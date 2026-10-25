@@ -1,0 +1,529 @@
+@カメラデータコピー(子)@カメラデータコピー
+--label:tim\カメラ制御\@カメラデータコピー
+--track@track_scale_percent:倍率[%],0,5000,100,0.1
+--check@check_invert_x:X軸反転,0
+--check@check_invert_y:Y軸反転,0
+--check@check_invert_z:Z軸反転,0
+local scale_ratio = track_scale_percent * 0.01
+
+if check_invert_x == 1 then
+    T_AVIUTL_CAMERA_PARAM_COPY.x = -T_AVIUTL_CAMERA_PARAM_COPY.x
+end
+if check_invert_y == 1 then
+    T_AVIUTL_CAMERA_PARAM_COPY.y = -T_AVIUTL_CAMERA_PARAM_COPY.y
+end
+if check_invert_z == 1 then
+    T_AVIUTL_CAMERA_PARAM_COPY.z = -T_AVIUTL_CAMERA_PARAM_COPY.z
+end
+
+T_AVIUTL_CAMERA_PARAM_COPY.x = scale_ratio * T_AVIUTL_CAMERA_PARAM_COPY.x
+T_AVIUTL_CAMERA_PARAM_COPY.y = scale_ratio * T_AVIUTL_CAMERA_PARAM_COPY.y
+T_AVIUTL_CAMERA_PARAM_COPY.z = scale_ratio * T_AVIUTL_CAMERA_PARAM_COPY.z
+
+T_AVIUTL_CAMERA_PARAM_COPY.rz = T_AVIUTL_CAMERA_PARAM_COPY.rz
+
+T_AVIUTL_CAMERA_PARAM_COPY.tx = T_AVIUTL_CAMERA_PARAM_COPY.tx
+T_AVIUTL_CAMERA_PARAM_COPY.ty = T_AVIUTL_CAMERA_PARAM_COPY.ty
+T_AVIUTL_CAMERA_PARAM_COPY.tz = T_AVIUTL_CAMERA_PARAM_COPY.tz
+
+T_AVIUTL_CAMERA_PARAM_COPY.d = T_AVIUTL_CAMERA_PARAM_COPY.d
+
+obj.setoption("camera_param", T_AVIUTL_CAMERA_PARAM_COPY)
+
+@カメラデータコピー(親)@カメラデータコピー
+--label:tim\カメラ制御\@カメラデータコピー
+T_AVIUTL_CAMERA_PARAM_COPY = obj.getoption("camera_param")
+
+@オートターゲット
+--label:tim\カメラ制御
+--track@track_target_index:ターゲット,1,100,1,0.01
+--track@track_camera_distance:カメラ距離,0,20000,1024,0.1
+--track@track_easing:イーズ,0,100,20,0.1
+--check@check_smooth:なめらか,true
+--select@select_target_method:指定方法=0,絶対値=0,カメラからの相対値=1,前ターゲットからの相対値=2
+--group:ターゲット指定
+
+--value@target_layers:ターゲット一覧,{}
+--track@track_target_layer_1:ターゲット1,0,1000,0,1
+--track@track_target_layer_2:ターゲット2,0,1000,0,1
+--track@track_target_layer_3:ターゲット3,0,1000,0,1
+--track@track_target_layer_4:ターゲット4,0,1000,0,1
+--track@track_target_layer_5:ターゲット5,0,1000,0,1
+--track@track_target_layer_6:ターゲット6,0,1000,0,1
+--track@track_target_layer_7:ターゲット7,0,1000,0,1
+--track@track_target_layer_8:ターゲット8,0,1000,0,1
+--track@track_target_layer_9:ターゲット9,0,1000,0,1
+--track@track_target_layer_10:ターゲット10,0,1000,0,1
+local get_value_type = function(value)
+    local string_value = tostring(value)
+    if string_value == value then
+        return "string"
+    end
+    if string_value == "nil" then
+        return "nil"
+    end
+    if string_value == "true" or string_value == "false" then
+        return "boolean"
+    end
+    if string.find(string_value, "table:") then
+        return "table"
+    end
+    if string.find(string_value, "function:") then
+        return "function"
+    end
+    if string.find(string_value, "userdata:") then
+        return "userdata"
+    end
+    return "number"
+end
+
+local function is_enabled(value)
+    return value == true or value == 1
+end
+
+select_target_method = math.floor(select_target_method)
+
+local resolved_target_layers = {}
+local target_count
+if #target_layers > 0 then
+    resolved_target_layers = target_layers
+    target_count = #resolved_target_layers
+else
+    resolved_target_layers = {
+        track_target_layer_1,
+        track_target_layer_2,
+        track_target_layer_3,
+        track_target_layer_4,
+        track_target_layer_5,
+        track_target_layer_6,
+        track_target_layer_7,
+        track_target_layer_8,
+        track_target_layer_9,
+        track_target_layer_10,
+    }
+    target_count = 10
+    for i = 1, 10 do
+        if get_value_type(resolved_target_layers[i]) ~= "number" then
+            target_count = i - 1
+            break
+        end
+    end
+end
+
+local target_position = track_target_index
+local track_camera_distance = track_camera_distance
+local easing_strength = track_easing / 10
+if target_position > target_count then
+    target_position = target_count
+end
+
+if select_target_method == 1 then
+    for i = 1, target_count do
+        resolved_target_layers[i] = resolved_target_layers[i] + obj.layer
+    end
+elseif select_target_method == 2 then
+    local cumulative_layer = obj.layer
+    for i = 1, target_count do
+        cumulative_layer = cumulative_layer + resolved_target_layers[i]
+        resolved_target_layers[i] = cumulative_layer
+    end
+end
+
+local target_data = {}
+for i = 1, target_count do
+    resolved_target_layers[i] = math.floor(resolved_target_layers[i])
+    if resolved_target_layers[i] < 1 then
+        resolved_target_layers[i] = 1
+    end
+    target_data[i] = {
+        x = obj.getvalue("layer" .. resolved_target_layers[i] .. ".x"),
+        y = obj.getvalue("layer" .. resolved_target_layers[i] .. ".y"),
+        z = obj.getvalue("layer" .. resolved_target_layers[i] .. ".z"),
+        rx = obj.getvalue("layer" .. resolved_target_layers[i] .. ".rx"),
+        ry = obj.getvalue("layer" .. resolved_target_layers[i] .. ".ry"),
+        rz = obj.getvalue("layer" .. resolved_target_layers[i] .. ".rz"),
+    }
+end
+for i = target_count, 1, -1 do
+    if target_data[i].x == nil then
+        table.remove(target_data, i)
+        target_count = target_count - 1
+    end
+end
+
+local current_target_index = math.floor(target_position)
+local next_target_index = current_target_index + 1
+target_position = target_position - current_target_index
+
+if easing_strength ~= 0 then
+    target_position = math.exp(easing_strength * (2 * target_position - 1))
+    local easing_coefficient = (math.exp(easing_strength) + 1) / (math.exp(easing_strength) - 1)
+    target_position = (1 + easing_coefficient * (target_position - 1) / (target_position + 1)) / 2
+end
+local inverse_target_fraction = 1 - target_position
+if next_target_index > target_count then
+    next_target_index = target_count
+end
+
+local camera = obj.getoption("camera_param")
+
+local target_rotation_x, target_rotation_y, target_rotation_z
+
+if not is_enabled(check_smooth) then
+    camera.tx = inverse_target_fraction * target_data[current_target_index].x
+        + target_position * target_data[next_target_index].x
+    camera.ty = inverse_target_fraction * target_data[current_target_index].y
+        + target_position * target_data[next_target_index].y
+    camera.tz = inverse_target_fraction * target_data[current_target_index].z
+        + target_position * target_data[next_target_index].z
+
+    target_rotation_x = inverse_target_fraction * target_data[current_target_index].rx
+        + target_position * target_data[next_target_index].rx
+    target_rotation_y = inverse_target_fraction * target_data[current_target_index].ry
+        + target_position * target_data[next_target_index].ry
+    target_rotation_z = inverse_target_fraction * target_data[current_target_index].rz
+        + target_position * target_data[next_target_index].rz
+else
+    local previous_target_index = current_target_index - 1
+    if previous_target_index < 1 then
+        previous_target_index = 1
+    end
+    local following_target_index = next_target_index + 1
+    if following_target_index > target_count then
+        following_target_index = target_count
+    end
+
+    local x0, y0, z0 =
+        target_data[previous_target_index].x, target_data[previous_target_index].y, target_data[previous_target_index].z
+    local x1, y1, z1 =
+        target_data[current_target_index].x, target_data[current_target_index].y, target_data[current_target_index].z
+    local x2, y2, z2 =
+        target_data[next_target_index].x, target_data[next_target_index].y, target_data[next_target_index].z
+    local x3, y3, z3 =
+        target_data[following_target_index].x,
+        target_data[following_target_index].y,
+        target_data[following_target_index].z
+    camera.tx, camera.ty, camera.tz = obj.interpolation(target_position, x0, y0, z0, x1, y1, z1, x2, y2, z2, x3, y3, z3)
+
+    x0, y0, z0 =
+        target_data[previous_target_index].rx,
+        target_data[previous_target_index].ry,
+        target_data[previous_target_index].rz
+    x1, y1, z1 =
+        target_data[current_target_index].rx, target_data[current_target_index].ry, target_data[current_target_index].rz
+    x2, y2, z2 = target_data[next_target_index].rx, target_data[next_target_index].ry, target_data[next_target_index].rz
+    x3, y3, z3 =
+        target_data[following_target_index].rx,
+        target_data[following_target_index].ry,
+        target_data[following_target_index].rz
+    target_rotation_x, target_rotation_y, target_rotation_z =
+        obj.interpolation(target_position, x0, y0, z0, x1, y1, z1, x2, y2, z2, x3, y3, z3)
+end
+
+local rotation_x_sine = math.sin(target_rotation_x * math.pi / 180)
+local rotation_x_cosine = math.cos(target_rotation_x * math.pi / 180)
+local rotation_y_sine = math.sin(target_rotation_y * math.pi / 180)
+local rotation_y_cosine = math.cos(target_rotation_y * math.pi / 180)
+local rotation_z_sine = math.sin(target_rotation_z * math.pi / 180)
+local rotation_z_cosine = math.cos(target_rotation_z * math.pi / 180)
+
+local camera_direction_x = -rotation_y_sine
+local camera_direction_y = rotation_x_sine * rotation_y_cosine
+local camera_direction_z = -rotation_x_cosine * rotation_y_cosine
+
+local up_vector_x = rotation_y_cosine * rotation_z_sine
+local up_vector_y = -rotation_x_cosine * rotation_z_cosine + (rotation_x_sine * rotation_z_sine) * rotation_y_sine
+local up_vector_z = -rotation_x_sine * rotation_z_cosine - (rotation_x_cosine * rotation_z_sine) * rotation_y_sine
+
+camera.x = camera.tx + camera_direction_x * track_camera_distance
+camera.y = camera.ty + camera_direction_y * track_camera_distance
+camera.z = camera.tz + camera_direction_z * track_camera_distance
+camera.ux = up_vector_x
+camera.uy = up_vector_y
+camera.uz = up_vector_z
+
+obj.setoption("camera_param", camera)
+
+@オートターゲット100
+--label:tim\カメラ制御
+--track@track_target_index:ターゲット,100,10000,100,0.01
+--track@track_camera_distance:カメラ距離,0,20000,1024,0.1
+--track@track_easing:イーズ,0,100,20,0.1
+--check@check_smooth:なめらか,true
+--select@select_target_method:指定方法=0,絶対値=0,カメラからの相対値=1,前ターゲットからの相対値=2
+--group:ターゲット指定
+
+--value@target_layers:ターゲット一覧,{}
+--track@track_target_layer_1:ターゲット1,0,1000,0,1
+--track@track_target_layer_2:ターゲット2,0,1000,0,1
+--track@track_target_layer_3:ターゲット3,0,1000,0,1
+--track@track_target_layer_4:ターゲット4,0,1000,0,1
+--track@track_target_layer_5:ターゲット5,0,1000,0,1
+--track@track_target_layer_6:ターゲット6,0,1000,0,1
+--track@track_target_layer_7:ターゲット7,0,1000,0,1
+--track@track_target_layer_8:ターゲット8,0,1000,0,1
+--track@track_target_layer_9:ターゲット9,0,1000,0,1
+--track@track_target_layer_10:ターゲット10,0,1000,0,1
+local get_value_type = function(value)
+    local string_value = tostring(value)
+    if string_value == value then
+        return "string"
+    end
+    if string_value == "nil" then
+        return "nil"
+    end
+    if string_value == "true" or string_value == "false" then
+        return "boolean"
+    end
+    if string.find(string_value, "table:") then
+        return "table"
+    end
+    if string.find(string_value, "function:") then
+        return "function"
+    end
+    if string.find(string_value, "userdata:") then
+        return "userdata"
+    end
+    return "number"
+end
+
+local function is_enabled(value)
+    return value == true or value == 1
+end
+
+select_target_method = math.floor(select_target_method)
+
+local resolved_target_layers = {}
+local target_count
+if #target_layers > 0 then
+    resolved_target_layers = target_layers
+    target_count = #resolved_target_layers
+else
+    resolved_target_layers = {
+        track_target_layer_1,
+        track_target_layer_2,
+        track_target_layer_3,
+        track_target_layer_4,
+        track_target_layer_5,
+        track_target_layer_6,
+        track_target_layer_7,
+        track_target_layer_8,
+        track_target_layer_9,
+        track_target_layer_10,
+    }
+    target_count = 10
+    for i = 1, 10 do
+        if get_value_type(resolved_target_layers[i]) ~= "number" then
+            target_count = i - 1
+            break
+        end
+    end
+end
+
+local target_position = track_target_index * 0.01
+local track_camera_distance = track_camera_distance
+local easing_strength = track_easing / 10
+if target_position > target_count then
+    target_position = target_count
+end
+
+if select_target_method == 1 then
+    for i = 1, target_count do
+        resolved_target_layers[i] = resolved_target_layers[i] + obj.layer
+    end
+elseif select_target_method == 2 then
+    local cumulative_layer = obj.layer
+    for i = 1, target_count do
+        cumulative_layer = cumulative_layer + resolved_target_layers[i]
+        resolved_target_layers[i] = cumulative_layer
+    end
+end
+
+local target_data = {}
+for i = 1, target_count do
+    resolved_target_layers[i] = math.floor(resolved_target_layers[i])
+    if resolved_target_layers[i] < 1 then
+        resolved_target_layers[i] = 1
+    end
+    target_data[i] = {
+        x = obj.getvalue("layer" .. resolved_target_layers[i] .. ".x"),
+        y = obj.getvalue("layer" .. resolved_target_layers[i] .. ".y"),
+        z = obj.getvalue("layer" .. resolved_target_layers[i] .. ".z"),
+        rx = obj.getvalue("layer" .. resolved_target_layers[i] .. ".rx"),
+        ry = obj.getvalue("layer" .. resolved_target_layers[i] .. ".ry"),
+        rz = obj.getvalue("layer" .. resolved_target_layers[i] .. ".rz"),
+    }
+end
+for i = target_count, 1, -1 do
+    if target_data[i].x == nil then
+        table.remove(target_data, i)
+        target_count = target_count - 1
+    end
+end
+
+local current_target_index = math.floor(target_position)
+local next_target_index = current_target_index + 1
+target_position = target_position - current_target_index
+
+if easing_strength ~= 0 then
+    target_position = math.exp(easing_strength * (2 * target_position - 1))
+    local easing_coefficient = (math.exp(easing_strength) + 1) / (math.exp(easing_strength) - 1)
+    target_position = (1 + easing_coefficient * (target_position - 1) / (target_position + 1)) / 2
+end
+local inverse_target_fraction = 1 - target_position
+if next_target_index > target_count then
+    next_target_index = target_count
+end
+
+local camera = obj.getoption("camera_param")
+
+local target_rotation_x, target_rotation_y, target_rotation_z
+
+if not is_enabled(check_smooth) then
+    camera.tx = inverse_target_fraction * target_data[current_target_index].x
+        + target_position * target_data[next_target_index].x
+    camera.ty = inverse_target_fraction * target_data[current_target_index].y
+        + target_position * target_data[next_target_index].y
+    camera.tz = inverse_target_fraction * target_data[current_target_index].z
+        + target_position * target_data[next_target_index].z
+
+    target_rotation_x = inverse_target_fraction * target_data[current_target_index].rx
+        + target_position * target_data[next_target_index].rx
+    target_rotation_y = inverse_target_fraction * target_data[current_target_index].ry
+        + target_position * target_data[next_target_index].ry
+    target_rotation_z = inverse_target_fraction * target_data[current_target_index].rz
+        + target_position * target_data[next_target_index].rz
+else
+    local previous_target_index = current_target_index - 1
+    if previous_target_index < 1 then
+        previous_target_index = 1
+    end
+    local following_target_index = next_target_index + 1
+    if following_target_index > target_count then
+        following_target_index = target_count
+    end
+
+    local x0, y0, z0 =
+        target_data[previous_target_index].x, target_data[previous_target_index].y, target_data[previous_target_index].z
+    local x1, y1, z1 =
+        target_data[current_target_index].x, target_data[current_target_index].y, target_data[current_target_index].z
+    local x2, y2, z2 =
+        target_data[next_target_index].x, target_data[next_target_index].y, target_data[next_target_index].z
+    local x3, y3, z3 =
+        target_data[following_target_index].x,
+        target_data[following_target_index].y,
+        target_data[following_target_index].z
+    camera.tx, camera.ty, camera.tz = obj.interpolation(target_position, x0, y0, z0, x1, y1, z1, x2, y2, z2, x3, y3, z3)
+
+    x0, y0, z0 =
+        target_data[previous_target_index].rx,
+        target_data[previous_target_index].ry,
+        target_data[previous_target_index].rz
+    x1, y1, z1 =
+        target_data[current_target_index].rx, target_data[current_target_index].ry, target_data[current_target_index].rz
+    x2, y2, z2 = target_data[next_target_index].rx, target_data[next_target_index].ry, target_data[next_target_index].rz
+    x3, y3, z3 =
+        target_data[following_target_index].rx,
+        target_data[following_target_index].ry,
+        target_data[following_target_index].rz
+    target_rotation_x, target_rotation_y, target_rotation_z =
+        obj.interpolation(target_position, x0, y0, z0, x1, y1, z1, x2, y2, z2, x3, y3, z3)
+end
+
+local rotation_x_sine = math.sin(target_rotation_x * math.pi / 180)
+local rotation_x_cosine = math.cos(target_rotation_x * math.pi / 180)
+local rotation_y_sine = math.sin(target_rotation_y * math.pi / 180)
+local rotation_y_cosine = math.cos(target_rotation_y * math.pi / 180)
+local rotation_z_sine = math.sin(target_rotation_z * math.pi / 180)
+local rotation_z_cosine = math.cos(target_rotation_z * math.pi / 180)
+
+local camera_direction_x = -rotation_y_sine
+local camera_direction_y = rotation_x_sine * rotation_y_cosine
+local camera_direction_z = -rotation_x_cosine * rotation_y_cosine
+
+local up_vector_x = rotation_y_cosine * rotation_z_sine
+local up_vector_y = -rotation_x_cosine * rotation_z_cosine + (rotation_x_sine * rotation_z_sine) * rotation_y_sine
+local up_vector_z = -rotation_x_sine * rotation_z_cosine - (rotation_x_cosine * rotation_z_sine) * rotation_y_sine
+
+camera.x = camera.tx + camera_direction_x * track_camera_distance
+camera.y = camera.ty + camera_direction_y * track_camera_distance
+camera.z = camera.tz + camera_direction_z * track_camera_distance
+camera.ux = up_vector_x
+camera.uy = up_vector_y
+camera.uz = up_vector_z
+
+obj.setoption("camera_param", camera)
+
+@位置補正
+--label:tim\カメラ制御
+--track@track_offset_x:補正X,-5000,5000,0,0.1
+--track@track_offset_y:補正Y,-5000,5000,0,0.1
+--track@track_offset_z:補正Z,-5000,5000,0,0.1
+--select@select_adjust_method:補正方法=1,カメラ位置=1,ターゲット位置=2,両方=3
+local dx = track_offset_x
+local dy = track_offset_y
+local dz = track_offset_z
+local adjust_method = math.floor(select_adjust_method)
+local camera = obj.getoption("camera_param")
+
+if adjust_method == 1 or adjust_method == 3 then
+    camera.x = camera.x + dx
+    camera.y = camera.y + dy
+    camera.z = camera.z + dz
+end
+if adjust_method == 2 or adjust_method == 3 then
+    camera.tx = camera.tx + dx
+    camera.ty = camera.ty + dy
+    camera.tz = camera.tz + dz
+end
+obj.setoption("camera_param", camera)
+
+@位置補正R
+--label:tim\カメラ制御
+--track@track_rotation_z_offset:補正RZ,-5000,5000,0,0.1
+local rotation_z_offset = track_rotation_z_offset
+local camera = obj.getoption("camera_param")
+
+camera.rz = camera.rz + rotation_z_offset
+
+obj.setoption("camera_param", camera)
+
+@MMDカメラデータ読込VMD
+--label:tim\カメラ制御
+--track@track_size_correction:サイズ補正,1,10000,100,0.01
+--track@track_frame_offset:フレームオフセット,0,10000,0,1
+--check@check_auto_view_angle:自動視野角,true
+--file@file_path:ファイル
+local tim2 = obj.module("tim2")
+local loaded_camera_count = tim2.mmdcam_read_data(file_path)
+
+if loaded_camera_count ~= 0 then
+    local x, y, z, target_x, target_y, target_z, roll, view_angle, vertical_sign = tim2.mmdcam_get_camera_data(
+        obj.frame + track_frame_offset,
+        obj.totalframe + track_frame_offset,
+        3000 / track_size_correction
+    )
+
+    local camera = obj.getoption("camera_param")
+
+    camera.x = x
+    camera.y = y
+    camera.z = z
+    camera.target_x = target_x
+    camera.target_y = target_y
+    camera.target_z = target_z
+    camera.roll = camera.roll + roll
+
+    if vertical_sign < 0 then
+        camera.ux = -camera.ux
+        camera.uy = -camera.uy
+        camera.uz = -camera.uz
+    end
+
+    if check_auto_view_angle then
+        camera.d = obj.screen_h / math.tan(view_angle * math.pi / 360) / 2
+    end
+
+    obj.setoption("camera_param", camera)
+end
+

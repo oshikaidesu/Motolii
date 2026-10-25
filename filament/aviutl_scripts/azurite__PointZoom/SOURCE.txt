@@ -1,0 +1,6 @@
+ポイントズーム by azurite
+licence: MIT
+from: https://github.com/azurite581/AviUtl2-PointZoom/releases/download/v2.0.1/PointZoom-v2.0.1.au2pkg.zip (tag v2.0.1, commit 19e2e63550de)
+page: https://github.com/azurite581/AviUtl2-PointZoom
+licence/README from: https://github.com/azurite581/AviUtl2-PointZoom at v2.0.1
+Put here unchanged for Motolii (filament/aviutl_scripts).

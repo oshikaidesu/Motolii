@@ -1,0 +1,10 @@
+@単一カメラ
+--label:カメラ制御補助
+camera_param = obj.getoption("camera_param")
+
+@複数カメラ
+--label:カメラ制御補助
+if not camera_param_table then
+    camera_param_table = {}
+end
+camera_param_table[obj.layer] = obj.getoption("camera_param")

@@ -1,0 +1,253 @@
+--label:加工
+--information:JPEGノイズ(DCT圧縮)
+--filter
+
+--group:圧縮設定
+--track@quality:品質,0,100,50,1
+--track@interlace:インターレース,1,64,64,1
+--check@compress_alpha:透明度も圧縮,0
+--group:
+
+--group:ブロック設定
+--track@block_scale:サイズ倍率,1,16,1,1
+--track@shift_x:Xズレ,-32,32,0,1
+--track@shift_y:Yズレ,-32,32,0,1
+--trackgroup@shift_x,shift_y:グリッドズレ
+--group:
+
+if obj.w <= 0 or obj.h <= 0 then
+    return
+end
+
+--[[computeshader@jpeg_cs:
+Texture2D<float4> texIn : register(t0);
+RWTexture2D<float4> texOut : register(u0);
+
+cbuffer Params : register(b0) {
+    float4 p_params; // x: quality, y: interlace, z: compress_alpha, w: block_scale
+    float4 p_grid;   // x: shift_x, y: shift_y, z: obj_alpha, w: unused
+    float4 p_res;    // xy: img_size (w, h), zw: offset (x, y)
+};
+
+static const uint zigzag[64] = {
+     0u,  1u,  5u,  6u, 14u, 15u, 27u, 28u,
+     2u,  4u,  7u, 13u, 16u, 26u, 29u, 42u,
+     3u,  8u, 12u, 17u, 25u, 30u, 41u, 43u,
+     9u, 11u, 18u, 24u, 31u, 40u, 44u, 53u,
+    10u, 19u, 23u, 32u, 39u, 45u, 52u, 54u,
+    20u, 22u, 33u, 38u, 46u, 51u, 55u, 60u,
+    21u, 34u, 37u, 47u, 50u, 56u, 59u, 61u,
+    35u, 36u, 48u, 49u, 57u, 58u, 62u, 63u
+};
+
+static const float Q_Y[64] = {
+    16, 11, 10, 16, 24,  40,  51,  61,
+    12, 12, 14, 19, 26,  58,  60,  55,
+    14, 13, 16, 24, 40,  57,  69,  55,
+    14, 17, 22, 29, 51,  87,  80,  62,
+    18, 22, 37, 56, 68, 109, 103,  77,
+    24, 35, 55, 64, 81, 104, 113,  92,
+    49, 64, 78, 87, 103, 121, 120, 101,
+    72, 92, 95, 98, 112, 100, 103,  99
+};
+
+static const float Q_UV[64] = {
+    17, 18, 24, 47, 99, 99, 99, 99,
+    18, 21, 26, 66, 99, 99, 99, 99,
+    24, 26, 56, 99, 99, 99, 99, 99,
+    47, 66, 99, 99, 99, 99, 99, 99,
+    99, 99, 99, 99, 99, 99, 99, 99,
+    99, 99, 99, 99, 99, 99, 99, 99,
+    99, 99, 99, 99, 99, 99, 99, 99,
+    99, 99, 99, 99, 99, 99, 99, 99
+};
+
+static const float COS_TBL[8][8] = {
+    { 1.00000000,  1.00000000,  1.00000000,  1.00000000,  1.00000000,  1.00000000,  1.00000000,  1.00000000 },
+    { 0.98078528,  0.83146961,  0.55557023,  0.19509032, -0.19509032, -0.55557023, -0.83146961, -0.98078528 },
+    { 0.92387953,  0.38268343, -0.38268343, -0.92387953, -0.92387953, -0.38268343,  0.38268343,  0.92387953 },
+    { 0.83146961, -0.19509032, -0.98078528, -0.55557023,  0.55557023,  0.98078528,  0.19509032, -0.83146961 },
+    { 0.70710678, -0.70710678, -0.70710678,  0.70710678,  0.70710678, -0.70710678, -0.70710678,  0.70710678 },
+    { 0.55557023, -0.98078528,  0.19509032,  0.83146961, -0.83146961, -0.19509032,  0.98078528, -0.55557023 },
+    { 0.38268343, -0.92387953,  0.92387953, -0.38268343, -0.38268343,  0.92387953, -0.92387953,  0.38268343 },
+    { 0.19509032, -0.55557023,  0.83146961, -0.98078528,  0.98078528, -0.83146961,  0.55557023, -0.19509032 }
+};
+
+groupshared float4 s_data[8][8];
+groupshared float4 s_temp[8][8];
+groupshared float  s_orig_a[8][8];
+
+[numthreads(8, 8, 1)]
+void jpeg_cs(uint3 dtid : SV_DispatchThreadID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GroupID) {
+    uint lx = gtid.x;
+    uint ly = gtid.y;
+    uint scale = (uint)max(1.0, p_params.w);
+    uint half_scale = scale >> 1u;
+
+    // 1. 各スレッドが対応ピクセルをロードして YUVA 変換
+    int2 sample_pos = (int2(gid.xy) * 8 + int2(lx, ly)) * (int)scale - int2(p_res.zw) + (int)half_scale;
+    sample_pos = clamp(sample_pos, int2(0, 0), int2(p_res.xy) - 1);
+
+    float4 color = texIn.Load(int3(sample_pos, 0));
+    if (color.a > 0.0001) {
+        color.rgb /= color.a;
+    }
+
+    float in_r = color.r * 255.0;
+    float in_g = color.g * 255.0;
+    float in_b = color.b * 255.0;
+
+    // C++ 原作準拠の RGB -> YUVA 変換 (U: Cr/2, V: Cb/2)
+    float y_val =  0.299 * in_r + 0.587 * in_g + 0.114 * in_b;
+    float u_val = (0.500 * in_r - 0.419 * in_g - 0.081 * in_b + 128.0) * 0.5;
+    float v_val = (-0.169 * in_r - 0.332 * in_g + 0.500 * in_b + 128.0) * 0.5;
+    float a_val = color.a * 255.0;
+
+    s_data[ly][lx] = float4(y_val, u_val, v_val, a_val);
+    s_orig_a[ly][lx] = a_val;
+
+    GroupMemoryBarrierWithGroupSync();
+
+    // 2. 1D-FDCT (X軸方向並列計算)
+    float4 sum_x = float4(0.0, 0.0, 0.0, 0.0);
+    [unroll]
+    for (uint tx = 0u; tx < 8u; ++tx) {
+        float c = COS_TBL[lx][tx];
+        float4 p = s_data[ly][tx];
+        sum_x.x += p.x * c;
+        sum_x.y += (p.y - 64.0) * c;
+        sum_x.z += (p.z - 64.0) * c;
+        sum_x.w += p.w * c;
+    }
+    s_temp[ly][lx] = sum_x;
+
+    GroupMemoryBarrierWithGroupSync();
+
+    // 3. 1D-FDCT (Y軸方向並列計算) ＆ 量子化
+    uint coeff_idx = lx + ly * 8u;
+    uint rank = zigzag[coeff_idx];
+    uint max_f = (uint)p_params.y;
+
+    if (rank >= max_f) {
+        s_data[ly][lx] = float4(0.0, 0.0, 0.0, 0.0);
+    } else {
+        float4 sum_y = float4(0.0, 0.0, 0.0, 0.0);
+        [unroll]
+        for (uint ty = 0u; ty < 8u; ++ty) {
+            sum_y += s_temp[ty][lx] * COS_TBL[ly][ty];
+        }
+
+        float cu = (lx == 0u) ? 0.70710678 : 1.0;
+        float cv = (ly == 0u) ? 0.70710678 : 1.0;
+        float factor = 0.25 * cu * cv;
+        float4 freq = sum_y * factor;
+
+        // C++ 原作の線形補間量子化テーブル式
+        float q = p_params.x;
+        float s_y  = max(1.0, 0.02 * (1.0 - Q_Y[coeff_idx]) * q + 2.0 * Q_Y[coeff_idx] - 1.0);
+        float s_uv = max(1.0, 0.02 * (1.0 - Q_UV[coeff_idx]) * q + 2.0 * Q_UV[coeff_idx] - 1.0);
+        float4 quant_step = float4(s_y, s_uv, s_uv, s_y);
+
+        s_data[ly][lx] = round(freq / quant_step) * quant_step;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    // 4. 1D-IDCT (Y軸方向並列計算)
+    float4 iy = float4(0.0, 0.0, 0.0, 0.0);
+    [unroll]
+    for (uint v = 0u; v < 8u; ++v) {
+        float cv = (v == 0u) ? 0.70710678 : 1.0;
+        iy += s_data[v][lx] * (cv * COS_TBL[v][ly]);
+    }
+    s_temp[ly][lx] = iy;
+
+    GroupMemoryBarrierWithGroupSync();
+
+    // 5. 1D-IDCT (X軸方向並列計算)
+    float4 out_val = float4(0.0, 0.0, 0.0, 0.0);
+    [unroll]
+    for (uint u = 0u; u < 8u; ++u) {
+        float cu = (u == 0u) ? 0.70710678 : 1.0;
+        out_val += s_temp[ly][u] * (cu * COS_TBL[u][lx]);
+    }
+
+    // 6. スケール復元と YUVA -> RGB 変換 (C++ 原作準拠)
+    float y_out = out_val.x * 0.25;
+    float u_out = 2.0 * (out_val.y * 0.25 + 64.0) - 128.0;
+    float v_out = 2.0 * (out_val.z * 0.25 + 64.0) - 128.0;
+    float a_out = (p_params.z > 0.5) ? (out_val.w * 0.25) : s_orig_a[ly][lx];
+
+    float out_r = y_out + 1.402 * u_out;
+    float out_g = y_out - 0.714 * u_out - 0.344 * v_out;
+    float out_b = y_out + 1.772 * v_out;
+
+    float4 result;
+    result.r = saturate(out_r / 255.0);
+    result.g = saturate(out_g / 255.0);
+    result.b = saturate(out_b / 255.0);
+    result.a = saturate(a_out / 255.0) * p_grid.z;
+
+    result.rgb *= result.a;
+
+    // 7. 出力テクスチャへの書き込み (ブロック倍率対応)
+    int2 base_out = (int2(gid.xy) * 8 + int2(lx, ly)) * (int)scale - int2(p_res.zw);
+    [loop]
+    for (uint dy = 0u; dy < scale; ++dy) {
+        [loop]
+        for (uint dx = 0u; dx < scale; ++dx) {
+            int2 write_pos = base_out + int2((int)dx, (int)dy);
+            if (write_pos.x >= 0 && write_pos.y >= 0 && write_pos.x < (int)p_res.x && write_pos.y < (int)p_res.y) {
+                texOut[write_pos] = result;
+            }
+        }
+    }
+}
+]]
+
+do
+    local floor = math.floor
+    local ceil = math.ceil
+    local max = math.max
+
+    local w, h = obj.w, obj.h
+    local q = (quality == 0) and 0.0 or quality
+    local b_scale = max(1, floor(block_scale))
+    local block_px = 8 * b_scale
+
+    obj.copybuffer("tempbuffer", "object")
+
+    local total_blocks_x = ceil(w / block_px) + 2
+    local total_blocks_y = ceil(h / block_px) + 2
+
+    local grid_w = total_blocks_x * block_px
+    local grid_h = total_blocks_y * block_px
+
+    local offset_x = floor((grid_w - w) * 0.5 - shift_x)
+    local offset_y = floor((grid_h - h) * 0.5 - shift_y)
+
+    obj.computeshader(
+        "jpeg_cs",
+        "object",
+        { "tempbuffer" },
+        {
+            q,
+            interlace,
+            (compress_alpha == 1) and 1.0 or 0.0,
+            b_scale,
+
+            shift_x,
+            shift_y,
+            obj.alpha,
+            0.0,
+
+            w,
+            h,
+            offset_x,
+            offset_y
+        },
+        total_blocks_x,
+        total_blocks_y,
+        1
+    )
+end

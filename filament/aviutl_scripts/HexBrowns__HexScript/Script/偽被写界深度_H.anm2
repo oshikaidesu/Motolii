@@ -1,0 +1,187 @@
+--information:偽被写界深度_H v1.00 by HexBrowns
+--label:HexScript
+--filter
+
+--track@focal:焦点距離,-5000,5000,0,0.1
+--track@aperture:焦点範囲,0,5000,100,0.1
+--track@blur_amount:Blur,0,100,10,0.1
+--track@color_amount:色強度,0,100,0,0.1
+--check@focus_target:焦点を目標に固定,0
+--check@lens:ﾚﾝｽﾞﾌﾞﾗｰ,0
+--check@fd:ﾌｪｰﾄﾞ,0
+--value@fdp:ﾌｪｰﾄﾞ%,100
+--color@nearcol:色(近),0xffffff
+--check@ncinv:色(近)無効,0
+--color@farcol:色(遠),0xffffff
+--check@fcinv:色(遠)無効,0
+--check@cp:中心点を含む,0
+--check@mode:球判定,0
+
+--[[
+偽被写界深度_H v1.00
+
+原作: Script/偽被写界深度2.anm2（--information:偽被写界深度2@加工 for AviUtl2、作者・ライセンス表記なし）。
+原作を直したフォーク。原作の部分の権利は原作者にある。原作者の方は、問題があれば HexBrowns まで連絡をください。
+不具合の記録と判断の経緯: AI/scripts/issues/20260915_fake_dof2_ignores_camera.md
+数値検証: AI/scripts/偽被写界深度_H/verify_dof.py
+
+カメラ位置による被写界深度ボケもどきです。
+オブジェクトに直接かけて使います。
+
+  グループ制御に追加すると、配下のオブジェクトの Z がスクリプトから見えず、
+  全部が Z=0 の位置にあるものとしてぼけます（原作も同じ。2026-09-16 に実機で確認。
+  検証 DOF-09 / AI/scripts/issues/20260915_fake_dof2_ignores_camera.md）。
+  奥行きごとにぼかしたいオブジェクトには、1 つずつ直接かけてください。
+カメラのZバッファ/シャドウマップを無効にするか、オブジェクトの合成モードを通常以外にすることを推奨します。
+大きな画像にはあまり有効に働きません。
+
+各種説明
+  焦点距離  : ピントの合う位置を前後させます。0 でスクリーン（等倍で描かれる面）に合います。
+  焦点範囲  : ピントが合う範囲を広げます。範囲の内側ではぼかしません。
+  Blur      : ぼかしのかかり具合を変更します。焦点範囲の外 1024px で指定値、最大 3 倍まで変化します。
+  色強度    : ぼかしのかかり具合を色で表示します。
+  ﾚﾝｽﾞﾌﾞﾗｰ  : チェックするとレンズブラーを使用します。
+  ﾌｪｰﾄﾞ     : チェックするとぼかしが Blur と同じ値になる位置で丁度透明になります。完全に透明になるとぼかしの処理をカットします。
+  ﾌｪｰﾄﾞ%    : フェード距離を拡張します。300 だとぼかしが最大値になる位置で透明になります。色の変化にも影響します。
+  色(近)    : 焦点より手前の場合の色を変更します。
+  色(遠)    : 焦点より奥の場合の色を変更します。
+  中心点を含む : チェックすると中心点の回転も距離計算に含みます。が、恐らく正確ではありません。
+  球判定    : 距離をカメラ平面からの奥行きではなく、カメラ位置からの直線距離で測ります。
+
+原作からの変更点（保存キー＝項目名・範囲・既定値は原作と同じ）
+  1. カメラを読む。原作は if の中で local cam を作り直していて外側の cam が書き換わらず、
+     さらに camera_mode（数値）を true と比べていたため、常に擬似カメラ (0,0,-1024) を使っていた。
+     camera_mode が 0 以外（カメラ制御の対象）のときだけ camera_param を読み、
+     対象外では原作と同じ擬似カメラを使う（カメラ制御の無いシーンでは原作と同じ結果）
+  2. スクリーン距離は cam.d（lua.txt「カメラからスクリーンまでの距離」）。原作の固定 1024 を置き換えた。
+     カメラから目標までの距離は「焦点を目標に固定」で選べる（原作どおり）。
+     ぼかし量の正規化（焦点範囲の外 1024px で Blur 倍）はカメラの性質ではないので 1024 のまま
+  3. 焦点範囲の内側でぼかし量を 0 に切る（原作は負の範囲をぼかしへ渡していた）。0 のときはぼかしを呼ばない
+  4. 球判定はカメラ位置からの距離 - スクリーン距離（式は原作どおり。コメントを式に合わせた）
+  5. 中心Z にも拡大率を掛ける（中心は画像ローカルの座標で、X/Y と同じく拡大される）
+  6. フィルタオブジェクトではサイズを変えない（ぼかしをサイズ固定にし、ﾌｪｰﾄﾞで obj.alpha を書き換えない）
+  7. UI 定義を新形式にした。.aup2 の値の書式は原作と同じ（トラック 0.1 刻み / チェック 0,1 / 色 6 桁 / ﾌｪｰﾄﾞ% は数値）
+  8. グローバル変数 cam_depth を local にした（Script/ ほかを検索して読み手が 0 件）
+]]
+
+if ncinv == 1 then
+  nearcol = 0
+end
+if fcinv == 1 then
+  farcol = 0
+end
+
+-- ぼかし量の正規化。焦点範囲の外 BLUR_RAMP px で Blur 倍になる（原作の 1024）
+local BLUR_RAMP = 1024
+-- カメラ制御の対象外で使う擬似カメラ。原作の既定値と同じ位置・スクリーン距離
+local DEFAULT_CAM = {x = 0, y = 0, z = -1024, tx = 0, ty = 0, tz = 0, d = 1024}
+
+local sqrt, abs, max, min = math.sqrt, math.abs, math.max, math.min
+local gv = obj.getvalue
+local is_filter = obj.getinfo("filter") == true
+
+local ROT = function(p, rx, ry, rz)
+  local to_rad = math.pi / 180
+  local x, y, z = p[1], p[2], p[3] or 0
+  rx, ry, rz = (rx or obj.rx) * to_rad, (ry or obj.ry) * to_rad, (rz or obj.rz) * to_rad
+
+  local x0 = x * math.cos(rz) - y * math.sin(rz)
+  local y0 = x * math.sin(rz) + y * math.cos(rz)
+  local z0 = z * math.cos(ry) - x0 * math.sin(ry)
+
+  return {z * math.sin(ry) + x0 * math.cos(ry), y0 * math.cos(rx) - z0 * math.sin(rx), y0 * math.sin(rx) + z0 * math.cos(rx)}
+end
+
+-- カメラ。camera_mode は 2026/7/12 から数値（lua.txt）。それ以前の真偽値でも false/nil は対象外として扱う
+local cam = nil
+local camera_mode = obj.getoption("camera_mode")
+if camera_mode ~= 0 and camera_mode ~= false and camera_mode ~= nil then
+  cam = obj.getoption("camera_param")
+end
+if type(cam) ~= "table" then
+  cam = DEFAULT_CAM
+end
+
+local cam_x, cam_y, cam_z = cam.x or 0, cam.y or 0, cam.z or -1024
+local fx, fy, fz = (cam.tx or 0) - cam_x, (cam.ty or 0) - cam_y, (cam.tz or 0) - cam_z
+local target_dist = sqrt(fx * fx + fy * fy + fz * fz)
+
+-- 視線方向（カメラ平面の法線）。座標と目標が一致して向きが決まらないときは +Z
+local nx, ny, nz = 0, 0, 1
+if target_dist > 1e-6 then
+  nx, ny, nz = fx / target_dist, fy / target_dist, fz / target_dist
+end
+if target_dist < 1 then target_dist = 1 end
+
+local screen = cam.d
+if type(screen) ~= "number" or screen <= 0 then
+  screen = DEFAULT_CAM.d
+end
+-- ピントの基準面までの距離。焦点距離 0 はこの面
+local base_dist = (focus_target == 1) and target_dist or screen
+
+-- オブジェクトの位置。中心は画像ローカルの座標なので拡大率を掛けてから引く
+local zoom = (gv("zoom") or 100) * 0.01
+local zoom_z = gv("sz") or zoom
+local c1 = {obj.cx * zoom, obj.cy * zoom, obj.cz * zoom_z}
+if cp == 1 then c1 = ROT(c1) end
+local px = obj.x + obj.ox - c1[1] - cam_x
+local py = obj.y + obj.oy - c1[2] - cam_y
+local pz = obj.z + obj.oz - c1[3] - cam_z
+
+local L
+if mode == 1 then
+  -- 球判定: カメラ位置からの直線距離 - 基準面までの距離（光軸上では平面判定と一致する）
+  L = sqrt(px * px + py * py + pz * pz) - base_dist
+else
+  -- カメラ平面からの奥行き - 基準面までの距離
+  L = px * nx + py * ny + pz * nz - base_dist
+end
+
+local R = L - focal
+local location = (R > 0) and 2 or 1
+local D = (abs(R) - aperture) / BLUR_RAMP
+if D < 0 then D = 0 end
+
+local fade_len = (tonumber(fdp) or 100) * 0.01
+if fade_len <= 0 then fade_len = 1e-6 end
+local alp = max(0, min(fade_len - D, fade_len)) / fade_len
+local blur = blur_amount * min(D, 3)  -- ぼかしは最大 300 まで
+
+-- 読み手はいない（Script/ Alias/ Preset/ Backup/ と制作 .aup2 を検索して 0 件）。原作との対照用に残す
+local R_norm = (R - aperture) / BLUR_RAMP
+local cam_depth = {alp = alp, d = D, far = max(0, R_norm), near = -min(0, R_norm), R = R_norm}
+
+-- フィルタオブジェクトではオブジェクトの変数を変えない（lua.txt のフィルタオブジェクトの制限）
+if fd == 1 and not is_filter then
+  obj.alpha = obj.alpha * alp
+end
+
+if obj.alpha > 0 then
+  if blur > 0 then
+    if lens == 1 then
+      obj.effect("レンズブラー", "範囲", blur, "サイズ固定", is_filter and 1 or 0)
+    elseif is_filter then
+      obj.effect("ぼかし", "範囲", blur, "サイズ固定", 1)
+    else
+      obj.effect("ぼかし", "範囲", blur)
+    end
+  end
+
+  local color_am = color_amount * 0.01
+  if color_am > 0 then
+    -- 色(近)/色(遠) は既定値が 0xffffff なので nil にはならない（原作の分岐をそのまま残す）
+    if nearcol == nil then
+      nearcol = HSV(120 * alp, 50 + 30 * (1 - alp), 40 + 40 * (1 - alp))
+    end
+    if farcol == nil then
+      farcol = HSV(120 + 95 * (1 - alp), 50 + 30 * (1 - alp), 90 - 20 * (1 - alp))
+    end
+
+    local color = ({nearcol, farcol})[location]
+    if color == 0 then
+      return
+    end
+    obj.effect("グラデーション", "強さ", 100 * color_am * (1 - alp), "color", color, "color2", color, "blend", 0)
+  end
+end

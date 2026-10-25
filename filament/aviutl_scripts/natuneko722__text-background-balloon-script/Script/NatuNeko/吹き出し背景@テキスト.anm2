@@ -1,0 +1,724 @@
+--information:吹き出し背景@テキスト v1.2.1
+--label:NatuNeko
+--require:2010500
+
+--group:背景,true
+--track@padding_x:横余白,-500,500,24,1
+--track@padding_y:縦余白,-500,500,16,1
+--color@background_color:背景色,0x202020
+--track@background_transparency:背景透明度,0,100,20,1
+--track@corner_radius:角丸,0,500,16,1
+--group
+
+--group:テキスト位置,false
+--track@text_offset_x:オフセットX,-500,500,0,1
+--track@text_offset_y:オフセットY,-500,500,0,1
+--group
+
+--group:しっぽ,false
+--select@tail_side:しっぽの向き=1,なし=4,上=0,下=1,左=2,右=3
+--select@tail_position_mode:しっぽの位置=0,割合=0,固定距離+=1,固定距離-=2
+--track@tail_position:割合位置,-100,100,50,1
+--track@tail_position_fixed:固定距離,0,2000,50,1
+--track@tail_width:しっぽの幅,0,1000,72,1
+--track@tail_height:しっぽの高さ,0,1000,48,1
+--track@tail_corner_radius:しっぽ角丸,0,500,16,1
+--track@tail_tip_offset_x:先端オフセットX,-2000,2000,0,1
+--track@tail_tip_offset_y:先端オフセットY,-2000,2000,0,1
+--group
+
+--hide@tail_position_mode:tail_side==4
+--hide@tail_position:tail_side==4
+--hide@tail_position:tail_position_mode~=0
+--hide@tail_position_fixed:tail_side==4
+--hide@tail_position_fixed:tail_position_mode==0
+--hide@tail_width:tail_side==4
+--hide@tail_height:tail_side==4
+--hide@tail_corner_radius:tail_side==4
+--hide@tail_tip_offset_x:tail_side==4
+--hide@tail_tip_offset_y:tail_side==4
+
+--[[pixelshader@compose_text_background_balloon:
+Texture2D source_texture : register(t0);
+SamplerState source_sampler : register(s0);
+
+cbuffer constant0 : register(b0) {
+    float4 sizes;          // source width, source height, destination width, destination height
+    float4 panel;          // panel half width, panel half height, corner radius, reserved
+    float4 layout;         // canvas center x/y, text offset x/y
+    float4 tail;           // enabled, side, position, width
+    float4 tail_tip;       // absolute tip x/y, rounded tip radius, reserved
+    float4 background;     // straight RGB and alpha
+};
+
+float cross2(float2 a, float2 b) {
+    return a.x * b.y - a.y * b.x;
+}
+
+float distance_to_segment(float2 p, float2 a, float2 b) {
+    float2 ab = b - a;
+    float denominator = max(dot(ab, ab), 0.000001);
+    float t = saturate(dot(p - a, ab) / denominator);
+    return length(p - (a + ab * t));
+}
+
+float signed_distance_triangle(float2 p, float2 a, float2 b, float2 c) {
+    float s0 = cross2(b - a, p - a);
+    float s1 = cross2(c - b, p - b);
+    float s2 = cross2(a - c, p - c);
+    bool has_negative = (s0 < 0.0) || (s1 < 0.0) || (s2 < 0.0);
+    bool has_positive = (s0 > 0.0) || (s1 > 0.0) || (s2 > 0.0);
+    bool inside = !(has_negative && has_positive);
+
+    float distance_value = min(
+        distance_to_segment(p, a, b),
+        min(distance_to_segment(p, b, c), distance_to_segment(p, c, a))
+    );
+    return inside ? -distance_value : distance_value;
+}
+
+float signed_distance_quadrilateral(
+    float2 p,
+    float2 a,
+    float2 b,
+    float2 c,
+    float2 d
+) {
+    float s0 = cross2(b - a, p - a);
+    float s1 = cross2(c - b, p - b);
+    float s2 = cross2(d - c, p - c);
+    float s3 = cross2(a - d, p - d);
+    bool has_negative = (s0 < 0.0) || (s1 < 0.0) || (s2 < 0.0) || (s3 < 0.0);
+    bool has_positive = (s0 > 0.0) || (s1 > 0.0) || (s2 > 0.0) || (s3 > 0.0);
+    bool inside = !(has_negative && has_positive);
+
+    float distance_value = min(
+        min(distance_to_segment(p, a, b), distance_to_segment(p, b, c)),
+        min(distance_to_segment(p, c, d), distance_to_segment(p, d, a))
+    );
+    return inside ? -distance_value : distance_value;
+}
+
+float2 tangent_point_toward(
+    float2 external_point,
+    float2 circle_center,
+    float circle_radius,
+    float2 toward
+) {
+    float2 delta = external_point - circle_center;
+    float distance_squared = max(dot(delta, delta), 0.000001);
+    float radius_squared = circle_radius * circle_radius;
+    float2 base = circle_center + delta * (radius_squared / distance_squared);
+    float tangent_scale = circle_radius * sqrt(max(
+        distance_squared - radius_squared,
+        0.0
+    )) / distance_squared;
+    float2 offset = float2(-delta.y, delta.x) * tangent_scale;
+    float2 candidate_a = base + offset;
+    float2 candidate_b = base - offset;
+    return dot(candidate_a - circle_center, toward)
+        >= dot(candidate_b - circle_center, toward)
+        ? candidate_a
+        : candidate_b;
+}
+
+float signed_distance_rounded_tail(
+    float2 p,
+    float2 a,
+    float2 b,
+    float2 tip,
+    float tip_radius_value
+) {
+    float2 base_center = (a + b) * 0.5;
+    float2 tip_vector = tip - base_center;
+    float tip_length = length(tip_vector);
+    float base_length = length(b - a);
+    if (tip_radius_value <= 0.0 || tip_length <= 0.0001 || base_length <= 0.0001) {
+        return signed_distance_triangle(p, a, b, tip);
+    }
+
+    float2 outward = tip_vector / tip_length;
+    float2 base_edge = (b - a) / base_length;
+    float2 outward_normal = float2(base_edge.y, -base_edge.x);
+    float normal_height = max(dot(tip_vector, outward_normal), 0.0);
+    float tip_radius = min(
+        max(tip_radius_value, 0.0),
+        min(
+            base_length * 0.2,
+            min(
+                tip_length * 0.25,
+                min(length(tip - a), length(tip - b)) * 0.25
+            )
+        )
+    );
+    tip_radius = min(tip_radius, normal_height * 0.4);
+    if (tip_radius <= 0.0001) {
+        return signed_distance_triangle(p, a, b, tip);
+    }
+
+    // The circle remains tangent at the requested tip. Tangent segments from
+    // the base make the transition smooth without moving the visible endpoint.
+    float2 circle_center = tip - outward * tip_radius;
+    float2 tangent_a = tangent_point_toward(
+        a,
+        circle_center,
+        tip_radius,
+        outward
+    );
+    float2 tangent_b = tangent_point_toward(
+        b,
+        circle_center,
+        tip_radius,
+        outward
+    );
+    float body_distance = signed_distance_quadrilateral(
+        p,
+        a,
+        b,
+        tangent_b,
+        tangent_a
+    );
+    float cap_distance = length(p - circle_center) - tip_radius;
+    return min(body_distance, cap_distance);
+}
+
+float signed_distance_rounded_box(float2 p, float2 half_size, float radius) {
+    radius = min(max(radius, 0.0), min(half_size.x, half_size.y));
+    float2 q = abs(p) - half_size + radius;
+    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - radius;
+}
+
+float signed_distance_tail(
+    float2 p,
+    float2 half_size,
+    float radius,
+    float side_value,
+    float position,
+    float width,
+    float2 tip_position,
+    float tip_radius
+) {
+    if (width <= 0.0) {
+        return 1000000.0;
+    }
+
+    float half_width = width * 0.5;
+    float2 a;
+    float2 b;
+    float2 c;
+    int side = (int)floor(side_value + 0.5);
+
+    // Keep the whole tail base inside the rounded panel. When a large radius
+    // removes the straight part of an edge, move the base farther inward
+    // instead of shrinking the tail to zero.
+    bool vertical_tail = side == 0 || side == 1;
+    float edge_half_length = vertical_tail ? half_size.x : half_size.y;
+    float normal_half_length = vertical_tail ? half_size.y : half_size.x;
+    float safe_radius = min(max(radius, 0.0), min(half_size.x, half_size.y));
+    float base_extent = abs(position) + half_width;
+    float straight_half_length = max(0.0, edge_half_length - safe_radius);
+    float curve_offset = clamp(
+        base_extent - straight_half_length,
+        0.0,
+        safe_radius
+    );
+    float required_overlap = 0.0;
+    if (safe_radius > 0.0 && curve_offset > 0.0) {
+        float radius_squared = safe_radius * safe_radius;
+        required_overlap = safe_radius - sqrt(max(
+            radius_squared - curve_offset * curve_offset,
+            0.0
+        )) + 0.5;
+    }
+    float minimum_overlap = min(1.5, min(half_size.x, half_size.y) * 0.25);
+    float join_overlap = min(
+        max(minimum_overlap, required_overlap),
+        normal_half_length
+    );
+
+    if (side == 0) {
+        a = float2(position - half_width, -half_size.y + join_overlap);
+        b = float2(position + half_width, -half_size.y + join_overlap);
+    } else if (side == 1) {
+        a = float2(position + half_width, half_size.y - join_overlap);
+        b = float2(position - half_width, half_size.y - join_overlap);
+    } else if (side == 2) {
+        a = float2(-half_size.x + join_overlap, position + half_width);
+        b = float2(-half_size.x + join_overlap, position - half_width);
+    } else {
+        a = float2(half_size.x - join_overlap, position - half_width);
+        b = float2(half_size.x - join_overlap, position + half_width);
+    }
+    c = tip_position;
+
+    return signed_distance_rounded_tail(p, a, b, c, tip_radius);
+}
+
+float signed_distance_shape(
+    float2 p,
+    float2 half_size,
+    float radius,
+    float tail_enabled,
+    float side,
+    float position,
+    float tail_width_value,
+    float2 tail_tip_position,
+    float tail_tip_radius
+) {
+    float rectangle_distance = signed_distance_rounded_box(p, half_size, radius);
+    if (tail_enabled < 0.5) {
+        return rectangle_distance;
+    }
+
+    float tail_distance = signed_distance_tail(
+        p,
+        half_size,
+        radius,
+        side,
+        position,
+        tail_width_value,
+        tail_tip_position,
+        tail_tip_radius
+    );
+    return min(rectangle_distance, tail_distance);
+}
+
+float coverage_from_distance(float distance_value) {
+    // One-pixel transition keeps curved edges and diagonal tails smooth.
+    return saturate(0.5 - distance_value);
+}
+
+float4 over(float4 foreground, float4 background_value) {
+    return foreground + background_value * (1.0 - foreground.a);
+}
+
+float4 compose_text_background_balloon(float4 position : SV_Position) : SV_Target {
+    float2 source_size = sizes.xy;
+    float2 destination_size = sizes.zw;
+    float2 local_position = position.xy - destination_size * 0.5 + layout.xy;
+
+    float outer_distance = signed_distance_shape(
+        local_position,
+        panel.xy,
+        panel.z,
+        tail.x,
+        tail.y,
+        tail.z,
+        tail.w,
+        tail_tip.xy,
+        tail_tip.z
+    );
+    float outer_coverage = coverage_from_distance(outer_distance);
+    float background_alpha = background.a * outer_coverage;
+    float4 shape_color = float4(
+        background.rgb * background_alpha,
+        background_alpha
+    );
+
+    float2 source_uv = (
+        local_position - layout.zw + source_size * 0.5
+    ) / source_size;
+    float4 text_color = source_texture.SampleLevel(source_sampler, source_uv, 0.0);
+
+    // AviUtl ExEdit2 image buffers use premultiplied alpha for composition.
+    return over(text_color, shape_color);
+}
+]]
+
+local MARGIN = 2
+
+local function clamp(value, minimum, maximum)
+    return math.max(minimum, math.min(maximum, value))
+end
+
+local function color_to_rgb(color)
+    local red = math.floor(color / 0x10000) % 0x100
+    local green = math.floor(color / 0x100) % 0x100
+    local blue = color % 0x100
+    return red / 255, green / 255, blue / 255
+end
+
+local function compute_tail_tip_rounding(
+    half_width,
+    half_height,
+    panel_radius,
+    tip_rounding_radius,
+    side,
+    position,
+    width,
+    tip_x,
+    tip_y
+)
+    local vertical_tail = side == 0 or side == 1
+    local edge_half_length = vertical_tail and half_width or half_height
+    local normal_half_length = vertical_tail and half_height or half_width
+    local safe_panel_radius = clamp(
+        panel_radius,
+        0,
+        math.min(half_width, half_height)
+    )
+    local base_extent = math.abs(position) + width * 0.5
+    local straight_half_length = math.max(
+        0,
+        edge_half_length - safe_panel_radius
+    )
+    local curve_offset = clamp(
+        base_extent - straight_half_length,
+        0,
+        safe_panel_radius
+    )
+    local required_overlap = 0
+    if safe_panel_radius > 0 and curve_offset > 0 then
+        required_overlap = safe_panel_radius - math.sqrt(math.max(
+            safe_panel_radius * safe_panel_radius - curve_offset * curve_offset,
+            0
+        )) + 0.5
+    end
+    local minimum_overlap = math.min(1.5, math.min(half_width, half_height) * 0.25)
+    local join_overlap = math.min(
+        math.max(minimum_overlap, required_overlap),
+        normal_half_length
+    )
+
+    local half_tail_width = width * 0.5
+    local base_center_x = position
+    local base_center_y = position
+    local point_a_x
+    local point_a_y
+    local point_b_x
+    local point_b_y
+    if side == 0 then
+        base_center_y = -half_height + join_overlap
+        point_a_x = position - half_tail_width
+        point_a_y = base_center_y
+        point_b_x = position + half_tail_width
+        point_b_y = base_center_y
+    elseif side == 1 then
+        base_center_y = half_height - join_overlap
+        point_a_x = position + half_tail_width
+        point_a_y = base_center_y
+        point_b_x = position - half_tail_width
+        point_b_y = base_center_y
+    elseif side == 2 then
+        base_center_x = -half_width + join_overlap
+        point_a_x = base_center_x
+        point_a_y = position + half_tail_width
+        point_b_x = base_center_x
+        point_b_y = position - half_tail_width
+    else
+        base_center_x = half_width - join_overlap
+        point_a_x = base_center_x
+        point_a_y = position - half_tail_width
+        point_b_x = base_center_x
+        point_b_y = position + half_tail_width
+    end
+
+    local tip_vector_x = tip_x - base_center_x
+    local tip_vector_y = tip_y - base_center_y
+    local tip_length = math.sqrt(
+        tip_vector_x * tip_vector_x + tip_vector_y * tip_vector_y
+    )
+    local safe_tip_radius = clamp(tip_rounding_radius, 0, 500)
+    if safe_tip_radius <= 0 or tip_length <= 0.0001 or width <= 0 then
+        return 0, tip_x, tip_y
+    end
+
+    local base_edge_x = point_b_x - point_a_x
+    local base_edge_y = point_b_y - point_a_y
+    local base_length = math.sqrt(base_edge_x * base_edge_x + base_edge_y * base_edge_y)
+    if base_length <= 0.0001 then
+        return 0, tip_x, tip_y
+    end
+    local outward_normal_x = base_edge_y / base_length
+    local outward_normal_y = -base_edge_x / base_length
+    local normal_height = math.max(
+        tip_vector_x * outward_normal_x + tip_vector_y * outward_normal_y,
+        0
+    )
+    local edge_a_x = tip_x - point_a_x
+    local edge_a_y = tip_y - point_a_y
+    local edge_b_x = tip_x - point_b_x
+    local edge_b_y = tip_y - point_b_y
+    local edge_a_length = math.sqrt(edge_a_x * edge_a_x + edge_a_y * edge_a_y)
+    local edge_b_length = math.sqrt(edge_b_x * edge_b_x + edge_b_y * edge_b_y)
+    local tip_radius = math.min(
+        safe_tip_radius,
+        base_length * 0.2,
+        tip_length * 0.25,
+        math.min(edge_a_length, edge_b_length) * 0.25,
+        normal_height * 0.4
+    )
+    if tip_radius <= 0.0001 then
+        return 0, tip_x, tip_y
+    end
+
+    local circle_center_x = tip_x - tip_vector_x / tip_length * tip_radius
+    local circle_center_y = tip_y - tip_vector_y / tip_length * tip_radius
+    return tip_radius, circle_center_x, circle_center_y
+end
+
+local source_width = obj.w
+local source_height = obj.h
+if source_width == nil or source_height == nil or source_width <= 0 or source_height <= 0 then
+    return
+end
+
+local image_max_width, image_max_height = obj.getinfo("image_max")
+image_max_width = image_max_width or 16384
+image_max_height = image_max_height or 16384
+if source_width > image_max_width or source_height > image_max_height then
+    return
+end
+
+local margin_x = math.min(
+    MARGIN,
+    math.max(0, math.floor((image_max_width - source_width) * 0.5))
+)
+local margin_y = math.min(
+    MARGIN,
+    math.max(0, math.floor((image_max_height - source_height) * 0.5))
+)
+local available_width = image_max_width - margin_x * 2
+local available_height = image_max_height - margin_y * 2
+
+local maximum_padding_x = math.max(0, (available_width - source_width) * 0.5)
+local maximum_padding_y = math.max(0, (available_height - source_height) * 0.5)
+local minimum_padding_x = -source_width * 0.5 + 0.5
+local minimum_padding_y = -source_height * 0.5 + 0.5
+local effective_padding_x = clamp(padding_x, minimum_padding_x, maximum_padding_x)
+local effective_padding_y = clamp(padding_y, minimum_padding_y, maximum_padding_y)
+
+local panel_half_width = source_width * 0.5 + effective_padding_x
+local panel_half_height = source_height * 0.5 + effective_padding_y
+local effective_radius = clamp(corner_radius, 0, math.min(panel_half_width, panel_half_height))
+
+local text_offset_limit_x = math.max(
+    0,
+    available_width - panel_half_width - source_width * 0.5
+)
+local text_offset_limit_y = math.max(
+    0,
+    available_height - panel_half_height - source_height * 0.5
+)
+local effective_text_offset_x = clamp(
+    text_offset_x,
+    -text_offset_limit_x,
+    text_offset_limit_x
+)
+local effective_text_offset_y = clamp(
+    text_offset_y,
+    -text_offset_limit_y,
+    text_offset_limit_y
+)
+
+local base_min_x = math.min(
+    -panel_half_width,
+    effective_text_offset_x - source_width * 0.5
+)
+local base_max_x = math.max(
+    panel_half_width,
+    effective_text_offset_x + source_width * 0.5
+)
+local base_min_y = math.min(
+    -panel_half_height,
+    effective_text_offset_y - source_height * 0.5
+)
+local base_max_y = math.max(
+    panel_half_height,
+    effective_text_offset_y + source_height * 0.5
+)
+
+local selected_tail_side = clamp(math.floor(tail_side + 0.5), 0, 4)
+local tail_direction_enabled = selected_tail_side < 4
+local effective_tail_side = tail_direction_enabled and selected_tail_side or 0
+local tail_is_horizontal = effective_tail_side == 2 or effective_tail_side == 3
+local tail_is_vertical = effective_tail_side == 0 or effective_tail_side == 1
+
+local edge_half_length
+if tail_is_vertical then
+    edge_half_length = panel_half_width
+else
+    edge_half_length = panel_half_height
+end
+
+-- A large corner radius may remove the straight part of an edge, but the tail
+-- can still join the curved part. The shader moves its base farther inward.
+local maximum_tail_width = math.max(0, (edge_half_length - 1) * 2)
+local effective_tail_width = math.min(math.max(0, tail_width), maximum_tail_width)
+local tail_position_limit = math.max(
+    0,
+    edge_half_length - effective_radius - effective_tail_width * 0.5 - 1
+)
+local selected_tail_position_mode = clamp(
+    math.floor(tail_position_mode + 0.5),
+    0,
+    2
+)
+local effective_tail_position
+if selected_tail_position_mode ~= 0 then
+    -- Fixed distance + measures from the left/top edge. Fixed distance -
+    -- measures from the right/bottom edge. The target is the tail-base center.
+    local fixed_tail_position = clamp(tail_position_fixed, 0, 2000)
+    local requested_tail_position
+    if selected_tail_position_mode == 1 then
+        requested_tail_position = -edge_half_length + fixed_tail_position
+    else
+        requested_tail_position = edge_half_length - fixed_tail_position
+    end
+    effective_tail_position = clamp(
+        requested_tail_position,
+        -tail_position_limit,
+        tail_position_limit
+    )
+else
+    effective_tail_position = clamp(tail_position, -100, 100)
+        / 100 * tail_position_limit
+end
+
+local tail_enabled = 0
+local effective_tail_height = math.max(0, tail_height)
+if tail_direction_enabled and effective_tail_width > 0 and effective_tail_height > 0 then
+    tail_enabled = 1
+end
+
+local effective_tail_tip_x = 0
+local effective_tail_tip_y = 0
+local effective_tail_tip_radius = 0
+local tail_tip_circle_center_x = 0
+local tail_tip_circle_center_y = 0
+if tail_enabled == 1 then
+    local default_tip_x = effective_tail_position
+    local default_tip_y = effective_tail_position
+    if effective_tail_side == 0 then
+        default_tip_y = -panel_half_height - effective_tail_height
+    elseif effective_tail_side == 1 then
+        default_tip_y = panel_half_height + effective_tail_height
+    elseif effective_tail_side == 2 then
+        default_tip_x = -panel_half_width - effective_tail_height
+    else
+        default_tip_x = panel_half_width + effective_tail_height
+    end
+
+    local tip_min_x = base_max_x - available_width
+    local tip_max_x = base_min_x + available_width
+    local tip_min_y = base_max_y - available_height
+    local tip_max_y = base_min_y + available_height
+    local minimum_outward_distance = 1
+
+    if effective_tail_side == 0 then
+        tip_max_y = math.min(tip_max_y, -panel_half_height - minimum_outward_distance)
+    elseif effective_tail_side == 1 then
+        tip_min_y = math.max(tip_min_y, panel_half_height + minimum_outward_distance)
+    elseif effective_tail_side == 2 then
+        tip_max_x = math.min(tip_max_x, -panel_half_width - minimum_outward_distance)
+    else
+        tip_min_x = math.max(tip_min_x, panel_half_width + minimum_outward_distance)
+    end
+
+    if tip_min_x > tip_max_x or tip_min_y > tip_max_y then
+        tail_enabled = 0
+    else
+        effective_tail_tip_x = clamp(
+            default_tip_x + tail_tip_offset_x,
+            tip_min_x,
+            tip_max_x
+        )
+        effective_tail_tip_y = clamp(
+            default_tip_y + tail_tip_offset_y,
+            tip_min_y,
+            tip_max_y
+        )
+        effective_tail_tip_radius,
+            tail_tip_circle_center_x,
+            tail_tip_circle_center_y = compute_tail_tip_rounding(
+                panel_half_width,
+                panel_half_height,
+                effective_radius,
+                tail_corner_radius,
+                effective_tail_side,
+                effective_tail_position,
+                effective_tail_width,
+                effective_tail_tip_x,
+                effective_tail_tip_y
+            )
+    end
+end
+
+local minimum_x = base_min_x
+local maximum_x = base_max_x
+local minimum_y = base_min_y
+local maximum_y = base_max_y
+if tail_enabled == 1 then
+    local rounded_minimum_x = math.min(
+        minimum_x,
+        effective_tail_tip_x,
+        tail_tip_circle_center_x - effective_tail_tip_radius
+    )
+    local rounded_maximum_x = math.max(
+        maximum_x,
+        effective_tail_tip_x,
+        tail_tip_circle_center_x + effective_tail_tip_radius
+    )
+    local rounded_minimum_y = math.min(
+        minimum_y,
+        effective_tail_tip_y,
+        tail_tip_circle_center_y - effective_tail_tip_radius
+    )
+    local rounded_maximum_y = math.max(
+        maximum_y,
+        effective_tail_tip_y,
+        tail_tip_circle_center_y + effective_tail_tip_radius
+    )
+    if rounded_maximum_x - rounded_minimum_x + margin_x * 2 <= image_max_width
+        and rounded_maximum_y - rounded_minimum_y + margin_y * 2 <= image_max_height then
+        minimum_x = rounded_minimum_x
+        maximum_x = rounded_maximum_x
+        minimum_y = rounded_minimum_y
+        maximum_y = rounded_maximum_y
+    else
+        -- Preserve the existing safe image limit at extreme offsets. Only the
+        -- tip rounding is disabled when its cap would exceed the output area.
+        effective_tail_tip_radius = 0
+        minimum_x = math.min(minimum_x, effective_tail_tip_x)
+        maximum_x = math.max(maximum_x, effective_tail_tip_x)
+        minimum_y = math.min(minimum_y, effective_tail_tip_y)
+        maximum_y = math.max(maximum_y, effective_tail_tip_y)
+    end
+end
+
+local destination_width = math.ceil(maximum_x - minimum_x + margin_x * 2)
+local destination_height = math.ceil(maximum_y - minimum_y + margin_y * 2)
+if destination_width <= 0 or destination_height <= 0
+    or destination_width > image_max_width
+    or destination_height > image_max_height then
+    return
+end
+local canvas_center_x = (minimum_x + maximum_x) * 0.5
+local canvas_center_y = (minimum_y + maximum_y) * 0.5
+
+local background_red, background_green, background_blue = color_to_rgb(background_color)
+local background_alpha = 1 - clamp(background_transparency, 0, 100) / 100
+
+if not obj.copybuffer("tempbuffer", "object") then
+    return
+end
+
+obj.clearbuffer("object", destination_width, destination_height)
+obj.pixelshader(
+    "compose_text_background_balloon",
+    "object",
+    "tempbuffer",
+    {
+        source_width, source_height, destination_width, destination_height,
+        panel_half_width, panel_half_height, effective_radius, 0,
+        canvas_center_x, canvas_center_y, effective_text_offset_x, effective_text_offset_y,
+        tail_enabled, effective_tail_side, effective_tail_position, effective_tail_width,
+        effective_tail_tip_x, effective_tail_tip_y, effective_tail_tip_radius, 0,
+        background_red, background_green, background_blue, background_alpha
+    },
+    "copy",
+    "clip"
+)
+obj.cx = obj.cx - canvas_center_x
+obj.cy = obj.cy - canvas_center_y
+obj.setoption("focus_mode", "no_resize")

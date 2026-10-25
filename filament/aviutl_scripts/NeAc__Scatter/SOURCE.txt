@@ -1,0 +1,5 @@
+Scatter by 猫愛
+licence: MIT
+from: https://github.com/nea-c/aviutl2_script_Scatter/releases/download/r2/Scatter.zip (tag r2, commit 5a84211f4046)
+page: https://github.com/nea-c/aviutl2_script_Scatter
+Put here unchanged for Motolii (filament/aviutl_scripts).

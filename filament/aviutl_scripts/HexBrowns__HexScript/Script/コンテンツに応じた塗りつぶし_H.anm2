@@ -1,0 +1,511 @@
+--information:コンテンツに応じた塗りつぶし_H v1.01 by HexBrowns
+--label:HexScript
+--filter
+
+--group:消す範囲
+--select@area:範囲=2,透明な所=0,レイヤー=1,矩形=2,楕円=3
+--track@area_layer:範囲のレイヤー,1,1000,1,1
+--hide@area_layer:area<1
+--hide@area_layer:area>1
+--select@area_prop:範囲の決め方=0,アルファ=0,輝度=1
+--hide@area_prop:area<1
+--hide@area_prop:area>1
+--check@area_inv:範囲を反転,0
+--hide@area_inv:area<1
+--hide@area_inv:area>1
+--track@area_x:中心X,-4000,4000,0,0.1
+--hide@area_x:area<2
+--track@area_y:中心Y,-4000,4000,0,0.1
+--hide@area_y:area<2
+--track@area_w:幅,0,8000,200,0.1
+--hide@area_w:area<2
+--track@area_h:高さ,0,8000,200,0.1
+--hide@area_h:area<2
+--track@grow:範囲を広げる,0,64,2,1
+--group
+
+--group:塗り方
+--select@method:方法=1,なめらか=0,パッチ=1
+--select@patch_size:パッチの大きさ=7,5=5,7=7,9=9
+--hide@patch_size:method==0
+--select@pm_res:探す細かさ=1,等倍=0,1/2=1
+--hide@pm_res:method==0
+--track@iters:繰り返し,1,10,4,1
+--hide@iters:method==0
+--track@seed:シード,0,10000,0,1
+--hide@seed:method==0
+--check@show_area:範囲を表示,0
+--group
+
+--[[
+After Effects の「コンテンツに応じた塗りつぶし」に当たる効果。消す範囲を周りの絵で埋める。1 フレームずつ塗る。
+
+- 範囲: 透明な所（アルファ 0.5 未満）/ 別レイヤーのアルファか輝度（オブジェクトの大きさに引き伸ばす）/ 矩形 / 楕円。範囲を広げる で膨らませる
+- なめらか: 縮小階層のプッシュ・プル。知っている画素（範囲の外で不透明）の色を、段ごとに重み付きで平均して 1x1 まで縮め、
+  粗い段から広げながら穴を埋める
+- パッチ: PatchMatch。各段で、穴の画素ごとに「周りのパッチが一番似ている、知っている場所」へのずれ（NNF）を求め、
+  そのずれで色を集めて（投票）埋める。粗い段（短辺 32px 以上の最も粗い段）から細かい段へ、ずれを 2 倍にして引き継ぐ。
+  探す: 隣の画素のずれ（1・2・4・8 先）を試し、今の最良の周りをだんだん狭くランダムに探す。初期値はなめらかの結果。
+  比べるときは穴の中の画素の重みを 0.3 にし、投票は誤差の小さいパッチほど重く数える
+- 塗った所は不透明になる。範囲の外はそのまま
+
+オブジェクトの大きさと変数は変えない（フィルタオブジェクトでも使える。ただし 範囲=レイヤー は読み込みのあと元に戻す）。
+cache: 元の画像・範囲・縮小階層（元の 1.33 倍）・塗り 2 枚・ずれ 2 枚（パッチのとき）。FHD・探す細かさ 等倍だと枠（1600 万画素）の 9 割を使う
+机上検証: AI/scripts/コンテンツに応じた塗りつぶし_H/verify_fill.py
+]]
+
+--[[pixelshader@ps_caf_mask:
+cbuffer P : register(b0) {
+    float2 size;      // 0-1  大きさ
+    float2 center;    // 2-3  矩形・楕円の中心（バッファの px）
+    float2 halfsz;    // 4-5  矩形・楕円の半分の大きさ
+    float mode;       // 6    0 透明な所 / 1 レイヤー / 2 矩形 / 3 楕円
+    float prop;       // 7    0 アルファ / 1 輝度（レイヤーのとき）
+    float inv;        // 8    1 で反転（レイヤーのとき）
+};
+Texture2D src : register(t0);
+Texture2D lay : register(t1);
+SamplerState smp : register(s0);
+
+float4 ps_caf_mask(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy;
+    float hole = 0.0;
+    if (mode < 0.5) {
+        hole = (src.SampleLevel(smp, p / size, 0).a < 0.5) ? 1.0 : 0.0;
+    } else if (mode < 1.5) {
+        float4 m = lay.SampleLevel(smp, p / size, 0);
+        float v = (prop > 0.5) ? dot(m.rgb, float3(0.2126, 0.7152, 0.0722)) : m.a;
+        hole = (v > 0.5) ? 1.0 : 0.0;
+        if (inv > 0.5) hole = 1.0 - hole;
+    } else if (mode < 2.5) {
+        float2 d = abs(p - center);
+        hole = (d.x <= halfsz.x && d.y <= halfsz.y) ? 1.0 : 0.0;
+    } else {
+        float2 d = (p - center) / max(halfsz, float2(1e-3, 1e-3));
+        hole = (dot(d, d) <= 1.0) ? 1.0 : 0.0;
+    }
+    return float4(hole, 0.0, 0.0, 1.0);
+}
+]]
+
+--[[pixelshader@ps_caf_grow:
+cbuffer P : register(b0) {
+    float2 size;      // 0-1 大きさ
+    float2 dir;       // 2-3 (1, 0) で横、(0, 1) で縦
+    float radius;     // 4   広げる画素数
+};
+Texture2D m : register(t0);
+
+// 範囲を radius 画素ぶん膨らませる（横と縦に分けた最大値）
+float4 ps_caf_grow(float4 pos : SV_Position) : SV_Target {
+    int2 p = int2(pos.xy);
+    int2 hi = int2(size) - 1;
+    float v = 0.0;
+    [loop] for (float i = -radius; i <= radius; i += 1.0) {
+        int2 q = clamp(p + int2(dir * i), int2(0, 0), hi);
+        v = max(v, m.Load(int3(q, 0)).r);
+    }
+    return float4(v, 0.0, 0.0, 1.0);
+}
+]]
+
+--[[pixelshader@ps_caf_shrink:
+cbuffer P : register(b0) {
+    float2 src_size;  // 0-1 元の大きさ
+    float2 dst_size;  // 2-3 出力の大きさ
+};
+Texture2D src : register(t0);
+SamplerState smp : register(s0);
+
+// 任意の倍率で縮める（v1.01。cache の枠に収めるときだけ使う）。
+// 1 画素は元の画像の対応する範囲を n x n 点の双線形で平均する（乗算済みのまま）
+float4 ps_caf_shrink(float4 pos : SV_Position) : SV_Target {
+    float2 ratio = src_size / max(dst_size, float2(1.0, 1.0));
+    int n = clamp(int(ceil(max(ratio.x, ratio.y) * 0.5)), 1, 8);
+    float2 o = floor(pos.xy) * ratio;
+    float4 acc = float4(0.0, 0.0, 0.0, 0.0);
+    [loop] for (int j = 0; j < n; j++) {
+        [loop] for (int i = 0; i < n; i++) {
+            float2 q = o + (float2(float(i), float(j)) + 0.5) * ratio / float(n);
+            acc += src.SampleLevel(smp, q / src_size, 0);
+        }
+    }
+    return acc / float(n * n);
+}
+]]
+
+--[[pixelshader@ps_caf_init:
+cbuffer P : register(b0) {
+    float2 size;      // 0-1 大きさ
+};
+Texture2D src : register(t0);
+Texture2D m : register(t1);
+
+// 縮小階層の 0 段目。rgb = ストレートの色、a = 知っている重み（範囲の外で不透明なら 1）
+float4 ps_caf_init(float4 pos : SV_Position) : SV_Target {
+    int2 p = int2(pos.xy);
+    float4 s = src.Load(int3(p, 0));
+    float known = (m.Load(int3(p, 0)).r < 0.5 && s.a > 0.5) ? 1.0 : 0.0;
+    float3 c = (s.a > 1e-4) ? s.rgb / s.a : float3(0.0, 0.0, 0.0);
+    return float4(c * known, known);
+}
+]]
+
+--[[pixelshader@ps_caf_down:
+cbuffer P : register(b0) {
+    float2 size;      // 0-1 出力の大きさ
+    float2 src;       // 2-3 1 段細かい方の大きさ
+};
+Texture2D pk : register(t0);
+
+// 4 つの子の重み付き平均。重みは平均（4 つとも知っていれば 1）
+float4 ps_caf_down(float4 pos : SV_Position) : SV_Target {
+    int2 p = int2(pos.xy) * 2;
+    int2 hi = int2(src) - 1;
+    float4 a = pk.Load(int3(min(p, hi), 0));
+    float4 b = pk.Load(int3(min(p + int2(1, 0), hi), 0));
+    float4 c = pk.Load(int3(min(p + int2(0, 1), hi), 0));
+    float4 d = pk.Load(int3(min(p + int2(1, 1), hi), 0));
+    float w = a.a + b.a + c.a + d.a;
+    float3 col = (w > 1e-6) ? (a.rgb * a.a + b.rgb * b.a + c.rgb * c.a + d.rgb * d.a) / w : float3(0.0, 0.0, 0.0);
+    return float4(col, w * 0.25);
+}
+]]
+
+--[[pixelshader@ps_caf_pull:
+cbuffer P : register(b0) {
+    float2 size;      // 0-1 この段の大きさ
+    float coarsest;   // 2   1 なら一番粗い段（上の段が無い）
+};
+Texture2D pk : register(t0);
+Texture2D up : register(t1);
+SamplerState smp : register(s0);
+
+// 知っている重みの分だけこの段の色、残りを 1 段粗い段の塗りで埋める
+float4 ps_caf_pull(float4 pos : SV_Position) : SV_Target {
+    float4 me = pk.Load(int3(int2(pos.xy), 0));
+    float3 u = (coarsest > 0.5) ? me.rgb : up.SampleLevel(smp, pos.xy / size, 0).rgb;
+    return float4(lerp(u, me.rgb, saturate(me.a)), 1.0);
+}
+]]
+
+--[[pixelshader@ps_caf_ninit:
+cbuffer P : register(b0) {
+    float2 size;      // 0-1 この段の大きさ
+    float seed;       // 2   シード
+};
+
+float hash(float2 p, float k) {
+    return frac(sin(dot(p, float2(12.9898, 78.233)) + k * 37.719 + seed * 0.618) * 43758.5453);
+}
+
+// ずれの初期値: 画像のどこかランダムな点へのずれ
+float4 ps_caf_ninit(float4 pos : SV_Position) : SV_Target {
+    float2 t = floor(float2(hash(pos.xy, 1.0), hash(pos.xy, 2.0)) * size);
+    return float4(t - floor(pos.xy), 1e9, 1.0);
+}
+]]
+
+--[[pixelshader@ps_caf_nup:
+cbuffer P : register(b0) {
+    float2 size;      // 0-1 この段の大きさ
+    float2 src;       // 2-3 1 段粗い段の大きさ
+};
+Texture2D nn : register(t0);
+
+// 1 段粗い段のずれを 2 倍にして引き継ぐ
+float4 ps_caf_nup(float4 pos : SV_Position) : SV_Target {
+    // int の割り算は X3556（strict で エラー）になるので、float で半分にしてから切り捨てる
+    int2 q = min(int2(floor(pos.xy * 0.5)), int2(src) - 1);
+    return float4(round(nn.Load(int3(q, 0)).rg) * 2.0, 1e9, 1.0);
+}
+]]
+
+--[[pixelshader@ps_caf_pm:
+cbuffer P : register(b0) {
+    float2 size;      // 0-1 この段の大きさ
+    float radius;     // 2   パッチの半径（5x5 なら 2）
+    float salt;       // 3   繰り返しの番号（乱数をずらす）
+    float seed;       // 4   シード
+    float search;     // 5   ランダムに探す最初の半径（px）
+};
+Texture2D pk : register(t0);   // rgb = 知っている色、a = 重み（1 なら知っている）
+Texture2D fk : register(t1);   // rgb = 今の塗り
+Texture2D nn : register(t2);   // rg = ずれ（px）
+
+float hash(float2 p, float k) {
+    return frac(sin(dot(p, float2(12.9898, 78.233)) + k * 37.719 + seed * 0.618 + salt * 5.123) * 43758.5453);
+}
+
+// p の周りのパッチ（今の塗り）と、p + off の周りのパッチ（知っている色）の二乗誤差の重み付き平均。
+// 穴の中の画素（まだ推測の色）は重みを 0.3 に下げ、知っている画素の一致を優先する（縁から内側へ模様が伝わる）。
+// 元の側に知らない画素が 1 つでもあれば使えない（1e9）。
+// bound: 途中の合計がこれ以上なら打ち切る（重みの合計はパッチの画素数以下なので、合計 >= 最良 x 画素数 なら最良より悪いのが確実）
+float patch_dist(int2 p, int2 off, float bound) {
+    int2 q = p + off;
+    int r = (int)radius;
+    int2 sz = int2(size);
+    if (q.x - r < 0 || q.y - r < 0 || q.x + r >= sz.x || q.y + r >= sz.y) return 1e9;
+    float d = 0.0;
+    float wsum = 0.0;
+    [loop] for (int y = -r; y <= r; y++) {
+        [loop] for (int x = -r; x <= r; x++) {
+            float4 s = pk.Load(int3(q + int2(x, y), 0));
+            if (s.a < 0.999) return 1e9;
+            int2 t = clamp(p + int2(x, y), int2(0, 0), sz - 1);
+            float w = (pk.Load(int3(t, 0)).a >= 0.999) ? 1.0 : 0.3;
+            float3 e = fk.Load(int3(t, 0)).rgb - s.rgb;
+            d += w * dot(e, e);
+            wsum += w;
+            if (d >= bound) return 1e9;
+        }
+    }
+    return d / max(wsum, 1e-6);
+}
+
+float4 ps_caf_pm(float4 pos : SV_Position) : SV_Target {
+    int2 p = int2(pos.xy);
+    if (pk.Load(int3(p, 0)).a >= 0.999) return float4(0.0, 0.0, 0.0, 1.0);   // 知っている画素はずれ 0
+    int2 sz = int2(size);
+    int2 best = int2(round(nn.Load(int3(p, 0)).rg));
+    float npx = (2.0 * radius + 1.0) * (2.0 * radius + 1.0);
+    float bd = patch_dist(p, best, 1e30);
+    // 隣の画素のずれを試す（1・2・4・8 先、上下左右）
+    [loop] for (int j = 1; j <= 8; j *= 2) {
+        [loop] for (int k = 0; k < 4; k++) {
+            int2 dd = (k == 0) ? int2(j, 0) : ((k == 1) ? int2(-j, 0) : ((k == 2) ? int2(0, j) : int2(0, -j)));
+            int2 nb = clamp(p + dd, int2(0, 0), sz - 1);
+            int2 o = int2(round(nn.Load(int3(nb, 0)).rg));
+            float d = patch_dist(p, o, bd * npx);
+            if (d < bd) { bd = d; best = o; }
+        }
+    }
+    // 今の最良の周りを、半径を半分ずつにしながらランダムに探す
+    float rr = search;
+    float n = 0.0;
+    [loop] while (rr >= 1.0) {
+        float2 u = float2(hash(pos.xy, n * 2.0 + 3.0), hash(pos.xy, n * 2.0 + 4.0)) * 2.0 - 1.0;
+        int2 o = best + int2(round(u * rr));
+        float d = patch_dist(p, o, bd * npx);
+        if (d < bd) { bd = d; best = o; }
+        rr *= 0.5;
+        n += 1.0;
+    }
+    return float4(float2(best), bd, 1.0);
+}
+]]
+
+--[[pixelshader@ps_caf_vote:
+cbuffer P : register(b0) {
+    float2 size;      // 0-1 この段の大きさ
+    float radius;     // 2   パッチの半径
+};
+Texture2D pk : register(t0);
+Texture2D nn : register(t1);
+Texture2D fk : register(t2);   // 票が無いときに使う今までの塗り（大きさが違ってもよい）
+SamplerState smp : register(s0);
+
+// 穴の画素 p を覆うパッチ（中心 c）のずれで元の色を集めて平均する: 色 = 平均 pk(p + ずれ(c))
+float4 ps_caf_vote(float4 pos : SV_Position) : SV_Target {
+    int2 p = int2(pos.xy);
+    float4 me = pk.Load(int3(p, 0));
+    if (me.a >= 0.999) return float4(me.rgb, 1.0);
+    int r = (int)radius;
+    int2 sz = int2(size);
+    float3 acc = float3(0.0, 0.0, 0.0);
+    float w = 0.0;
+    [loop] for (int y = -r; y <= r; y++) {
+        [loop] for (int x = -r; x <= r; x++) {
+            int2 c = p + int2(x, y);
+            if (c.x < 0 || c.y < 0 || c.x >= sz.x || c.y >= sz.y) continue;
+            if (pk.Load(int3(c, 0)).a >= 0.999) continue;
+            int2 q = p + int2(round(nn.Load(int3(c, 0)).rg));
+            if (q.x < 0 || q.y < 0 || q.x >= sz.x || q.y >= sz.y) continue;
+            float4 s = pk.Load(int3(q, 0));
+            if (s.a < 0.999) continue;
+            // 似ているパッチ（誤差の小さい中心 c）の票ほど重く数える
+            float wv = exp(-10.0 * nn.Load(int3(c, 0)).b);
+            acc += s.rgb * wv;
+            w += wv;
+        }
+    }
+    float3 c0 = (w > 1e-6) ? acc / w : fk.SampleLevel(smp, pos.xy / size, 0).rgb;
+    return float4(c0, 1.0);
+}
+]]
+
+--[[pixelshader@ps_caf_out:
+cbuffer P : register(b0) {
+    float2 size;      // 0-1 大きさ
+    float show;       // 2   1 で範囲を赤く重ねる
+    float scaled;     // 3   1 なら範囲は縮めた解像度で作ってある（双線形で読んで 0.5 で切る。v1.01）
+};
+Texture2D src : register(t0);
+Texture2D fill : register(t1);
+Texture2D m : register(t2);
+SamplerState smp : register(s0);
+
+float4 ps_caf_out(float4 pos : SV_Position) : SV_Target {
+    float2 uv = pos.xy / size;
+    float4 s = src.Load(int3(int2(pos.xy), 0));   // 範囲の外は補間せずにそのまま
+    float hole = (scaled > 0.5) ? m.SampleLevel(smp, uv, 0).r : m.Load(int3(int2(pos.xy), 0)).r;
+    float4 o = (hole > 0.5) ? float4(fill.SampleLevel(smp, uv, 0).rgb, 1.0) : s;
+    if (show > 0.5 && hole > 0.5) o = float4(lerp(o.rgb, float3(1.0, 0.0, 0.0), 0.5), 1.0);
+    return o;
+}
+]]
+
+local function num(v, d)
+  v = tonumber(v)
+  if v == nil or v ~= v then return d end
+  return v
+end
+
+local W, H = obj.w, obj.h
+if W <= 0 or H <= 0 then return end
+
+local SRC, M = "cache:caf/src", "cache:caf/m"
+local FA, FB, NA, NB = "cache:caf/fa", "cache:caf/fb", "cache:caf/na", "cache:caf/nb"
+local AREA = math.floor(num(area, 2) + 0.5)
+local METHOD = math.floor(num(method, 1) + 0.5)
+local area_l = math.floor(num(area_layer, 1) + 0.5)
+local layer_mode = (AREA == 1) and area_l ~= obj.layer
+
+-- v1.01: 元の画像は cache に退避せず object のまま読む（範囲のレイヤーを読む間だけ退避する）。範囲・縮小階層・プル・
+-- パッチの作業が cache と tempbuffer の枠（1600 万ドット）に収まらなければ、全部を縮めた解像度 WS x HS で行い、
+-- 範囲と塗りを双線形で広げて合成する。それでも収まらなければ効果を掛けない
+-- （AI/scripts/issues/20261013_cache_budget_4k_wide_materials.md）
+local budget = require("EffectUtils_Budget")
+local SC
+do
+  -- 範囲 1 + 縮小階層 4/3 + 作業 FA 1 + プル・パッチの 3 枚（パッチを等倍で探すなら 1 段目、1/2 なら 2 段目の大きさ）
+  local fine = (METHOD == 1 and math.floor(num(pm_res, 1) + 0.5) ~= 0) and 0.25 or 1
+  SC = budget.scale(0, (1 + 4 / 3 + 1 + 3 * fine) * W * H)
+  if SC and layer_mode then
+    local s2 = budget.scale(W * H, W * H)
+    SC = s2 and math.min(SC, s2) or nil
+  end
+  if not SC then
+    budget.refuse("コンテンツに応じた塗りつぶし_H", W, H)
+    return
+  end
+end
+local WS, HS = W, H
+if SC < 1 then WS, HS = math.max(1, math.ceil(W * SC)), math.max(1, math.ceil(H * SC)) end
+
+-- 中間のバッファは pixelshader が全面を書くので、同じ大きさのまま確保し直す clearbuffer は要らない。
+-- この実行の中で大きさが変わるときだけ確保する（FHD で 1 フレームの呼び出しが 60 回を超えるので、回数を減らす）
+local buf_size = {}
+local function ensure(name, w, h)
+  local key = w .. "x" .. h
+  if buf_size[name] ~= key then
+    obj.clearbuffer(name, w, h)
+    buf_size[name] = key
+  end
+end
+
+-- 範囲（r = 1 が消す所）。範囲のレイヤーは読み込んだまま範囲にし、自分の画像と変数を戻す（読み込みで上書きされる）。
+-- レイヤーを読めないとき・自分のレイヤーのときは、自分の画像を範囲の元にする（v1.00 と同じ）
+local function make_mask()
+  ensure(M, WS, HS)
+  obj.pixelshader("ps_caf_mask", M, {"object", "object"}, {
+    WS, HS, (W / 2 + num(area_x, 0)) * WS / W, (H / 2 + num(area_y, 0)) * HS / H,
+    math.max(num(area_w, 200), 0) / 2 * WS / W, math.max(num(area_h, 200), 0) / 2 * HS / H,
+    AREA, math.floor(num(area_prop, 0) + 0.5), (area_inv == 1) and 1 or 0,
+  }, "copy", "clamp")
+end
+local made = false
+if layer_mode then
+  obj.copybuffer(SRC, "object")
+  local names = {"ox", "oy", "oz", "rx", "ry", "rz", "cx", "cy", "cz", "sx", "sy", "sz", "alpha", "zoom", "aspect"}
+  local saved = {}
+  for k, n in ipairs(names) do saved[k] = obj[n] end
+  if obj.load("layer", area_l, true) and obj.w > 0 and obj.h > 0 then
+    make_mask()
+    made = true
+  end
+  obj.copybuffer("object", SRC)
+  obj.clearbuffer(SRC, 1, 1)   -- 戻したら要らない（枠を空ける）
+  for k, n in ipairs(names) do obj[n] = saved[k] end
+end
+if not made then make_mask() end
+local G = math.floor(math.max(num(grow, 2), 0) + 0.5)
+if G > 0 and SC < 1 then G = math.max(1, math.floor(G * SC + 0.5)) end
+if G > 0 then
+  ensure(FA, WS, HS)
+  obj.pixelshader("ps_caf_grow", FA, {M}, {WS, HS, 1, 0, G})
+  obj.pixelshader("ps_caf_grow", M, {FA}, {WS, HS, 0, 1, G})
+end
+
+-- 縮小階層（1x1 まで）
+local levels = {{WS, HS}}
+while levels[#levels][1] > 1 or levels[#levels][2] > 1 do
+  local w, h = levels[#levels][1], levels[#levels][2]
+  levels[#levels + 1] = {math.max(1, math.ceil(w / 2)), math.max(1, math.ceil(h / 2))}
+end
+local function pname(k) return "cache:caf/p" .. k end
+-- 縮めるときは、元の画像を FA へ縮めてから 0 段目を作る
+local src_small = "object"
+if SC < 1 then
+  ensure(FA, WS, HS)
+  obj.pixelshader("ps_caf_shrink", FA, {"object"}, {W, H, WS, HS}, "copy", "clamp")
+  src_small = FA
+end
+ensure(pname(1), WS, HS)
+obj.pixelshader("ps_caf_init", pname(1), {src_small, M}, {WS, HS})
+for k = 2, #levels do
+  ensure(pname(k), levels[k][1], levels[k][2])
+  obj.pixelshader("ps_caf_down", pname(k), {pname(k - 1)}, {levels[k][1], levels[k][2], levels[k - 1][1], levels[k - 1][2]})
+end
+
+-- パッチ: 探す段の範囲。粗い方は短辺 32px 以上で最も粗い段、細かい方は 探す細かさ（等倍 = 1 段目、1/2 = 2 段目）
+local K_FINE, K_COARSE = 1, 1
+if METHOD == 1 then
+  K_FINE = math.min((math.floor(num(pm_res, 1) + 0.5) == 0) and 1 or 2, #levels)
+  K_COARSE = K_FINE
+  while K_COARSE + 1 <= #levels and math.min(levels[K_COARSE + 1][1], levels[K_COARSE + 1][2]) >= 32 do
+    K_COARSE = K_COARSE + 1
+  end
+end
+local pull_to = (METHOD == 1) and K_COARSE or 1
+
+-- プル: 一番粗い段から pull_to 段まで
+local cur, other = FA, FB
+for k = #levels, pull_to, -1 do
+  ensure(other, levels[k][1], levels[k][2])
+  -- 一番粗い段には上の段が無い。まだ作っていない cache を渡すと実機ではエラーになるので、自分の段を渡す（読まない）
+  local up = (k == #levels) and pname(k) or cur
+  obj.pixelshader("ps_caf_pull", other, {pname(k), up}, {levels[k][1], levels[k][2], (k == #levels) and 1 or 0}, "copy", "clamp")
+  cur, other = other, cur
+end
+
+if METHOD == 1 then
+  local R = (math.floor(num(patch_size, 7) + 0.5) - 1) / 2
+  local IT = math.min(math.max(math.floor(num(iters, 4) + 0.5), 1), 10)
+  local SEED = math.floor(num(seed, 0) + 0.5)
+  local ncur, nother = NA, NB
+  for k = K_COARSE, K_FINE, -1 do
+    local w, h = levels[k][1], levels[k][2]
+    if k == K_COARSE then
+      ensure(ncur, w, h)
+      obj.pixelshader("ps_caf_ninit", ncur, nil, {w, h, SEED})
+    else
+      ensure(nother, w, h)
+      obj.pixelshader("ps_caf_nup", nother, {ncur}, {w, h, levels[k + 1][1], levels[k + 1][2]})
+      ncur, nother = nother, ncur
+      ensure(other, w, h)
+      obj.pixelshader("ps_caf_vote", other, {pname(k), ncur, cur}, {w, h, R}, "copy", "clamp")
+      cur, other = other, cur
+    end
+    for it = 1, IT do
+      ensure(nother, w, h)
+      obj.pixelshader("ps_caf_pm", nother, {pname(k), cur, ncur}, {w, h, R, it + k * 16, SEED, math.max(w, h)})
+      ncur, nother = nother, ncur
+      ensure(other, w, h)
+      obj.pixelshader("ps_caf_vote", other, {pname(k), ncur, cur}, {w, h, R}, "copy", "clamp")
+      cur, other = other, cur
+    end
+  end
+end
+
+obj.pixelshader("ps_caf_out", "object", {"object", cur, M}, {W, H, (show_area == 1) and 1 or 0, (SC < 1) and 1 or 0}, "copy", "clamp")

@@ -1,0 +1,197 @@
+# AutoClipping_S AviUtl ExEdit2 余白除去スクリプト
+
+オブジェクトの不透明ピクセルを検索して，最小サイズなるよう上下左右端をクリッピングする AviUtl ExEdit 2 用のスクリプトです．
+
+Mr-Ojii 様の [AutoClipping_M](https://github.com/Mr-Ojii/AviUtl-AutoClipping_M-Script) の移植・機能追加版であり，私の[余白除去σ](https://github.com/sigma-axis/aviutl_CropBlank_S)の移植版です．
+
+[ダウンロードはこちら．](https://github.com/sigma-axis/aviutl2_script_AutoClipping_S/releases)
+
+![使用例](https://github.com/user-attachments/assets/d57d96b5-ba4f-4f41-91f4-bf0ee04eacbd)
+
+##  動作要件
+
+- AviUtl ExEdit2
+
+  http://spring-fragrance.mints.ne.jp/aviutl
+
+  - `2.1.9` で動作確認済み．
+
+##  導入方法
+
+ダウンロードした `aviutl2_script_AutoClipping_S-v*.**.au2pkg.zip` を AviUtl2 のウィンドウにドラッグ & ドロップしてください．
+
+初期状態だと「フィルタ効果を追加」メニューの「クリッピング」に AutoClipping_S が追加されています．
+- 「オブジェクト追加メニューの設定」の「ラベル」項目で分類を変更できます．
+
+### For non-Japanese speaking users
+
+You may be able to find language translation file for this script / plugin from [this repository](https://github.com/sigma-axis/aviutl2_translations_sigma-axis).
+
+Translation files enable names, parameters and commands of the scripts / plugins to be displayed in other languages.
+
+Although, usage documentations for this script / plugin in languages other than Japanese are not available now.
+
+##  パラメタの説明
+
+### αしきい値
+
+各ピクセルを「不透明」と判断する，アルファ値のしきい値です．このしきい値以下のピクセルは「透明」，しきい値を超えるピクセルは「不透明」とみなされます．
+
+% 単位で最小値は 0, 最大値は 100, 初期値は 0.
+
+- 100 を指定しても，アルファ値 100% のピクセルは「不透明」とみなされます．
+
+### 中心の位置を変更
+
+拡張編集標準の「クリッピング」の「中心の位置を変更」と同様です．チェックを入れると見た目の回転中心が，フィルタ効果適用前と比べて移動します．
+
+初期値は ON.
+
+### 上余白 / 下余白 / 左余白 / 右余白
+
+上下左右それぞれの余白幅を指定します．負値を指定するとさらにクリッピングします．
+
+全てピクセル単位で最小値は -4000, 最大値は 4000, 初期値は 0.
+
+### 上除去 / 下除去 / 左除去 / 右除去
+
+上下左右それぞれで，透明ピクセルを除去するかどうかを個別に指定します．
+
+初期値は全て ON.
+
+### `PI`
+
+パラメタインジェクション (parameter injection) です．初期値は空欄. テーブル型の中身として解釈され，各種パラメタの代替値として使用されます．また，任意のスクリプトコードを実行する記述領域にもなります．
+
+```lua
+{
+  thresh = num,       -- number 型で "αしきい値" の項目を上書き，または nil.
+  move_center = bool, -- boolean 型で "中心の位置を変更" の項目を上書き，または nil. 0 を false, 0 以外を true 扱いとして number 型も可能．
+  pad_u = num,        -- number 型で "上余白" の項目を上書き，または nil.
+  pad_d = num,        -- number 型で "下余白" の項目を上書き，または nil.
+  pad_l = num,        -- number 型で "左余白" の項目を上書き，または nil.
+  pad_r = num,        -- number 型で "右余白" の項目を上書き，または nil.
+  enable_u = bool,    -- boolean 型で "上除去" の項目を上書き，または nil. 0 を false, 0 以外を true 扱いとして number 型も可能．
+  enable_d = bool,    -- boolean 型で "下除去" の項目を上書き，または nil. 0 を false, 0 以外を true 扱いとして number 型も可能．
+  enable_l = bool,    -- boolean 型で "左除去" の項目を上書き，または nil. 0 を false, 0 以外を true 扱いとして number 型も可能．
+  enable_r = bool,    -- boolean 型で "右除去" の項目を上書き，または nil. 0 を false, 0 以外を true 扱いとして number 型も可能．
+}
+```
+- テキストボックスには冒頭末尾の波括弧 (`{}`) を省略して記述してください．
+
+
+##  TIPS
+
+1.  [「上除去」「下除去」「左除去」「右除去」](#上除去--下除去--左除去--右除去) を全て OFF にすれば「クリッピング」と「領域拡張」の両方を組み合わせたような，上位互換のフィルタ効果として使用できます．ただし...
+
+    - 「クリッピング」のアンカー操作に相当することはできません．
+    - 「領域拡張」の「塗りつぶし」に相当する機能はありません．
+
+
+##  謝辞
+
+- Mr-Ojii 様
+
+  このスクリプトは，以前私が公開した[拡張編集フィルタプラグイン](https://github.com/sigma-axis/aviutl_CropBlank_S)が元になっていますが，そのアイデア元は Mr-Ojii 様のスクリプト [AutoClipping_M](https://github.com/Mr-Ojii/AviUtl-AutoClipping_M-Script) です．AviUtl ExEdit 2 の公開に伴って同じ機能を実装したものになります．
+
+  実装手順もコードも元のものとは全く異なりますが，根本的な設計は同じです．礎となったスクリプトを開発してくださった Mr-Ojii 様には改めて感謝申し上げます．
+
+
+##  改版履歴
+
+- **v1.20** (2026-09-19)
+
+  - 一部設定項目にツールチップを追加．
+  - 各種チェックボックスの設定項目を，中間点区間ごとに可変なものに変更．
+
+- **v1.17 (for beta53a)** (2026-07-07)
+
+  - 高さが 4001 ピクセル以上の完全透明画像が正しく処理できていなかったのを修正．
+  - AviUtl2 `beta53a` での動作確認．
+  - AviUtl2 一周年おめでとう！
+
+- **v1.16 (for beta52)** (2026-06-28)
+
+  - 「上除去」「下除去」「左除去」「右除去」のどれかが負方向に大きくて，元画像の枠からはみ出て完全透明になった場合，スクリプトエラーになることがあったのを修正．
+  - AviUtl2 `beta52` での動作確認．
+
+- **v1.15 (for beta45)** (2026-05-10)
+
+  - 一時バッファとして仮想バッファ (`"tempbuffer"`) を使用しないように変更．
+    - 「仮想バッファ出力」での出力結果を上書きしなくなりました．
+  - AviUtl2 `beta45` での動作確認．
+
+- **v1.14 (for beta43a)** (2026-04-28)
+
+  - パラメタのマウス操作倍率を設定．
+  - 画像の幅と高さの和が 16384 ピクセルを超えていた場合正しくなかったのを修正．
+  - コード整理．
+
+  - 配布形式を `.au2pkg.zip` (AviUtl2 のパッケージ形式) に変更．
+    - **以前のバージョンから更新する際は，以前の導入時にコピーしたファイルを一度削除してから導入してください．**
+
+      同名ファイルが複数フォルダに分散して重複して認識されないようにするためで，次のファイルが削除対象です:
+
+      1.  `AutoClipping_S.anm2`
+
+      スクリプトフォルダ，またはその 1 階層下のサブフォルダ内に配置されています．
+
+  - `beta43` での動作確認．
+
+- **v1.13 (for beta22)** (2025-12-01)
+
+  - 設定項目を並び替え/グループ化して整理．
+
+  - `beta22` での動作確認．
+
+- **v1.12 (for beta15)** (2025-10-14)
+
+  - ピクセルの不透明度を 1 / 255 刻みでしか判定できていなかったのを修正．
+
+  - AviUtl2 本体の更新に伴って手順変更・高速化．
+
+  - `beta15` での動作確認．
+
+- **v1.11 (for beta12)** (2025-09-27)
+
+  - 完全透明な画像に対して，ゴミ画像が残ったりエラーが発生していたのを修正．
+
+  - `beta12` での動作確認．
+
+- **v1.10 (for beta8)** (2025-08-24)
+
+  - 不透明ピクセルの検索手順を変更．
+
+  - `beta8` での動作確認，不要になったバグ対処用コードの削除．
+
+- **v1.00 (for beta3)** (2025-07-27)
+
+  - 初版．
+
+
+##  ライセンス
+
+このプログラムの利用・改変・再頒布等に関しては MIT ライセンスに従うものとします．
+
+---
+
+The MIT License (MIT)
+
+Copyright (C) 2025-2026 sigma-axis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+https://mit-license.org/
+
+
+# 連絡・バグ報告
+
+- GitHub: https://github.com/sigma-axis
+- Twitter: https://x.com/sigma_axis
+- nicovideo: https://www.nicovideo.jp/user/51492481
+- Misskey.io: https://misskey.io/@sigma_axis
+- Bluesky: https://bsky.app/profile/sigma-axis.bsky.social

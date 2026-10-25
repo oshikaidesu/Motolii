@@ -56,6 +56,47 @@ static std::string doc_folder_names(const char* folder, const char* extension) {
     }
     return all;
 }
+// AviUtl2's scripts as their makers give them, a package a folder (aviutl_scripts/<maker>__<package>/, unchanged: a
+// script's require reads beside it), in the library's aviutl_scripts/ and the maker's own (doc_folders), to any depth:
+// each .anm2 and .obj2 a line as doc_folder_names's, each script of an @ file ("file#name") its own, its label its
+// --label:. A file is read again only when it was written over.
+static std::string doc_aviutl_names() {
+    static std::string all;
+    static std::filesystem::file_time_type was{};
+    static std::chrono::steady_clock::time_point looked{};
+    static std::map<std::string, std::pair<std::filesystem::file_time_type, std::string>> read;   // (each file's lines as it was)
+    if (!doc_folder_moved("aviutl_scripts", was, looked)) return all;
+    all.clear();
+    std::error_code wrong;
+    for (const auto& dir : doc_folders("aviutl_scripts")) {
+        std::vector<std::filesystem::path> files;
+        for (auto e = std::filesystem::recursive_directory_iterator(dir, wrong); !wrong && e != std::filesystem::recursive_directory_iterator(); e.increment(wrong))
+            if (e->is_regular_file(wrong) && aviutl_is(e->path().string())) files.push_back(e->path());
+        wrong.clear();
+        std::sort(files.begin(), files.end());
+        for (const auto& f : files) {
+            const auto stamp = std::filesystem::last_write_time(f, wrong);
+            auto& [when, lines] = read[f.string()];
+            if (lines.empty() || when != stamp) {
+                when = stamp, lines.clear();
+                std::ifstream in(f);
+                const bool many = f.filename().string()[0] == '@';
+                std::string name = many ? "" : f.stem().string(), label;
+                const auto put = [&] { if (!name.empty()) lines += name + "\t" + f.string() + (many ? "#" + name : "") + "\t" + label + "\t\n"; };
+                for (std::string line; std::getline(in, line);) {
+                    if (line.rfind("\xEF\xBB\xBF", 0) == 0) line.erase(0, 3);
+                    line.erase(line.find_last_not_of(" \t\r") + 1);
+                    if (many && line.rfind("@", 0) == 0) { put(), name = line.substr(1), label.clear(); continue; }
+                    if (label.empty() && line.rfind("--label:", 0) == 0) label = line.substr(8);
+                }
+                put();
+            }
+            all += lines;
+        }
+    }
+    if (!all.empty()) all.pop_back();
+    return all;
+}
 // The ways a maker keeps of their own, as a maker's scripts are theirs: a file each in ways/ of their own folder
 // (doc_folders), and the few the library comes with (one put in either is a tile of the Ease desk at once). Its first line says its name
 // before the colon; the rest is how far it is, as a way defined in a document says it (doc_define: a, b, u, p1..p4,

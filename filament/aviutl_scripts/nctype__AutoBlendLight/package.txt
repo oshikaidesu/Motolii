@@ -1,0 +1,2 @@
+AutoBlendLight v1.3.3
+Japanese default script + English / Simplified Chinese language files

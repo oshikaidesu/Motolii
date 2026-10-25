@@ -1,0 +1,6 @@
+aviutl2_script_PenroseTile_S by sigma-axis
+licence: MIT
+from: https://github.com/sigma-axis/aviutl2_script_PenroseTile_S (branch main, commit 8ffcdd8a0f1f) (commit 8ffcdd8a0f1f)
+page: https://github.com/sigma-axis/aviutl2_script_PenroseTile_S
+left out: 2 other (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

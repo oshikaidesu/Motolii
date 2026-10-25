@@ -1,0 +1,19 @@
+[Language]
+Information=English Language for sevenc-nanashi/aviutl2-scripts / https://github.com/sevenc-nanashi/aviutl2-scripts
+[Tips.目標指定拡大縮小]
+effect.name=Scales an object to a target pixel size while preserving its aspect ratio.\n
+モード=- Cover: Scales the object so the specified area is filled. (Equivalent to CSS `cover`.)\n- Contain: Scales the object so it fits inside the specified area. (Equivalent to CSS `contain`.)\n- Width: Scales the object so its width becomes the specified number of pixels.\n- Height: Scales the object so its height becomes the specified number of pixels.\n
+PI=- `target_width`: Target width in pixels\n- `target_height`: Target height in pixels\n- `mode`: Mode (0 = cover, 1 = contain, 2 = width, 3 = height)\n- `debug`: Debug mode\n
+
+[目標指定拡大縮小]
+目標指定拡大縮小=Targeted Scale
+目標幅=Target Width
+目標高さ=Target Height
+モード=Mode
+下限指定=Cover
+上限指定=Contain
+幅指定=Width
+高さ指定=Height
+高度な設定=Advanced Settings
+デバッグモード=Debug Mode
+PI=PI

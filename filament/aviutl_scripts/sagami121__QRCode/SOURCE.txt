@@ -1,0 +1,6 @@
+QRCode by 3aGaM1
+licence: MIT
+from: https://github.com/sagami121/Aviutl2-QRCode/releases/download/v1.0.2/QRCode.obj2 (tag v1.0.2, commit cec31c61f3cf)
+page: https://github.com/sagami121/Aviutl2-QRCode
+licence/README from: https://github.com/sagami121/Aviutl2-QRCode at v1.0.2
+Put here unchanged for Motolii (filament/aviutl_scripts).

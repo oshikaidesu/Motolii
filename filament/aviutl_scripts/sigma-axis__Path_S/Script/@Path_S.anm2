@@ -1,0 +1,1865 @@
+--[[
+MIT License
+
+Copyright (c) 2025-2026 sigma-axis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+https://mit-license.org/
+]]
+
+--
+-- v2.42
+--
+
+-- https://github.com/sigma-axis/aviutl2_script_Path_S
+
+@パスマスクσ
+--information:パスマスクσ@Path_S v2.42 by σ軸
+--label:Path_S\クリッピング
+--filter
+--require:2011000
+--track@intensity:強さ,0,100,100,0.01
+--checksection@invert:反転,false,false
+--group:パス設定,true
+--value@num_points:頂点数,4
+--select@path_type:線タイプ=3,折れ線=0,補間移動=1,2次ベジェ曲線=2,3次ベジェ曲線=3
+--value@points:点リスト,{0,-100,55.23,-100,100,-55.23,100,0,100,55.23,55.23,100,0,100,-55.23,100,-100,55.23,-100,0,-100,-55.23,-55.23,-100}
+--select@mode_anchor_base:アンカー基準=5,回転中心=0,左上=1,上=2,右上=3,左=4,中央=5,右=6,左下=7,下=8,右下=9
+--track@precision:曲線精度,1,128,8,1,,0.25
+--group:塗り設定,false
+--track@inflation:追加幅,0,1000,0,0.01,,0.2
+--select@mode_fill:範囲=0,内側=0,奇偶=1,内側反転=2,奇偶反転=3
+--group:塗り境界設定,false
+--track@antialias:ぼかし幅,0,1000,1,0.01,,0.2
+--select@dither_pattern:ディザリング=0,なし=0,Checker=1,Bayer 2x2=2,Bayer 4x4=3,Bayer 256x256=4,IGN=5,White Noise=6,Halftone=7,Halftone Honeycomb=8,Halftone Square=9,Stripe=10
+--track@dither_seed:dither::ノイズシード,-65536,65535,10000,1
+--hide@dither_seed:dither_pattern==0
+--hide@dither_seed:dither_pattern==1
+--hide@dither_seed:dither_pattern==2
+--hide@dither_seed:dither_pattern==3
+--hide@dither_seed:dither_pattern==4
+--hide@dither_seed:dither_pattern==7
+--hide@dither_seed:dither_pattern==8
+--hide@dither_seed:dither_pattern==9
+--hide@dither_seed:dither_pattern==10
+--track@dither_rate:ディザ強さ,0,100,100,0.01
+--hide@dither_rate:dither_pattern==0
+--track@dither_size:dither::ドットサイズ,100,6400,100,0.01,,0.0625
+--hide@dither_size:dither_pattern==0
+--track@dither_X:dither::移動X,-4000,4000,0,0.01,,0.25
+--hide@dither_X:dither_pattern==0
+--track@dither_Y:dither::移動Y,-4000,4000,0,0.01,,0.25
+--hide@dither_Y:dither_pattern==0
+--trackgroup@dither_X,dither_Y:DitherPos
+--track@dither_angle:dither::回転,-3600,3600,0,0.01,,0.1
+--hide@dither_angle:dither_pattern==0
+--group:配置,false
+--track@X:移動X,-4000,4000,0,0.01,,0.25
+--track@Y:移動Y,-4000,4000,0,0.01,,0.25
+--trackgroup@X,Y:Position
+--track@zoom:拡大率,0,5000,100,0.001,,0.16
+--track@rotate:回転,-3600,3600,0,0.01,,0.1
+--check@toggle_gui:アンカー切り替え,false
+--group:スナップ設定,false
+--select@snap_grid:snap::グリッド=0,なし=0,横のみ=1,縦のみ=2,縦横=3
+--track@snap_grid_X:snap::間隔X,1,1000,40,0.01,,0.1
+--hide@snap_grid_X:snap_grid==0
+--hide@snap_grid_X:snap_grid==2
+--track@snap_grid_Y:snap::間隔Y,1,1000,40,0.01,,0.1
+--hide@snap_grid_Y:snap_grid==0
+--hide@snap_grid_Y:snap_grid==1
+--check@snap_show_grid:snap::グリッド表示,false
+--hide@snap_show_grid:snap_grid==0
+--select@snap_angle_pos:snap::隣との角度=0,なし=0,90°=1,45°=2,30°=3,15°=4,5°=5
+--select@snap_angle_ctrl:snap::制御点の角度=0,なし=0,90°=1,45°=2,30°=3,15°=4,5°=5
+--hide@snap_angle_ctrl:path_type<2
+--select@snap_prev_ctrl:snap::隣の制御点=0,なし=0,角度=1,長さ=2,角度と長さ=3
+--hide@snap_prev_ctrl:path_type<2
+--track@snap_threshold:snap::スナップ距離,0,200,8,0.01,,0.1
+--group:その他,false
+--value@PI:PI,{}
+--[[pixelshader@const_alpha:
+cbuffer constant0 : register(b0) {
+	float alpha;
+};
+float4 const_alpha(float4 pos : SV_Position) : SV_Target
+{
+	return float4(0, 0, 0, alpha);
+}
+
+]]
+--[[pixelshader@carve:
+Texture2D<half4> coords : register(t0);
+float decode_float(half3 c)
+{
+	const uint3 c_i = floor(255 * c + 0.5);
+	const int i = (c_i.r << 8) | (c_i.g << 16) | (c_i.b << 24);
+	return i / float(1 << 16);
+}
+float2 get_point(uint i)
+{
+	static const uint log2_span_x = 12, span_x = 1 << log2_span_x;
+	const uint x = (i << 1) & (span_x - 1), y = i >> (log2_span_x - 1);
+	return float2(
+		decode_float(coords[uint2(x | 0, y)].rgb),
+		decode_float(coords[uint2(x | 1, y)].rgb));
+}
+
+// IbukiHash by Andante (https://twitter.com/andanteyk)
+// This work is marked with CC0 1.0. To view a copy of this license, visit https://creativecommons.org/publicdomain/zero/1.0/
+
+float ibuki(float4 v)
+{
+    const uint4 mult =
+        uint4(0xae3cc725, 0x9fe72885, 0xae36bfb5, 0x82c1fcad);
+
+    uint4 u = uint4(v);
+    u = u * mult;
+    u ^= u.wxyz ^ u >> 13;
+
+    uint r = dot(u, mult);
+
+    r ^= r >> 11;
+    r = (r * r) ^ r;
+
+    return r * 2.3283064365386962890625e-10;
+}
+
+float checker(uint2 p)
+{
+	float b = 0;
+	if ((dot(p, 1) & 1) != 0) { p += uint2(127, 128); b = 1; }
+	p = firstbitlow(256 | p);
+	uint v = 2 * (8 - min(p.x, p.y));
+	if (p.x == p.y && v > 0) v -= 1;
+	static const float V = 0.4 / (1 << 15);
+	return abs(V * (1 << v) - b);
+}
+uint bayer_88(uint2 p)
+{
+	p.y ^= p.x;
+	uint v = dot(p & 0xff, uint2(1 << 8, 1));
+	v = (v & 0x0ff0) | ((v & 0xf000) >>12) | ((v & 0x000f) <<12);
+	v = (v & 0x3c3c) | ((v & 0xc0c0) >> 6) | ((v & 0x0303) << 6);
+	v = (v & 0x6666) | ((v & 0x8888) >> 3) | ((v & 0x1111) << 3);
+	return v;
+}
+// Interleaved Gradient Noise by Jorge Jimenez
+// https://www.iryoku.com/next-generation-post-processing-in-call-of-duty-advanced-warfare
+float ign(float2 v)
+{
+    float3 magic = float3(0.06711056, 0.00583715, 52.9829189);
+    return frac(magic.z * frac(dot(v, magic.xy)));
+}
+float halftone(float2 p)
+{
+	static const float pi = 4 * atan(1), a = pi / 4;
+	const float2 u = 2 * frac(p / 4 - 0.5) - 1;
+	const float R = dot(u, u);
+	if (R < 1) return a * R;
+	else return 1 - (1 - a) * (2 - R) * (2 - R);
+}
+float halftone_honeycomb(float2 p)
+{
+	static const float pi = 4 * atan(1), a = pi / (2 * sqrt(3));
+	static const float2x2
+		mat1 = float2x2(1, -1 / sqrt(3), 0, 2 / sqrt(3)),
+		mat2 = 2 * float2x2(1, 0.5, 0, sqrt(3) / 2);
+	float2 u = mul(mat1, p);
+	u = frac(u / 4);
+	if (dot(u, 1) > 1) u = 1 - u;
+	if (dot(u, float2(2, 1)) > 1) u.x = 1 - dot(u, 1);
+	if (dot(u, float2(1, 2)) > 1) u.y = 1 - dot(u, 1);
+	u = mul(mat2, u);
+	const float R = dot(u, u);
+	if (R < 1) return a * R;
+	else return 1 - (1 - a) * (4 - 3 * R) * (4 - 3 * R);
+}
+float halftone_square(float2 p)
+{
+	static const float a = 0.5;
+	const float2 u = abs(2 * frac(p / 4 - 0.5) - 1);
+	const float R = dot(u, 1);
+	if (R < 1) return a * R * R;
+	else return 1 - (1 - a) * (2 - R) * (2 - R);
+}
+float stripe(float2 p)
+{
+	return abs(2 * frac(p.y / 2 - 0.5) - 1);
+}
+float dither_func(float2 pos, uint2 seed, uint pattern)
+{
+	switch (pattern) {
+	default: return 0;
+	case 1: // checker
+		return checker(uint2(pos + (1 << 16)));
+	case 2: // bayer 2x2
+		return ((bayer_88(uint2(pos + (1 << 16))) & 0xc000) + 0x2000) / float(1 << 16);
+	case 3: // bayer 4x4
+		return ((bayer_88(uint2(pos + (1 << 16))) & 0xf000) + 0x0800) / float(1 << 16);
+	case 4: // bayer 256x256
+		return (bayer_88(uint2(pos + (1 << 16))) + 0.5) / float(1 << 16);
+	case 5: { // Interleaved Gradient Noise
+		uint2 s = uint2(106033, 92681) * seed;
+		s ^= s >> 14; s &= 0x3fff;
+		return ign(floor(pos) + ((1 << 16) + s));
+	}
+	case 6: // white noise
+		return ibuki(float4(pos + (1 << 16), seed));
+	case 7: // halftone
+		return halftone(pos);
+	case 8: // halftone honeycomb
+		return halftone_honeycomb(pos);
+	case 9: // halftone square
+		return halftone_square(pos);
+	case 10: // stripe
+		return stripe(pos);
+	}
+}
+
+cbuffer constant0 : register(b0) {
+	float2 alpha_map;
+	float N_f, mode_fill_f,
+		padding, aa_thick;
+	float2 dither_offset;
+	float2x2 inv_dither_mat;
+	float dither_buff, noise_seed, dither_pattern;
+};
+
+uint quadrant(float2 v)
+{
+	return (v.x >= 0 ? 0 : 1) ^ (v.y >= 0 ? 0 : 3);
+}
+bool is_inner(int cycles)
+{
+	static const uint mode_fill = uint(mode_fill_f);
+	switch(mode_fill) {
+	case 0: default: return cycles != 0;
+	case 1: return (cycles & 1) != 0;
+	case 2: return cycles == 0;
+	case 3: return (cycles & 1) == 0;
+	}
+}
+
+float4 carve(float4 pos : SV_Position) : SV_Target
+{
+	int cycles = 0;
+	float sq_dist = (aa_thick + padding + 1) * (aa_thick + padding + 1);
+
+	static const uint N = uint(N_f);
+	float2 pt0 = get_point(0) - pos.xy;
+	uint q0 = quadrant(pt0);
+	for (uint i = 1; i < N; i++) {
+		const float2 pt1 = get_point(i) - pos.xy,
+			d = pt1 - pt0;
+		const float side = d.y * pt1.x - d.x * pt1.y;
+		const uint q1 = quadrant(pt1);
+
+		if (side < 0) { if (q1 > q0) cycles--; }
+		else { if (q1 < q0) cycles++; }
+		sq_dist = min(sq_dist,
+			dot(d, pt0) >= 0 || dot(d, pt1) <= 0 ?
+			dot(pt0, pt0) : side * side / dot(d, d));
+
+		pt0 = pt1; q0 = q1;
+	}
+
+	float a = 1 - (is_inner(cycles) ? 0 : sqrt(sq_dist) - padding) / aa_thick;
+	float noise = 0;
+	[branch] if (dither_pattern != 0) noise = dither_func(
+		mul(inv_dither_mat, pos.xy - dither_offset),
+		uint2(noise_seed, 101), dither_pattern);
+	a = (a - (1 - dither_buff) * noise) / dither_buff;
+	return float4(0, 0, 0, dot(alpha_map, float2(saturate(a), 1)));
+}
+
+]]
+local path_s = require("Path_S");
+local obj, math, tonumber, type = obj, math, tonumber, type;
+
+-- see if the points are already buffered.
+local pt_buff = type(PI.pt_buff) == "string" and PI.pt_buff or nil;
+if pt_buff and pt_buff ~= "tempbuffer" and not pt_buff:match("^cache:.+$") then pt_buff = nil end
+
+-- process snapping.
+if (snap_grid ~= 0 or snap_angle_pos ~= 0 or snap_angle_ctrl ~= 0 or snap_prev_ctrl ~= 0) and snap_threshold > 0 then
+	path_s.snap_anchors(path_type,
+		points, num_points, true,
+		(snap_grid == 1 or snap_grid == 3) and snap_grid_X or 0,
+		(snap_grid == 2 or snap_grid == 3) and snap_grid_Y or 0,
+		snap_angle_pos, snap_angle_ctrl, snap_prev_ctrl, snap_threshold,
+		snap_show_grid and snap_grid ~= 0 and obj.getoption("gui"), mode_anchor_base);
+end
+
+-- set anchors.
+if obj.getoption("gui") and not pt_buff then
+	if toggle_gui then
+		obj.setanchor("X,Y", 0, "line", "offset", path_s.anchor_offset(mode_anchor_base));
+	else
+		num_points = math.max(math.floor(0.5 + (tonumber(num_points) or 4)), 3);
+		path_type = math.min(math.max(math.floor(0.5 + path_type), 0), 3);
+		local _, pts = path_s.anchor("points", path_type, points, num_points,
+			true, nil, mode_anchor_base);
+		points = pts;
+	end
+end
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+intensity = tonumber(PI.intensity) or intensity;
+invert = path_s.PI.as_bool(PI.invert, invert);
+num_points = tonumber(PI.num_points) or num_points;
+path_type = path_s.PI.path_type(PI.path_type, path_type);
+if type(PI.points) == "table" then points = PI.points end
+mode_anchor_base = path_s.PI.mode_anchor_base(PI.mode_anchor_base, mode_anchor_base);
+precision = tonumber(PI.precision) or precision;
+inflation = tonumber(PI.inflation) or inflation;
+mode_fill = path_s.PI.mode_fill(PI.mode_fill, mode_fill);
+antialias = tonumber(PI.antialias) or antialias;
+dither_pattern = path_s.PI.dither_pattern(PI.dither_pattern, dither_pattern);
+dither_seed = tonumber(PI.dither_seed) or dither_seed;
+dither_rate = tonumber(PI.dither_rate) or dither_rate;
+dither_size = tonumber(PI.dither_size) or dither_size;
+dither_X = tonumber(PI.dither_X) or dither_X;
+dither_Y = tonumber(PI.dither_Y) or dither_Y;
+dither_angle = tonumber(PI.dither_angle) or dither_angle;
+X = tonumber(PI.X) or X;
+Y = tonumber(PI.Y) or Y;
+zoom = tonumber(PI.zoom) or zoom;
+rotate = tonumber(PI.rotate) or rotate;
+
+-- normalize parameters.
+intensity = math.min(math.max(intensity / 100, 0), 1);
+num_points = math.max(math.floor(0.5 + num_points), 3);
+precision = math.max(precision, 1);
+inflation = math.max(inflation, 0);
+antialias = math.max(antialias, 0);
+dither_seed = math.floor(0.5 + dither_seed);
+if dither_seed >= 0 then
+	dither_seed = dither_seed
+		+  2525 * (obj.id % 2 ^ 20)
+		+ 13579 * (obj.effect_id % 2 ^ 20)
+		+ 54321 * (obj.index % 2 ^ 20);
+end
+dither_seed = dither_seed % 2 ^ 20;
+dither_rate = math.min(math.max(dither_rate / 100, 0), 1);
+dither_size = math.max(dither_size / 100, 1);
+dither_angle = 2 * math.pi * ((dither_angle / 360) % 1);
+do
+	local cx, cy = path_s.anchor_offset(mode_anchor_base);
+	X, Y = X + cx, Y + cy;
+end
+zoom = math.min(math.max(zoom / 100, 0), 50);
+rotate = math.pi / 180 * (rotate % 360);
+if intensity <= 0 then return end
+
+--#endregion PI / normalize parameters.
+
+-- further calculations.
+local alpha_outer, alpha_inner = 1 - intensity, 1;
+if invert then alpha_outer, alpha_inner = alpha_inner, alpha_outer end
+if pt_buff then
+	path_s.path_mask_area_buffered(
+		alpha_outer, alpha_inner, mode_fill,
+		inflation, antialias,
+		pt_buff, num_points);
+else
+	path_s.path_mask_area(
+		alpha_outer, alpha_inner, mode_fill,
+		inflation, {
+			width = antialias,
+			pattern = dither_pattern, seed = dither_seed,
+			rate = dither_rate,
+			cx = X + obj.w / 2 + dither_X, cy = Y + obj.h / 2 + dither_Y,
+			size = dither_size, rot = dither_angle,
+		},
+		path_type, points, num_points, precision,
+		zoom, rotate, X, Y);
+end
+
+@パスマスク(ライン)σ
+--information:パスマスク(ライン)σ@Path_S v2.42 by σ軸
+--label:Path_S\クリッピング
+--filter
+--require:2011000
+--track@intensity:強さ,0,100,100,0.01
+--checksection@invert:反転,false,false
+--track@line:ライン幅,0,1000,5,0.01,,0.2
+--group:パス設定,true
+--value@num_points:頂点数,4
+--select@path_type:線タイプ=3,折れ線=0,補間移動=1,2次ベジェ曲線=2,3次ベジェ曲線=3
+--value@points:点リスト,{-100.00,50.00,-75.00,0.00,-50.00,-50.00,-25.00,-50.00,0.00,-50.00,0.00,50.00,25.00,50.00,50.00,50.00,75.00,0.00,100.00,-50.00}
+--checksection@loop:ループ,false,false
+--select@mode_anchor_base:アンカー基準=5,回転中心=0,左上=1,上=2,右上=3,左=4,中央=5,右=6,左下=7,下=8,右下=9
+--track@precision:曲線精度,1,128,8,1,,0.25
+--group:ライン設定,false
+--track@start_pos:開始位置,-400,400,0,0.001,,0.25
+--track@end_pos:終了位置,-400,400,100,0.001,,0.25
+--select@end_shape:端の形状=0,円=0,四角=1,平坦=2,三角=3,リボン=4
+--select@join_shape:線結合の形状=0,ラウンド=0,ベベル=1,マイター=2,ブランク=3,ブランク+ラウンド=4,ブランク+ベベル=5
+--track@miter_limit:マイター限界,100,3200,400,0.001,,0.25
+--hide@miter_limit:join_shape<2
+--hide@miter_limit:join_shape==3
+--value@dash_pat:破線パターン,{100,0}
+--checksection@dash_adj:破線周期補正,true,false
+--track@dash_pos:破線位置,-4000,4000,0,0.01,,0.25
+--select@dash_end_shape:dash::端の形状=0,円=0,四角=1,平坦=2,三角=3,リボン=4
+--group:ライン境界設定,false
+--track@antialias:ぼかし幅,0,1000,1,0.01,,0.2
+--select@dither_pattern:ディザリング=0,なし=0,Checker=1,Bayer 2x2=2,Bayer 4x4=3,Bayer 256x256=4,IGN=5,White Noise=6,Halftone=7,Halftone Honeycomb=8,Halftone Square=9,Stripe=10
+--track@dither_seed:dither::ノイズシード,-65536,65535,10000,1
+--hide@dither_seed:dither_pattern==0
+--hide@dither_seed:dither_pattern==1
+--hide@dither_seed:dither_pattern==2
+--hide@dither_seed:dither_pattern==3
+--hide@dither_seed:dither_pattern==4
+--hide@dither_seed:dither_pattern==7
+--hide@dither_seed:dither_pattern==8
+--hide@dither_seed:dither_pattern==9
+--hide@dither_seed:dither_pattern==10
+--track@dither_rate:ディザ強さ,0,100,100,0.01
+--hide@dither_rate:dither_pattern==0
+--track@dither_size:dither::ドットサイズ,100,6400,100,0.01,,0.0625
+--hide@dither_size:dither_pattern==0
+--track@dither_X:dither::移動X,-4000,4000,0,0.01,,0.25
+--hide@dither_X:dither_pattern==0
+--track@dither_Y:dither::移動Y,-4000,4000,0,0.01,,0.25
+--hide@dither_Y:dither_pattern==0
+--trackgroup@dither_X,dither_Y:DitherPos
+--track@dither_angle:dither::回転,-3600,3600,0,0.01,,0.1
+--hide@dither_angle:dither_pattern==0
+--group:配置,false
+--track@X:移動X,-4000,4000,0,0.01,,0.25
+--track@Y:移動Y,-4000,4000,0,0.01,,0.25
+--trackgroup@X,Y:Position
+--track@zoom:拡大率,0,5000,100,0.001,,0.16
+--track@rotate:回転,-3600,3600,0,0.01,,0.1
+--check@toggle_gui:アンカー切り替え,false
+--group:スナップ設定,false
+--select@snap_grid:snap::グリッド=0,なし=0,横のみ=1,縦のみ=2,縦横=3
+--track@snap_grid_X:snap::間隔X,1,1000,40,0.01,,0.1
+--hide@snap_grid_X:snap_grid==0
+--hide@snap_grid_X:snap_grid==2
+--track@snap_grid_Y:snap::間隔Y,1,1000,40,0.01,,0.1
+--hide@snap_grid_Y:snap_grid==0
+--hide@snap_grid_Y:snap_grid==1
+--check@snap_show_grid:snap::グリッド表示,false
+--hide@snap_show_grid:snap_grid==0
+--select@snap_angle_pos:snap::隣との角度=0,なし=0,90°=1,45°=2,30°=3,15°=4,5°=5
+--select@snap_angle_ctrl:snap::制御点の角度=0,なし=0,90°=1,45°=2,30°=3,15°=4,5°=5
+--hide@snap_angle_ctrl:path_type<2
+--select@snap_prev_ctrl:snap::隣の制御点=0,なし=0,角度=1,長さ=2,角度と長さ=3
+--hide@snap_prev_ctrl:path_type<2
+--track@snap_threshold:snap::スナップ距離,0,200,8,0.01,,0.1
+--group:その他,false
+--value@PI:PI,{}
+--[[pixelshader@carve:
+Texture2D<half4> coords : register(t0);
+float decode_float(half3 c)
+{
+	const uint3 c_i = floor(255 * c + 0.5);
+	const int i = (c_i.r << 8) | (c_i.g << 16) | (c_i.b << 24);
+	return i / float(1 << 16);
+}
+float2 get_point(uint i)
+{
+	static const uint log2_span_x = 12, span_x = 1 << log2_span_x;
+	const uint x = (i << 1) & (span_x - 1), y = i >> (log2_span_x - 1);
+	return float2(
+		decode_float(coords[uint2(x | 0, y)].rgb),
+		decode_float(coords[uint2(x | 1, y)].rgb));
+}
+
+// IbukiHash by Andante (https://twitter.com/andanteyk)
+// This work is marked with CC0 1.0. To view a copy of this license, visit https://creativecommons.org/publicdomain/zero/1.0/
+
+float ibuki(float4 v)
+{
+    const uint4 mult =
+        uint4(0xae3cc725, 0x9fe72885, 0xae36bfb5, 0x82c1fcad);
+
+    uint4 u = uint4(v);
+    u = u * mult;
+    u ^= u.wxyz ^ u >> 13;
+
+    uint r = dot(u, mult);
+
+    r ^= r >> 11;
+    r = (r * r) ^ r;
+
+    return r * 2.3283064365386962890625e-10;
+}
+
+float checker(uint2 p)
+{
+	float b = 0;
+	if ((dot(p, 1) & 1) != 0) { p += uint2(127, 128); b = 1; }
+	p = firstbitlow(256 | p);
+	uint v = 2 * (8 - min(p.x, p.y));
+	if (p.x == p.y && v > 0) v -= 1;
+	static const float V = 0.4 / (1 << 15);
+	return abs(V * (1 << v) - b);
+}
+uint bayer_88(uint2 p)
+{
+	p.y ^= p.x;
+	uint v = dot(p & 0xff, uint2(1 << 8, 1));
+	v = (v & 0x0ff0) | ((v & 0xf000) >>12) | ((v & 0x000f) <<12);
+	v = (v & 0x3c3c) | ((v & 0xc0c0) >> 6) | ((v & 0x0303) << 6);
+	v = (v & 0x6666) | ((v & 0x8888) >> 3) | ((v & 0x1111) << 3);
+	return v;
+}
+// Interleaved Gradient Noise by Jorge Jimenez
+// https://www.iryoku.com/next-generation-post-processing-in-call-of-duty-advanced-warfare
+float ign(float2 v)
+{
+    float3 magic = float3(0.06711056, 0.00583715, 52.9829189);
+    return frac(magic.z * frac(dot(v, magic.xy)));
+}
+float halftone(float2 p)
+{
+	static const float pi = 4 * atan(1), a = pi / 4;
+	const float2 u = 2 * frac(p / 4 - 0.5) - 1;
+	const float R = dot(u, u);
+	if (R < 1) return a * R;
+	else return 1 - (1 - a) * (2 - R) * (2 - R);
+}
+float halftone_honeycomb(float2 p)
+{
+	static const float pi = 4 * atan(1), a = pi / (2 * sqrt(3));
+	static const float2x2
+		mat1 = float2x2(1, -1 / sqrt(3), 0, 2 / sqrt(3)),
+		mat2 = 2 * float2x2(1, 0.5, 0, sqrt(3) / 2);
+	float2 u = mul(mat1, p);
+	u = frac(u / 4);
+	if (dot(u, 1) > 1) u = 1 - u;
+	if (dot(u, float2(2, 1)) > 1) u.x = 1 - dot(u, 1);
+	if (dot(u, float2(1, 2)) > 1) u.y = 1 - dot(u, 1);
+	u = mul(mat2, u);
+	const float R = dot(u, u);
+	if (R < 1) return a * R;
+	else return 1 - (1 - a) * (4 - 3 * R) * (4 - 3 * R);
+}
+float halftone_square(float2 p)
+{
+	static const float a = 0.5;
+	const float2 u = abs(2 * frac(p / 4 - 0.5) - 1);
+	const float R = dot(u, 1);
+	if (R < 1) return a * R * R;
+	else return 1 - (1 - a) * (2 - R) * (2 - R);
+}
+float stripe(float2 p)
+{
+	return abs(2 * frac(p.y / 2 - 0.5) - 1);
+}
+float dither_func(float2 pos, uint2 seed, uint pattern)
+{
+	switch (pattern) {
+	default: return 0;
+	case 1: // checker
+		return checker(uint2(pos + (1 << 16)));
+	case 2: // bayer 2x2
+		return ((bayer_88(uint2(pos + (1 << 16))) & 0xc000) + 0x2000) / float(1 << 16);
+	case 3: // bayer 4x4
+		return ((bayer_88(uint2(pos + (1 << 16))) & 0xf000) + 0x0800) / float(1 << 16);
+	case 4: // bayer 256x256
+		return (bayer_88(uint2(pos + (1 << 16))) + 0.5) / float(1 << 16);
+	case 5: { // Interleaved Gradient Noise
+		uint2 s = uint2(106033, 92681) * seed;
+		s ^= s >> 14; s &= 0x3fff;
+		return ign(floor(pos) + ((1 << 16) + s));
+	}
+	case 6: // white noise
+		return ibuki(float4(pos + (1 << 16), seed));
+	case 7: // halftone
+		return halftone(pos);
+	case 8: // halftone honeycomb
+		return halftone_honeycomb(pos);
+	case 9: // halftone square
+		return halftone_square(pos);
+	case 10: // stripe
+		return stripe(pos);
+	}
+}
+
+float sq_dist_func_end(float2 pt, float2 d, uint shape, float padding)
+{
+	static const float2 flip = { 1, -1 };
+	const float l = -dot(d, pt);
+	if (l < 0) return (1 << 30);
+
+	const float L = abs(dot(flip * d.yx, pt));
+	[branch] switch (shape) {
+	case 0: default: return dot(pt, pt);
+	case 1: {
+		const float D = max(l, L);
+		return D * D;
+	}
+	case 2: {
+		float D = max(L - padding, 0);
+		D = sqrt(l * l + D * D) + padding;
+		return D * D;
+	}
+	case 3: {
+		const float D = l + L;
+		return D * D;
+	}
+	case 4: {
+		float D;
+		[branch] if (l > padding && l + L > 2 * padding)
+			D = length(float2(l, L) - padding) + padding;
+		else D = max(sqrt(0.5) * (l - L) + padding, L);
+		return D * D;
+	}
+	}
+}
+float sq_dist_func_join(float2 pt, float2 d0, float2 d1, uint shape, float padding, float dot_lim)
+{
+	static const float2 flip = { 1, -1 };
+	const float l0 = -dot(d0, pt), l1 = dot(d1, pt);
+	if (l0 < 0 || l1 < 0) return (1 << 30);
+
+	const float L0 = abs(dot(flip * d0.yx, pt)), L1 = abs(dot(flip * d1.yx, pt)),
+		L = max(L0, L1);
+	[branch] if (shape != 3 && dot_lim >= -dot(d0, d1)) {
+		if (shape == 2) return L * L;
+	}
+	else if (shape >= 3) {
+		const float D = length(float2(min(abs(l0), abs(l1)), max(L - padding, 0))) + padding;
+		return D * D;
+	}
+
+	[branch] switch (shape) {
+	case 0: case 4: return dot(pt, pt);
+	default:
+		float2 dd = d0 - d1, nd = flip * (d0 + d1).yx;
+		dd = normalize(dd + (dot(dd, nd) < 0 ? -nd : nd));
+		float D = max(abs(dot(dd, pt)) + (1 - abs(dot(dd, flip * d0.yx))) * padding, L);
+		return D * D;
+	}
+}
+
+cbuffer constant0 : register(b0) {
+	float2 alpha_map;
+	float N_f, loop_f, padding, aa_thick;
+	float2 dither_offset;
+	float2x2 inv_dither_mat;
+	float dither_buff, noise_seed, dither_pattern;
+	float end_shape_f, join_shape_f, dot_lim;
+};
+static const uint
+	end_shape = uint(end_shape_f),
+	join_shape = uint(join_shape_f);
+static const bool loop = loop_f > 0;
+static const uint N = uint(N_f);
+
+float4 carve(float4 pos : SV_Position) : SV_Target
+{
+	float sq_dist = (aa_thick + padding + 1) * (aa_thick + padding + 1);
+
+	float2 pt0 = get_point(0) - pos.xy, d0 = get_point(1) - pos.xy - pt0;
+	d0 = length(d0) == 0 ? float2(1, 0) : normalize(d0);
+
+	if (!loop) sq_dist = sq_dist_func_end(pt0, -d0, end_shape, padding);
+
+	for (uint i = 1; i < N; i++) {
+		float2 pt1 = get_point(i) - pos.xy, d1 = pt1 - pt0;
+		float l = length(d1);
+		d1 = l == 0 ? d0 : d1 / l;
+
+		sq_dist = min(sq_dist,
+			sq_dist_func_join(pt0, d0, d1, join_shape, padding, dot_lim));
+		if (dot(d1, pt0) < 0 && dot(d1, pt1) >= 0) {
+			const float side = dot(float2(-d1.y, d1.x), pt1);
+			sq_dist = min(sq_dist, side * side);
+		}
+
+		pt0 = pt1; d0 = d1;
+	}
+
+	[branch] if (loop) {
+		float2 pt1 = get_point(1) - pos.xy, d1 = pt1 - pt0;
+		float l = length(d1);
+		d1 = l == 0 ? d0 : d1 / l;
+		sq_dist = min(sq_dist,
+			sq_dist_func_join(pt0, d0, d1, join_shape, padding, dot_lim));
+	}
+	else sq_dist = min(sq_dist,
+		sq_dist_func_end(pt0, d0, end_shape, padding));
+
+	float a = 1 - (sqrt(sq_dist) - padding) / aa_thick;
+	float noise = 0;
+	[branch] if (dither_pattern != 0) noise = dither_func(
+		mul(inv_dither_mat, pos.xy - dither_offset),
+		uint2(noise_seed, 101), dither_pattern);
+	a = (a - (1 - dither_buff) * noise) / dither_buff;
+	return float4(0, 0, 0, dot(alpha_map, float2(saturate(a), 1)));
+}
+
+]]
+--[[pixelshader@carve_dash:
+Texture2D<half4> coords : register(t0);
+float decode_float(half3 c)
+{
+	const uint3 c_i = floor(255 * c + 0.5);
+	const int i = (c_i.r << 8) | (c_i.g << 16) | (c_i.b << 24);
+	return i / float(1 << 16);
+}
+float2 get_point(uint i)
+{
+	static const uint log2_span_x = 12, span_x = 1 << log2_span_x;
+	const uint x = (i << 1) & (span_x - 1), y = i >> (log2_span_x - 1);
+	return float2(
+		decode_float(coords[uint2(x | 0, y)].rgb),
+		decode_float(coords[uint2(x | 1, y)].rgb));
+}
+
+// IbukiHash by Andante (https://twitter.com/andanteyk)
+// This work is marked with CC0 1.0. To view a copy of this license, visit https://creativecommons.org/publicdomain/zero/1.0/
+
+float ibuki(float4 v)
+{
+    const uint4 mult =
+        uint4(0xae3cc725, 0x9fe72885, 0xae36bfb5, 0x82c1fcad);
+
+    uint4 u = uint4(v);
+    u = u * mult;
+    u ^= u.wxyz ^ u >> 13;
+
+    uint r = dot(u, mult);
+
+    r ^= r >> 11;
+    r = (r * r) ^ r;
+
+    return r * 2.3283064365386962890625e-10;
+}
+
+float checker(uint2 p)
+{
+	float b = 0;
+	if ((dot(p, 1) & 1) != 0) { p += uint2(127, 128); b = 1; }
+	p = firstbitlow(256 | p);
+	uint v = 2 * (8 - min(p.x, p.y));
+	if (p.x == p.y && v > 0) v -= 1;
+	static const float V = 0.4 / (1 << 15);
+	return abs(V * (1 << v) - b);
+}
+uint bayer_88(uint2 p)
+{
+	p.y ^= p.x;
+	uint v = dot(p & 0xff, uint2(1 << 8, 1));
+	v = (v & 0x0ff0) | ((v & 0xf000) >>12) | ((v & 0x000f) <<12);
+	v = (v & 0x3c3c) | ((v & 0xc0c0) >> 6) | ((v & 0x0303) << 6);
+	v = (v & 0x6666) | ((v & 0x8888) >> 3) | ((v & 0x1111) << 3);
+	return v;
+}
+// Interleaved Gradient Noise by Jorge Jimenez
+// https://www.iryoku.com/next-generation-post-processing-in-call-of-duty-advanced-warfare
+float ign(float2 v)
+{
+    float3 magic = float3(0.06711056, 0.00583715, 52.9829189);
+    return frac(magic.z * frac(dot(v, magic.xy)));
+}
+float halftone(float2 p)
+{
+	static const float pi = 4 * atan(1), a = pi / 4;
+	const float2 u = 2 * frac(p / 4 - 0.5) - 1;
+	const float R = dot(u, u);
+	if (R < 1) return a * R;
+	else return 1 - (1 - a) * (2 - R) * (2 - R);
+}
+float halftone_honeycomb(float2 p)
+{
+	static const float pi = 4 * atan(1), a = pi / (2 * sqrt(3));
+	static const float2x2
+		mat1 = float2x2(1, -1 / sqrt(3), 0, 2 / sqrt(3)),
+		mat2 = 2 * float2x2(1, 0.5, 0, sqrt(3) / 2);
+	float2 u = mul(mat1, p);
+	u = frac(u / 4);
+	if (dot(u, 1) > 1) u = 1 - u;
+	if (dot(u, float2(2, 1)) > 1) u.x = 1 - dot(u, 1);
+	if (dot(u, float2(1, 2)) > 1) u.y = 1 - dot(u, 1);
+	u = mul(mat2, u);
+	const float R = dot(u, u);
+	if (R < 1) return a * R;
+	else return 1 - (1 - a) * (4 - 3 * R) * (4 - 3 * R);
+}
+float halftone_square(float2 p)
+{
+	static const float a = 0.5;
+	const float2 u = abs(2 * frac(p / 4 - 0.5) - 1);
+	const float R = dot(u, 1);
+	if (R < 1) return a * R * R;
+	else return 1 - (1 - a) * (2 - R) * (2 - R);
+}
+float stripe(float2 p)
+{
+	return abs(2 * frac(p.y / 2 - 0.5) - 1);
+}
+float dither_func(float2 pos, uint2 seed, uint pattern)
+{
+	switch (pattern) {
+	default: return 0;
+	case 1: // checker
+		return checker(uint2(pos + (1 << 16)));
+	case 2: // bayer 2x2
+		return ((bayer_88(uint2(pos + (1 << 16))) & 0xc000) + 0x2000) / float(1 << 16);
+	case 3: // bayer 4x4
+		return ((bayer_88(uint2(pos + (1 << 16))) & 0xf000) + 0x0800) / float(1 << 16);
+	case 4: // bayer 256x256
+		return (bayer_88(uint2(pos + (1 << 16))) + 0.5) / float(1 << 16);
+	case 5: { // Interleaved Gradient Noise
+		uint2 s = uint2(106033, 92681) * seed;
+		s ^= s >> 14; s &= 0x3fff;
+		return ign(floor(pos) + ((1 << 16) + s));
+	}
+	case 6: // white noise
+		return ibuki(float4(pos + (1 << 16), seed));
+	case 7: // halftone
+		return halftone(pos);
+	case 8: // halftone honeycomb
+		return halftone_honeycomb(pos);
+	case 9: // halftone square
+		return halftone_square(pos);
+	case 10: // stripe
+		return stripe(pos);
+	}
+}
+
+float sq_dist_func_end(float2 pt, float2 d, uint shape, float padding)
+{
+	static const float2 flip = { 1, -1 };
+	const float l = -dot(d, pt);
+	if (l < 0) return (1 << 30);
+
+	const float L = abs(dot(flip * d.yx, pt));
+	[branch] switch (shape) {
+	case 0: default: return dot(pt, pt);
+	case 1: {
+		const float D = max(l, L);
+		return D * D;
+	}
+	case 2: {
+		float D = max(L - padding, 0);
+		D = sqrt(l * l + D * D) + padding;
+		return D * D;
+	}
+	case 3: {
+		const float D = l + L;
+		return D * D;
+	}
+	case 4: {
+		float D;
+		[branch] if (l > padding && l + L > 2 * padding)
+			D = length(float2(l, L) - padding) + padding;
+		else D = max(sqrt(0.5) * (l - L) + padding, L);
+		return D * D;
+	}
+	}
+}
+float sq_dist_func_join(float2 pt, float2 d0, float2 d1, uint shape, float padding, float dot_lim)
+{
+	static const float2 flip = { 1, -1 };
+	const float l0 = -dot(d0, pt), l1 = dot(d1, pt);
+	if (l0 < 0 || l1 < 0) return (1 << 30);
+
+	const float L0 = abs(dot(flip * d0.yx, pt)), L1 = abs(dot(flip * d1.yx, pt)),
+		L = max(L0, L1);
+	[branch] if (shape != 3 && dot_lim >= -dot(d0, d1)) {
+		if (shape == 2) return L * L;
+	}
+	else if (shape >= 3) {
+		const float D = length(float2(min(abs(l0), abs(l1)), max(L - padding, 0))) + padding;
+		return D * D;
+	}
+
+	[branch] switch (shape) {
+	case 0: case 4: return dot(pt, pt);
+	default:
+		float2 dd = d0 - d1, nd = flip * (d0 + d1).yx;
+		dd = normalize(dd + (dot(dd, nd) < 0 ? -nd : nd));
+		float D = max(abs(dot(dd, pt)) + (1 - abs(dot(dd, flip * d0.yx))) * padding, L);
+		return D * D;
+	}
+}
+
+cbuffer constant0 : register(b0) {
+	float2 alpha_map;
+	float N_f, loop_f, padding, aa_thick;
+	float2 dither_offset;
+	float2x2 inv_dither_mat;
+	float dither_buff, noise_seed, dither_pattern;
+	float M_f, len_period0, idx_period0;
+	float end_shape_f, join_shape_f, dash_shape_f, dot_lim;
+	float4 phase_whole;
+	float4 phase_period[64];
+};
+static const uint
+	end_shape = uint(end_shape_f),
+	join_shape = uint(join_shape_f),
+	dash_shape = uint(dash_shape_f);
+static const bool loop = loop_f > 0;
+static const uint N = uint(N_f), M = uint(M_f);
+
+float4 carve_dash(float4 pos : SV_Position) : SV_Target
+{
+	float sq_dist = (aa_thick + padding + 1) * (aa_thick + padding + 1),
+		len_whole = phase_whole[0], len_period = len_period0;
+	uint idx_whole = 0, idx_period = idx_period0;
+	if (loop) {
+		if (len_whole <= 0) len_whole += phase_whole[(++idx_whole) & 3];
+		if (len_period <= 0) {
+			++idx_period;
+			idx_period %= M;
+			len_period += phase_period[idx_period >> 2][idx_period & 3];
+		}
+	}
+
+	float2 pt0 = get_point(0) - pos.xy, d0 = get_point(1) - pos.xy - pt0;
+	d0 = length(d0) == 0 ? float2(1, 0) : normalize(d0);
+	bool was_stroke_whole = (idx_whole & 1) != 0, was_stroke_period = (idx_period & 1) != 0;
+
+	for (uint i = 1; i < N; i++) {
+		float2 pt1 = get_point(i) - pos.xy, d1 = pt1 - pt0;
+		const float l = length(d1);
+		d1 = l == 0 ? d0 : d1 / l;
+		const float side = dot(float2(-d1.y, d1.x), pt1);
+
+		if (was_stroke_whole && was_stroke_period)
+			sq_dist = min(sq_dist, sq_dist_func_join(pt0, d0, d1, join_shape, padding, dot_lim));
+		for (float rest = l; rest > 0 && idx_whole < 4; ) {
+			if (len_whole <= 0) len_whole += phase_whole[(++idx_whole) & 3];
+			if (len_period <= 0) {
+				++idx_period;
+				idx_period %= M;
+				len_period += phase_period[idx_period >> 2][idx_period & 3];
+			}
+			const float consume = min(rest, min(len_whole, len_period));
+			rest -= consume; len_whole -= consume; len_period -= consume;
+
+			const float2 ptm = pt1 - rest * d1;
+			const bool is_stroke_whole = (idx_whole & 1) != 0,
+				is_stroke_period = (idx_period & 1) != 0;
+			if (is_stroke_whole && is_stroke_period &&
+				dot(d1, pt0) < 0 && dot(d1, ptm) >= 0)
+				sq_dist = min(sq_dist, side * side);
+			[branch] if ((was_stroke_whole && was_stroke_period) != (is_stroke_whole && is_stroke_period)) {
+				sq_dist = min(sq_dist, sq_dist_func_end(pt0,
+					(was_stroke_whole && was_stroke_period) ? d1 : -d1,
+					(was_stroke_whole != is_stroke_whole) ? end_shape : dash_shape, padding));
+			}
+
+			pt0 = ptm;
+			was_stroke_whole = is_stroke_whole;
+			was_stroke_period = is_stroke_period;
+		}
+		d0 = d1;
+	}
+
+	[branch] if (loop) {
+		float2 d1 = get_point(1) - pos.xy - pt0;
+		d1 = length(d1) == 0 ? float2(1, 0) : normalize(d1);
+		const bool is_stroke_whole = phase_whole[0] <= 0,
+			is_stroke_period = ((uint(idx_period0) & 1) != 0) ^ (len_period0 <= 0);
+		if (was_stroke_whole && was_stroke_period)
+			sq_dist = min(sq_dist, sq_dist_func_join(pt0, d0, d1, join_shape, padding, dot_lim));
+		if ((was_stroke_whole && was_stroke_period) != (is_stroke_whole && is_stroke_period)) {
+			sq_dist = min(sq_dist, sq_dist_func_end(pt0,
+				(was_stroke_whole && was_stroke_period) ? d0 : -d1,
+				(was_stroke_whole != is_stroke_whole) ? end_shape : dash_shape, padding));
+		}
+	}
+	else if (was_stroke_whole && was_stroke_period)
+		sq_dist = min(sq_dist, sq_dist_func_end(pt0, d0, end_shape, padding));
+
+	float a = 1 - (sqrt(sq_dist) - padding) / aa_thick;
+	float noise = 0;
+	[branch] if (dither_pattern != 0) noise = dither_func(
+		mul(inv_dither_mat, pos.xy - dither_offset),
+		uint2(noise_seed, 101), dither_pattern);
+	a = (a - (1 - dither_buff) * noise) / dither_buff;
+	return float4(0, 0, 0, dot(alpha_map, float2(saturate(a), 1)));
+}
+
+]]
+local path_s = require("Path_S");
+local obj, math, tonumber, type = obj, math, tonumber, type;
+
+-- see if the points are already buffered.
+local pt_buff, len_buff =
+	type(PI.pt_buff) == "string" and PI.pt_buff or nil,
+	tonumber(PI.len_buff);
+if (pt_buff and pt_buff ~= "tempbuffer" and not pt_buff:match("^cache:.+$")) or not (len_buff and len_buff > 0) then pt_buff, len_buff = nil, -1 end
+
+-- process snapping.
+if (snap_grid ~= 0 or snap_angle_pos ~= 0 or snap_angle_ctrl ~= 0 or snap_prev_ctrl ~= 0) and snap_threshold > 0 then
+	path_s.snap_anchors(path_type,
+		points, num_points, loop,
+		(snap_grid == 1 or snap_grid == 3) and snap_grid_X or 0,
+		(snap_grid == 2 or snap_grid == 3) and snap_grid_Y or 0,
+		snap_angle_pos, snap_angle_ctrl, snap_prev_ctrl, snap_threshold,
+		snap_show_grid and snap_grid ~= 0 and obj.getoption("gui"), mode_anchor_base);
+end
+
+-- set anchors.
+if obj.getoption("gui") and not pt_buff then
+	if toggle_gui then
+		obj.setanchor("X,Y", 0, "line", "offset", path_s.anchor_offset(mode_anchor_base));
+	else
+		num_points = math.max(math.floor(0.5 + (tonumber(num_points) or 4)), 2);
+		path_type = math.min(math.max(math.floor(0.5 + path_type), 0), 3);
+		local _, pts = path_s.anchor("points", path_type,
+			points, num_points - (loop and 0 or 1), loop, nil, mode_anchor_base);
+		points = pts;
+	end
+end
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+intensity = tonumber(PI.intensity) or intensity;
+invert = path_s.PI.as_bool(PI.invert, invert);
+line = tonumber(PI.line) or line;
+num_points = tonumber(PI.num_points) or num_points;
+path_type = path_s.PI.path_type(PI.path_type, path_type);
+if type(PI.points) == "table" then points = PI.points end
+loop = path_s.PI.as_bool(PI.loop, loop);
+mode_anchor_base = path_s.PI.mode_anchor_base(PI.mode_anchor_base, mode_anchor_base);
+precision = tonumber(PI.precision) or precision;
+start_pos = tonumber(PI.start_pos) or start_pos;
+end_pos = tonumber(PI.end_pos) or end_pos;
+end_shape = path_s.PI.end_shape(PI.end_shape, end_shape);
+join_shape = path_s.PI.join_shape(PI.join_shape, join_shape);
+miter_limit = tonumber(PI.miter_limit) or miter_limit;
+if type(PI.dash_pat) == "table" then dash_pat = PI.dash_pat end
+dash_adj = path_s.PI.as_bool(PI.dash_adj, dash_adj);
+dash_pos = tonumber(PI.dash_pos) or dash_pos;
+dash_end_shape = path_s.PI.end_shape(PI.dash_end_shape, dash_end_shape);
+antialias = tonumber(PI.antialias) or antialias;
+dither_pattern = path_s.PI.dither_pattern(PI.dither_pattern, dither_pattern);
+dither_seed = tonumber(PI.dither_seed) or dither_seed;
+dither_rate = tonumber(PI.dither_rate) or dither_rate;
+dither_size = tonumber(PI.dither_size) or dither_size;
+dither_X = tonumber(PI.dither_X) or dither_X;
+dither_Y = tonumber(PI.dither_Y) or dither_Y;
+dither_angle = tonumber(PI.dither_angle) or dither_angle;
+X = tonumber(PI.X) or X;
+Y = tonumber(PI.Y) or Y;
+zoom = tonumber(PI.zoom) or zoom;
+rotate = tonumber(PI.rotate) or rotate;
+
+-- normalize parameters.
+intensity = math.min(math.max(intensity / 100, 0), 1);
+line = math.max(line, 0);
+num_points = math.max(math.floor(0.5 + num_points), 2);
+precision = math.max(precision, 1);
+start_pos = start_pos / 100;
+end_pos = end_pos / 100;
+miter_limit = math.max(miter_limit / 100, 1);
+antialias = math.max(antialias, 0);
+dither_seed = math.floor(0.5 + dither_seed);
+if dither_seed >= 0 then
+	dither_seed = dither_seed
+		+  2525 * (obj.id % 2 ^ 20)
+		+ 13579 * (obj.effect_id % 2 ^ 20)
+		+ 54321 * (obj.index % 2 ^ 20);
+end
+dither_seed = dither_seed % 2 ^ 20;
+dither_rate = math.min(math.max(dither_rate / 100, 0), 1);
+dither_size = math.max(dither_size / 100, 1);
+dither_angle = 2 * math.pi * ((dither_angle / 360) % 1);
+do
+	local cx, cy = path_s.anchor_offset(mode_anchor_base);
+	X, Y = X + cx, Y + cy;
+end
+zoom = math.min(math.max(zoom / 100, 0), 50);
+rotate = math.pi / 180 * (rotate % 360);
+if intensity <= 0 then return end
+
+--#endregion PI / normalize parameters.
+
+local alpha_outer, alpha_inner = 1 - intensity, 1;
+if invert then alpha_outer, alpha_inner = alpha_inner, alpha_outer end
+if pt_buff then
+	path_s.path_mask_line_buffered(
+		alpha_outer, alpha_inner, line, antialias,
+		pt_buff, num_points, len_buff, loop,
+		start_pos, end_pos, end_shape, join_shape, miter_limit,
+		dash_pat, dash_pos, dash_adj, dash_end_shape);
+else
+	path_s.path_mask_line(
+		alpha_outer, alpha_inner, line, {
+			width = antialias,
+			pattern = dither_pattern, seed = dither_seed,
+			rate = dither_rate,
+			cx = X + obj.w / 2 + dither_X, cy = Y + obj.h / 2 + dither_Y,
+			size = dither_size, rot = dither_angle,
+		},
+		path_type, points, num_points - (loop and 0 or 1), loop, precision,
+		start_pos, end_pos, end_shape, join_shape, miter_limit,
+		dash_pat, dash_pos, dash_adj, dash_end_shape,
+		zoom, rotate, X, Y);
+end
+
+@パス部分フィルタσ
+--information:パス部分フィルタσ@Path_S v2.42 by σ軸
+--label:Path_S\加工
+--require:2011000
+--checksection@invert:反転,false,false
+--group:パス設定,true
+--value@num_points:頂点数,4
+--select@path_type:線タイプ=3,折れ線=0,補間移動=1,2次ベジェ曲線=2,3次ベジェ曲線=3
+--value@points:点リスト,{0,-100,55.23,-100,100,-55.23,100,0,100,55.23,55.23,100,0,100,-55.23,100,-100,55.23,-100,0,-100,-55.23,-55.23,-100}
+--select@mode_anchor_base:アンカー基準=5,回転中心=0,左上=1,上=2,右上=3,左=4,中央=5,右=6,左下=7,下=8,右下=9
+--track@precision:曲線精度,1,128,8,1,,0.25
+--group:塗り設定,false
+--track@inflation:追加幅,0,1000,0,0.01,,0.2
+--select@mode_fill:範囲=0,内側=0,奇偶=1,内側反転=2,奇偶反転=3
+--group:塗り境界設定,false
+--track@antialias:ぼかし幅,0,1000,1,0.01,,0.2
+--select@dither_pattern:ディザリング=0,なし=0,Checker=1,Bayer 2x2=2,Bayer 4x4=3,Bayer 256x256=4,IGN=5,White Noise=6,Halftone=7,Halftone Honeycomb=8,Halftone Square=9,Stripe=10
+--track@dither_seed:dither::ノイズシード,-65536,65535,10000,1
+--hide@dither_seed:dither_pattern==0
+--hide@dither_seed:dither_pattern==1
+--hide@dither_seed:dither_pattern==2
+--hide@dither_seed:dither_pattern==3
+--hide@dither_seed:dither_pattern==4
+--hide@dither_seed:dither_pattern==7
+--hide@dither_seed:dither_pattern==8
+--hide@dither_seed:dither_pattern==9
+--hide@dither_seed:dither_pattern==10
+--track@dither_rate:ディザ強さ,0,100,100,0.01
+--hide@dither_rate:dither_pattern==0
+--track@dither_size:dither::ドットサイズ,100,6400,100,0.01,,0.0625
+--hide@dither_size:dither_pattern==0
+--track@dither_X:dither::移動X,-4000,4000,0,0.01,,0.25
+--hide@dither_X:dither_pattern==0
+--track@dither_Y:dither::移動Y,-4000,4000,0,0.01,,0.25
+--hide@dither_Y:dither_pattern==0
+--trackgroup@dither_X,dither_Y:DitherPos
+--track@dither_angle:dither::回転,-3600,3600,0,0.01,,0.1
+--hide@dither_angle:dither_pattern==0
+--group:配置,false
+--track@X:移動X,-4000,4000,0,0.01,,0.25
+--track@Y:移動Y,-4000,4000,0,0.01,,0.25
+--trackgroup@X,Y:Position
+--track@zoom:拡大率,0,5000,100,0.001,,0.16
+--track@rotate:回転,-3600,3600,0,0.01,,0.1
+--check@toggle_gui:アンカー切り替え,false
+--group:フィルタ設定,false
+--select@extra_filter:追加のフィルタ効果=0,後続フィルタ=0,スクリプト実行=1
+--text@extra_script:追加スクリプト,obj.effect("グラデーション",\n  "形状","凸形",\n  "角度",30,\n  "開始色",0x00ff00) -- グラデーション適用\nobj.cx=obj.cx+100 -- 位置もずらせる\n
+--hide@extra_script:extra_filter~=1
+--group:スナップ設定,false
+--select@snap_grid:snap::グリッド=0,なし=0,横のみ=1,縦のみ=2,縦横=3
+--track@snap_grid_X:snap::間隔X,1,1000,40,0.01,,0.1
+--hide@snap_grid_X:snap_grid==0
+--hide@snap_grid_X:snap_grid==2
+--track@snap_grid_Y:snap::間隔Y,1,1000,40,0.01,,0.1
+--hide@snap_grid_Y:snap_grid==0
+--hide@snap_grid_Y:snap_grid==1
+--check@snap_show_grid:snap::グリッド表示,false
+--hide@snap_show_grid:snap_grid==0
+--select@snap_angle_pos:snap::隣との角度=0,なし=0,90°=1,45°=2,30°=3,15°=4,5°=5
+--select@snap_angle_ctrl:snap::制御点の角度=0,なし=0,90°=1,45°=2,30°=3,15°=4,5°=5
+--hide@snap_angle_ctrl:path_type<2
+--select@snap_prev_ctrl:snap::隣の制御点=0,なし=0,角度=1,長さ=2,角度と長さ=3
+--hide@snap_prev_ctrl:path_type<2
+--track@snap_threshold:snap::スナップ距離,0,200,8,0.01,,0.1
+--group:その他,false
+--value@PI:PI,{}
+--[[pixelshader@interpolate:
+Texture2D ori : register(t0);
+Texture2D eff : register(t1);
+Texture2D rate : register(t2);
+cbuffer constant0 : register(b0) {
+	float2 ofs_ori, ofs_eff;
+};
+float4 interpolate(float4 pos : SV_Position) : SV_Target
+{
+	return lerp(
+		ori.Load(int3(floor(pos.xy + ofs_ori), 0)),
+		eff.Load(int3(floor(pos.xy + ofs_eff), 0)),
+		rate[pos.xy].a);
+}
+
+]]
+local path_s = require("Path_S");
+local obj, math, tonumber, type, tostring = obj, math, tonumber, type, tostring;
+
+-- process snapping.
+if (snap_grid ~= 0 or snap_angle_pos ~= 0 or snap_angle_ctrl ~= 0 or snap_prev_ctrl ~= 0) and snap_threshold > 0 then
+	path_s.snap_anchors(path_type,
+		points, num_points, true,
+		(snap_grid == 1 or snap_grid == 3) and snap_grid_X or 0,
+		(snap_grid == 2 or snap_grid == 3) and snap_grid_Y or 0,
+		snap_angle_pos, snap_angle_ctrl, snap_prev_ctrl, snap_threshold,
+		snap_show_grid and snap_grid ~= 0 and obj.getoption("gui"), mode_anchor_base);
+end
+
+-- set anchors.
+if obj.getoption("gui") then
+	if toggle_gui then
+		obj.setanchor("X,Y", 0, "line", "offset", path_s.anchor_offset(mode_anchor_base));
+	else
+		num_points = math.max(math.floor(0.5 + (tonumber(num_points) or 4)), 3);
+		path_type = math.min(math.max(math.floor(0.5 + path_type), 0), 3);
+		local _, pts = path_s.anchor("points", path_type, points, num_points,
+			true, nil, mode_anchor_base);
+		points = pts;
+	end
+end
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+invert = path_s.PI.as_bool(PI.invert, invert);
+num_points = tonumber(PI.num_points) or num_points;
+path_type = path_s.PI.path_type(PI.path_type, path_type);
+if type(PI.points) == "table" then points = PI.points end
+mode_anchor_base = path_s.PI.mode_anchor_base(PI.mode_anchor_base, mode_anchor_base);
+precision = tonumber(PI.precision) or precision;
+inflation = tonumber(PI.inflation) or inflation;
+mode_fill = path_s.PI.mode_fill(PI.mode_fill, mode_fill);
+antialias = tonumber(PI.antialias) or antialias;
+dither_pattern = path_s.PI.dither_pattern(PI.dither_pattern, dither_pattern);
+dither_seed = tonumber(PI.dither_seed) or dither_seed;
+dither_rate = tonumber(PI.dither_rate) or dither_rate;
+dither_size = tonumber(PI.dither_size) or dither_size;
+dither_X = tonumber(PI.dither_X) or dither_X;
+dither_Y = tonumber(PI.dither_Y) or dither_Y;
+dither_angle = tonumber(PI.dither_angle) or dither_angle;
+X = tonumber(PI.X) or X;
+Y = tonumber(PI.Y) or Y;
+zoom = tonumber(PI.zoom) or zoom;
+rotate = tonumber(PI.rotate) or rotate;
+if type(PI.extra_filter) == "string" then
+	local name2num = {
+		["後続フィルタ"] = 0, ["スクリプト実行"] = 1,
+	};
+	extra_filter = name2num[PI.extra_filter] or extra_filter;
+end
+
+-- normalize parameters.
+num_points = math.max(math.floor(0.5 + num_points), 3);
+precision = math.max(precision, 1);
+inflation = math.max(inflation, 0);
+antialias = math.max(antialias, 0);
+dither_seed = math.floor(0.5 + dither_seed);
+if dither_seed >= 0 then
+	dither_seed = dither_seed
+		+  2525 * (obj.id % 2 ^ 20)
+		+ 13579 * (obj.effect_id % 2 ^ 20)
+		+ 54321 * (obj.index % 2 ^ 20);
+end
+dither_seed = dither_seed % 2 ^ 20;
+dither_rate = math.min(math.max(dither_rate / 100, 0), 1);
+dither_size = math.max(dither_size / 100, 1);
+dither_angle = 2 * math.pi * ((dither_angle / 360) % 1);
+do
+	local cx, cy = path_s.anchor_offset(mode_anchor_base);
+	X, Y = X + cx, Y + cy;
+end
+zoom = math.min(math.max(zoom / 100, 0), 50);
+rotate = math.pi / 180 * (rotate % 360);
+extra_filter = math.min(math.max(math.floor(0.5 + extra_filter), 0), 1);
+if extra_filter == 1 and extra_script:match("^%s*(.-)%s*$") == "" then return end
+
+--#endregion PI / normalize parameters.
+
+-- save the current context.
+local cxt; cxt = path_s.partial_filter.make_cxt(
+	num_points, path_type, points, precision,
+	mode_fill, inflation, {
+		width = antialias,
+		pattern = dither_pattern, seed = dither_seed,
+		rate = dither_rate,
+		cx = X + obj.w / 2 + dither_X, cy = Y + obj.h / 2 + dither_Y,
+		size = dither_size, rot = dither_angle,
+	}, invert,
+	X, Y, zoom, rotate);
+
+-- apply following filters.
+if extra_filter == 0 then
+	-- push the context so subsequent filter can combine.
+	path_s.context_manager.push(cxt);
+	obj.effect();
+	-- then pop it off after.
+	cxt = path_s.partial_filter.check_cxt(path_s.context_manager.pop(obj.effect_id));
+else
+	local f, c, e;
+	f, e = loadstring(extra_script);
+	if f then c, e = pcall(f) end
+	if not (f and c) then
+		path_s.print_script_error(tostring(e), extra_script);
+		obj.load("text", "");
+		return;
+	end
+end
+if obj.w <= 0 or obj.h <= 0 then return end -- subsequent filter already drew.
+
+-- if the context is still alive, combine with the original.
+if cxt then path_s.partial_filter.combine(cxt) end
+
+if extra_filter == 0 then
+	-- draw to the framebuffer.
+	obj.setoption("drawtarget", "framebuffer");
+	obj.draw();
+end
+
+@パス部分フィルタσここまで
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:パス部分フィルタσここまで@Path_S v2.40 by σ軸
+--label:Path_S\加工
+--require:2011000
+local path_s = require("Path_S");
+local cxt = path_s.partial_filter.check_cxt(path_s.context_manager.pop());
+if cxt then path_s.partial_filter.combine(cxt) end
+
+@パスに沿って配置σ
+--information:パスに沿って配置σ@Path_S v2.42 by σ軸
+--label:Path_S\配置
+--require:2011000
+--track@position:位置,-400,400,0,0.001,,0.25
+--track@rotate:回転,-3600,3600,0,0.01,,0.1
+--checksection@rot_tangent:パスに沿って回転,true,false
+--track@ofs_indiv:個別位置ズレ,-200,200,-5,0.001,,0.5
+--select@out_of_range:範囲外=0,非表示=0,始点のみ表示=1,終点のみ表示=2,表示=3
+--group:パス設定,true
+--value@num_points:頂点数,4
+--select@path_type:線タイプ=3,折れ線=0,補間移動=1,2次ベジェ曲線=2,3次ベジェ曲線=3
+--value@points:点リスト,{0,-100,55.23,-100,100,-55.23,100,0,100,55.23,55.23,100,0,100,-55.23,100,-100,55.23,-100,0,-100,-55.23,-55.23,-100}
+--checksection@loop:ループ,true,false
+--select@mode_anchor_base:アンカー基準=5,回転中心=0,左上=1,上=2,右上=3,左=4,中央=5,右=6,左下=7,下=8,右下=9
+--hide@out_of_range:loop==1
+--track@precision:曲線精度,1,128,8,1,,0.25
+--check@toggle_gui:パスの表示,false
+--group:スナップ設定,false
+--select@snap_grid:snap::グリッド=0,なし=0,横のみ=1,縦のみ=2,縦横=3
+--track@snap_grid_X:snap::間隔X,1,1000,40,0.01,,0.1
+--hide@snap_grid_X:snap_grid==0
+--hide@snap_grid_X:snap_grid==2
+--track@snap_grid_Y:snap::間隔Y,1,1000,40,0.01,,0.1
+--hide@snap_grid_Y:snap_grid==0
+--hide@snap_grid_Y:snap_grid==1
+--check@snap_show_grid:snap::グリッド表示,false
+--hide@snap_show_grid:snap_grid==0
+--select@snap_angle_pos:snap::隣との角度=0,なし=0,90°=1,45°=2,30°=3,15°=4,5°=5
+--select@snap_angle_ctrl:snap::制御点の角度=0,なし=0,90°=1,45°=2,30°=3,15°=4,5°=5
+--hide@snap_angle_ctrl:path_type<2
+--select@snap_prev_ctrl:snap::隣の制御点=0,なし=0,角度=1,長さ=2,角度と長さ=3
+--hide@snap_prev_ctrl:path_type<2
+--track@snap_threshold:snap::スナップ距離,0,200,8,0.01,,0.1
+--group:その他,false
+--value@PI:PI,{}
+local path_s = require("Path_S");
+local obj, math, tonumber, type = obj, math, tonumber, type;
+local cx0, cy0, cz0 = obj.getvalue("center");
+
+-- process snapping.
+if (snap_grid ~= 0 or snap_angle_pos ~= 0 or snap_angle_ctrl ~= 0 or snap_prev_ctrl ~= 0) and snap_threshold > 0 then
+	path_s.snap_anchors(path_type,
+		points, num_points, loop,
+		(snap_grid == 1 or snap_grid == 3) and snap_grid_X or 0,
+		(snap_grid == 2 or snap_grid == 3) and snap_grid_Y or 0,
+		snap_angle_pos, snap_angle_ctrl, snap_prev_ctrl, snap_threshold,
+		snap_show_grid and snap_grid ~= 0 and obj.getoption("gui"), mode_anchor_base);
+end
+
+-- set anchors.
+if obj.getoption("gui") then
+	num_points = math.max(math.floor(0.5 + (tonumber(num_points) or 4)), 2);
+	path_type = math.min(math.max(math.floor(0.5 + path_type), 0), 3);
+	local _, pts = path_s.anchor("points", path_type, points,
+		num_points - (loop and 0 or 1), loop, nil, mode_anchor_base);
+	points = pts;
+end
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+position = tonumber(PI.position) or position;
+rotate = tonumber(PI.rotate) or rotate;
+rot_tangent = path_s.PI.as_bool(PI.rot_tangent, rot_tangent);
+ofs_indiv = tonumber(PI.ofs_indiv) or ofs_indiv;
+if type(PI.out_of_range) == "string" then
+	local name2num = {
+		["非表示"] = 0, ["始点のみ表示"] = 1, ["終点のみ表示"] = 2, ["表示"] = 3,
+	};
+	out_of_range = name2num[PI.out_of_range] or out_of_range;
+end
+num_points = tonumber(PI.num_points) or num_points;
+path_type = path_s.PI.path_type(PI.path_type, path_type);
+if type(PI.points) == "table" then points = PI.points end
+loop = path_s.PI.as_bool(PI.loop, loop);
+mode_anchor_base = path_s.PI.mode_anchor_base(PI.mode_anchor_base, mode_anchor_base);
+precision = tonumber(PI.precision) or precision;
+
+-- normalize parameters.
+position = position / 100;
+rotate = rotate % 360;
+ofs_indiv = ofs_indiv / 100;
+out_of_range = math.min(math.max(math.floor(0.5 + out_of_range), 0), 3);
+num_points = math.max(math.floor(0.5 + num_points), 2);
+precision = math.max(precision, 1);
+local is_mult_obj = obj.getoption("multi_object");
+toggle_gui = toggle_gui and
+	obj.getoption("gui") and (not is_mult_obj or obj.index == 0);
+
+--#endregion PI / normalize parameters.
+
+-- further calculations.
+local cx, cy = path_s.anchor_offset(mode_anchor_base);
+points, num_points = path_s.poll(path_type, points, num_points - (loop and 0 or 1), loop, precision);
+if toggle_gui then
+	-- backup the original object.
+	local cache_name = "cache:path_s/place/obj";
+	assert(obj.copybuffer(cache_name, "object"));
+
+	-- find the bounding box.
+	local L, R, T, B, len = path_s.measure(points, num_points);
+	local pts, rate = points, 1;
+	if (R - L) + (B - T) > obj.screen_w + obj.screen_w then
+		-- shrink the points so the canvas will not be too large.
+		pts, rate = {}, (obj.screen_w + obj.screen_w) / ((R - L) + (B - T));
+		for i = 1, 2 * num_points do
+			pts[i] = rate * points[i];
+		end
+		L, R, T, B, len = rate * L, rate * R, rate * T, rate * B, rate * len;
+	end
+	L, R = math.floor(L) - 1, math.ceil(R) + 1;
+	T, B = math.floor(T) - 1, math.ceil(B) + 1;
+
+	-- prepare the canvas.
+	obj.clearbuffer("object", R - L, B - T, 0xffffff);
+
+	-- carve by the path.
+	path_s.path_mask_line(
+		0, 1, 2, 1,
+		0, pts, num_points - (loop and 0 or 1), loop, 1,
+		0, 1, 0, 0, 1, { 6, 10 }, 0, true, 0,
+		1, 0, -(L + R) / 2, -(T + B) / 2);
+
+	-- adjust the position.
+	local cx1, cy1 = obj.cx, obj.cy;
+	obj.cx, obj.cy =
+		(cx0 + cx1 - cx) * rate - (R + L) / 2 - cx0,
+		(cy0 + cy1 - cy) * rate - (B + T) / 2 - cy0;
+
+	-- then draw to the framebuffer.
+	local prev_blend = obj.getoption("blend");
+	obj.setoption("blend", "diff");
+	obj.draw(0, 0, 0, 1 / rate);
+	obj.setoption("blend", prev_blend);
+	obj.setoption("draw_state", false);
+
+	-- rewind the states.
+	assert(obj.copybuffer("object", cache_name));
+	obj.cx, obj.cy = cx1, cy1;
+end
+local ofs = position + ofs_indiv * (is_mult_obj and obj.index or 0);
+if loop then ofs = ofs % 1;
+elseif (ofs < 0 and out_of_range % 2 == 0) or (ofs > 1 and out_of_range < 2) then
+	-- hide the object.
+	obj.setoption("draw_state", true);
+	return;
+else ofs = math.min(math.max(ofs, 0), 1) end
+
+-- find the position and the angle.
+local X, Y, A do
+	local i, j = path_s.find_index(-ofs, points, num_points);
+
+	-- calculate the position and the angle.
+	X, Y =
+		(1 - j) * points[2 * i - 1] + j * points[2 * i + 1],
+		(1 - j) * points[2 * i - 0] + j * points[2 * i + 2];
+
+	if rot_tangent then
+		A = math.atan2(
+			points[2 * i + 2] - points[2 * i - 0],
+			points[2 * i + 1] - points[2 * i - 1]);
+
+		-- as to the angle, interpolate with the neighbor secant.
+		if j < 0.5 then i = i - 1;
+		else i, j = i + 1, 1 - j end
+		if loop then
+			if i < 1 then i = i + (num_points - 1);
+			elseif i >= num_points then i = i - (num_points - 1) end
+		end
+		local dA = 0;
+		if 0 < i and i < num_points then
+			dA = math.atan2(
+				points[2 * i + 2] - points[2 * i - 0],
+				points[2 * i + 1] - points[2 * i - 1]);
+			dA = (dA - A) / (2 * math.pi);
+			dA = ((dA + 0.5) % 1) - 0.5;
+			dA = 360 * (0.5 - j) * dA;
+		end
+		A = 180 / math.pi * A + dA;
+	else A = 0 end
+end
+
+-- convert anchor coordinates to screen coordinates.
+local Z = 0 do
+	local px, py, pz, c, s;
+	local x, y, z = cx - cx0 - obj.cx, cy - cy0 - obj.cy, -cz0 - obj.cz;
+	X, Y, Z = X + x, Y + y, Z + z;
+
+	px, py, pz = obj.getvalue("scale");
+	X, Y, Z = px * obj.sx * X, py * obj.sy * Y, pz * obj.sz * Z;
+	x, y, z = px * obj.sx * x, py * obj.sy * y, pz * obj.sz * z;
+
+	px, py, pz = obj.getvalue("angle");
+	px, py, pz =
+		math.pi / 180 * (px + obj.rx),
+		math.pi / 180 * (py + obj.ry),
+		math.pi / 180 * (pz + obj.rz);
+	c, s = math.cos(pz), math.sin(pz);
+	X, Y = c * X - s * Y, s * X + c * Y;
+	pz = pz + math.pi / 180 * (rotate + A);
+	c, s = math.cos(pz), math.sin(pz);
+	x, y = c * x - s * y, s * x + c * y;
+	c, s = math.cos(py), math.sin(py);
+	Z, X = c * Z - s * X, s * Z + c * X;
+	z, x = c * z - s * x, s * z + c * x;
+	c, s = math.cos(px), math.sin(px);
+	Y, Z = c * Y - s * Z, s * Y + c * Z;
+	y, z = c * y - s * z, s * y + c * z;
+
+	X, Y, Z = X - x, Y - y, Z - z;
+end
+
+-- apply the position and the angle.
+obj.ox, obj.oy, obj.oz = obj.ox + X, obj.oy + Y, obj.oz + Z;
+obj.rz = obj.rz + rotate + A;
+
+@輪郭パスσ
+--information:輪郭パスσ@Path_S v2.42 by σ軸
+--label:Path_S\装飾
+--require:2011000
+--select@mode_targets:対象=0,1個=0,複数=1,全て=2
+--track@X:X,-4000,4000,0,0.01,,0.25
+--track@Y:Y,-4000,4000,0,0.01,,0.25
+--trackgroup@X,Y:PrimaryPos
+--hide@X:mode_targets~=0
+--hide@Y:mode_targets~=0
+--value@num_points:対象個数,2
+--hide@num_points:mode_targets~=1
+--value@points:点リスト,{-100,0,100,0}
+--hide@points:mode_targets~=1
+--select@mode_anchor_base:アンカー基準=5,回転中心=0,左上=1,上=2,右上=3,左=4,中央=5,右=6,左下=7,下=8,右下=9
+--hide@mode_anchor_base:mode_targets==2
+--track@line:ライン幅,0,1000,5,0.01,,0.2
+--color@color:色,0xffffff
+--group:境界設定,false
+--track@thresh:αしきい値,0,100,50,0.01
+--checksection@conn_corner:角で隣接扱い,false,false
+--track@prec_trace:境界精度,10,200,50,0.01,,0.5
+--checksection@force_clockwise:時計回りに揃える,true,false
+--group:ライン設定,false
+--track@start_pos:開始位置,-400,400,0,0.001,,0.25
+--track@end_pos:終了位置,-400,400,100,0.001,,0.25
+--select@end_shape:端の形状=0,円=0,四角=1,平坦=2,三角=3,リボン=4
+--value@dash_pat:破線パターン,{100,0}
+--track@dash_pos:破線位置,-4000,4000,0,0.01,,0.25
+--select@dash_end_shape:dash::端の形状=0,円=0,四角=1,平坦=2,三角=3,リボン=4
+--group:ライン境界設定,false
+--track@antialias:ぼかし幅,0,1000,1,0.01,,0.2
+--select@dither_pattern:ディザリング=0,なし=0,Checker=1,Bayer 2x2=2,Bayer 4x4=3,Bayer 256x256=4,IGN=5,White Noise=6,Halftone=7,Halftone Honeycomb=8,Halftone Square=9,Stripe=10
+--track@dither_seed:dither::ノイズシード,-65536,65535,10000,1
+--hide@dither_seed:dither_pattern==0
+--hide@dither_seed:dither_pattern==1
+--hide@dither_seed:dither_pattern==2
+--hide@dither_seed:dither_pattern==3
+--hide@dither_seed:dither_pattern==4
+--hide@dither_seed:dither_pattern==7
+--hide@dither_seed:dither_pattern==8
+--hide@dither_seed:dither_pattern==9
+--hide@dither_seed:dither_pattern==10
+--track@dither_rate:ディザ強さ,0,100,100,0.01
+--hide@dither_rate:dither_pattern==0
+--track@dither_size:dither::ドットサイズ,100,6400,100,0.01,,0.0625
+--hide@dither_size:dither_pattern==0
+--track@dither_X:dither::移動X,-4000,4000,0,0.01,,0.25
+--hide@dither_X:dither_pattern==0
+--track@dither_Y:dither::移動Y,-4000,4000,0,0.01,,0.25
+--hide@dither_Y:dither_pattern==0
+--trackgroup@dither_X,dither_Y:DitherPos
+--track@dither_angle:dither::回転,-3600,3600,0,0.01,,0.1
+--hide@dither_angle:dither_pattern==0
+--group:ランダム変化,false
+--track@rand_period:ランダム周期,4,1024,32,0.01,,0.25
+--track@rand_amplify:ランダム振幅,0,1024,0,0.001,,0.125
+--track@rand_seed:ランダムシード,-65536,65535,10000,1
+--group:合成,false
+--select@mode_draw:モード=0,前方から合成=0,後方から合成=1
+--select@blend:合成モード=0,通常=0,加算=1,減算=2,乗算=3,スクリーン=4,オーバーレイ=5,比較(明)=6,比較(暗)=7,輝度=8,色差=9,陰影=10,明暗=11,差分=12
+--track@line_alpha:ライン透明度,0,100,0,0.01
+--track@orig_alpha:元画像透明度,0,100,0,0.01
+--group:フィルタ設定,false
+--select@extra_filter:追加のフィルタ効果=0,なし=0,後続フィルタ=1,スクリプト実行=2
+--text@extra_script:追加スクリプト,obj.effect("グラデーション",\n  "形状","凸形",\n  "角度",30,\n  "開始色",0x00ff00) -- グラデーション適用\nobj.cx=obj.cx+100 -- 位置もずらせる\n
+--hide@extra_script:extra_filter~=2
+--group:その他,false
+--value@PI:PI,{}
+--[[pixelshader@invert_alpha:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+	float4 color;
+};
+float4 invert_alpha(float4 pos : SV_Position) : SV_Target
+{
+	const float a = saturate(src[pos.xy].a);
+	return (1 - a) * color;
+}
+
+]]
+local path_s = require("Path_S");
+local obj, math, tonumber, type = obj, math, tonumber, type;
+
+if obj.getoption("gui") and mode_targets ~= 2 then
+	local cx, cy = path_s.anchor_offset(mode_anchor_base);
+	num_points = math.floor(0.5 + num_points);
+	if mode_targets == 0 then
+		obj.setanchor("X,Y", 0, "line", "offset", cx, cy);
+	elseif num_points > 0 then
+		for i = #points + 1, 2 * num_points do points[i] = 0 end
+		obj.setanchor("points", num_points, points, "offset", cx, cy);
+	end
+end
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+if type(PI.mode_targets) == "string" then
+	local name2num = {
+		["1個"] = 0, ["複数"] = 1, ["全て"] = 2
+	};
+	mode_targets = name2num[PI.mode_targets] or mode_targets;
+end
+X, Y = tonumber(PI.X) or X, tonumber(PI.Y) or Y;
+num_points = tonumber(PI.num_points) or num_points;
+if type(PI.points) == "table" then points = PI.points end
+mode_anchor_base = path_s.PI.mode_anchor_base(PI.mode_anchor_base, mode_anchor_base);
+line = tonumber(PI.line) or line;
+color = tonumber(PI.color) or color;
+thresh = tonumber(PI.thresh) or thresh;
+conn_corner = path_s.PI.as_bool(PI.conn_corner, conn_corner);
+prec_trace = tonumber(PI.prec_trace) or prec_trace;
+force_clockwise = path_s.PI.as_bool(PI.force_clockwise, force_clockwise);
+start_pos = tonumber(PI.start_pos) or start_pos;
+end_pos = tonumber(PI.end_pos) or end_pos;
+end_shape = path_s.PI.end_shape(PI.end_shape, end_shape);
+if type(PI.dash_pat) == "table" then dash_pat = PI.dash_pat end
+dash_pos = tonumber(PI.dash_pos) or dash_pos;
+dash_end_shape = path_s.PI.end_shape(PI.dash_end_shape, dash_end_shape);
+antialias = tonumber(PI.antialias) or antialias;
+dither_pattern = path_s.PI.dither_pattern(PI.dither_pattern, dither_pattern);
+dither_seed = tonumber(PI.dither_seed) or dither_seed;
+dither_rate = tonumber(PI.dither_rate) or dither_rate;
+dither_size = tonumber(PI.dither_size) or dither_size;
+dither_X = tonumber(PI.dither_X) or dither_X;
+dither_Y = tonumber(PI.dither_Y) or dither_Y;
+dither_angle = tonumber(PI.dither_angle) or dither_angle;
+rand_period = tonumber(PI.rand_period) or rand_period;
+rand_amplify = tonumber(PI.rand_amplify) or rand_amplify;
+rand_seed = tonumber(PI.rand_seed) or rand_seed;
+if type(PI.mode_draw) == "string" then
+	local name2num = {
+		["前方から合成"] = 0, ["後方から合成"] = 1
+	};
+	mode_draw = name2num[PI.mode_draw] or mode_draw;
+end
+local blend_mode = path_s.PI.blend_mode(PI.blend, blend);
+line_alpha = tonumber(PI.line_alpha) or line_alpha;
+orig_alpha = tonumber(PI.orig_alpha) or orig_alpha;
+if type(PI.extra_filter) == "string" then
+	local name2num = {
+		["なし"] = 0, ["後続フィルタ"] = 1, ["スクリプト実行"] = 2
+	};
+	extra_filter = name2num[PI.extra_filter] or extra_filter;
+end
+
+-- normalize parameters.
+mode_targets = math.min(math.max(math.floor(0.5 + mode_targets), 0), 2);
+if mode_targets == 0 then num_points, points = 1, { X, Y };
+elseif mode_targets == 1 then
+	num_points = math.min(math.max(math.floor(0.5 + num_points), 1), math.floor(#points / 2));
+end
+line = math.max(line, 0);
+color = math.floor(0.5 + color) % 2 ^ 24;
+thresh = math.min(math.max(thresh / 100, 0), 1);
+prec_trace = math.max(prec_trace / 100, 1 / 16);
+start_pos = start_pos / 100;
+end_pos = end_pos / 100;
+antialias = math.max(antialias, 0);
+dither_seed = math.floor(0.5 + dither_seed);
+if dither_seed >= 0 then
+	dither_seed = dither_seed
+		+  2525 * (obj.id % 2 ^ 20)
+		+ 13579 * (obj.effect_id % 2 ^ 20)
+		+ 54321 * (obj.index % 2 ^ 20);
+end
+dither_seed = dither_seed % 2 ^ 20;
+dither_rate = math.min(math.max(dither_rate / 100, 0), 1);
+dither_size = math.max(dither_size / 100, 1);
+dither_angle = 2 * math.pi * ((dither_angle / 360) % 1);
+rand_period = math.max(rand_period, 4);
+rand_amplify = math.max(rand_amplify, 0);
+rand_seed = math.min(math.max(math.floor(0.5 + rand_seed), -2 ^ 16), 2 ^ 16 - 1);
+mode_draw = math.min(math.max(math.floor(0.5 + mode_draw), 0), 1);
+line_alpha = math.min(math.max(1 - line_alpha / 100, 0), 1);
+orig_alpha = math.min(math.max(1 - orig_alpha / 100, 0), 1);
+
+--#endregion PI / normalize parameters.
+
+-- collect paths.
+local paths, cx, cy = {}, nil, nil;
+if mode_targets < 2 then
+	cx, cy = path_s.anchor_offset(mode_anchor_base);
+	for i = 1, num_points do
+		points[2 * i - 1] = math.floor(0.5 + points[2 * i - 1] + cx + obj.w / 2);
+		points[2 * i] = math.floor(0.5 + points[2 * i] + cy + obj.h / 2);
+	end
+	paths = path_s.boundary.find("object", points, num_points,
+		thresh, conn_corner, prec_trace);
+else
+	cx, cy = path_s.anchor_offset(0); -- rotation center.
+	paths = path_s.boundary.find_all("object", thresh, conn_corner, prec_trace);
+end
+if #paths == 0 then return end
+
+-- adjust directions.
+if force_clockwise then
+	for i = 1, #paths do
+		local p = paths[i];
+		local c = path_s.rotation_count(p.points, p.num_segments);
+		if c < 0 then
+			-- reverse.
+			for j = 2, (p.num_segments + 1) / 2 do
+				p.points[2 * j - 1], p.points[2 * j],
+				p.points[2 * (p.num_segments - j) + 3], p.points[2 * (p.num_segments - j) + 4] =
+					p.points[2 * (p.num_segments - j) + 3], p.points[2 * (p.num_segments - j) + 4],
+					p.points[2 * j - 1], p.points[2 * j];
+			end
+		end
+	end
+end
+
+-- randomize.
+if rand_amplify > 0 then
+	-- randomize the path.
+	for i = 1, #paths do
+		local p = paths[i];
+		local pts, n_pts = path_s.randomize(p.points, p.num_segments + 1,
+			rand_period, rand_amplify, 2, rand_seed);
+		p.points, p.num_segments = pts, n_pts - 1;
+	end
+end
+
+-- measure paths.
+local w, h, L, R, T, B = obj.w, obj.h, path_s.measure(paths[1].points, paths[1].num_segments);
+for i = 2, #paths do
+	local l, r, t, b = path_s.measure(paths[i].points, paths[i].num_segments);
+	L, R = math.min(L, l), math.max(R, r);
+	T, B = math.min(T, t), math.max(B, b);
+end
+local th = path_s.line_inflation(end_shape, dash_end_shape, 0, line, antialias, 1, dash_pat);
+L, R = math.floor(L - th), math.ceil(R + th);
+T, B = math.floor(T - th), math.ceil(B + th);
+local W, H, dcx, dcy = R - L, B - T, (w - L - R) / 2, (h - T - B) / 2;
+
+-- backup the original image.
+local cache_name = "cache:path_s/track/obj#"..obj.effect_id;
+assert(obj.copybuffer(cache_name, "object"));
+local cx0, cy0 = obj.cx, obj.cy;
+
+-- carve the shape.
+obj.cx, obj.cy = obj.cx + dcx, obj.cy + dcy;
+obj.clearbuffer("object", W, H, color);
+for i = 1, #paths do
+	local p = paths[i];
+	path_s.path_mask_line(#paths > 1 and 1 or 0, #paths > 1 and 0 or 1,
+		line, {
+			width = antialias,
+			pattern = dither_pattern, seed = dither_seed,
+			rate = dither_rate,
+			cx = cx + dcx + W / 2 + dither_X, cy = cy + dcy + H / 2 + dither_Y,
+			size = dither_size, rot = dither_angle,
+		}, nil,
+		p.points, p.num_segments, true, 8,
+		start_pos, end_pos, end_shape, 0, 1,
+		dash_pat, dash_pos, true, dash_end_shape,
+		1, 0, dcx - w / 2, dcy - h / 2);
+end
+if #paths > 1 then
+	obj.pixelshader("invert_alpha", "object", "object", {
+		bit.band(color, 0xff0000) / 0xff0000,
+		bit.band(color, 0x00ff00) / 0x00ff00,
+		bit.band(color, 0x0000ff) / 0x0000ff, 1;
+	});
+end
+
+-- save the current context.
+local cxt; cxt = path_s.post_effect.make_cxt(
+	mode_draw, blend_mode, orig_alpha, line_alpha,
+	w, h, cx0, cy0, cache_name);
+
+-- apply following filters.
+if extra_filter == 1 then
+	-- push the context so subsequent filter can combine.
+	path_s.context_manager.push(cxt);
+	obj.effect();
+	-- then pop it off after.
+	cxt = path_s.post_effect.check_cxt(path_s.context_manager.pop(obj.effect_id));
+elseif extra_filter == 2 then
+	local f, c, e;
+	f, e = loadstring(extra_script);
+	if f then c, e = pcall(f) end
+	if not (f and c) then
+		path_s.print_script_error(tostring(e), extra_script);
+		obj.load("text", "");
+		return;
+	end
+end
+if obj.w <= 0 or obj.h <= 0 then return end -- subsequent filter already drew.
+
+-- if the context is still alive, combine with the original.
+if cxt then path_s.post_effect.combine(cxt) end
+
+if extra_filter == 1 then
+	-- draw to the framebuffer.
+	obj.setoption("drawtarget", "framebuffer");
+	obj.draw();
+end
+
+@追加フィルタここまで
+--information:追加フィルタここまで@Path_S v2.42 by σ軸
+--label:Path_S
+--require:2011000
+local path_s = require("Path_S");
+local cxt = path_s.context_manager.pop();
+---@diagnostic disable-next-line: param-type-mismatch
+if path_s.partial_filter.check_cxt(cxt) then path_s.partial_filter.combine(cxt);
+---@diagnostic disable-next-line: param-type-mismatch
+elseif path_s.post_effect.check_cxt(cxt) then path_s.post_effect.combine(cxt) end
+

@@ -1,0 +1,5 @@
+# ベクターキャンバス
+
+複雑なベクターグラフィックスを AviUtl ExEdit2 で扱うためのスクリプト群です。
+
+https://github.com/Mg32/aviutl2-vectorcanvas

@@ -1,0 +1,689 @@
+--[[
+MIT License
+
+Copyright (c) 2025-2026 sigma-axis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+https://mit-license.org/
+]]
+
+--
+-- v2.93
+--
+
+-- https://github.com/sigma-axis/aviutl2_script_Basic_S
+
+@全体で時間制御
+--information:全体で時間制御@Basic_S v2.93 by σ軸
+--label:Basic_S
+--require:2011200
+--timecontrol
+local i, t = require("Basic_S").track.curve.entire();
+local v0, v1 = obj.getpoint(i), obj.getpoint(i + 1)
+return v0 + (v1 - v0) * t;
+
+@区間ごとに時間制御
+--information:区間ごとに時間制御@Basic_S v2.93 by σ軸
+--label:Basic_S
+--require:2011200
+--timecontrol
+local i, t = require("Basic_S").track.curve.section();
+local v0, v1 = obj.getpoint(i), obj.getpoint(i + 1)
+return v0 + (v1 - v0) * t;
+
+@全体で時間制御(回転)
+--information:全体で時間制御(回転)@Basic_S v2.93 by σ軸
+--label:Basic_S
+--require:2011200
+--param:1周角度,360
+--timecontrol
+local track = require("Basic_S").track;
+local i, t = track.curve.entire();
+return track.linear_rotation(i, t, obj.getpoint("param"));
+
+@区間ごとに時間制御(回転)
+--information:区間ごとに時間制御(回転)@Basic_S v2.93 by σ軸
+--label:Basic_S
+--require:2011200
+--param:1周角度,360
+--timecontrol
+local track = require("Basic_S").track;
+local i, t = track.curve.section();
+return track.linear_rotation(i, t, obj.getpoint("param"));
+
+@正弦波
+--information:正弦波@Basic_S v2.93 by σ軸
+--label:Basic_S\基本緩急
+--require:2011200
+--speed:0,1
+local t, v0, v1 = require("Basic_S").track.ease_inout_core();
+local rho = 1 - math.cos(math.pi / 2 * t);
+return v0 + (v1 - v0) * rho;
+
+@2次式
+--information:2次式@Basic_S v2.93 by σ軸
+--label:Basic_S\基本緩急
+--require:2011200
+--speed:0,1
+local t, v0, v1 = require("Basic_S").track.ease_inout_core();
+local rho = t ^ 2;
+return v0 + (v1 - v0) * rho;
+
+@3次式
+--information:3次式@Basic_S v2.93 by σ軸
+--label:Basic_S\基本緩急
+--require:2011200
+--speed:0,1
+local t, v0, v1 = require("Basic_S").track.ease_inout_core();
+local rho = t ^ 3;
+return v0 + (v1 - v0) * rho;
+
+@4次式
+--information:4次式@Basic_S v2.93 by σ軸
+--label:Basic_S\基本緩急
+--require:2011200
+--speed:0,1
+local t, v0, v1 = require("Basic_S").track.ease_inout_core();
+local rho = t ^ 4;
+return v0 + (v1 - v0) * rho;
+
+@N次式
+--information:N次式@Basic_S v2.93 by σ軸
+--label:Basic_S\基本緩急
+--require:2011200
+--speed:0,1
+--param:次数N,5
+local t, v0, v1 = require("Basic_S").track.ease_inout_core();
+
+local N = math.max(obj.getpoint("param"), 0);
+local rho = (N > 0 or t > 0) and t ^ N or 0;
+
+return v0 + (v1 - v0) * rho;
+
+@指数関数
+--information:指数関数@Basic_S v2.93 by σ軸
+--label:Basic_S\基本緩急
+--require:2011200
+--speed:0,1
+--param:減衰率,2
+local t, v0, v1 = require("Basic_S").track.ease_inout_core();
+
+local a = math.max(obj.getpoint("param"), 0);
+local rho = a > 0 and (math.exp(a * t) - 1) / (math.exp(a) - 1) or t;
+
+return v0 + (v1 - v0) * rho;
+
+@円形
+--information:円形@Basic_S v2.93 by σ軸
+--label:Basic_S\基本緩急
+--require:2011200
+--speed:0,1
+local t, v0, v1 = require("Basic_S").track.ease_inout_core();
+local rho = 1 - (1 - t ^ 2) ^ 0.5;
+return v0 + (v1 - v0) * rho;
+
+@等速移動
+--information:等速移動@Basic_S v2.93 by σ軸
+--label:Basic_S
+--require:2011200
+--twopoint
+--param:単位/select/秒=0/フレーム=1,0
+--param:単位時間,1
+--param:起点/select/始点=0/終点=1,0
+local fr, mode, T, origin = obj.getpoint("framerate"), obj.getpoint("param");
+local t, v0, v1 = obj.getpoint("time"), obj.getpoint(0), obj.getpoint(1);
+T = math.abs(T); if T == 0 then T = 1 end
+if origin == 1 then t, v0, v1 = obj.getpoint("time", 1) - t, v1, v0 end
+if mode == 1 then t = fr * t end
+return v0 + (v1 - v0) * t / T;
+
+@等速移動(秒)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:等速移動(秒)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:単位時間(秒),1
+local t, T, v0, v1 = obj.getpoint("time"), obj.getpoint("param"), obj.getpoint(0), obj.getpoint(1);
+if 1 / T < 0 then t, T, v0, v1 = obj.getpoint("time", 1) - t, -T, v1, v0 end
+if T == 0 then T = 1 end
+return v0 + (v1 - v0) * t / T;
+
+@等速移動(フレーム)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:等速移動(フレーム)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:単位時間(フレーム),60
+local fr = obj.getpoint("framerate");
+local f, F, v0, v1 = fr * obj.getpoint("time"), obj.getpoint("param"), obj.getpoint(0), obj.getpoint(1);
+if 1 / F < 0 then f, F, v0, v1 = fr * obj.getpoint("time", 1) - f, -F, v1, v0 end
+if F == 0 then F = 1 end
+return v0 + (v1 - v0) * f / F;
+
+@コマ落ち反復
+--information:コマ落ち反復@Basic_S v2.93 by σ軸
+--label:Basic_S\コマ落ち
+--require:2011200
+--twopoint
+--param:周期の単位/select/秒=0/フレーム=1/Hz=2/回数=3/BPM=4/BPMグリッド(拍数線)=5/BPMグリッド(小節線)=6,0
+--param:周期,0.5
+--param:周期(倍率),1
+--param:周期(分母),1
+--param:周期ずれ%,0
+--param:周期の起点/select/始点=0/終点=1/始点近くのグリッド(BPMグリッド)=2/終点近くのグリッド(BPMグリッド)=3,0
+--param:デューティ比%,50
+local track = require("Basic_S").track;
+return track.discrete_repeat(track.period.select(obj.getpoint("param")));
+
+@コマ落ち反復(秒)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:コマ落ち反復(秒)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(秒),0.5
+--param:周期ずれ%,0
+--param:デューティ比%,50
+local track = require("Basic_S").track;
+return track.discrete_repeat(track.period.sec(obj.getpoint("param")));
+
+@コマ落ち反復(フレーム)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:コマ落ち反復(フレーム)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(フレーム),30
+--param:周期ずれ%,0
+--param:デューティ比%,50
+local track = require("Basic_S").track;
+return track.discrete_repeat(track.period.frame(obj.getpoint("param")));
+
+@コマ落ち反復(Hz)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:コマ落ち反復(Hz)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(Hz),2
+--param:周期ずれ%,0
+--param:デューティ比%,50
+local track = require("Basic_S").track;
+return track.discrete_repeat(track.period.hertz(obj.getpoint("param")));
+
+@コマ落ち反復(BPM)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:コマ落ち反復(BPM)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(BPM),120
+--param:周期ずれ%,0
+--param:デューティ比%,50
+local track = require("Basic_S").track;
+return track.discrete_repeat(track.period.bpm(obj.getpoint("param")));
+
+@コマ落ち反復(BPMグリッド)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:コマ落ち反復(BPMグリッド)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(音符数),1
+--param:基準のN分音符(0:小節),4
+--param:グリッド1拍のN分音符,4
+--param:周期ずれ%,0
+--param:デューティ比%,50
+local track = require("Basic_S").track;
+return track.discrete_repeat(track.period.bpmgrid(obj.getpoint("param")));
+
+@コマ落ち反復(回数)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:コマ落ち反復(回数)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(回数),8
+--param:周期ずれ%,0
+--param:デューティ比%,50
+local track = require("Basic_S").track;
+return track.discrete_repeat(track.period.count(obj.getpoint("param")));
+
+@コマ落ちランダム
+--information:コマ落ちランダム@Basic_S v2.93 by σ軸
+--label:Basic_S\コマ落ち
+--require:2011200
+--twopoint
+--param:周期の単位/select/秒=0/フレーム=1/Hz=2/回数=3/BPM=4/BPMグリッド(拍数線)=5/BPMグリッド(小節線)=6,0
+--param:周期,0.5
+--param:周期(倍率),1
+--param:周期(分母),1
+--param:周期ずれ%,0
+--param:周期の起点/select/始点=0/終点=1/始点近くのグリッド(BPMグリッド)=2/終点近くのグリッド(BPMグリッド)=3,0
+--param:乱数シード,2525
+local track = require("Basic_S").track;
+return track.discrete_random(track.period.select(obj.getpoint("param")));
+
+@コマ落ちランダム(秒)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:コマ落ちランダム(秒)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(秒),0.5
+--param:周期ずれ%,0
+--param:乱数シード,2525
+local track = require("Basic_S").track;
+return track.discrete_random(track.period.sec(obj.getpoint("param")));
+
+@コマ落ちランダム(フレーム)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:コマ落ちランダム(フレーム)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(フレーム),30
+--param:周期ずれ%,0
+--param:乱数シード,2525
+local track = require("Basic_S").track;
+return track.discrete_random(track.period.frame(obj.getpoint("param")));
+
+@コマ落ちランダム(Hz)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:コマ落ちランダム(Hz)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(Hz),2
+--param:周期ずれ%,0
+--param:乱数シード,2525
+local track = require("Basic_S").track;
+return track.discrete_random(track.period.hertz(obj.getpoint("param")));
+
+@コマ落ちランダム(BPM)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:コマ落ちランダム(BPM)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(BPM),120
+--param:周期ずれ%,0
+--param:乱数シード,2525
+local track = require("Basic_S").track;
+return track.discrete_random(track.period.bpm(obj.getpoint("param")));
+
+@コマ落ちランダム(BPMグリッド)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:コマ落ちランダム(BPMグリッド)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(音符数),1
+--param:基準のN分音符(0:小節),4
+--param:グリッド1拍のN分音符,4
+--param:周期ずれ%,0
+--param:乱数シード,2525
+local track = require("Basic_S").track;
+return track.discrete_random(track.period.bpmgrid(obj.getpoint("param")));
+
+@コマ落ちランダム(回数)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:コマ落ちランダム(回数)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(回数),8
+--param:周期ずれ%,0
+--param:乱数シード,2525
+local track = require("Basic_S").track;
+return track.discrete_random(track.period.count(obj.getpoint("param")));
+
+@コマ落ち時間制御
+--information:コマ落ち時間制御@Basic_S v2.93 by σ軸
+--label:Basic_S\コマ落ち
+--require:2011200
+--param:周期の単位/select/秒=0/フレーム=1/Hz=2/回数=3/BPM=4/BPMグリッド(拍数線)=5/BPMグリッド(小節線)=6,0
+--param:周期,0.5
+--param:周期(倍率),1
+--param:周期(分母),1
+--param:周期ずれ%,0
+--param:周期の起点/select/始点=0/終点=1/始点近くのグリッド(BPMグリッド)=2/終点近くのグリッド(BPMグリッド)=3,0
+--param:モード/select/区間ごとに時間制御=0/全体で時間制御=1/区間ごとに時間制御(回転)=2/全体で時間制御(回転)=3,0
+--param:1周角度,360
+--param:サンプル位置%,0
+--timecontrol
+local track = require("Basic_S").track;
+return track.curve.discrete(obj.getpoint("param"));
+
+@時間制御繰り返し
+--information:時間制御繰り返し@Basic_S v2.93 by σ軸
+--label:Basic_S\繰り返し
+--require:2011200
+--twopoint
+--param:周期の単位/select/秒=0/フレーム=1/Hz=2/回数=3/BPM=4/BPMグリッド(拍数線)=5/BPMグリッド(小節線)=6,0
+--param:周期,0.5
+--param:周期(倍率),1
+--param:周期(分母),1
+--param:周期ずれ%,0
+--param:周期の起点/select/始点=0/終点=1/始点近くのグリッド(BPMグリッド)=2/終点近くのグリッド(BPMグリッド)=3,0
+--param:モード/select/通常=0/往復=1,0
+--timecontrol
+local track = require("Basic_S").track;
+return track.curve_repeat(track.period.select(obj.getpoint("param")));
+
+@時間制御繰り返し(秒)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:時間制御繰り返し(秒)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(秒),0.5
+--param:周期ずれ%,0
+--timecontrol
+local track = require("Basic_S").track;
+return track.curve_repeat(track.period.sec(obj.getpoint("param")));
+
+@時間制御繰り返し(フレーム)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:時間制御繰り返し(フレーム)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(フレーム),30
+--param:周期ずれ%,0
+--timecontrol
+local track = require("Basic_S").track;
+return track.curve_repeat(track.period.frame(obj.getpoint("param")));
+
+@時間制御繰り返し(Hz)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:時間制御繰り返し(Hz)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(Hz),2
+--param:周期ずれ%,0
+--timecontrol
+local track = require("Basic_S").track;
+return track.curve_repeat(track.period.hertz(obj.getpoint("param")));
+
+@時間制御繰り返し(BPM)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:時間制御繰り返し(BPM)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(BPM),120
+--param:周期ずれ%,0
+--timecontrol
+local track = require("Basic_S").track;
+return track.curve_repeat(track.period.bpm(obj.getpoint("param")));
+
+@時間制御繰り返し(BPMグリッド)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:時間制御繰り返し(BPMグリッド)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(音符数),1
+--param:基準のN分音符(0:小節),4
+--param:グリッド1拍のN分音符,4
+--param:周期ずれ%,0
+--param:モード/select/通常=0/往復=1,0
+--timecontrol
+local track = require("Basic_S").track;
+return track.curve_repeat(track.period.bpmgrid(obj.getpoint("param")));
+
+@時間制御繰り返し(回数)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:時間制御繰り返し(回数)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(回数),8
+--param:周期ずれ%,0
+--timecontrol
+local track = require("Basic_S").track;
+return track.curve_repeat(track.period.count(obj.getpoint("param")));
+
+@時間制御繰り返し往復(秒)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:時間制御繰り返し往復(秒)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(秒),0.5
+--param:周期ずれ%,0
+--timecontrol
+local track = require("Basic_S").track;
+return track.curve_backforth(track.period.sec(obj.getpoint("param")));
+
+@時間制御繰り返し往復(フレーム)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:時間制御繰り返し往復(フレーム)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(フレーム),30
+--param:周期ずれ%,0
+--timecontrol
+local track = require("Basic_S").track;
+return track.curve_backforth(track.period.frame(obj.getpoint("param")));
+
+@時間制御繰り返し往復(Hz)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:時間制御繰り返し往復(Hz)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(Hz),2
+--param:周期ずれ%,0
+--timecontrol
+local track = require("Basic_S").track;
+return track.curve_backforth(track.period.hertz(obj.getpoint("param")));
+
+@時間制御繰り返し往復(BPM)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:時間制御繰り返し往復(BPM)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(BPM),120
+--param:周期ずれ%,0
+--timecontrol
+local track = require("Basic_S").track;
+return track.curve_backforth(track.period.bpm(obj.getpoint("param")));
+
+@時間制御繰り返し往復(BPMグリッド)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:時間制御繰り返し往復(BPMグリッド)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(音符数),1
+--param:基準のN分音符(0:小節),4
+--param:グリッド1拍のN分音符,4
+--param:周期ずれ%,0
+--timecontrol
+local track = require("Basic_S").track;
+return track.curve_backforth(track.period.bpmgrid(obj.getpoint("param")));
+
+@時間制御繰り返し往復(回数)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:時間制御繰り返し往復(回数)@Basic_S v2.71 by σ軸
+--label:Basic_S\非推奨
+--require:2005400
+--twopoint
+--param:周期(回数),8
+--param:周期ずれ%,0
+--timecontrol
+local track = require("Basic_S").track;
+return track.curve_backforth(track.period.count(obj.getpoint("param")));
+
+@対数補間
+--information:対数補間@Basic_S v2.93 by σ軸
+--label:Basic_S\特殊補間
+--require:2011200
+--param:原点,0
+--timecontrol
+local track = require("Basic_S").track;
+local i, t = track.curve.section();
+return track.logarithmic(t, obj.getpoint(i), obj.getpoint(i + 1), obj.getpoint("param"));
+
+@対数補間(全体時間制御)
+--information:対数補間(全体時間制御)@Basic_S v2.93 by σ軸
+--label:Basic_S\特殊補間
+--require:2011200
+--param:原点,0
+--timecontrol
+local track = require("Basic_S").track;
+local i, t = track.curve.entire();
+return track.logarithmic(t, obj.getpoint(i), obj.getpoint(i + 1), obj.getpoint("param"));
+
+@逆数補間
+--information:逆数補間@Basic_S v2.93 by σ軸
+--label:Basic_S\特殊補間
+--require:2011200
+--param:原点,0
+--timecontrol
+local track = require("Basic_S").track;
+local i, t = track.curve.section();
+return track.harmonic(t, obj.getpoint(i), obj.getpoint(i + 1), obj.getpoint("param"));
+
+@逆数補間(全体時間制御)
+--information:逆数補間(全体時間制御)@Basic_S v2.93 by σ軸
+--label:Basic_S\特殊補間
+--require:2011200
+--param:原点,0
+--timecontrol
+local track = require("Basic_S").track;
+local i, t = track.curve.entire();
+return track.harmonic(t, obj.getpoint(i), obj.getpoint(i + 1), obj.getpoint("param"));
+
+@バウンス
+--information:バウンス@Basic_S v2.93 by σ軸
+--label:Basic_S
+--require:2011200
+--speed:0,1
+--param:反発係数,0.70710678
+--param:回数,0
+--timecontrol
+local basic_s = require("Basic_S");
+local i, t = basic_s.track.curve.section();
+local v0, v1 = obj.getpoint(i), obj.getpoint(i + 1);
+t, v0, v1 = basic_s.reduce_inout_ease(t, v0, v1, obj.getpoint("accelerate"), obj.getpoint("decelerate"));
+return basic_s.track.bounce(t, v0, v1, obj.getpoint("param"));
+
+@バウンス(全体時間制御)
+--information:バウンス(全体時間制御)@Basic_S v2.93 by σ軸
+--label:Basic_S
+--require:2011200
+--speed:0,1
+--param:反発係数,0.70710678
+--param:回数,0
+--timecontrol
+local basic_s = require("Basic_S");
+local i, t = basic_s.track.curve.entire();
+local v0, v1 = obj.getpoint(i), obj.getpoint(i + 1);
+t, v0, v1 = basic_s.reduce_inout_ease(t, v0, v1, obj.getpoint("accelerate"), obj.getpoint("decelerate"));
+return basic_s.track.bounce(t, v0, v1, obj.getpoint("param"));
+
+@バック
+--information:バック@Basic_S v2.93 by σ軸
+--label:Basic_S
+--require:2011200
+--speed:0,1
+--param:勢い,0.8
+--timecontrol
+local basic_s = require("Basic_S");
+local i, t = basic_s.track.curve.section();
+local v0, v1 = obj.getpoint(i), obj.getpoint(i + 1);
+t, v0, v1 = basic_s.reduce_inout_ease(t, v0, v1, obj.getpoint("accelerate"), obj.getpoint("decelerate"));
+return basic_s.track.back(t, v0, v1, obj.getpoint("param"));
+
+@バック(全体時間制御)
+--information:バック(全体時間制御)@Basic_S v2.93 by σ軸
+--label:Basic_S
+--require:2011200
+--speed:0,1
+--param:勢い,0.8
+--timecontrol
+local basic_s = require("Basic_S");
+local i, t = basic_s.track.curve.entire();
+local v0, v1 = obj.getpoint(i), obj.getpoint(i + 1);
+t, v0, v1 = basic_s.reduce_inout_ease(t, v0, v1, obj.getpoint("accelerate"), obj.getpoint("decelerate"));
+return basic_s.track.back(t, v0, v1, obj.getpoint("param"));
+
+@バネ振動
+--information:バネ振動@Basic_S v2.93 by σ軸
+--label:Basic_S
+--require:2011200
+--speed:0,1
+--param:振動回数,3
+--param:減衰率,0.3
+--timecontrol
+local basic_s = require("Basic_S");
+local i, t = basic_s.track.curve.section();
+local v0, v1 = obj.getpoint(i), obj.getpoint(i + 1);
+t, v0, v1 = basic_s.reduce_inout_ease(t, v0, v1, obj.getpoint("accelerate"), obj.getpoint("decelerate"));
+return basic_s.track.elastic(t, v0, v1, obj.getpoint("param"));
+
+@バネ振動(全体時間制御)
+--information:バネ振動(全体時間制御)@Basic_S v2.93 by σ軸
+--label:Basic_S
+--require:2011200
+--speed:0,1
+--param:振動回数,3
+--param:減衰率,0.3
+--timecontrol
+local basic_s = require("Basic_S");
+local i, t = basic_s.track.curve.entire();
+local v0, v1 = obj.getpoint(i), obj.getpoint(i + 1);
+t, v0, v1 = basic_s.reduce_inout_ease(t, v0, v1, obj.getpoint("accelerate"), obj.getpoint("decelerate"));
+return basic_s.track.elastic(t, v0, v1, obj.getpoint("param"));
+

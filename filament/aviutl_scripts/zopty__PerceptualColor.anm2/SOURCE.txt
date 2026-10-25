@@ -1,0 +1,5 @@
+PerceptualColor.anm2 by zopty
+licence: BSD-3-Clause
+from: https://github.com/zopty/PerceptualColor.anm2 (branch main, commit d7b916d4f992) (commit d7b916d4f992)
+page: https://github.com/zopty/PerceptualColor.anm2
+Put here unchanged for Motolii (filament/aviutl_scripts).

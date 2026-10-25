@@ -1,0 +1,3569 @@
+--information:extra_blend_mode.anm2 / https://github.com/sevenc-nanashi/extra_blend_mode.anm2
+--label:色調整
+--select@mode:合成モード=1,加算=1,減算=2,乗算=3,除算=4,スクリーン=5,オーバーレイ=6,オーバーレイ(gimp)=7,比較(明)=8,比較(暗)=9,色差=10,陰影(焼き込み(リニア))=11,明暗(リニアライト)=12,明暗(逆)=13,差分=14,除外=15,ネガ=16,反転=17,カラー比較(明)=18,カラー比較(暗)=19,覆い焼き(カラー)=20,覆い焼き(逆カラー)=21,覆い焼き(ソフト)=22,焼き込み(カラー)=23,焼き込み(逆カラー)=24,焼き込み(ソフト)=25,ハードライト=26,ソフトライト=27,ソフトライト(gimp)=28,ソフトライト(photoshop)=29,ビビッドライト=30,ビビッドライト(photoshop)=31,ピンライト=32,ピンライト(逆)=33,ピンライト(強)=34,ハードミックス=35,色相=36,色相(HSVL)=37,色相(δ)=38,カラー(明度)=39,カラー(輝度)=40,カラー(HSVL)=41,彩度(明度)=42,彩度(輝度)=43,彩度(HSVL)=44,明度=45,輝度=46,輝度(HSVL)=47,RED=48,GREEN=49,BLUE=50,YELLOW=51,AQUA=52,MAGENTA=53,相加平均=54,相乗平均=55,調和平均=56,反射=57,グロー=58,寒色=59,暖色=60,微粒取り出し=61,微粒結合=62,フェニックス=63,AND=64,OR=65,XOR=66,SHIFT=67,加算(unsigned)=68,減算(unsigned)=69,加算(RED)=70,加算(GREEN)=71,加算(BLUE)=72,加算(RED-GREEN)=73,加算(GREEN-BLUE)=74,加算(BLUE-RED)=75,二値化=76
+
+--[[pixelshader@add:
+#define ENTRY add
+// label: 加算
+float3 Blend(float3 s, float3 b) { return min(s + b, 255.0); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@subtract:
+#define ENTRY subtract
+// label: 減算
+float3 Blend(float3 s, float3 b) { return max(b - s, 0.0); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@multiply:
+#define ENTRY multiply
+// label: 乗算
+float3 Blend(float3 s, float3 b) { return s * b / 255.0; }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@divide:
+#define ENTRY divide
+// label: 除算
+float3 Blend(float3 s, float3 b) { return min(b * 256.0 / (s + 1.0), 255.0); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@screen:
+#define ENTRY screen
+// label: スクリーン
+float3 Blend(float3 s, float3 b) {
+  return 255.0 - (255.0 - s) * (255.0 - b) / 255.0;
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@overlay:
+#define ENTRY overlay
+// label: オーバーレイ
+float BlendChannel(float s, float b) {
+  return b < 128.0 ? 2.0 * s * b / 255.0
+                   : 2.0 * (b + s - b * s / 255.0) - 255.0;
+}
+
+float3 Blend(float3 s, float3 b) {
+  return float3(BlendChannel(s.r, b.r), BlendChannel(s.g, b.g),
+                BlendChannel(s.b, b.b));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@overlay_gimp:
+#define ENTRY overlay_gimp
+// label: オーバーレイ(gimp)
+float3 Blend(float3 s, float3 b) {
+  return b / 255.0 * (b + (255.0 - b) * (2.0 * s / 255.0));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@lighten:
+#define ENTRY lighten
+// label: 比較(明)
+float3 Blend(float3 s, float3 b) { return max(s, b); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@darken:
+#define ENTRY darken
+// label: 比較(暗)
+float3 Blend(float3 s, float3 b) { return min(s, b); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@color_difference:
+#define ENTRY color_difference
+// label: 色差
+// RGB・HSV の V・輝度は 0..255、色相は度、彩度・HSL の L は 0..1。
+float MinChannel(float3 c) { return min(c.r, min(c.g, c.b)); }
+float MaxChannel(float3 c) { return max(c.r, max(c.g, c.b)); }
+// BT.601 の輝度係数。
+float Luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+float Hue(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  if (chroma == 0.0)
+    return 0.0;
+  float hue;
+  if (high == c.r)
+    hue = 60.0 * (c.g - c.b) / chroma;
+  else if (high == c.g)
+    hue = 60.0 * ((c.b - c.r) / chroma + 2.0);
+  else
+    hue = 60.0 * ((c.r - c.g) / chroma + 4.0);
+  return hue < 0.0 ? hue + 360.0 : hue;
+}
+
+float3 HueRange(float hue, float low, float high) {
+  hue = frac(hue / 360.0) * 6.0;
+  float3 unit;
+  if (hue < 1.0)
+    unit = float3(1, hue, 0);
+  else if (hue < 2.0)
+    unit = float3(2.0 - hue, 1, 0);
+  else if (hue < 3.0)
+    unit = float3(0, 1, hue - 2.0);
+  else if (hue < 4.0)
+    unit = float3(0, 4.0 - hue, 1);
+  else if (hue < 5.0)
+    unit = float3(hue - 4.0, 0, 1);
+  else
+    unit = float3(1, 0, 6.0 - hue);
+  return low + (high - low) * unit;
+}
+
+float3 ToHsv(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  return float3(Hue(c), high == 0.0 ? 0.0 : chroma / high, high);
+}
+
+float3 FromHsv(float3 hsv) {
+  return HueRange(hsv.x, (1.0 - hsv.y) * hsv.z, hsv.z);
+}
+
+float3 ToHsl(float3 c) {
+  float low = MinChannel(c) / 255.0;
+  float high = MaxChannel(c) / 255.0;
+  float lightness = (high + low) * 0.5;
+  if (high == low)
+    return float3(0, 0, lightness);
+  float saturation =
+      (high - low) / (lightness <= 0.5 ? high + low : 2.0 - high - low);
+  return float3(Hue(c), saturation, lightness);
+}
+
+float3 FromHsl(float3 hsl) {
+  float halfChroma = (1.0 - abs(2.0 * hsl.z - 1.0)) * hsl.y * 0.5;
+  return HueRange(hsl.x, (hsl.z - halfChroma) * 255.0,
+                  (hsl.z + halfChroma) * 255.0);
+}
+
+float3 FromHsvl(float hue, float saturation, float luminance) {
+  float3 color = HueRange(hue, 1.0 - saturation, 1.0);
+  // 色相・彩度を保ったまま、指定された輝度へスケールする。
+  return clamp(color * (luminance / Luma(color)), 0.0, 255.0);
+}
+
+float3 Blend(float3 s, float3 b) { return clamp(s + Luma(b - s), 0.0, 255.0); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@linear_burn:
+#define ENTRY linear_burn
+// label: 陰影(焼き込み(リニア))
+float3 Blend(float3 s, float3 b) { return max(s + b - 255.0, 0.0); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@linear_light:
+#define ENTRY linear_light
+// label: 明暗(リニアライト)
+float3 Blend(float3 s, float3 b) {
+  return clamp(b + 2.0 * s - 255.0, 0.0, 255.0);
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@linear_light_inverse:
+#define ENTRY linear_light_inverse
+// label: 明暗(逆)
+float3 Blend(float3 s, float3 b) {
+  return clamp(s + 2.0 * b - 255.0, 0.0, 255.0);
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@difference:
+#define ENTRY difference
+// label: 差分
+float3 Blend(float3 s, float3 b) { return abs(b - s); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@exclusion:
+#define ENTRY exclusion
+// label: 除外
+float3 Blend(float3 s, float3 b) { return s + b - 2.0 * s * b / 255.0; }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@negative:
+#define ENTRY negative
+// label: ネガ
+float3 Blend(float3 s, float3 b) { return 255.0 - abs(255.0 - s - b); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@invert:
+#define ENTRY invert
+// label: 反転
+// RGB・HSV の V・輝度は 0..255、色相は度、彩度・HSL の L は 0..1。
+float MinChannel(float3 c) { return min(c.r, min(c.g, c.b)); }
+float MaxChannel(float3 c) { return max(c.r, max(c.g, c.b)); }
+// BT.601 の輝度係数。
+float Luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+float Hue(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  if (chroma == 0.0)
+    return 0.0;
+  float hue;
+  if (high == c.r)
+    hue = 60.0 * (c.g - c.b) / chroma;
+  else if (high == c.g)
+    hue = 60.0 * ((c.b - c.r) / chroma + 2.0);
+  else
+    hue = 60.0 * ((c.r - c.g) / chroma + 4.0);
+  return hue < 0.0 ? hue + 360.0 : hue;
+}
+
+float3 HueRange(float hue, float low, float high) {
+  hue = frac(hue / 360.0) * 6.0;
+  float3 unit;
+  if (hue < 1.0)
+    unit = float3(1, hue, 0);
+  else if (hue < 2.0)
+    unit = float3(2.0 - hue, 1, 0);
+  else if (hue < 3.0)
+    unit = float3(0, 1, hue - 2.0);
+  else if (hue < 4.0)
+    unit = float3(0, 4.0 - hue, 1);
+  else if (hue < 5.0)
+    unit = float3(hue - 4.0, 0, 1);
+  else
+    unit = float3(1, 0, 6.0 - hue);
+  return low + (high - low) * unit;
+}
+
+float3 ToHsv(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  return float3(Hue(c), high == 0.0 ? 0.0 : chroma / high, high);
+}
+
+float3 FromHsv(float3 hsv) {
+  return HueRange(hsv.x, (1.0 - hsv.y) * hsv.z, hsv.z);
+}
+
+float3 ToHsl(float3 c) {
+  float low = MinChannel(c) / 255.0;
+  float high = MaxChannel(c) / 255.0;
+  float lightness = (high + low) * 0.5;
+  if (high == low)
+    return float3(0, 0, lightness);
+  float saturation =
+      (high - low) / (lightness <= 0.5 ? high + low : 2.0 - high - low);
+  return float3(Hue(c), saturation, lightness);
+}
+
+float3 FromHsl(float3 hsl) {
+  float halfChroma = (1.0 - abs(2.0 * hsl.z - 1.0)) * hsl.y * 0.5;
+  return HueRange(hsl.x, (hsl.z - halfChroma) * 255.0,
+                  (hsl.z + halfChroma) * 255.0);
+}
+
+float3 FromHsvl(float hue, float saturation, float luminance) {
+  float3 color = HueRange(hue, 1.0 - saturation, 1.0);
+  // 色相・彩度を保ったまま、指定された輝度へスケールする。
+  return clamp(color * (luminance / Luma(color)), 0.0, 255.0);
+}
+
+float3 Blend(float3 s, float3 b) { return Luma(s - b) > 0.0 ? 255.0 - b : b; }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@lighter_color:
+#define ENTRY lighter_color
+// label: カラー比較(明)
+float3 Blend(float3 s, float3 b) {
+  return dot(s, float3(1, 1, 1)) < dot(b, float3(1, 1, 1)) ? b : s;
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@darker_color:
+#define ENTRY darker_color
+// label: カラー比較(暗)
+float3 Blend(float3 s, float3 b) {
+  return dot(s, float3(1, 1, 1)) < dot(b, float3(1, 1, 1)) ? s : b;
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@color_dodge:
+#define ENTRY color_dodge
+// label: 覆い焼き(カラー)
+float3 Blend(float3 s, float3 b) { return min(b * 256.0 / (256.0 - s), 255.0); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@inverse_color_dodge:
+#define ENTRY inverse_color_dodge
+// label: 覆い焼き(逆カラー)
+float3 Blend(float3 s, float3 b) { return min(s * 256.0 / (256.0 - b), 255.0); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@soft_dodge:
+#define ENTRY soft_dodge
+// label: 覆い焼き(ソフト)
+float BlendChannel(float s, float b) {
+  return s + b < 255.0 ? b * 128.0 / (256.0 - s)
+                       : 255.0 - (256.0 - s) / (2.0 * (b + 1.0));
+}
+
+float3 Blend(float3 s, float3 b) {
+  return float3(BlendChannel(s.r, b.r), BlendChannel(s.g, b.g),
+                BlendChannel(s.b, b.b));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@color_burn:
+#define ENTRY color_burn
+// label: 焼き込み(カラー)
+float3 Blend(float3 s, float3 b) {
+  return max(255.0 - (255.0 - b) * 256.0 / (s + 1.0), 0.0);
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@inverse_color_burn:
+#define ENTRY inverse_color_burn
+// label: 焼き込み(逆カラー)
+float3 Blend(float3 s, float3 b) {
+  return max(255.0 - (255.0 - s) * 256.0 / (b + 1.0), 0.0);
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@soft_burn:
+#define ENTRY soft_burn
+// label: 焼き込み(ソフト)
+float BlendChannel(float s, float b) {
+  return s + b < 256.0 ? s * 127.5 / (256.0 - b)
+                       : 255.0 - (256.0 - b) * 255.0 / (2.0 * (s + 1.0));
+}
+
+float3 Blend(float3 s, float3 b) {
+  return float3(BlendChannel(s.r, b.r), BlendChannel(s.g, b.g),
+                BlendChannel(s.b, b.b));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@hard_light:
+#define ENTRY hard_light
+// label: ハードライト
+float BlendChannel(float s, float b) {
+  return s <= 128.0 ? 2.0 * s * b / 256.0
+                    : 255.0 - (255.0 - b) * (511.0 - 2.0 * s) / 255.0;
+}
+
+float3 Blend(float3 s, float3 b) {
+  return float3(BlendChannel(s.r, b.r), BlendChannel(s.g, b.g),
+                BlendChannel(s.b, b.b));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@soft_light:
+#define ENTRY soft_light
+// label: ソフトライト
+float BlendChannel(float s, float b) {
+  float exponent = s < 128.0 ? (255.0 - s) / 128.0 : 128.0 / s;
+  return b == 0.0 ? 0.0 : 255.0 * pow(b / 255.0, exponent);
+}
+
+float3 Blend(float3 s, float3 b) {
+  return float3(BlendChannel(s.r, b.r), BlendChannel(s.g, b.g),
+                BlendChannel(s.b, b.b));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@soft_light_gimp:
+#define ENTRY soft_light_gimp
+// label: ソフトライト(gimp)
+float3 Blend(float3 s, float3 b) {
+  return ((255.0 - (255.0 - s) * (255.0 - b) / 255.0) * b + s * (255.0 - b)) /
+         255.0;
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@soft_light_photoshop:
+#define ENTRY soft_light_photoshop
+// label: ソフトライト(photoshop)
+float BlendChannel(float s, float b) {
+  return s < 128.0 ? ((255.0 - 2.0 * s) * b * b / 255.0 + 2.0 * s * b) / 255.0
+                   : (2.0 * s - 255.0) * sqrt(b / 255.0) +
+                         2.0 * b * (1.0 - s / 255.0);
+}
+
+float3 Blend(float3 s, float3 b) {
+  return float3(BlendChannel(s.r, b.r), BlendChannel(s.g, b.g),
+                BlendChannel(s.b, b.b));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@vivid_light:
+#define ENTRY vivid_light
+// label: ビビッドライト
+float VividChannel(float s, float b, bool upper) {
+  return upper ? b * 255.0 / (511.0 - 2.0 * s)
+               : 255.0 - (255.0 - b) * 255.0 / (2.0 * (s + 1.0));
+}
+float3 Blend(float3 s, float3 b) {
+  return clamp(float3(VividChannel(s.r, b.r, s.r >= 128.0),
+                      VividChannel(s.g, b.g, s.g > 128.0),
+                      VividChannel(s.b, b.b, s.b > 128.0)),
+               0.0, 255.0);
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@vivid_light_photoshop:
+#define ENTRY vivid_light_photoshop
+// label: ビビッドライト(photoshop)
+float VividChannel(float s, float b, bool upper) {
+  if (upper)
+    return 255.0 - (255.0 - b) * 255.0 / (2.0 * s - 255.0);
+
+  if (s == 127.5)
+    return b == 0.0 ? 0.0 : 255.0;
+  return b * 255.0 / (255.0 - 2.0 * s);
+}
+float3 Blend(float3 s, float3 b) {
+  return clamp(float3(VividChannel(s.r, b.r, s.r >= 128.0),
+                      VividChannel(s.g, b.g, s.g > 128.0),
+                      VividChannel(s.b, b.b, s.b > 128.0)),
+               0.0, 255.0);
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@pin_light:
+#define ENTRY pin_light
+// label: ピンライト
+float BlendChannel(float s, float b) {
+  return s < 128.0 ? max(s, b) : min(s, b);
+}
+
+float3 Blend(float3 s, float3 b) {
+  return float3(BlendChannel(s.r, b.r), BlendChannel(s.g, b.g),
+                BlendChannel(s.b, b.b));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@inverse_pin_light:
+#define ENTRY inverse_pin_light
+// label: ピンライト(逆)
+float BlendChannel(float s, float b) {
+  return s < 128.0 ? min(s, b) : max(s, b);
+}
+
+float3 Blend(float3 s, float3 b) {
+  return float3(BlendChannel(s.r, b.r), BlendChannel(s.g, b.g),
+                BlendChannel(s.b, b.b));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@strong_pin_light:
+#define ENTRY strong_pin_light
+// label: ピンライト(強)
+float BlendChannel(float s, float b) {
+  return s < 128.0 ? min(2.0 * s, b) : max(2.0 * s - 255.0, b);
+}
+
+float3 Blend(float3 s, float3 b) {
+  return float3(BlendChannel(s.r, b.r), BlendChannel(s.g, b.g),
+                BlendChannel(s.b, b.b));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@hard_mix:
+#define ENTRY hard_mix
+// label: ハードミックス
+float3 Blend(float3 s, float3 b) { return step(255.0, s + b) * 255.0; }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@hue:
+#define ENTRY hue
+// label: 色相
+// RGB・HSV の V・輝度は 0..255、色相は度、彩度・HSL の L は 0..1。
+float MinChannel(float3 c) { return min(c.r, min(c.g, c.b)); }
+float MaxChannel(float3 c) { return max(c.r, max(c.g, c.b)); }
+// BT.601 の輝度係数。
+float Luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+float Hue(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  if (chroma == 0.0)
+    return 0.0;
+  float hue;
+  if (high == c.r)
+    hue = 60.0 * (c.g - c.b) / chroma;
+  else if (high == c.g)
+    hue = 60.0 * ((c.b - c.r) / chroma + 2.0);
+  else
+    hue = 60.0 * ((c.r - c.g) / chroma + 4.0);
+  return hue < 0.0 ? hue + 360.0 : hue;
+}
+
+float3 HueRange(float hue, float low, float high) {
+  hue = frac(hue / 360.0) * 6.0;
+  float3 unit;
+  if (hue < 1.0)
+    unit = float3(1, hue, 0);
+  else if (hue < 2.0)
+    unit = float3(2.0 - hue, 1, 0);
+  else if (hue < 3.0)
+    unit = float3(0, 1, hue - 2.0);
+  else if (hue < 4.0)
+    unit = float3(0, 4.0 - hue, 1);
+  else if (hue < 5.0)
+    unit = float3(hue - 4.0, 0, 1);
+  else
+    unit = float3(1, 0, 6.0 - hue);
+  return low + (high - low) * unit;
+}
+
+float3 ToHsv(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  return float3(Hue(c), high == 0.0 ? 0.0 : chroma / high, high);
+}
+
+float3 FromHsv(float3 hsv) {
+  return HueRange(hsv.x, (1.0 - hsv.y) * hsv.z, hsv.z);
+}
+
+float3 ToHsl(float3 c) {
+  float low = MinChannel(c) / 255.0;
+  float high = MaxChannel(c) / 255.0;
+  float lightness = (high + low) * 0.5;
+  if (high == low)
+    return float3(0, 0, lightness);
+  float saturation =
+      (high - low) / (lightness <= 0.5 ? high + low : 2.0 - high - low);
+  return float3(Hue(c), saturation, lightness);
+}
+
+float3 FromHsl(float3 hsl) {
+  float halfChroma = (1.0 - abs(2.0 * hsl.z - 1.0)) * hsl.y * 0.5;
+  return HueRange(hsl.x, (hsl.z - halfChroma) * 255.0,
+                  (hsl.z + halfChroma) * 255.0);
+}
+
+float3 FromHsvl(float hue, float saturation, float luminance) {
+  float3 color = HueRange(hue, 1.0 - saturation, 1.0);
+  // 色相・彩度を保ったまま、指定された輝度へスケールする。
+  return clamp(color * (luminance / Luma(color)), 0.0, 255.0);
+}
+
+float3 Blend(float3 s, float3 b) {
+  float3 sourceHsv = ToHsv(s);
+  if (sourceHsv.y == 0.0)
+    return b;
+  return HueRange(sourceHsv.x, MinChannel(b), MaxChannel(b));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@hue_hsvl:
+#define ENTRY hue_hsvl
+// label: 色相(HSVL)
+// RGB・HSV の V・輝度は 0..255、色相は度、彩度・HSL の L は 0..1。
+float MinChannel(float3 c) { return min(c.r, min(c.g, c.b)); }
+float MaxChannel(float3 c) { return max(c.r, max(c.g, c.b)); }
+// BT.601 の輝度係数。
+float Luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+float Hue(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  if (chroma == 0.0)
+    return 0.0;
+  float hue;
+  if (high == c.r)
+    hue = 60.0 * (c.g - c.b) / chroma;
+  else if (high == c.g)
+    hue = 60.0 * ((c.b - c.r) / chroma + 2.0);
+  else
+    hue = 60.0 * ((c.r - c.g) / chroma + 4.0);
+  return hue < 0.0 ? hue + 360.0 : hue;
+}
+
+float3 HueRange(float hue, float low, float high) {
+  hue = frac(hue / 360.0) * 6.0;
+  float3 unit;
+  if (hue < 1.0)
+    unit = float3(1, hue, 0);
+  else if (hue < 2.0)
+    unit = float3(2.0 - hue, 1, 0);
+  else if (hue < 3.0)
+    unit = float3(0, 1, hue - 2.0);
+  else if (hue < 4.0)
+    unit = float3(0, 4.0 - hue, 1);
+  else if (hue < 5.0)
+    unit = float3(hue - 4.0, 0, 1);
+  else
+    unit = float3(1, 0, 6.0 - hue);
+  return low + (high - low) * unit;
+}
+
+float3 ToHsv(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  return float3(Hue(c), high == 0.0 ? 0.0 : chroma / high, high);
+}
+
+float3 FromHsv(float3 hsv) {
+  return HueRange(hsv.x, (1.0 - hsv.y) * hsv.z, hsv.z);
+}
+
+float3 ToHsl(float3 c) {
+  float low = MinChannel(c) / 255.0;
+  float high = MaxChannel(c) / 255.0;
+  float lightness = (high + low) * 0.5;
+  if (high == low)
+    return float3(0, 0, lightness);
+  float saturation =
+      (high - low) / (lightness <= 0.5 ? high + low : 2.0 - high - low);
+  return float3(Hue(c), saturation, lightness);
+}
+
+float3 FromHsl(float3 hsl) {
+  float halfChroma = (1.0 - abs(2.0 * hsl.z - 1.0)) * hsl.y * 0.5;
+  return HueRange(hsl.x, (hsl.z - halfChroma) * 255.0,
+                  (hsl.z + halfChroma) * 255.0);
+}
+
+float3 FromHsvl(float hue, float saturation, float luminance) {
+  float3 color = HueRange(hue, 1.0 - saturation, 1.0);
+  // 色相・彩度を保ったまま、指定された輝度へスケールする。
+  return clamp(color * (luminance / Luma(color)), 0.0, 255.0);
+}
+
+float3 Blend(float3 s, float3 b) {
+  float3 sourceHsv = ToHsv(s);
+  if (sourceHsv.y == 0.0)
+    return b;
+  return FromHsvl(sourceHsv.x, ToHsv(b).y, Luma(b));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@hue_delta:
+#define ENTRY hue_delta
+// label: 色相(δ)
+// RGB・HSV の V・輝度は 0..255、色相は度、彩度・HSL の L は 0..1。
+float MinChannel(float3 c) { return min(c.r, min(c.g, c.b)); }
+float MaxChannel(float3 c) { return max(c.r, max(c.g, c.b)); }
+// BT.601 の輝度係数。
+float Luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+float Hue(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  if (chroma == 0.0)
+    return 0.0;
+  float hue;
+  if (high == c.r)
+    hue = 60.0 * (c.g - c.b) / chroma;
+  else if (high == c.g)
+    hue = 60.0 * ((c.b - c.r) / chroma + 2.0);
+  else
+    hue = 60.0 * ((c.r - c.g) / chroma + 4.0);
+  return hue < 0.0 ? hue + 360.0 : hue;
+}
+
+float3 HueRange(float hue, float low, float high) {
+  hue = frac(hue / 360.0) * 6.0;
+  float3 unit;
+  if (hue < 1.0)
+    unit = float3(1, hue, 0);
+  else if (hue < 2.0)
+    unit = float3(2.0 - hue, 1, 0);
+  else if (hue < 3.0)
+    unit = float3(0, 1, hue - 2.0);
+  else if (hue < 4.0)
+    unit = float3(0, 4.0 - hue, 1);
+  else if (hue < 5.0)
+    unit = float3(hue - 4.0, 0, 1);
+  else
+    unit = float3(1, 0, 6.0 - hue);
+  return low + (high - low) * unit;
+}
+
+float3 ToHsv(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  return float3(Hue(c), high == 0.0 ? 0.0 : chroma / high, high);
+}
+
+float3 FromHsv(float3 hsv) {
+  return HueRange(hsv.x, (1.0 - hsv.y) * hsv.z, hsv.z);
+}
+
+float3 ToHsl(float3 c) {
+  float low = MinChannel(c) / 255.0;
+  float high = MaxChannel(c) / 255.0;
+  float lightness = (high + low) * 0.5;
+  if (high == low)
+    return float3(0, 0, lightness);
+  float saturation =
+      (high - low) / (lightness <= 0.5 ? high + low : 2.0 - high - low);
+  return float3(Hue(c), saturation, lightness);
+}
+
+float3 FromHsl(float3 hsl) {
+  float halfChroma = (1.0 - abs(2.0 * hsl.z - 1.0)) * hsl.y * 0.5;
+  return HueRange(hsl.x, (hsl.z - halfChroma) * 255.0,
+                  (hsl.z + halfChroma) * 255.0);
+}
+
+float3 FromHsvl(float hue, float saturation, float luminance) {
+  float3 color = HueRange(hue, 1.0 - saturation, 1.0);
+  // 色相・彩度を保ったまま、指定された輝度へスケールする。
+  return clamp(color * (luminance / Luma(color)), 0.0, 255.0);
+}
+
+float3 Blend(float3 s, float3 b) {
+  float3 sourceHsv = ToHsv(s);
+  float backgroundHue = Hue(b);
+  float delta = sourceHsv.x - backgroundHue;
+  if (delta < 0.0)
+    delta += 360.0;
+  float hue = backgroundHue - sourceHsv.z * sourceHsv.y * delta / 255.0;
+  return HueRange(hue, MinChannel(b), MaxChannel(b));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@color_lightness:
+#define ENTRY color_lightness
+// label: カラー(明度)
+// RGB・HSV の V・輝度は 0..255、色相は度、彩度・HSL の L は 0..1。
+float MinChannel(float3 c) { return min(c.r, min(c.g, c.b)); }
+float MaxChannel(float3 c) { return max(c.r, max(c.g, c.b)); }
+// BT.601 の輝度係数。
+float Luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+float Hue(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  if (chroma == 0.0)
+    return 0.0;
+  float hue;
+  if (high == c.r)
+    hue = 60.0 * (c.g - c.b) / chroma;
+  else if (high == c.g)
+    hue = 60.0 * ((c.b - c.r) / chroma + 2.0);
+  else
+    hue = 60.0 * ((c.r - c.g) / chroma + 4.0);
+  return hue < 0.0 ? hue + 360.0 : hue;
+}
+
+float3 HueRange(float hue, float low, float high) {
+  hue = frac(hue / 360.0) * 6.0;
+  float3 unit;
+  if (hue < 1.0)
+    unit = float3(1, hue, 0);
+  else if (hue < 2.0)
+    unit = float3(2.0 - hue, 1, 0);
+  else if (hue < 3.0)
+    unit = float3(0, 1, hue - 2.0);
+  else if (hue < 4.0)
+    unit = float3(0, 4.0 - hue, 1);
+  else if (hue < 5.0)
+    unit = float3(hue - 4.0, 0, 1);
+  else
+    unit = float3(1, 0, 6.0 - hue);
+  return low + (high - low) * unit;
+}
+
+float3 ToHsv(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  return float3(Hue(c), high == 0.0 ? 0.0 : chroma / high, high);
+}
+
+float3 FromHsv(float3 hsv) {
+  return HueRange(hsv.x, (1.0 - hsv.y) * hsv.z, hsv.z);
+}
+
+float3 ToHsl(float3 c) {
+  float low = MinChannel(c) / 255.0;
+  float high = MaxChannel(c) / 255.0;
+  float lightness = (high + low) * 0.5;
+  if (high == low)
+    return float3(0, 0, lightness);
+  float saturation =
+      (high - low) / (lightness <= 0.5 ? high + low : 2.0 - high - low);
+  return float3(Hue(c), saturation, lightness);
+}
+
+float3 FromHsl(float3 hsl) {
+  float halfChroma = (1.0 - abs(2.0 * hsl.z - 1.0)) * hsl.y * 0.5;
+  return HueRange(hsl.x, (hsl.z - halfChroma) * 255.0,
+                  (hsl.z + halfChroma) * 255.0);
+}
+
+float3 FromHsvl(float hue, float saturation, float luminance) {
+  float3 color = HueRange(hue, 1.0 - saturation, 1.0);
+  // 色相・彩度を保ったまま、指定された輝度へスケールする。
+  return clamp(color * (luminance / Luma(color)), 0.0, 255.0);
+}
+
+float3 Blend(float3 s, float3 b) {
+  float3 sourceHsv = ToHsv(s);
+  if (sourceHsv.y == 0.0)
+    return b;
+  return FromHsv(float3(sourceHsv.xy, MaxChannel(b)));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@color_luminance:
+#define ENTRY color_luminance
+// label: カラー(輝度)
+// RGB・HSV の V・輝度は 0..255、色相は度、彩度・HSL の L は 0..1。
+float MinChannel(float3 c) { return min(c.r, min(c.g, c.b)); }
+float MaxChannel(float3 c) { return max(c.r, max(c.g, c.b)); }
+// BT.601 の輝度係数。
+float Luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+float Hue(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  if (chroma == 0.0)
+    return 0.0;
+  float hue;
+  if (high == c.r)
+    hue = 60.0 * (c.g - c.b) / chroma;
+  else if (high == c.g)
+    hue = 60.0 * ((c.b - c.r) / chroma + 2.0);
+  else
+    hue = 60.0 * ((c.r - c.g) / chroma + 4.0);
+  return hue < 0.0 ? hue + 360.0 : hue;
+}
+
+float3 HueRange(float hue, float low, float high) {
+  hue = frac(hue / 360.0) * 6.0;
+  float3 unit;
+  if (hue < 1.0)
+    unit = float3(1, hue, 0);
+  else if (hue < 2.0)
+    unit = float3(2.0 - hue, 1, 0);
+  else if (hue < 3.0)
+    unit = float3(0, 1, hue - 2.0);
+  else if (hue < 4.0)
+    unit = float3(0, 4.0 - hue, 1);
+  else if (hue < 5.0)
+    unit = float3(hue - 4.0, 0, 1);
+  else
+    unit = float3(1, 0, 6.0 - hue);
+  return low + (high - low) * unit;
+}
+
+float3 ToHsv(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  return float3(Hue(c), high == 0.0 ? 0.0 : chroma / high, high);
+}
+
+float3 FromHsv(float3 hsv) {
+  return HueRange(hsv.x, (1.0 - hsv.y) * hsv.z, hsv.z);
+}
+
+float3 ToHsl(float3 c) {
+  float low = MinChannel(c) / 255.0;
+  float high = MaxChannel(c) / 255.0;
+  float lightness = (high + low) * 0.5;
+  if (high == low)
+    return float3(0, 0, lightness);
+  float saturation =
+      (high - low) / (lightness <= 0.5 ? high + low : 2.0 - high - low);
+  return float3(Hue(c), saturation, lightness);
+}
+
+float3 FromHsl(float3 hsl) {
+  float halfChroma = (1.0 - abs(2.0 * hsl.z - 1.0)) * hsl.y * 0.5;
+  return HueRange(hsl.x, (hsl.z - halfChroma) * 255.0,
+                  (hsl.z + halfChroma) * 255.0);
+}
+
+float3 FromHsvl(float hue, float saturation, float luminance) {
+  float3 color = HueRange(hue, 1.0 - saturation, 1.0);
+  // 色相・彩度を保ったまま、指定された輝度へスケールする。
+  return clamp(color * (luminance / Luma(color)), 0.0, 255.0);
+}
+
+float3 Blend(float3 s, float3 b) {
+  float3 sourceHsl = ToHsl(s);
+  if (sourceHsl.y == 0.0)
+    return b;
+  return FromHsl(float3(sourceHsl.xy, (MinChannel(b) + MaxChannel(b)) / 510.0));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@color_hsvl:
+#define ENTRY color_hsvl
+// label: カラー(HSVL)
+// RGB・HSV の V・輝度は 0..255、色相は度、彩度・HSL の L は 0..1。
+float MinChannel(float3 c) { return min(c.r, min(c.g, c.b)); }
+float MaxChannel(float3 c) { return max(c.r, max(c.g, c.b)); }
+// BT.601 の輝度係数。
+float Luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+float Hue(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  if (chroma == 0.0)
+    return 0.0;
+  float hue;
+  if (high == c.r)
+    hue = 60.0 * (c.g - c.b) / chroma;
+  else if (high == c.g)
+    hue = 60.0 * ((c.b - c.r) / chroma + 2.0);
+  else
+    hue = 60.0 * ((c.r - c.g) / chroma + 4.0);
+  return hue < 0.0 ? hue + 360.0 : hue;
+}
+
+float3 HueRange(float hue, float low, float high) {
+  hue = frac(hue / 360.0) * 6.0;
+  float3 unit;
+  if (hue < 1.0)
+    unit = float3(1, hue, 0);
+  else if (hue < 2.0)
+    unit = float3(2.0 - hue, 1, 0);
+  else if (hue < 3.0)
+    unit = float3(0, 1, hue - 2.0);
+  else if (hue < 4.0)
+    unit = float3(0, 4.0 - hue, 1);
+  else if (hue < 5.0)
+    unit = float3(hue - 4.0, 0, 1);
+  else
+    unit = float3(1, 0, 6.0 - hue);
+  return low + (high - low) * unit;
+}
+
+float3 ToHsv(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  return float3(Hue(c), high == 0.0 ? 0.0 : chroma / high, high);
+}
+
+float3 FromHsv(float3 hsv) {
+  return HueRange(hsv.x, (1.0 - hsv.y) * hsv.z, hsv.z);
+}
+
+float3 ToHsl(float3 c) {
+  float low = MinChannel(c) / 255.0;
+  float high = MaxChannel(c) / 255.0;
+  float lightness = (high + low) * 0.5;
+  if (high == low)
+    return float3(0, 0, lightness);
+  float saturation =
+      (high - low) / (lightness <= 0.5 ? high + low : 2.0 - high - low);
+  return float3(Hue(c), saturation, lightness);
+}
+
+float3 FromHsl(float3 hsl) {
+  float halfChroma = (1.0 - abs(2.0 * hsl.z - 1.0)) * hsl.y * 0.5;
+  return HueRange(hsl.x, (hsl.z - halfChroma) * 255.0,
+                  (hsl.z + halfChroma) * 255.0);
+}
+
+float3 FromHsvl(float hue, float saturation, float luminance) {
+  float3 color = HueRange(hue, 1.0 - saturation, 1.0);
+  // 色相・彩度を保ったまま、指定された輝度へスケールする。
+  return clamp(color * (luminance / Luma(color)), 0.0, 255.0);
+}
+
+float3 Blend(float3 s, float3 b) {
+  float3 sourceHsv = ToHsv(s);
+  if (sourceHsv.y == 0.0)
+    return b;
+  return FromHsvl(sourceHsv.x, sourceHsv.y, Luma(b));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@saturation_lightness:
+#define ENTRY saturation_lightness
+// label: 彩度(明度)
+// RGB・HSV の V・輝度は 0..255、色相は度、彩度・HSL の L は 0..1。
+float MinChannel(float3 c) { return min(c.r, min(c.g, c.b)); }
+float MaxChannel(float3 c) { return max(c.r, max(c.g, c.b)); }
+// BT.601 の輝度係数。
+float Luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+float Hue(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  if (chroma == 0.0)
+    return 0.0;
+  float hue;
+  if (high == c.r)
+    hue = 60.0 * (c.g - c.b) / chroma;
+  else if (high == c.g)
+    hue = 60.0 * ((c.b - c.r) / chroma + 2.0);
+  else
+    hue = 60.0 * ((c.r - c.g) / chroma + 4.0);
+  return hue < 0.0 ? hue + 360.0 : hue;
+}
+
+float3 HueRange(float hue, float low, float high) {
+  hue = frac(hue / 360.0) * 6.0;
+  float3 unit;
+  if (hue < 1.0)
+    unit = float3(1, hue, 0);
+  else if (hue < 2.0)
+    unit = float3(2.0 - hue, 1, 0);
+  else if (hue < 3.0)
+    unit = float3(0, 1, hue - 2.0);
+  else if (hue < 4.0)
+    unit = float3(0, 4.0 - hue, 1);
+  else if (hue < 5.0)
+    unit = float3(hue - 4.0, 0, 1);
+  else
+    unit = float3(1, 0, 6.0 - hue);
+  return low + (high - low) * unit;
+}
+
+float3 ToHsv(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  return float3(Hue(c), high == 0.0 ? 0.0 : chroma / high, high);
+}
+
+float3 FromHsv(float3 hsv) {
+  return HueRange(hsv.x, (1.0 - hsv.y) * hsv.z, hsv.z);
+}
+
+float3 ToHsl(float3 c) {
+  float low = MinChannel(c) / 255.0;
+  float high = MaxChannel(c) / 255.0;
+  float lightness = (high + low) * 0.5;
+  if (high == low)
+    return float3(0, 0, lightness);
+  float saturation =
+      (high - low) / (lightness <= 0.5 ? high + low : 2.0 - high - low);
+  return float3(Hue(c), saturation, lightness);
+}
+
+float3 FromHsl(float3 hsl) {
+  float halfChroma = (1.0 - abs(2.0 * hsl.z - 1.0)) * hsl.y * 0.5;
+  return HueRange(hsl.x, (hsl.z - halfChroma) * 255.0,
+                  (hsl.z + halfChroma) * 255.0);
+}
+
+float3 FromHsvl(float hue, float saturation, float luminance) {
+  float3 color = HueRange(hue, 1.0 - saturation, 1.0);
+  // 色相・彩度を保ったまま、指定された輝度へスケールする。
+  return clamp(color * (luminance / Luma(color)), 0.0, 255.0);
+}
+
+float3 Blend(float3 s, float3 b) {
+  return FromHsv(float3(Hue(b), ToHsv(s).y, MaxChannel(b)));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@saturation_luminance:
+#define ENTRY saturation_luminance
+// label: 彩度(輝度)
+// RGB・HSV の V・輝度は 0..255、色相は度、彩度・HSL の L は 0..1。
+float MinChannel(float3 c) { return min(c.r, min(c.g, c.b)); }
+float MaxChannel(float3 c) { return max(c.r, max(c.g, c.b)); }
+// BT.601 の輝度係数。
+float Luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+float Hue(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  if (chroma == 0.0)
+    return 0.0;
+  float hue;
+  if (high == c.r)
+    hue = 60.0 * (c.g - c.b) / chroma;
+  else if (high == c.g)
+    hue = 60.0 * ((c.b - c.r) / chroma + 2.0);
+  else
+    hue = 60.0 * ((c.r - c.g) / chroma + 4.0);
+  return hue < 0.0 ? hue + 360.0 : hue;
+}
+
+float3 HueRange(float hue, float low, float high) {
+  hue = frac(hue / 360.0) * 6.0;
+  float3 unit;
+  if (hue < 1.0)
+    unit = float3(1, hue, 0);
+  else if (hue < 2.0)
+    unit = float3(2.0 - hue, 1, 0);
+  else if (hue < 3.0)
+    unit = float3(0, 1, hue - 2.0);
+  else if (hue < 4.0)
+    unit = float3(0, 4.0 - hue, 1);
+  else if (hue < 5.0)
+    unit = float3(hue - 4.0, 0, 1);
+  else
+    unit = float3(1, 0, 6.0 - hue);
+  return low + (high - low) * unit;
+}
+
+float3 ToHsv(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  return float3(Hue(c), high == 0.0 ? 0.0 : chroma / high, high);
+}
+
+float3 FromHsv(float3 hsv) {
+  return HueRange(hsv.x, (1.0 - hsv.y) * hsv.z, hsv.z);
+}
+
+float3 ToHsl(float3 c) {
+  float low = MinChannel(c) / 255.0;
+  float high = MaxChannel(c) / 255.0;
+  float lightness = (high + low) * 0.5;
+  if (high == low)
+    return float3(0, 0, lightness);
+  float saturation =
+      (high - low) / (lightness <= 0.5 ? high + low : 2.0 - high - low);
+  return float3(Hue(c), saturation, lightness);
+}
+
+float3 FromHsl(float3 hsl) {
+  float halfChroma = (1.0 - abs(2.0 * hsl.z - 1.0)) * hsl.y * 0.5;
+  return HueRange(hsl.x, (hsl.z - halfChroma) * 255.0,
+                  (hsl.z + halfChroma) * 255.0);
+}
+
+float3 FromHsvl(float hue, float saturation, float luminance) {
+  float3 color = HueRange(hue, 1.0 - saturation, 1.0);
+  // 色相・彩度を保ったまま、指定された輝度へスケールする。
+  return clamp(color * (luminance / Luma(color)), 0.0, 255.0);
+}
+
+float3 Blend(float3 s, float3 b) {
+  float3 backgroundHsl = ToHsl(b);
+  return FromHsl(float3(backgroundHsl.x, ToHsl(s).y, backgroundHsl.z));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@saturation_hsvl:
+#define ENTRY saturation_hsvl
+// label: 彩度(HSVL)
+// RGB・HSV の V・輝度は 0..255、色相は度、彩度・HSL の L は 0..1。
+float MinChannel(float3 c) { return min(c.r, min(c.g, c.b)); }
+float MaxChannel(float3 c) { return max(c.r, max(c.g, c.b)); }
+// BT.601 の輝度係数。
+float Luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+float Hue(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  if (chroma == 0.0)
+    return 0.0;
+  float hue;
+  if (high == c.r)
+    hue = 60.0 * (c.g - c.b) / chroma;
+  else if (high == c.g)
+    hue = 60.0 * ((c.b - c.r) / chroma + 2.0);
+  else
+    hue = 60.0 * ((c.r - c.g) / chroma + 4.0);
+  return hue < 0.0 ? hue + 360.0 : hue;
+}
+
+float3 HueRange(float hue, float low, float high) {
+  hue = frac(hue / 360.0) * 6.0;
+  float3 unit;
+  if (hue < 1.0)
+    unit = float3(1, hue, 0);
+  else if (hue < 2.0)
+    unit = float3(2.0 - hue, 1, 0);
+  else if (hue < 3.0)
+    unit = float3(0, 1, hue - 2.0);
+  else if (hue < 4.0)
+    unit = float3(0, 4.0 - hue, 1);
+  else if (hue < 5.0)
+    unit = float3(hue - 4.0, 0, 1);
+  else
+    unit = float3(1, 0, 6.0 - hue);
+  return low + (high - low) * unit;
+}
+
+float3 ToHsv(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  return float3(Hue(c), high == 0.0 ? 0.0 : chroma / high, high);
+}
+
+float3 FromHsv(float3 hsv) {
+  return HueRange(hsv.x, (1.0 - hsv.y) * hsv.z, hsv.z);
+}
+
+float3 ToHsl(float3 c) {
+  float low = MinChannel(c) / 255.0;
+  float high = MaxChannel(c) / 255.0;
+  float lightness = (high + low) * 0.5;
+  if (high == low)
+    return float3(0, 0, lightness);
+  float saturation =
+      (high - low) / (lightness <= 0.5 ? high + low : 2.0 - high - low);
+  return float3(Hue(c), saturation, lightness);
+}
+
+float3 FromHsl(float3 hsl) {
+  float halfChroma = (1.0 - abs(2.0 * hsl.z - 1.0)) * hsl.y * 0.5;
+  return HueRange(hsl.x, (hsl.z - halfChroma) * 255.0,
+                  (hsl.z + halfChroma) * 255.0);
+}
+
+float3 FromHsvl(float hue, float saturation, float luminance) {
+  float3 color = HueRange(hue, 1.0 - saturation, 1.0);
+  // 色相・彩度を保ったまま、指定された輝度へスケールする。
+  return clamp(color * (luminance / Luma(color)), 0.0, 255.0);
+}
+
+float3 Blend(float3 s, float3 b) {
+  return FromHsvl(Hue(b), ToHsv(s).y, Luma(b));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@lightness:
+#define ENTRY lightness
+// label: 明度
+// RGB・HSV の V・輝度は 0..255、色相は度、彩度・HSL の L は 0..1。
+float MinChannel(float3 c) { return min(c.r, min(c.g, c.b)); }
+float MaxChannel(float3 c) { return max(c.r, max(c.g, c.b)); }
+// BT.601 の輝度係数。
+float Luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+float Hue(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  if (chroma == 0.0)
+    return 0.0;
+  float hue;
+  if (high == c.r)
+    hue = 60.0 * (c.g - c.b) / chroma;
+  else if (high == c.g)
+    hue = 60.0 * ((c.b - c.r) / chroma + 2.0);
+  else
+    hue = 60.0 * ((c.r - c.g) / chroma + 4.0);
+  return hue < 0.0 ? hue + 360.0 : hue;
+}
+
+float3 HueRange(float hue, float low, float high) {
+  hue = frac(hue / 360.0) * 6.0;
+  float3 unit;
+  if (hue < 1.0)
+    unit = float3(1, hue, 0);
+  else if (hue < 2.0)
+    unit = float3(2.0 - hue, 1, 0);
+  else if (hue < 3.0)
+    unit = float3(0, 1, hue - 2.0);
+  else if (hue < 4.0)
+    unit = float3(0, 4.0 - hue, 1);
+  else if (hue < 5.0)
+    unit = float3(hue - 4.0, 0, 1);
+  else
+    unit = float3(1, 0, 6.0 - hue);
+  return low + (high - low) * unit;
+}
+
+float3 ToHsv(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  return float3(Hue(c), high == 0.0 ? 0.0 : chroma / high, high);
+}
+
+float3 FromHsv(float3 hsv) {
+  return HueRange(hsv.x, (1.0 - hsv.y) * hsv.z, hsv.z);
+}
+
+float3 ToHsl(float3 c) {
+  float low = MinChannel(c) / 255.0;
+  float high = MaxChannel(c) / 255.0;
+  float lightness = (high + low) * 0.5;
+  if (high == low)
+    return float3(0, 0, lightness);
+  float saturation =
+      (high - low) / (lightness <= 0.5 ? high + low : 2.0 - high - low);
+  return float3(Hue(c), saturation, lightness);
+}
+
+float3 FromHsl(float3 hsl) {
+  float halfChroma = (1.0 - abs(2.0 * hsl.z - 1.0)) * hsl.y * 0.5;
+  return HueRange(hsl.x, (hsl.z - halfChroma) * 255.0,
+                  (hsl.z + halfChroma) * 255.0);
+}
+
+float3 FromHsvl(float hue, float saturation, float luminance) {
+  float3 color = HueRange(hue, 1.0 - saturation, 1.0);
+  // 色相・彩度を保ったまま、指定された輝度へスケールする。
+  return clamp(color * (luminance / Luma(color)), 0.0, 255.0);
+}
+
+float3 Blend(float3 s, float3 b) {
+  return FromHsv(float3(ToHsv(b).xy, MaxChannel(s)));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@luminance:
+#define ENTRY luminance
+// label: 輝度
+// RGB・HSV の V・輝度は 0..255、色相は度、彩度・HSL の L は 0..1。
+float MinChannel(float3 c) { return min(c.r, min(c.g, c.b)); }
+float MaxChannel(float3 c) { return max(c.r, max(c.g, c.b)); }
+// BT.601 の輝度係数。
+float Luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+float Hue(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  if (chroma == 0.0)
+    return 0.0;
+  float hue;
+  if (high == c.r)
+    hue = 60.0 * (c.g - c.b) / chroma;
+  else if (high == c.g)
+    hue = 60.0 * ((c.b - c.r) / chroma + 2.0);
+  else
+    hue = 60.0 * ((c.r - c.g) / chroma + 4.0);
+  return hue < 0.0 ? hue + 360.0 : hue;
+}
+
+float3 HueRange(float hue, float low, float high) {
+  hue = frac(hue / 360.0) * 6.0;
+  float3 unit;
+  if (hue < 1.0)
+    unit = float3(1, hue, 0);
+  else if (hue < 2.0)
+    unit = float3(2.0 - hue, 1, 0);
+  else if (hue < 3.0)
+    unit = float3(0, 1, hue - 2.0);
+  else if (hue < 4.0)
+    unit = float3(0, 4.0 - hue, 1);
+  else if (hue < 5.0)
+    unit = float3(hue - 4.0, 0, 1);
+  else
+    unit = float3(1, 0, 6.0 - hue);
+  return low + (high - low) * unit;
+}
+
+float3 ToHsv(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  return float3(Hue(c), high == 0.0 ? 0.0 : chroma / high, high);
+}
+
+float3 FromHsv(float3 hsv) {
+  return HueRange(hsv.x, (1.0 - hsv.y) * hsv.z, hsv.z);
+}
+
+float3 ToHsl(float3 c) {
+  float low = MinChannel(c) / 255.0;
+  float high = MaxChannel(c) / 255.0;
+  float lightness = (high + low) * 0.5;
+  if (high == low)
+    return float3(0, 0, lightness);
+  float saturation =
+      (high - low) / (lightness <= 0.5 ? high + low : 2.0 - high - low);
+  return float3(Hue(c), saturation, lightness);
+}
+
+float3 FromHsl(float3 hsl) {
+  float halfChroma = (1.0 - abs(2.0 * hsl.z - 1.0)) * hsl.y * 0.5;
+  return HueRange(hsl.x, (hsl.z - halfChroma) * 255.0,
+                  (hsl.z + halfChroma) * 255.0);
+}
+
+float3 FromHsvl(float hue, float saturation, float luminance) {
+  float3 color = HueRange(hue, 1.0 - saturation, 1.0);
+  // 色相・彩度を保ったまま、指定された輝度へスケールする。
+  return clamp(color * (luminance / Luma(color)), 0.0, 255.0);
+}
+
+float3 Blend(float3 s, float3 b) {
+  float3 backgroundHsl = ToHsl(b);
+  return FromHsl(
+      float3(backgroundHsl.xy, (MinChannel(s) + MaxChannel(s)) / 510.0));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@luminance_hsvl:
+#define ENTRY luminance_hsvl
+// label: 輝度(HSVL)
+// RGB・HSV の V・輝度は 0..255、色相は度、彩度・HSL の L は 0..1。
+float MinChannel(float3 c) { return min(c.r, min(c.g, c.b)); }
+float MaxChannel(float3 c) { return max(c.r, max(c.g, c.b)); }
+// BT.601 の輝度係数。
+float Luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+float Hue(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  if (chroma == 0.0)
+    return 0.0;
+  float hue;
+  if (high == c.r)
+    hue = 60.0 * (c.g - c.b) / chroma;
+  else if (high == c.g)
+    hue = 60.0 * ((c.b - c.r) / chroma + 2.0);
+  else
+    hue = 60.0 * ((c.r - c.g) / chroma + 4.0);
+  return hue < 0.0 ? hue + 360.0 : hue;
+}
+
+float3 HueRange(float hue, float low, float high) {
+  hue = frac(hue / 360.0) * 6.0;
+  float3 unit;
+  if (hue < 1.0)
+    unit = float3(1, hue, 0);
+  else if (hue < 2.0)
+    unit = float3(2.0 - hue, 1, 0);
+  else if (hue < 3.0)
+    unit = float3(0, 1, hue - 2.0);
+  else if (hue < 4.0)
+    unit = float3(0, 4.0 - hue, 1);
+  else if (hue < 5.0)
+    unit = float3(hue - 4.0, 0, 1);
+  else
+    unit = float3(1, 0, 6.0 - hue);
+  return low + (high - low) * unit;
+}
+
+float3 ToHsv(float3 c) {
+  float high = MaxChannel(c);
+  float chroma = high - MinChannel(c);
+  return float3(Hue(c), high == 0.0 ? 0.0 : chroma / high, high);
+}
+
+float3 FromHsv(float3 hsv) {
+  return HueRange(hsv.x, (1.0 - hsv.y) * hsv.z, hsv.z);
+}
+
+float3 ToHsl(float3 c) {
+  float low = MinChannel(c) / 255.0;
+  float high = MaxChannel(c) / 255.0;
+  float lightness = (high + low) * 0.5;
+  if (high == low)
+    return float3(0, 0, lightness);
+  float saturation =
+      (high - low) / (lightness <= 0.5 ? high + low : 2.0 - high - low);
+  return float3(Hue(c), saturation, lightness);
+}
+
+float3 FromHsl(float3 hsl) {
+  float halfChroma = (1.0 - abs(2.0 * hsl.z - 1.0)) * hsl.y * 0.5;
+  return HueRange(hsl.x, (hsl.z - halfChroma) * 255.0,
+                  (hsl.z + halfChroma) * 255.0);
+}
+
+float3 FromHsvl(float hue, float saturation, float luminance) {
+  float3 color = HueRange(hue, 1.0 - saturation, 1.0);
+  // 色相・彩度を保ったまま、指定された輝度へスケールする。
+  return clamp(color * (luminance / Luma(color)), 0.0, 255.0);
+}
+
+float3 Blend(float3 s, float3 b) {
+  return FromHsvl(Hue(b), ToHsv(b).y, Luma(s));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@red:
+#define ENTRY red
+// label: RED
+float3 Blend(float3 s, float3 b) {
+  return float3(255.0 - (255.0 - s.r) * (255.0 - b.r) / 255.0, b.g, b.b);
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@green:
+#define ENTRY green
+// label: GREEN
+float3 Blend(float3 s, float3 b) { return float3(b.r, s.g, b.b); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@blue:
+#define ENTRY blue
+// label: BLUE
+float3 Blend(float3 s, float3 b) { return float3(b.r, b.g, s.b); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@yellow:
+#define ENTRY yellow
+// label: YELLOW
+float3 Blend(float3 s, float3 b) { return float3(s.r, s.g, b.b); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@aqua:
+#define ENTRY aqua
+// label: AQUA
+float3 Blend(float3 s, float3 b) { return float3(b.r, s.g, s.b); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@magenta:
+#define ENTRY magenta
+// label: MAGENTA
+float3 Blend(float3 s, float3 b) { return float3(s.r, b.g, s.b); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@arithmetic_mean:
+#define ENTRY arithmetic_mean
+// label: 相加平均
+float3 Blend(float3 s, float3 b) { return (s + b) * 0.5; }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@geometric_mean:
+#define ENTRY geometric_mean
+// label: 相乗平均
+float3 Blend(float3 s, float3 b) { return sqrt(s * b); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@harmonic_mean:
+#define ENTRY harmonic_mean
+// label: 調和平均
+float BlendChannel(float s, float b) {
+
+  return s + b == 0.0 ? 0.0 : 2.0 * s * b / (s + b);
+}
+
+float3 Blend(float3 s, float3 b) {
+  return float3(BlendChannel(s.r, b.r), BlendChannel(s.g, b.g),
+                BlendChannel(s.b, b.b));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@reflect:
+#define ENTRY reflect
+// label: 反射
+float3 Blend(float3 s, float3 b) { return min(s * s / (256.0 - b), 255.0); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@glow:
+#define ENTRY glow
+// label: グロー
+float3 Blend(float3 s, float3 b) { return min(b * b / (256.0 - s), 255.0); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@freeze:
+#define ENTRY freeze
+// label: 寒色
+float3 Blend(float3 s, float3 b) {
+  return max(255.0 - (255.0 - b) * (255.0 - b) / (s + 1.0), 0.0);
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@heat:
+#define ENTRY heat
+// label: 暖色
+float3 Blend(float3 s, float3 b) {
+  return max(255.0 - (255.0 - s) * (255.0 - s) / (b + 1.0), 0.0);
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@grain_extract:
+#define ENTRY grain_extract
+// label: 微粒取り出し
+float3 Blend(float3 s, float3 b) { return clamp(b - s + 128.0, 0.0, 255.0); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@grain_merge:
+#define ENTRY grain_merge
+// label: 微粒結合
+float3 Blend(float3 s, float3 b) { return clamp(b + s - 128.0, 0.0, 255.0); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@phoenix:
+#define ENTRY phoenix
+// label: フェニックス
+float3 Blend(float3 s, float3 b) { return 255.0 - abs(b - s); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@bitwise_and:
+#define ENTRY bitwise_and
+// label: AND
+float3 Blend(float3 s, float3 b) { return float3((uint3)s & (uint3)b); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@bitwise_or:
+#define ENTRY bitwise_or
+// label: OR
+float3 Blend(float3 s, float3 b) { return float3((uint3)s | (uint3)b); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@bitwise_xor:
+#define ENTRY bitwise_xor
+// label: XOR
+float3 Blend(float3 s, float3 b) { return float3((uint3)s ^ (uint3)b); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@shift:
+#define ENTRY shift
+// label: SHIFT
+float3 Blend(float3 s, float3 b) {
+
+  uint3 shift = (uint3)s & 7u;
+  uint3 value = (uint3)b;
+  return float3(((value << shift) | (value >> (8u - shift))) & 255u);
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@unsigned_add:
+#define ENTRY unsigned_add
+// label: 加算(unsigned)
+float3 Blend(float3 s, float3 b) { return float3((uint3)(s + b) & 255u); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@unsigned_subtract:
+#define ENTRY unsigned_subtract
+// label: 減算(unsigned)
+float3 Blend(float3 s, float3 b) { return float3((int3)(b - s) & 255); }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@add_red:
+#define ENTRY add_red
+// label: 加算(RED)
+float3 Blend(float3 s, float3 b) {
+  return float3(min(s.r + b.r, 255.0), s.g, s.b);
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@add_green:
+#define ENTRY add_green
+// label: 加算(GREEN)
+float3 Blend(float3 s, float3 b) {
+  return float3(s.r, min(s.g + b.g, 255.0), s.b);
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@add_blue:
+#define ENTRY add_blue
+// label: 加算(BLUE)
+float3 Blend(float3 s, float3 b) {
+  return float3(s.r, s.g, min(s.b + b.b, 255.0));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@add_red_green:
+#define ENTRY add_red_green
+// label: 加算(RED-GREEN)
+float3 Blend(float3 s, float3 b) {
+  return float3(min(s.r + b.r, 255.0), min(s.g + b.g, 255.0), s.b);
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@add_green_blue:
+#define ENTRY add_green_blue
+// label: 加算(GREEN-BLUE)
+float3 Blend(float3 s, float3 b) {
+  return float3(s.r, min(s.g + b.g, 255.0), min(s.b + b.b, 255.0));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@add_blue_red:
+#define ENTRY add_blue_red
+// label: 加算(BLUE-RED)
+float3 Blend(float3 s, float3 b) {
+  return float3(min(s.r + b.r, 255.0), s.g, min(s.b + b.b, 255.0));
+}
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+--[[pixelshader@threshold:
+#define ENTRY threshold
+// label: 二値化
+float3 Blend(float3 s, float3 b) { return (1.0 - step(b, s)) * 255.0; }
+
+Texture2D<float4> Source : register(t0);
+Texture2D<float4> Background : register(t1);
+
+float4 ENTRY(float4 pos : SV_Position) : SV_Target {
+  int3 pixel = int3(pos.xy, 0);
+  float4 source = Source.Load(pixel);
+  float4 background = Background.Load(pixel);
+  if (source.a <= 0.0)
+    return background;
+  if (background.a <= 0.0)
+    return source;
+
+  float3 s = saturate(source.rgb / source.a);
+  float3 b = saturate(background.rgb / background.a);
+  float overlap = source.a * background.a;
+  float sourceOnly = source.a * (1.0 - background.a);
+  float backgroundOnly = background.a * (1.0 - source.a);
+  float3 mixed = saturate(Blend(s * 255.0, b * 255.0) / 255.0);
+  // 非乗算の合成結果を、出力アルファで割らずに返す。
+  return float4(s * sourceOnly + b * backgroundOnly + mixed * overlap,
+                source.a + backgroundOnly);
+}
+
+]]
+
+local shaders = {
+    "add",
+    "subtract",
+    "multiply",
+    "divide",
+    "screen",
+    "overlay",
+    "overlay_gimp",
+    "lighten",
+    "darken",
+    "color_difference",
+    "linear_burn",
+    "linear_light",
+    "linear_light_inverse",
+    "difference",
+    "exclusion",
+    "negative",
+    "invert",
+    "lighter_color",
+    "darker_color",
+    "color_dodge",
+    "inverse_color_dodge",
+    "soft_dodge",
+    "color_burn",
+    "inverse_color_burn",
+    "soft_burn",
+    "hard_light",
+    "soft_light",
+    "soft_light_gimp",
+    "soft_light_photoshop",
+    "vivid_light",
+    "vivid_light_photoshop",
+    "pin_light",
+    "inverse_pin_light",
+    "strong_pin_light",
+    "hard_mix",
+    "hue",
+    "hue_hsvl",
+    "hue_delta",
+    "color_lightness",
+    "color_luminance",
+    "color_hsvl",
+    "saturation_lightness",
+    "saturation_luminance",
+    "saturation_hsvl",
+    "lightness",
+    "luminance",
+    "luminance_hsvl",
+    "red",
+    "green",
+    "blue",
+    "yellow",
+    "aqua",
+    "magenta",
+    "arithmetic_mean",
+    "geometric_mean",
+    "harmonic_mean",
+    "reflect",
+    "glow",
+    "freeze",
+    "heat",
+    "grain_extract",
+    "grain_merge",
+    "phoenix",
+    "bitwise_and",
+    "bitwise_or",
+    "bitwise_xor",
+    "shift",
+    "unsigned_add",
+    "unsigned_subtract",
+    "add_red",
+    "add_green",
+    "add_blue",
+    "add_red_green",
+    "add_green_blue",
+    "add_blue_red",
+    "threshold",
+}
+
+
+local target = obj.getoption("drawtarget")
+local background = "cache:extra_blend_mode.background"
+obj.effect()
+obj.copybuffer(background, target)
+obj.clearbuffer(target)
+obj.draw()
+obj.pixelshader(shaders[mode], target, { target, background }, {}, "copy")

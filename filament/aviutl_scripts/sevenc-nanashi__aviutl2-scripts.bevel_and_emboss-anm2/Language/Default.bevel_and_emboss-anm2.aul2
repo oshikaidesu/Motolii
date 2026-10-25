@@ -1,0 +1,5 @@
+[Language]
+Information=Default Language for sevenc-nanashi/aviutl2-scripts / https://github.com/sevenc-nanashi/aviutl2-scripts
+[Tips.ベベルとエンボス]
+effect.name=GPUで輪郭からの距離と陰影を計算し、ベベル・エンボスを作ります。
+出力=直接描画は元画像・ハイライト・シャドウにそれぞれ後続エフェクトを適用します。

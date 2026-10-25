@@ -1,0 +1,115 @@
+--infomation:PixelSorter_K v1.0.1 by Korarei
+--label:加工
+--select@s0:Sort By=1,Luminance (BT.601)=0,Luminance (BT.709)=1,Luminance (BT.2020)=2,RGB Average=3,RGB Product=4,RGB Minimum=5,RGB Maximum=6
+--track0:Sort From,0,255,32
+--track1:Sort To,0,255,224
+--track2:Direction,-3600,3600,0,0.01
+--select@s1:Color Space=1,Linear=0,sRGB=1
+--check0:Mask,0
+--value@_0:PI,{}
+--[[pixelshader@meta:
+Texture2D src : register(t0);
+cbuffer params : register(b0) {
+    float2 res;
+    float2 range;
+    float mode;
+    float col_space;
+};
+
+static const float eps = 1.0e-4;
+
+inline float4 unpremul_col(float4 col) {
+    return saturate(float4(col.rgb * rcp(max(col.a, eps)), col.a));
+}
+
+inline float4 premul_col(float4 col) {
+    return float4(col.rgb * col.a, col.a);
+}
+
+float4 to_linear(float4 col) {
+    switch (int(col_space)) {
+        case 1:
+            float3 t = step(col.rgb, 0.04045);
+            float3 low = col.rgb * rcp(12.92);
+            float3 high = pow(abs((col.rgb + 0.055) * rcp(1.055)), 2.4);
+            return saturate(float4(lerp(high, low, t), col.a));
+        default:
+            return col;
+    }
+}
+
+float rgb2metric(float3 rgb) {
+    switch (int(mode)) {
+        case 0:
+            return dot(rgb, float3(0.299, 0.587, 0.114));
+        case 2:
+            return dot(rgb, float3(0.2627, 0.6780, 0.0593));
+        case 3:
+            return dot(rgb, 1.0) * rcp(3.0);
+        case 4:
+            return min(rgb.r, min(rgb.g, rgb.b));
+        case 5:
+            return max(rgb.r, max(rgb.g, rgb.b));
+        default:
+            return dot(rgb, float3(0.2126, 0.7152, 0.0722));
+    }
+}
+
+float4 meta(float4 pos : SV_Position) : SV_Target {
+    float4 tex = src.Load(int3(pos.xy, 0));
+    float4 col = to_linear(unpremul_col(tex));
+    float v = rgb2metric(col.rgb);
+    float in_range = step(range.x, v) * step(v, range.y) * step(eps, col.a);
+    return premul_col(float4(v.xxx, in_range));
+}
+
+]]
+
+local function tobool(v, d)
+    if (type(v) == "boolean") then
+        return v
+    elseif (type(v) == "number") then
+        return v ~= 0
+    else
+        return d
+    end
+end
+
+_0 = _0 or {}
+local sort_by = tonumber(_0.sort_by) or s0 s0 = nil
+local sort_from = (tonumber(_0.sort_from) or obj.track0) / 255.0
+local sort_to = (tonumber(_0.sort_to) or obj.track1) / 255.0
+local dir = tonumber(_0.dir) or obj.track2
+local col_space = tonumber(_0.col_space) or s1 s1 = nil
+local mask = tobool(_0.mask, obj.check0)
+_0 = nil
+
+local lib = obj.module("PixelSorter_K")
+
+local w, h = obj.getpixel()
+local rot = math.rad(dir)
+local c = math.abs(math.cos(rot))
+local s = math.abs(math.sin(rot))
+local meta_w = math.ceil(c * w + s * h)
+local meta_h = math.ceil(s * w + c * h)
+
+obj.setoption("drawtarget", "tempbuffer", meta_w, meta_h)
+obj.draw(0, 0, 0, 1, 1, 0, 0, -dir)
+obj.copybuffer("object", "tempbuffer")
+
+obj.pixelshader("meta", "tempbuffer", "object", {
+    meta_w, meta_h,
+    sort_from, sort_to,
+    sort_by,
+    col_space
+})
+
+local px, _, _ = obj.getpixeldata("object")
+local meta, _, _ = obj.getpixeldata("tempbuffer")
+lib.sort(px, meta, meta_w, meta_h, mask)
+obj.putpixeldata("object", px, meta_w, meta_h)
+
+obj.setoption("drawtarget", "tempbuffer", w, h)
+obj.draw(0, 0, 0, 1, 1, 0, 0, dir)
+obj.copybuffer("object", "tempbuffer")
+obj.clearbuffer("tempbuffer")

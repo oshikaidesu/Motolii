@@ -1,0 +1,6 @@
+ノイズ_Te by てるよし
+licence: MIT
+from: https://github.com/teruyoshii/AviUtl2_Noise_Te/releases/download/1.2/%40noise_Te.anm2 (tag 1.2, commit dfb8c9a4dfb7)
+page: https://github.com/teruyoshii/AviUtl2_Noise_Te
+licence/README from: https://github.com/teruyoshii/AviUtl2_Noise_Te at 1.2
+Put here unchanged for Motolii (filament/aviutl_scripts).

@@ -1,0 +1,148 @@
+--label:CJF
+--information:選択マスク（幅/高さ指定・図形選択・回転） for AviUtl ExEdit2 / AviUtl2 only
+--select@shape:図形,円=0,四角形=1,三角形=2,五角形=3,六角形=4
+--track@x:X,-8192,8192,0,1
+--track@y:Y,-8192,8192,0,1
+--track@w:幅(px),1,16384,200,1
+--track@h:高さ(px),1,16384,200,1
+--track@rot:回転,-360,360,0,0.1
+--track@blur:ぼかし,0,2000,0,1
+--check@invert:マスクの反転,false
+
+--[[
+  選択マスク
+  既存オブジェクトのコンテンツを、指定した図形（円/四角形/三角形/五角形/六角形）で
+  マスクする効果スクリプト。標準マスク効果の サイズ/縦横比 を 幅(px)/高さ(px) に置換。
+  X/Y はオブジェクト中心からのオフセット(px)。回転はマスク形状の回転(度・正で時計回り)。
+  ぼかしは形状エッジのソフト幅(px)。
+
+  実装: pixel shader で各ピクセルの形状への符号付き距離を求め、
+  alpha = alpha * coverage とする（プリマルチプライのため RGB も同一係数で乗算）。
+  ぼかし=0 はハードエッジ、>0 は遷移幅ぼかし px のソフトエッジ。
+  多角形は Lua 側で計算したフィット倍率・回転により、単位正多角形 SDF を
+  幅/高さ 空間へ逆変換して判定する。
+  図形の外接矩形が 幅×高さ に一致するように描画される
+  (三角形・五角形は頂点が上、六角形は頂点が上下)。
+
+  注意: コンテンツより後に配置すること（それ以前の描画結果がマスク対象）。
+]]
+
+--[[pixelshader@mask_shape:
+Texture2D tex0 : register(t0);
+cbuffer constant0 : register(b0) {
+	float4 p0; // バッファ幅, バッファ高さ, X(+フィット補正), Y(+フィット補正)
+	float4 p1; // 幅, 高さ, ぼかし, 反転
+	float4 p2; // 図形, 回転(度), フィット倍率X, フィット倍率Y
+};
+
+// 楕円の近似SDF (Inigo Quilez)
+float sd_ellipse(float2 p, float2 r) {
+	float k0 = length(p / r);
+	float k1 = length(p / (r * r));
+	return k0 * (k0 - 1.0) / max(k1, 1e-6);
+}
+
+// 矩形のSDF
+float sd_box(float2 p, float2 b) {
+	float2 d = abs(p) - b;
+	return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+}
+
+float4 mask_shape(float4 pos : SV_Position) : SV_Target {
+	float4 src = tex0.Load(int3(pos.xy, 0));
+	if (src.a < 0.001) return float4(0, 0, 0, 0);
+
+	float rx = max(p1.x * 0.5, 0.25);
+	float ry = max(p1.y * 0.5, 0.25);
+	// ピクセル座標(左上原点) → 形状中心原点
+	float2 c = pos.xy - float2(p0.x, p0.y) * 0.5 - float2(p0.z, p0.w);
+	// マスク形状の回転 (度・正で時計回り)。全図形共通の剛体回転 (Z回転)
+	float rrad = radians(p2.y);
+	float rcs = cos(rrad), rsn = sin(rrad);
+	c = float2(c.x * rcs + c.y * rsn, -c.x * rsn + c.y * rcs);
+	float shape = p2.x;
+	float d;
+	if (shape < 0.5) {
+		// 円 (幅×高さに内接する楕円)
+		d = sd_ellipse(c, float2(rx, ry));
+	} else if (shape < 1.5) {
+		// 四角形
+		d = sd_box(c, float2(rx, ry));
+	} else {
+		// 多角形 (3/5/6): 回転なし姿勢の外接矩形が 幅×高さ に一致するよう
+		// Lua が計算したフィット倍率(p2.zw)で正規化してから、単位正多角形
+		// (頂点半径 1) の折りたたみ SDF で判定する。
+		float ne = (shape < 2.5) ? 3.0 : ((shape < 3.5) ? 5.0 : 6.0);
+		float an = 6.2831853 / ne;
+		float ca = cos(an * 0.5); // 頂点半径 1 の多角形の辺中心距離 (内接半径)
+		float2 q = c / float2(p2.z, p2.w);
+		// 外接矩形中心を原点へ (頂点上向き図形では矩形中心と図形中心がずれる)
+		if (ne < 5.5) q.y -= (ne < 3.5) ? 0.25 : (1.0 - ca) * 0.5;
+		// 向き: 三角形・五角形は頂点が上 (+90° 回転)
+		if (ne < 5.5) q = float2(q.y, -q.x);
+		float ang = atan2(q.y, q.x);
+		float bn = an * floor((ang + 0.5 * an) / an);
+		float frc = cos(bn), frs = sin(bn);
+		q = float2(q.x * frc + q.y * frs, -q.x * frs + q.y * frc);
+		float he = tan(0.5 * an) * ca;
+		d = length(q - float2(ca, clamp(q.y, -he, he)));
+		d *= (q.x > ca) ? 1.0 : -1.0;
+		// 距離を px 近似 (ぼかし用)
+		d *= min(p2.z, p2.w);
+	}
+	float blur = max(p1.z, 0.0);
+	float cov = (blur > 0.001) ? saturate(0.5 - d / blur) : (d < 0.0 ? 1.0 : 0.0);
+	if (p1.w > 0.5) cov = 1.0 - cov;
+	// プリマルチプライ alpha の合成: RGB と A を同一係数でスケール
+	return float4(src.rgb * cov, src.a * cov);
+}
+]]
+
+local bw, bh = obj.getpixel()
+if not bw or not bh or bw < 1 or bh < 1 then
+	return
+end
+
+local shp = math.max(0, math.min(4, math.floor(tonumber(shape) or 1)))
+local cx = tonumber(x) or 0
+local cy = tonumber(y) or 0
+local sw = math.max(1, tonumber(w) or 200)
+local shh = math.max(1, tonumber(h) or 200)
+local rotv = tonumber(rot) or 0
+local bl = math.max(0, tonumber(blur) or 0)
+local inv = ((invert == true) or (invert == 1)) and 1 or 0
+
+-- 多角形 (3/5/6): 回転なし姿勢の外接矩形が 幅×高さ に一致するようフィット倍率を
+-- 計算してシェーダーへ渡す。回転はシェーダー前段で全図形共通の剛体回転として適用。
+local fx, fy = 1.0, 1.0
+if shp >= 2 then
+	local nn = (shp == 2) and 3 or ((shp == 3) and 5 or 6)
+	local PI2 = 6.2831853
+	local an = PI2 / nn
+	local xs, ys = {}, {}
+	for k = 0, nn - 1 do
+		-- 単位円上の頂点 (頂点角 an/2 + k·an)
+		local phi = an * 0.5 + an * k
+		local ux, uy = math.cos(phi), math.sin(phi)
+		-- 向き: 三角形・五角形は頂点が上 (90° 回転)
+		if nn < 5.5 then
+			xs[k + 1], ys[k + 1] = -uy, ux
+		else
+			xs[k + 1], ys[k + 1] = ux, uy
+		end
+	end
+	local xmin, xmax = math.huge, -math.huge
+	local ymin, ymax = math.huge, -math.huge
+	for i = 1, nn do
+		if xs[i] < xmin then xmin = xs[i] end
+		if xs[i] > xmax then xmax = xs[i] end
+		if ys[i] < ymin then ymin = ys[i] end
+		if ys[i] > ymax then ymax = ys[i] end
+	end
+	fx = sw / (xmax - xmin)
+	fy = shh / (ymax - ymin)
+end
+
+obj.pixelshader("mask_shape", "object", "object",
+	{ bw, bh, cx, cy, sw, shh, bl, inv, shp, rotv, fx, fy },
+	"copy", "clamp")

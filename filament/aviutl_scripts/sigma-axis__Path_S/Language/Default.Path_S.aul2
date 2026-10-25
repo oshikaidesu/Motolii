@@ -1,0 +1,168 @@
+; Tooltip definitions
+;===============================================================
+; Target: Path_S (https://github.com/sigma-axis/aviutl2_script_Path_S)
+; Target Version: v2.42
+; Language: Default
+
+[Language]
+Information=Default tooltips for Path_S v2.42 (日本語)
+
+;===============================================================
+
+[Tips.パスマスクσ@Path_S]
+effect.name=パスで囲った範囲で画像を切り抜くフィルタ効果です．
+曲線精度=折れ線近似の最大サンプル間隔，ピクセル単位
+ディザリング=ぼかし幅の範囲にディザリングを適用します．
+dither::ノイズシード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+アンカー切り替え=パス編集用のアンカーと移動用のアンカーを切り替え．
+snap::グリッド=格子状にスナップします．制御点以外に有効．
+snap::隣との角度=直前の点からの角度でスナップします．制御点以外に有効．
+snap::制御点の角度=制御点の角度でスナップします．制御点のみに有効．
+snap::隣の制御点=直前の制御点と角度や長さを揃えます．
+PI=PI = {\n  intensity: number?,\n  invert: boolean|number|nil,\n  num_points: number?,\n  path_type: string?,\n  points: table?,\n  mode_anchor_base: string?,\n  precision: number?,\n  inflation: number?,\n  mode_fill: string?,\n  antialias: number?,\n  dither_pattern: string?,\n  dither_seed: number?,\n  dither_rate: number?,\n  dither_size: number?,\n  dither_X: number?,\n  dither_Y: number?,\n  dither_angle: number?,\n  X, Y: number?,\n  zoom: number?,\n  rotate: number?,\n}
+
+[Tips.パスマスク(ライン)σ@Path_S]
+effect.name=パスの通ったライン上の画像を切り抜くフィルタ効果です．
+曲線精度=折れ線近似の最大サンプル間隔，ピクセル単位
+開始位置=ライン描画範囲の始点，パス全体長からの % 単位
+終了位置=ライン描画範囲の終点，パス全体長からの % 単位
+破線パターン=実線部分の長さと空白部分の長さを交互に記述，ピクセル単位
+破線周期補正=ループが ON の場合のみ有効，ループ 1 周での破線パターンが整数回になるよう補正
+ディザリング=ぼかし幅の範囲にディザリングを適用します．
+dither::ノイズシード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+アンカー切り替え=パス編集用のアンカーと移動用のアンカーを切り替え．
+snap::グリッド=格子状にスナップします．制御点以外に有効．
+snap::隣との角度=直前の点からの角度でスナップします．制御点以外に有効．
+snap::制御点の角度=制御点の角度でスナップします．制御点のみに有効．
+snap::隣の制御点=直前の制御点と角度や長さを揃えます．
+PI=PI = {\n  intensity: number?,\n  invert: boolean|number|nil,\n  line: number?,\n  num_points: number?,\n  path_type: string?,\n  points: table?,\n  loop: boolean|number|nil,\n  mode_anchor_base: string?,\n  precision: number?,\n  start_pos: number?,\n  end_pos: number?,\n  end_shape: string?,\n  join_shape: string?,\n  miter_limit: number?,\n  dash_pat: table?,\n  dash_adj: boolean|number|nil,\n  dash_pos: number?,\n  dash_end_shape: string?,\n  antialias: number?,\n  dither_pattern: string?,\n  dither_seed: number?,\n  dither_rate: number?,\n  dither_size: number?,\n  dither_X: number?,\n  dither_Y: number?,\n  dither_angle: number?,\n  X, Y: number?,\n  zoom: number?,\n  rotate: number?,\n}
+
+[Tips.パス部分フィルタσ@Path_S]
+effect.name=パスで囲った範囲のみに，後続のフィルタ効果，または直接スクリプトを記述して適用するフィルタ効果です．
+曲線精度=折れ線近似の最大サンプル間隔，ピクセル単位
+ディザリング=ぼかし幅の範囲にディザリングを適用します．
+dither::ノイズシード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+アンカー切り替え=パス編集用のアンカーと移動用のアンカーを切り替え．
+追加のフィルタ効果=「後続フィルタ」の範囲は「追加フィルタここまで」で区切ることができます．
+snap::グリッド=格子状にスナップします．制御点以外に有効．
+snap::隣との角度=直前の点からの角度でスナップします．制御点以外に有効．
+snap::制御点の角度=制御点の角度でスナップします．制御点のみに有効．
+snap::隣の制御点=直前の制御点と角度や長さを揃えます．
+PI=PI = {\n  invert: boolean|number|nil,\n  num_points: number?,\n  path_type: string?,\n  points: table?,\n  mode_anchor_base: string?,\n  precision: number?,\n  inflation: number?,\n  mode_fill: string?,\n  antialias: number?,\n  dither_pattern: string?,\n  dither_seed: number?,\n  dither_rate: number?,\n  dither_size: number?,\n  dither_X: number?,\n  dither_Y: number?,\n  dither_angle: number?,\n  X, Y: number?,\n  zoom: number?,\n  rotate: number?,\n  extra_filter: string?,\n}
+
+[Tips.パス部分フィルタσここまで@Path_S]
+effect.name=「パス部分フィルタσ」での「後続フィルタ」の範囲を指定します．
+
+[Tips.パスに沿って配置σ@Path_S]
+effect.name=パスに沿ってオブジェクトを配置するフィルタ効果です．個別オブジェクトでも間隔を空けて配置できます．\n各オブジェクト間の相対座標はパスに沿わずにそのまま反映されます．直前に「座標の拡大縮小(個別オブジェクト)」で 0 倍をしておくなどするとパスに沿った配置になります．
+個別位置ズレ=個別オブジェクト間の位置ズレ長さ，パス全体長からの % 単位
+範囲外=パスの始点と終点の間に収まらないオブジェクトを表示するかどうかを指定．
+曲線精度=折れ線近似の最大サンプル間隔，ピクセル単位
+パスの表示=パスの形状を編集画面に表示．動画出力時には自動的に無効化されます．
+snap::グリッド=格子状にスナップします．制御点以外に有効．
+snap::隣との角度=直前の点からの角度でスナップします．制御点以外に有効．
+snap::制御点の角度=制御点の角度でスナップします．制御点のみに有効．
+snap::隣の制御点=直前の制御点と角度や長さを揃えます．
+PI=PI = {\n  position: number?,\n  rotate: number?,\n  rot_tangent: boolean|number|nil,\n  ofs_indiv: number?,\n  out_of_range: string?,\n  num_points: number?,\n  path_type: string?,\n  points: table?,\n  loop: boolean|number|nil,\n  mode_anchor_base: string?,\n  precision: number?,\n}
+
+[Tips.輪郭パスσ@Path_S]
+effect.name=アンカーで選んだ部分の輪郭にラインを引きます．
+開始位置=ライン描画範囲の始点，パス全体長からの % 単位
+終了位置=ライン描画範囲の終点，パス全体長からの % 単位
+破線パターン=実線部分の長さと空白部分の長さを交互に記述，ピクセル単位
+ディザリング=ぼかし幅の範囲にディザリングを適用します．
+dither::ノイズシード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+ランダム周期=パスの描画方向に沿ったランダム変動の周期，ピクセル単位
+ランダム振幅=ランダム変動の大きさ，ピクセル単位
+ランダムシード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+追加のフィルタ効果=「後続フィルタ」の範囲は「追加フィルタここまで」で区切ることができます．
+PI=PI = {\n  mode_targets: string?,\n  X, Y: number?,\n  num_points: number?,\n  points: table?,\n  mode_anchor_base: string?,\n  line: number?,\n  color: number?,\n  thresh: number?,\n  conn_corner: boolean|number|nil,\n  prec_trace: number?,\n  force_clockwise: boolean|number|nil,\n  start_pos: number?,\n  end_pos: number?,\n  end_shape: string?\n  dash_pat: table?,\n  dash_pos: number?,\n  dash_end_shape: string?,\n  antialias: number?,\n  dither_pattern: string?\n  dither_seed: number?,\n  dither_rate: number?,\n  dither_size: number?,\n  dither_X: number?,\n  dither_Y: number?,\n  dither_angle: number?,\n  rand_period: number?,\n  rand_amplify: number?,\n  rand_seed: number?,\n  mode_draw: string?,\n  blend: string?,\n  line_alpha: number?,\n  orig_alpha: number?,\n  extra_filter: string?,\n}
+
+[Tips.追加フィルタここまで@Path_S]
+effect.name=「後続フィルタ」の範囲を指定します．
+
+[Tips.パス図形σ@Path_S]
+effect.name=パスに沿ったラインと，パス内を塗りつぶした図形を描画するオブジェクトです．
+曲線精度=折れ線近似の最大サンプル間隔，ピクセル単位
+開始位置=ライン描画範囲の始点，パス全体長からの % 単位
+終了位置=ライン描画範囲の終点，パス全体長からの % 単位
+破線パターン=実線部分の長さと空白部分の長さを交互に記述，ピクセル単位
+破線周期補正=ループが ON の場合のみ有効，ループ 1 周での破線パターンが整数回になるよう補正
+ディザリング=ぼかし幅の範囲にディザリングを適用します．
+dither::ノイズシード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+fill::ディザリング=ぼかし幅の範囲にディザリングを適用します．
+fill::dither::ノイズシード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+ランダム周期=パスの描画方向に沿ったランダム変動の周期，ピクセル単位
+ランダム振幅=ランダム変動の大きさ，ピクセル単位
+ランダム固定端=パスの始点終点をランダム変動の影響から除外します．
+ランダムシード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+snap::グリッド=格子状にスナップします．制御点以外に有効．
+snap::隣との角度=直前の点からの角度でスナップします．制御点以外に有効．
+snap::制御点の角度=制御点の角度でスナップします．制御点のみに有効．
+snap::隣の制御点=直前の制御点と角度や長さを揃えます．
+PI=PI = {\n  line: number?,\n  color_line: number?,\n  color_fill: number?,\n  num_points: number?,\n  path_type: string?,\n  points: table?,\n  loop: boolean|number|nil,\n  precision: number?,\n  alpha_line: number?,\n  start_pos: number?,\n  end_pos: number?,\n  end_shape: string?,\n  join_shape: string?,\n  miter_limit: number?,\n  dash_pat: table?,\n  dash_adj: boolean|number|nil,\n  dash_pos: number?,\n  dash_end_shape: string?,\n  antialias: number?,\n  dither_pattern: string?,\n  dither_seed: number?,\n  dither_rate: number?,\n  dither_size: number?,\n  dither_X: number?,\n  dither_Y: number?,\n  dither_angle: number?,\n  inflation: number?,\n  alpha_fill: number?,\n  mode_fill: string?,\n  fill_antialias: number?,\n  fill_dither_pattern: string?,\n  fill_dither_seed: number?,\n  fill_dither_rate: number?,\n  fill_dither_size: number?,\n  fill_dither_X: number?,\n  fill_dither_Y: number?,\n  fill_dither_angle: number?,\n  rand_period: number?,\n  rand_amplify: number?,\n  rand_fix_end: boolean|number|nil,\n  rand_seed: number?,\n}
+
+[Tips.ラインσ@Path_S]
+effect.name=波線やジグザグ線など，よく使われるパターンのライン形状を描画するオブジェクトです．
+開始位置=ライン描画範囲の始点，パス全体長からの % 単位
+終了位置=ライン描画範囲の終点，パス全体長からの % 単位
+破線パターン=実線部分の長さと空白部分の長さを交互に記述，ピクセル単位
+ディザリング=ぼかし幅の範囲にディザリングを適用します．
+dither::ノイズシード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+ランダム周期=パスの描画方向に沿ったランダム変動の周期，ピクセル単位
+ランダム振幅=ランダム変動の大きさ，ピクセル単位
+ランダム固定端=パスの始点終点をランダム変動の影響から除外します．
+ランダムシード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+PI=PI = {\n  start_X, start_Y: number?,\n  end_X, end_Y: number?,\n  line: number?,\n  color: number?,\n  line_shape: string?,\n  line_period: number?,\n  line_phase: number?,\n  line_amplify: number?,\n  start_pos: number?,\n  end_pos: number?,\n  end_shape: string?,\n  join_shape: string?,\n  miter_limit: number?,\n  dash_pat: table?,\n  dash_pos: number?,\n  dash_end_shape: string?,\n  antialias: number?,\n  dither_pattern: string?,\n  dither_seed: number?,\n  dither_rate: number?,\n  dither_size: number?,\n  dither_X: number?,\n  dither_Y: number?,\n  dither_angle: number?,\n  rand_period: number?,\n  rand_amplify: number?,\n  rand_fix_end: boolean|number|nil,\n  rand_seed: number?,\n}
+
+[Tips.スパイラルσ@Path_S]
+effect.name=渦巻の形のラインを描画するオブジェクトです．
+傾き=正で外向きに反時計回り / 0 で半直線 / 負で外向きに時計回り
+開始位置=ライン描画範囲の始点，パス全体長からの % 単位
+終了位置=ライン描画範囲の終点，パス全体長からの % 単位
+曲線精度=折れ線近似の最大サンプル間隔，ピクセル単位
+破線パターン=実線部分の長さと空白部分の長さを交互に記述，ピクセル単位
+ディザリング=ぼかし幅の範囲にディザリングを適用します．
+dither::ノイズシード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+ランダム周期=パスの描画方向に沿ったランダム変動の周期，ピクセル単位
+ランダム振幅=ランダム変動の大きさ，ピクセル単位
+ランダム固定端=パスの始点終点をランダム変動の影響から除外します．
+ランダムシード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+PI=PI = {\n  start_X, start_Y: number?,\n  end_X, end_Y: number?,\n  start_radius: number?,\n  end_radius: number?,\n  line: number?,\n  color: number?,\n  line_shape: string?,\n  slope: number?,\n  rotate: number?,\n  start_pos: number?,\n  end_pos: number?,\n  end_shape: string?,\n  precision: number?,\n  dash_pat: table?,\n  dash_pos: number?,\n  dash_end_shape: string?,\n  antialias: number?,\n  dither_pattern: string?,\n  dither_seed: number?,\n  dither_rate: number?,\n  dither_size: number?,\n  dither_X: number?,\n  dither_Y: number?,\n  dither_angle: number?,\n  rand_period: number?,\n  rand_amplify: number?,\n  rand_fix_end: boolean|number|nil,\n  rand_seed: number?,\n}
+
+[Tips.アローσ@Path_S]
+effect.name=パスに沿ったラインと先端図形を配置して，矢印の形を描画するオブジェクトです．
+曲線精度=折れ線近似の最大サンプル間隔，ピクセル単位
+開始位置=ライン描画範囲の始点，パス全体長からの % 単位
+終了位置=ライン描画範囲の終点，パス全体長からの % 単位
+破線パターン=実線部分の長さと空白部分の長さを交互に記述，ピクセル単位
+ディザリング=ぼかし幅の範囲にディザリングを適用します．
+dither::ノイズシード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+矢じり幅=矢じりの横幅の拡大率，% 単位
+ランダム周期=パスの描画方向に沿ったランダム変動の周期，ピクセル単位
+ランダム振幅=ランダム変動の大きさ，ピクセル単位
+ランダム固定端=パスの始点終点をランダム変動の影響から除外します．
+ランダムシード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+snap::グリッド=格子状にスナップします．制御点以外に有効．
+snap::隣との角度=直前の点からの角度でスナップします．制御点以外に有効．
+snap::制御点の角度=制御点の角度でスナップします．制御点のみに有効．
+snap::隣の制御点=直前の制御点と角度や長さを揃えます．
+PI=PI = {\n  line: number?,\n  head_size: number?,\n  color: number?,\n  num_points: number?,\n  path_type: string?,\n  points: table?,\n  precision: number?,\n  start_pos: number?,\n  end_pos: number?,\n  end_shape: string?,\n  join_shape: string?,\n  miter_limit: number?,\n  dash_pat: table?,\n  dash_pos: number?,\n  dash_end_shape: string?,\n  antialias: number?,\n  dither_pattern: string?,\n  dither_seed: number?,\n  dither_rate: number?,\n  dither_size: number?,\n  dither_X: number?,\n  dither_Y: number?,\n  dither_angle: number?,\n  head_type: string?,\n  head_fig: string?,\n  head_width: number?,\n  head_center: number?,\n  head_rot: number?,\n  head_pos: number?,\n  rand_period: number?,\n  rand_amplify: number?,\n  rand_fix_end: boolean|number|nil,\n  rand_seed: number?,\n}
+
+[Tips.スクウェアσ@Path_S]
+effect.name=角丸四角形を描画するオブジェクトです．
+水平揃え=-100: 右揃え / 0: 中央揃え / +100: 左揃え
+垂直揃え=-100: 下揃え / 0: 中央揃え / +100: 上揃え
+丸角縦横比=正で縦長 / 負で横長
+丸角縦横比固定=角半径に対してサイズが小さいときの自動調整で，丸角の縦横比を固定します．
+開始位置=ライン描画範囲の始点，パス全体長からの % 単位
+終了位置=ライン描画範囲の終点，パス全体長からの % 単位
+破線パターン=実線部分の長さと空白部分の長さを交互に記述，ピクセル単位
+ディザリング=ぼかし幅の範囲にディザリングを適用します．
+dither::ノイズシード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+fill::ディザリング=ぼかし幅の範囲にディザリングを適用します．
+fill::dither::ノイズシード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+ランダム周期=パスの描画方向に沿ったランダム変動の周期，ピクセル単位
+ランダム振幅=ランダム変動の大きさ，ピクセル単位
+ランダムシード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+PI=PI = {\n  width: number?,\n  height: number?,\n  line: number?,\n  color_line: number?,\n  color_fill: number?,\n  radii: table|number|nil,\n  fixed_aspect: boolean|number|nil,\n  align_x: number?,\n  align_y: number?,\n  alpha_line: number?,\n  start_pos: number?,\n  end_pos: number?,\n  end_shape: string?,\n  join_shape: string?,\n  dash_pat: table?,\n  dash_pos: number?,\n  dash_end_shape: string?,\n  antialias: number?,\n  dither_pattern: string?,\n  dither_seed: number?,\n  dither_rate: number?,\n  dither_size: number?,\n  dither_X: number?,\n  dither_Y: number?,\n  dither_angle: number?,\n  inflation: number?,\n  alpha_fill: number?,\n  fill_antialias: number?,\n  fill_dither_pattern: string?,\n  fill_dither_seed: number?,\n  fill_dither_rate: number?,\n  fill_dither_size: number?,\n  fill_dither_X: number?,\n  fill_dither_Y: number?,\n  fill_dither_angle: number?,\n  rand_period: number?,\n  rand_amplify: number?,\n  rand_seed: number?,\n}

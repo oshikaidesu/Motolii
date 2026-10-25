@@ -1,0 +1,13 @@
+# SceneChangeKit_S AviUtl ExEdit2 シーンチェンジ自作キット
+
+スクリプトを書かなくてもシーンチェンジをタイムライン上で構成して自作できるスクリプトです．前シーンと次シーンをレイヤーに配置してフィルタ効果などを追加していくことができます．
+
+公開ページ:
+https://github.com/sigma-axis/aviutl2_script_SceneChangeKit_S
+
+紹介動画:
+https://www.nicovideo.jp/watch/ss46859392
+
+お願い:
+ニコニコ動画での親作品登録をしていただけると励みになります．
+作品 ID: ss46859392

@@ -1,0 +1,6 @@
+OpticsCompensation_s_for_AviUtl2 by サ行
+licence: MIT
+from: https://raw.githubusercontent.com/SagyouDarui900/OpticsCompensation_s_for_AviUtl2/refs/heads/main/OpticsCompensation_s.anm2 (commit 80e9be342569)
+page: https://github.com/SagyouDarui900/OpticsCompensation_s_for_AviUtl2
+licence/README from: https://github.com/SagyouDarui900/OpticsCompensation_s_for_AviUtl2 at 80e9be342569c5a4a200e24ee977468b898ae1a0
+Put here unchanged for Motolii (filament/aviutl_scripts).

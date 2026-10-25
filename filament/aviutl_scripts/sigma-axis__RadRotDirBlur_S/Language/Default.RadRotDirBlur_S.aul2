@@ -1,0 +1,22 @@
+; Tooltip definitions
+;===============================================================
+; Target: RadRotDirBlur_S (https://github.com/sigma-axis/aviutl2_script_RadRotDirBlur_S)
+; Target Version: v1.20
+; Language: Default
+
+[Language]
+Information=Default tooltips for RadRotDirBlur_S v1.20 (日本語)
+
+;===============================================================
+
+[Tips.RadRotDirBlur_S]
+effect.name=放射ブラー，回転ブラー，方向ブラーの 3 つを複合したぼかし効果．
+移動X=方向ブラーの方向
+移動Y=方向ブラーの方向
+拡大率=放射ブラーの拡大率
+回転角=回転ブラーの回転角
+中心X=放射ブラーと回転ブラーの中心
+中心Y=放射ブラーと回転ブラーの中心
+色収差=現実世界の正しい順序は「赤青」．A は B より半透明部分が減衰しやすい．
+精度=ぼかし計算のサンプル数
+PI=PI = {\n  dir: table? { x, y },\n  rad: number?,\n  rot: number?,\n  center: table? { x, y },\n  center_based: boolean|number|nil,\n  amount: number?,\n  rel_pos: number?,\n  chroma: string?,\n  chrm_abrr: number?,\n  keep_size: boolean|number|nil,\n  quality: number?,\n}

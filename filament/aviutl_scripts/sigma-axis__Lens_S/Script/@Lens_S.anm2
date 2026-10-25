@@ -1,0 +1,732 @@
+--[[
+MIT License
+
+Copyright (c) 2026 sigma-axis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+https://mit-license.org/
+]]
+
+--
+-- v1.10
+--
+
+-- https://github.com/sigma-axis/aviutl2_script_Lens_S
+
+@アクリルσ
+--information:アクリルσ@Lens_S v1.10 by σ軸
+--label:Lens_S
+--require:2011000
+--track@base_alpha:基準透明度,0,100,100,0.01
+--color@base_color:基準色,nil
+--group:色設定,true
+--track@mul_luma:透過輝度,0,200,50,0.01,,0.5
+--track@add_luma:輝度補正,-100,100,0,0.01
+--track@mul_chroma:透過彩度,0,200,100,0.01,,0.5
+--color@tint_color:着色,0x4050ff
+--track@tint_luma:着色輝度,0,100,0,0.01
+--track@tint_chroma:着色彩度,0,100,0,0.01
+--group:ぼかし設定,true
+--track@blur:blur::範囲,0,1000,20,0.01,,0.2
+--track@blur_aspect:blur::縦横比,-100,100,0,0.001
+--track@blur_luma_weight:blur::光の強さ,0,60,0,0.1
+--track@noise_intensity:noise::ノイズ,0,100,4,0.01,,0.1
+--track@noise_seed:noise::シード,-65536,65535,10000,1
+--track@noise_size:noise::ドットサイズ,100,6400,100,0.01,,0.0625
+--group:背景配置,false
+--track@move_x:移動X,-4000,4000,0,0.01
+--track@move_y:移動Y,-4000,4000,0,0.01
+--trackgroup@move_x,move_y:MoveXY
+--track@scale:拡大率,1,10000,100,0.001,,0.02
+--track@rotate:回転,-1440,1440,0,0.01,,0.25
+--checksection@anchor_screen:画面基準で配置,false,false
+--group:その他,false
+--color@back_color:背景色,nil
+--value@PI:PI,{}
+--[[pixelshader@back_proj:
+Texture2D src : register(t0);
+SamplerState smp : register(s0);
+cbuffer constant0 : register(b0) {
+	float4 back_color;
+	float3x2 mat;
+	float3 t;
+};
+float4 back_proj(float4 pos : SV_Position) : SV_Target
+{
+	const float3 p = mul(mat, pos.xy) + t;
+	const float4 c = p.z > 0 ? src.SampleLevel(smp, p.xy / p.z, 0) : 0;
+	return c + (1 - c.a) * back_color;
+}
+
+]]
+--[[pixelshader@combine:
+// IbukiHash by Andante (https://twitter.com/andanteyk)
+// This work is marked with CC0 1.0. To view a copy of this license, visit https://creativecommons.org/publicdomain/zero/1.0/
+
+float ibuki(float4 v)
+{
+    const uint4 mult =
+        uint4(0xae3cc725, 0x9fe72885, 0xae36bfb5, 0x82c1fcad);
+
+    uint4 u = uint4(v);
+    u = u * mult;
+    u ^= u.wxyz ^ u >> 13;
+
+    uint r = dot(u, mult);
+
+    r ^= r >> 11;
+    r = (r * r) ^ r;
+
+    return r * 2.3283064365386962890625e-10;
+}
+
+Texture2D src : register(t0);
+Texture2D back : register(t1);
+cbuffer constant0 : register(b0) {
+	float4 base_color; float base_alpha;
+	float3 tint_color; float tint_luma, tint_chroma;
+	float mul_luma, mul_chroma, add_luma;
+	float noise_intensity, noise_seed, inv_noise_size;
+	float2 noise_offset;
+};
+static const float2 V01 = { 0, 1 };
+static const float3x3 to_bt601 = {
+	0.299, 0.587, 0.114,
+	-0.16873589, -0.3312641, 0.5,
+	0.5, -0.41868758, -0.08131241,
+}, from_bt601 = {
+	1, 0, 1.402,
+	1, -0.3441363, -0.7141363,
+	1, 1.772, 0,
+},
+mat_luma = mul(mul(from_bt601, float3x3(V01.yxx, V01.xxx, V01.xxx)), to_bt601),
+mat_chroma = mul(mul(from_bt601, float3x3(V01.xxx, V01.xyx, V01.xxy)), to_bt601);
+
+static const float3x3
+	mat_back = mul_luma * mat_luma + mul_chroma * mat_chroma,
+	mat_tint = tint_luma * mat_luma + tint_chroma * mat_chroma;
+float4 combine(float4 pos : SV_Position) : SV_Target
+{
+	float4 c = src[pos.xy], b = back[pos.xy];
+	const float noise = noise_intensity * (ibuki(float4(
+		inv_noise_size * (pos.xy - noise_offset) + ((1 << 16) - 0.5),
+		noise_seed, 7)) - 0.5);
+
+	b.rgb = mul(mat_back, b.rgb) + add_luma * b.a;
+	b.rgb += mul(mat_tint, tint_color * b.a - b.rgb) + noise * b.a;
+	b *= saturate(base_alpha > 0 ? c.a / base_alpha : sign(c.a));
+	[branch] if (base_color.a == 1)
+		c -= (base_alpha < 1  && c.a > base_alpha ?
+			(1 - c.a) * base_alpha / (1 - base_alpha) :
+			c.a) * base_color;
+	else c *= saturate(base_alpha < 1  && c.a > 0 ?
+			(c.a - base_alpha) / ((1 - base_alpha) * c.a) : 0);
+	c += (1 - c.a) * b;
+	return c + (1 - c.a) * b;
+}
+
+]]
+local obj, math, tonumber = obj, math, tonumber;
+local lens_s = require("Lens_S")
+
+if obj.getoption("gui") then
+	if anchor_screen then
+		obj.setanchor("move_x,move_y", 0, "line", "screen");
+		obj.setanchor({ 0, 0, move_x, move_y }, 2, "line", "screen", "color", 0x30d030);
+	else
+		local cx, cy, _ = obj.getvalue("center");
+		cx, cy = cx + obj.cx, cy + obj.cy;
+		obj.setanchor("move_x,move_y", 0, "line", "offset", cx, cy);
+		obj.setanchor({ 0, 0, move_x, move_y }, 2, "line", "offset", cx, cy, "color", 0x30d030);
+	end
+end
+
+-- take parameters.
+base_alpha = tonumber(PI.base_alpha) or base_alpha;
+base_color = lens_s.PI.color_opt(PI.base_color, base_color);
+mul_luma = tonumber(PI.mul_luma) or mul_luma;
+add_luma = tonumber(PI.add_luma) or add_luma;
+mul_chroma = tonumber(PI.mul_chroma) or mul_chroma;
+tint_color = tonumber(PI.tint_color) or tint_color;
+tint_luma = tonumber(PI.tint_luma) or tint_luma;
+tint_chroma = tonumber(PI.tint_chroma) or tint_chroma;
+blur = tonumber(PI.blur) or blur;
+blur_aspect = tonumber(PI.blur_aspect) or blur_aspect;
+blur_luma_weight = tonumber(PI.blur_luma_weight) or blur_luma_weight;
+noise_intensity = tonumber(PI.noise_intensity) or noise_intensity;
+noise_seed = tonumber(PI.noise_seed) or noise_seed;
+noise_size = tonumber(PI.noise_size) or noise_size;
+move_x = tonumber(PI.move_x) or move_x;
+move_y = tonumber(PI.move_y) or move_y;
+scale = tonumber(PI.scale) or scale;
+rotate = tonumber(PI.rotate) or rotate;
+anchor_screen = lens_s.PI.as_bool(PI.anchor_screen, anchor_screen);
+back_color = lens_s.PI.color_opt(PI.back_color, back_color);
+
+-- normalize parameters.
+base_alpha = math.min(math.max(1 - base_alpha / 100, 0), 1);
+mul_luma = math.max(mul_luma / 100, 0);
+add_luma = add_luma / 100;
+mul_chroma = math.max(mul_chroma / 100, 0);
+tint_color = math.floor(0.5 + tint_color) % 2 ^ 24;
+tint_luma = math.max(tint_luma / 100, 0);
+tint_chroma = math.max(tint_chroma / 100, 0);
+blur = math.min(math.max(blur, 0), 1000);
+blur_aspect = math.min(math.max(blur_aspect / 100, -1), 1);
+blur_luma_weight = math.min(math.max(blur_luma_weight, 0), 60);
+noise_intensity = math.max(noise_intensity / 100, 0);
+noise_seed = math.floor(0.5 + noise_seed);
+if noise_seed >= 0 then
+	noise_seed = noise_seed
+		+  2525 * (obj.id % 2 ^ 20)
+		+ 13579 * (obj.effect_id % 2 ^ 20)
+		+ 54321 * (obj.index % 2 ^ 20);
+end
+noise_seed = noise_seed % 2 ^ 20;
+noise_size = math.max(noise_size / 100, 1);
+scale = math.min(math.max(scale / 100, 0.01), 100);
+rotate = 2 * math.pi * ((rotate / 360) % 1);
+
+-- pass to core.
+lens_s.effect.acryl(
+	base_alpha, base_color,
+	mul_luma, add_luma, mul_chroma,
+	tint_color, tint_luma, tint_chroma,
+	blur * math.min(1 + blur_aspect, 1), blur * math.min(1 - blur_aspect, 1), blur_luma_weight,
+	noise_intensity, noise_seed, noise_size,
+	move_x, move_y, scale, rotate, anchor_screen,
+	back_color);
+
+@レンズσ
+--information:レンズσ@Lens_S v1.10 by σ軸
+--label:Lens_S
+--require:2011000
+--group:色設定,true
+--track@mul_luma:透過輝度,0,200,80,0.01,,0.5
+--track@add_luma:輝度補正,-100,100,0,0.01
+--track@mul_chroma:透過彩度,0,200,80,0.01,,0.5
+--track@face_luma:表面輝度,0,200,20,0.01,,0.5
+--track@face_chroma:表面彩度,0,200,80,0.01,,0.5
+--group:形状設定,true
+--track@lift:背景距離,-1000,1000,200,0.01,,0.2
+--track@lens_amplify:起伏,0,1000,32,0.01,,0.2
+--track@lens_round:丸み,0,4000,32,0.01,,0.05
+--track@edge_amplify:輪郭起伏,-100,100,50,0.01
+--track@edge_round:輪郭丸み,0,100,50,0.01
+--track@luma_amplify:輝度起伏,-100,100,0,0.01
+--track@luma_round:輝度丸み,0,100,50,0.01
+--track@col_amplify:色境界起伏,-100,100,0,0.01
+--track@col_round:色境界丸み,0,100,50,0.01
+--track@col_thresh:色境界しきい値,0,100,4,0.01,,0.2
+--track@smooth:平滑化,0,1000,100,0.01,,0.2
+--check@visualize_shape:形状可視化,false
+--group:屈折設定,false
+--track@refr_idx:屈折率,100,400,150,0.01,,0.5
+--track@chrm_abrr:色収差,-100,100,3,0.001,,0.1
+--group:光設定,false
+--track@light_angle:光角度,-1440,1440,-20,0.01,,0.25
+--track@refl_power:光沢,0,100,70,0.01
+--track@refl_light:ハイライト,0,400,30,0.01,,0.25
+--track@refl_shadow:シャドウ,0,400,30,0.01,,0.25
+--checksection@light_screen:光角度を画面基準,false,false
+--group:ぼかし設定,false
+--track@blur:blur::範囲,0,1000,0,0.01,,0.2
+--track@blur_aspect:blur::縦横比,-100,100,0,0.001
+--track@blur_luma_weight:blur::光の強さ,0,60,0,0.1
+--track@noise_intensity:noise::ノイズ,0,100,0,0.01,,0.1
+--track@noise_seed:noise::シード,-65536,65535,10000,1
+--track@noise_size:noise::ドットサイズ,100,6400,100,0.01,,0.0625
+--group:背景配置,false
+--track@move_x:移動X,-4000,4000,0,0.01
+--track@move_y:移動Y,-4000,4000,0,0.01
+--trackgroup@move_x,move_y:MoveXY
+--track@scale:拡大率,1,10000,100,0.001,,0.02
+--track@rotate:回転,-1440,1440,0,0.01,,0.25
+--checksection@anchor_screen:画面基準で配置,false,false
+--group:その他,false
+--color@back_color:背景色,nil
+--select@chrm_abrr_order:色収差順序=0,RGB=0,GBR=1,BRG=2
+--value@PI:PI,{}
+--[[pixelshader@dist_init:
+half4 enc(uint4 p) { p += 1 << 13; p &= 0xffff; p = (p << 15) | (p >> 1); return f16tof32(p); }
+uint4 dec(half4 u) { uint4 p = f32tof16(u); p = (p >> 15) | (p << 1); p &= 0xffff; p -= 1 << 13; return p; }
+bool valid(uint2 p) { return all((p + (1 << 13)) < (3 << 13)); }
+static const uint2 p_none = (1 << 15) - 1;
+
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+	float thresh;
+};
+static const float3x3 to_bt601 = {
+	0.299, 0.587, 0.114,
+	-0.16873589, -0.3312641, 0.5,
+	0.5, -0.41868758, -0.08131241,
+};
+
+float4 dist_init(float4 pos : SV_Position) : SV_Target
+{
+	const int2 p = int2(pos.xy);
+	const uint2 p_edge = src[uint2(p)].a > 0 ? p_none : uint2(p);
+
+	float4 dx = 0, dy = 0;
+	[unroll] for (int y = -1; y <= 1; y++) {
+		[unroll] for (int x = -1; x <= 1; x++) {
+			if (x == 0 && y == 0) continue;
+			const float4 c = src.Load(int3(p + int2(x, y), 0));
+			dx += x * c; dy += y * c;
+		}
+	}
+	dx.xyz = mul(to_bt601, dx.rgb);
+	dy.xyz = mul(to_bt601, dy.rgb);
+	const float L = dot(dx, dx) + dot(dy, dy);
+	const uint2 p_col = src[p].a > 0 && L < 4 * thresh * thresh ? p_none : uint2(p);
+
+	return enc(uint4(p_edge, p_col));
+}
+
+]]
+--[[pixelshader@dist_step:
+half4 enc(uint4 p) { p += 1 << 13; p &= 0xffff; p = (p << 15) | (p >> 1); return f16tof32(p); }
+uint4 dec(half4 u) { uint4 p = f32tof16(u); p = (p >> 15) | (p << 1); p &= 0xffff; p -= 1 << 13; return p; }
+bool valid(uint2 p) { return all((p + (1 << 13)) < (3 << 13)); }
+static const uint2 p_none = (1 << 15) - 1;
+
+Texture2D prev : register(t0);
+cbuffer constant0 : register(b0) {
+	float2 size_f;
+	float step_len_f;
+};
+static const uint2 size = uint2(size_f);
+static const int step_len = int(step_len_f);
+
+float4 dist_step(float4 pos : SV_Position) : SV_Target
+{
+	const uint2 p0 = int2(pos.xy);
+
+	uint4 p_min = uint4(p_none, p_none);
+	int2 len_sq_min = dot(p_none, p_none);
+	[unroll] for (int j = -1; j <= 1; j++) {
+		[unroll] for (int i = -1; i <= 1; i++) {
+			uint4 p = uint4(p0 + int2(i, j) * step_len, 0, 0); p.zw = p.xy;
+			if (all(p.xy < size)) p = dec(prev[p.xy]);
+
+			const int4 dp = p - int4(p0, p0);
+			const int2 len_sq = int2(dot(dp.xy, dp.xy), dot(dp.zw, dp.zw));
+			if (valid(p.xy) && len_sq.x < len_sq_min.x) {
+				p_min.xy = p.xy;
+				len_sq_min.x = len_sq.x;
+			}
+			if (valid(p.zw) && len_sq.y < len_sq_min.y) {
+				p_min.zw = p.zw;
+				len_sq_min.y = len_sq.y;
+			}
+		}
+	}
+
+	return enc(p_min);
+}
+
+]]
+--[[pixelshader@dist_fin:
+half4 enc(uint4 p) { p += 1 << 13; p &= 0xffff; p = (p << 15) | (p >> 1); return f16tof32(p); }
+uint4 dec(half4 u) { uint4 p = f32tof16(u); p = (p >> 15) | (p << 1); p &= 0xffff; p -= 1 << 13; return p; }
+bool valid(uint2 p) { return all((p + (1 << 13)) < (3 << 13)); }
+static const uint2 p_none = (1 << 15) - 1;
+
+Texture2D prev : register(t0);
+cbuffer constant0 : register(b0) {
+	float2 size_f;
+};
+static const uint2 size = uint2(size_f);
+
+float4 dist_fin(float4 pos : SV_Position) : SV_Target
+{
+	const uint2 p0 = int2(pos.xy);
+
+	uint4 p_min = uint4(p_none, p_none);
+	int2 len_sq_min = dot(p_none, p_none);
+	[unroll] for (int j = -1; j <= 1; j++) {
+		[unroll] for (int i = -1; i <= 1; i++) {
+			uint4 p = uint4(p0 + int2(i, j), 0, 0); p.zw = p.xy;
+			if (all(p.xy < size)) p = dec(prev[p.xy]);
+
+			const int4 dp = p - int4(p0, p0);
+			const int2 len_sq = int2(dot(dp.xy, dp.xy), dot(dp.zw, dp.zw));
+			if (valid(p.xy) && len_sq.x < len_sq_min.x) {
+				p_min.xy = p.xy;
+				len_sq_min.x = len_sq.x;
+			}
+			if (valid(p.zw) && len_sq.y < len_sq_min.y) {
+				p_min.zw = p.zw;
+				len_sq_min.y = len_sq.y;
+			}
+		}
+	}
+
+	return float4(int4(p_min) - int4(p0, p0));
+}
+
+]]
+--[[computeshader@calc_lens:
+RWTexture2D<half4> pos_map : register(u0);
+RWTexture2D<half4> lit_map : register(u1);
+Texture2D<half4> src : register(t0);
+cbuffer constant0 : register(b0) {
+	float2 size_f; float ht_adj_factor;
+	float lift, edge_amplify, edge_round, luma_amplify, col_amplify, col_round,
+		refr_idx;
+	float2 dir_light; float refl_power;
+};
+static const uint2 size = uint2(size_f);
+
+float calc_luma(float4 col)
+{
+	static const float3 luma_coeff = { 0.299, 0.587, 0.114 };
+	return dot(luma_coeff, col.rgb) / col.a;
+}
+float calc_d_luma(float4 c0, float luma, float4 c1)
+{
+	return c0.a > 0 ? c1.a > 0 ?
+		0.5 * (calc_luma(c1) - calc_luma(c0)) :
+		luma - calc_luma(c0) : c1.a > 0 ?
+		calc_luma(c1) - luma : 0;
+}
+float2 grad_cylinder(float2 pos, float rnd, out float height)
+{
+	const float L = length(pos),
+		r = rnd > 0 ? 1 - L / max(L, rnd) : 0, s = sqrt(1 - r * r), t = r / s;
+	height = s;
+	return L > 0 && rnd > 0 ? -(t / (L * rnd)) * pos : 0;
+}
+float2 grad_height(float2 pos_edge, float2 pos_col, float luma, float2 d_luma, out float height)
+{
+	height = edge_amplify + luma_amplify * luma;
+	float2 slope = luma_amplify * d_luma;
+
+	float ht; float2 sl;
+	sl = grad_cylinder(pos_edge, edge_round, ht);
+	slope = ht * slope + sl * height;
+	height *= ht;
+
+	sl = grad_cylinder(pos_col, col_round, ht);
+	slope += col_amplify * sl;
+	height += col_amplify * ht;
+
+	return slope;
+}
+[numthreads(8, 8, 1)]
+void calc_lens(uint2 id : SV_DispatchThreadID)
+{
+	if (any(id >= size)) return;
+	const float4 p = pos_map[id];
+	if (all(p.xy == 0)) {
+		pos_map[id] = 0; lit_map[id] = 0;
+		return;
+	}
+	const float luma = calc_luma(src[id]);
+	const float2 d_luma = float2(
+		calc_d_luma(src.Load(int3(id.x - 1, id.y, 0)), luma, src.Load(int3(id.x + 1, id.y, 0))),
+		calc_d_luma(src.Load(int3(id.x, id.y - 1, 0)), luma, src.Load(int3(id.x, id.y + 1, 0))));
+	float ht;
+	const float2 slope = grad_height(p.xy, p.zw, luma, d_luma, ht);
+	ht += lift;
+
+	const float t2_i = dot(slope, slope), t_i = sqrt(t2_i), c_i = 1 / sqrt(1 + t2_i);
+	const float2 ht_dir = (ht_adj_factor * ht) * (t_i > 0 ? slope / t_i : 0);
+
+	// refraction.
+	float t_t = t2_i / (1 + t2_i); // sin^2(a_i)
+	t_t /= refr_idx * refr_idx; // sin^2(a_t)
+	const float c_t = sqrt(1 - t_t); // cos(a_t)
+	t_t = sqrt(t_t / (1 - t_t)); // tan(a_t)
+	t_t = (t_i - t_t) / (1 + t_i * t_t); // tan(a_i - a_t)
+
+	// reflection.
+	const bool has_reflect = t2_i > 1;
+	const float t_r = has_reflect ? max(2 * t_i / (1 - t2_i), -2) : 0; // tan(2 a_i)
+
+	// reflection coefficient by Fresnel equations.
+	float refl_cff; {
+		const float2 R = {
+			(c_i - refr_idx * c_t) / (c_i + refr_idx * c_t),
+			(c_t - refr_idx * c_i) / (c_t + refr_idx * c_i)
+		};
+		refl_cff = 0.5 * dot(R, R);
+	}
+
+	// highlights. Beckmann distribution.
+	float2 lit = -dot(slope, dir_light) * float2(1, -1);
+	lit = 0.5 * c_i * (sqrt(3) + lit);
+	lit = lit > 0 ? 1 / (lit * lit) : 0;
+	lit = lit * lit * exp(-refl_power * abs(lit - 1));
+
+	pos_map[id] = 512.0 * float4(t_t * ht_dir, refl_cff, 1);
+	lit_map[id] = 512.0 * float4(t_r * ht_dir, lit.x - lit.y, has_reflect ? 1 : 0);
+}
+
+]]
+--[[pixelshader@combine:
+// IbukiHash by Andante (https://twitter.com/andanteyk)
+// This work is marked with CC0 1.0. To view a copy of this license, visit https://creativecommons.org/publicdomain/zero/1.0/
+
+float ibuki(float4 v)
+{
+    const uint4 mult =
+        uint4(0xae3cc725, 0x9fe72885, 0xae36bfb5, 0x82c1fcad);
+
+    uint4 u = uint4(v);
+    u = u * mult;
+    u ^= u.wxyz ^ u >> 13;
+
+    uint r = dot(u, mult);
+
+    r ^= r >> 11;
+    r = (r * r) ^ r;
+
+    return r * 2.3283064365386962890625e-10;
+}
+
+Texture2D src : register(t0);
+Texture2D back : register(t1);
+Texture2D refr_map : register(t2);
+Texture2D refl_map : register(t3);
+SamplerState smp : register(s0);
+cbuffer constant0 : register(b0) {
+	float2 size_f; float back_margin, ht_adj_factor;
+	float3 chrm_abrr;
+	float refl_power; float2 refl_light;
+	float mul_luma, add_luma, mul_chroma;
+	float face_luma, face_chroma;
+	float noise_intensity, noise_seed, inv_noise_size;
+	float2 noise_offset;
+};
+static const uint2 size_back = uint2(size_f + 2 * back_margin);
+static const float pi = 2 * acos(0);
+static const float2 V01 = { 0, 1 };
+static const float3x3 to_bt601 = {
+	0.299, 0.587, 0.114,
+	-0.16873589, -0.3312641, 0.5,
+	0.5, -0.41868758, -0.08131241,
+}, from_bt601 = {
+	1, 0, 1.402,
+	1, -0.3441363, -0.7141363,
+	1, 1.772, 0,
+},
+mat_luma = mul(mul(from_bt601, float3x3(V01.yxx, V01.xxx, V01.xxx)), to_bt601),
+mat_chroma = mul(mul(from_bt601, float3x3(V01.xxx, V01.xyx, V01.xxy)), to_bt601);
+
+static const float3x3
+	mat_back = mul_luma * mat_luma + mul_chroma * mat_chroma,
+	mat_fore = face_luma * mat_luma + face_chroma * mat_chroma;
+
+float4 combine(float4 pos : SV_Position) : SV_Target
+{
+	float4 c = src[pos.xy], p = refr_map[pos.xy] / 512.0, l = refl_map[pos.xy] / 512.0;
+	p.xyz = p.w > 0 ? p.xyz / p.w : 0;
+	l.xy = l.w > 0 ? l.xy / l.w : 0;
+	l.z = p.w > 0 ? l.z / p.w : 0;
+	const float2 refr_pos = ht_adj_factor * p.xy, refl_pos = ht_adj_factor * l.xy;
+	float2 lit = max(sign(l.z) * pow(abs(refl_power / pi * l.z), 1 / 2.2) * float2(1, -1), 0);
+	const float refr_cff = 1 - p.z,
+		refl_cff = saturate(4 * (l.w - 0.5) + 0.5) * p.z;
+	const float noise = noise_intensity * (ibuki(float4(
+		inv_noise_size * (pos.xy - noise_offset) + ((1 << 16) - 0.5),
+		noise_seed, 3)) - 0.5);
+
+	const float2
+		back_r = back.SampleLevel(smp, (pos.xy + chrm_abrr.r * refr_pos + back_margin) / size_back, 0).ra,
+		back_g = back.SampleLevel(smp, (pos.xy + chrm_abrr.g * refr_pos + back_margin) / size_back, 0).ga,
+		back_b = back.SampleLevel(smp, (pos.xy + chrm_abrr.b * refr_pos + back_margin) / size_back, 0).ba;
+	float3 b_rgb = { back_r.x, back_g.x, back_b.x },
+		b_a = { back_r.y, back_g.y, back_b.y };
+	const float4 refl = refl_cff * back.SampleLevel(smp, (pos.xy + refl_pos + back_margin) / size_back, 0);
+	lit.x = saturate(refl_light.x * lit.x);
+	lit.y = refl_light.y * saturate(lit.y);
+
+	b_rgb = mul(mat_back, b_rgb);
+	b_rgb *= (1 - lit.y) * refr_cff;
+	b_rgb += add_luma * b_a;
+
+	c.rgb = mul(mat_fore, c.rgb);
+	c.rgb += c.a * (b_rgb + refl.rgb);
+	c.rgb += c.a * (lit.x + noise);
+
+	c.a *= saturate((face_luma + 2 * face_chroma + dot(b_a, 1)) / 3);
+
+	return c;
+}
+
+]]
+--[[computeshader@visualize:
+RWTexture2D<half4> pos_map : register(u0);
+Texture2D<half4> src : register(t0);
+cbuffer constant0 : register(b0) {
+	float2 size_f; float ht_adj_factor;
+	float lift, edge_amplify, edge_round, luma_amplify, col_amplify, col_round;
+};
+static const uint2 size = uint2(size_f);
+
+float calc_luma(float4 col)
+{
+	static const float3 luma_coeff = { 0.299, 0.587, 0.114 };
+	return dot(luma_coeff, col.rgb) / col.a;
+}
+float cylinder(float2 pos, float rnd)
+{
+	const float L = length(pos),
+		r = rnd > 0 ? 1 - L / max(L, rnd) : 0;
+	return sqrt(1 - r * r);
+}
+float grad_height(float2 pos_edge, float2 pos_col, float luma)
+{
+	float height = edge_amplify + luma_amplify * luma;
+	height *= cylinder(pos_edge, edge_round);
+	height += col_amplify * cylinder(pos_col, col_round);
+
+	return height;
+}
+[numthreads(8, 8, 1)]
+void visualize(uint2 id : SV_DispatchThreadID)
+{
+	if (any(id >= size)) return;
+	const float4 p = pos_map[id];
+	if (all(p.xy == 0)) {
+		pos_map[id] = 0;
+		return;
+	}
+	const float ht = grad_height(p.xy, p.zw, calc_luma(src[id])) + lift;
+
+	pos_map[id] = float4((ht_adj_factor * ht).rrr, 1);
+}
+
+]]
+local obj, math, tonumber = obj, math, tonumber;
+local lens_s = require("Lens_S");
+
+if obj.getoption("gui") then
+	if anchor_screen then
+		obj.setanchor("move_x,move_y", 0, "line", "screen");
+		obj.setanchor({ 0, 0, move_x, move_y }, 2, "line", "screen", "color", 0x30d030);
+	else
+		local cx, cy, _ = obj.getvalue("center");
+		cx, cy = cx + obj.cx, cy + obj.cy;
+		obj.setanchor("move_x,move_y", 0, "line", "offset", cx, cy);
+		obj.setanchor({ 0, 0, move_x, move_y }, 2, "line", "offset", cx, cy, "color", 0x30d030);
+	end
+else visualize_shape = false end
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+mul_luma = tonumber(PI.mul_luma) or mul_luma;
+add_luma = tonumber(PI.add_luma) or add_luma;
+mul_chroma = tonumber(PI.mul_chroma) or mul_chroma;
+face_luma = tonumber(PI.face_luma) or face_luma;
+face_chroma = tonumber(PI.face_chroma) or face_chroma;
+lift = tonumber(PI.lift) or lift;
+lens_amplify = tonumber(PI.lens_amplify) or lens_amplify;
+lens_round = tonumber(PI.lens_round) or lens_round;
+edge_amplify = tonumber(PI.edge_amplify) or edge_amplify;
+edge_round = tonumber(PI.edge_round) or edge_round;
+luma_amplify = tonumber(PI.luma_amplify) or luma_amplify;
+luma_round = tonumber(PI.luma_round) or luma_round;
+col_amplify = tonumber(PI.col_amplify) or col_amplify;
+col_round = tonumber(PI.col_round) or col_round;
+col_thresh = tonumber(PI.col_thresh) or col_thresh;
+smooth = tonumber(PI.smooth) or smooth;
+refr_idx = tonumber(PI.refr_idx) or refr_idx;
+chrm_abrr = tonumber(PI.chrm_abrr) or chrm_abrr;
+light_angle = tonumber(PI.light_angle) or light_angle;
+refl_power = tonumber(PI.refl_power) or refl_power;
+refl_light = tonumber(PI.refl_light) or refl_light;
+refl_shadow = tonumber(PI.refl_shadow) or refl_shadow;
+light_screen = lens_s.PI.as_bool(PI.light_screen, light_screen);
+blur = tonumber(PI.blur) or blur;
+blur_aspect = tonumber(PI.blur_aspect) or blur_aspect;
+blur_luma_weight = tonumber(PI.blur_luma_weight) or blur_luma_weight;
+noise_intensity = tonumber(PI.noise_intensity) or noise_intensity;
+noise_seed = tonumber(PI.noise_seed) or noise_seed;
+move_x = tonumber(PI.move_x) or move_x;
+noise_size = tonumber(PI.noise_size) or noise_size;
+move_y = tonumber(PI.move_y) or move_y;
+scale = tonumber(PI.scale) or scale;
+rotate = tonumber(PI.rotate) or rotate;
+anchor_screen = lens_s.PI.as_bool(PI.anchor_screen, anchor_screen);
+back_color = lens_s.PI.color_opt(PI.back_color, back_color);
+if PI.chrm_abrr_order then
+	local name2num = {
+		["RGB"] = 0, ["GBR"] = 1, ["BRG"] = 2,
+	};
+	chrm_abrr_order = name2num[PI.chrm_abrr_order] or chrm_abrr_order;
+end
+
+-- normalize parameters.
+mul_luma = math.max(mul_luma / 100, 0);
+add_luma = add_luma / 100;
+mul_chroma = math.max(mul_chroma / 100, 0);
+face_luma = math.max(face_luma / 100, 0);
+face_chroma = math.max(face_chroma / 100, 0);
+lens_amplify = math.max(lens_amplify, 0);
+lens_round = math.max(lens_round, 0);
+edge_amplify = edge_amplify * lens_amplify / 100;
+edge_round = math.max(edge_round * lens_round / 100, 0);
+luma_amplify = luma_amplify * lens_amplify / 100;
+luma_round = math.min(math.max(luma_round * lens_round / 200, 0), 1000);
+col_amplify = col_amplify * lens_amplify / 100;
+col_round = math.max(col_round * lens_round / 100, 0);
+col_thresh = math.min(math.max(col_thresh / 100, 0), 1);
+smooth = math.min(math.max(lens_round ^ 0.5 * smooth / 100, 0), 1000);
+refr_idx = math.max(refr_idx / 100, 1);
+chrm_abrr = math.min(math.max(chrm_abrr / 100, -1), 1);
+light_angle = 2 * math.pi * ((light_angle / 360) % 1);
+refl_power = 1.5 * 128 ^ math.min(math.max(refl_power / 100, 0), 1);
+refl_light = math.max(refl_light / 100, 0);
+refl_shadow = math.max(refl_shadow / 100, 0);
+blur = math.min(math.max(blur, 0), 1000);
+blur_aspect = math.min(math.max(blur_aspect / 100, -1), 1);
+blur_luma_weight = math.min(math.max(blur_luma_weight, 0), 60);
+noise_intensity = math.max(noise_intensity / 100, 0);
+noise_seed = math.floor(0.5 + noise_seed);
+if noise_seed >= 0 then
+	noise_seed = noise_seed
+		+  2525 * (obj.id % 2 ^ 20)
+		+ 13579 * (obj.effect_id % 2 ^ 20)
+		+ 54321 * (obj.index % 2 ^ 20);
+end
+noise_seed = noise_seed % 2 ^ 20;
+noise_size = math.max(noise_size / 100, 1);
+scale = math.min(math.max(scale / 100, 0.01), 100);
+rotate = 2 * math.pi * ((rotate / 360) % 1);
+chrm_abrr_order = math.min(math.max(math.floor(0.5 + chrm_abrr_order), 0), 2);
+
+--#endregion PI / normalize parameters.
+
+-- pass to core.
+lens_s.effect.lens(
+	mul_luma, add_luma, mul_chroma, face_luma, face_chroma,
+	lift, edge_amplify, edge_round, luma_amplify, luma_round, col_amplify, col_round, col_thresh, smooth,
+	refr_idx, chrm_abrr,
+	light_angle, refl_power, refl_light, refl_shadow, light_screen,
+	blur * math.min(1 + blur_aspect, 1), blur * math.min(1 - blur_aspect, 1), blur_luma_weight,
+	noise_intensity, noise_seed, noise_size,
+	move_x, move_y, scale, rotate, anchor_screen,
+	back_color, chrm_abrr_order,
+	visualize_shape);
+

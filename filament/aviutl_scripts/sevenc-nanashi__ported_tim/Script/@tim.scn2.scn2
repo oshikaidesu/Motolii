@@ -1,0 +1,585 @@
+@ブラースライドT@シーンチェンジセットT
+--label:tim\シーンチェンジ\@シーンチェンジセットT
+--track@track_blur_amount:ブラー量,0,5000,50,0.1
+--select@select_flow_direction:流れ方向=0,横=0,縦=1
+--track@track_split_count:分割数,1,100,20,1
+local calculate_warp_position = function(frame_position, half_frame_count)
+    local normalized_position
+
+    if half_frame_count > 2 then
+        local mirrored_position = frame_position
+        if frame_position > half_frame_count * 0.5 then
+            mirrored_position = half_frame_count - frame_position
+        end
+        if mirrored_position > 0.5 then
+            normalized_position = 0.25
+                + (math.sqrt((8 * mirrored_position - 4) * (half_frame_count - 2) + 1) - 1)
+                    / (8 * (half_frame_count - 2))
+        else
+            normalized_position = mirrored_position * 0.5
+        end
+        if frame_position > half_frame_count * 0.5 then
+            normalized_position = 1 - normalized_position
+        end
+    else
+        normalized_position = frame_position / half_frame_count
+    end
+
+    return normalized_position
+end
+
+local blur_range = track_blur_amount * 0.5
+local flow_direction = math.floor(select_flow_direction)
+local split_count = math.floor(track_split_count)
+
+local last_frame = obj.totalframe - 1
+local half_frame_count = (last_frame + 2) * 0.5
+local frame_position = obj.frame -- math.floor(obj.getvalue("scenechange") * TF)
+
+local image_width, image_height = obj.getpixel()
+local half_width, half_height = image_width / 2, image_height / 2
+
+obj.copybuffer("cache:ch", "object")
+obj.copybuffer("cache:after", "framebuffer")
+obj.setoption("drawtarget", "tempbuffer", image_width, image_height)
+
+if flow_direction == 0 then
+    obj.drawpoly(-half_width, -half_height, 0, 0, -half_height, 0, 0, half_height, 0, -half_width, half_height, 0)
+    obj.copybuffer("object", "cache:after")
+    obj.drawpoly(0, -half_height, 0, half_width, -half_height, 0, half_width, half_height, 0, 0, half_height, 0)
+    obj.copybuffer("object", "tempbuffer")
+    obj.effect("方向ブラー", "範囲", blur_range, "角度", -90, "サイズ固定", 1)
+    local normalized_segment_width = 1 / split_count
+    local segment_width = image_width / split_count
+    for i = 0, split_count - 1 do
+        local x0 = frame_position * 0.5 + i * normalized_segment_width
+        local x1 = x0 + normalized_segment_width
+        local u0 = image_width * calculate_warp_position(x0, half_frame_count)
+        local u1 = image_width * calculate_warp_position(x1, half_frame_count)
+        x0 = -half_width + i * segment_width
+        x1 = x0 + segment_width
+        obj.drawpoly(
+            x0,
+            -half_height,
+            0,
+            x1,
+            -half_height,
+            0,
+            x1,
+            half_height,
+            0,
+            x0,
+            half_height,
+            0,
+            u0,
+            0,
+            u1,
+            0,
+            u1,
+            image_height,
+            u0,
+            image_height
+        )
+    end
+    if frame_position == 0 then
+        obj.copybuffer("object", "cache:ch")
+        obj.effect("斜めクリッピング", "角度", -90, "ぼかし", image_width / 3, "中心X", -image_width / 6)
+        obj.draw()
+    end
+    if frame_position == last_frame then
+        obj.load("framebuffer")
+        obj.effect("斜めクリッピング", "角度", 90, "ぼかし", image_width / 3, "中心X", image_width / 6)
+        obj.draw()
+    end
+else
+    obj.drawpoly(-half_width, -half_height, 0, half_width, -half_height, 0, half_width, 0, 0, -half_width, 0, 0)
+    obj.copybuffer("object", "frame")
+    obj.drawpoly(-half_width, 0, 0, half_width, 0, 0, half_width, half_height, 0, -half_width, half_height, 0)
+    obj.copybuffer("object", "tempbuffer")
+    obj.effect("方向ブラー", "範囲", blur_range, "角度", 0, "サイズ固定", 1)
+    local normalized_segment_height = 1 / split_count
+    local segment_height = image_height / split_count
+    for i = 0, split_count - 1 do
+        local y0 = frame_position * 0.5 + i * normalized_segment_height
+        local y1 = y0 + normalized_segment_height
+        local v0 = image_height * calculate_warp_position(y0, half_frame_count)
+        local v1 = image_height * calculate_warp_position(y1, half_frame_count)
+        y0 = -half_height + i * segment_height
+        y1 = y0 + segment_height
+        obj.drawpoly(
+            -half_width,
+            y0,
+            0,
+            half_width,
+            y0,
+            0,
+            half_width,
+            y1,
+            0,
+            -half_width,
+            y1,
+            0,
+            0,
+            v0,
+            image_width,
+            v0,
+            image_width,
+            v1,
+            0,
+            v1
+        )
+    end
+    if frame_position == 0 then
+        obj.copybuffer("object", "cache:ch")
+        obj.effect("斜めクリッピング", "角度", 0, "ぼかし", image_height / 3, "中心Y", -image_height / 6)
+        obj.draw()
+    end
+    if frame_position == last_frame then
+        obj.load("framebuffer")
+        obj.effect(
+            "斜めクリッピング",
+            "角度",
+            180,
+            "ぼかし",
+            image_height / 3,
+            "中心Y",
+            image_height / 6
+        )
+        obj.draw()
+    end
+end
+
+obj.copybuffer("object", "tempbuffer")
+obj.setoption("drawtarget", "framebuffer")
+obj.draw()
+
+@ホールT@シーンチェンジセットT
+--label:tim\シーンチェンジ\@シーンチェンジセットT
+--track@track_size:サイズ,10,2000,100,0.1
+--track@track_open_duration_percent:開時間％,0.1,100,10,0.1
+--track@track_randomness_percent:ランダム性％,0,100,100,0.1
+--track@track_random_seed:乱数シード,0,100000,5,1
+local transition_progress = obj.getvalue("scenechange")
+local cell_size = track_size
+local open_duration = track_open_duration_percent * 0.01
+local start_time_scale = 1 - open_duration
+local image_width = obj.w
+local image_height = obj.h
+local half_width = image_width * 0.5
+local half_height = image_height * 0.5
+local column_count = math.ceil(image_width / cell_size)
+local row_count = math.ceil(image_height / cell_size)
+local diameter = 2 * cell_size
+local random_offset_rate = track_randomness_percent * 0.01
+local random_seed = math.floor(track_random_seed)
+if random_offset_rate < 0 then
+    random_offset_rate = 0
+elseif random_offset_rate > 1 then
+    random_offset_rate = 1
+end
+local vertex_x = {}
+local vertex_y = {}
+
+for i = 0, column_count do
+    vertex_x[i] = {}
+    vertex_y[i] = {}
+    local base_x = i * cell_size
+    for j = 0, row_count do
+        vertex_x[i][j] = base_x + obj.rand(-cell_size, cell_size, i, j + random_seed + 1000) * random_offset_rate
+        vertex_y[i][j] = j * cell_size + obj.rand(-cell_size, cell_size, i, j + random_seed + 2000) * random_offset_rate
+    end
+end
+
+for i = 0, column_count do
+    vertex_y[i][0] = 0
+    vertex_y[i][row_count] = image_height
+end
+
+for j = 0, row_count do
+    vertex_x[0][j] = 0
+    vertex_x[column_count][j] = image_width
+end
+
+local cell_start_times = {}
+local maximum_start_time = 0
+local minimum_start_time = 1000
+for i = 0, column_count - 1 do
+    cell_start_times[i] = {}
+    for j = 0, row_count - 1 do
+        cell_start_times[i][j] = obj.rand(0, 1000, i, j + random_seed + 3000)
+        if maximum_start_time < cell_start_times[i][j] then
+            maximum_start_time = cell_start_times[i][j]
+        end
+        if minimum_start_time > cell_start_times[i][j] then
+            minimum_start_time = cell_start_times[i][j]
+        end
+    end
+end
+
+start_time_scale = start_time_scale / (maximum_start_time - minimum_start_time)
+for i = 0, column_count - 1 do
+    for j = 0, row_count - 1 do
+        cell_start_times[i][j] = start_time_scale * (cell_start_times[i][j] - minimum_start_time)
+    end
+end
+
+obj.copybuffer("cache:original", "object")
+obj.setoption("drawtarget", "tempbuffer", obj.getpixel())
+
+obj.load("figure", "円", 0xffffff, diameter)
+for i = 0, column_count - 1 do
+    for j = 0, row_count - 1 do
+        local cell_progress = (transition_progress - cell_start_times[i][j]) / open_duration
+        if cell_progress > 1 then
+            cell_progress = 1
+        end
+        if cell_progress > 0 then
+            local cell_center_x = (vertex_x[i][j] + vertex_x[i + 1][j] + vertex_x[i + 1][j + 1] + vertex_x[i][j + 1])
+                * 0.25
+            local cell_center_y = (vertex_y[i][j] + vertex_y[i + 1][j] + vertex_y[i + 1][j + 1] + vertex_y[i][j + 1])
+                * 0.25
+            local corner_distance_1 = (vertex_x[i][j] - cell_center_x) * (vertex_x[i][j] - cell_center_x)
+                + (vertex_y[i][j] - cell_center_y) * (vertex_y[i][j] - cell_center_y)
+            local corner_distance_2 = (vertex_x[i + 1][j] - cell_center_x) * (vertex_x[i + 1][j] - cell_center_x)
+                + (vertex_y[i + 1][j] - cell_center_y) * (vertex_y[i + 1][j] - cell_center_y)
+            local corner_distance_3 = (vertex_x[i + 1][j + 1] - cell_center_x)
+                    * (vertex_x[i + 1][j + 1] - cell_center_x)
+                + (vertex_y[i + 1][j + 1] - cell_center_y) * (vertex_y[i + 1][j + 1] - cell_center_y)
+            local corner_distance_4 = (vertex_x[i][j + 1] - cell_center_x) * (vertex_x[i][j + 1] - cell_center_x)
+                + (vertex_y[i][j + 1] - cell_center_y) * (vertex_y[i][j + 1] - cell_center_y)
+            corner_distance_1 = 2
+                * math.sqrt(math.max(corner_distance_1, corner_distance_2, corner_distance_3, corner_distance_4))
+            obj.draw(
+                cell_center_x - half_width,
+                cell_center_y - half_height,
+                0,
+                corner_distance_1 / diameter * cell_progress
+            )
+        end
+    end
+end
+
+obj.copybuffer("cache:delete_area", "tempbuffer")
+obj.copybuffer("tempbuffer", "cache:original")
+obj.setoption("blend", "alpha_sub")
+obj.copybuffer("object", "cache:delete_area")
+obj.draw()
+obj.copybuffer("object", "tempbuffer")
+obj.setoption("drawtarget", "framebuffer")
+obj.setoption("blend", "none")
+obj.draw()
+
+@モザイクT@シーンチェンジセットT
+--label:tim\シーンチェンジ\@シーンチェンジセットT
+--track@track_tile_size:サイズ,1,1000,50,0.1
+--check@check_tile_style:タイル風,0
+--check@track_tile_correction:タイル補正,1
+--check@track_smoothing:滑らか,false
+--hide@track_tile_correction:check_tile_style==0
+
+local transition_progress = obj.getvalue("scenechange")
+if track_smoothing then
+    transition_progress = transition_progress * transition_progress * (3 - 2 * transition_progress)
+end
+local blend_alpha = 4 * transition_progress - 1.5
+if blend_alpha < 0 then
+    blend_alpha = 0
+elseif blend_alpha > 1 then
+    blend_alpha = 1
+end
+local mosaic_size = (track_tile_size - 1) * (1 - math.abs(2 * transition_progress - 1)) + 1
+if check_tile_style == 1 and track_tile_correction == 1 and mosaic_size < 10 then
+    obj.copybuffer("cache:bf", "object")
+end
+obj.copybuffer("tempbuffer", "frame")
+obj.copybuffer("cache:af", "tempbuffer")
+
+obj.effect("モザイク", "サイズ", mosaic_size, "タイル風", check_tile_style)
+obj.draw()
+obj.copybuffer("object", "cache:af")
+obj.effect("モザイク", "サイズ", mosaic_size, "タイル風", check_tile_style)
+obj.draw(0, 0, 0, 1, blend_alpha)
+
+if check_tile_style == 1 and track_tile_correction == 1 and mosaic_size < 10 then
+    local image_width, image_height = obj.getpixel()
+    obj.setoption("drawtarget", "tempbuffer", image_width, image_height)
+    obj.copybuffer("object", "cache:bf")
+    obj.effect("モザイク", "サイズ", mosaic_size)
+    obj.draw()
+    obj.copybuffer("object", "cache:af")
+    obj.effect("モザイク", "サイズ", mosaic_size)
+    obj.draw(0, 0, 0, 1, blend_alpha)
+    obj.load("tempbuffer")
+    obj.setoption("drawtarget", "framebuffer")
+    obj.draw(0, 0, 0, 1, (10 - mosaic_size) / 9)
+end
+
+@ルミナンスT@シーンチェンジセットT
+--label:tim\シーンチェンジ\@シーンチェンジセットT
+--track@track_blur_percent:ぼかし％,0,100,10,0.1
+--check@check_invert_transparency:透過反転,true
+local blur_radius = 4096 * track_blur_percent * 0.01
+local transition_progress = obj.getvalue("scenechange")
+local luminance_threshold = (4096 + 2 * blur_radius) * transition_progress - blur_radius
+
+obj.copybuffer("tempbuffer", "object")
+obj.setoption("drawtarget", "tempbuffer")
+obj.setoption("blend", "alpha_sub")
+
+obj.effect("単色化")
+if check_invert_transparency then
+    obj.effect("反転", "輝度反転", 1)
+end
+obj.effect("ルミナンスキー", "基準輝度", luminance_threshold, "ぼかし", blur_radius, "type", 1)
+obj.draw()
+
+obj.copybuffer("object", "tempbuffer")
+obj.setoption("drawtarget", "framebuffer")
+obj.draw()
+
+@分割スライドT@シーンチェンジセットT
+--label:tim\シーンチェンジ\@シーンチェンジセットT
+--track@track_single_amount:単独量,0,100,40,0.1
+--select@select_mode:モード=1,通常=0,逆順=1,交互=2,逆順・交互=3
+--track@track_split_count:分割数,2,100,5,1
+--check@check_vertical:縦,false
+obj.copybuffer("tempbuffer", "object")
+obj.setoption("drawtarget", "tempbuffer")
+obj.setoption("blend", "alpha_sub")
+
+local transition_progress = obj.getvalue("scenechange")
+local segment_duration = track_single_amount * 0.01
+local split_count = math.max(2, math.floor(track_split_count))
+local selected_mode = math.floor(select_mode)
+local reverse_order = selected_mode % 2 == 1
+local alternate_direction = selected_mode >= 2
+local overlap_duration = (split_count * segment_duration - 1) / (split_count - 1)
+if overlap_duration <= 0 then
+    overlap_duration = 0
+end
+
+local image_width = obj.w
+local image_height = obj.h
+local half_width = 0.5 * image_width
+local half_height = 0.5 * image_height
+
+if check_vertical then
+    for segment_index = 1, split_count do
+        local order_index = segment_index
+        if reverse_order then
+            order_index = split_count - segment_index + 1
+        end
+
+        local x0 = (segment_index - 1) * image_width / split_count - half_width
+        local x1 = segment_index * image_width / split_count - half_width
+        if (order_index - 1) * (segment_duration - overlap_duration) + segment_duration <= transition_progress then --全表示
+            obj.drawpoly(x0, -half_height, 0, x1, -half_height, 0, x1, image_height, 0, x0, image_height, 0)
+        else
+            local revealed_height = (transition_progress - (order_index - 1) * (segment_duration - overlap_duration))
+                * image_height
+                / segment_duration
+            if revealed_height <= 0 then
+                revealed_height = 0
+            end
+            if alternate_direction and segment_index % 2 == 0 then
+                obj.drawpoly(
+                    x0,
+                    half_height - revealed_height,
+                    0,
+                    x1,
+                    half_height - revealed_height,
+                    0,
+                    x1,
+                    half_height,
+                    0,
+                    x0,
+                    half_height,
+                    0
+                )
+            else
+                obj.drawpoly(
+                    x0,
+                    -half_height,
+                    0,
+                    x1,
+                    -half_height,
+                    0,
+                    x1,
+                    revealed_height - half_height,
+                    0,
+                    x0,
+                    revealed_height - half_height,
+                    0
+                )
+            end
+        end
+    end --k
+else
+    for segment_index = 1, split_count do
+        local order_index = segment_index
+        if reverse_order then
+            order_index = split_count - segment_index + 1
+        end
+
+        local y0 = (segment_index - 1) * image_height / split_count - half_height
+        local y1 = segment_index * image_height / split_count - half_height
+        if (order_index - 1) * (segment_duration - overlap_duration) + segment_duration <= transition_progress then --全表示
+            obj.drawpoly(-half_width, y0, 0, half_width, y0, 0, half_width, y1, 0, -half_width, y1, 0)
+        else
+            local revealed_width = (transition_progress - (order_index - 1) * (segment_duration - overlap_duration))
+                * image_width
+                / segment_duration
+            if revealed_width <= 0 then
+                revealed_width = 0
+            end
+            if alternate_direction and segment_index % 2 == 0 then
+                obj.drawpoly(
+                    half_width - revealed_width,
+                    y0,
+                    0,
+                    half_width,
+                    y0,
+                    0,
+                    half_width,
+                    y1,
+                    0,
+                    half_width - revealed_width,
+                    y1,
+                    0
+                )
+            else
+                obj.drawpoly(
+                    -half_width,
+                    y0,
+                    0,
+                    revealed_width - half_width,
+                    y0,
+                    0,
+                    revealed_width - half_width,
+                    y1,
+                    0,
+                    -half_width,
+                    y1,
+                    0
+                )
+            end
+        end
+    end --k
+end
+obj.copybuffer("object", "tempbuffer")
+obj.setoption("drawtarget", "framebuffer")
+obj.draw()
+
+@矩形T@シーンチェンジセットT
+--label:tim\シーンチェンジ\@シーンチェンジセットT
+--track@track_width:幅,5,1000,100,0.1
+--track@track_angle:角度,-3600,3600,0,0.1
+--track@track_tip_width_percent:先端幅％,0,50,35,0.1
+--track@track_height:高さ,1,1000,50,0.1
+local rotate_point = function(x, y, cos, sin)
+    return x * cos - y * sin, x * sin + y * cos
+end
+
+local image_width = obj.w
+local image_height = obj.h
+
+if track_tip_width_percent > 50 then
+    track_tip_width_percent = 50
+elseif track_tip_width_percent < 0 then
+    track_tip_width_percent = 0
+end
+local transition_remaining = 1 - obj.getvalue("scenechange")
+
+local shape_width = track_width
+local tip_width = shape_width * track_tip_width_percent * 0.01
+local base_width = shape_width - tip_width
+local base_half_width = base_width * 0.5
+local tip_half_width = tip_width * 0.5
+local shape_height = track_height
+local shape_half_height = shape_height * 0.5
+
+local angle_degrees = track_angle
+local angle_radians = angle_degrees * math.pi / 180
+
+obj.copybuffer("cache:bf", "object")
+
+obj.setoption("drawtarget", "tempbuffer", shape_width + 2, shape_height + 2)
+obj.load("figure", "四角形", 0xffffff, math.max(shape_width, shape_height))
+
+obj.drawpoly(
+    -base_half_width,
+    -shape_half_height,
+    0,
+    base_half_width,
+    -shape_half_height,
+    0,
+    tip_half_width,
+    shape_half_height,
+    0,
+    -tip_half_width,
+    shape_half_height,
+    0
+)
+obj.drawpoly(
+    -base_half_width - 1,
+    -shape_half_height - 1,
+    0,
+    base_half_width + 1,
+    -shape_half_height - 1,
+    0,
+    base_half_width,
+    -shape_half_height,
+    0,
+    -base_half_width,
+    -shape_half_height,
+    0
+)
+obj.copybuffer("object", "tempbuffer")
+obj.setoption("blend", "alpha_sub")
+
+obj.copybuffer("tempbuffer", "cache:bf")
+
+local cos = math.cos(angle_radians)
+local sin = math.sin(angle_radians)
+local absolute_cosine = math.abs(cos)
+local absolute_sine = math.abs(sin)
+local rotated_width = image_width * absolute_cosine + image_height * absolute_sine
+local rotated_height = image_height * absolute_cosine + image_width * absolute_sine
+
+local rotated_half_width = rotated_width * 0.5
+local rotated_half_height = rotated_height * 0.5
+
+local horizontal_repeat_count = -math.floor(-rotated_half_width / shape_width)
+
+local sweep_y = transition_remaining * (rotated_half_height + shape_half_height)
+for i = -horizontal_repeat_count, horizontal_repeat_count do
+    local x1, y1 = rotate_point(i * shape_width, -sweep_y, cos, sin)
+    obj.draw(x1, y1, 0, 1, 1, 0, 0, angle_degrees)
+end
+local reverse_angle_degrees = 180 + angle_degrees
+for i = 1, horizontal_repeat_count do
+    local dx = (i - 0.5) * shape_width
+    local x1, y1 = rotate_point(dx, sweep_y, cos, sin)
+    obj.draw(x1, y1, 0, 1, 1, 0, 0, reverse_angle_degrees)
+    x1, y1 = rotate_point(-dx, sweep_y, cos, sin)
+    obj.draw(x1, y1, 0, 1, 1, 0, 0, reverse_angle_degrees)
+end
+
+obj.load("figure", "四角形", 0xffffff, math.max(image_width, image_height))
+obj.setoption("blend", "alpha_sub")
+sweep_y = sweep_y + shape_half_height
+local x0, y0 = rotate_point(-rotated_half_width, -rotated_half_height, cos, sin)
+local x1, y1 = rotate_point(rotated_half_width, -rotated_half_height, cos, sin)
+local x2, y2 = rotate_point(rotated_half_width, -sweep_y, cos, sin)
+local x3, y3 = rotate_point(-rotated_half_width, -sweep_y, cos, sin)
+obj.drawpoly(x0, y0, 0, x1, y1, 0, x2, y2, 0, x3, y3, 0)
+x0, y0 = rotate_point(-rotated_half_width, sweep_y, cos, sin)
+x1, y1 = rotate_point(rotated_half_width, sweep_y, cos, sin)
+x2, y2 = rotate_point(rotated_half_width, rotated_half_height, cos, sin)
+x3, y3 = rotate_point(-rotated_half_width, rotated_half_height, cos, sin)
+obj.drawpoly(x0, y0, 0, x1, y1, 0, x2, y2, 0, x3, y3, 0)
+
+obj.copybuffer("object", "tempbuffer")
+obj.setoption("drawtarget", "framebuffer")
+obj.draw()
+

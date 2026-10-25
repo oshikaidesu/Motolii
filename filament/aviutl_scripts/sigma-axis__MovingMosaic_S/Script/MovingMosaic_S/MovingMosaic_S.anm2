@@ -1,0 +1,196 @@
+--[[
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <https://unlicense.org>
+
+]]
+
+--
+-- v1.01
+--
+
+-- https://github.com/sigma-axis/aviutl2_script_MovingMosaic_S
+
+--information:MovingMosaic_S v1.01 by σ軸
+--label:加工
+--filter
+--require:2010800
+--track@size:サイズ,1,2000,12,0.01,,0.1
+--track@seed:シード,-65536,65535,10000,1
+--checksection@convex:タイル風,false,false
+--group:追加設定,false
+--track@aspect:縦横比,-100,100,0,0.01
+--track@X:X,-4000,4000,0,0.01,,0.25
+--track@Y:Y,-4000,4000,0,0.01,,0.25
+--trackgroup@X,Y:OriginPos
+--group:その他,false
+--value@PI:PI,{}
+--[[pixelshader@mosaic:
+// IbukiHash by Andante (https://twitter.com/andanteyk)
+// This work is marked with CC0 1.0. To view a copy of this license, visit https://creativecommons.org/publicdomain/zero/1.0/
+
+float ibuki(float4 v)
+{
+    const uint4 mult =
+        uint4(0xae3cc725, 0x9fe72885, 0xae36bfb5, 0x82c1fcad);
+
+    uint4 u = uint4(v);
+    u = u * mult;
+    u ^= u.wxyz ^ u >> 13;
+
+    uint r = dot(u, mult);
+
+    r ^= r >> 11;
+    r = (r * r) ^ r;
+
+    return r * 2.3283064365386962890625e-10;
+}
+
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+	float2 tile_offset_f, src_size_f, size, origin;
+	float seed;
+};
+static const int2
+	tile_offset = int2(tile_offset_f),
+	src_size = int2(src_size_f);
+
+float4 mosaic(float4 pos : SV_Position) : SV_Target
+{
+	const int2 tile_pos = int2(pos.xy) + tile_offset;
+	const float2 tile_tl = tile_pos * size + origin,
+		tile_br = tile_tl + size;
+	const uint2 sample_pt = clamp(int2(
+		floor(lerp(tile_tl, tile_br, float2(
+			ibuki(float4((1 << 16) + tile_pos, seed, 7)),
+			ibuki(float4((1 << 16) + tile_pos, seed, 11)))))),
+		0, src_size - 1);
+	return src[sample_pt];
+}
+
+]]
+--[[pixelshader@antialias:
+Texture2D src : register(t0);
+SamplerState smp : register(s0);
+cbuffer constant0 : register(b0) {
+	float2 tile_offset_f, tile_size_f, size, origin;
+};
+static const int2
+	tile_offset = int2(tile_offset_f),
+	tile_size = int2(tile_size_f);
+
+float4 antialias(float4 pos : SV_Position) : SV_Target
+{
+	const int2 tile_pos = floor((pos.xy - origin) / size);
+	const float2 tile_tl = tile_pos * size + origin,
+		tile_br = tile_tl + size;
+
+	return src.SampleLevel(smp, (tile_pos - tile_offset + 0.5
+		+ min(pos.xy - tile_tl, 0.5)
+		+ max(pos.xy - tile_br, -0.5)) / tile_size, 0);
+}
+
+]]
+--[[pixelshader@tile:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+	float2 tile_offset_f, tile_size_f, size, origin;
+};
+static const int2
+	tile_offset = int2(tile_offset_f),
+	tile_size = int2(tile_size_f);
+
+float4 tile(float4 pos : SV_Position) : SV_Target
+{
+	const int2 tile_pos = floor((pos.xy - origin) / size);
+	const float2 tile_tl = tile_pos * size + origin,
+		tile_br = tile_tl + size;
+	const int2 tile_tl_i = ceil(tile_tl - 0.5), tile_br_i = ceil(tile_br - 0.5);
+
+	int rate = 0;
+	const int2 pos_i = floor(pos.xy);
+	if (any(pos_i == tile_tl_i)) rate++;
+	if (any(pos_i == tile_br_i - 1)) rate--;
+
+	float4 col = src[uint2(tile_pos - tile_offset)];
+	col.rgb *= (1.0 + rate * 0.25);
+	col.rgb = clamp(col.rgb, 0.0, col.a);
+	return col;
+}
+
+]]
+local obj, math, tonumber, type = obj, math, tonumber, type;
+
+local cx, cy = obj.getvalue("center");
+cx, cy = cx + obj.cx, cy + obj.cy;
+if obj.getoption("gui") then
+	obj.setanchor("X,Y", 0, "line", "offset", cx, cy);
+end
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+size = tonumber(PI.size) or size;
+seed = tonumber(PI.seed) or seed;
+if type(PI.convex) == "boolean" then convex = PI.convex;
+elseif type(PI.convex) == "number" then convex = PI.convex ~= 0 end
+aspect = tonumber(PI.aspect) or aspect;
+X = tonumber(PI.X) or X;
+Y = tonumber(PI.Y) or Y;
+
+-- normalize parameters.
+local size_x, size_y = size, size;
+aspect = math.min(math.max(aspect / 100, -1), 1);
+if aspect > 0 then size_x = size_x * (1 - aspect) end
+if aspect < 0 then size_y = size_y * (1 + aspect) end
+size_x, size_y = math.max(size_x, 1), math.max(size_y, 1);
+if size_x <= 1 and size_y <= 1 then return end
+seed = math.floor(seed); -- not the nearest, but simple floor.
+if seed >= 0 then
+	seed = seed
+		+  2525 * (obj.id % 2 ^ 20)
+		+ 13579 * (obj.effect_id % 2 ^ 20)
+		+ 54321 * (obj.index % 2 ^ 20);
+end
+seed = seed % 2 ^ 20;
+cx, cy = cx + X + obj.w / 2, cy + Y + obj.h / 2;
+
+--#endregion PI / normalize parameters.
+
+-- further calculations.
+local L, R, T, B =
+	math.floor(-cx / size_x), math.ceil((obj.w - cx) / size_x),
+	math.floor(-cy / size_y), math.ceil((obj.h - cy) / size_y);
+
+-- apply shaders.
+local cache_name = "cache:movingmosaic_s/temp";
+obj.clearbuffer(cache_name, R - L, B - T);
+obj.pixelshader("mosaic", cache_name, "object", {
+	L, T; obj.w, obj.h; size_x, size_y; cx, cy; seed;
+});
+
+obj.pixelshader(convex and "tile" or "antialias", "object", cache_name, {
+	L, T; R - L, B - T; size_x, size_y; cx, cy;
+}, "copy", "clamp");
+

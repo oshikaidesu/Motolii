@@ -1,0 +1,624 @@
+--[[
+MIT License
+
+Copyright (c) 2025-2026 sigma-axis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+https://mit-license.org/
+]]
+
+--
+-- v1.40
+--
+
+-- https://github.com/sigma-axis/aviutl2_script_GroundShadow2_S
+
+--information:GroundShadow2_S v1.40 by σ軸
+--label:装飾
+--filter
+--require:2010900
+--track@ground_angle:地面角度,-1800,1800,0,0.01,水平,0.1
+--track@light_angle:光源角度,-1800,1800,-45,0.01,水平,0.1
+--track@light_slope:光源傾斜,-1600,1600,0,0.01,,0.125
+--track@rotation:回転,-3600,3600,0,0.01,水平,0.05
+--group:配置,true
+--track@ground_pos_x:地面位置X,-4000,4000,0,0.01,,0.25
+--track@ground_pos_y:地面位置Y,-4000,4000,200,0.01,,0.25
+--track@ground_pos_z:地面位置Z,-4000,4000,0,0.01,,0.25
+--trackgroup@ground_pos_x,ground_pos_y,ground_pos_z:ground_pos_xyz
+--checksection@ground_screen:地面位置を画面基準,false,false
+--track@camera_pos_x:カメラ位置X,-4000,4000,0,0.01,,0.25
+--track@camera_pos_y:カメラ位置Y,-4000,4000,-200,0.01,,0.25
+--trackgroup@camera_pos_x,camera_pos_y:camera_pos_xy
+--checksection@camera_screen:カメラ位置を画面基準,false,false
+--track@camera_fov:視野幅,0,10000,100,0.01,直投影,0.02
+--track@pos_x:影位置移動X,-4000,4000,0,0.01,,0.25
+--track@pos_y:影位置移動Y,-4000,4000,0,0.01,,0.25
+--trackgroup@pos_x,pos_y:shadow_pos_xy
+--group:色/透明度,false
+--color@col:影色,0x000000
+--track@col_alpha:影色強さ,0,100,100,0.01
+--track@alpha:影の濃さ,0,100,50,0.01
+--track@front_alpha:前景透明度,0,100,0,0.01
+--group:ぼかし設定,false
+--track@conic_blur:光分散,0,70,5,0.001
+--track@edge_blur:境界ぼかし,0,500,4,0.01
+--track@len:影の範囲,0,4000,0,0.1,全体,0.25
+--track@tip_blur:先端ぼかし,0,2000,0,1,,0.25
+--group:描画設定,false
+--checksection@draw:影を別オブジェクトで描画,false,false
+--select@blend:合成モード=-1,元の合成モード=-1,通常=0,加算=1,減算=2,乗算=3,スクリーン=4,オーバーレイ=5,比較(明)=6,比較(暗)=7,輝度=8,色差=9,陰影=10,明暗=11,差分=12
+--hide@blend:draw==0
+--group:その他,false
+--track@quality:精度,1,9801,529,1
+--track@max_w:画像最大幅,1024,16384,2000,1,,0.125
+--track@max_h:画像最大高さ,1024,16384,2000,1,,0.125
+--value@PI:PI,{}
+--group:互換対応(将来削除予定),false
+--value@ground_pos:地面位置,{}
+--value@camera_pos:カメラ位置,{}
+--value@pos:影位置移動,{}
+--[[pixelshader@proj_blur:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+	float2 size_src, ofs_src;
+	float3 cam;
+	float alpha1;
+	float4 plane;
+	float3 l_dir; float quality;
+	float3 l_ddir0, l_ddir1;
+};
+SamplerState s : register(s0);
+
+float4 pick_color(float2 pos)
+{
+	return src.Sample(s, pos / size_src);
+}
+float4 proj_blur(float4 pos : SV_Position) : SV_Target
+{
+	float3 pt = float3(pos.xy, 0);
+	if (cam.z < 0) {
+		float3 ray = pt - cam;
+		float t = dot(plane.xyz, ray), v = dot(plane, float4(cam, 1));
+		if ((t <= 0 && v < 0) || (t >= 0 && v > 0)) discard;
+		pt = cam - (v == 0 ? 0 : v / t) * ray;
+	}
+	else {
+		if (plane.z == 0) discard;
+		float v = dot(plane, float4(pt, 1));
+		pt.z = -v / plane.z;
+	}
+	const float2 XY = pt.xy + ofs_src; const float Z = pt.z;
+
+	float4 color = 0.0;
+	const int N = int(quality), Q = N * N;
+	for (int i = -N; i <= N; i++) {
+		for (int j = -N; j <= N; j++) {
+			if (i * i + j * j > Q) continue;
+
+			const float3 l = l_dir + i * l_ddir0 + j * l_ddir1;
+			color += l.z == 0 ? 0 : pick_color(XY - (Z / l.z) * l.xy);
+		}
+	}
+	return saturate(alpha1 * color);
+}
+
+]]
+local obj, tonumber, type, math = obj, tonumber, type, math;
+
+-- set anchors.
+obj.setanchor("ground_pos_x,ground_pos_y,ground_pos_z", 0, "arm", "color", 0x40ff00, "xyz",
+	unpack(ground_screen and { "screen" } or {}));
+obj.setanchor("camera_pos_x,camera_pos_y", 0, "arm", "color", 0x4040ff,
+	unpack(camera_screen and { "screen" } or {}));
+obj.setanchor("pos_x,pos_y", 0, "line", "color", 0xff4040);
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+local function as_bool(t, v)
+	if type(t) == "boolean" then return t;
+	elseif type(t) == "number" then return t ~= 0;
+	else return v end
+end
+ground_pos_x = ground_pos[1] or ground_pos_x;
+ground_pos_y = ground_pos[2] or ground_pos_y;
+ground_pos_z = ground_pos[3] or ground_pos_z;
+if type(PI.ground_pos) == "table" then
+	ground_pos_x = tonumber(PI.ground_pos[1]) or ground_pos_x;
+	ground_pos_y = tonumber(PI.ground_pos[2]) or ground_pos_y;
+	ground_pos_z = tonumber(PI.ground_pos[3]) or ground_pos_z;
+end
+ground_screen = as_bool(PI.ground_screen, ground_screen);
+ground_angle = tonumber(PI.ground_angle) or ground_angle;
+light_angle = tonumber(PI.light_angle) or light_angle;
+light_slope = tonumber(PI.light_slope) or light_slope;
+rotation = tonumber(PI.rotation) or rotation;
+camera_pos_x = camera_pos[1] or camera_pos_x;
+camera_pos_y = camera_pos[2] or camera_pos_y;
+if type(PI.camera_pos) == "table" then
+	camera_pos_x = tonumber(PI.camera_pos[1]) or camera_pos_x;
+	camera_pos_y = tonumber(PI.camera_pos[2]) or camera_pos_y;
+end
+camera_screen = as_bool(PI.camera_screen, camera_screen);
+camera_fov = tonumber(PI.camera_fov) or camera_fov;
+col = tonumber(PI.col) or col;
+col_alpha = tonumber(PI.col_alpha) or col_alpha;
+alpha = tonumber(PI.alpha) or alpha;
+front_alpha = tonumber(PI.front_alpha) or front_alpha;
+conic_blur = tonumber(PI.conic_blur) or conic_blur;
+edge_blur = tonumber(PI.edge_blur) or edge_blur;
+len = tonumber(PI.len) or len;
+tip_blur = tonumber(PI.tip_blur) or tip_blur;
+pos_x = pos[1] or pos_x;
+pos_y = pos[2] or pos_y;
+if type(PI.pos) == "table" then
+	pos_x = tonumber(PI.pos[1]) or pos_x;
+	pos_y = tonumber(PI.pos[2]) or pos_y;
+end
+draw = as_bool(PI.draw, draw);
+if type(PI.blend) == "string" then
+	local name2num = {
+		["元の合成モード"] = -1,
+		["通常"] = 0, ["加算"] = 1, ["減算"] = 2, ["乗算"] = 3, ["スクリーン"] = 4, ["オーバーレイ"] = 5,
+		["比較(明)"] = 6, ["比較(暗)"] = 7, ["輝度"] = 8, ["色差"] = 9,
+		["陰影"] = 10, ["明暗"] = 11, ["差分"] = 12,
+		["alpha_add"] = 100, ["alpha_max"] = 101, ["alpha_sub"] = 102, ["alpha_add2"] = 103, ["rgba_add"] = 104,
+	};
+	blend = name2num[PI.blend] or blend;
+end
+quality = tonumber(PI.quality) or quality;
+max_w = tonumber(PI.max_w) or max_w;
+max_h = tonumber(PI.max_h) or max_h;
+
+-- normalize paramters.
+ground_angle = math.pi / 180 * (ground_angle % 360);
+light_angle = math.pi / 180 * (light_angle % 360);
+light_slope = light_slope / 100;
+rotation = math.pi / 180 * (rotation % 360);
+camera_fov = math.max(camera_fov / 100, 0);
+col = math.floor(col) % 2 ^ 24;
+col_alpha = math.min(math.max(col_alpha / 100, 0), 1);
+alpha = math.min(math.max(alpha / 100, 0), 1);
+front_alpha = math.min(math.max(1 - front_alpha / 100, 0), 1);
+conic_blur = math.max(conic_blur / 100, 0);
+len = math.max(len, 0);
+tip_blur = math.min(math.max(math.floor(0.5 + tip_blur), 0), 2000);
+local blend_mode = ({
+	[0] = "none", "add", "sub", "mul", "screen", "overlay",
+	"light", "dark", "brightness", "chroma", "shadow", "light_dark", "diff",
+	[100] = "alpha_add", [101] = "alpha_max", [102] = "alpha_sub", [103] = "alpha_add2", [104] = "rgba_add",
+})[blend] or nil;
+quality = math.floor((math.max(quality, 1) ^ 0.5 - 1) / 2);
+if obj.getinfo("filter") then
+	max_w = obj.w;
+	max_h = obj.h;
+else
+	local W, H = obj.getinfo("image_max");
+	max_w = math.max(math.min(math.floor(max_w), W), obj.w);
+	max_h = math.max(math.min(math.floor(max_h), H), obj.h);
+end
+
+--#endregion PI / normalize parameters.
+
+-- further calculation of parameters.
+if ground_screen or camera_screen then
+	local ox, oy, oz = obj.getvalue("pos");
+	ox, oy, oz = ox + obj.ox, oy + obj.oy, oz + obj.oz;
+	local cx, cy, cz = obj.getvalue("center");
+	cx, cy, cz = cx + obj.cx, cy + obj.cy, cz + obj.cz;
+	local sx, sy, sz = obj.getvalue("scale");
+	sx, sy, sz = sx * obj.sx, sy * obj.sy, sz * obj.sz;
+	local rx, ry, rz = obj.getvalue("angle");
+	rx, ry, rz = rx + obj.rx, ry + obj.ry, rz + obj.rz;
+	rx, ry, rz = 2 * math.pi * ((rx / 360) % 1), 2 * math.pi * ((ry / 360) % 1), 2 * math.pi * ((rz / 360) % 1);
+	local cos_x, sin_x, cos_y, sin_y, cos_z, sin_z =
+		math.cos(rx), math.sin(rx), math.cos(ry), math.sin(ry), math.cos(rz), math.sin(rz);
+
+	if ground_screen then
+		if sx == 0 or sy == 0 or sz == 0 then
+			ground_pos_x, ground_pos_y, ground_pos_z = 0, 0, 0;
+		else
+			local x, y, z = ground_pos_x - ox, ground_pos_y - oy, ground_pos_z - oz;
+			y, z = cos_x * y + sin_x * z, -sin_x * y + cos_x * z;
+			z, x = cos_y * z + sin_y * x, -sin_y * z + cos_y * x;
+			x, y = cos_z * x + sin_z * y, -sin_z * x + cos_z * y;
+			x, y, z = x / sx, y / sy, z / sz;
+			x, y, z = x + cx, y + cy, z + cz;
+
+			ground_pos_x, ground_pos_y, ground_pos_z = x, y, z;
+		end
+	end
+	if camera_screen then
+		local nx, ny, nz = sin_y + cos_y, 0, cos_y - sin_y;
+		ny, nz = cos_x * ny - sin_x * nz, sin_x * ny + cos_x * nz;
+
+		if sx == 0 or sy == 0 or sz == 0 or nz == 0 then
+			camera_pos_x, camera_pos_y, camera_fov = 0, 0, 0;
+		else
+			local x, y, z = camera_pos_x - ox, camera_pos_y - oy, 0;
+			z = -(nx * x + ny * y) / nz;
+			y, z = cos_x * y + sin_x * z, -sin_x * y + cos_x * z;
+			z, x = cos_y * z + sin_y * x, -sin_y * z + cos_y * x;
+			x, y = cos_z * x + sin_z * y, -sin_z * x + cos_z * y;
+			x, y, z = x / sx, y / sy, z / sz;
+			x, y, z = x + cx, y + cy, z + cz;
+
+			camera_pos_x, camera_pos_y = x, y;
+		end
+	end
+end
+local function normalize(x, y, z)
+	local l = (x ^ 2 + y ^ 2 + z ^ 2) ^ 0.5;
+	return x / l, y / l, z / l;
+end
+local function cross_prod(x, y, z, X, Y, Z)
+	return y * Z - z * Y, z *X - x * Z, x * Y - y * X;
+end
+local w, h = obj.w, obj.h;
+local cos_rot, sin_rot = math.cos(rotation), math.sin(rotation);
+local g_nx, g_ny, g_nz, g_nw = 0, math.cos(ground_angle), math.sin(ground_angle); -- defines the plane of the ground.
+local l_dx, l_dy, l_dz, l_ddx0, l_ddy0, l_ddz0 do -- direction of the light and range of the conic blur.
+	local cos_lit, sin_lit = math.cos(light_angle), math.sin(light_angle);
+	l_dx, l_dy, l_dz = normalize(light_slope, -sin_lit, cos_lit);
+	l_ddy0, l_ddz0 = -- multiply conic_blur / sqrt(2) here.
+		2 ^ -0.5 * conic_blur * cos_lit, 2 ^ -0.5 * conic_blur * sin_lit;
+
+	-- apply rotation.
+	g_nx, g_ny = -sin_rot * g_ny, cos_rot * g_ny;
+	g_nw = -(g_nx * ground_pos_x + g_ny * ground_pos_y + g_nz * ground_pos_z);
+
+	l_dx, l_dy =
+		cos_rot * l_dx - sin_rot * l_dy,
+		sin_rot * l_dx + cos_rot * l_dy;
+	l_ddx0, l_ddy0 = -sin_rot * l_ddy0, cos_rot * l_ddy0;
+end
+local l_ddx1, l_ddy1, l_ddz1 = cross_prod(l_ddx0, l_ddy0, l_ddz0, l_dx, l_dy, l_dz);
+-- rotate by pi / 4. note that 1 / sqrt(2) was multiplied beforehand.
+l_ddx0, l_ddy0, l_ddz0, l_ddx1, l_ddy1, l_ddz1 =
+	l_ddx0 + l_ddx1, l_ddy0 + l_ddy1, l_ddz0 + l_ddz1,
+	l_ddx0 - l_ddx1, l_ddy0 - l_ddy1, l_ddz0 - l_ddz1;
+
+---calculates the crossing point of a plane and a line.
+---@param nx number defines the plane.
+---@param ny number defines the plane.
+---@param nz number defines the plane.
+---@param nw number defines the plane.
+---@param dx number defines the direction of the line.
+---@param dy number defines the direction of the line.
+---@param dz number defines the direction of the line.
+---@param x0 number defines the starting point of the line.
+---@param y0 number defines the starting point of the line.
+---@param z0 number defines the starting point of the line.
+---@return number? side +1, 0, or -1 representing which side is ray is crossing to the plane, or nil if it is parallel to the plane.
+---@return number x, number y, number z the crossing point, or nothing when parallel.
+local function plane_line_to_pt(nx, ny, nz, nw, dx, dy, dz, x0, y0, z0)
+	local v0 = nx * x0 + ny * y0 + nz * z0 + nw;
+	local dv = nx * dx + ny * dy + nz * dz;
+---@diagnostic disable-next-line: missing-return-value
+	if dv == 0 then return nil end
+	local t = -v0 / dv;
+	return t == 0 and 0 or t > 0 and 1 or -1,
+		x0 + t * dx, y0 + t * dy, z0 + t * dz;
+end
+---orthogonally projects a line onto a plane.
+---@param nx number defines the plane.
+---@param ny number defines the plane.
+---@param nz number defines the plane.
+---@param nw number defines the plane.
+---@param dx number defines the direction of the line.
+---@param dy number defines the direction of the line.
+---@param dz number defines the direction of the line.
+---@param x0 number defines the origin of the line.
+---@param y0 number defines the origin of the line.
+---@param z0 number defines the origin of the line.
+---@return number p_dx, number p_dy, number p_dz the direction of the projected line.
+---@return number p_x0, number p_y0, number p_z0 the projected origin.
+local function ortho_proj_line(nx, ny, nz, nw, dx, dy, dz, x0, y0, z0)
+	local _, x1, y1, z1 = plane_line_to_pt(nx, ny, nz, nw,
+		nx, ny, nz, x0, y0, z0);
+	local _, x2, y2, z2 = plane_line_to_pt(nx, ny, nz, nw,
+		nx, ny, nz, x0 + dx, y0 + dy, z0 + dz);
+	return x2 - x1, y2 - y1, z2 - z1, x1, y1, z1;
+end
+---converts from object-coordinate to camera-coordinate.
+---@param x number defines a point in object-coordinate.
+---@param y number defines a point in object-coordinate.
+---@param z number defines a point in object-coordinate.
+---@return number? x, number y the point in camera coordinate. nil if the point is beyond the back side of the camera.
+local function to_camera(x, y, z)
+	local Z = 1 + camera_fov * z / 1024;
+---@diagnostic disable-next-line: missing-return-value
+	if Z <= 0 then return nil end
+	local p = 1 / Z;
+	return p * x + (1 - p) * camera_pos_x, p * y + (1 - p) * camera_pos_y;
+end
+---determines the direction to extend to contain backward ray.
+---@param dx number defines the direction of the line.
+---@param dy number defines the direction of the line.
+---@param dz number defines the direction of the line.
+---@param x number defines the origin of the line.
+---@param y number defines the origin of the line.
+---@param z number defines the origin of the line.
+---@return number x, number y the extension bound.
+local function to_back_camera(dx, dy, dz, x, y, z)
+	if dz == 0 then return 0, 0 end
+	if dz < 0 then dx, dy, dz = -dx, -dy, -dz end
+
+	x, y = x - camera_pos_x, y - camera_pos_y;
+	if camera_fov > 0 then
+		local t = (z + 1024 / camera_fov) / dz;
+		dx, dy = t * dx, t * dy;
+	else
+		if dx ~= 0 then x = 0 end
+		if dy ~= 0 then y = 0 end
+	end
+	x, y = x - dx, y - dy;
+	return
+		x == 0 and 0 or x < 0 and -max_w or max_w,
+		y == 0 and 0 or y < 0 and -max_h or max_h;
+end
+---calculates the vanishing point of a line.
+---@param dx number defines the direction of the line.
+---@param dy number defines the direction of the line.
+---@param dz number defines the direction of the line.
+---@return number x, number y one vanishing point, whicn is infinitely far from the camera.
+local function vanishing_pts(dx, dy, dz)
+	if camera_fov <= 0 or dz == 0 then
+		return
+			dx == 0 and 0 or dx < 0 and -max_w or max_w,
+			dy == 0 and 0 or dy < 0 and -max_h or max_h;
+	else
+		local p = 1024 / (camera_fov * dz);
+		local px, py = p * dx + camera_pos_x, p * dy + camera_pos_y;
+		return
+			math.min(math.max(px, -max_w), max_w),
+			math.min(math.max(py, -max_h), max_h);
+	end
+end
+
+-- backup the current image.
+local cache_name_obj = "cache:GroundShadow2_S/obj";
+if front_alpha > 0 then obj.copybuffer(cache_name_obj, "object") end
+
+-- apply coloring.
+if col_alpha > 0 then
+	obj.effect("単色化", "輝度を保持する", 0, "強さ", 100 * col_alpha, "色", col);
+end
+
+-- apply `len` and `tip_blur`
+if len > 0 then
+	local L, rot = math.min(math.floor(0.5 + len), tip_blur), 180 / math.pi * rotation;
+	obj.effect("斜めクリッピング",
+		"中心X", ground_pos_x - (len - L / 2) * sin_rot,
+		"中心Y", ground_pos_y + (len - L / 2) * cos_rot,
+		"角度", rot, "ぼかし", L);
+	obj.effect("斜めクリッピング",
+		"中心X", ground_pos_x + (len - L / 2) * sin_rot,
+		"中心Y", ground_pos_y - (len - L / 2) * cos_rot,
+		"角度", rot + 180, "ぼかし", L);
+end
+
+-- apply blurring
+if edge_blur > 0 then
+	local i, f = math.modf(edge_blur);
+	obj.effect("ぼかし", "範囲", i);
+	if f > 0 then
+		obj.setoption("drawtarget", "tempbuffer", obj.w, obj.h);
+		obj.draw(0, 0, 0, 1, 1 - f);
+		local prev_blend = obj.getoption("blend");
+		obj.setoption("blend", "rgba_add");
+		obj.effect("ぼかし", "範囲", 1);
+		obj.draw(0, 0, 0, 1, f);
+		obj.setoption("blend", prev_blend);
+		obj.copybuffer("object", "tempbuffer");
+	end
+end
+
+-- calculate the bounds.
+local w1, h1, w2, h2, x2, y2, ray_range = obj.w, obj.h, nil, nil, nil, nil, 0 do
+	-- determine corners.
+	local corners do
+		local L, T, R, B = -w / 2, -h / 2, w / 2, h / 2;
+		if len > 0 then
+			-- find the minimum rectangle containing area where is not clipped off.
+			local lx, ly = -len * sin_rot, len * cos_rot;
+			if cos_rot ~= 0 then
+				local tan_rot = sin_rot / cos_rot;
+				local Y1, Y2, Y3, Y4 =
+					(ground_pos_y + ly) - tan_rot * (ground_pos_x + lx - R),
+					(ground_pos_y + ly) - tan_rot * (ground_pos_x + lx - L),
+					(ground_pos_y - ly) - tan_rot * (ground_pos_x - lx - R),
+					(ground_pos_y - ly) - tan_rot * (ground_pos_x - lx - L);
+				if Y1 > Y2 then Y1, Y2 = Y2, Y1 end
+				if Y3 > Y4 then Y3, Y4 = Y4, Y3 end
+				T = math.max(T, math.min(Y1, Y3));
+				B = math.min(B, math.max(Y2, Y4));
+			end
+			if sin_rot ~= 0 then
+				local cot_rot = cos_rot / sin_rot;
+				local X1, X2, X3, X4 =
+					(ground_pos_x + lx) - cot_rot * (ground_pos_y + ly - B),
+					(ground_pos_x + lx) - cot_rot * (ground_pos_y + ly - T),
+					(ground_pos_x - lx) - cot_rot * (ground_pos_y - ly - B),
+					(ground_pos_x - lx) - cot_rot * (ground_pos_y - ly - T);
+				if X1 > X2 then X1, X2 = X2, X1 end
+				if X3 > X4 then X3, X4 = X4, X3 end
+				L = math.max(L, math.min(X1, X3));
+				R = math.min(R, math.max(X2, X4));
+			end
+		end
+		if edge_blur > 0 then
+			local sz = math.ceil(edge_blur);
+			L, T, R, B = L - sz, T - sz, R + sz, B + sz;
+		end
+		corners = { { L, T }, { R, T }, { R, B }, { L, B } };
+	end
+
+	-- collect rays.
+	local rays if conic_blur <= 0 then rays = { { l_dx, l_dy, l_dz } };
+	else
+		-- four rays to test.
+		-- rays = {
+		-- 	{ l_dx + l_ddx0 + l_ddx1, l_dy + l_ddy0 + l_ddy1, l_dz + l_ddz0 + l_ddz1 },
+		-- 	{ l_dx - l_ddx0 + l_ddx1, l_dy - l_ddy0 + l_ddy1, l_dz - l_ddz0 + l_ddz1 },
+		-- 	{ l_dx - l_ddx0 - l_ddx1, l_dy - l_ddy0 - l_ddy1, l_dz - l_ddz0 - l_ddz1 },
+		-- 	{ l_dx + l_ddx0 - l_ddx1, l_dy + l_ddy0 - l_ddy1, l_dz + l_ddz0 - l_ddz1 },
+		-- };
+
+		-- eight rays to test.
+		local d = 0.41421356237309505; -- tan(pi/8).
+		rays = {
+			{ l_dx + l_ddx0 + d * l_ddx1, l_dy + l_ddy0 + d * l_ddy1, l_dz + l_ddz0 + d * l_ddz1 },
+			{ l_dx + d * l_ddx0 + l_ddx1, l_dy + d * l_ddy0 + l_ddy1, l_dz + d * l_ddz0 + l_ddz1 },
+
+			{ l_dx - d * l_ddx0 + l_ddx1, l_dy - d * l_ddy0 + l_ddy1, l_dz - d * l_ddz0 + l_ddz1 },
+			{ l_dx - l_ddx0 + d * l_ddx1, l_dy - l_ddy0 + d * l_ddy1, l_dz - l_ddz0 + d * l_ddz1 },
+
+			{ l_dx - l_ddx0 - d * l_ddx1, l_dy - l_ddy0 - d * l_ddy1, l_dz - l_ddz0 - d * l_ddz1 },
+			{ l_dx - d * l_ddx0 - l_ddx1, l_dy - d * l_ddy0 - l_ddy1, l_dz - d * l_ddz0 - l_ddz1 },
+
+			{ l_dx + d * l_ddx0 - l_ddx1, l_dy + d * l_ddy0 - l_ddy1, l_dz + d * l_ddz0 - l_ddz1 },
+			{ l_dx + l_ddx0 - d * l_ddx1, l_dy + l_ddy0 - d * l_ddy1, l_dz + l_ddz0 - d * l_ddz1 },
+		};
+		-- rays are chosen so they consist of a convex figure containing the cone of the light.
+	end
+
+	-- test rays.
+	local L, T, R, B = nil, nil, nil, nil;
+	for j = 1, 4 do
+		local corner = corners[j];
+		local pt_tail = { plane_line_to_pt(g_nx, g_ny, g_nz, g_nw,
+			rays[#rays][1], rays[#rays][2], rays[#rays][3], corner[1], corner[2], 0) };
+		local prev_sgn, l, t, r, b = pt_tail[1], nil, nil, nil, nil;
+		for i = 1, #rays do
+			local ray = rays[i];
+			local X1, Y1, X2, Y2;
+			local pt = i == #rays and pt_tail or
+				{ plane_line_to_pt(g_nx, g_ny, g_nz, g_nw,
+					ray[1], ray[2], ray[3], corner[1], corner[2], 0) };
+			if pt[1] == nil or (prev_sgn ~= nil and pt[1] * prev_sgn < 0) then
+				-- overflowing beyond horizon. calcaute the vanishing points.
+				local p_dx, p_dy, p_dz, p_x0, p_y0, p_z0 = ortho_proj_line(g_nx, g_ny, g_nz, g_nw,
+					ray[1], ray[2], ray[3], corner[1], corner[2], 0);
+				X1, Y1 = vanishing_pts(p_dx, p_dy, p_dz);
+				X2, Y2 = to_back_camera(p_dx, p_dy, p_dz, p_x0, p_y0, p_z0);
+				if X1 > X2 then X1, X2 = X2, X1 end
+				if Y1 > Y2 then Y1, Y2 = Y2, Y1 end
+				ray_range = max_w + max_h; -- assume indefinite range.
+			else
+				X1, Y1 = to_camera(pt[2], pt[3], pt[4]);
+				if not X1 then
+					X1, Y1 = to_back_camera(ortho_proj_line(g_nx, g_ny, g_nz, g_nw,
+						ray[1], ray[2], ray[3], corner[1], corner[2], 0));
+					ray_range = max_w + max_h; -- assume indefinite range.
+				end
+				X2, Y2 = X1, Y1;
+			end
+			l, r = math.min(l or X1, X1), math.max(r or X2, X2);
+			t, b = math.min(t or Y1, Y1), math.max(b or Y2, Y2);
+			prev_sgn = pt[1];
+		end
+		ray_range = math.max(ray_range, r - l, b - t);
+		L, R = math.min(L or l, l), math.max(R or r, r);
+		T, B = math.min(T or t, t), math.max(B or b, b);
+	end
+
+	-- reposition.
+	L, T, R, B = L + pos_x, T + pos_y, R + pos_x, B + pos_y;
+
+	-- convert to the extension length.
+	L, R = math.ceil(math.max(-L - w / 2, 0)), math.ceil(math.max(R - w / 2, 0));
+	T, B = math.ceil(math.max(-T - h / 2, 0)), math.ceil(math.max(B - h / 2, 0));
+
+	-- cap the bounds to the maximum size.
+	if L + w + R > max_w then
+		if L + w / 2 <= max_w / 2 then R = max_w - (L + w);
+		elseif w / 2 + R <= max_w / 2 then L = max_w - (w + R);
+		else R = math.floor((max_w - w) / 2); L = max_w - (w + R) end
+	end
+	if T + h + B > max_h then
+		if T + h / 2 <= max_h / 2 then B = max_h - (T + h);
+		elseif h / 2 + B <= max_h / 2 then T = max_h - (h + B);
+		else B = math.floor((max_h - h) / 2); T = max_h - (h + B) end
+	end
+
+	-- determine the final size and position.
+	w2, h2 = L + w + R, T + h + B;
+	x2, y2 = (L - R) / 2, (T - B) / 2;
+end
+
+-- apply shader.
+obj.setoption("drawtarget", "tempbuffer", w2, h2);
+if alpha > 0 then
+	local ofs_x2, ofs_y2 = w2 / 2 + x2 + pos_x, h2 / 2 + y2 + pos_y;
+	local N, alpha1 = math.min(quality, math.ceil((ray_range - 1) / 2)), alpha;
+	if N > 0 then
+		l_ddx0, l_ddy0, l_ddz0, l_ddx1, l_ddy1, l_ddz1 =
+			l_ddx0 / N, l_ddy0 / N, l_ddz0 / N,
+			l_ddx1 / N, l_ddy1 / N, l_ddz1 / N;
+		local cnt = 0;
+		for x = 1, N - 1 do
+			cnt = cnt + math.floor((N ^ 2 - x ^ 2) ^ 0.5);
+		end
+		cnt = 4 * (cnt + N) + 1; -- number of rays to sum up.
+		alpha1 = alpha1 / cnt;
+	end
+	obj.pixelshader("proj_blur", "tempbuffer", "object",
+	{
+		w1, h1; w1 / 2 - ofs_x2, h1 / 2 - ofs_y2;
+		camera_pos_x + ofs_x2, camera_pos_y + ofs_y2, camera_fov > 0 and -1024 / camera_fov or 0;
+		alpha1;
+		g_nx, g_ny, g_nz, g_nw - g_nx * ofs_x2 - g_ny * ofs_y2;
+		l_dx, l_dy, l_dz; N;
+		l_ddx0, l_ddy0, l_ddz0; 0; l_ddx1, l_ddy1, l_ddz1;
+	}, "copy", "clip");
+end
+
+-- adjust the center.
+obj.cx, obj.cy = obj.cx + x2, obj.cy + y2;
+
+if draw then
+	-- draw only the shadow.
+	obj.copybuffer("object", "tempbuffer");
+	obj.setoption("drawtarget", "framebuffer");
+	local prev_blend = obj.getoption("blend");
+	if blend_mode ~= nil then
+		obj.setoption("blend", blend_mode, "force");
+	end
+	obj.draw();
+	obj.setoption("blend", prev_blend);
+	obj.setoption("draw_state", false);
+
+	obj.setoption("drawtarget", "tempbuffer", w, h);
+	obj.cx, obj.cy = obj.cx - x2, obj.cy - y2;
+	x2, y2 = 0, 0;
+end
+
+if front_alpha > 0 then
+	-- combine the images.
+	obj.copybuffer("object", cache_name_obj);
+	local prev_blend = obj.getoption("blend");
+	obj.setoption("blend", "none");
+	obj.draw(x2, y2, 0, 1, front_alpha);
+	obj.setoption("blend", prev_blend);
+end
+obj.copybuffer("object", "tempbuffer");
+

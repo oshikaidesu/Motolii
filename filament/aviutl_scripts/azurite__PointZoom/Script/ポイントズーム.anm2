@@ -1,0 +1,78 @@
+--label:変形
+--information:ポイントズーム v2.0.1 by azurite
+--filter
+--separator:ズーム
+--track@zoom:拡大率,0,10000,100,0.001
+--check@no_interp:補間なし,false
+--separator:目標座標
+--track@x:X,-4000,4000,0,0.01
+--track@y:Y,-4000,4000,0,0.01
+--trackgroup@x,y:Group
+--separator:領域外
+--select@sampler:モード,指定色=1,引き伸ばす=2,ループ=3,ミラー=4
+--color@col:色,0xffffff
+--track@alpha:透明度,0,100,0,0.01
+--group:その他,false
+--value@PI:PI,{}
+
+--[[pixelshader@psmain:
+Texture2D<float4> src : register(t0);
+SamplerState samp : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 center;
+    float zoom;
+}
+
+float4 psmain(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float2 delta = uv - center;
+    float2 zoomed_uv = center + delta / zoom;
+    return src.Sample(samp, zoomed_uv);
+}
+]]
+
+local function clamp(x, min, max)
+    if x < min then return min end
+    if x > max then return max end
+    return x
+end
+
+local n = obj.setanchor("x,y", 0, "line")
+local sampler_state = {"clip", "clamp", "loop", "mirror", "dot"}
+
+-- PI
+zoom = tonumber(PI[1]) or zoom
+if type(PI[2]) == "boolean" then no_interp = PI[2]
+elseif type(PI[2]) == "number" then no_interp = (PI[2] ~= 0)
+end
+x = tonumber(PI[3]) or x
+y = tonumber(PI[4]) or y
+sampler = tonumber(PI[5]) or sampler
+col = tonumber(PI[6]) or col
+alpha = tonumber(PI[7]) or alpha
+
+-- normalize
+zoom = clamp(zoom, 1e-5, 10000)
+if sampler == 3 or sampler == 4 then zoom = math.max(zoom, 1) end
+x, y = (x + obj.w * 0.5) / obj.w, (y + obj.h * 0.5) / obj.h
+sampler = clamp(sampler, 1, 4)
+local a = math.min(math.max(1 - alpha / 100, 0), 1)
+
+obj.setoption("drawtarget", "tempbuffer", obj.w, obj.h)
+local cache = "cache:orig_img_"..tostring(obj.id)
+obj.copybuffer(cache, "object")
+
+if sampler == 1 then
+    obj.clearbuffer("object", 0xffffff)
+    obj.pixelshader("psmain", "object", "object", {x, y, zoom / 100}, "mask", "clip")
+    obj.effect("反転", "透明度反転", 1)
+    obj.effect("単色化", "強さ", 100, "色", col, "輝度を保持する", 0)
+    obj.draw(0, 0, 0, 1, a)
+else
+    obj.pixelshader("psmain", "object", cache, {x, y, zoom / 100}, "copy", sampler_state[sampler])
+    obj.draw(0, 0, 0, 1, a)
+end
+
+if no_interp then sampler = 5 else sampler = 1 end
+obj.pixelshader("psmain", "object", cache, {x, y, zoom / 100}, "copy", sampler_state[sampler])
+obj.draw()
+obj.copybuffer("object", "tempbuffer")

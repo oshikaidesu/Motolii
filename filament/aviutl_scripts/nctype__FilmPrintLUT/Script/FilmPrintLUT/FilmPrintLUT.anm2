@@ -1,0 +1,70 @@
+--information:FilmPrintLUT v1.2.0
+--label:色調整
+--require:2003700
+--filter
+--file@cube_file:CUBEファイル
+--track@strength:強度,0,100,100,0.1
+--check@preserve_alpha:アルファを保持,1
+
+--[[pixelshader@filmprint_lut:
+Texture2D<float4> source_tex : register(t0);
+Texture2D<float4> atlas_tex : register(t1);
+cbuffer Parameters : register(b0) {
+    float4 settings;    // N, strength, preserve alpha, reserved
+    float4 domain_min;
+    float4 domain_max;
+    float4 output_min;
+    float4 output_span;
+};
+
+float3 lattice(int3 p) {
+    int n = (int)settings.x;
+    int2 xy = int2(p.z * n + p.x, p.y);
+    // Recover integer bytes even when AviUtl2 stores the PNG in RGBA16_FLOAT.
+    float3 hi = floor(atlas_tex.Load(int3(xy, 0)).rgb * 255.0 + 0.5);
+    float3 lo = floor(atlas_tex.Load(int3(xy + int2(n*n, 0), 0)).rgb * 255.0 + 0.5);
+    return output_min.rgb + (hi * 256.0 + lo) * (output_span.rgb / 65535.0);
+}
+
+float3 lut3d(float3 rgb) {
+    float3 p = saturate((rgb - domain_min.rgb) / (domain_max.rgb - domain_min.rgb)) * (settings.x - 1.0);
+    int3 i = (int3)floor(p);
+    int3 j = min(i + 1, (int)settings.x - 1);
+    float3 f = p - (float3)i;
+    // Integer Load addresses texels exactly: no filtering, wrap, or slice leakage.
+    float3 c00 = lerp(lattice(int3(i.x,i.y,i.z)), lattice(int3(j.x,i.y,i.z)), f.x);
+    float3 c10 = lerp(lattice(int3(i.x,j.y,i.z)), lattice(int3(j.x,j.y,i.z)), f.x);
+    float3 c01 = lerp(lattice(int3(i.x,i.y,j.z)), lattice(int3(j.x,i.y,j.z)), f.x);
+    float3 c11 = lerp(lattice(int3(i.x,j.y,j.z)), lattice(int3(j.x,j.y,j.z)), f.x);
+    return lerp(lerp(c00,c10,f.y), lerp(c01,c11,f.y), f.z);
+}
+
+float4 filmprint_lut(float4 pos : SV_Position) : SV_Target {
+    float4 src = source_tex.Load(int3((int2)pos.xy, 0));
+    if (settings.y <= 0.0) return src;
+    // AviUtl2 uses premultiplied alpha; do not grade premultiplied RGB.
+    float3 straight = src.a > 0.0 ? src.rgb / src.a : float3(0,0,0);
+    float3 rgb = lerp(straight, lut3d(straight), saturate(settings.y));
+    float a = settings.z > 0.5 ? src.a : 1.0;
+    return float4(rgb * a, a);
+}
+]]
+
+local amount = math.max(0, math.min(100, strength)) / 100
+-- No file and zero strength both leave the source completely unchanged.
+if amount <= 0 or obj.w <= 0 or obj.h <= 0 or not cube_file or cube_file == "" then return end
+local keep = (preserve_alpha == 1 or preserve_alpha == true) and 1 or 0
+local loader = obj.module("FilmPrintLUTCube")
+local data, width, height, p = loader.load(cube_file, 0, obj.effect_id)
+local max_width, max_height = obj.getinfo("image_max")
+assert(width <= max_width and height <= max_height, "FilmPrintLUT: LUT exceeds host texture size")
+-- Upload only the cached LUT lattice. Source image processing remains on the GPU.
+local atlas = "cache:FilmPrintLUT_atlas"
+obj.putpixeldata(atlas, data, width, height, "rgba")
+obj.pixelshader("filmprint_lut", "object", {"object", atlas}, {
+    p[1], amount, keep, 0,
+    p[2], p[3], p[4], 0,
+    p[5], p[6], p[7], 0,
+    p[8], p[9], p[10], 0,
+    p[11], p[12], p[13], 0
+}, "copy")

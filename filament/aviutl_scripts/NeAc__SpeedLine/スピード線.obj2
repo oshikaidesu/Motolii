@@ -1,0 +1,101 @@
+
+--label:カスタムオブジェクト
+--track@width_track:幅,0,4000,300
+--track@threshold:しきい値,0,100,20
+--track@thickness:濃さ,0,100,80
+--track@thinness:薄さ,0,100,0
+--check@use_aviutl_noise:無印ノイズを使用,false
+--check@is_vertical:縦方向,false
+--track@spd:速度,-800,800,20,0.1
+--track@blur:ぼかし,0,1000,150,0.01
+--track@periodX:周期X,0,1000,0.1,0.01
+--track@periodY:周期Y,0,1000,6,0.01
+--track@seed:シード,0,1000,0,1
+--color@color:色,0xffffff
+--check@invert_alpha:透明度反転,true
+--check@width_per:幅を割合に,false
+--check@effect_before:前にエフェクトを適応,false
+
+
+--[[pixelshader@psmain:
+Texture2D tempbuffer : register(t0);
+cbuffer constant0 : register(b0) {
+	float alpha1;
+	float alpha2;
+};
+float4 psmain(float4 input : SV_Position) : SV_Target {
+	float4 col = tempbuffer[input.xy];
+    float transparency = 1 - col.a;
+    if (transparency < alpha1) transparency = 0.0;
+    else if (transparency > alpha2) transparency = 1.0;
+    float a = 1 - transparency;
+	return float4((col.a > 0 ?  a / col.a : 0) * col.rgb, a);
+}
+]]
+
+
+obj.load("figure","背景",0xffffff)
+if(effect_before)then obj.effect() end
+
+local obj_w, obj_h = obj.w, obj.h
+
+local angle, width = 0, obj_h - width_track
+local speed_x, speed_y = spd, 0
+
+if(is_vertical)then
+    angle, width = 90, obj_w - width_track
+    speed_x, speed_y = 0, spd
+    -- swap X/Y
+    periodX = periodX + periodY
+    periodY = periodX - periodY
+    periodX = periodX - periodY
+end
+
+if(width_per)then
+    if(not is_vertical)then
+        width = obj_h - (width_track / 4000) * obj_h
+    else
+        width = obj_w - (width_track / 4000) * obj_w
+    end
+end
+
+
+if (width<=1 and blur~=0)then
+    width=1
+end
+if not(math.floor(width)<=0)then
+    obj.effect("斜めクリッピング","角度",angle,"幅",-width,"ぼかし",blur)
+end
+if use_aviutl_noise then
+    local probe_cache = "cache:speedline_noise_probe"
+    if not obj.copybuffer(probe_cache,"object") then
+        obj.load("text","無印ノイズ.anm2の呼び出しに失敗しました")
+        return
+    end
+    obj.clearbuffer("object",1,1,0xffffff)
+    obj.effect("無印ノイズ","強さ",200,"合成モード","アルファ値と乗算")
+    obj.pixeloption("get","object")
+    local _, _, _, probe_alpha = obj.getpixel(0,0,"rgb")
+    local restored = obj.copybuffer("object",probe_cache)
+    if not restored or probe_alpha ~= 0 then
+        obj.load("text","無印ノイズ.anm2の呼び出しに失敗しました")
+        return
+    end
+    obj.effect("無印ノイズ","強さ",100,"速度X",speed_x,"速度Y",speed_y,"周期X",periodX,"周期Y",periodY,"しきい値",threshold,"シード",seed,"合成モード","アルファ値と乗算","ノイズの種類","Type3")
+else
+    obj.effect("ノイズ","強さ",100,"速度X",speed_x,"速度Y",speed_y,"周期X",periodX,"周期Y",periodY,"しきい値",threshold,"seed",seed,"合成モード","アルファ値と乗算","ノイズの種類","Type3")
+end
+
+local alpha1 = (thickness / 100)
+local alpha2 = (1 - alpha1) * (1 - thinness / 100) + alpha1
+
+
+obj.pixelshader("psmain", "object", "object", { alpha1, alpha2 })
+
+if(invert_alpha)then
+    obj.effect("反転","透明度反転",1)
+end
+if(effect_before)then obj.draw() end
+
+
+obj.effect("単色化","色",color,"輝度を保持する",0)

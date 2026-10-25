@@ -1,0 +1,6 @@
+AutoBlendLight by nctype
+licence: MIT
+from: https://github.com/nctype/aviutl2_script_AutoBlendLight/releases/download/v1.3.3/AutoBlendLight_v1.3.3.au2pkg.zip (tag v1.3.3, commit 85a63327ed0c)
+page: https://github.com/nctype/aviutl2_script_AutoBlendLight
+licence/README from: https://github.com/nctype/aviutl2_script_AutoBlendLight at v1.3.3
+Put here unchanged for Motolii (filament/aviutl_scripts).

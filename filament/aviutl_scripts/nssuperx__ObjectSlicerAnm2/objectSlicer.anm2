@@ -1,0 +1,104 @@
+--label:アニメーション効果
+--track@sliceAngle:角度,-360,360,10,1
+--track@shiftAmount:移動量,-100,100,10,0.1
+--track@shiftAmountTimes:移動量倍率,0,100,1,0.01
+--track@shiftBias:移動方向偏り,-1,1,0,0.01
+--track@sliceCount:分割数,0,100,10,1
+--check@sliceWidthRandom:幅ランダム化,0
+--track@sliceWidth:幅拡張,-100,300,0,1
+--check@fadeEnable:フェード,0
+--check@colorEnable:色付け,0
+--color@color:色,0xffffff
+--track@randSeed:乱数シード,0,10000,0,1
+--[[pixelshader@objectSlicer:
+Texture2D src : register(t0);
+SamplerState samplerState : register(s0);
+cbuffer constant0 : register(b0) {
+    float sliceAngle;           // スライス方向（ラジアン）
+    float shiftAmount;          // スライス移動量
+    float shiftAmountTimes;     // スライス移動量倍率
+    float shiftBias;            // -1, 0, 0.5, 1 など
+    float sliceCount;           // 分割数
+    float sliceWidthRandom;     // 幅ランダム化フラグ
+    float sliceWidth;           // スライス幅
+    float fadeEnable;           // フェード有効フラグ
+    float colorEnable;          // 色付け有効フラグ
+    float colorR;
+    float colorG;
+    float colorB;
+    float randSeed;             // 外部乱数シード
+}
+
+float rand(float2 co, float seed) {
+    return frac(sin(dot(co + seed, float2(12.9898,78.233))) * 43758.5453);
+}
+
+float4 objectSlicer(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_TARGET
+{
+    uint width, height;
+    src.GetDimensions(width, height);
+    float3 targetColor = float3(colorR, colorG, colorB) / 255.0;
+    float2 texSize = float2((float)width, (float)height);
+
+    // スライス方向
+    float2 sliceDirPx = float2(cos(sliceAngle), sin(sliceAngle));
+    sliceDirPx = normalize(sliceDirPx);
+
+    // TODO: このあたりはAIが書いてよくわからんので後で整理する
+    // UV をピクセル座標に変換してからスライス軸に射影してスライス位置を求める
+    // 中心 (0.5,0.5) を回転/射影の原点とする
+    float2 px = uv * texSize;
+    float2 centerPx = texSize * 0.5;
+    float2 relPx = px - centerPx;
+    // 中心からエッジまでの正の方向への最大射影長（ピクセル単位）
+    float halfProjMax = dot(centerPx, abs(sliceDirPx));
+    // relPx の射影は [-halfProjMax, +halfProjMax] の範囲にある。
+    // これを 0..1 にマッピングして中心が 0.5 になるようにする
+    float proj = (halfProjMax > 0.0) ? (dot(relPx, sliceDirPx) / (2.0 * halfProjMax) + 0.5) : 0.5;
+    float slicePosF = proj * sliceCount; // スライス単位での位置
+    float sliceIndex = floor(slicePosF);
+
+    // 方向決定: shiftBias=-1 -> 0.0 (負のみ), 0 -> 0.5, 1 -> 1.0 (正のみ)
+    // randが0.0..1.0を返すので、-1..1 を 0..1 にする
+    float posProb = saturate(0.5 + shiftBias * 0.5);
+    float rdir = rand(float2(sliceIndex, sliceIndex * 1.37), randSeed);
+    float dirSign = (rdir < posProb) ? 1.0 : -1.0;
+
+    // スライス毎のランダム倍率
+    float rmag = rand(float2(sliceIndex * 2.13, sliceIndex * 3.77), randSeed);
+    float shiftPixels = shiftAmount * shiftAmountTimes * lerp(0.1, 4.0, rmag);
+
+    // ピクセル空間での垂直方向ベクトルを作り、ピクセル単位のシフト量をUVに戻す
+    // 90度回転 (反時計回り)
+    float2 perpPx = float2(-sliceDirPx.y, sliceDirPx.x);
+    // perpPx / texSize でUV空間への変換（要素ごとの除算）
+    float2 shiftUV = (perpPx / texSize) * dirSign * shiftPixels;
+    float2 shiftedUV = uv + shiftUV;
+    shiftedUV = clamp(shiftedUV, 0.0, 1.0);
+
+    // 色付け・フェード処理。移動量が多いほど効果が強くなる
+    float4 col = src.Sample(samplerState, shiftedUV);
+    if (colorEnable > 0.5) {
+        float shiftMag = max(abs(shiftUV.x), abs(shiftUV.y));
+        // TODO: 0.5はマジックナンバー。あとで色変化感度のようなパラメータで調整できるようにする。(1.0-色変化感度)
+        float tcol = smoothstep(0.0, 0.5, shiftMag);
+        tcol *= col.a;
+        col.rgb = lerp(col.rgb, targetColor, tcol);
+    }
+
+    if (fadeEnable > 0.5) {
+        float shiftMag = max(abs(shiftUV.x), abs(shiftUV.y));
+        // TODO: 0.5はマジックナンバー。あとで透明度変化感度のようなパラメータで調整できるようにする。(1.0-透明度変化感度)
+        float tfade = smoothstep(0.0, 0.5, shiftMag);
+        col = lerp(col, 0.0, tfade);
+    }
+
+    return col;
+}
+
+]]
+
+local r, g, b = RGB(color)
+local angleRad = math.rad(sliceAngle or 0)
+
+obj.pixelshader("objectSlicer", "object", {"object"}, {angleRad, shiftAmount, shiftAmountTimes, shiftBias, sliceCount, sliceWidthRandom, sliceWidth, fadeEnable, colorEnable, r, g, b, randSeed}, "copy", "clip")

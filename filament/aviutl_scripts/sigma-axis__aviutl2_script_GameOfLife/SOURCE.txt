@@ -1,0 +1,6 @@
+aviutl2_script_GameOfLife by sigma-axis
+licence: Unlicense
+from: https://github.com/sigma-axis/aviutl2_script_GameOfLife (branch main, commit a33a9bfdd3fc) (commit a33a9bfdd3fc)
+page: https://github.com/sigma-axis/aviutl2_script_GameOfLife
+left out: 2 other (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

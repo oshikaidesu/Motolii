@@ -1,0 +1,147 @@
+--information:色付き残像(画像履歴) v1.11 by HexBrowns
+--label:HexScript
+
+--group:残像
+--track@count:数,1,120,12,1
+--track@interval:間隔[f],0.01,50,1,0.01
+--track@decay:減衰,0,100,70,0.01
+--track@blur:ぼかし,0,50,0,1
+
+--group:色
+--color@col1:色1,0xff0000
+--track@al1:不透明度1,0,1,1,0.01
+--check@use_color:色を適用,1
+--check@use_grad:グラデーション,0
+--color@col2:色2,0x0000ff
+--track@al2:不透明度2,0,1,0.2,0.01
+--select@color_space:色空間=0,sRGB=0,リニア=1,Oklab=2,HSV=3,HSL=4,Lab=5,LCh=6,Oklch=7,HWB=9
+--hide@color_space:use_color==0
+--hide@color_space:use_grad==0
+--select@hue_path:色相経路=0,短経路=0,長経路=1
+--hide@hue_path:use_color==0
+--hide@hue_path:use_grad==0
+--hide@hue_path:color_space<3
+--hide@hue_path:color_space==5
+
+--group:オプション
+--check@add_blend:加算,0
+--group:
+
+--[[pixelshader@ps_cei_blur:
+cbuffer Params : register(b0) {
+    float texel_w;
+    float texel_h;
+    float blur_scale;
+    float _pad0;
+};
+
+Texture2D tex : register(t0);
+SamplerState smp : register(s0);
+
+float4 ps_cei_blur(float4 sv_pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
+    float2 texel = float2(texel_w, texel_h) * max(blur_scale, 0.01);
+    float4 sum = float4(0.0, 0.0, 0.0, 0.0);
+    float weight_sum = 0.0;
+    [unroll]
+    for (int y = -2; y <= 2; y++) {
+        [unroll]
+        for (int x = -2; x <= 2; x++) {
+            float2 offset = float2(x, y) * texel;
+            float w = exp(-(x * x + y * y) / 4.5);
+            sum += tex.Sample(smp, uv + offset) * w;
+            weight_sum += w;
+        }
+    }
+    return sum / max(weight_sum, 1e-5);
+}
+]]
+
+local function color_rgb01(col)
+  local r, g, b = RGB(col)
+  return r / 255, g / 255, b / 255
+end
+
+local echo_count = count or 0
+local echo_interval = interval or 1
+local echo_decay = (decay or 70) * 0.01
+local echo_blur = blur or 0
+local is_color = (use_color == 1 or use_color == true)
+local is_grad = (use_grad == 1 or use_grad == true)
+local is_add = (add_blend == 1 or add_blend == true)
+local opacity1 = al1 or 1
+local opacity2 = al2 or 1
+
+if echo_count < 1 then
+  return
+end
+
+local mod = obj.module("colored_echo_img")
+if not mod then
+  print("@warn", "colored_echo_img.mod2 が見つかりません（Script/ColoredEchoImg/）")
+  obj.draw()
+  return
+end
+
+local buffer_id = string.format("cei_%s_%s", tostring(obj.id), tostring(obj.index))
+-- v1.11: シーンチェンジ・モーションブラーの参照フレームの描画（本体 2.1.14〜）は別の履歴に積む。
+-- 参照フレームは今より前のフレームを毎フレーム描き直すので、同じ履歴に積むと下の「前へ戻った」で毎回捨てていた
+local ok_ref, is_ref = pcall(obj.getinfo, "reference_frame")
+if ok_ref and is_ref == true then
+  buffer_id = buffer_id .. "_ref"
+end
+
+_COLORED_ECHO_IMG_LAST = _COLORED_ECHO_IMG_LAST or {}
+local last = _COLORED_ECHO_IMG_LAST[buffer_id]
+if last ~= nil and obj.frame < last then
+  mod.reset(buffer_id)
+end
+_COLORED_ECHO_IMG_LAST[buffer_id] = obj.frame
+
+local r1, g1, b1 = color_rgb01(col1)
+local r2, g2, b2 = color_rgb01(col2)
+local use_color_n = is_color and 1 or 0
+local use_grad_n = is_grad and 1 or 0
+
+-- v1.10: 色1→色2 の補間の色空間・色相経路（番号は共有部品 EffectUtils_ColorSpace.lua と同じ）。
+-- 計算はモジュール（v1.3.0〜）が残像ごとに 1 回行う。色を適用・グラデーションのどちらかが OFF なら効かないので sRGB を渡す
+local cs_space = math.floor((tonumber(color_space) or 0) + 0.5)
+if not (is_color and is_grad) then
+  cs_space = 0
+end
+local cs_long = 0
+if cs_space ~= 0 then
+  cs_long = (math.floor((tonumber(hue_path) or 0) + 0.5) == 1) and 1 or 0
+  -- v1.2.0 までのモジュールは色空間の引数を読まない（sRGB で描く）。version が無ければ古い版として 1 回だけ知らせる
+  if mod.version == nil and not _COLORED_ECHO_IMG_OLD_WARNED then
+    _COLORED_ECHO_IMG_OLD_WARNED = true
+    print("@warn", "[色付き残像(画像履歴)] colored_echo_img.mod2 が古い版です（色空間には v1.3.0 以上が要ります。sRGB で描きます。Script/ColoredEchoImg/）")
+  end
+end
+
+local data, dw, dh = obj.getpixeldata("object", "rgba")
+if data and dw > 0 and dh > 0 then
+  local changed = mod.process(
+    buffer_id, data, dw, dh,
+    obj.frame, echo_count, echo_interval,
+    echo_decay, use_color_n, r1, g1, b1, opacity1,
+    use_grad_n, r2, g2, b2, opacity2,
+    cs_space, cs_long
+  )
+  -- v1.01: モジュール（v1.2.0〜）が 0（1 画素も書き換えなかった）を返したら書き戻さない
+  -- （絵が不透明で、1 枚目・残像がすべて今の絵に隠れる、など）。v1.1.0 までのモジュールは何も返さない（nil）ので書き戻す
+  if changed ~= 0 then
+    obj.putpixeldata("object", data, dw, dh, "rgba")
+  end
+end
+
+if echo_blur > 0 and obj.w > 0 and obj.h > 0 then
+  obj.pixelshader("ps_cei_blur", "object", {"object"}, {
+    1.0 / obj.w, 1.0 / obj.h, echo_blur
+  }, "copy", "clamp")
+end
+
+if is_add then
+  obj.setoption("blend", "add")
+end
+
+obj.draw()

@@ -1,0 +1,101 @@
+--label:変形
+--information:https://github.com/sevenc-nanashi/aviutl2-scripts/blob/main/scripts/%E3%83%89%E3%83%83%E3%83%88%E7%B5%B5%E5%A4%89%E5%BD%A2.anm2
+
+-- ========================================================================================================================
+-- 最新版をダウンロード：https://aviutl2-scripts-download.sevenc7c.workers.dev/%E7%9B%AE%E6%A8%99%E6%8C%87%E5%AE%9A%E6%8B%A1%E5%A4%A7%E7%B8%AE%E5%B0%8F.anm2
+-- 説明書をブラウザで読む：https://github.com/sevenc-nanashi/aviutl2-scripts/blob/main/scripts/%E7%9B%AE%E6%A8%99%E6%8C%87%E5%AE%9A%E6%8B%A1%E5%A4%A7%E7%B8%AE%E5%B0%8F/README.md
+--
+-- 目標のピクセル数を指定し、アスペクト比を維持したまま拡大縮小を行うスクリプト。
+--
+-- [ モード ]
+--   - 下限指定：指定した範囲が埋まるように拡大縮小します。（CSSにおけるcoverに相当）
+--   - 上限指定：指定した範囲に収まるように拡大縮小します。（CSSにおけるcontainに相当）
+--   - 幅指定：幅が指定したピクセル数になるように拡大縮小します。
+--   - 高さ指定：高さが指定したピクセル数になるように拡大縮小します。
+--
+-- [ PI ]
+--   - `target_width`：目標幅（ピクセル単位）
+--   - `target_height`：目標高さ（ピクセル単位）
+--   - `mode`：モード（0 = 最小指定、1 = 最大指定、2 = 幅指定、3 = 高さ指定）
+--   - `debug`：デバッグモード
+--
+-- --< 更新履歴 >----------------------------------------------------------------------------------------------------------
+--
+-- [ v1.2（2026/8/18） ]
+--   - Tipsを追加
+--
+-- [ v1.1（2026/7/6） ]
+--   - 英語の言語ファイルを追加
+--
+-- [ v1.0（2026/01/25） ]
+--   - 初版リリース
+--
+-- ========================================================================================================================
+
+
+--track@target_width:目標幅,0,5000,100,1
+--track@target_height:目標高さ,0,5000,100,1
+--select@mode:モード=0,下限指定=0,上限指定=1,幅指定=2,高さ指定=3
+--group:高度な設定,false
+--check@debug:デバッグモード,false
+--value@PI:PI,{}
+-- PIからパラメータを取得
+if type(PI.target_width) == "number" then
+  target_width = PI.target_width
+end
+if type(PI.target_height) == "number" then
+  target_height = PI.target_height
+end
+if type(PI.mode) == "number" then
+  mode = PI.mode
+end
+if type(PI.debug) == "boolean" then
+  debug = PI.debug
+end
+
+local current_width = obj.w * obj.sx
+local current_height = obj.h * obj.sy
+local aspect_ratio = current_width / current_height
+
+local real_width, real_height
+
+if mode == 0 then
+  -- 下限指定
+  if target_width / aspect_ratio >= target_height then
+    real_width = target_width
+    real_height = target_width / aspect_ratio
+  else
+    real_width = target_height * aspect_ratio
+    real_height = target_height
+  end
+elseif mode == 1 then
+  -- 上限指定
+  if target_width / aspect_ratio <= target_height then
+    real_width = target_width
+    real_height = target_width / aspect_ratio
+  else
+    real_width = target_height * aspect_ratio
+    real_height = target_height
+  end
+elseif mode == 2 then
+  -- 幅指定
+  real_width = target_width
+  real_height = target_width / aspect_ratio
+elseif mode == 3 then
+  -- 高さ指定
+  real_width = target_height * aspect_ratio
+  real_height = target_height
+end
+
+if debug then
+  debug_print(string.format("original: width=%.2f, height=%.2f", current_width, current_height))
+  debug_print(string.format("target: width=%.2f, height=%.2f", target_width, target_height))
+  debug_print(string.format("real: width=%.2f, height=%.2f", real_width, real_height))
+
+  debug_print(string.format("sx: %.4f -> %.4f", obj.sx, obj.sx * (real_width / current_width)))
+  debug_print(string.format("sy: %.4f -> %.4f", obj.sy, obj.sy * (real_height / current_height)))
+end
+
+obj.sx = obj.sx * (real_width / current_width)
+obj.sy = obj.sy * (real_height / current_height)
+

@@ -1,0 +1,2 @@
+# AviUtl2_Script_SagyouDarui
+自分用にAIで作成したAviUtl2スクリプトのまとめです

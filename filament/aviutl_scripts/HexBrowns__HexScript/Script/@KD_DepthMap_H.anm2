@@ -1,0 +1,75 @@
+--[[
+KD_DepthMap_H.anm2 v1.2
+
+Toolbox_kurodonut v1.1 の「深度マスク」を、AviUtl2 で動くように修正したフォーク。
+原作: Toolbox_kurodonut（kurodonut 氏）
+
+原作からの変更点
+  - HLSL が strict モード（warning = error）でコンパイルできず
+    `invalid shader output parameter` で落ちていたのを修正
+      * float4 ret; の未初期化宣言 → 宣言と同時に初期化
+      * ret = 0; のスカラ代入 → float4(0,0,0,0)
+      * return float4(ret); の冗長なコンストラクタ → return ret;
+  - 深度ファイル未指定・読み込み失敗時に obj.load がオブジェクトを空にし、
+    `invalid buffer type. name=object` になっていたのをガード
+  - cbuffer の未使用フィールド float blur を削除（Lua 側が値を渡しておらず未設定だった）
+  - --infomation → --information（綴り誤りでスクリプト情報が認識されていなかった）
+  - --track0 の旧形式を --track@ へ、ヘッダー順を現行規約へ
+
+※このコメント内で行頭に @ を置かないこと。ホストはブロックコメントの中も走査し、
+  行頭 @ をセクション区切りとして扱うため、偽のスクリプトがエフェクト一覧に並ぶ。
+]]
+
+@深度マスク
+--information:深度マスク@KD_DepthMap_H v1.2 by HexBrowns
+--label:HexScript
+
+--track@border:閾値,0,1,0,0.001
+--file@depth_file:深度ファイル
+
+--[[pixelshader@ps_kd_depth_mask:
+Texture2D depth_tex : register(t0);
+Texture2D base_tex : register(t1);
+
+cbuffer constant0 : register(b0) {
+    float border;
+};
+
+float4 ps_kd_depth_mask(float4 pos : SV_Position) : SV_Target {
+    float4 d = depth_tex.Load(int3(pos.xy, 0));
+    float4 c = base_tex.Load(int3(pos.xy, 0));
+    // 深度画像の R を 3 で割って閾値と比較する（原作の判定をそのまま維持）
+    float depth_val = d.r / 3.0;
+    // 原作は未初期化の float4 ret; を使っており strict モードで通らなかった
+    float4 ret = float4(0.0, 0.0, 0.0, 0.0);
+    if (depth_val - border > 0.0) {
+        // 原作は float4(c2.rgb, 1) と α を 1 に固定していたが、
+        // 内部フォーマットは Premultiplied Alpha なので半透明部が暗くなる。
+        // 元の α をそのまま通す。元画像が不透明なら原作と同じ絵になる。
+        ret = c;
+    }
+    return ret;
+}
+]]
+
+local path = depth_file
+if path == nil or path == "" then
+  return
+end
+
+local time = obj.getvalue("time")
+
+-- 元画像を退避してから深度ファイルを読み込む（obj.load は読み込み済み画像を破棄する）
+obj.copybuffer("tempbuffer", "object")
+obj.load(path, time)
+
+-- 読み込みに失敗するとオブジェクトが空になり、pixelshader が
+-- `invalid buffer type. name=object` で落ちる
+if obj.w < 1 or obj.h < 1 then
+  obj.copybuffer("object", "tempbuffer")
+  return
+end
+
+-- 深度ファイルと元画像は同サイズである前提（Load はピクセル座標で引くため）。
+-- サイズが違うと座標がずれる。
+obj.pixelshader("ps_kd_depth_mask", "object", { "object", "tempbuffer" }, { border })

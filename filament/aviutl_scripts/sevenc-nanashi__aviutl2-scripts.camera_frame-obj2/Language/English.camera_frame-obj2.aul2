@@ -1,0 +1,18 @@
+[Language]
+Information=English Language for sevenc-nanashi/aviutl2-scripts / https://github.com/sevenc-nanashi/aviutl2-scripts
+[Tips.カメラフレーム]
+effect.name=Draws a camera frame-like shape.\n
+PI=- `width`: Width in pixels\n- `height`: Height in pixels\n- `line_length`: Line length in pixels\n- `line_thickness`: Line thickness in pixels\n- `line_color`: Line color (`0xRRGGBB`)\n- `size_specifier`: Size mode (1 = margin, 2 = absolute)\n- `debug`: Debug mode\n
+
+[カメラフレーム]
+カメラフレーム=Camera Frame
+幅=Width
+高さ=Height
+線の長さ=Line Length
+線の太さ=Line Thickness
+線の色=Line Color
+サイズ指定=Size Mode
+余白指定=Margin
+絶対指定=Absolute
+デバッグモード=Debug Mode
+PI=PI

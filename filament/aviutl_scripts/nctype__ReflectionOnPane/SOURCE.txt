@@ -1,0 +1,6 @@
+ReflectionOnPane by nctype
+licence: MIT
+from: https://github.com/nctype/aviutl2_script_ReflectionOnPane/releases/download/v1.0.1/ReflectionOnPane_v1.0.1.au2pkg.zip (tag v1.0.1, commit 9bb9c1544768)
+page: https://github.com/nctype/aviutl2_script_ReflectionOnPane
+licence/README from: https://github.com/nctype/aviutl2_script_ReflectionOnPane at v1.0.1
+Put here unchanged for Motolii (filament/aviutl_scripts).

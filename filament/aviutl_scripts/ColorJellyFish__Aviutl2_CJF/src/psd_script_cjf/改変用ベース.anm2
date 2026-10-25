@@ -1,0 +1,99 @@
+--label:CJF
+--information:改変用ベース：PSDToolKit2連携アニメーションの雛形（AviUtl2専用）
+--track@refLayer:参照レイヤー,1,100,1,1
+--value@charId:キャラクターID,""
+--value@watchParts:監視パーツ,""
+--value@overwriteEffect:上書き効果名,""
+--track@gateDur:境界時間(秒),0.05,2,0.4,0.01
+
+-- このファイルは、PSDToolKit2のパーツ上書きに反応する
+-- アニメーション効果を自作するための雛形です。
+--
+-- 【使い方】
+-- 1. このファイルをコピーして、好きな名前に変更する。
+-- 2. ptk_overwrite_react_core.lua と ptk_overwrite_react_state.lua もコピーし、
+--    3ファイルを同じ Script/CJF フォルダ（または同じスクリプト検索対象フォルダ）に置く。
+-- 3. このファイルの末尾にある「アニメーション記述欄」より下だけを編集する。
+-- 4. 作成した anm2 を対象オブジェクトへ追加する。
+--
+-- パーツ上書きの検知、キャラクターIDごとの状態管理、切り替え境界の判定は
+-- 上の共通処理と2つのluaファイルが担当します。
+-- ptk_overwrite_react_core.lua は検知・境界判定の本体、
+-- ptk_overwrite_react_state.lua はフレームをまたいで状態を保持するための領域です。
+-- 通常、この2つのluaファイルを編集する必要はありません。
+--
+-- この雛形では、PSDファイル@PSDToolKit（パーツ上書きオブジェクトではない側）に
+-- アニメーション効果を追加して使います。
+-- 監視パーツを空欄にすると全パーツを監視し、例えば「4,5」とすると
+-- 4番または5番のパーツが変化した境界だけを対象にします。
+--
+-- 上の設定項目や共通処理を変更する必要がなければ、そのまま残してください。
+-- 自作アニメーションは、末尾の「アニメーション記述欄」に書き足します。
+
+local gate_dur = tonumber(gateDur) or 0.4
+if gate_dur < 0.05 then gate_dur = 0.05 end
+local half = gate_dur * 0.5
+
+local Core = require("ptk_overwrite_react_core")
+local react = Core.update({
+	ref_layer = refLayer,
+	char_id = charId,
+	watch_parts = watchParts,
+	overwrite_effect = overwriteEffect,
+	pre_roll = 0,
+})
+
+if not react.found then
+	return
+end
+
+local t, tt, remain, src = Core.read_sub_clock(react.ref_layer, react.char_id)
+if t == nil or remain == nil then
+	return
+end
+
+local gates = Core.clip_flip_gates({
+	react = react,
+	watch_parts = watchParts,
+	peek_layer = refLayer,
+	time = t,
+	remain = remain,
+	totaltime = tt,
+	open_half = half,
+	close_half = half,
+})
+
+------------------------------------------------------------
+-- アニメーション記述欄（ここから下を自分の演出に書き換える）
+--
+-- 共通処理から、次の値を利用できます。
+--   react  : パーツ上書きの検知結果。
+--           found（対象が見つかったか）、changed（変化したか）、
+--           values、diff などを含みます。
+--   t      : 現在の上書き区間内の経過時間（秒）
+--   tt     : 上書き区間全体の時間（秒）
+--   remain : 現在の上書き区間の残り時間（秒）
+--   src    : 現在の上書き区間に関する補助情報
+--   half   : 境界時間の半分（gateDur / 2）
+--   gates  : 境界判定の結果
+--           open  = 新しい区間の開始側で演出する
+--           close = 区間の終了側で演出する
+--           reason、watch_label、watch_all、peek_layer も参照できます。
+--
+-- 下は「くるっと@psd」と同じ考え方のサンプルです。
+-- この部分を、自分が作りたい obj.sx / obj.sy / obj.x / obj.y などの
+-- アニメーション処理へ置き換えてください。
+--
+-- if gates.open then
+--     local p = (half > 0) and (t / half) or 1
+--     local deg = 270.0 + 90.0 * p
+--     obj.sx = obj.sx * math.max(0, math.cos(math.rad(deg)))
+-- elseif gates.close then
+--     local p = (half > 0) and (1 - remain / half) or 1
+--     local deg = 90.0 * p
+--     obj.sx = obj.sx * math.max(0, math.cos(math.rad(deg)))
+-- end
+--
+-- このサンプルをコメント解除して動作を確認してから、数値や対象プロパティを
+-- 変更していくと、共通処理を意識せずに独自アニメーションを作れます。
+------------------------------------------------------------

@@ -1,0 +1,934 @@
+--information:ビーム化_H v1.13 by HexBrowns
+--label:HexScript
+--group:光
+--color@glow_color:光の色,nil
+--track@inner_radius:内側の広がり,0,1000,10,0.1
+--track@inner_gain:内側の強さ,0,1000,100,0.1
+--track@outer_radius:外側の広がり,0,1000,60,0.1
+--track@outer_gain:外側の強さ,0,1000,60,0.1
+--group:芯
+--track@core_gain:芯の明るさ,0,1000,100,0.1
+--color@core_color:芯の色,0xffffff
+--track@core_offset:芯の太さ,-50,50,0,0.1
+--track@core_soft:芯のぼかし,0,20,0,0.1
+--group:長さ方向
+--select@along:長さの測り方=0,方向=0,形に沿う=1
+--track@direction:方向,-360,360,0,0.1
+--track@fade_root:根元のフェード,0,100,0,0.1
+--track@fade_tip:先端のフェード,0,100,0,0.1
+--group:揺らぎの設定
+--track@noise_amount:揺らぎ,0,100,0,0.1
+--track@noise_scale:揺らぎの大きさ,1,1000,60,0.1
+--track@noise_stretch:揺らぎの伸び,1,20,4,0.01
+--track@noise_speed:流れの速さ,-5000,5000,400,0.1
+--track@flicker:ちらつき,0,100,0,0.1
+--track@seed:シード,-1000,1000,0,1
+--group
+
+--[[
+ビーム化_H v1.13
+
+v1.13: 元の画像を cache に退避しない。芯・道のり・放射・光は広げる前の object から作り、広げた後の合成は
+広げた object をそのまま読む。4K・横長の巨大素材で cache と tempbuffer の枠（1600 万ドット）に収まらなければ、
+光を縮める率の下限を 2・4・… と上げ、それでも収まらなければ効果を掛けない
+（AI/scripts/issues/20261013_cache_budget_4k_wide_materials.md）。
+
+v1.12: 元の画像の退避（cache:beamh/src）を広げる前の大きさにした。cache と tempbuffer の枠（1600 万ドット）を
+外側の広がりによらず超えないようにするため（AI/scripts/issues/20260925_beam_cache_budget_over_16m.md）。
+
+掛けたオブジェクトの形（アルファ）を「白く光る芯＋色の付いた光」のビームに描き替える。
+形は図形・LongShadowN・テキストなど他に任せ、これは見た目だけを受け持つ。
+
+  仕様      AI/specifications/20260922_ビーム化_H_spec.md
+  机上検証  AI/scripts/ビーム化_H/verify_beam.py
+  実機検証  AI/tools/debug_items/bem.py（節 BEM）
+
+項目名は保存キーなので変えない（保存は項目名で引くので、足す位置はどこでもよい）。
+
+方向 は画像の中の向き（0 = 右、90 = 下）。標準描画の回転は効果の後に掛かるので、
+図形を横長にして回すなら 0 のままでよい。
+
+長さの測り方（v1.10）:
+  方向      フェードと揺らぎの流れを、方向 への射影で測る（v1.00 と同じ）
+  形に沿う  形の中の道のり（根元からの距離）で測る。折れ線・曲線の曲がりに沿う。
+            光線経路_H が同じオブジェクトで道のりを渡していれば、それを使う（交差しても正しい）。
+            無ければ形を縮めた升目の上で最短路を求める（CPU、getpixeldata）。根元は形の両端
+            （道のりでいちばん離れた 2 点）のうち、方向 の後ろ側。つながっていない部分は
+            それぞれの根元の 方向 への位置で継ぐ（破線など。近似）
+光の色 が透明なら元の色で光る。乱数はシードだけで決まる（レイヤー・オブジェクトに依存しない）。
+
+光はリニア（γ 2.2）で足し、1 を超えた分はチャンネルごとに頭打ちにする。
+出力のアルファは光の明るさ（RGB の最大値）と芯の不透明度の大きい方。
+]]
+
+--[[pixelshader@ps_beamh_blur:
+// 1 方向のガウスぼかし。出力の画素 p は入力の p + in_off を中心に読む。
+// 範囲外は透明として数える。芯と光の両方で使う
+Texture2D src : register(t0);
+cbuffer P : register(b0) {
+    float2 step_dir;
+    float2 size;
+    float2 in_off;
+    float sigma;
+    float taps;
+};
+float4 ps_beamh_blur(float4 pos : SV_Position) : SV_Target {
+    int2 base = int2(pos.xy) + int2(in_off);
+    int2 st = int2(step_dir);
+    int2 lim = int2(size);
+    int n = (int)taps;
+    float inv = -0.5 / max(sigma * sigma, 1e-6);
+    float4 acc = float4(0, 0, 0, 0);
+    float wsum = 0.0;
+    [loop]
+    for (int i = 0; i <= 192; i++) {
+        if (i > 2 * n) break;
+        int k = i - n;
+        float w = exp(inv * (float)(k * k));
+        wsum += w;
+        int2 p = base + st * k;
+        if (p.x >= 0 && p.y >= 0 && p.x < lim.x && p.y < lim.y) {
+            acc += w * src.Load(int3(p, 0));
+        }
+    }
+    return acc / max(wsum, 1e-6);
+}
+]]
+
+--[[pixelshader@ps_beamh_down:
+// 1 方向を factor 分の 1 に縮める。出力の画素 i の中心は入力の (i + 0.5) factor で、
+// そこから ±factor のテントで平均する。箱平均と違い、縮めて双線形で戻しても点の重心が動かない
+// （箱平均だと重心が縮小の升目の中心に寄り、形が動くと光が升目の刻みで跳ねる）。
+// 縮める前の領域の (0, 0) は入力の in_off。範囲外は透明として数える
+Texture2D src : register(t0);
+cbuffer P : register(b0) {
+    float2 step_dir;
+    float2 size;
+    float2 in_off;
+    float factor;
+};
+float4 ps_beamh_down(float4 pos : SV_Position) : SV_Target {
+    int f = (int)factor;
+    int2 st = int2(step_dir);
+    int2 lim = int2(size);
+    int2 off = int2(in_off);
+    int2 o = int2(pos.xy);
+    int i = st.x > 0 ? o.x : o.y;
+    float c = ((float)i + 0.5) * factor;
+    int first = (int)floor(c - factor);
+    float4 acc = float4(0, 0, 0, 0);
+    [loop]
+    for (int k = 0; k <= 64; k++) {
+        if (k > 2 * f) break;
+        int x = first + k;
+        float w = max(0.0, 1.0 - abs((float)x + 0.5 - c) / factor);
+        int2 p = (st.x > 0 ? int2(x, o.y) : int2(o.x, x)) + off;
+        if (w > 0.0 && p.x >= 0 && p.y >= 0 && p.x < lim.x && p.y < lim.y) {
+            acc += w * src.Load(int3(p, 0));
+        }
+    }
+    return acc / factor;
+}
+]]
+
+--[[pixelshader@ps_beamh_pool:
+// 形に沿うとき、道のりを求める升目へ縮める。升目の値は中のアルファの最大値（細い線が途切れない）。
+// 元の画像の (0, 0) は入力の in_off
+Texture2D src : register(t0);
+cbuffer P : register(b0) {
+    float2 in_off;
+    float2 img;
+    float factor;
+};
+float4 ps_beamh_pool(float4 pos : SV_Position) : SV_Target {
+    int f = (int)factor;
+    int2 base = int2(pos.xy) * f;
+    int2 lim = int2(img);
+    float m = 0.0;
+    [loop]
+    for (int j = 0; j < 16; j++) {
+        if (j >= f) break;
+        [loop]
+        for (int i = 0; i < 16; i++) {
+            if (i >= f) break;
+            int2 q = base + int2(i, j);
+            if (q.x < lim.x && q.y < lim.y) {
+                m = max(m, src.Load(int3(q + int2(in_off), 0)).a);
+            }
+        }
+    }
+    return float4(m, m, m, m);
+}
+]]
+
+--[[pixelshader@ps_beamh_pmap:
+// 升目の道のり（putpixeldata の 8bit）を元の画像の大きさへ戻す。升目の値は
+// r * 256 + g = 道のり x 4、b = 縁からの距離 x 4（どちらも升目の単位）、a = 有効。
+// 有効な升目だけで双線形に混ぜ、px に直して (道のり / 64 の整数部, 余り, 縁からの距離, 1) で置く
+// （RGBA16F は 2048 を超える整数を 1 刻みで持てないので 2 つに分ける）
+Texture2D low : register(t0);
+cbuffer P : register(b0) {
+    float2 grid;
+    float factor;
+};
+float4 ps_beamh_pmap(float4 pos : SV_Position) : SV_Target {
+    float2 c = pos.xy / factor - 0.5;
+    float2 c0 = floor(c);
+    float2 f = c - c0;
+    int2 g = int2(grid) - 1;
+    int2 q00 = clamp(int2(c0), int2(0, 0), g);
+    int2 q11 = clamp(int2(c0) + int2(1, 1), int2(0, 0), g);
+    float4 e00 = low.Load(int3(q00.x, q00.y, 0));
+    float4 e10 = low.Load(int3(q11.x, q00.y, 0));
+    float4 e01 = low.Load(int3(q00.x, q11.y, 0));
+    float4 e11 = low.Load(int3(q11.x, q11.y, 0));
+    float w00 = (1.0 - f.x) * (1.0 - f.y) * step(0.5, e00.a);
+    float w10 = f.x * (1.0 - f.y) * step(0.5, e10.a);
+    float w01 = (1.0 - f.x) * f.y * step(0.5, e01.a);
+    float w11 = f.x * f.y * step(0.5, e11.a);
+    float w = w00 + w10 + w01 + w11;
+    if (w <= 0.0) return float4(0, 0, 0, 0);
+    float s = w00 * (round(e00.r * 255.0) * 256.0 + round(e00.g * 255.0))
+            + w10 * (round(e10.r * 255.0) * 256.0 + round(e10.g * 255.0))
+            + w01 * (round(e01.r * 255.0) * 256.0 + round(e01.g * 255.0))
+            + w11 * (round(e11.r * 255.0) * 256.0 + round(e11.g * 255.0));
+    float v = w00 * round(e00.b * 255.0) + w10 * round(e10.b * 255.0)
+            + w01 * round(e01.b * 255.0) + w11 * round(e11.b * 255.0);
+    s = s / w * (factor / 4.0);
+    v = v / w * (factor / 4.0);
+    float hi = floor(s / 64.0);
+    return float4(hi, s - hi * 64.0, v, 1.0);
+}
+]]
+
+--[[pixelshader@ps_beamh_emit:
+// 光の放射 E（リニア・乗算済み）。出力は元の画像の大きさで、(0, 0) は広げた画像の origin。
+// 変調の関数（beamh_hash / beamh_lattice / beamh_value / beamh_fbm / beamh_mod）はここが正本。
+// ps_beamh_final に同じものを置いている。変更時は両方を直す
+Texture2D src : register(t0);
+Texture2D pmap : register(t1);
+cbuffer P : register(b0) {
+    float2 size;
+    float2 dir;
+    float3 glow_lin;
+    float use_source;
+    float half_len;
+    float fade_root;
+    float fade_tip;
+    float noise_amount;
+    float noise_scale;
+    float noise_stretch;
+    float shift_int;
+    float shift_frac;
+    float seed;
+    float flicker_gain;
+    float2 origin;
+    float2 path_origin;
+    float2 path_size;
+    float along;
+    float path_s0;
+    float path_s1;
+};
+uint beamh_hash(int2 c, uint s) {
+    uint h = asuint(c.x) * 0x8da6b343u;
+    h = h ^ (asuint(c.y) * 0xd8163841u);
+    h = h ^ (s * 0xcb1ab31fu);
+    h = h ^ (h >> 16);
+    h = h * 0x7feb352du;
+    h = h ^ (h >> 15);
+    h = h * 0x846ca68bu;
+    h = h ^ (h >> 16);
+    return h;
+}
+float beamh_lattice(int2 c, uint s) {
+    return (float)(beamh_hash(c, s) >> 8) * (1.0 / 16777216.0);
+}
+// cell_shift は格子の番号へ整数のまま足す（長時間でも float の精度が落ちない）
+float beamh_value(float2 q, int cell_shift, uint s) {
+    float2 i = floor(q);
+    float2 f = q - i;
+    float2 w = f * f * (3.0 - 2.0 * f);
+    int2 c = int2(i) - int2(cell_shift, 0);
+    float a = beamh_lattice(c, s);
+    float b = beamh_lattice(c + int2(1, 0), s);
+    float e = beamh_lattice(c + int2(0, 1), s);
+    float g = beamh_lattice(c + int2(1, 1), s);
+    return lerp(lerp(a, b, w.x), lerp(e, g, w.x), w.y);
+}
+float beamh_fbm(float u, float v) {
+    float qx = u / noise_scale;
+    float qy = v * noise_stretch / noise_scale;
+    uint s = (uint)seed * 3u;
+    float sum = 0.0;
+    float amp = 1.0;
+    float mul = 1.0;
+    [unroll]
+    for (int k = 0; k < 3; k++) {
+        float sf = shift_frac * mul;
+        float sfi = floor(sf);
+        int cell_shift = (int)shift_int * (int)mul + (int)sfi;
+        sum += amp * beamh_value(float2(qx * mul - (sf - sfi), qy * mul), cell_shift, s + (uint)k);
+        amp *= 0.5;
+        mul *= 2.0;
+    }
+    return sum / 1.75;
+}
+float beamh_mod(float2 p) {
+    float2 rel = p - size * 0.5;
+    float u = dot(rel, dir);
+    float v = dot(rel, float2(-dir.y, dir.x));
+    float t = saturate((u + half_len) / (2.0 * half_len));
+    if (along > 0.5) {
+        // 形に沿う: 道のりの地図（元の画像の大きさ）から u = 道のり、v = 縁や中心線からの距離
+        int2 q = clamp(int2(p - path_origin), int2(0, 0), int2(path_size) - 1);
+        float4 e = pmap.Load(int3(q, 0));
+        u = e.r * 64.0 + e.g;
+        v = e.b;
+        t = saturate((u - path_s0) / max(path_s1 - path_s0, 1e-3));
+    }
+    float m = flicker_gain;
+    if (fade_root > 0.0) m *= smoothstep(0.0, fade_root, t);
+    if (fade_tip > 0.0) m *= smoothstep(0.0, fade_tip, 1.0 - t);
+    if (noise_amount > 0.0) m *= 1.0 - noise_amount * beamh_fbm(u, v);
+    return m;
+}
+float4 ps_beamh_emit(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy + origin;
+    // src は広げる前の元の画像（v1.12）。出力も元の画像の大きさなので同じ画素を読む
+    float4 s = src.Load(int3(pos.xy, 0));
+    if (s.a <= 0.0) return float4(0, 0, 0, 0);
+    float m = beamh_mod(p);
+    float3 straight = saturate(s.rgb / s.a);
+    float3 col = use_source > 0.5 ? pow(straight, 2.2) : glow_lin;
+    float a = s.a * m;
+    return float4(col * a, a);
+}
+]]
+
+--[[pixelshader@ps_beamh_final:
+// 芯と光を足して出力する。
+// 正本: ps_beamh_emit の beamh_hash / beamh_lattice / beamh_value / beamh_fbm / beamh_mod（変更時は両方を直す）
+Texture2D src : register(t0);
+Texture2D core_tex : register(t1);
+Texture2D glow1 : register(t2);
+Texture2D glow2 : register(t3);
+Texture2D pmap : register(t4);
+SamplerState smp : register(s0);
+cbuffer P : register(b0) {
+    float2 size;
+    float2 dir;
+    float2 g1_scale;
+    float2 g2_scale;
+    float3 core_lin;
+    float core_gain;
+    float half_len;
+    float fade_root;
+    float fade_tip;
+    float noise_amount;
+    float noise_scale;
+    float noise_stretch;
+    float shift_int;
+    float shift_frac;
+    float seed;
+    float flicker_gain;
+    float core_mode;
+    float core_sigma;
+    float core_offset;
+    float core_width;
+    float inner_gain;
+    float outer_gain;
+    float2 core_origin;
+    float2 core_size;
+    float2 g1_origin;
+    float2 g2_origin;
+    float2 path_origin;
+    float2 path_size;
+    float along;
+    float path_s0;
+    float path_s1;
+};
+uint beamh_hash(int2 c, uint s) {
+    uint h = asuint(c.x) * 0x8da6b343u;
+    h = h ^ (asuint(c.y) * 0xd8163841u);
+    h = h ^ (s * 0xcb1ab31fu);
+    h = h ^ (h >> 16);
+    h = h * 0x7feb352du;
+    h = h ^ (h >> 15);
+    h = h * 0x846ca68bu;
+    h = h ^ (h >> 16);
+    return h;
+}
+float beamh_lattice(int2 c, uint s) {
+    return (float)(beamh_hash(c, s) >> 8) * (1.0 / 16777216.0);
+}
+float beamh_value(float2 q, int cell_shift, uint s) {
+    float2 i = floor(q);
+    float2 f = q - i;
+    float2 w = f * f * (3.0 - 2.0 * f);
+    int2 c = int2(i) - int2(cell_shift, 0);
+    float a = beamh_lattice(c, s);
+    float b = beamh_lattice(c + int2(1, 0), s);
+    float e = beamh_lattice(c + int2(0, 1), s);
+    float g = beamh_lattice(c + int2(1, 1), s);
+    return lerp(lerp(a, b, w.x), lerp(e, g, w.x), w.y);
+}
+float beamh_fbm(float u, float v) {
+    float qx = u / noise_scale;
+    float qy = v * noise_stretch / noise_scale;
+    uint s = (uint)seed * 3u;
+    float sum = 0.0;
+    float amp = 1.0;
+    float mul = 1.0;
+    [unroll]
+    for (int k = 0; k < 3; k++) {
+        float sf = shift_frac * mul;
+        float sfi = floor(sf);
+        int cell_shift = (int)shift_int * (int)mul + (int)sfi;
+        sum += amp * beamh_value(float2(qx * mul - (sf - sfi), qy * mul), cell_shift, s + (uint)k);
+        amp *= 0.5;
+        mul *= 2.0;
+    }
+    return sum / 1.75;
+}
+float beamh_mod(float2 p) {
+    float2 rel = p - size * 0.5;
+    float u = dot(rel, dir);
+    float v = dot(rel, float2(-dir.y, dir.x));
+    float t = saturate((u + half_len) / (2.0 * half_len));
+    if (along > 0.5) {
+        // 形に沿う: 道のりの地図（元の画像の大きさ）から u = 道のり、v = 縁や中心線からの距離
+        int2 q = clamp(int2(p - path_origin), int2(0, 0), int2(path_size) - 1);
+        float4 e = pmap.Load(int3(q, 0));
+        u = e.r * 64.0 + e.g;
+        v = e.b;
+        t = saturate((u - path_s0) / max(path_s1 - path_s0, 1e-3));
+    }
+    float m = flicker_gain;
+    if (fade_root > 0.0) m *= smoothstep(0.0, fade_root, t);
+    if (fade_tip > 0.0) m *= smoothstep(0.0, fade_tip, 1.0 - t);
+    if (noise_amount > 0.0) m *= 1.0 - noise_amount * beamh_fbm(u, v);
+    return m;
+}
+// erfinv の単精度近似（M. Giles, 2010）。分岐させずに両方を計算して選ぶ
+float beamh_erfinv(float x) {
+    float w = -log(max((1.0 - x) * (1.0 + x), 1e-30));
+    float w1 = w - 2.5;
+    float p1 = 2.81022636e-08;
+    p1 = 3.43273939e-07 + p1 * w1;
+    p1 = -3.5233877e-06 + p1 * w1;
+    p1 = -4.39150654e-06 + p1 * w1;
+    p1 = 0.00021858087 + p1 * w1;
+    p1 = -0.00125372503 + p1 * w1;
+    p1 = -0.00417768164 + p1 * w1;
+    p1 = 0.246640727 + p1 * w1;
+    p1 = 1.50140941 + p1 * w1;
+    float w2 = sqrt(w) - 3.0;
+    float p2 = -0.000200214257;
+    p2 = 0.000100950558 + p2 * w2;
+    p2 = 0.00134934322 + p2 * w2;
+    p2 = -0.00367342844 + p2 * w2;
+    p2 = 0.00573950773 + p2 * w2;
+    p2 = -0.0076224613 + p2 * w2;
+    p2 = 0.00943887047 + p2 * w2;
+    p2 = 1.00167406 + p2 * w2;
+    p2 = 2.83297682 + p2 * w2;
+    return (w < 5.0 ? p1 : p2) * x;
+}
+float4 ps_beamh_final(float4 pos : SV_Position) : SV_Target {
+    int3 ip = int3(pos.xy, 0);
+    // src は広げた画像（v1.13。v1.12 は広げる前の元の画像を退避して path_origin の位置で読んでいた）。広げた所は透明
+    float core_a = 0.0;
+    if (ip.x < (int)size.x && ip.y < (int)size.y) {
+        core_a = src.Load(ip).a;
+    }
+    if (core_mode > 0.5) {
+        // ぼかしたアルファ b = Φ(d / σ) から輪郭までの距離 d を戻す（直線の縁で正確）。
+        // 芯のバッファは「元の画像 + 芯の外側の範囲」だけ。その外に芯は無い
+        int2 cp = ip.xy - int2(core_origin);
+        float b = 0.0;
+        if (cp.x >= 0 && cp.y >= 0 && cp.x < (int)core_size.x && cp.y < (int)core_size.y) {
+            b = core_tex.Load(int3(cp, 0)).a;
+        }
+        b = clamp(b, 1e-4, 1.0 - 1e-4);
+        float d = core_sigma * 1.41421356 * beamh_erfinv(2.0 * b - 1.0);
+        core_a = saturate((d + core_offset) / core_width + 0.5);
+    }
+    // 変調は芯のある画素だけで計算する（光の方は放射のときに掛けてある）
+    if (core_a > 0.0) core_a *= beamh_mod(pos.xy);
+    float3 light = core_lin * (core_gain * core_a);
+    light += inner_gain * glow1.SampleLevel(smp, (pos.xy - g1_origin) * g1_scale, 0).rgb;
+    light += outer_gain * glow2.SampleLevel(smp, (pos.xy - g2_origin) * g2_scale, 0).rgb;
+    float3 rgb = min(pow(max(light, 0.0), 1.0 / 2.2), 1.0);
+    float a = saturate(max(max(rgb.r, max(rgb.g, rgb.b)), core_a * saturate(core_gain)));
+    return float4(rgb, a);
+}
+]]
+
+local w0, h0 = obj.w, obj.h
+if w0 < 1 or h0 < 1 then return end
+
+local GAMMA = 2.2
+local BLUR_MAX_TAPS = 96      -- ps_beamh_blur のループの上限（片側）
+local DOWN_MAX = 32           -- ps_beamh_down のループの上限（2 x 縮小率 <= 64）
+local CORE_SIGMA_MAX = 32     -- 3σ がタップの上限に収まる
+local GRID_MAX = 65536        -- 形に沿うとき、道のりを求める升目の数の目安（CPU で回す）
+local POOL_MAX = 16           -- ps_beamh_pool のループの上限（縮小率）
+
+local function lin_rgb(col)
+  local r, g, b = RGB(col)
+  return (r / 255) ^ GAMMA, (g / 255) ^ GAMMA, (b / 255) ^ GAMMA
+end
+
+-- 光のぼかしの段取り。σ = 広がり / 2 を、縮小後の σ が 6 以下になるまで縮めてから掛ける。
+-- タップは 4σ まで取る。3σ で打ち切ると、ガンマで持ち上がった裾（黒地で 10/255 ほど）が
+-- 四角い縁として見える。reach は 1 画素の光が届く距離（縮小のテント + ぼかし + 双線形の読み出し）
+-- fmin は縮小率の下限（v1.13。cache の枠に収めるときだけ 1 より大きくする）
+local function glow_plan(radius, gain, fmin)
+  if gain <= 0 then return nil end
+  local sigma = math.max(radius, 0) / 2
+  local f = math.min(DOWN_MAX, math.max(fmin or 1, math.ceil(sigma / 6)))
+  local s = sigma / f
+  local taps = math.min(BLUR_MAX_TAPS, math.ceil(4 * s))
+  return { factor = f, sigma = s, taps = taps, reach = (taps + 2) * f }
+end
+
+-- 芯。太さもぼかしも 0 なら元のアルファをそのまま使う
+local core_mode = core_offset ~= 0 or core_soft > 0
+local core_sigma = math.min(CORE_SIGMA_MAX, math.max(0.5, (math.abs(core_offset) + core_soft) / 2))
+local core_taps = math.min(BLUR_MAX_TAPS, math.ceil(3 * core_sigma))
+local core_width = math.max(core_soft, 1)
+
+local max_w, max_h = obj.getinfo("image_max")
+max_w = math.min(16384, max_w or 16384)
+max_h = math.min(16384, max_h or 16384)
+
+-- 光の段取りと広げる量。広げる量は光が 0 まで落ちきる所より外まで
+local inner, outer, pad_x, pad_y
+local function plan_all(fmin)
+  inner = glow_plan(inner_radius, inner_gain, fmin)
+  outer = glow_plan(outer_radius, outer_gain, fmin)
+  local pad = 0
+  if core_mode then pad = math.max(core_offset, 0) + core_width / 2 + 1 end
+  if inner then pad = math.max(pad, inner.reach) end
+  if outer then pad = math.max(pad, outer.reach) end
+  pad = math.ceil(pad) + 2
+  pad_x = math.max(0, math.min(pad, math.floor((max_w - w0) / 2)))
+  pad_y = math.max(0, math.min(pad, math.floor((max_h - h0) / 2)))
+end
+
+-- v1.13: cache と tempbuffer の枠（1600 万ドット）に収める。元の画像は退避しない（広げる前の object から芯・道のり・
+-- 放射・光を作り、広げた後の合成は広げた object を読む）。残るのは道のりの地図・放射・芯（元の画像の大きさ）と光で、
+-- 収まらなければ光を縮める率の下限を上げる。放射・芯・道のりだけで収まらなければ効果を掛けない
+-- （AI/scripts/issues/20261013_cache_budget_4k_wide_materials.md）
+local budget = require("EffectUtils_Budget")
+local function need()
+  local function reg(reach)
+    return w0 + 2 * math.min(reach, pad_x), h0 + 2 * math.min(reach, pad_y)
+  end
+  local keep, peak = 0, 0
+  if along == 1 and (fade_root > 0 or fade_tip > 0 or noise_amount > 0) then keep = keep + w0 * h0 end
+  if inner or outer then keep = keep + w0 * h0 end
+  if core_mode then
+    local cw, ch = reg(math.ceil(math.max(core_offset, 0) + core_width / 2) + 2)
+    keep, peak = keep + cw * ch, cw * ch
+  end
+  for _, p in ipairs({ inner or false, outer or false }) do
+    if p then
+      local rw, rh = reg(p.reach)
+      local lw, lh = math.ceil(rw / p.factor), math.ceil(rh / p.factor)
+      keep = keep + lw * lh
+      peak = math.max(peak, (p.factor == 1) and rw * rh or (lw * rh + 2 * lw * lh))
+    end
+  end
+  return keep + peak
+end
+local fmin = 1
+plan_all(fmin)
+while not budget.fits(need()) and fmin < DOWN_MAX do
+  fmin = fmin * 2
+  plan_all(fmin)
+end
+if not budget.check("ビーム化_H", w0, h0, need()) then return end
+local W, H = w0 + 2 * pad_x, h0 + 2 * pad_y
+
+-- 長さ方向
+local rad = math.rad(direction)
+local dx, dy = math.cos(rad), math.sin(rad)
+local half_len = math.max(0.5, (w0 * math.abs(dx) + h0 * math.abs(dy)) / 2)
+
+-- 乱数はシードだけで決める。ちらつきはマイナスの種（全オブジェクトで同じ、lua.txt の obj.rand1）
+local seed_i = math.floor(seed + 0.5)
+local flicker_gain = 1
+if flicker > 0 then
+  flicker_gain = 1 - flicker / 100 * obj.rand1(-(seed_i + 1001), obj.frame)
+end
+local seed_u = seed_i + 1000
+
+-- 流れ。格子の番号へ整数のまま足す分と小数の分に分ける
+local shift = noise_speed * obj.time / noise_scale
+local shift_int = math.floor(shift)
+local shift_frac = shift - shift_int
+
+local fr, ft, na = fade_root / 100, fade_tip / 100, noise_amount / 100
+
+-- ------------------------------------------------------------------ 形に沿う（道のりの地図）
+-- 16 近傍の歩幅（縦横 5・斜め 7・桂馬 11 で、ユークリッド距離の 5 倍を 2% 以内で近似する）。
+-- 桂馬は間の 2 升のどちらかが形の中のときだけ通す（隙間を飛び越えない）
+local NB = {
+  { 1, 0, 5 }, { -1, 0, 5 }, { 0, 1, 5 }, { 0, -1, 5 },
+  { 1, 1, 7 }, { 1, -1, 7 }, { -1, 1, 7 }, { -1, -1, 7 },
+  { 2, 1, 11, 1, 0, 1, 1 }, { 2, -1, 11, 1, 0, 1, -1 },
+  { -2, 1, 11, -1, 0, -1, 1 }, { -2, -1, 11, -1, 0, -1, -1 },
+  { 1, 2, 11, 0, 1, 1, 1 }, { -1, 2, 11, 0, 1, -1, 1 },
+  { 1, -2, 11, 0, -1, 1, -1 }, { -1, -2, 11, 0, -1, -1, -1 },
+}
+local INF = 0x3fffffff
+
+-- 升目の上の最短路（Dial のバケツ）。srcs の升から距離 0 で始める。
+-- inside なら形の中だけを通る。label があれば始点の番号を運ぶ。dmax を超える升へは進まない
+local function dial(ffi, gw, gh, mask, dist, srcs, inside, label, dmax)
+  local NBK = 12
+  local bucket, bn = {}, {}
+  for i = 0, NBK - 1 do bucket[i] = {}; bn[i] = 0 end
+  local pending = 0
+  for i = 1, #srcs do
+    local c = srcs[i]
+    dist[c] = 0
+    if label then label[c] = c end
+    bn[0] = bn[0] + 1
+    bucket[0][bn[0]] = c
+    pending = pending + 1
+  end
+  local d = 0
+  while pending > 0 do
+    local b = d % NBK
+    local list, cnt = bucket[b], bn[b]
+    for i = 1, cnt do
+      local c = list[i]
+      pending = pending - 1
+      if dist[c] == d then
+        local x = c % gw
+        local y = (c - x) / gw
+        for k = 1, 16 do
+          local nb = NB[k]
+          local nx, ny = x + nb[1], y + nb[2]
+          if nx >= 0 and ny >= 0 and nx < gw and ny < gh then
+            local nc = ny * gw + nx
+            local ok = true
+            if inside then
+              ok = mask[nc] == 1
+              if ok and nb[4] then
+                ok = mask[(y + nb[5]) * gw + x + nb[4]] == 1 or mask[(y + nb[7]) * gw + x + nb[6]] == 1
+              end
+            end
+            local nd = d + nb[3]
+            if ok and nd < dist[nc] and nd <= dmax then
+              dist[nc] = nd
+              if label then label[nc] = label[c] end
+              local b2 = nd % NBK
+              bn[b2] = bn[b2] + 1
+              bucket[b2][bn[b2]] = nc
+              pending = pending + 1
+            end
+          end
+        end
+      end
+    end
+    bn[b] = 0
+    d = d + 1
+  end
+end
+
+-- 道のりの地図を作る。戻り値は (地図のバッファ, 見せる範囲の始まり, 終わり)（px）。形が無ければ nil
+local function build_path_map(band_px)
+  -- 光線経路_H が同じオブジェクトで道のりを渡していれば、それを使う（交差しても道のりが正しい）。
+  -- 同じフレーム・同じ大きさのときだけ（間に大きさを変える効果を挟むと合わなくなる）
+  local key = "rayh:" .. tostring(obj.id)
+  local rec = global and global[key]
+  if rec then
+    local f, rw, rh, s0, s1 = string.match(tostring(rec),
+      "^(%-?%d+),(%d+),(%d+),([%-%d%.e+]+),([%-%d%.e+]+)$")
+    if f and tonumber(f) == obj.frame and tonumber(rw) == w0 and tonumber(rh) == h0 then
+      return "cache:rayh/" .. tostring(obj.id), tonumber(s0), tonumber(s1)
+    end
+  end
+
+  -- 形を升目へ縮め、CPU で最短路を求める
+  local ffi = require("ffi")
+  local k = math.min(POOL_MAX, math.max(1, math.ceil(math.sqrt(w0 * h0 / GRID_MAX))))
+  local gw, gh = math.ceil(w0 / k), math.ceil(h0 / k)
+  local n = gw * gh
+  obj.clearbuffer("cache:beamh/pool", gw, gh)
+  obj.pixelshader("ps_beamh_pool", "cache:beamh/pool", "object", { 0, 0, w0, h0, k }, "copy")
+  local px = ffi.cast("uint8_t*", obj.getpixeldata("cache:beamh/pool"))
+  local mask = ffi.new("uint8_t[?]", n)
+  local ncell = 0
+  for c = 0, n - 1 do
+    if px[c * 4 + 3] >= 128 then
+      mask[c] = 1
+      ncell = ncell + 1
+    end
+  end
+  if ncell == 0 then return nil end
+
+  -- つながった部分（8 近傍）ごとに升を並べる
+  local comp = ffi.new("int32_t[?]", n)
+  local order = ffi.new("int32_t[?]", ncell)
+  local first, count = {}, {}
+  local nc, pos = 0, 0
+  for c = 0, n - 1 do
+    if mask[c] == 1 and comp[c] == 0 then
+      nc = nc + 1
+      first[nc] = pos
+      comp[c] = nc
+      order[pos] = c
+      local head, tail = pos, pos + 1
+      while head < tail do
+        local q = order[head]
+        head = head + 1
+        local x = q % gw
+        local y = (q - x) / gw
+        for j = 1, 8 do
+          local nx, ny = x + NB[j][1], y + NB[j][2]
+          if nx >= 0 and ny >= 0 and nx < gw and ny < gh then
+            local qq = ny * gw + nx
+            if mask[qq] == 1 and comp[qq] == 0 then
+              comp[qq] = nc
+              order[tail] = qq
+              tail = tail + 1
+            end
+          end
+        end
+      end
+      count[nc] = tail - pos
+      pos = tail
+    end
+  end
+
+  local dist = ffi.new("int32_t[?]", n)
+  for c = 0, n - 1 do dist[c] = INF end
+  local function reset(ci)
+    for i = first[ci], first[ci] + count[ci] - 1 do dist[order[i]] = INF end
+  end
+  local function farthest(ci)
+    local best, bc = -1, order[first[ci]]
+    for i = first[ci], first[ci] + count[ci] - 1 do
+      local c = order[i]
+      if dist[c] < INF and dist[c] > best then best, bc = dist[c], c end
+    end
+    return bc, best
+  end
+  local function proj(c)
+    local x = c % gw
+    return x * dx + (c - x) / gw * dy
+  end
+
+  -- 部分ごとに両端（道のりでいちばん離れた 2 点）を探し、方向 の後ろ側を根元にする
+  local s = ffi.new("float[?]", n)
+  local roots = {}
+  for ci = 1, nc do
+    dial(ffi, gw, gh, mask, dist, { order[first[ci]] }, true, nil, INF)
+    local a = farthest(ci)
+    reset(ci)
+    dial(ffi, gw, gh, mask, dist, { a }, true, nil, INF)
+    local b = farthest(ci)
+    local root = a
+    if proj(b) < proj(a) then
+      root = b
+      reset(ci)
+      dial(ffi, gw, gh, mask, dist, { b }, true, nil, INF)
+    end
+    local len = 0
+    for i = first[ci], first[ci] + count[ci] - 1 do
+      local c = order[i]
+      s[c] = dist[c] / 5
+      if s[c] > len then len = s[c] end
+    end
+    roots[ci] = { p = proj(root), len = len }
+    reset(ci)
+  end
+  -- つながっていない部分は、根元の 方向 への位置の差で継ぐ
+  local pmin = math.huge
+  for ci = 1, nc do pmin = math.min(pmin, roots[ci].p) end
+  local total = 0
+  for ci = 1, nc do
+    local off = roots[ci].p - pmin
+    for i = first[ci], first[ci] + count[ci] - 1 do
+      local c = order[i]
+      s[c] = s[c] + off
+    end
+    total = math.max(total, off + roots[ci].len)
+  end
+
+  -- 縁からの距離（形の中）
+  local edge = ffi.new("int32_t[?]", n)
+  for c = 0, n - 1 do edge[c] = INF end
+  local srcs = {}
+  for c = 0, n - 1 do
+    if mask[c] == 1 then
+      local x = c % gw
+      local y = (c - x) / gw
+      local border = false
+      for j = 1, 8 do
+        local nx, ny = x + NB[j][1], y + NB[j][2]
+        if nx < 0 or ny < 0 or nx >= gw or ny >= gh or mask[ny * gw + nx] == 0 then
+          border = true
+          break
+        end
+      end
+      if border then srcs[#srcs + 1] = c end
+    end
+  end
+  dial(ffi, gw, gh, mask, edge, srcs, true, nil, INF)
+
+  -- 形の外は、近い形の升の値を帯の幅だけ運ぶ（縁のにじみと芯の太さの分）
+  local fill = ffi.new("int32_t[?]", n)
+  local label = ffi.new("int32_t[?]", n)
+  for c = 0, n - 1 do
+    fill[c] = INF
+    label[c] = -1
+  end
+  srcs = {}
+  for i = 0, ncell - 1 do srcs[i + 1] = order[i] end
+  dial(ffi, gw, gh, mask, fill, srcs, false, label, 5 * (math.ceil(band_px / k) + 2))
+
+  -- putpixeldata へは getpixeldata が返したユーザーデータをそのまま渡す（@tim.anm2 と同じ手順）
+  obj.clearbuffer("cache:beamh/pmap_low", gw, gh)
+  local data = obj.getpixeldata("cache:beamh/pmap_low")
+  local out = ffi.cast("uint8_t*", data)
+  for c = 0, n - 1 do
+    local l = label[c]
+    local o = c * 4
+    if l >= 0 then
+      local sq = math.min(65535, math.floor(s[l] * 4 + 0.5))
+      local vq = 0
+      if mask[c] == 1 then vq = math.min(255, math.floor((edge[c] + 2.5) / 5 * 4 + 0.5)) end
+      out[o] = math.floor(sq / 256)
+      out[o + 1] = sq % 256
+      out[o + 2] = vq
+      out[o + 3] = 255
+    else
+      out[o], out[o + 1], out[o + 2], out[o + 3] = 0, 0, 0, 0
+    end
+  end
+  obj.putpixeldata("cache:beamh/pmap_low", data, gw, gh)
+  obj.clearbuffer("cache:beamh/pmap", w0, h0)
+  obj.pixelshader("ps_beamh_pmap", "cache:beamh/pmap", "cache:beamh/pmap_low", { gw, gh, k }, "copy")
+  return "cache:beamh/pmap", 0, total * k
+end
+
+-- 使わないときの resource は object（読まない）
+local path_buf, path_s0, path_s1, along_on = "object", 0, 1, 0
+-- フェードも揺らぎも無ければ長さ方向は使わないので、地図も作らない
+if along == 1 and (fr > 0 or ft > 0 or na > 0) then
+  local band = math.max(core_offset, 0) + core_width + 4
+  local buf, s0, s1 = build_path_map(band)
+  if buf then
+    path_buf, path_s0, path_s1, along_on = buf, s0, s1, 1
+  end
+end
+
+-- 芯・光のバッファは「元の画像 + それぞれの届く範囲」だけ取る。広げた全面では回さない。
+-- 外側の光を大きくすると画像は大きく広がるが、芯と内側の光はその外で 0 なので計算しても無駄になる
+-- （AI/scripts/ビーム化_H/issues/20260922_beam_perf_full_padded_passes.md）。
+-- 戻り値は広げた画像の中での原点と大きさ。画像の外は要らないので広げた量で頭打ちにする
+local function region(reach)
+  local rx = math.min(reach, pad_x)
+  local ry = math.min(reach, pad_y)
+  return pad_x - rx, pad_y - ry, w0 + 2 * rx, h0 + 2 * ry
+end
+
+local core_buf = "object"
+local core_ox, core_oy, core_w, core_h = 0, 0, 1, 1
+if core_mode then
+  core_ox, core_oy, core_w, core_h = region(math.ceil(math.max(core_offset, 0) + core_width / 2) + 2)
+  obj.clearbuffer("cache:beamh/tmp", core_w, core_h)
+  obj.pixelshader("ps_beamh_blur", "cache:beamh/tmp", "object",
+    { 1, 0, w0, h0, core_ox - pad_x, core_oy - pad_y, core_sigma, core_taps }, "copy")
+  obj.clearbuffer("cache:beamh/core", core_w, core_h)
+  obj.pixelshader("ps_beamh_blur", "cache:beamh/core", "cache:beamh/tmp",
+    { 0, 1, core_w, core_h, 0, 0, core_sigma, core_taps }, "copy")
+  core_buf = "cache:beamh/core"
+end
+
+-- 放射は元の画像の大きさ（広げた分には光源が無い）
+if inner or outer then
+  local use_source, gr, gg, gb = 1, 0, 0, 0
+  if glow_color then
+    use_source = 0
+    gr, gg, gb = lin_rgb(glow_color)
+  end
+  obj.clearbuffer("cache:beamh/emit", w0, h0)
+  obj.pixelshader("ps_beamh_emit", "cache:beamh/emit", { "object", path_buf }, {
+    W, H, dx, dy,
+    gr, gg, gb, use_source,
+    half_len, fr, ft, na,
+    noise_scale, noise_stretch, shift_int, shift_frac,
+    seed_u, flicker_gain, pad_x, pad_y,
+    pad_x, pad_y, w0, h0,
+    along_on, path_s0, path_s1,
+  }, "copy")
+end
+
+-- 光を 1 本ぼかす。戻り値は合成で読むときの uv の係数と、広げた画像の中での原点
+local function run_glow(plan, name)
+  local out = "cache:beamh/" .. name
+  if not plan then
+    obj.clearbuffer(out, 1, 1)
+    return 0, 0, 0, 0
+  end
+  local f = plan.factor
+  local ox, oy, rw, rh = region(plan.reach)
+  local ex, ey = ox - pad_x, oy - pad_y          -- 放射のバッファから見た領域の原点
+  local lw, lh = math.ceil(rw / f), math.ceil(rh / f)
+  if f == 1 then
+    obj.clearbuffer("cache:beamh/tmp", rw, rh)
+    obj.pixelshader("ps_beamh_blur", "cache:beamh/tmp", "cache:beamh/emit",
+      { 1, 0, w0, h0, ex, ey, plan.sigma, plan.taps }, "copy")
+  else
+    local low = out .. "_low"
+    obj.clearbuffer("cache:beamh/down", lw, rh)
+    obj.pixelshader("ps_beamh_down", "cache:beamh/down", "cache:beamh/emit",
+      { 1, 0, w0, h0, ex, ey, f }, "copy")
+    obj.clearbuffer(low, lw, lh)
+    obj.pixelshader("ps_beamh_down", low, "cache:beamh/down",
+      { 0, 1, lw, rh, 0, 0, f }, "copy")
+    obj.clearbuffer("cache:beamh/tmp", lw, lh)
+    obj.pixelshader("ps_beamh_blur", "cache:beamh/tmp", low,
+      { 1, 0, lw, lh, 0, 0, plan.sigma, plan.taps }, "copy")
+    -- 縮小の途中は合成で読まないので縮めて枠を空ける（v1.12。縮めれば枠が空くのは実機で確認済み）
+    obj.clearbuffer("cache:beamh/down", 1, 1)
+    obj.clearbuffer(low, 1, 1)
+  end
+  obj.clearbuffer(out, lw, lh)
+  obj.pixelshader("ps_beamh_blur", out, "cache:beamh/tmp",
+    { 0, 1, lw, lh, 0, 0, plan.sigma, plan.taps }, "copy")
+  return 1 / (f * lw), 1 / (f * lh), ox, oy
+end
+
+local g1x, g1y, g1ox, g1oy = run_glow(inner, "g1")
+local g2x, g2y, g2ox, g2oy = run_glow(outer, "g2")
+
+-- ここまでは広げる前の object を読んだ。ここで広げる（合成は広げた object の上に描く）
+if pad_x > 0 or pad_y > 0 then
+  obj.effect("領域拡張", "上", pad_y, "下", pad_y, "左", pad_x, "右", pad_x, "塗りつぶし", 0)
+end
+
+-- 光のバッファの外は透明として読む（sampler "clip"）
+local cr, cg, cb = lin_rgb(core_color)
+local ig = inner and inner_gain / 100 or 0
+local og = outer and outer_gain / 100 or 0
+obj.pixelshader("ps_beamh_final", "object",
+  { "object", core_buf, "cache:beamh/g1", "cache:beamh/g2", path_buf }, {
+    W, H, dx, dy,
+    g1x, g1y, g2x, g2y,
+    cr, cg, cb, core_gain / 100,
+    half_len, fr, ft, na,
+    noise_scale, noise_stretch, shift_int, shift_frac,
+    seed_u, flicker_gain, core_mode and 1 or 0, core_sigma,
+    core_offset, core_width, ig, og,
+    core_ox, core_oy, core_w, core_h,
+    g1ox, g1oy, g2ox, g2oy,
+    pad_x, pad_y, w0, h0,
+    along_on, path_s0, path_s1,
+  }, "copy", "clip")

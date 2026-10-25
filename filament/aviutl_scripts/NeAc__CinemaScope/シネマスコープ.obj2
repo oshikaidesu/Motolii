@@ -1,0 +1,87 @@
+--information:シネマスコープ r5 by 猫愛
+--label:画面効果
+
+--track@centerX:中心X,-10000,10000,0,0.1
+--track@centerY:中心Y,-10000,10000,0,0.1
+--track@angle:角度,-10000,10000,0,0.01
+--select@mode_width:幅タイプ=1,ピクセル=1,割合(スクリーン幅)=2,割合(スクリーン高さ)=3
+--track@width:幅,0,50000,0,0.01
+--color@color:色,0x000000
+--group:オフセット設定,false
+--select@mode_offset:オフセットタイプ=1,ピクセル=1,割合(スクリーン幅)=2,割合(スクリーン高さ)=3
+--track@offset:オフセット,-10000,10000,0,0.1
+--group:追加オプション1,false
+--track@centerX_1:追加1::中心X,-10000,10000,0,0.1
+--track@centerY_1:追加1::中心Y,-10000,10000,0,0.1
+--track@angle_1:追加1::角度,-10000,10000,0,0.01
+--track@width_1:追加1::幅,-10000,10000,0,0.1
+--track@offset_1:追加1::オフセット,-10000,10000,0,0.1
+--group:追加オプション2,false
+--track@centerX_2:追加2::中心X,-10000,10000,0,0.1
+--track@centerY_2:追加2::中心Y,-10000,10000,0,0.1
+--track@angle_2:追加2::角度,-10000,10000,0,0.01
+--track@width_2:追加2::幅,-10000,10000,0,0.1
+--track@offset_2:追加2::オフセット,-10000,10000,0,0.1
+
+
+centerX = centerX + centerX_1 + centerX_2
+centerY = centerY + centerY_1 + centerY_2
+angle = angle + angle_1 + angle_2
+width = width + width_1 + width_2
+offset = offset + offset_1 + offset_2
+
+
+if (mode_offset == 2) then
+  offset = offset / 100 * obj.screen_w / 2
+elseif (mode_offset == 3) then
+  offset = offset / 100 * obj.screen_h / 2
+end
+
+if (mode_width == 2) then
+  width = width / 100 * obj.screen_w / 2
+elseif (mode_width == 3) then
+  width = width / 100 * obj.screen_h / 2
+end
+
+
+local function belt_draw(width, angle, centerX, centerY, offset, variant)
+  local rad = math.atan2(width, 0) + math.rad(angle)
+  local rad_90 = rad + math.rad(90)
+  local inverter = (variant == 2) and -1 or 1
+  local l_w1 = (width * inverter + offset) * math.cos(rad) + (500000 * inverter + offset) * math.cos(rad_90)
+  local l_h1 = (width * inverter + offset) * math.sin(rad) + (500000 * inverter + offset) * math.sin(rad_90)
+  local l_w2 = (width * inverter + offset) * math.cos(rad) + (-500000 * inverter + offset) * math.cos(rad_90)
+  local l_h2 = (width * inverter + offset) * math.sin(rad) + (-500000 * inverter + offset) * math.sin(rad_90)
+  local l_w3 = (500000 * inverter) * math.cos(rad) + (-500000 * inverter) * math.cos(rad_90)
+  local l_h3 = (500000 * inverter) * math.sin(rad) + (-500000 * inverter) * math.sin(rad_90)
+  local l_w4 = (500000 * inverter) * math.cos(rad) + (500000 * inverter) * math.cos(rad_90)
+  local l_h4 = (500000 * inverter) * math.sin(rad) + (500000 * inverter) * math.sin(rad_90)
+
+  l_w1 = l_w1 + centerX
+  l_h1 = l_h1 + centerY
+  l_w2 = l_w2 + centerX
+  l_h2 = l_h2 + centerY
+  l_w3 = l_w3 + centerX
+  l_h3 = l_h3 + centerY
+  l_w4 = l_w4 + centerX
+  l_h4 = l_h4 + centerY
+
+
+  obj.drawpoly(l_w1,l_h1,0, l_w2,l_h2,0, l_w3,l_h3,0, l_w4,l_h4,0)
+
+end
+
+
+
+obj.setoption("drawtarget","tempbuffer",obj.screen_w,obj.screen_h)
+obj.load("figure","四角形",color,1)
+
+if (width==0) then
+  local half_screen_w, half_screen_h = obj.screen_w / 2, obj.screen_h / 2
+  obj.drawpoly(-half_screen_w,-half_screen_h,0, half_screen_w,-half_screen_h,0, half_screen_w,half_screen_h,0, -half_screen_w,half_screen_h,0)
+else
+  belt_draw(width, angle, centerX, centerY, offset, 1)
+  belt_draw(width, angle, centerX, centerY, offset, 2)
+end
+
+obj.load("tempbuffer")

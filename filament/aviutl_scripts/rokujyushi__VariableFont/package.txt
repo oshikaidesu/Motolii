@@ -1,0 +1,19 @@
+Variable Font
+
+【日本語】
+Variable Font Textフィルタ、Variable Font Object、Scriptモジュールをインストールします。
+英語・簡体中文の言語ファイルを同梱しています。
+GCMZ Drops 2を導入している場合は、テキスト／音声ファイルのドロップ変換も利用できます。
+詳しい使用方法はPlugin/VariableFont/README.md、ライセンスはPlugin/VariableFont/LICENSEをご覧ください。
+
+[English]
+Installs the Variable Font Text filter, Variable Font Object, and script module.
+English and Simplified Chinese language files are included.
+If GCMZ Drops 2 is installed, dropped text/audio files can also be converted automatically.
+See Plugin/VariableFont/README.md for usage and Plugin/VariableFont/LICENSE for license terms.
+
+【简体中文】
+安装Variable Font Text滤镜、Variable Font Object和脚本模块。
+本软件包包含英语和简体中文语言文件。
+如果已安装GCMZ Drops 2，还可以自动转换拖放的文本／音频文件。
+使用方法请参阅Plugin/VariableFont/README.md，许可条款请参阅Plugin/VariableFont/LICENSE。

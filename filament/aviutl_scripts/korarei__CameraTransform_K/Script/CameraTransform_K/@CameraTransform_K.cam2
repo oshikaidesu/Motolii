@@ -1,0 +1,433 @@
+@Transform
+
+--require:2005300
+--information:Transform@CameraTransform_K v2.0.1 by Korarei
+--label:カメラ効果
+
+--group:Position,true
+--track@position_x:Position::X,-100000,100000,0,0.01
+--track@position_y:Position::Y,-100000,100000,0,0.01
+--track@position_z:Position::Z,-100000,100000,0,0.01
+--trackgroup@position_x,position_y,position_z:Group::Position
+--group:Rotation,true
+--track@rotation_w:Rotation::W,-3600,3600,0,0.01
+--track@rotation_x:Rotation::X,-3600,3600,0,0.01
+--track@rotation_y:Rotation::Y,-3600,3600,0,0.01
+--track@rotation_z:Rotation::Z,-3600,3600,0,0.01
+--select@rotation_mode:Rotation::Mode=21,Quaternion=0,Axis Angle=1,XYZ Euler=5,XZY Euler=7,YXZ Euler=11,YZX Euler=15,ZXY Euler=19,ZYX Euler=21
+--trackgroup@rotation_x,rotation_y,rotation_z:Group::Rotation
+--group:Scale,true
+--track@scale_x:Scale::X,0,10000,100,0.01
+--track@scale_y:Scale::Y,0,10000,100,0.01
+--track@scale_z:Scale::Z,0,10000,100,0.01
+--trackgroup@scale_x,scale_y,scale_z:Group::Scale
+--group:Relations,true
+--track@relations_parent_layer:Relations::Parent Layer,-100,100,0,1,---
+--group:Additional Options,false
+--track@influence:Influence,0,100,100,0.01
+--select@layer_reference:Layer Reference=0,Absolute=0,Relative=1
+
+local _ = obj.setanchor("position_x,position_y,position_z", 0, "line", "xyz")
+
+do
+    local kKeyXform, compose
+
+    do
+        local buffer = require("string.buffer")
+
+        local vector = obj.module("CameraTransform_K")
+
+        kKeyXform = "0e1ed7c9-af0e-4440-b903-eb36ba941ede"
+
+        ---@param target integer
+        ---@return boolean
+        compose = function(target)
+            local tonumber, comp, getvalue = tonumber, vector.compose, obj.getvalue
+
+            local name = "layer" .. target
+            local has_empty = getvalue(target, "Empty@CameraTransform_K", "Influence") ~= nil
+
+            if not getvalue(name) then
+                print("@warn", "Object not found on layer " .. target)
+                vector.reset()
+                return false
+            end
+
+            vector.tryenter(obj.layer)
+
+            if not vector.tryenter(target) then
+                print("@warn", "Cyclic reference is not allowed")
+                vector.reset()
+                return false
+            end
+
+            local t = 1.0
+            local x, y, z = getvalue(name .. ".pos")
+            local rx, ry, rz = getvalue(name .. ".angle")
+            local sx, sy, sz = getvalue(name .. ".scale")
+
+            if has_empty then
+                global[kKeyXform] = nil
+
+                if obj.load("layer", target, true) and global[kKeyXform] ~= nil then
+                    local xform = buffer.decode(global[kKeyXform])
+
+                    if type(xform) == "table" and #xform == 10 then
+                        t = tonumber(xform[1]) or 1.0
+                        x = x + (tonumber(xform[2]) or 0.0)
+                        y = y + (tonumber(xform[3]) or 0.0)
+                        z = z + (tonumber(xform[4]) or 0.0)
+                        rx = rx + (tonumber(xform[5]) or 0.0)
+                        ry = ry + (tonumber(xform[6]) or 0.0)
+                        rz = rz + (tonumber(xform[7]) or 0.0)
+                        sx = sx * (tonumber(xform[8]) or 1.0)
+                        sy = sy * (tonumber(xform[9]) or 1.0)
+                        sz = sz * (tonumber(xform[10]) or 1.0)
+                    end
+                else
+                    vector.reset()
+                end
+            else
+                vector.reset()
+            end
+
+            do
+                local empties = {}
+
+                do
+                    local curr = target
+
+                    for i = target - 1, 1, -1 do
+                        local range = getvalue(i, "グループ制御", "対象レイヤー数")
+
+                        if range ~= nil then
+                            range = tonumber(range) or 0
+                            if range == 0 or range >= curr - i then
+                                empties[#empties + 1] = i
+                                curr = i
+                            end
+                        end
+                    end
+                end
+
+                for i = #empties, 1, -1 do
+                    local j = empties[i]
+
+                    local scale = getvalue(j, "グループ制御", "拡大率") * 0.01
+
+                    comp(
+                        t,
+                        getvalue(j, "グループ制御", "X"),
+                        getvalue(j, "グループ制御", "Y"),
+                        getvalue(j, "グループ制御", "Z"),
+                        0.0,
+                        getvalue(j, "グループ制御", "X軸回転"),
+                        getvalue(j, "グループ制御", "Y軸回転"),
+                        getvalue(j, "グループ制御", "Z軸回転"),
+                        21,
+                        scale,
+                        scale,
+                        scale
+                    )
+                end
+            end
+
+            comp(t, x, y, z, 0.0, rx, ry, rz, 21, sx, sy, sz)
+
+            return true
+        end
+    end
+
+
+    local vector = obj.module("CameraTransform_K")
+
+    scale_x = scale_x * 0.01
+    scale_y = scale_y * 0.01
+    scale_z = scale_z * 0.01
+
+    influence = influence * 0.01
+
+    if layer_reference == 0 then
+        relations_parent_layer = math.max(relations_parent_layer, 0)
+    else
+        relations_parent_layer = math.max(obj.layer + relations_parent_layer, 0)
+    end
+
+    vector.reset()
+
+    if relations_parent_layer ~= 0 and relations_parent_layer ~= obj.layer then
+        compose(relations_parent_layer)
+    end
+
+    vector.compose(
+        influence,
+        position_x,
+        position_y,
+        position_z,
+        rotation_w,
+        rotation_x,
+        rotation_y,
+        rotation_z,
+        rotation_mode,
+        scale_x,
+        scale_y,
+        scale_z
+    )
+
+    do
+        local camera = obj.getoption("camera_param")
+        local focus = obj.getoption("camera_focus")
+
+        local up = vector.rotate({ camera.ux, camera.uy, camera.uz })
+        local to, pos = vector.transform({ camera.tx, camera.ty, camera.tz }, { camera.x, camera.y, camera.z })
+
+        camera.ux, camera.uy, camera.uz = up[1], up[2], up[3]
+        camera.tx, camera.ty, camera.tz = to[1], to[2], to[3]
+        camera.x, camera.y, camera.z = pos[1], pos[2], pos[3]
+
+        focus.x, focus.y, focus.z = to[1], to[2], to[3]
+
+        obj.setoption("camera_param", camera)
+        obj.setoption("camera_focus", focus)
+    end
+end
+
+@Track
+
+--require:2005300
+--information:Track@CameraTransform_K v2.0.1 by Korarei
+--label:カメラ効果
+
+--track@target_layer:Target Layer,-100,100,1,1,---
+--select@track_axis:Track Axis=3,-Z=-3,-Y=-2,-X=-1,X=1,Y=2,Z=3
+--group:Additional Options,false
+--track@influence:Influence,0,100,100,0.01
+--select@layer_reference:Layer Reference,Absolute=0,Relative=1
+
+do
+    local kKeyXform, compose
+
+    do
+        local buffer = require("string.buffer")
+
+        local vector = obj.module("CameraTransform_K")
+
+        kKeyXform = "0e1ed7c9-af0e-4440-b903-eb36ba941ede"
+
+        ---@param target integer
+        ---@return boolean
+        compose = function(target)
+            local tonumber, comp, getvalue = tonumber, vector.compose, obj.getvalue
+
+            local name = "layer" .. target
+            local has_empty = getvalue(target, "Empty@CameraTransform_K", "Influence") ~= nil
+
+            if not getvalue(name) then
+                print("@warn", "Object not found on layer " .. target)
+                vector.reset()
+                return false
+            end
+
+            vector.tryenter(obj.layer)
+
+            if not vector.tryenter(target) then
+                print("@warn", "Cyclic reference is not allowed")
+                vector.reset()
+                return false
+            end
+
+            local t = 1.0
+            local x, y, z = getvalue(name .. ".pos")
+            local rx, ry, rz = getvalue(name .. ".angle")
+            local sx, sy, sz = getvalue(name .. ".scale")
+
+            if has_empty then
+                global[kKeyXform] = nil
+
+                if obj.load("layer", target, true) and global[kKeyXform] ~= nil then
+                    local xform = buffer.decode(global[kKeyXform])
+
+                    if type(xform) == "table" and #xform == 10 then
+                        t = tonumber(xform[1]) or 1.0
+                        x = x + (tonumber(xform[2]) or 0.0)
+                        y = y + (tonumber(xform[3]) or 0.0)
+                        z = z + (tonumber(xform[4]) or 0.0)
+                        rx = rx + (tonumber(xform[5]) or 0.0)
+                        ry = ry + (tonumber(xform[6]) or 0.0)
+                        rz = rz + (tonumber(xform[7]) or 0.0)
+                        sx = sx * (tonumber(xform[8]) or 1.0)
+                        sy = sy * (tonumber(xform[9]) or 1.0)
+                        sz = sz * (tonumber(xform[10]) or 1.0)
+                    end
+                else
+                    vector.reset()
+                end
+            else
+                vector.reset()
+            end
+
+            do
+                local empties = {}
+
+                do
+                    local curr = target
+
+                    for i = target - 1, 1, -1 do
+                        local range = getvalue(i, "グループ制御", "対象レイヤー数")
+
+                        if range ~= nil then
+                            range = tonumber(range) or 0
+                            if range == 0 or range >= curr - i then
+                                empties[#empties + 1] = i
+                                curr = i
+                            end
+                        end
+                    end
+                end
+
+                for i = #empties, 1, -1 do
+                    local j = empties[i]
+
+                    local scale = getvalue(j, "グループ制御", "拡大率") * 0.01
+
+                    comp(
+                        t,
+                        getvalue(j, "グループ制御", "X"),
+                        getvalue(j, "グループ制御", "Y"),
+                        getvalue(j, "グループ制御", "Z"),
+                        0.0,
+                        getvalue(j, "グループ制御", "X軸回転"),
+                        getvalue(j, "グループ制御", "Y軸回転"),
+                        getvalue(j, "グループ制御", "Z軸回転"),
+                        21,
+                        scale,
+                        scale,
+                        scale
+                    )
+                end
+            end
+
+            comp(t, x, y, z, 0.0, rx, ry, rz, 21, sx, sy, sz)
+
+            return true
+        end
+    end
+
+
+    local vector = obj.module("CameraTransform_K")
+
+    influence = influence * 0.01
+
+    if layer_reference == 0 then
+        target_layer = math.max(target_layer, 0)
+    else
+        target_layer = math.max(obj.layer + target_layer, 0)
+    end
+
+    if target_layer == 0 or target_layer == obj.layer then
+        return
+    end
+
+    vector.reset()
+
+    if not compose(target_layer) then
+        return
+    end
+
+    local to = vector.translate({ 0.0, 0.0, 0.0 })
+
+    do
+        local camera = obj.getoption("camera_param")
+        local focus = obj.getoption("camera_focus")
+
+        local d, up = vector.align(
+            influence,
+            { to[1] - camera.x, to[2] - camera.y, to[3] - camera.z },
+            track_axis,
+            { camera.tx - camera.x, camera.ty - camera.y, camera.tz - camera.z },
+            { camera.ux, camera.uy, camera.uz }
+        )
+
+        local tx, ty, tz = d[1] + camera.x, d[2] + camera.y, d[3] + camera.z
+
+        camera.ux, camera.uy, camera.uz = up[1], up[2], up[3]
+        camera.tx, camera.ty, camera.tz = tx, ty, tz
+
+        focus.x, focus.y, focus.z = tx, ty, tz
+
+        obj.setoption("camera_param", camera)
+        obj.setoption("camera_focus", focus)
+    end
+end
+
+@Lens
+
+--require:2005300
+--information:Lens@CameraTransform_K v2.0.1 by Korarei
+--label:カメラ効果
+
+--track@focal_length:Focal Length,1,5000,50,0.01,0.00,0.01
+--checksection@use_dolly_zoom:Dolly Zoom,false,false
+--group:Sensor,false
+--select@sensor_fit:Sensor::Fit,Auto=0,Horizontal=1,Vertical=2
+--track@sensor_size:Sensor::Size,1,100,36,0.01
+--group:Depth of Field,false
+--track@dof_focus_distance:DOF::Focus Distance,0,100000,0,0.01,---
+--separator:Aperture
+--track@dof_aperture_f_stop:DOF::Aperture::F-Stop,0.0,128,0.0,0.01,---
+
+do
+    local kEpsilon = 1.0e-4
+
+    focal_length = math.max(focal_length, 1.0)
+    sensor_size = math.max(sensor_size, 1.0)
+
+    if (sensor_fit == 0 and obj.screen_w > obj.screen_h) or sensor_fit == 1 then
+        sensor_size = sensor_size * obj.screen_h / obj.screen_w
+    end
+
+    local fov = 2.0 * math.atan(sensor_size / (2.0 * focal_length))
+
+    local d = obj.screen_h / (2.0 * math.tan(fov * 0.5)) -- ExEdit の視野角焦点距離変換式
+
+    do
+        local camera = obj.getoption("camera_param")
+        local focus = obj.getoption("camera_focus")
+
+        if dof_focus_distance > kEpsilon then
+            local x, y, z = camera.tx - camera.x, camera.ty - camera.y, camera.tz - camera.z
+            local norm = math.sqrt(x * x + y * y + z * z)
+
+            if norm > kEpsilon then
+                local scale = dof_focus_distance / norm
+                camera.tx, camera.ty, camera.tz = camera.x + x * scale, camera.y + y * scale, camera.z + z * scale
+            end
+        end
+
+        if use_dolly_zoom then
+            local x, y, z = camera.tx - camera.x, camera.ty - camera.y, camera.tz - camera.z
+            local norm = math.sqrt(x * x + y * y + z * z)
+
+            if norm > kEpsilon then
+                local scale = d / camera.d
+                camera.x, camera.y, camera.z = camera.tx - scale * x, camera.ty - scale * y, camera.tz - scale * z
+            end
+        end
+
+        if dof_aperture_f_stop > kEpsilon then
+            local x, y, z = camera.tx - camera.x, camera.ty - camera.y, camera.tz - camera.z
+            local norm = math.sqrt(x * x + y * y + z * z)
+
+            if norm > kEpsilon then
+                focus.bokeh = focal_length * d / (dof_aperture_f_stop * norm) * 0.5 -- それっぽいだけで保証はない
+            end
+        end
+
+        camera.d = d
+
+        focus.x, focus.y, focus.z = camera.tx, camera.ty, camera.tz
+
+        obj.setoption("camera_param", camera)
+        obj.setoption("camera_focus", focus)
+    end
+end

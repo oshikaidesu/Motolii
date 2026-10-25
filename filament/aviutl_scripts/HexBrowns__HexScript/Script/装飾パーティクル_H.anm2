@@ -1,0 +1,366 @@
+--information:装飾パーティクル_H v1.00 by HexBrowns
+--label:HexScript
+--track@co:個数,1,100,16,1
+--track@ti_sh:表示時間[f],1,2000,60,1
+--track@ti_io:登退場[f],1,2000,20,1
+--track@ra_ti:表時ばらつき[%],0,100,100,0.01
+--track@size:サイズ,1,2000,100,1
+--track@ra_si:サイズばらつき[%],0,100,30,0.01
+--track@io_curve:登退場カーブ,0,1,0,0.001
+
+--select@bl:合成モード=0,通常=0,加算=1,減算=2,乗算=3,スクリーン=4,オーバーレイ=5,比較(明)=6,比較(暗)=7,輝度=8,色差=9,陰影=10,明暗=11,差分=12
+--color@col:色,0xffff00
+
+--check@isfig:図形／画像,1
+--figure@fig:図形,円
+--file@path:画像
+--track@alpha:透明度[%],0,100,0,0.01
+
+--track@rot_m:回転min,-360,360,0,0.01
+--track@rot_M:回転max,-360,360,0,0.01
+--track@asp_m:縦横比min,-100,100,0,0.01
+--track@asp_M:縦横比max,-100,100,0,0.01
+
+--track@zrange:Z軸幅,0,1000,0,0.01
+
+--check@delay:徐々に増減,1
+
+--track@iox:登場X,-1000,1000,0,0.01
+--track@ioy:登場Y,-1000,1000,0,0.01
+--track@ioz:登場Z,-1000,1000,0,0.01
+--track@irx:登場rX,-3600,3600,0,0.01
+--track@iry:登場rY,-3600,3600,0,0.01
+--track@irz:登場rZ,-3600,3600,0,0.01
+--track@izoom:登場zoom[%],0,1000,100,0.01
+--track@ialpha:登場alpha[%],0,100,100,0.01
+
+--track@oox:退場X,-1000,1000,0,0.01
+--track@ooy:退場Y,-1000,1000,0,0.01
+--track@ooz:退場Z,-1000,1000,0,0.01
+--track@orx:退場rX,-3600,3600,0,0.01
+--track@ory:退場rY,-3600,3600,0,0.01
+--track@orz:退場rZ,-3600,3600,0,0.01
+--track@ozoom:退場zoom[%],0,1000,100,0.01
+--track@oalpha:退場alpha[%],0,100,100,0.01
+
+--check@sarea:領域可視化,0
+
+--track@o_u:外領域上,-1000,1000,0,0.01
+--track@o_d:外領域下,-1000,1000,0,0.01
+--track@o_r:外領域右,-1000,1000,0,0.01
+--track@o_l:外領域左,-1000,1000,0,0.01
+--track@i_u:内領域除上,0,1000,0,0.01
+--track@i_d:内領域除下,0,1000,0,0.01
+--track@i_r:内領域除右,0,1000,0,0.01
+--track@i_l:内領域除左,0,1000,0,0.01
+
+--track@seed:シード,0,1000,0,1
+
+--[[
+装飾パーティクル.anm2 の軽量版。設定項目と描画結果は元と同じにしてある（元は残してある）。
+原作: アス（AVILITY）「装飾パーティクル」 https://avilityyy.blogspot.com/2025/11/decoParticle.html
+AVILITY の利用規約（https://avilityyy.blogspot.com/p/blog-page_83.html）に従い、原作を組み込んだ自作として配布する。
+
+元から変えたのは処理の中身だけ。
+  ・登退場カーブの始点と終点の値を、粒ごとではなく 1 フレームに 1 回だけ読む。
+    カーブが未編集（始点＝終点）なら、粒ごとの obj.getvalue も呼ばない
+  ・回転行列を作るたびに捨てていた行列表（1 粒あたり十数個）を作らず、式を直接計算する
+  ・いま表示中の区画を先頭からの線形探索ではなく二分探索で引く
+  ・透明度が同じ粒が続くあいだは obj.drawpoly をテーブル 1 回にまとめて呼ぶ（描く順は変えない）
+  ・設定が変わったかの判定を 47 項目の比較から文字列 1 回の比較にした
+  ・関数と作業変数をローカルにした（元はグローバルに reset / inout / minx などが漏れていた）
+  ・状態を持つグローバル表の名前を decor_particle_H_state にした。元の surrounding_A と共有しない
+
+検証器: AI/scripts/装飾パーティクル_H/verify_equivalence.py
+（元と本版を同じ入力で走らせ、描画命令の列が一致することを確かめる）
+]]
+
+local obj, math, tostring = obj, math, tostring
+
+local izoom_v = izoom / 100
+local ozoom_v = ozoom / 100
+local ialpha_v = 1 - ialpha / 100
+local oalpha_v = 1 - oalpha / 100
+local alpha_v = 1 - alpha / 100
+
+-- outside/inside の各端の座標（o は outer、i は inner、udrl は up/down/right/left）
+local oyu = math.min(0, -obj.h / 2 - o_u)
+local oyd = math.max(0, obj.h / 2 + o_d)
+local oxr = math.max(0, obj.w / 2 + o_r)
+local oxl = math.min(0, -obj.w / 2 - o_l)
+local iyu = math.max(-math.max(0, i_u), oyu)
+local iyd = math.min(math.max(0, i_d), oyd)
+local ixr = math.min(math.max(0, i_r), oxr)
+local ixl = math.max(-math.max(0, i_l), oxl)
+-- 面積: s1 上の帯 / s2 下の帯 / s3 右 / s4 左
+local s1 = (oxr - oxl) * (iyu - oyu)
+local s2 = (oxr - oxl) * (oyd - iyd)
+local s3 = (oxr - ixr) * (iyd - iyu)
+local s4 = (ixl - oxl) * (iyd - iyu)
+
+-- 同じオブジェクトに付いた同名スクリプトの中で自分が何番目か（scid）、一番下か（amlast）
+local my_name = obj.getoption("script_name")
+local scid = 1
+local amlast = true
+for i = -1, -99, -1 do
+  local name = obj.getoption("script_name", i, true)
+  if name == "" then break end
+  if name == my_name then scid = scid + 1 end
+end
+for i = 1, 99 do
+  local name = obj.getoption("script_name", i, true)
+  if name == "" then break end
+  if name == my_name then amlast = false end
+end
+amlast = amlast and (obj.index + 1 == obj.num or obj.num == 0)
+
+if amlast then
+  obj.draw()
+end
+
+-- 設定が変わったかの判定用。元の cache 表と同じ 47 項目を同じ順で連結する
+local cache_key = table.concat({
+  tostring(co), tostring(ti_sh), tostring(ti_io), tostring(ra_ti), tostring(size),
+  tostring(ra_si), tostring(io_curve), tostring(bl), tostring(col), tostring(isfig),
+  tostring(fig), tostring(path), tostring(rot_m), tostring(rot_M), tostring(asp_m),
+  tostring(asp_M), tostring(zrange), tostring(delay), tostring(iox), tostring(ioy),
+  tostring(ioz), tostring(irx), tostring(iry), tostring(irz), tostring(izoom_v),
+  tostring(ialpha_v), tostring(oox), tostring(ooy), tostring(ooz), tostring(orx),
+  tostring(ory), tostring(orz), tostring(ozoom_v), tostring(oalpha_v), tostring(sarea),
+  tostring(o_u), tostring(o_d), tostring(o_r), tostring(o_l), tostring(i_u),
+  tostring(i_d), tostring(i_r), tostring(i_l), tostring(alpha_v), tostring(obj.w),
+  tostring(obj.h), tostring(seed)
+}, "\n")
+
+local root = decor_particle_H_state
+if type(root) ~= "table" then
+  root = {}
+  decor_particle_H_state = root
+end
+local per_obj = root[obj.id]
+if type(per_obj) ~= "table" then
+  per_obj = {}
+  root[obj.id] = per_obj
+end
+
+local function needs_reset()
+  if obj.frame == 0 then return true end
+  local inst = per_obj[scid]
+  if type(inst) ~= "table" then return true end
+  local first = inst[1]
+  if type(first) ~= "table" then return true end
+  if #first.rsize == 0 then return true end
+  return inst.cache ~= cache_key
+end
+
+-- 必要なときだけ各粒の表示位置などを算出する
+if needs_reset() then
+  if scid == 1 then
+    per_obj = {}
+    root[obj.id] = per_obj
+  end
+  local inst = {
+    isfig = isfig, fig = fig, path = path, col = col, sarea = sarea, bl = bl, co = co,
+    oyu = oyu, oyd = oyd, oxr = oxr, oxl = oxl, iyu = iyu, iyd = iyd, ixr = ixr, ixl = ixl,
+    iox = iox, ioy = ioy, ioz = ioz, irx = irx, iry = iry, irz = irz,
+    izoom = izoom_v, ialpha = ialpha_v,
+    oox = oox, ooy = ooy, ooz = ooz, orx = orx, ory = ory, orz = orz,
+    ozoom = ozoom_v, oalpha = oalpha_v,
+  }
+  per_obj[scid] = inst
+
+  local smin = math.max(1, math.ceil(size * (100 - ra_si) / 100.0))
+  inst.size_M = math.max(smin, math.ceil(size * (100 + ra_si) / 100.0))
+
+  local t_m = math.max(1, math.ceil(ti_sh * (100 - ra_ti) / 100.0))
+  local t_M = math.max(t_m, math.ceil(ti_sh * (100 + ra_ti) / 100.0))
+  local s_m = smin
+  local s_M = inst.size_M
+  local s_all = s1 + s2 + s3 + s4
+
+  for i = 1, co do
+    local d = { till = {}, rsize = {}, asp = {}, x = {}, y = {}, z = {}, rz = {} }
+    inst[i] = d
+    local till = d.till
+    repeat
+      local j = #till + 1
+      local f = i * 1000000 + j * 1000 + scid
+
+      -- 何フレームの間表示するか。1 区画目だけは時差（delay=1 で後ろへ、0 で前倒し）
+      local lframe = obj.rand(t_m, t_M, seed, f)
+      if j == 1 then
+        if delay == 1 then
+          till[1] = lframe * obj.rand(0, 100, seed, f) / 100
+        else
+          till[1] = -lframe * obj.rand(0, 100, seed, f) / 100
+        end
+      else
+        till[j] = till[j - 1] + lframe
+      end
+
+      d.rsize[j] = obj.rand(s_m, s_M, seed, f) / s_M
+
+      local r = obj.rand(0, s_all, seed, f)
+      local minx, maxx, miny, maxy
+      if r < s1 then
+        minx, maxx, miny, maxy = oxl, oxr, oyu, iyu
+      elseif r < s1 + s2 then
+        minx, maxx, miny, maxy = oxl, oxr, iyd, oyd
+      elseif r < s1 + s2 + s3 then
+        minx, maxx, miny, maxy = ixr, oxr, iyu, iyd
+      else
+        minx, maxx, miny, maxy = oxl, ixl, iyu, iyd
+      end
+      d.x[j] = obj.rand(minx, maxx, seed, f)
+      d.y[j] = obj.rand(miny, maxy, seed, f)
+      d.z[j] = obj.rand(-zrange, zrange, seed, f)
+      d.rz[j] = obj.rand(rot_m, rot_M, seed, f)
+      d.asp[j] = obj.rand(asp_m, asp_M, seed, f)
+    until obj.totalframe <= till[j]
+  end
+end
+
+if amlast then
+  -- 表示領域を表示する
+  for k = 1, scid do
+    local dd = per_obj[k]
+    if dd.sarea == 1 then
+      obj.load("figure", "四角形", dd.col, 20)
+      obj.alpha = 0.5
+      obj.drawpoly(dd.oxl, dd.oyu, 0, dd.oxr, dd.oyu, 0, dd.oxr, dd.iyu, 0, dd.oxl, dd.iyu, 0)
+      obj.drawpoly(dd.ixr, dd.iyu, 0, dd.oxr, dd.iyu, 0, dd.oxr, dd.iyd, 0, dd.ixr, dd.iyd, 0)
+      obj.drawpoly(dd.oxl, dd.iyd, 0, dd.oxr, dd.iyd, 0, dd.oxr, dd.oyd, 0, dd.oxl, dd.oyd, 0)
+      obj.drawpoly(dd.oxl, dd.iyu, 0, dd.ixl, dd.iyu, 0, dd.ixl, dd.iyd, 0, dd.oxl, dd.iyd, 0)
+    end
+  end
+
+  -- 登退場カーブ（未編集時は線形）。始点と終点は最初に要ったときに 1 回だけ読む
+  local total = obj.totaltime or 0
+  local curve_ready, curve_linear, curve_st, curve_range = false, true, 0, 0
+  local function sample_io_curve(u)
+    if u < 0 then u = 0 elseif u > 1 then u = 1 end
+    if not curve_ready then
+      curve_ready = true
+      if total >= 1e-9 then
+        curve_st = obj.getvalue("track.io_curve", 0.0)
+        curve_range = obj.getvalue("track.io_curve", 0.0, -1) - curve_st
+        curve_linear = math.abs(curve_range) < 1e-9
+      end
+    end
+    if curve_linear then return u end
+    return (obj.getvalue("track.io_curve", total * u) - curve_st) / curve_range
+  end
+
+  local frame_now = obj.frame
+  local total_frame = obj.totalframe
+  local rad = math.pi / 180
+
+  for k = 1, scid do
+    local dd = per_obj[k]
+    obj.setoption("blend", dd.bl)
+    if dd.isfig == 1 then
+      obj.load("figure", dd.fig, dd.col, dd.size_M, 9999)
+    else
+      obj.load("image", dd.path)
+    end
+    obj.effect()
+
+    local img_w, img_h = obj.w, obj.h
+    local batch, batch_n, batch_alpha = {}, 0, nil
+    local function flush()
+      if batch_n == 1 then
+        local q = batch[1]
+        obj.drawpoly(q[1], q[2], q[3], q[4], q[5], q[6], q[7], q[8], q[9], q[10], q[11], q[12],
+          q[13], q[14], q[15], q[16], q[17], q[18], q[19], q[20], batch_alpha)
+      elseif batch_n > 1 then
+        obj.drawpoly(batch, batch_alpha)
+      end
+      batch, batch_n, batch_alpha = {}, 0, nil
+    end
+
+    for i = 1, dd.co do
+      local d = dd[i]
+      local till = d.till
+
+      -- till は狭義単調増加なので、frame_now より小さい要素の個数を二分探索で数える
+      local lo, hi = 0, #till
+      while lo < hi do
+        local mid = math.floor((lo + hi + 1) / 2)
+        if till[mid] < frame_now then lo = mid else hi = mid - 1 end
+      end
+      local j = lo
+
+      if j > 0 and (delay == 0 or (delay == 1 and till[j + 1] < total_frame)) and j <= #till then
+        local frame = frame_now - till[j]
+        local lasting = till[j + 1] - till[j]
+
+        -- 登退場（カーブは登場と退場で鏡合わせ）
+        local isin, prog = true, nil
+        if ti_io * 2 > lasting then
+          local dur = lasting / 2
+          if frame < dur then
+            prog = 1 - sample_io_curve(frame / dur)
+          else
+            isin, prog = false, 1 - sample_io_curve((lasting - frame) / dur)
+          end
+        elseif frame < ti_io then
+          prog = 1 - sample_io_curve(frame / ti_io)
+        elseif lasting - frame < ti_io then
+          isin, prog = false, 1 - sample_io_curve((lasting - frame) / ti_io)
+        end
+
+        local dx, dy, dz, drx, dry, drz, dzoom, dalpha = 0, 0, 0, 0, 0, 0, 1, 1
+        if prog then
+          if isin then
+            dx, dy, dz = dd.iox * prog, dd.ioy * prog, dd.ioz * prog
+            drx, dry, drz = dd.irx * prog, dd.iry * prog, dd.irz * prog
+            dzoom, dalpha = (1 - prog) + dd.izoom * prog, (1 - prog) + dd.ialpha * prog
+          else
+            dx, dy, dz = dd.oox * prog, dd.ooy * prog, dd.ooz * prog
+            drx, dry, drz = dd.orx * prog, dd.ory * prog, dd.orz * prog
+            dzoom, dalpha = (1 - prog) + dd.ozoom * prog, (1 - prog) + dd.oalpha * prog
+          end
+        end
+
+        -- 元の実装に合わせ、ここは dd.isfig ではなく自分の isfig を見る
+        if isfig == 0 then
+          dzoom = dzoom * dd.size_M / img_w
+        end
+
+        local asp = d.asp[j]
+        local hw = img_w * d.rsize[j] * math.min(100, 100 - asp) / 100 * dzoom / 2
+        local hh = img_h * d.rsize[j] * math.min(100, 100 + asp) / 100 * dzoom / 2
+        local cx0, cy0, cz0 = d.x[j] + dx, d.y[j] + dy, d.z[j] + dz
+
+        -- R = Rz * Ry * Rx を四隅 (±hw, ±hh, 0) に掛ける
+        local ax, ay, az = drx * rad, dry * rad, (d.rz[j] + drz) * rad
+        local cx, sx = math.cos(ax), math.sin(ax)
+        local cy, sy = math.cos(ay), math.sin(ay)
+        local cz, sz = math.cos(az), math.sin(az)
+        local r11, r12 = cy * cz, sx * sy * cz - cx * sz
+        local r21, r22 = cy * sz, sx * sy * sz + cx * cz
+        local r31, r32 = -sy, sx * cy
+
+        local a = dalpha * alpha_v
+        local quad = {
+          cx0 - r11 * hw - r12 * hh, cy0 - r21 * hw - r22 * hh, cz0 - r31 * hw - r32 * hh,
+          cx0 + r11 * hw - r12 * hh, cy0 + r21 * hw - r22 * hh, cz0 + r31 * hw - r32 * hh,
+          cx0 + r11 * hw + r12 * hh, cy0 + r21 * hw + r22 * hh, cz0 + r31 * hw + r32 * hh,
+          cx0 - r11 * hw + r12 * hh, cy0 - r21 * hw + r22 * hh, cz0 - r31 * hw + r32 * hh,
+          0, 0, img_w, 0, img_w, img_h, 0, img_h,
+        }
+        if batch_n > 0 and a ~= batch_alpha then flush() end
+        batch_n = batch_n + 1
+        batch_alpha = a
+        batch[batch_n] = quad
+      end
+    end
+    flush()
+  end
+end
+
+per_obj[scid].cache = cache_key
+
+if obj.frame + 1 == obj.totalframe and amlast then
+  root[obj.id] = nil
+end

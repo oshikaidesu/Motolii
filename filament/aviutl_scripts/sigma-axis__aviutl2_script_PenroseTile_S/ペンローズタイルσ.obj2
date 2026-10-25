@@ -1,0 +1,515 @@
+--[[
+MIT License
+Copyright (c) 2025 sigma-axis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+https://mit-license.org/
+]]
+
+--information:ペンローズタイルσ v1.23 (for beta25) by σ軸
+--label:カスタムオブジェクト
+--track@width:幅,0,4000,320,1
+--track@height:高さ,0,4000,320,1
+--check@screen_size:背景サイズ,0
+--group:タイル分類,true
+--select@pattern:種類=0,P2(Kite+Dart)=0,P3(菱形2種)=1
+--select@center_form:中心の形状=0,Sun=0,Star=1
+--group:色設定,false
+--color@col1:色1,0xffffff
+--color@col_inner1:内部色1,0xa0a0a0
+--color@col2:色2,0xc0c0c0
+--color@col_inner2:内部色2,0x808080
+--color@col_back:余白色,0x000000
+--track@alpha1:透明度1,0,100,0,0.01
+--track@alpha2:透明度2,0,100,0,0.01
+--track@alpha_back:余白透明度,0,100,100,0.01
+--group:タイル設定,false
+--track@size:サイズ,2,2000,64,0.01
+--track@line:ライン幅,0,1000,1000,0.01
+--track@line_blur:ラインぼかし,0,100,0,0.01
+--track@back:余白幅,0,1000,2,0.01
+--group:タイル配置,false
+--track@rotate:回転,-720,720,0,0.01
+--track0:X,-4000,4000,0,0.1
+--track1:Y,-4000,4000,0,0.1
+--group:その他,false
+--check@antialias:アンチエイリアス,1
+--value@PI:PI,{}
+--[[pixelshader@draw:
+struct figure {
+	float4 color, color_inner;
+	float line_thick, line_blur, outer;
+};
+cbuffer constant0 : register(b0) {
+	figure fig[2];
+	float4 color_back;
+	float2x2 rot_scale;
+	float2 offset;
+	float size, depth_f, pattern, aa_thick;
+};
+
+static const float
+	phi = 1.618033988749894848,
+	phi_sq = 1 + phi,
+	phi_i = phi - 1,
+	c_1_5th = phi_i / 2,
+	s_1_5th = 0.951056516295153572,
+	c_2_5th = -phi / 2,
+	s_2_5th = 2 * c_1_5th * s_1_5th;
+static const float2
+	n_1_10th = { s_2_5th, +c_2_5th },
+	n_2_10th = { s_1_5th, -c_1_5th },
+	n_3_10th = { s_1_5th, +c_1_5th },
+	n_4_10th = { s_2_5th, -c_2_5th };
+static const float2x3 tr_c5 = {
+	1, 0, 0,
+	0, -1, 0,
+}, tr_c4 = {
+	+c_2_5th, +s_2_5th, 0,
+	-s_2_5th, +c_2_5th, 0,
+}, tr_c2 = {
+	+c_1_5th, +s_1_5th, 0,
+	-s_1_5th, +c_1_5th, 0,
+}, tr_c1 = {
+	+c_1_5th, +s_1_5th, 0,
+	+s_1_5th, -c_1_5th, 0,
+}, tr_c0 = {
+	-1, 0, 1,
+	0, 1, 0,
+}, tr_k0 = {
+	-phi * c_1_5th, +phi * s_1_5th, +phi_i * c_1_5th,
+	-phi * s_1_5th, -phi * c_1_5th, +phi_i * s_1_5th,
+}, tr_k1 = {
+	-phi * c_1_5th, +phi * s_1_5th, +phi_i * c_1_5th,
+	+phi * s_1_5th, +phi * c_1_5th, -phi_i * s_1_5th,
+}, tr_k2 = {
+	+phi * c_2_5th, +phi * s_2_5th, -phi * c_2_5th,
+	-phi * s_2_5th, +phi * c_2_5th, +phi * s_2_5th,
+}, tr_d3 = {
+	-phi, 0, 1,
+	0, phi, 0,
+}, tr_d0 = {
+	+phi * c_2_5th, -phi * s_2_5th, phi,
+	+phi * s_2_5th, +phi * c_2_5th, 0,
+}, tr_w0 = {
+	+phi * c_2_5th, -phi * s_2_5th, phi,
+	+phi * s_2_5th, +phi * c_2_5th, 0,
+}, tr_w3 = {
+	-phi * c_2_5th, -phi * s_2_5th, c_2_5th + c_1_5th,
+	-phi * s_2_5th, +phi * c_2_5th, s_2_5th + s_1_5th,
+}, tr_w1 = {
+	-phi, 0, phi_sq,
+	0, phi, 0,
+}, tr_l2 = {
+	-phi * c_1_5th, -phi * s_1_5th, phi,
+	+phi * s_1_5th, -phi * c_1_5th, 0,
+}, tr_l0 = {
+	-phi * c_1_5th, +phi * s_1_5th, +c_1_5th,
+	-phi * s_1_5th, -phi * c_1_5th, +s_1_5th,
+};
+
+static const int depth = int(depth_f);
+static const bool is_P2 = pattern == 0;
+float2x4 identify_angle(out int piece, float2 pt)
+{
+	float2x4 ret = {
+		1, 0, 0, pt.x,
+		0, 1, 0, pt.y,
+	};
+
+	// P2 -> 0: kite / left, 1: kite / right, 2: dart / left, 3: dart / right.
+	// P3 -> 0: wide / left, 1: wide / right, 2: long / left, 3: long / right.
+	piece = 1;
+	if (ret._24 < 0) {
+		piece ^= 1;
+		ret = mul(tr_c5, float3x4(ret, 0, 0, 1, 1));
+	}
+	if (dot(ret._14_24, n_4_10th) < 0) ret = mul(tr_c4, float3x4(ret, 0, 0, 1, 1));
+	else if (dot(ret._14_24, n_2_10th) < 0) ret = mul(tr_c2, float3x4(ret, 0, 0, 1, 1));
+	if (dot(ret._14_24, n_1_10th) < 0) {
+		piece ^= 1;
+		ret = mul(tr_c1, float3x4(ret, 0, 0, 1, 1));
+	}
+
+	return ret;
+}
+float2x3 identify_piece_P2(out int piece, inout float2 pt)
+{
+	float2x4 ret = identify_angle(piece, pt);
+	piece ^= 1;
+	ret = mul(tr_c0, float3x4(ret, 0, 0, 1, 1));
+
+	for (int i = 0; i < depth; i++) {
+		if ((piece & 2) == 0) {
+			const float2 p = ret._14_24 - float2(2 - phi, 0);
+			if (dot(p, n_3_10th) < 0) {
+				piece ^= 0;
+				ret = mul(tr_k0, float3x4(ret, 0, 0, 1, 1));
+			}
+			else if (dot(p, n_1_10th) < 0) {
+				piece ^= 1;
+				ret = mul(tr_k1, float3x4(ret, 0, 0, 1, 1));
+			}
+			else {
+				piece ^= 2;
+				ret = mul(tr_k2, float3x4(ret, 0, 0, 1, 1));
+			}
+		}
+		else {
+			const float2 p = ret._14_24 - float2(phi_i, 0);
+			if (dot(p, n_3_10th) < 0) {
+				piece ^= 3;
+				ret = mul(tr_d3, float3x4(ret, 0, 0, 1, 1));
+			}
+			else {
+				piece ^= 0;
+				ret = mul(tr_d0, float3x4(ret, 0, 0, 1, 1));
+			}
+		}
+	}
+
+	pt = ret._14_24;
+	return float2x3(ret._11_12_13, ret._21_22_23);
+}
+
+float2x3 identify_piece_P3(out int piece, inout float2 pt)
+{
+	float2x4 ret = identify_angle(piece, pt);
+
+	for (int i = 0; i < depth; i++) {
+		if ((piece & 2) == 0) {
+			const float2 p = ret._14_24 - float2(phi_i, 0);
+			if (dot(p, n_2_10th) < 0) {
+				piece ^= 0;
+				ret = mul(tr_w0, float3x4(ret, 0, 0, 1, 1));
+			}
+			else if (dot(p, n_1_10th) < 0) {
+				piece ^= 3;
+				ret = mul(tr_w3, float3x4(ret, 0, 0, 1, 1));
+			}
+			else {
+				piece ^= 1;
+				ret = mul(tr_w1, float3x4(ret, 0, 0, 1, 1));
+			}
+		}
+		else {
+			if (dot(ret._14_24, n_1_10th) < 0) {
+				piece ^= 2;
+				ret = mul(tr_l2, float3x4(ret, 0, 0, 1, 1));
+			}
+			else {
+				piece ^= 0;
+				ret = mul(tr_l0, float3x4(ret, 0, 0, 1, 1));
+			}
+		}
+	}
+
+	pt = ret._14_24;
+	return float2x3(ret._11_12_13, ret._21_22_23);
+}
+
+float edge_distance_P2(int piece, float2 pt, out float2 n_inner, out float2 mid_edge)
+{
+	if ((piece & 2) == 0) {
+		const float d1 = dot(pt, n_2_10th), d2 = -dot(pt - float2(1, 0), n_4_10th);
+		if (d1 < d2) {
+			n_inner = n_2_10th; mid_edge = phi_i / 2 * float2(c_1_5th, s_1_5th);
+			return d1;
+		}
+		else {
+			n_inner = -n_4_10th; mid_edge = float2(1 + c_2_5th / 2, s_2_5th / 2);
+			return d2;
+		}
+	}
+	else {
+		const float d1 = dot(pt, n_1_10th), d2 = -dot(pt - float2(phi_i, 0), n_2_10th);
+		if (d1 < d2) {
+			n_inner = n_1_10th; mid_edge = float2(-c_2_5th, s_2_5th) / 2;
+			return d1;
+		}
+		else {
+			n_inner = -n_2_10th; mid_edge = float2(phi_i + c_1_5th / 2, s_1_5th / 2);
+			return d2;
+		}
+	}
+}
+
+float edge_distance_P3(int piece, float2 pt, out float2 n_inner, out float2 mid_edge)
+{
+	if ((piece & 2) == 0) {
+		const float d1 = dot(pt, n_1_10th), d2 = -dot(pt - float2(phi, 0), n_4_10th);
+		if (d1 < d2) {
+			n_inner = n_1_10th; mid_edge = float2(-c_2_5th, s_2_5th) / 2;
+			return d1;
+		}
+		else {
+			n_inner = -n_4_10th; mid_edge = float2(phi + c_2_5th / 2, s_2_5th / 2);
+			return d2;
+		}
+	}
+	else {
+		const float d1 = dot(pt, n_2_10th), d2 = -dot(pt - float2(phi_i, 0), n_3_10th);
+		if (d1 < d2) {
+			n_inner = n_2_10th; mid_edge = float2(c_1_5th, s_1_5th) / 2;
+			return d1;
+		}
+		else {
+			n_inner = -n_3_10th; mid_edge = float2(phi_i - c_1_5th / 2, s_1_5th / 2);
+			return d2;
+		}
+	}
+}
+
+float2x3 identify_piece(out int piece, inout float2 pt)
+{
+	[branch] if (is_P2)
+		return identify_piece_P2(piece, pt);
+	else return identify_piece_P3(piece, pt);
+}
+
+float edge_distance(int piece, float2 pt, out float2 n_inner, out float2 mid_edge)
+{
+	[branch] if (is_P2)
+		return edge_distance_P2(piece, pt, n_inner, mid_edge);
+	else return edge_distance_P3(piece, pt, n_inner, mid_edge);
+}
+
+float2x2 inv_mat(float2x2 m)
+{
+	return float2x2(
+		+m._22, -m._12,
+		-m._21, +m._11
+	) / determinant(m);
+}
+float2x3 inv_map(float2x3 tr)
+{
+	const float2x2 m = inv_mat(float2x2(tr._11_12, tr._21_22));
+	const float2 p = mul(m, -tr._13_23);
+	return float2x3(m._11_12, p.x, m._21_22, p.y);
+}
+float2 rev_map(float2x3 tr, float2 pt)
+{
+	return mul(inv_mat(float2x2(tr._11_12, tr._21_22)), pt - tr._13_23);
+}
+
+float4 draw(float4 pos : SV_Position) : SV_Target
+{
+	float2 pt = mul(rot_scale, pos.xy - offset);
+
+	int piece;
+	const float2x3 tr = identify_piece(piece, pt);
+	const int idx = piece >> 1;
+
+	float2 n_inner, pt2;
+	const float dist = edge_distance(piece, pt, n_inner, pt2) * size - fig[idx].outer;
+	pt2 -= (phi_i * s_2_5th / 2) * n_inner;
+
+	float4 color_outer = color_back;
+	if (dist < aa_thick / 2 && fig[idx].outer <= 0) {
+		pt2 = rev_map(tr, pt2);
+		int piece2;
+		identify_piece(piece2, pt2);
+		const int idx2 = piece2 >> 1;
+		if (fig[idx2].outer <= 0) color_outer = fig[idx2].color;
+	}
+
+	return lerp(lerp(fig[idx].color_inner, fig[idx].color,
+		smoothstep(-aa_thick / 2, fig[idx].line_blur, fig[idx].line_thick - dist)),
+		color_outer,
+		smoothstep(-aa_thick / 2, aa_thick / 2, -dist));
+}
+]]
+local obj, math, tonumber, type, bit = obj, math, tonumber, type, require("bit");
+
+-- set anchors.
+obj.setanchor("track", 0, "line");
+
+-- take parameters.
+--[==[
+	PI = {
+		width:			number?,
+		height:			number?,
+		screen_size:	boolean|number|nil,
+		pattern:		string?,
+		center_form:	string?,
+		size:			number?,
+		line:			table|number|nil,
+		line_blur:		table|number|nil,
+		back:			table|number|nil,
+		col:			table|number|nil,
+		col_inner:		table|number|nil,
+		alpha:			table|number|nil,
+		col_back:		number?,
+		alpha_back:		number?,
+		rotate:			number?,
+		X:				number?,
+		Y:				number?,
+		antialias:		boolean|number|nil,
+	}
+--]==]
+local function field_as_num(src, tgt, fld)
+	local t = src[fld];
+	if type(t) == "table" then
+		tgt[1][fld], tgt[2][fld] =
+			tonumber(t[1]) or tgt[1][fld],
+			tonumber(t[2]) or tgt[2][fld];
+	elseif type(t) == "number" then
+		tgt[1][fld], tgt[2][fld] = t, t;
+	end
+end
+local function as_bool(t, v)
+	if type(t) == "boolean" then return t;
+	elseif type(t) == "number" then return t ~= 0;
+	else return v end
+end
+local fig = {
+	{ line = line, line_blur = line_blur, back = back, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col1, col_inner = col_inner1, alpha = alpha1, },
+	{ line = line, line_blur = line_blur, back = back, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col2, col_inner = col_inner2, alpha = alpha2, },
+};
+width = tonumber(PI.width) or width;
+height = tonumber(PI.height) or height;
+screen_size = as_bool(PI.screen_size, screen_size ~= 0);
+if PI.pattern then
+	local name2num = {
+		[0] = 0, 1; -- legacy compatibility.
+		["P2(Kite+Dart)"] = 0, ["P3(菱形2種)"] = 1,
+	};
+	pattern = name2num[PI.pattern] or pattern;
+end
+if PI.center_form then
+	local name2num = {
+		[0] = 0, 1; -- legacy compatibility.
+		Sun = 0, Star = 1,
+	};
+	center_form = name2num[PI.center_form] or center_form;
+end
+size = tonumber(PI.size) or size;
+field_as_num(PI, fig, "line");
+field_as_num(PI, fig, "line_blur");
+field_as_num(PI, fig, "back");
+field_as_num(PI, fig, "col");
+field_as_num(PI, fig, "col_inner");
+field_as_num(PI, fig, "alpha");
+col_back = tonumber(PI.col_back) or col_back;
+alpha_back = tonumber(PI.alpha_back) or alpha_back;
+rotate = tonumber(PI.rotate) or rotate;
+local X = tonumber(PI.X) or obj.track0;
+local Y = tonumber(PI.Y) or obj.track1;
+antialias = as_bool(PI.antialias, antialias ~= 0);
+
+-- normalize parameters.
+if screen_size then
+	width, height = obj.screen_w, obj.screen_h;
+else
+	width = math.max(math.floor(0.5 + width), 0);
+	height = math.max(math.floor(0.5 + height), 0);
+end
+if width <= 0 or height <= 0 then return end
+local kite_dart = pattern == 0;
+local center_sun = math.floor(0.5 + center_form) == 0;
+size = math.max(size, 2);
+for i = 1, #fig do
+	local f = fig[i];
+	f.col = math.floor(0.5 + f.col) % 2 ^ 24;
+	f.col_inner = math.floor(0.5 + f.col_inner) % 2 ^ 24;
+	f.alpha = math.min(math.max(1 - f.alpha / 100, 0), 1);
+	f.line = math.max(f.line, 0);
+	f.line_blur = math.max(antialias and 0.5 or 0,
+		math.min(math.max(f.line_blur / 100, 0), 1) * f.line);
+	f.back = math.max(f.back, 0);
+end
+col_back = math.floor(0.5 + col_back) % 2 ^ 24;
+alpha_back = math.min(math.max(1 - alpha_back / 100, 0), 1);
+rotate = math.pi / 180 * rotate;
+local dx, dy = X + width / 2, Y + height / 2;
+
+-- further calculations.
+local phi = (1 + 5 ^ 0.5) / 2;
+local flip = kite_dart == center_sun and 1 or -1;
+local R = ((math.abs(X) + width / 2) ^ 2 + (math.abs(Y) + height / 2) ^ 2) ^ 0.5;
+if kite_dart then
+	if center_sun then
+		R = R * (4 / 5 * (3 - phi)) ^ 0.5; -- R / \sqrt{1 - 1/4\phi^2}
+	else
+		R = R * phi;
+	end
+end
+R = math.log(R / size + 1, phi);
+local depth = center_sun and
+	2 * math.max(0, math.ceil(R / 2)) or
+	2 * math.max(0, math.ceil((R - 1) / 2)) + 1;
+local size_adj = phi ^ depth * size;
+if depth % 4 >= 2 then flip = -flip end
+
+local function rgb(col, alpha)
+	return
+		alpha * (bit.band(col, 0xff0000) / 0xff0000),
+		alpha * (bit.band(col, 0x00ff00) / 0x00ff00),
+		alpha * (bit.band(col, 0x0000ff) / 0x0000ff);
+end
+local function col_pair(l, col_o, col_i, alpha)
+	-- remove artifacts when line width is near 0.
+	local t = l < 1 and 6 * l / (5 * l + 1) or 1;
+	local r_o, g_o, b_o = rgb(col_o, alpha);
+	local r_i, g_i, b_i = rgb(col_i, alpha);
+	return
+		t * r_o + (1 - t) * r_i,
+		t * g_o + (1 - t) * g_i,
+		t * b_o + (1 - t) * b_i,
+		r_i, g_i, b_i;
+end
+for i = 1, #fig do
+	local f = fig[i];
+	f.r, f.g, f.b, f.r_i, f.g_i, f.b_i = col_pair(f.line, f.col, f.col_inner, f.alpha);
+	f.back = f.back / 2;
+end
+local r_bk, g_bk, b_bk = rgb(col_back, alpha_back);
+
+local m11, m12, m21, m22 = 0, flip / size_adj, -flip / size_adj, 0 do
+	local c, s = math.cos(rotate), math.sin(rotate);
+	m11, m12, m21, m22 =
+		-- multiplication of M * (rotation matrix).
+		m11 * c - m12 * s, m11 * s + m12 * c,
+		m21 * c - m22 * s, m21 * s + m22 * c;
+end
+
+-- draw by shader.
+obj.setoption("drawtarget", "tempbuffer", width, height);
+obj.copybuffer("object", "tempbuffer");
+obj.pixelshader("draw", "object", {},
+{
+	fig[1].r,   fig[1].g,   fig[1].b,   fig[1].alpha;
+	fig[1].r_i, fig[1].g_i, fig[1].b_i, fig[1].alpha;
+	fig[1].line, fig[1].line_blur, fig[1].back, 0;
+
+	fig[2].r,   fig[2].g,   fig[2].b,   fig[2].alpha;
+	fig[2].r_i, fig[2].g_i, fig[2].b_i, fig[2].alpha;
+	fig[2].line, fig[2].line_blur, fig[2].back, 0;
+
+	r_bk, g_bk, b_bk, alpha_back;
+
+	m11, m21, 0, 0,
+	m12, m22;
+
+	dx, dy;
+	size; depth;
+	kite_dart and 0 or 1;
+	antialias and 1 or 0;
+});

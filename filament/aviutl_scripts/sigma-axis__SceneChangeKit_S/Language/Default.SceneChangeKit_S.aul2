@@ -1,0 +1,19 @@
+; Tooltip definitions
+;===============================================================
+; Target: SceneChangeKit_S (https://github.com/sigma-axis/aviutl2_script_SceneChangeKit_S)
+; Target Version: v1.00
+; Language: Default
+
+[Language]
+Information=Default tooltips for SceneChangeKit_S v1.00 (日本語)
+
+;===============================================================
+
+[Tips.自作シーンチェンジ@SceneChangeKit_S]
+effect.name=シーンチェンジをタイムライン上で構成して自作します．\n「前シーン」や「次シーン」オブジェクトを下のレイヤーに配置してください．
+
+[Tips.前シーン@SceneChangeKit_S]
+effect.name=このオブジェクトがだんだん隠れるような演出を，フィルタ効果などを使って構成してください．
+
+[Tips.次シーン@SceneChangeKit_S]
+effect.name=このオブジェクトがだんだん現れるような演出を，フィルタ効果などを使って構成してください．

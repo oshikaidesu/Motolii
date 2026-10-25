@@ -1,0 +1,10 @@
+# Glitch_T
+
+AviUtl ExEdit2 専用のグリッチエフェクトです。 
+デジタルスライス、色収差、V-HOLD、砂嵐ノイズ、走査線、ネオンカラーブロック帯などの本格的なグリッチエフェクトをHLSLで描画します。
+
+作者:
+3aGaM1
+
+公開リンク:
+https://github.com/sagami121/Glitch_T

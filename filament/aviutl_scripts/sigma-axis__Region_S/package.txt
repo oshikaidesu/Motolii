@@ -1,0 +1,13 @@
+# Region_S アンカー指定で範囲を塗りつぶしたり色々する AviUtl ExEdit2 スクリプト
+
+アンカーで指定した点からつながった範囲に対して，塗りつぶしや透過キーフィルタをかける AviUtl2 スクリプトです．アンカーからつながった範囲を個別オブジェクトとして分割するものもあります．
+
+公開ページ:
+https://github.com/sigma-axis/aviutl2_script_Region_S
+
+紹介動画:
+https://www.nicovideo.jp/watch/sm46356972
+
+お願い:
+ニコニコ動画での親作品登録をしていただけると励みになります．
+作品 ID: sm46356972

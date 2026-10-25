@@ -1,0 +1,69 @@
+--information:キラキラ_H v1.00 by HexBrowns
+--label:HexScript
+--filter
+
+--group:放射
+--track@count:個数,1,500,20,1
+--track@dist:距離,0,10000,300,1
+--track@speed:速度,1,2000,100,1
+--track@spawn:出現範囲,0,2000,0,1
+--track@v_ran:ランダム速度[-%],0,100,90,0.1
+--track@beki:減速度,1,5,3,0.01
+--group
+
+--group:変化
+--track@av:透過速度[%],0,100,100,0.1
+--track@sv:拡大速度[%],-100,1000,0,0.1
+--track@s_ran:ランダム拡大[-%],0,100,0,0.1
+--check@rz_ran:ランダム回転,0
+--track@rzv_ran:回転速度[度],0,3600,0,0.1
+--check@zero:終点で消える,1
+--track@ran:乱数,0,1000,0,1
+--group
+
+--[[
+@ANM1.anm2 の @キラキラ（第三者作）を、同じ見た目のまま軽くした版。原作は残してある。
+
+原作から変えたこと
+  ・旧形式の --track0 / --dialog を --track@ / --check@ に置き換えた
+  ・粒の透明度は全粒で共通（時間だけで決まる）。これが 0 以下になったら、
+    フィルタ効果の実行も描画もせずに抜ける（原作は透明な粒を個数分描き続ける）
+  ・角度の乱数を 1 粒 1 回にまとめた（原作は x と y で同じ値を 2 回引いていた）
+  ・距離 0 のとき 0 除算で t が NaN になるのを避けた
+
+乱数の引き方（seed と frame の組）は原作と同じなので、同じ設定なら同じ位置に出る。
+検証器: AI/scripts/キラキラ_H/verify_kirakira.py
+]]
+
+local obj, math = obj, math
+
+local n = math.floor(count)
+local v = (speed > 0) and (dist / speed) or 0
+
+-- 全粒で共通の進み具合。v が 0（距離 0）なら最初から終点にいる扱い
+local t = 0
+if v > 0 then
+  t = math.max((v - obj.time) / v, 0) ^ beki
+end
+local alpha = 1 - av / 100 * (1 - t)
+if zero == 1 and t == 0 then
+  alpha = 0
+end
+
+-- 見えない粒しか無いなら何もしない。描画済みにして元の画像も出さない
+if alpha <= 0 or n < 1 then
+  obj.setoption("draw_state", true)
+  return
+end
+
+obj.effect()
+
+local rad = math.pi / 180
+local spin = obj.time
+for i = 0, n - 1 do
+  local ang = obj.rand(0, 360, i, ran) * rad
+  local r = (dist * (1 - t) + obj.rand(0, spawn, i, ran)) * obj.rand(100 - v_ran, 100, i, 1 + ran) / 100
+  local zoom = 1 + sv / 100 * (1 - t) - obj.rand(0, s_ran, i, 10 + ran) / 100
+  local rz = obj.rand(0, 360, i, 6 + ran) * rz_ran + obj.rand(-rzv_ran / 2, rzv_ran / 2, i, 9 + ran) * spin
+  obj.draw(r * math.cos(ang), r * math.sin(ang), 0, zoom, alpha, 0, 0, rz)
+end

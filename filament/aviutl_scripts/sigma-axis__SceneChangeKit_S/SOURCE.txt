@@ -1,0 +1,5 @@
+シーンチェンジ自作キット by σ軸
+licence: Unlicense
+from: https://github.com/sigma-axis/aviutl2_script_SceneChangeKit_S/releases/download/v1.00/aviutl2_script_SceneChangeKit_S-v1.00.au2pkg.zip (tag v1.00, commit eb2fa1f9ff58)
+page: https://github.com/sigma-axis/aviutl2_script_SceneChangeKit_S
+Put here unchanged for Motolii (filament/aviutl_scripts).

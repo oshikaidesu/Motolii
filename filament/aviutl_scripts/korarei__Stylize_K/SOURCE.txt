@@ -1,0 +1,5 @@
+@Stylize_K by Korarei
+licence: MIT
+from: https://github.com/korarei/AviUtl2_Stylize_K_Script/releases/download/v1.2.1/%40Stylize_K.zip (tag v1.2.1, commit 26fa83aa8b0a)
+page: https://github.com/korarei/AviUtl2_Stylize_K_Script
+Put here unchanged for Motolii (filament/aviutl_scripts).

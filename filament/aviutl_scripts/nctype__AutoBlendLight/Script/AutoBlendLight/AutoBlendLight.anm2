@@ -1,0 +1,1178 @@
+--information:AutoBlendLight v1.3.3
+--label:AutoBlendLight
+--require:2003700
+
+--group:オブジェクト,true
+--track@bright:明るさ,0,200,75,1
+--group
+
+--group:ライティング,true
+--select@color_mode:カラーモード,単色=0,2色（左右）=1
+--select@light_style:スタイル,グラデーション=0,縁取り=1
+--check@backlight_mode:逆光,1
+--track@light_strength:強さ,0,200,100,1
+--track@light_diffusion:拡散,0,200,25,1
+--track@light_ratio:偏り,-100,100,-90,1
+--track@color_mix:自然補正,0,200,100,1
+--track@color_density:彩度,0,200,100,1
+--check@brightness_link:明るさ連動,1
+--group
+
+--group:ライティング範囲,true
+--figure@mask_type:種類,円
+--track@mask_x:X,-4000,4000,0,1
+--track@mask_y:Y,-4000,4000,0,1
+--track@mask_size:サイズ,0,8000,2000,1
+--track@mask_blur:縁ぼかし,0,1000,0,1
+--track@mask_rotation:角度,-360,360,0,0.1
+--track@mask_aspect:縦横比,-100,100,0,0.1
+--group
+
+--group:環境なじませ,true
+--track@env_blend:なじませ量,0,100,30,1
+--track@env_blur:背景ぼかし,0,1000,500,1
+--group
+
+--group:固定光源,false
+--check@fixed_light:固定光源モード,0
+--group
+
+--[[pixelshader@backlight_env_framebuffer:
+Texture2D frame_tex : register(t0);
+Texture2D mask_tex  : register(t1);
+Texture2D bg_tex    : register(t2);
+SamplerState smp    : register(s0);
+
+cbuffer constant0 : register(b0) {
+    float4 c0; // multiplyOpacity, reserved, reserved, reserved
+};
+
+float4 backlight_env_framebuffer(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float4 base = frame_tex.Load(int3(int2(pos.xy), 0));
+    float opacity = saturate(c0.x);
+
+    if (opacity <= 0.00001 || base.a <= 0.00001) {
+        return base;
+    }
+
+    // The mask is already rendered in framebuffer/screen space by obj.draw().
+    // This means X/Y/Z, Center X/Y/Z, rotations, scale and camera projection
+    // are all handled by AviUtl2 itself instead of being reconstructed here.
+    float4 mask = mask_tex.Load(int3(int2(pos.xy), 0));
+    if (mask.a <= 0.00001) {
+        return base;
+    }
+
+    float4 bg = bg_tex.Load(int3(int2(pos.xy), 0));
+
+    float3 baseRGB = base.rgb / max(base.a, 0.00001);
+    float3 bgRGB = float3(1.0, 1.0, 1.0);
+    if (bg.a > 0.00001) {
+        bgRGB = saturate(bg.rgb / bg.a);
+    }
+
+    float amount = opacity * saturate(mask.a);
+    float3 multiplied = baseRGB * bgRGB;
+    float3 outRGB = lerp(baseRGB, multiplied, amount);
+
+    return float4(outRGB * base.a, base.a);
+}
+]]
+
+--[[pixelshader@backlight_work_resize:
+Texture2D source_tex : register(t0);
+SamplerState smp : register(s0);
+float4 backlight_work_resize(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    return source_tex.Sample(smp, uv);
+}
+]]
+
+--[[pixelshader@backlight_detail_restore:
+Texture2D sharp_tex : register(t0);
+Texture2D lit_tex : register(t1);
+Texture2D baseline_tex : register(t2);
+float4 backlight_detail_restore(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    int3 p = int3(int2(pos.xy), 0);
+    float4 sharp = sharp_tex.Load(p);
+    float4 lit = lit_tex.Load(p);
+    float4 baseline = baseline_tex.Load(p);
+    // Both proxy draws use the same background, native transform and blend.
+    // Remove the proxy's source contribution before adding the light change.
+    // With neutral light lit == baseline, including at translucent edges.
+    float4 result = sharp + (lit - baseline);
+    return float4(max(result.rgb, 0.0), saturate(result.a));
+}
+]]
+
+--[[pixelshader@backlight_range_composite:
+Texture2D light_tex : register(t0);
+Texture2D base_tex  : register(t1);
+Texture2D mask_tex  : register(t2);
+cbuffer constant0 : register(b0) {
+    float4 c0; // baseW, baseH, baseOffsetX, baseOffsetY
+    float4 c1; // outlineMode, reserved, reserved, reserved
+};
+float4 backlight_range_composite(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    int2 pixel = int2(pos.xy);
+    int2 basePixel = pixel - int2(c0.zw);
+    float4 base = float4(0, 0, 0, 0);
+    if (all(basePixel >= 0) && all(basePixel < int2(c0.xy))) {
+        base = base_tex.Load(int3(basePixel, 0));
+    }
+    float4 light = light_tex.Load(int3(pixel, 0));
+    float coverage = saturate(mask_tex.Load(int3(pixel, 0)).a);
+    if (c1.x > 0.5) {
+        float4 rim = light * coverage;
+        return rim + base * (1.0 - rim.a);
+    }
+    // The native Light result already contains the original image. Interpolate
+    // once, in image space, instead of drawing that image over itself again.
+    return lerp(base, light, coverage);
+}
+]]
+
+--[[pixelshader@backlight_dualcolor_mix:
+Texture2D left_tex  : register(t0);
+Texture2D right_tex : register(t1);
+SamplerState smp    : register(s0);
+
+cbuffer constant0 : register(b0) {
+    float4 c0; // transition, reserved, reserved, reserved
+};
+
+float4 backlight_dualcolor_mix(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float4 leftColor = left_tex.Load(int3(int2(pos.xy), 0));
+    float4 rightColor = right_tex.Load(int3(int2(pos.xy), 0));
+
+    float transition = saturate(c0.x);
+    float halfWidth = lerp(0.02, 0.30, transition);
+    float tx = smoothstep(0.5 - halfWidth, 0.5 + halfWidth, uv.x);
+
+    return lerp(leftColor, rightColor, tx);
+}
+]]
+
+--[[pixelshader@backlight_outline_only:
+Texture2D outline_tex : register(t0);
+Texture2D base_tex   : register(t1);
+SamplerState smp     : register(s0);
+
+cbuffer constant0 : register(b0) {
+    float4 c0; // outlineW, outlineH, baseW, baseH
+    float4 c1; // r, g, b, effectiveStrength
+    float4 c2; // innerWidthPx, reserved, reserved, reserved
+};
+
+float sample_base_alpha(float2 baseUV) {
+    return base_tex.Sample(smp, saturate(baseUV)).a;
+}
+
+float4 backlight_outline_only(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float4 outlined = outline_tex.Sample(smp, uv);
+
+    float2 outlineSize = c0.xy;
+    float2 baseSize = c0.zw;
+    float2 offset = (outlineSize - baseSize) * 0.5;
+
+    float2 basePos = pos.xy - offset;
+    float baseA = 0.0;
+    float innerA = 0.0;
+
+    if (basePos.x >= 0.0 && basePos.y >= 0.0 &&
+        basePos.x < baseSize.x && basePos.y < baseSize.y) {
+
+        float2 baseUV = basePos / baseSize;
+        baseA = sample_base_alpha(baseUV);
+
+        float innerWidth = max(c2.x, 0.0);
+
+        if (innerWidth > 0.05 && baseA > 0.00001) {
+            float2 px = float2(
+                innerWidth / max(baseSize.x, 1.0),
+                innerWidth / max(baseSize.y, 1.0)
+            );
+            float2 dg = px * 0.70710678;
+
+            // Erode the original alpha at the requested radius.
+            // The difference between the original alpha and this eroded alpha
+            // becomes the INNER part of the rim.
+            float eroded = baseA;
+            eroded = min(eroded, sample_base_alpha(baseUV + float2( px.x, 0.0)));
+            eroded = min(eroded, sample_base_alpha(baseUV + float2(-px.x, 0.0)));
+            eroded = min(eroded, sample_base_alpha(baseUV + float2(0.0,  px.y)));
+            eroded = min(eroded, sample_base_alpha(baseUV + float2(0.0, -px.y)));
+            eroded = min(eroded, sample_base_alpha(baseUV + float2( dg.x,  dg.y)));
+            eroded = min(eroded, sample_base_alpha(baseUV + float2(-dg.x,  dg.y)));
+            eroded = min(eroded, sample_base_alpha(baseUV + float2( dg.x, -dg.y)));
+            eroded = min(eroded, sample_base_alpha(baseUV + float2(-dg.x, -dg.y)));
+
+            innerA = saturate(baseA - eroded);
+        }
+    }
+
+    // AviUtl2's native Outline effect provides the OUTER part.
+    // Subtract the original object's alpha so only the outside contour remains.
+    float outerA = saturate(outlined.a - baseA);
+
+    // Strength changes visibility/brightness, not the inner/outer width split.
+    float effectiveStrength = max(c1.a, 0.0);
+    float alphaScale = saturate(effectiveStrength / 100.0);
+    float whiteBoost = saturate((effectiveStrength - 100.0) / 100.0) * 0.35;
+
+    float3 tint = lerp(saturate(c1.rgb), float3(1.0, 1.0, 1.0), whiteBoost);
+
+    float rimA = saturate(max(innerA, outerA)) * alphaScale;
+    return float4(tint * rimA, rimA);
+}
+]]
+
+
+
+local pi = math.pi
+
+local src_w = obj.w
+local src_h = obj.h
+local screen_w = obj.screen_w
+local screen_h = obj.screen_h
+
+if src_w <= 0 or src_h <= 0 or screen_w <= 0 or screen_h <= 0 then
+    return
+end
+
+local function clamp(v, lo, hi)
+    if v < lo then return lo end
+    if v > hi then return hi end
+    return v
+end
+
+local function luminance(r, g, b)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+end
+
+local function rgb_to_hsl(r, g, b)
+    r = r / 255
+    g = g / 255
+    b = b / 255
+    local maxc = math.max(r, g, b)
+    local minc = math.min(r, g, b)
+    local h, s
+    local l = (maxc + minc) * 0.5
+
+    if maxc == minc then
+        h = 0
+        s = 0
+    else
+        local d = maxc - minc
+        if l > 0.5 then
+            s = d / (2 - maxc - minc)
+        else
+            s = d / (maxc + minc)
+        end
+
+        if maxc == r then
+            h = (g - b) / d
+            if g < b then h = h + 6 end
+        elseif maxc == g then
+            h = (b - r) / d + 2
+        else
+            h = (r - g) / d + 4
+        end
+        h = h / 6
+    end
+
+    return h, s, l
+end
+
+local function hue_to_rgb(p, q, t)
+    if t < 0 then t = t + 1 end
+    if t > 1 then t = t - 1 end
+    if t < 1 / 6 then return p + (q - p) * 6 * t end
+    if t < 1 / 2 then return q end
+    if t < 2 / 3 then return p + (q - p) * (2 / 3 - t) * 6 end
+    return p
+end
+
+local function hsl_to_rgb(h, s, l)
+    local r, g, b
+    if s <= 0 then
+        r, g, b = l, l, l
+    else
+        local q
+        if l < 0.5 then
+            q = l * (1 + s)
+        else
+            q = l + s - l * s
+        end
+        local p = 2 * l - q
+        r = hue_to_rgb(p, q, h + 1 / 3)
+        g = hue_to_rgb(p, q, h)
+        b = hue_to_rgb(p, q, h - 1 / 3)
+    end
+    return clamp(math.floor(r * 255 + 0.5), 0, 255), clamp(math.floor(g * 255 + 0.5), 0, 255), clamp(math.floor(b * 255 + 0.5), 0, 255)
+end
+
+local function tune_backlight_color(r, g, b, mix_value)
+    local raw_r, raw_g, raw_b = r, g, b
+    local h, s, l = rgb_to_hsl(r, g, b)
+    local lum_n = luminance(r, g, b) / 255
+
+    -- Color confidence is based on ABSOLUTE channel separation rather than
+    -- HSL saturation alone. Near-black compression noise such as (0,2,0)
+    -- can have a very high HSL saturation even though it contains almost no
+    -- reliable color information. Near-white highlights have the same hue
+    -- instability when RGB channels differ by only a few levels.
+    local max_rgb = math.max(r, g, b)
+    local min_rgb = math.min(r, g, b)
+    local chroma_n = (max_rgb - min_rgb) / 255
+
+    local color_confidence = clamp((chroma_n - 0.025) / 0.16, 0, 1)
+
+    -- Very dark samples need stronger confidence before they are allowed to
+    -- tint the backlight. This keeps black / almost-black footage neutral,
+    -- while still allowing genuinely colored dark lights (neon, LEDs, etc.).
+    if lum_n < 0.10 then
+        local dark_confidence = clamp((max_rgb - 8) / 36, 0, 1)
+        color_confidence = color_confidence * dark_confidence
+    end
+
+    -- Preserve clear environment colors, but collapse uncertain hue toward
+    -- neutral instead of forcing a minimum saturation.
+    s = clamp(s * 0.58 * color_confidence, 0, 0.46)
+
+    l = l + (1 - l) * 0.16
+    if lum_n < 0.06 then
+        -- A black background has no trustworthy hue. Give it a neutral light
+        -- value rather than amplifying codec/chroma noise into green/blue.
+        l = 0.70
+    else
+        l = clamp(l, 0.52, 0.84)
+    end
+
+    local tuned_r, tuned_g, tuned_b = hsl_to_rgb(h, s, l)
+
+    -- Uncertain colors are pulled a little farther toward white. Clear warm,
+    -- cool, or neon colors keep much more of their original hue.
+    local white_mix =
+        0.06 +
+        (1 - lum_n) * 0.05 +
+        (1 - color_confidence) * 0.08
+
+    tuned_r = clamp(math.floor(tuned_r * (1 - white_mix) + 255 * white_mix + 0.5), 0, 255)
+    tuned_g = clamp(math.floor(tuned_g * (1 - white_mix) + 255 * white_mix + 0.5), 0, 255)
+    tuned_b = clamp(math.floor(tuned_b * (1 - white_mix) + 255 * white_mix + 0.5), 0, 255)
+
+    local m = clamp(mix_value, 0, 200)
+
+    if m <= 100 then
+        -- 0 = raw sampled environment color
+        -- 100 = recommended automatic correction
+        local t = m / 100
+        return
+            clamp(math.floor(raw_r + (tuned_r - raw_r) * t + 0.5), 0, 255),
+            clamp(math.floor(raw_g + (tuned_g - raw_g) * t + 0.5), 0, 255),
+            clamp(math.floor(raw_b + (tuned_b - raw_b) * t + 0.5), 0, 255)
+    end
+
+    -- 100..200 = progressively more neutral/white.
+    local t = (m - 100) / 100
+    local neutral_h, _, neutral_l = rgb_to_hsl(tuned_r, tuned_g, tuned_b)
+    local neutral_r, neutral_g, neutral_b = hsl_to_rgb(
+        neutral_h,
+        0.05,
+        clamp(neutral_l + (1 - neutral_l) * 0.55, 0, 0.94)
+    )
+
+    return
+        clamp(math.floor(tuned_r + (neutral_r - tuned_r) * t + 0.5), 0, 255),
+        clamp(math.floor(tuned_g + (neutral_g - tuned_g) * t + 0.5), 0, 255),
+        clamp(math.floor(tuned_b + (neutral_b - tuned_b) * t + 0.5), 0, 255)
+end
+
+-- Final user saturation control, applied after automatic color correction.
+-- 0 = neutral, 100 = current result, 200 = up to 2x saturation.
+local function apply_color_density(r, g, b, density_value)
+    local h, s, l = rgb_to_hsl(r, g, b)
+    local density = clamp(density_value / 100, 0, 2)
+    s = clamp(s * density, 0, 1)
+    return hsl_to_rgb(h, s, l)
+end
+
+
+-- Automatic saturation reduction for uncertain / conflicting sampled colors.
+--
+-- confidence:
+--   0 = nearby light candidates disagree strongly, move toward neutral
+--   1 = nearby colored light candidates agree, keep the tuned saturation
+--
+-- The user-facing Saturation control is applied AFTER this, so the automatic decision can
+-- still be overridden aesthetically without changing the sampling algorithm.
+local function apply_auto_color_confidence(r, g, b, confidence)
+    local h, s, l = rgb_to_hsl(r, g, b)
+    confidence = clamp(confidence, 0, 1)
+
+    -- Keep a little color even when confidence is poor, so transitions do not
+    -- collapse abruptly to pure white.
+    local auto_saturation_scale = 0.22 + 0.78 * confidence
+    s = clamp(s * auto_saturation_scale, 0, 1)
+
+    return hsl_to_rgb(h, s, l)
+end
+
+local has_background = obj.copybuffer("cache:aul2_backlight_bg", "framebuffer")
+
+-- AviUtl2 skips filter effects placed after a script once that script uses
+-- obj.draw(). AutoBlendLight draws multiple layers manually, so execute all
+-- following effects explicitly before building our lighting result.
+--
+-- The clean framebuffer background has already been cached above, therefore
+-- downstream object effects (including clipping) do not contaminate the
+-- background used for color/brightness pickup.
+obj.effect()
+
+-- Effects such as clipping can change the image size and center offsets.
+-- Work directly on the processed image without reconstructing a crop canvas.
+src_w = obj.w
+src_h = obj.h
+if src_w <= 0 or src_h <= 0 then
+    return
+end
+
+-- One 3D mapping is shared by pickup, fixed-light inversion and guides.
+-- The final image is still drawn by AviUtl2. This test build's auxiliary
+-- projection needs comparison with native rendering, especially camera/groups.
+local output_cx = obj.getvalue("cx") or 0
+local output_cy = obj.getvalue("cy") or 0
+local output_cz = obj.getvalue("cz") or 0
+local source_relative_cx = obj.cx or 0
+local source_relative_cy = obj.cy or 0
+local source_relative_cz = obj.cz or 0
+local center_x = output_cx + source_relative_cx
+local center_y = output_cy + source_relative_cy
+local center_z = output_cz + source_relative_cz
+local base_x = (obj.getvalue("x") or obj.x or 0) + (obj.ox or 0)
+local base_y = (obj.getvalue("y") or obj.y or 0) + (obj.oy or 0)
+local base_z = (obj.getvalue("z") or obj.z or 0) + (obj.oz or 0)
+local scale_x = (obj.getvalue("sx") or 1) * (obj.sx or 1)
+local scale_y = (obj.getvalue("sy") or 1) * (obj.sy or 1)
+local scale_z = (obj.getvalue("sz") or 1) * (obj.sz or 1)
+local rx = ((obj.getvalue("rx") or 0) + (obj.rx or 0)) * pi / 180
+local ry = ((obj.getvalue("ry") or 0) + (obj.ry or 0)) * pi / 180
+local rz = ((obj.getvalue("rz") or 0) + (obj.rz or 0)) * pi / 180
+local cxr, sxr = math.cos(rx), math.sin(rx)
+local cyr, syr = math.cos(ry), math.sin(ry)
+local czr, szr = math.cos(rz), math.sin(rz)
+local function rotate(x,y,z)
+    y,z = y*cxr-z*sxr, y*sxr+z*cxr
+    x,z = x*cyr+z*syr, -x*syr+z*cyr
+    return x*czr-y*szr, x*szr+y*czr, z
+end
+local function unrotate(x,y,z)
+    x,y = x*czr+y*szr, -x*szr+y*czr
+    x,z = x*cyr-z*syr, x*syr+z*cyr
+    return x, y*cxr+z*sxr, -y*sxr+z*cxr
+end
+local function normalize(x,y,z)
+    local n=math.sqrt(x*x+y*y+z*z)
+    if n<1e-10 then return nil end
+    return x/n,y/n,z/n
+end
+
+local camera = obj.getoption("camera_param")
+local camera_mode = tonumber(obj.getoption("camera_mode")) or 0
+local eye_x,eye_y,eye_z = 0,0,0
+local right_x,right_y,right_z = 1,0,0
+local down_x,down_y,down_z = 0,1,0
+local forward_x,forward_y,forward_z = 0,0,1
+local focal = type(camera)=="table" and tonumber(camera.d) or nil
+if focal and focal>0 then
+    eye_z=-focal
+    if camera_mode>0 then
+        eye_x,eye_y,eye_z=camera.x,camera.y,camera.z
+        local fx,fy,fz=normalize(camera.tx-eye_x,camera.ty-eye_y,camera.tz-eye_z)
+        if fx then
+            local ux,uy,uz=camera.ux or 0,camera.uy or -1,camera.uz or 0
+            local ax,ay,az=normalize(fy*uz-fz*uy,fz*ux-fx*uz,fx*uy-fy*ux)
+            if ax then
+                forward_x,forward_y,forward_z=fx,fy,fz
+                local dx,dy,dz=fy*az-fz*ay,fz*ax-fx*az,fx*ay-fy*ax
+                local roll=(camera.rz or 0)*pi/180
+                local c,t=math.cos(roll),math.sin(roll)
+                right_x,right_y,right_z=ax*c+dx*t,ay*c+dy*t,az*c+dz*t
+                down_x,down_y,down_z=dx*c-ax*t,dy*c-ay*t,dz*c-az*t
+            end
+        end
+    end
+else
+    focal=nil -- No undocumented focal-distance constant when unavailable.
+end
+
+local function object_local_to_screen_relative(local_x,local_y)
+    local x,y,z=rotate((local_x-center_x)*scale_x,
+        (local_y-center_y)*scale_y,-center_z*scale_z)
+    x,y,z=x+base_x-eye_x,y+base_y-eye_y,z+base_z-eye_z
+    local px=x*right_x+y*right_y+z*right_z
+    local py=x*down_x+y*down_y+z*down_z
+    if focal then
+        local depth=x*forward_x+y*forward_y+z*forward_z
+        if depth<=1e-6 then return nil end
+        return px*focal/depth,py*focal/depth
+    end
+    return px,py
+end
+
+local function screen_relative_to_object_local(rel_x,rel_y)
+    if math.abs(scale_x)<1e-9 or math.abs(scale_y)<1e-9 then return nil end
+    local ox,oy,oz=eye_x,eye_y,eye_z
+    local dx,dy,dz=forward_x,forward_y,forward_z
+    if focal then
+        dx=dx+right_x*rel_x/focal+down_x*rel_y/focal
+        dy=dy+right_y*rel_x/focal+down_y*rel_y/focal
+        dz=dz+right_z*rel_x/focal+down_z*rel_y/focal
+    else
+        ox,oy,oz=ox+right_x*rel_x+down_x*rel_y,
+            oy+right_y*rel_x+down_y*rel_y,oz+right_z*rel_x+down_z*rel_y
+    end
+    ox,oy,oz=unrotate(ox-base_x,oy-base_y,oz-base_z)
+    dx,dy,dz=unrotate(dx,dy,dz)
+    if math.abs(dz)<1e-9 then return nil end
+    local distance=(-center_z*scale_z-oz)/dz
+    if focal and distance<=0 then return nil end
+    return (ox+distance*dx)/scale_x+center_x,
+        (oy+distance*dy)/scale_y+center_y
+end
+
+local fixed_enabled = fixed_light == 1 or fixed_light == true
+local current_mask_type = mask_type
+if current_mask_type == nil or current_mask_type == "" then current_mask_type="円" end
+local show_guides=obj.getoption("gui")
+-- Read handle edits BEFORE deriving positions for this frame.
+if show_guides then
+    if fixed_enabled then obj.setanchor("mask_x,mask_y",0,"screen")
+    else obj.setanchor("mask_x,mask_y",0) end
+end
+local effective_mask_x,effective_mask_y=mask_x,mask_y
+local mask_projection_valid=true
+if fixed_enabled then
+    effective_mask_x,effective_mask_y=screen_relative_to_object_local(mask_x,mask_y)
+    if not effective_mask_x then
+        mask_projection_valid=false
+        effective_mask_x,effective_mask_y=0,0
+    end
+end
+
+local function build_mask_guide_points(shape_name, cx, cy, size, aspect, rotation_deg)
+    local points = {}
+    local radius = math.max(size, 0) * 0.5
+    local radius_x = radius
+    local radius_y = radius
+    local guide_aspect = clamp(aspect, -100, 100) / 100
+
+    -- Match AviUtl2's native Mask aspect-ratio direction:
+    -- positive values compress X, negative values compress Y.
+    if guide_aspect >= 0 then
+        radius_x = radius_x * (1 - guide_aspect)
+    else
+        radius_y = radius_y * (1 + guide_aspect)
+    end
+
+    local guide_r = rotation_deg * pi / 180
+    local guide_cos = math.cos(guide_r)
+    local guide_sin = math.sin(guide_r)
+
+    local function push(x, y)
+        local gx = x * guide_cos - y * guide_sin
+        local gy = x * guide_sin + y * guide_cos
+        points[#points + 1] = cx + gx
+        points[#points + 1] = cy + gy
+    end
+
+    local shape = tostring(shape_name or "円")
+    local lower = string.lower(shape)
+
+    -- The actual masking uses AviUtl2's native Mask type directly.
+    -- This preview guide only approximates the common built-in shapes.
+    if string.find(shape, "四角") or string.find(lower, "square") or string.find(lower, "rect") then
+        push(-radius_x, -radius_y)
+        push(radius_x, -radius_y)
+        push(radius_x, radius_y)
+        push(-radius_x, radius_y)
+    elseif string.find(shape, "菱") or string.find(lower, "diamond") then
+        push(0, -radius_y)
+        push(radius_x, 0)
+        push(0, radius_y)
+        push(-radius_x, 0)
+    elseif string.find(shape, "三角") or string.find(lower, "triangle") then
+        push(0, -radius_y)
+        push(radius_x, radius_y)
+        push(-radius_x, radius_y)
+    else
+        local guide_segments = 64
+        for i = 0, guide_segments - 1 do
+            local a = i * pi * 2 / guide_segments
+            push(math.cos(a) * radius_x, math.sin(a) * radius_y)
+        end
+    end
+
+    return points, #points / 2
+end
+
+-- Both outlines are object-local, so native anchor projection handles every
+-- rotation and depth component; only the fixed-light center handle is screen-local.
+if show_guides and mask_projection_valid then
+    local guide_points,guide_count=build_mask_guide_points(current_mask_type,
+        effective_mask_x,effective_mask_y,mask_size,mask_aspect,mask_rotation)
+    if guide_count>=2 then obj.setanchor(guide_points,guide_count,"loop") end
+end
+
+-- Convert an object-local coordinate directly to framebuffer coordinates.
+-- mask_x / mask_y use this same local coordinate system, so color sampling
+-- can follow the Mask center even when that center is outside the character.
+local function object_local_to_framebuffer(local_x,local_y)
+    local x,y=object_local_to_screen_relative(local_x,local_y)
+    if not x then return nil end
+    return math.floor(screen_w*0.5+x+0.5),math.floor(screen_h*0.5+y+0.5)
+end
+
+-- Local background color and brightness sampling.
+--
+-- The Mask center remains the origin of color judgment, but the algorithm now
+-- estimates "light color" instead of simply averaging every nearby surface.
+--
+-- Why:
+-- A dark green object / palm leaf / codec noise can be highly saturated and
+-- therefore win a normal color average even though it is not a light source.
+-- The sampler first searches for brighter pixels around the Mask center, then
+-- calculates the lighting color only from that "light candidate" pool.
+--
+-- Mono: one light color around the Mask center.
+-- Dual: left/right light candidates around the same Mask center are evaluated
+-- separately.
+
+local COLOR_MODE_SINGLE = 0
+local COLOR_MODE_DUAL = 1
+local STYLE_GRADIENT = 0
+local STYLE_OUTLINE = 1
+
+local color_mode_value =
+    math.floor(clamp(tonumber(color_mode) or COLOR_MODE_SINGLE, COLOR_MODE_SINGLE, COLOR_MODE_DUAL))
+local lighting_style =
+    math.floor(clamp(tonumber(light_style) or STYLE_GRADIENT, STYLE_GRADIENT, STYLE_OUTLINE))
+local backlight_enabled =
+    backlight_mode == 1 or backlight_mode == true
+local brightness_link_enabled =
+    brightness_link == 1 or brightness_link == true
+
+local global_color = {245, 245, 245}
+local left_color = {245, 245, 245}
+local right_color = {245, 245, 245}
+
+-- Automatic brightness factor from the Mask-center background.
+-- 0 = no usable background light, 1 = full user-set lighting strength.
+local global_light_factor = 0
+local left_light_factor = 0
+local right_light_factor = 0
+
+if has_background and mask_projection_valid then
+    -- Force a fresh read from the current framebuffer before sampling.
+    obj.pixeloption("get", "framebuffer")
+
+    -- Sampling is intentionally local to the Mask center:
+    -- Color judgment is now strictly local to the Mask center.
+    --
+    -- The previous wide search area could let a distant bright object win the
+    -- color vote even when the Mask center itself was over a flat color.
+    -- That was especially visible on simple test images: a green area could
+    -- unexpectedly produce a blue backlight.
+    --
+    -- We now average only a small circular patch around the Mask center.
+    -- This is still more stable than reading a single pixel, but it no longer
+    -- allows unrelated distant lights to take over the hue.
+    local pickup_radius = clamp(mask_size * 0.04, 36, 120)
+
+    local grid = 11
+    local half = (grid - 1) * 0.5
+    local samples = {}
+
+    for gy = 0, grid - 1 do
+        local ny = (gy - half) / half
+        for gx = 0, grid - 1 do
+            local nx = (gx - half) / half
+            local dist2 = nx * nx + ny * ny
+
+            if dist2 <= 1.0 then
+                local local_x = effective_mask_x + nx * pickup_radius
+                local local_y = effective_mask_y + ny * pickup_radius
+                local fx, fy = object_local_to_framebuffer(local_x, local_y)
+
+                if fx and fx >= 0 and fy >= 0 and fx < screen_w and fy < screen_h then
+                    local r, g, b, a = obj.getpixel(fx, fy, "rgb")
+                    if r and a and a > 0 then
+                        local lum = luminance(r, g, b)
+                        local max_rgb = math.max(r, g, b)
+                        local min_rgb = math.min(r, g, b)
+
+                        samples[#samples + 1] = {
+                            r = r,
+                            g = g,
+                            b = b,
+                            lum = lum,
+                            chroma = (max_rgb - min_rgb) / 255,
+                            side = nx,
+                            dist2 = dist2,
+                            alpha = a / 255
+                        }
+                    end
+                end
+            end
+        end
+    end
+
+    local function filter_side(source, want_left)
+        local out = {}
+        for i = 1, #source do
+            local s = source[i]
+            if (want_left and s.side < 0) or
+               ((not want_left) and s.side >= 0) then
+                out[#out + 1] = s
+            end
+        end
+        return out
+    end
+
+    local function estimate_center_color(source, fallback)
+        local use = source
+        if #use < 6 and fallback then
+            use = fallback
+        end
+
+        if #use == 0 then
+            return 0, 0, 0, 0
+        end
+
+        local sum_r, sum_g, sum_b = 0, 0, 0
+        local sum_lum = 0
+        local sum_w = 0
+
+        local hue_vec_x = 0
+        local hue_vec_y = 0
+        local hue_weight_sum = 0
+
+        for i = 1, #use do
+            local s = use[i]
+
+            -- Center pixels matter most. The rim is only there to stabilize
+            -- video/noise and boundary transitions.
+            local spatial_weight = 1.0 - 0.72 * s.dist2
+            local w = s.alpha * spatial_weight
+
+            if w > 0.000001 then
+                sum_r = sum_r + s.r * w
+                sum_g = sum_g + s.g * w
+                sum_b = sum_b + s.b * w
+                sum_lum = sum_lum + s.lum * w
+                sum_w = sum_w + w
+
+                -- Measure whether the local colored pixels agree on a hue.
+                local h, sat, _ = rgb_to_hsl(s.r, s.g, s.b)
+                local chroma_vote =
+                    w *
+                    clamp((s.chroma - 0.018) / 0.18, 0, 1) *
+                    clamp(sat, 0, 1)
+
+                if chroma_vote > 0.000001 then
+                    local angle = h * pi * 2
+                    hue_vec_x = hue_vec_x + math.cos(angle) * chroma_vote
+                    hue_vec_y = hue_vec_y + math.sin(angle) * chroma_vote
+                    hue_weight_sum = hue_weight_sum + chroma_vote
+                end
+            end
+        end
+
+        if sum_w <= 0.00001 then
+            return 0, 0, 0, 0
+        end
+
+        local r = clamp(math.floor(sum_r / sum_w + 0.5), 0, 255)
+        local g = clamp(math.floor(sum_g / sum_w + 0.5), 0, 255)
+        local b = clamp(math.floor(sum_b / sum_w + 0.5), 0, 255)
+        local mean_lum = sum_lum / sum_w
+
+        -- Hue confidence is intentionally conservative.
+        -- A uniform green/red/blue patch gets a high value; mixed colors
+        -- become more neutral instead of suddenly choosing one side.
+        local hue_agreement = 0
+        if hue_weight_sum > 0.00001 then
+            hue_agreement =
+                math.sqrt(hue_vec_x * hue_vec_x + hue_vec_y * hue_vec_y) /
+                hue_weight_sum
+        end
+        hue_agreement = clamp(hue_agreement, 0, 1)
+
+        local avg_max = math.max(r, g, b)
+        local avg_min = math.min(r, g, b)
+        local avg_chroma = (avg_max - avg_min) / 255
+        local color_presence = clamp((avg_chroma - 0.015) / 0.16, 0, 1)
+        local auto_confidence = hue_agreement * color_presence
+
+        local tr, tg, tb = tune_backlight_color(r, g, b, color_mix)
+        tr, tg, tb = apply_auto_color_confidence(
+            tr, tg, tb, auto_confidence
+        )
+
+        local fr, fg, fb = apply_color_density(
+            tr, tg, tb, color_density
+        )
+
+        -- Black means no usable environmental light.
+        -- The user's Strength acts as the maximum; actual strength fades in
+        -- smoothly as the Mask-center patch becomes brighter.
+        local light_factor = clamp((mean_lum - 8) / 80, 0, 1)
+        light_factor =
+            light_factor * light_factor * (3 - 2 * light_factor)
+
+        return fr, fg, fb, light_factor
+    end
+
+    if #samples > 0 then
+        local gr, gg, gb, gf = estimate_center_color(samples, nil)
+        global_color = {gr, gg, gb}
+        global_light_factor = gf or 0
+
+        if color_mode_value == COLOR_MODE_DUAL then
+            local left = filter_side(samples, true)
+            local right = filter_side(samples, false)
+
+            local lr, lg, lb, lf = estimate_center_color(left, samples)
+            local rr, rg, rb, rf = estimate_center_color(right, samples)
+
+            left_color = {lr, lg, lb}
+            right_color = {rr, rg, rb}
+            left_light_factor = lf or 0
+            right_light_factor = rf or 0
+        end
+    end
+
+    obj.pixeloption("get", "object")
+end
+
+local function color_value(c)
+    -- AviUtl2 color parameters use a numeric RGB value (0x000000..0xffffff).
+    -- Do not pass a hexadecimal string here: values near certain RGB ranges
+    -- can be interpreted inconsistently by the effect parameter parser.
+    return RGB(
+        clamp(math.floor(c[1] + 0.5), 0, 255),
+        clamp(math.floor(c[2] + 0.5), 0, 255),
+        clamp(math.floor(c[3] + 0.5), 0, 255)
+    )
+end
+
+
+-- Bound only the light-working surfaces. The original is drawn at full
+-- resolution before its buffer is replaced; never cache several large copies.
+local work_scale=math.min(1,3072/src_w,3072/src_h,
+    math.sqrt(4000000/(src_w*src_h)))
+local use_proxy=work_scale<1
+local work_w=math.max(1,math.floor(src_w*work_scale))
+local work_h=math.max(1,math.floor(src_h*work_scale))
+local work_sx,work_sy=work_w/src_w,work_h/src_h
+obj.effect("色調補正", "明るさ", bright)
+source_relative_cx = obj.cx or 0
+source_relative_cy = obj.cy or 0
+source_relative_cz = obj.cz or 0
+local work_relative_cx,work_relative_cy,work_relative_cz=
+    source_relative_cx,source_relative_cy,source_relative_cz
+if use_proxy then
+    obj.setoption("blend","none")
+    obj.draw()
+    if not obj.copybuffer("cache:autobacklight_sharp_frame","framebuffer") then return end
+    obj.clearbuffer("tempbuffer",work_w,work_h)
+    obj.pixelshader("backlight_work_resize","tempbuffer","object",nil,"copy","clamp")
+    if not obj.copybuffer("object","tempbuffer") then return end
+    obj.clearbuffer("tempbuffer",1,1)
+    work_relative_cx,work_relative_cy,work_relative_cz=-output_cx,-output_cy,-output_cz
+    obj.cx,obj.cy,obj.cz=work_relative_cx,work_relative_cy,work_relative_cz
+end
+if not obj.copybuffer("cache:autobacklight_workbase","object") then return end
+
+local function restore_workbase()
+    obj.copybuffer("object", "cache:autobacklight_workbase")
+    obj.cx = work_relative_cx
+    obj.cy = work_relative_cy
+    obj.cz = work_relative_cz
+end
+
+local function restore_background()
+    if has_background then obj.copybuffer("framebuffer","cache:aul2_backlight_bg")
+    else obj.clearbuffer("framebuffer") end
+end
+
+-- Explicit source-space vertices avoid scaling Center Z or the object's
+-- depth when enlarging a proxy. Roundoff in work_w/work_h is handled per axis.
+local function draw_work_image(offset_x,offset_y)
+    if not use_proxy then obj.draw(); return end
+    local x0=-src_w*0.5-offset_x/work_sx
+    local y0=-src_h*0.5-offset_y/work_sy
+    local x1=x0+obj.w/work_sx
+    local y1=y0+obj.h/work_sy
+    local saved_cx,saved_cy,saved_cz=obj.cx,obj.cy,obj.cz
+    obj.cx,obj.cy,obj.cz=source_relative_cx,source_relative_cy,source_relative_cz
+    obj.setoption("sampler","clip")
+    obj.drawpoly(x0,y0,0,x1,y0,0,x1,y1,0,x0,y1,0,
+        0,0,obj.w,0,obj.w,obj.h,0,obj.h)
+    obj.setoption("sampler")
+    obj.cx,obj.cy,obj.cz=saved_cx,saved_cy,saved_cz
+end
+
+if has_background and env_blend > 0 then
+    obj.copybuffer("object", "cache:aul2_backlight_bg")
+    obj.effect("ぼかし", "範囲", env_blur, "縦横比", 0, "光の強さ", 0, "サイズ固定", 1)
+    obj.copybuffer("cache:aul2_backlight_bgblur", "object")
+end
+
+local work_diffusion = light_diffusion * work_scale
+
+local function resolve_light_factor(light_factor)
+    if not brightness_link_enabled then
+        return 1.0
+    end
+    return clamp(light_factor or 0, 0, 1)
+end
+
+local function get_effective_strength(light_factor)
+    return light_strength * resolve_light_factor(light_factor)
+end
+
+local function apply_light(color, light_factor)
+    local effective_strength =
+        get_effective_strength(light_factor)
+
+    obj.effect(
+        "ライト",
+        "強さ", effective_strength,
+        "拡散", work_diffusion,
+        "比率", light_ratio,
+        "逆光", backlight_enabled and 1 or 0,
+        "color", color_value(color)
+    )
+end
+
+
+local function apply_outline(color, light_factor)
+    local effective_strength =
+        get_effective_strength(light_factor)
+
+    -- In Outline mode, Spread becomes the TOTAL rim width.
+    local total_width =
+        clamp(1.0 + light_diffusion * 0.30, 1.0, 64.0) * work_scale
+
+    -- Reuse Bias as the inside/outside distribution:
+    --  -100 = all outside
+    --     0 = half outside / half inside
+    --  +100 = all inside
+    local inside_ratio =
+        clamp((light_ratio + 100.0) / 200.0, 0.0, 1.0)
+
+    local inner_width = total_width * inside_ratio
+    local outer_width = total_width * (1.0 - inside_ratio)
+
+    local base_w = obj.w
+    local base_h = obj.h
+
+    -- AviUtl2's native Outline effect is used for the outside portion.
+    -- At +100 Bias the outside size becomes 0, leaving only the inner rim.
+    obj.effect(
+        "縁取り",
+        "サイズ", outer_width,
+        "ぼかし", 0,
+        "color", color_value(color)
+    )
+
+    local outline_w = obj.w
+    local outline_h = obj.h
+
+    -- Keep the native outer rim, generate an inner rim from the original alpha,
+    -- and combine the two into one transparent rim layer.
+    obj.pixelshader(
+        "backlight_outline_only",
+        "object",
+        {
+            "object",
+            "cache:autobacklight_workbase"
+        },
+        {
+            outline_w,
+            outline_h,
+            base_w,
+            base_h,
+
+            color[1] / 255,
+            color[2] / 255,
+            color[3] / 255,
+            effective_strength,
+
+            inner_width,
+            0,
+            0,
+            0
+        },
+        "copy",
+        "clamp"
+    )
+end
+
+if color_mode_value == COLOR_MODE_SINGLE then
+    -- Single-color mode uses one bounded lighting pass.
+    restore_workbase()
+
+    if lighting_style == STYLE_OUTLINE then
+        -- Outline: use the native Outline effect instead of Light.
+        apply_outline(global_color, global_light_factor)
+    else
+        -- Gradient: keep the native Light implementation.
+        apply_light(global_color, global_light_factor)
+    end
+else
+    -- Reuse the temporary buffer for the first color pass.
+    restore_workbase()
+    if lighting_style == STYLE_OUTLINE then
+        apply_outline(left_color, left_light_factor)
+    else
+        apply_light(left_color, left_light_factor)
+    end
+    obj.copybuffer("tempbuffer", "object")
+
+    restore_workbase()
+    if lighting_style == STYLE_OUTLINE then
+        apply_outline(right_color, right_light_factor)
+    else
+        apply_light(right_color, right_light_factor)
+    end
+
+    obj.pixelshader(
+        "backlight_dualcolor_mix",
+        "object",
+        {
+            "tempbuffer",
+            "object"
+        },
+        {
+            0.55, 0, 0, 0
+        },
+        "copy",
+        "clamp"
+    )
+
+    -- The left image is no longer needed after mixing.
+    obj.clearbuffer("tempbuffer", 1, 1)
+end
+
+-- Native effects may enlarge the image and update its relative center.
+-- Retain that change, but never inherit a previous pass's center adjustment.
+local light_w, light_h = obj.w, obj.h
+local light_cx, light_cy, light_cz = obj.cx, obj.cy, obj.cz
+local base_offset_x = (light_w - work_w) * 0.5 + light_cx - work_relative_cx
+local base_offset_y = (light_h - work_h) * 0.5 + light_cy - work_relative_cy
+obj.copybuffer("tempbuffer", "object")
+
+-- Generate coverage separately: Mask must not resample the character, and
+-- the user's drawing pivot must not move the mask inside the image buffer.
+obj.clearbuffer("object", light_w, light_h, 0xffffff)
+obj.cx, obj.cy, obj.cz = -output_cx, -output_cy, -output_cz
+obj.effect(
+    "マスク",
+    "X", effective_mask_x * work_sx + light_cx - work_relative_cx,
+    "Y", effective_mask_y * work_sy + light_cy - work_relative_cy,
+    "回転", mask_rotation,
+    "サイズ", mask_projection_valid and mask_size * work_scale or 0,
+    "縦横比", mask_aspect,
+    "ぼかし", mask_blur * work_scale,
+    "type", current_mask_type,
+    "マスクの反転", 0,
+    "元のサイズに合わせる", 0
+)
+if not mask_projection_valid then obj.clearbuffer("object") end
+obj.pixelshader(
+    "backlight_range_composite", "object",
+    {"tempbuffer", "cache:autobacklight_workbase", "object"},
+    {work_w, work_h, base_offset_x, base_offset_y,
+        lighting_style == STYLE_OUTLINE and 1 or 0, 0, 0, 0},
+    "copy", "dot"
+)
+obj.cx, obj.cy, obj.cz = light_cx, light_cy, light_cz
+obj.clearbuffer("tempbuffer", 1, 1)
+obj.setoption("blend", "none")
+if use_proxy then
+    restore_background()
+    draw_work_image(base_offset_x,base_offset_y)
+    if not obj.copybuffer("cache:autobacklight_lit_frame","framebuffer") then
+        obj.copybuffer("framebuffer","cache:autobacklight_sharp_frame")
+        return
+    end
+    restore_workbase()
+    restore_background()
+    draw_work_image(0,0)
+    obj.pixelshader("backlight_detail_restore","framebuffer",
+        {"cache:autobacklight_sharp_frame","cache:autobacklight_lit_frame","framebuffer"},
+        nil,"copy","dot")
+    obj.clearbuffer("cache:autobacklight_sharp_frame",1,1)
+    obj.clearbuffer("cache:autobacklight_lit_frame",1,1)
+else
+    obj.draw()
+end
+
+-- L8-L10 environment Multiply.
+--
+-- Previous versions reconstructed the object's screen position inside the
+-- framebuffer shader from X/Y, scale, rotation and Center X/Y. That worked in
+-- 2D, but Z and Center Z are perspective-dependent, so the environment blend
+-- could remain at the old depth while the object itself moved in Z.
+--
+-- Build the alpha mask in framebuffer space with obj.draw() instead. AviUtl2
+-- then applies the exact same object transform and camera projection to this
+-- mask as it does to the object, including Z and Center Z.
+if has_background and env_blend > 0 then
+    local multiply_opacity = clamp(env_blend / 100, 0, 1)
+
+    local has_pre_env = obj.copybuffer(
+        "cache:autobacklight_pre_env",
+        "framebuffer"
+    )
+
+    if has_pre_env then
+        local env_restore_cx, env_restore_cy, env_restore_cz = obj.cx, obj.cy, obj.cz
+        restore_workbase()
+
+        obj.clearbuffer("framebuffer")
+        obj.setoption("blend", "none")
+        draw_work_image(0,0)
+        local has_env_mask = obj.copybuffer(
+            "cache:autobacklight_envmask",
+            "framebuffer"
+        )
+
+        obj.cx = env_restore_cx
+        obj.cy = env_restore_cy
+        obj.cz = env_restore_cz
+
+        -- Restore the already-composited object + lighting before applying
+        -- the environment multiply.
+        obj.copybuffer("framebuffer", "cache:autobacklight_pre_env")
+
+        if has_env_mask then
+            obj.pixelshader(
+                "backlight_env_framebuffer",
+                "framebuffer",
+                {
+                    "cache:autobacklight_pre_env",
+                    "cache:autobacklight_envmask",
+                    "cache:aul2_backlight_bgblur"
+                },
+                {
+                    multiply_opacity, 0, 0, 0
+                },
+                "copy",
+                "clamp"
+            )
+        end
+    end
+end

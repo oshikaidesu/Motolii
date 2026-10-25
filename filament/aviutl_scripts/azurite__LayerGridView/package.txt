@@ -1,0 +1,35 @@
+[ 概要 ]
+
+指定したレイヤーのオブジェクトをグリッド状に表示する AviUtl2 用のスクリプトです。
+
+[ 使い方 ]
+
+1. あらかじめグリッド状に表示させたいオブジェクトを、異なるレイヤーに配置しておきます。
+2. カスタムオブジェクトからレイヤーグリッド表示を選択し配置します。このとき、1. でオブジェクトを配置したレイヤーよりも下のレイヤーに配置することを推奨します。
+3. [レイヤー設定] の [レイヤー] に、[セル番号]=レイヤー番号 の形式で、どのセルにどのレイヤーのオブジェクトを表示させるか指定します。
+
+各パラメーターの詳細は GitHub をご確認ください。
+
+[ ライセンス ]
+
+MIT License
+
+Copyright (c) 2026 azurite
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

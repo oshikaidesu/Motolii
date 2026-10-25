@@ -1,0 +1,739 @@
+--information:ペンツール（フリーハンド線・描画アニメーション） ver0.2.0
+--label:CJF
+--require:2005400
+
+--select@mode:進行モード,自動再生=0,進捗指定=1,秒数指定=2
+--track@dir:再生方向,-1,1,1,1
+--track@prog:進捗(%),0,100,0,0.1
+--track@dur:再生時間(秒),-600,600,5,0.1
+--hide@dir:mode~=0
+--hide@prog:mode~=1
+--hide@dur:mode~=2
+--separator:ペンの設定
+--group:レイヤー1設定,true
+--track@w:ペンの太さ(px),1,2000,8,1
+--track@taper_in:入り長さ,0,50,0,1
+--track@taperw_in:入り太さ,0,100,0,1
+--track@taper_out:抜き長さ,0,50,0,1
+--track@taperw_out:抜き太さ,0,100,0,1
+--track@feather:柔らかさ,0,2,2,1
+--track@stabilize:手ブレ補正,0,40,16,1
+--track@shapekeep:形状優先,1,10,3,1
+--color@col:色,0xffffff
+--group:レイヤー2設定,false
+--track@w2:ペンの太さ(L2)(px),1,2000,8,1
+--track@taper_in2:入り長さ(L2),0,50,0,1
+--track@taperw_in2:入り太さ(L2),0,100,0,1
+--track@taper_out2:抜き長さ(L2),0,50,0,1
+--track@taperw_out2:抜き太さ(L2),0,100,0,1
+--track@feather2:柔らかさ(L2),0,2,2,1
+--track@stabilize2:手ブレ補正(L2),0,40,16,1
+--track@shapekeep2:形状優先(L2),1,10,3,1
+--color@col2:色(L2),0xffffff
+--group:レイヤー3設定,false
+--track@w3:ペンの太さ(L3)(px),1,2000,8,1
+--track@taper_in3:入り長さ(L3),0,50,0,1
+--track@taperw_in3:入り太さ(L3),0,100,0,1
+--track@taper_out3:抜き長さ(L3),0,50,0,1
+--track@taperw_out3:抜き太さ(L3),0,100,0,1
+--track@feather3:柔らかさ(L3),0,2,2,1
+--track@stabilize3:手ブレ補正(L3),0,40,16,1
+--track@shapekeep3:形状優先(L3),1,10,3,1
+--color@col3:色(L3),0xffffff
+--group:レイヤー4設定,false
+--track@w4:ペンの太さ(L4)(px),1,2000,8,1
+--track@taper_in4:入り長さ(L4),0,50,0,1
+--track@taperw_in4:入り太さ(L4),0,100,0,1
+--track@taper_out4:抜き長さ(L4),0,50,0,1
+--track@taperw_out4:抜き太さ(L4),0,100,0,1
+--track@feather4:柔らかさ(L4),0,2,2,1
+--track@stabilize4:手ブレ補正(L4),0,40,16,1
+--track@shapekeep4:形状優先(L4),1,10,3,1
+--color@col4:色(L4),0xffffff
+--group:レイヤー5設定,false
+--track@w5:ペンの太さ(L5)(px),1,2000,8,1
+--track@taper_in5:入り長さ(L5),0,50,0,1
+--track@taperw_in5:入り太さ(L5),0,100,0,1
+--track@taper_out5:抜き長さ(L5),0,50,0,1
+--track@taperw_out5:抜き太さ(L5),0,100,0,1
+--track@feather5:柔らかさ(L5),0,2,2,1
+--track@stabilize5:手ブレ補正(L5),0,40,16,1
+--track@shapekeep5:形状優先(L5),1,10,3,1
+--color@col5:色(L5),0xffffff
+--group:高度な設定,false
+--value@fmtver:fmtver,""
+--value@lhide:lhide,""
+--value@pts:線の座標(シーンpx・ミリ秒),""
+
+-- 座標データ形式 (--value@pts:線の座標):
+--   "x,y,t[,l];...|x,y,t[,l];..."  x,y: シーンpx（左上原点） t: ペンモード開始からのミリ秒
+--   l: レイヤー番号 1..5 (1=最前面)。省略時は 1 (旧データ互換、3/4 フィールド混在許容 )。
+--   ストロークのレイヤー = 先頭点の l。描画順はレイヤー 5→1 (奥→手前)、同一レイヤー内は t 順。
+--   ストローク先頭に属性トークン xi (入りテーパー無効) / xo (抜きテーパー無効) / d<ms>
+--   (消失時刻) を置ける。xi/xo は受入のみ (v1 の描画はテーパーをそのまま適用)。
+--   d<ms> は消しゴム断片 (ゴースト) の消失時刻: target_t >= d で非表示になる。
+--   再生は「フルに線が引かれた後、消した時刻にその区間が消える」になる (P3 実装)。
+--
+-- 柔らかさ: ストローク輪郭の外側へ soft px のフェザー帯を描く。
+-- 頂点アルファ（Gouraud 補間）で「輪郭=α1 → 外縁=α0」のリニアなランプにする。
+-- シェーダー不使用・obj.zoom 不使用（obj2 で確実に動く drawpoly のみで実現）。
+-- 1=アンチエイリアス相当、2=やわらかい縁。
+-- ペン入力のジッター・手ブレはフェザー外縁で増幅されて毛虫状になるため、入力点は
+-- バイラテラル平滑化（「手ブレ補正」の半径で移動平均＋「形状優先」の偏差ブレンド）してから
+-- メッシュを組む（キャッシュ構築時に1回。全レイヤーのトラック値はキャッシュキーに含まれる）。
+-- 手ブレ補正: 平滑化半径。0=補正なし。大きくするとより滑らかになる。
+-- 形状優先: 偏差の閾値。小さいほど角・急カーブを描いた形のまま守る。
+-- レイヤー別スタイル : 太さ/入り抜き/柔らかさ/手ブレ/色 はレイヤー単位。
+-- Lk の項目が無い (旧構成オブジェクト) 場合は L1 の値 → 既定値 の順にフォールバックする
+-- (互換性規約 )。fmtver はプラグインが確定時に "2" を書込む形式判別用隠し項目。
+
+obj.setoption("culling", 0)
+-- ダミー読み込み（この後にobjectバッファをtempbufferで上書きする。必須）
+obj.load("figure", "四角形", 0xffffff, 1)
+
+local PEN_LAYER_MAX = 5
+
+local function clamp(v, lo, hi)
+  if v < lo then return lo elseif v > hi then return hi else return v end
+end
+
+-- "x,y,t[,l];...|..." をストロークの配列に変換
+-- 各点: {x, y, t, l}  l: レイヤー番号 1..PEN_LAYER_MAX (省略時 1)
+-- "|" でストローク（ペンアップ）区切り、";" で点区切り。
+-- 属性トークン:
+--   d<ms>  → ストロークテーブルの .vanish に保持。target_t >= vanish で非表示
+--            (消しゴム断片「引かれた後に消える」)
+--   xi/xo  → ストロークテーブルの .xi/.xo (入り/抜きテーパー無効)。消しゴム断片の
+--            テーパー引継ぎ用。消去前の再生が元の線と同一になる
+-- 未知トークンは黙ってスキップ。
+local function parse_pts(s)
+  local strokes = {}
+  if type(s) ~= "string" or s == "" then return strokes end
+  for ststr in (s .. "|"):gmatch("(.-)|") do
+    if ststr ~= "" then
+      local pts = nil
+      local pend_d = nil
+      local pend_xi = false
+      local pend_xo = false
+      for seg in (ststr .. ";"):gmatch("(.-);") do
+        -- 先に「点」として解釈する (4 フィールド → 3 フィールドの順。 混在許容)
+        local x, y, t, l = seg:match("^%s*(-?%d+%.?%d*)%s*,%s*(-?%d+%.?%d*)%s*,%s*(-?%d+)%s*,%s*(-?%d+)%s*$")
+        if not x then
+          l = nil
+          x, y, t = seg:match("^%s*(-?%d+%.?%d*)%s*,%s*(-?%d+%.?%d*)%s*,%s*(-?%d+)%s*$")
+        end
+        if x then
+          pts = pts or {}
+          local lv = tonumber(l) or 1
+          if lv < 1 then lv = 1 elseif lv > PEN_LAYER_MAX then lv = PEN_LAYER_MAX end
+          pts[#pts + 1] = { tonumber(x), tonumber(y), tonumber(t), lv }
+        else
+          local tok = seg:gsub("%s+", "")
+          local dv = tok:match("^d(%d+)$")
+          if dv then
+            pend_d = tonumber(dv)
+          elseif tok == "xi" then
+            pend_xi = true
+          elseif tok == "xo" then
+            pend_xo = true
+          end
+        end
+      end
+      if pts and #pts > 0 then
+        if pend_d then pts.vanish = pend_d end
+        if pend_xi then pts.xi = true end
+        if pend_xo then pts.xo = true end
+        strokes[#strokes + 1] = pts
+      end
+    end
+  end
+  return strokes
+end
+
+-----------------------------------------------------------------------------
+-- レイヤー別スタイル
+-- 項目変数はグローバルとして供給される。未定義 (旧オブジェクト等) なら nil になり、
+-- layer_style が L1 → 既定値 の順にフォールバックする。
+-----------------------------------------------------------------------------
+local RAW_STYLE = {
+  { w = w,            ti = taper_in,   twi = taperw_in,   to = taper_out,   two = taperw_out,
+    feather = feather, ma = stabilize,  tau = shapekeep,   col = col },
+  { w = w2,           ti = taper_in2,  twi = taperw_in2,  to = taper_out2,  two = taperw_out2,
+    feather = feather2, ma = stabilize2, tau = shapekeep2, col = col2 },
+  { w = w3,           ti = taper_in3,  twi = taperw_in3,  to = taper_out3,  two = taperw_out3,
+    feather = feather3, ma = stabilize3, tau = shapekeep3, col = col3 },
+  { w = w4,           ti = taper_in4,  twi = taperw_in4,  to = taper_out4,  two = taperw_out4,
+    feather = feather4, ma = stabilize4, tau = shapekeep4, col = col4 },
+  { w = w5,           ti = taper_in5,  twi = taperw_in5,  to = taper_out5,  two = taperw_out5,
+    feather = feather5, ma = stabilize5, tau = shapekeep5, col = col5 },
+}
+
+local function layer_style(k)
+  local r = RAW_STYLE[k]
+  local function num(field, def, lo, hi)
+    local v = tonumber(r[field])
+    if v == nil and k > 1 then v = tonumber(RAW_STYLE[1][field]) end
+    if v == nil then v = def end
+    return clamp(v, lo, hi)
+  end
+  local c = tonumber(r.col)
+  if c == nil and k > 1 then c = tonumber(RAW_STYLE[1].col) end
+  c = math.floor(c or 0) % 0x1000000
+  local ls = {}
+  ls.c    = c
+  ls.r    = (math.floor(c / 0x10000) % 0x100) / 255.0
+  ls.g    = (math.floor(c / 0x100) % 0x100) / 255.0
+  ls.b    = (c % 0x100) / 255.0
+  ls.pw   = num("w", 8, 1, 2000)
+  ls.half = ls.pw * 0.5
+  ls.ti   = num("ti", 0, 0, 50)
+  ls.twi  = num("twi", 0, 0, 100)
+  ls.to   = num("to", 0, 0, 50)
+  ls.two  = num("two", 0, 0, 100)
+  ls.soft = num("feather", 2, 0.5, 2)
+  ls.ma   = num("ma", 16, 0, 40)
+  ls.tau  = num("tau", 3, 1, 10)
+  return ls
+end
+
+local STYLES = {}
+local STYLE_KEYS = {}
+for k = 1, PEN_LAYER_MAX do
+  STYLES[k] = layer_style(k)
+  local s = STYLES[k]
+  STYLE_KEYS[k] = string.format("%g,%g,%g,%g,%g,%g,%g,%g,%06x",
+                                s.pw, s.ti, s.twi, s.to, s.two, s.soft, s.ma, s.tau, s.c)
+end
+local STYLES_KEY = table.concat(STYLE_KEYS, ";")
+
+-- 手ブレ補正（バイラテラル）はストロークの属するレイヤーの値を使う。
+-- 全レイヤーのスタイル値はキャッシュキーに含まれるので、どれか 1 つでも変われば
+-- 平滑化からメッシュまで全再構築される。
+local function smooth_stroke(st)
+  local MA_R = st.ls.ma
+  local BLEND_TAU = st.ls.tau
+  local n = #st
+  if n < 5 then return end
+  local cum = { 0 }
+  for i = 2, n do
+    local dx = st[i][1] - st[i - 1][1]
+    local dy = st[i][2] - st[i - 1][2]
+    cum[i] = cum[i - 1] + math.sqrt(dx * dx + dy * dy)
+  end
+  local sm = {}
+  sm[1] = st[1]
+  for i = 2, n - 1 do
+    local lo, hi = i, i
+    while lo > 1 and cum[i] - cum[lo - 1] <= MA_R do lo = lo - 1 end
+    while hi < n and cum[hi + 1] - cum[i] <= MA_R do hi = hi + 1 end
+    local sx, sy = 0, 0
+    for k = lo, hi do
+      sx = sx + st[k][1]
+      sy = sy + st[k][2]
+    end
+    local m = hi - lo + 1
+    local mx, my = sx / m, sy / m
+    -- 平滑化による移動量（偏差）が小さい＝ブレ → 平滑化を採用。
+    -- 大きい＝角・急カーブ → 元の座標に寄せる。
+    local ddx = mx - st[i][1]
+    local ddy = my - st[i][2]
+    local dev = math.sqrt(ddx * ddx + ddy * ddy)
+    local wgt = 1.0 / (1.0 + (dev / BLEND_TAU) * (dev / BLEND_TAU))
+    sm[i] = { st[i][1] + ddx * wgt, st[i][2] + ddy * wgt, st[i][3], st[i][4] }
+  end
+  sm[n] = st[n]
+  for i = 1, n do st[i] = sm[i] end
+end
+
+-- ストロークごとの頂点法線（隣接セグメントの法線の平均＝マイター）。
+-- 座標は確定後不変なので、結果をストロークテーブルにキャッシュする
+-- （キャッシュエントリは座標列が変わるまで保持される）。
+local function stroke_normals(st)
+  if st.nx then return st.nx, st.ny end
+  local n = #st
+  local snx, sny = {}, {}
+  for i = 1, n - 1 do
+    local dx = st[i + 1][1] - st[i][1]
+    local dy = st[i + 1][2] - st[i][2]
+    local len = math.sqrt(dx * dx + dy * dy)
+    if len < 1e-6 then
+      snx[i], sny[i] = 0, 1
+    else
+      snx[i], sny[i] = -dy / len, dx / len
+    end
+  end
+  local vnx, vny = {}, {}
+  if n == 1 then
+    vnx[1], vny[1] = 0, 1
+  else
+    vnx[1], vny[1] = snx[1], sny[1]
+    vnx[n], vny[n] = snx[n - 1], sny[n - 1]
+    for i = 2, n - 1 do
+      local mx, my = snx[i - 1] + snx[i], sny[i - 1] + sny[i]
+      local ml = math.sqrt(mx * mx + my * my)
+      if ml < 1e-6 then
+        vnx[i], vny[i] = snx[i], sny[i]
+      else
+        vnx[i], vny[i] = mx / ml, my / ml
+      end
+    end
+  end
+  st.nx, st.ny = vnx, vny
+  return vnx, vny
+end
+
+-- メッシュ生成（ローカル座標・中心原点）
+-- verts は「現在の書き込み先」。メッシュキャッシュ構築時は別テーブルを指し、
+-- 描画時は verts に完成メッシュの参照を積む。
+-- 色・幅・フェザーはストロークごとに set_stroke_style で指定する (レイヤー別スタイル)。
+local verts = {}
+
+-- 全ストローク外接矩形の中心。実値はパース後 (下の方) で代入する。
+-- P/PA のアップバリューとして参照されるため、ここで宣言しておく必要がある。
+local cx, cy = 0, 0
+
+-- 現在の生成対象ストロークのスタイル (set_stroke_style で切替)
+local cur_half, cur_soft = 4, 0
+local cur_r, cur_g, cur_b = 1, 1, 1
+local function set_stroke_style(ls)
+  cur_half = ls.half
+  cur_soft = ls.soft
+  cur_r, cur_g, cur_b = ls.r, ls.g, ls.b
+end
+
+local function P(x, y)
+  verts[#verts + 1] = { x - cx, y - cy, 0, cur_r, cur_g, cur_b, 1.0 }
+end
+-- α付き頂点（乗算済みα: r*a, g*a, b*a, a）
+local function PA(x, y, a)
+  verts[#verts + 1] = { x - cx, y - cy, 0, cur_r * a, cur_g * a, cur_b * a, a }
+end
+
+-- 入り抜き（筆圧風）: ストロークの始端（入り）と終端（抜き）を別々に細くできる
+-- ti/to: 入り長さ・抜き長さ（線幅の何倍分の区間で細くなるか）
+-- twi/two: 入り太さ・抜き太さ（通常幅に対する %。0=尖る / 100=変化なし）
+-- 位置 d（始端からの距離 px）での幅倍率（0..1）を返す
+-- 区間がストローク長より長い場合はそれぞれ半分ずつに収める（中央で通常幅になる）
+-- st に .xi / .xo (テーパー無効属性) がある場合は対応側を通常幅にする
+-- (消しゴム断片のテーパー引継ぎ )
+local function taper_ratio(ls, d, total, st)
+  if total <= 0 then return 1 end
+  local on = (ls.ti > 0 and ls.twi < 100) or (ls.to > 0 and ls.two < 100)
+  if not on then return 1 end
+  local segIn = math.min(ls.ti * ls.pw, total * 0.5)
+  local segOut = math.min(ls.to * ls.pw, total * 0.5)
+  if segIn > 0 and d <= segIn then
+    if st and st.xi then return 1 end -- 入り無効
+    local u = d / segIn
+    return (ls.twi / 100) + (1 - ls.twi / 100) * u
+  elseif segOut > 0 and d >= total - segOut then
+    if st and st.xo then return 1 end -- 抜き無効
+    local u = (total - d) / segOut
+    return (ls.two / 100) + (1 - ls.two / 100) * u
+  else
+    return 1
+  end
+end
+
+-- w1/w2: 両端の幅倍率（入り抜き用。1=通常幅）
+local function add_segment(st, vnx, vny, j, tpx, tpy, useTip, tipUv, w1, w2)
+  local p1x, p1y = st[j][1], st[j][2]
+  local p2x, p2y
+  local n2x, n2y
+  if useTip then
+    p2x, p2y = tpx, tpy
+    local mix = vnx[j] * (1 - tipUv) + vnx[j + 1] * tipUv
+    local miy = vny[j] * (1 - tipUv) + vny[j + 1] * tipUv
+    local ml = math.sqrt(mix * mix + miy * miy)
+    if ml < 1e-6 then
+      n2x, n2y = vnx[j], vny[j]
+    else
+      n2x, n2y = mix / ml, miy / ml
+    end
+  else
+    p2x, p2y = st[j + 1][1], st[j + 1][2]
+    n2x, n2y = vnx[j + 1], vny[j + 1]
+  end
+  local n1x, n1y = vnx[j], vny[j]
+  local h1 = cur_half * (w1 or 1)
+  local h2 = cur_half * (w2 or 1)
+  local l1x, l1y = p1x + n1x * h1, p1y + n1y * h1
+  local r1x, r1y = p1x - n1x * h1, p1y - n1y * h1
+  local l2x, l2y = p2x + n2x * h2, p2y + n2y * h2
+  local r2x, r2y = p2x - n2x * h2, p2y - n2y * h2
+  if cur_soft > 0.01 then
+    -- フェザー帯（輪郭=α1 → 外縁=α0）。芯より先に積む（被りは無いが順序は安全側）
+    local fl1x, fl1y = p1x + n1x * (h1 + cur_soft), p1y + n1y * (h1 + cur_soft)
+    local fr1x, fr1y = p1x - n1x * (h1 + cur_soft), p1y - n1y * (h1 + cur_soft)
+    local fl2x, fl2y = p2x + n2x * (h2 + cur_soft), p2y + n2y * (h2 + cur_soft)
+    local fr2x, fr2y = p2x - n2x * (h2 + cur_soft), p2y - n2y * (h2 + cur_soft)
+    -- 左フェザー
+    PA(l1x, l1y, 1); PA(l2x, l2y, 1); PA(fl2x, fl2y, 0)
+    PA(l1x, l1y, 1); PA(fl2x, fl2y, 0); PA(fl1x, fl1y, 0)
+    -- 右フェザー
+    PA(r1x, r1y, 1); PA(fr1x, fr1y, 0); PA(fr2x, fr2y, 0)
+    PA(r1x, r1y, 1); PA(fr2x, fr2y, 0); PA(r2x, r2y, 1)
+  end
+  -- 芯（α=1）
+  P(l1x, l1y); P(l2x, l2y); P(r2x, r2y)
+  P(l1x, l1y); P(r2x, r2y); P(r1x, r1y)
+end
+
+local function add_disc(dx, dy, rad)
+  local segs = clamp(math.ceil(rad * 0.4) + 8, 8, 32)
+  for kk = 0, segs - 1 do
+    local a0 = kk / segs * math.pi * 2
+    local a1 = (kk + 1) / segs * math.pi * 2
+    P(dx, dy)
+    P(dx + math.cos(a0) * rad, dy + math.sin(a0) * rad)
+    P(dx + math.cos(a1) * rad, dy + math.sin(a1) * rad)
+  end
+end
+
+-- ストロークの本体（toSeg 個の完成セグメント + 任意の部分セグメント）
+-- 入り抜き: 各頂点の幅倍率を累積長から求めて両端に渡す
+local function add_stroke_body(st, vnx, vny, toSeg, hasTip, tpx, tpy, tipUv, ls)
+  local total = st.len[#st]
+  for j = 1, toSeg do
+    add_segment(st, vnx, vny, j, 0, 0, false, 0,
+                taper_ratio(ls, st.len[j], total, st), taper_ratio(ls, st.len[j + 1], total, st))
+  end
+  if hasTip then
+    -- 部分セグメントの先端（tip）の位置は累積長 + 進み具合で求める
+    local d1 = st.len[toSeg + 1]
+    local d2 = st.len[toSeg + 2]
+    local dTip = d1 + (d2 - d1) * tipUv
+    add_segment(st, vnx, vny, toSeg + 1, tpx, tpy, true, tipUv,
+                taper_ratio(ls, d1, total, st), taper_ratio(ls, dTip, total, st))
+  end
+end
+
+-----------------------------------------------------------------------------
+-- パース結果のキャッシュ（obj.id ごと）。座標列（pts）と全レイヤーのスタイル値が
+-- 変わらない限り、毎フレームの文字列パース・タイミング合成・平滑化・
+-- メッシュ生成・バウンディングボックス計算を省ける。
+-- 再生時の負荷の大半はこの O(N) の文字列パースで、点が密になると顕著になる。
+-----------------------------------------------------------------------------
+local cache = rawget(_G, "__pen_cache")
+if type(cache) ~= "table" then
+  cache = {}
+  rawset(_G, "__pen_cache", cache)
+end
+local oid = obj.id or "obj" -- 複数オブジェクトでキャッシュを分ける
+-- lhide: 再生時非表示レイヤー。"01000" のようにレイヤー番号の位置に 1 を置く
+-- (プラグインが確定時に書込む)。該当レイヤーのストロークは「最初から描かなかった」
+-- 扱いで除外される (データは座標列に残るため、解除すれば復活する)。
+local cache_key = tostring(pts) .. "|" .. STYLES_KEY .. "|" .. tostring(lhide or "")
+local e = cache[oid]
+if not e or e.key ~= cache_key then
+  local strokes = parse_pts(pts)
+  -- 再生時非表示レイヤーのストロークを除外。タイミング合成・平滑化・bbox・
+  -- メッシュは除外後の strokes に対して行われる。
+  do
+    local hide_bits = tostring(lhide or "")
+    if hide_bits:find("1") then
+      local hidden = {}
+      for k = 1, PEN_LAYER_MAX do
+        hidden[k] = hide_bits:sub(k, k) == "1"
+      end
+      local visible = {}
+      for k = 1, #strokes do
+        local lv = strokes[k][1][4] or 1
+        if lv < 1 then lv = 1 elseif lv > PEN_LAYER_MAX then lv = PEN_LAYER_MAX end
+        if not hidden[lv] then visible[#visible + 1] = strokes[k] end
+      end
+      strokes = visible
+    end
+  end
+  -- パース自体の成否を記録しておく (lhide 全非表示での空は正常なため警告を出さない)
+  e = { key = cache_key, strokes = strokes,
+        parse_bad = (type(pts) == "string" and pts ~= "" and #strokes < 1) }
+  if #strokes >= 1 then
+    -- タイミング合成（タイムスタンプが無効な列への均等割り当て）
+    if strokes[#strokes][#strokes[#strokes]][3] - strokes[1][1][3] <= 0 then
+      local tt = 0
+      for k = 1, #strokes do
+        local st = strokes[k]
+        for i = 1, #st do
+          st[i][3] = tt
+          tt = tt + 33
+        end
+        tt = tt + 250
+      end
+    end
+
+    -- 配列順 = t 昇順 の復元 (先頭点 t の安定ソート。同 t は元の並びを維持)。
+    -- プラグインは確定時に必ず t 安定ソートして書き出すが、手編集等で順序が
+    -- 壊れた列でも走査モデル  が破綻しないようにする。
+    for k = 1, #strokes do strokes[k]._ord = k end
+    table.sort(strokes, function(a, b)
+      if a[1][3] ~= b[1][3] then return a[1][3] < b[1][3] end
+      return a._ord < b._ord
+    end)
+    for k = 1, #strokes do strokes[k]._ord = nil end
+
+    -- レイヤー属性 (第4フィールド) とスタイルの確定。ストロークのレイヤー = 先頭点の l
+    for k = 1, #strokes do
+      local st = strokes[k]
+      local lv = st[1][4] or 1
+      if lv < 1 then lv = 1 elseif lv > PEN_LAYER_MAX then lv = PEN_LAYER_MAX end
+      st.layer = lv
+      st.ls = STYLES[lv]
+    end
+
+    -- 手ブレ補正（バイラテラル平滑化）。ペン入力のジッターと低周波の手ブレは
+    -- フェザー外縁で (half+soft) 倍に増幅されてノコギリ状（毛虫）になる。
+    -- まず ±MA_R px の移動平均で強く平滑化し、次に「平滑化による移動量が大きい点
+    -- （角・意図した急カーブ）は元の座標に寄せる」重み付きブレンドで形を保つ。
+    -- 両端は座標を固定（キャップ・入り抜きの起点を守る）。座標は確定後に不変なので
+    -- キャッシュ構築時に一度だけ行う。MA_R / BLEND_TAU は各レイヤーのトラック値。
+    for k = 1, #strokes do
+      smooth_stroke(strokes[k])
+    end
+
+    -- バウンディングボックス（バッファサイズと中心）
+    local minX, maxX, minY, maxY
+    local first = true
+    for k = 1, #strokes do
+      local st = strokes[k]
+      for i = 1, #st do
+        local x, y = st[i][1], st[i][2]
+        if first then
+          minX, maxX, minY, maxY = x, x, y, y
+          first = false
+        else
+          if x < minX then minX = x end
+          if x > maxX then maxX = x end
+          if y < minY then minY = y end
+          if y > maxY then maxY = y end
+        end
+      end
+    end
+    e.minX, e.maxX, e.minY, e.maxY = minX, maxX, minY, maxY
+
+    -- 使用レイヤーの中で最大の太さ・柔らかさ (バッファ余白計算用)
+    local max_pw, max_soft = 1, 0.5
+    for k = 1, #strokes do
+      local ls = strokes[k].ls
+      if ls.pw > max_pw then max_pw = ls.pw end
+      if ls.soft > max_soft then max_soft = ls.soft end
+    end
+    e.max_pw, e.max_soft = max_pw, max_soft
+
+    -- 頂点ごとの累積長（入り抜きの幅計算用。座標不変なのでキャッシュする）
+    -- st.len[i] = 始端から頂点 i までの距離
+    for k = 1, #strokes do
+      local st = strokes[k]
+      local cum = { 0 }
+      local acc = 0
+      for i = 2, #st do
+        local dx = st[i][1] - st[i - 1][1]
+        local dy = st[i][2] - st[i - 1][2]
+        acc = acc + math.sqrt(dx * dx + dy * dy)
+        cum[i] = acc
+      end
+      st.len = cum
+    end
+
+    -- 完成ストロークのメッシュをキャッシュ構築時にまとめて生成する。
+    -- スタイル値 (全レイヤー分) はキャッシュキーに含まれるため、再生成は
+    -- 座標列またはスタイルが変わった最初のフレームだけでよい。
+    -- 注意: メッシュ頂点は中心原点のローカル座標なので、生成前に cx/cy を確定する。
+    cx, cy = (minX + maxX) * 0.5, (minY + maxY) * 0.5
+    e.meshes = {}
+    for k = 1, #strokes do
+      local st = strokes[k]
+      local ls = st.ls
+      set_stroke_style(ls)
+      local vnx, vny = stroke_normals(st)
+      local total = st.len[#st]
+      verts = {}
+      add_stroke_body(st, vnx, vny, #st - 1, false, 0, 0, 0, ls)
+      add_disc(st[1][1], st[1][2], ls.half * taper_ratio(ls, 0, total, st))
+      add_disc(st[#st][1], st[#st][2], ls.half * taper_ratio(ls, total, total, st))
+      e.meshes[k] = verts
+    end
+  end
+  cache[oid] = e
+end
+
+local strokes = e.strokes
+if #strokes < 1 then
+  if e.parse_bad and rawget(_G, "__pen_bad_pts") ~= true then
+    rawset(_G, "__pen_bad_pts", true)
+    print("ペンツール: 線の座標の解析に失敗しました（フォーマットを確認）")
+  end
+  obj.clearbuffer("object", 1, 1)
+  return
+end
+
+local minX, maxX, minY, maxY = e.minX, e.maxX, e.minY, e.maxY
+cx, cy = (minX + maxX) * 0.5, (minY + maxY) * 0.5
+
+-- 進捗（0..1）: 線が引かれていく割合。進行モード (mode) で動作が変わる:
+--   0=自動再生: クリップ長基準で自動的に 0→100 に移動（デフォルト）
+--     obj.frame / obj.totalframe（オブジェクト基準のフレーム）を使う。
+--     取れない環境では秒ベース（obj.time / obj.totaltime）へフォールバックし、
+--     どちらも取れなければ全体表示にする。
+--   1=進捗指定: 「進捗(%)」スライダーの値を使う（静止表示。スクラブも可能）。
+--     スライダーを中間点で 0→100 に直線移動させると、その速度で線が伸びる。
+--   2=秒数指定: オブジェクト開始から「再生時間(秒)」で 0→100 に進行し、
+--     以降は 100% の静止画として残る（obj.time / 再生時間(秒)）。
+--     再生時間がマイナスの場合は、完成状態(100%)から逆再生して
+--     |再生時間| 秒後に 0% まで戻り、以降は未描画のまま残る。
+local mode = tonumber(mode) or 0
+local dir = tonumber(dir) or 1
+local f
+if mode == 1 then
+  f = clamp((tonumber(prog) or 0) / 100, 0, 1)
+elseif mode == 2 then
+  local tsec = tonumber(obj.time)
+  local dur = tonumber(dur) or 0
+  if tsec and dur ~= 0 then
+    local span = math.abs(dur)
+    if dur > 0 then
+      f = clamp(tsec / span, 0, 1)      -- 順再生: 指定秒で 1 に達し、以降は 1 のまま（静止画）
+    else
+      f = clamp(1 - tsec / span, 0, 1)  -- 逆再生: 開始は完成(1)で、指定秒で 0 まで戻る
+    end
+  else
+    f = 1 -- 判別不能 → 全体を表示（動作確認しやすい）
+  end
+else
+  local fr = tonumber(obj.frame)
+  local tf = tonumber(obj.totalframe)
+  if not fr or not tf or tf <= 0 then
+    local tsec = tonumber(obj.time)
+    local tt = tonumber(obj.totaltime)
+    if tsec and tt and tt > 0 then
+      f = clamp(tsec / tt, 0, 1)
+    else
+      f = 1 -- 判別不能 → 全体を表示（動作確認しやすい）
+    end
+  elseif tf <= 1 then
+    f = 1
+  else
+    -- 先頭フレームでもわずかに線が見えるように +1（最後のフレームで全体）
+    f = clamp((fr + 1) / tf, 0, 1)
+  end
+  -- 自動再生の再生方向 (dir): 1=順再生 / -1=逆再生（完成(1)から未描画(0)へ）/ 0=静止（進捗100%の静止画）
+  if dir == 0 then
+    f = 1
+  elseif dir < 0 then
+    f = 1 - f
+  end
+end
+
+-- タイムライン（先頭点〜最終点）。タイミング合成・安定ソートはキャッシュ構築時に済んでいる
+local last_st = strokes[#strokes]
+local t_start = strokes[1][1][3]
+local t_end = last_st[#last_st][3]
+-- ゴースト断片 (消しゴム) の消失時刻は常に全ストロークの t より後のため、
+-- それが最終点を超える分だけ時間軸を伸ばす。これにより「消える瞬間」が
+-- オブジェクトの再生範囲内に収まる。ゴーストが無ければ従来と同じ軸。
+for k = 1, #strokes do
+  local stv = strokes[k].vanish
+  if stv and stv > t_end then t_end = stv end
+end
+local total_t = t_end - t_start
+
+-- 先端の位置を求める（完成ストローク + アクティブストロークの先端）
+-- 走査は配列順 (= t 昇順。書き出し時に安定ソート済み) で行う。
+local complete = 0 -- 完全描画するストローク数（先頭から連続）
+local act = 0      -- アクティブストローク（0=なし＝全て完成、または開始前）
+local segCount = 0
+local partJ = 0
+local tipU = 0
+local tipx, tipy = strokes[1][1][1], strokes[1][1][2]
+
+local target_t = t_start + f * total_t
+for k = 1, #strokes do
+  local st = strokes[k]
+  local s1 = st[#st][3]
+  if target_t >= s1 then
+    complete = k
+  elseif target_t >= st[1][3] then
+    act = k
+    local n = #st
+    if n <= 1 or target_t >= s1 then
+      segCount = n - 1
+      tipU = 1
+      tipx, tipy = st[n][1], st[n][2]
+    else
+      for i = 1, n - 1 do
+        local t0, t1 = st[i][3], st[i + 1][3]
+        if target_t <= t1 then
+          segCount = i - 1
+          partJ = i
+          local span = t1 - t0
+          tipU = (span > 0) and ((target_t - t0) / span) or 0
+          tipx = st[i][1] + (st[i + 1][1] - st[i][1]) * tipU
+          tipy = st[i][2] + (st[i + 1][2] - st[i][2]) * tipU
+          break
+        end
+      end
+    end
+    break
+  else
+    break
+  end
+end
+
+local drawn = (complete > 0) or (act > 0 and (segCount > 0 or tipU > 0.0001))
+
+verts = {}
+if drawn then
+  -- 描画 z 順: レイヤー 5→1 (奥→手前)。同一レイヤー内は配列順 (= t 順)。
+  -- 走査 (上のループ) と描画 z 順を分離することで、レイヤーを行き来しながら
+  -- 描いても書き順＝再生順が完全保存される。
+  for layer = PEN_LAYER_MAX, 1, -1 do
+    for k = 1, #strokes do
+      local st = strokes[k]
+      -- 消しゴム断片 (ゴースト): 消失時刻を過ぎたら「最初から無かった」扱いで
+      -- 提出しない (走査の complete/act には影響しない。描画のみ抑止)。
+      local vanished = st.vanish and target_t >= st.vanish
+      if st.layer == layer and not vanished then
+        if k <= complete then
+          -- 完成ストローク: キャッシュ済みメッシュの頂点を参照コピー（毎フレーム生成しない）
+          local m = e.meshes[k]
+          if m then
+            for i = 1, #m do
+              verts[#verts + 1] = m[i]
+            end
+          end
+        elseif k == act then
+          -- アクティブストローク（先端まで。毎フレーム生成）
+          local ls = st.ls
+          set_stroke_style(ls)
+          local vnx, vny = stroke_normals(st)
+          local total = st.len[#st]
+          add_stroke_body(st, vnx, vny, segCount, partJ > 0, tipx, tipy, tipU, ls)
+          add_disc(st[1][1], st[1][2], ls.half * taper_ratio(ls, 0, total, st))
+          -- 先端キャップの半径は、先端がストロークのどの位置にあるかで決まる
+          if partJ > 0 then
+            local d1 = st.len[partJ]
+            local d2 = st.len[partJ + 1]
+            local dTip = d1 + (d2 - d1) * tipU
+            add_disc(tipx, tipy, ls.half * taper_ratio(ls, dTip, total, st))
+          else
+            add_disc(tipx, tipy, ls.half * taper_ratio(ls, total, total, st))
+          end
+        end
+      end
+    end
+  end
+end
+
+if #verts > 0 then
+  -- バッファは最大の太さ・柔らかさ分の余白を持つ（外側フェザー帯用）
+  local pw_margin = e.max_pw or 8
+  local soft_margin = e.max_soft or 2
+  local bw = math.max(4, math.ceil(maxX - minX + pw_margin + 2 * soft_margin + 4))
+  local bh = math.max(4, math.ceil(maxY - minY + pw_margin + 2 * soft_margin + 4))
+  obj.setoption("drawtarget", "tempbuffer", bw, bh)
+  obj.drawpoly(verts, 3)
+  obj.setoption("drawtarget", "framebuffer")
+  obj.copybuffer("object", "tempbuffer")
+else
+  obj.clearbuffer("object", 1, 1)
+end

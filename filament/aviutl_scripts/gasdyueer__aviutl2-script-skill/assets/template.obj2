@@ -1,0 +1,21 @@
+--information:カスタムオブジェクト ver1.00
+-- 自定义对象模板 (.obj2)
+-- 核心是 obj.load() 加载图像，可使用各种类型（movie/image/text/figure/tempbuffer等）
+-- 可通过 obj.draw()/obj.drawpoly() 控制描画
+
+-- 配置项示例
+--file@path:画像ファイル
+--track@size:サイズ,10,1000,200
+--color@col:色,0xffffff
+--select@type:描画タイプ=標準,パターン1=0,パターン2=1
+
+-- 加载图像
+if path ~= nil and path ~= "" then
+    local ok = obj.load("image", path)
+    if not ok then return end
+end
+
+-- 可选：多重描画
+-- for i = 0, 5 do
+--   obj.draw(…)
+-- end

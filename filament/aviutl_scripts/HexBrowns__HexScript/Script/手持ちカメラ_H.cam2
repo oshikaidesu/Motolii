@@ -1,0 +1,278 @@
+--information:手持ちカメラ_H v1.10 by HexBrowns
+--label:HexScript
+
+--group:強さ
+--track@amount:振れ幅,0,100,20,0.1
+--track@rot_amount:傾きの振れ幅,0,100,15,0.1
+--track@zoom_amount:寄り引きの振れ幅,0,100,0,0.1
+
+--group:速さの設定
+--track@speed:速さ,0,100,30,0.1
+--track@roughness:細かさ,1,8,3,0.1
+
+--group:性格
+--track@drift:ドリフト,0,100,50,0.1
+--track@breath:呼吸,0,100,30,0.1
+--select@method:揺れの作り方=0,値ノイズ=0,コマ打ち=1,勾配ノイズ=2,正弦の和=3
+--track@hold:コマ打ちのフレーム数,1,30,3,1
+--hide@hold:method~=1
+
+--group:その他
+--track@seed:シード,-10000,10000,0,1
+--check@lock_z:前後を固定,1
+--group
+
+--[[
+設計意図
+
+手持ち撮影の揺れは、単一のランダムではなく次の3成分の合成で出来ている。
+
+  1. 微振動   手首と指の細かい震え。速くて振幅が小さい。
+              値ノイズを複数オクターブ重ねた fBm で作る（roughness = オクターブ数）。
+  2. 重心移動 体幹のゆっくりした流れ。遅くて振幅が大きい。
+              同じノイズをごく低い周波数で読んだ成分（drift の割合で混ぜる）。
+  3. 呼吸     一定周期の上下動。正弦波を上方向にだけ加算する（breath）。
+
+1 と 2 は「加算」ではなく「クロスフェード」で混ぜる。加算にすると drift を
+上げただけで総振幅が増えてしまい、振れ幅スライダーの意味が崩れるため。
+呼吸だけは性質が違う（規則的で方向が固定）ので別に足す。
+
+軸ごとに別のシードオフセットを与えて相関させない。同じ乱数列を共有すると
+X と Y が同位相で動き、斜め方向の直線的な往復に見えてしまう。
+
+速さ 0 で止まる（v1.03）
+
+速さはノイズを読む位置の進み方（base_hz）なので、速さ 0 は「時間が止まる」になる。
+v1.02 までは揺れの途中の一瞬で止まり、カメラがずれた位置のまま残っていた。
+v1.03 から、速さ 0〜1 の間で 1 と 2 の重み（motion_w）を 0→1 に上げる。
+
+  - 速さ 1 以上は v1.02 と同じ絵（motion_w = 1）
+  - 速さ 0 なら 1 と 2 は 0。呼吸は別の項目なので残る
+  - 速さ 0・呼吸 0 なら揺れが全く無いので、カメラに触らずに抜ける
+    （カメラは揺れの無い位置になる）
+
+速さ 0〜1 の間でも base_hz は速さに比例したまま（1 で v1.02 と一致させるため）。
+机上の検証器: AI/scripts/手持ちカメラ_H/verify_handheld.py
+
+揺れの作り方（v1.10）
+
+1 と 2 のノイズの作り方を選べる。初期値の「値ノイズ」は v1.03 と同じ式・同じ値。
+
+  値ノイズ   格子点ごとの乱数を三次補間でつなぐ（vnoise）。山の高さがまちまち
+  コマ打ち   値ノイズのまま、読む時刻を「コマ打ちのフレーム数」ごとに止める
+             （サンプル＆ホールド）。呼吸も同じ時刻で読むので、カメラ全体が
+             N フレームずつ止まってから次の位置へ跳ぶ。低フレームレートの手ブレ
+  勾配ノイズ 格子点で 0 を通り、傾きだけを乱数にする 1 次元の Perlin 型（gnoise）。
+             値ノイズより山の大きさがそろう。格子点（読む位置が整数）では必ず 0
+  正弦の和   オクターブ k ごとに周波数 2^k の正弦を重ねる（位相だけを乱数にする）。
+             ドリフト 0 なら 1 / (速さ × 0.04) 秒の周期で同じ揺れを繰り返す機械的な揺れ
+
+速さ 0 の扱い・呼吸・軸ごとのオフセットは全方式で共通。
+
+シードについて
+
+揺れは obj.rand ではなく、下記の自前ノイズで作っている。obj.rand は引数が種と
+フレームだけで軸や位相を渡せず、隣接フレームで独立した値を返すため、
+「時間方向に滑らかで、かつ軸ごとに独立した揺れ」をこれ一つでは満たせない。
+
+そのため obj.rand のシード符号規則（プラス＝種が同じでもオブジェクト毎に異なる／
+マイナス＝種が同じなら全オブジェクトで同じ）は、このスクリプトには当てはまらない。
+ここでのシードは正負どちらも「別の乱数列を選ぶ番号」でしかなく、符号に意味は無い。
+同じ値を指定すれば常に同じ揺れになる（obj.rand のマイナス側に相当する挙動で固定）。
+
+負の値が正の値の鏡像にならないのは、hash1 の sin 引数に定数 78.233 が入っていて
+奇関数になっていないため。-5000 と 5000 は別の列になる。
+]]
+
+if amount == 0 and rot_amount == 0 and zoom_amount == 0 then return end
+
+local floor = math.floor
+local sin = math.sin
+local cos = math.cos
+local sqrt = math.sqrt
+local TWO_PI = 6.283185307179586
+
+-- 1次元値ノイズ（sin ハッシュ + 三次補間）
+-- EffectUtils_Noise には perlin2 / fbm2 しか無く、いずれも2次元専用。
+-- 片方の軸を固定して流用すると格子インデックスが巨大になり、
+-- 内部の整数ハッシュが倍精度の桁を超えて劣化するので自前で持つ。
+local function hash1(n)
+  local s = sin(n * 12.9898 + 78.233) * 43758.5453
+  return s - floor(s)  -- 0.0〜1.0
+end
+
+-- 戻り値は -1.0〜1.0
+local function vnoise(x)
+  local i = floor(x)
+  local f = x - i
+  local u = f * f * (3 - 2 * f)  -- 三次補間（smoothstep）
+  local a = hash1(i)
+  local b = hash1(i + 1)
+  return (a + (b - a) * u) * 2 - 1
+end
+
+-- 1次元勾配ノイズ（Perlin 型）。格子点 i の傾き g(i) を -1〜1 の乱数にし、
+-- 両端からの直線 g0*f と g1*(f-1) を五次補間でつなぐ。格子点では 0。
+-- 振幅の上限は 0.5 なので 2 倍して -1.0〜1.0 にそろえる
+local function gnoise(x)
+  local i = floor(x)
+  local f = x - i
+  local u = f * f * f * (f * (f * 6 - 15) + 10)
+  local a = (hash1(i) * 2 - 1) * f
+  local b = (hash1(i + 1) * 2 - 1) * (f - 1)
+  return (a + (b - a) * u) * 2
+end
+
+-- fBm。octaves は小数を許し、端数は最終オクターブの振幅で按分する。
+-- noise は vnoise か gnoise
+local function fbm(x, octaves, noise)
+  local n = floor(octaves)
+  local frac = octaves - n
+  local sum, amp, freq, norm = 0, 1, 1, 0
+  for _ = 1, n do
+    sum = sum + amp * noise(x * freq)
+    norm = norm + amp
+    amp = amp * 0.5
+    freq = freq * 2
+  end
+  if frac > 0 then
+    sum = sum + amp * frac * noise(x * freq)
+    norm = norm + amp * frac
+  end
+  if norm <= 0 then return 0 end
+  return sum / norm
+end
+
+-- 正弦の和。オクターブ k（0 始まり）は周波数 2^k・振幅 0.5^k、位相は key と k から決める。
+-- x は時刻 × 周波数（オフセットを足さない。足すと整数のシードで位相が変わらない）
+local function sfbm(x, octaves, key)
+  local n = floor(octaves)
+  local frac = octaves - n
+  local sum, amp, freq, norm = 0, 1, 1, 0
+  for k = 0, n - 1 do
+    sum = sum + amp * sin(TWO_PI * (x * freq + hash1(key + k * 7.31)))
+    norm = norm + amp
+    amp = amp * 0.5
+    freq = freq * 2
+  end
+  if frac > 0 then
+    sum = sum + amp * frac * sin(TWO_PI * (x * freq + hash1(key + n * 7.31)))
+    norm = norm + amp * frac
+  end
+  if norm <= 0 then return 0 end
+  return sum / norm
+end
+
+-- 揺れの作り方（0 値ノイズ / 1 コマ打ち / 2 勾配ノイズ / 3 正弦の和）
+local mode = tonumber(method) or 0
+
+-- 時間（秒）。obj.frame は @tim.cam2.cam2 に .cam2 での使用実績がある
+local fps = tonumber(obj.framerate) or 30
+if fps <= 0 then fps = 30 end
+local frame = tonumber(obj.frame) or 0
+if mode == 1 then
+  -- コマ打ち: N フレームごとに同じ時刻を読む（オブジェクトの先頭から数える）
+  local hold_n = floor(tonumber(hold) or 1)
+  if hold_n < 1 then hold_n = 1 end
+  frame = floor(frame / hold_n) * hold_n
+end
+local t = frame / fps
+
+local seed_off = floor(seed) * 1013
+local base_hz = speed * 0.04        -- 速さ100 でおよそ 4Hz
+local drift_w = drift / 100
+local breath_w = breath / 100
+
+-- 微振動と重心移動の重み。速さ 0〜1 で 0→1、1 以上は 1（v1.02 と同じ絵）
+local motion_w = speed
+if motion_w > 1 then motion_w = 1 end
+if motion_w < 0 then motion_w = 0 end
+
+-- 速さ 0 で呼吸も無ければ揺れは全く無い。カメラに触らずに抜ける
+if motion_w == 0 and (breath_w == 0 or amount == 0) then return end
+local DRIFT_RATE = 0.09             -- 微振動に対する重心移動の周波数比
+local BREATH_HZ = 0.25              -- 呼吸は4秒周期
+
+-- 軸ごとのシードオフセット（互いに素な非整数にして格子を共有させない）
+local OFF_X, OFF_Y, OFF_Z = 0.0, 91.7, 213.3
+local OFF_RZ, OFF_D = 347.9, 521.1
+
+-- 微振動と重心移動をクロスフェードした 1 チャンネル分の値（-1.0〜1.0）。
+-- 値ノイズ・コマ打ちは v1.03 と同じ式（足し算の順も同じにして値を変えない）
+local noise = (mode == 2) and gnoise or vnoise
+local function channel(off)
+  local jitter, slow
+  if mode == 3 then
+    local key = seed_off + off
+    jitter = sfbm(t * base_hz, roughness, key)
+    slow = sfbm(t * base_hz * DRIFT_RATE, 1, key + 0.37)
+  else
+    jitter = fbm(t * base_hz + seed_off + off, roughness, noise)
+    slow = noise(t * base_hz * DRIFT_RATE + seed_off + off + 0.37)
+  end
+  return (jitter * (1 - drift_w) + slow * drift_w) * motion_w
+end
+
+local breath_v = sin(t * BREATH_HZ * TWO_PI + hash1(seed_off + 7.13) * TWO_PI)
+
+local lock_z_on = (lock_z == 1 or lock_z == true)
+
+-- カメラローカル量。ox=右, oy=上, oz=前後
+local ox = amount * channel(OFF_X)
+local oy = amount * (channel(OFF_Y) + breath_w * breath_v * 0.6)
+local oz = 0
+if not lock_z_on then
+  oz = amount * channel(OFF_Z)
+end
+
+local roll = rot_amount * 0.1 * channel(OFF_RZ)     -- 100 で ±10度
+local zoom = zoom_amount * 0.001 * channel(OFF_D)   -- 100 で ±10%
+
+local cam = obj.getoption("camera_param")
+if type(cam) ~= "table" then return end
+
+-- カメラローカル軸（右／上／前）。組み立て方は @Camera.cam2 の「カメラ基準」と同じ。
+-- 画面に対して水平・垂直に揺らすため、ワールド軸ではなくこちらを使う。
+local fx, fy, fz = cam.tx - cam.x, cam.ty - cam.y, cam.tz - cam.z
+local flen = sqrt(fx * fx + fy * fy + fz * fz)
+local rx, ry, rz = 1, 0, 0
+local ux, uy, uz = 0, 1, 0
+
+if flen > 1e-6 then
+  fx, fy, fz = fx / flen, fy / flen, fz / flen
+  local a = math.rad(cam.rz)
+  local hx, hy, hz = sin(a), cos(a), 0
+  -- right = h × forward
+  rx = hy * fz - hz * fy
+  ry = hz * fx - hx * fz
+  rz = hx * fy - hy * fx
+  local rlen = sqrt(rx * rx + ry * ry + rz * rz)
+  if rlen > 1e-6 then
+    rx, ry, rz = rx / rlen, ry / rlen, rz / rlen
+    -- up = forward × right
+    ux = fy * rz - fz * ry
+    uy = fz * rx - fx * rz
+    uz = fx * ry - fy * rx
+  else
+    -- ほぼ真上／真下を向いていて基準ベクトルが前方向と平行。ワールド軸へ退避する。
+    rx, ry, rz = 1, 0, 0
+    ux, uy, uz = 0, 1, 0
+    fx, fy, fz = 0, 0, 1
+  end
+else
+  -- 座標と目標座標が一致していて前方向が決まらない
+  fx, fy, fz = 0, 0, 1
+end
+
+local dx = rx * ox + ux * oy + fx * oz
+local dy = ry * ox + uy * oy + fy * oz
+local dz = rz * ox + uz * oy + fz * oz
+
+-- 座標と目標座標を同じだけ動かす（平行移動）。視線の向きは変えずに画面全体を揺らす。
+cam.x, cam.y, cam.z = cam.x + dx, cam.y + dy, cam.z + dz
+cam.tx, cam.ty, cam.tz = cam.tx + dx, cam.ty + dy, cam.tz + dz
+
+cam.rz = cam.rz + roll
+cam.d = cam.d * (1 + zoom)
+
+obj.setoption("camera_param", cam)

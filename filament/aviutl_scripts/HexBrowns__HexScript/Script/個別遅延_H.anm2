@@ -1,0 +1,457 @@
+--information:個別遅延_H v1.11 by HexBrowns
+--label:HexScript
+--filter
+--track@delay:遅延,-1000,1000,100,0.01
+--track@random:ランダム,0,200,0,0.01
+--track@shake_amt:時間ブレ,0,1000,0
+--select@order:順番=0,番号順=0,右から=1,上から=2,中央から左右へ=3,中央から上下へ=4,中央から外へ=5
+--check@reverse:逆順,0
+--select@dist_mode:配り方=0,等間隔=0,ベジェ=1
+--value@dist_bezier:配り方のベジェ,{0.42,0,0.58,1}
+--hide@dist_bezier:dist_mode~=1
+--check@hide_last:最後の中間点で非表示,0
+--group:詳細設定,false
+--check@DN:遅延の時間補正,1
+--value@seed:シード,0
+--value@mag:倍率[移動/回転],{100,100}
+--value@correct:終了補正(秒)[in/out],{0,0}
+--track@interval:時間ブレ周期,0,1000,100,1
+--check@RotW:グループ回転,0
+--track@parent:親レイヤー,0,1000,0,1
+--check@fullrand:番号を無視,0
+--value@Order2:順番のずらし,0
+--select@put_pos:座標を出力=0,しない=0,XYZ=1,XY=2
+--check@dbg:順番の表示,0
+--group
+
+--[[
+個別遅延_H v1.11
+
+原作: Script/@DelayMove.anm2 の「Delay個別」（AviUtl2 移植版。作者・ライセンスの表記なし）。
+v1.11: 親レイヤーが空きの番号のとき・フィルタオブジェクトに掛けたとき、例外にせず動かさない（警告を 1 回出す）。
+v1.10: 配り方（等間隔 / ベジェ）を足した。順番の位置をベジェで写して、遅れに緩急を付ける（After Effects の Lazy に当たる）。
+個別オブジェクトを中間点などで動かしたとき、個別オブジェクトごとに動きを遅らせる。
+
+原作から変えたところ
+  - 「最後の中間点で非表示」を足した。遅れた時刻が最後の中間点に届いた個別オブジェクトを消す
+    （中間点で順に止まる動きなら、止まった順に消える）。中間点はそのオブジェクトのもの、
+    親レイヤーを指定したときは親レイヤーのオブジェクトのもの。中間点が無ければ何もしない
+  - 設定項目を新しい書式（--track@ / --check@ / --select@ / --value@）にし、名前を日本語にした。
+    値の意味・範囲・初期値は原作と同じ。原作の対応:
+      Delay → 遅延 / random → ランダム / 時間ブレ → 時間ブレ / Order → 順番 / 逆順 → 逆順
+      Delay時間補正 → 遅延の時間補正 / Seed → シード / 倍率[移動/回転] / 終了補正(秒)[in/out]
+      時間ブレ周期 / グループ回転 / 親レイヤーを指定 → 親レイヤー / indexを無視 → 番号を無視
+      (Orderscirpt) → 順番のずらし / 座標を出力[0/2] → 座標を出力 / infoview → 順番の表示
+  - 順番のずらし（原作の Orderscirpt）は数値だけになった。原作のダイアログ欄のような
+    式（obj.ox/30 など）は書けない（新しい書式の --value は式を評価しないため）
+  - 乱数は obj.rand で引く（原作は互換関数 rand。引数の並びは原作のまま）
+  動きの計算は原作のまま（順番の名前は、横書きで中央揃えのテキストのときの並び）
+
+順番（逆順を ON にすると逆向き）
+  番号順         : 個別オブジェクトの番号順
+  右から         : 先頭の個別オブジェクトから最も遠い列から（横書きなら右端から）
+  上から         : 先頭の行から（上の行から。1 行だけのテキストでは使えない）
+  中央から左右へ : 中央の縦の線に近いものから
+  中央から上下へ : 中央の横の線に近いものから（1 行だけのテキストでは使えない）
+  中央から外へ   : 中央に近いものから同心円状に
+]]
+
+local check0 = (reverse == 1)
+local delayed_time = nil      -- 遅れた時刻（範囲に収める前）。最後の中間点で非表示 の判定に使う
+
+local function Delay_id(delaytime,adjin,adjout,index,magp,magr,layer,rotation,mode)
+ local delay  = delaytime/1000
+ local adjin  = adjin  or 1
+ local adjout = adjout or 1
+ local gv     = obj.getvalue
+ local L = layer or obj.layer
+ if L==0 then L=obj.layer end
+ local mode   = mode or "counter"
+ if(L~=obj.layer)then mode="nomal" end
+
+ L = "layer"..L.."."
+ if not index then index=obj.index+1 end
+ if not adjout then adjout=adjin end
+
+  local function IO(induration, outduration,time,total)
+    local iD=induration or 1
+    local oD=outduration or 1
+    local time=time or obj.time
+    local total=total or obj.totaltime
+    local start=math.min(1,math.max(0,(time/iD)),1)
+    local ending=(total-time-oD)/oD + 1
+    ending=math.min(1,math.max(0,ending),1)
+    return (start*ending^2)
+  end
+
+ local id = index*delay*IO(adjin,adjout)
+       delayed_time = obj.time-id
+       id = math.min(obj.totaltime,math.max(0,obj.time-id))
+       -- 計算が NaN になったとき（原作の補正の 0 除算）は、範囲に収めた時刻で判定する
+       if delayed_time ~= delayed_time then delayed_time = id end
+
+
+
+if mode=="track" then
+   return gv(0,id),gv(1,id),gv(2,id),gv(3,id)
+end
+
+ -- v1.11: 読む先の値が無いときは動かさない（原作はここで nil の計算の例外になる）。
+ -- 親レイヤーにオブジェクトが無い（空きの番号）・フィルタオブジェクト（標準描画の値を持たない）のとき。強化デバッグ edg_1
+ -- （表に nil を入れると詰まって見落とすので 1 つずつ見る。値を 0 個返すこともあるので、変数に受けてから型を見る）
+ local readable = true
+ for _, k in ipairs({ "x", "y", "z", "rx", "ry", "rz", "zoom", "alpha", "aspect" }) do
+   local v = gv(L..k, id)
+   if type(v) ~= "number" then readable = false break end
+ end
+ if readable and mode=="counter" then
+   for _, k in ipairs({ "rx", "ry", "rz", L.."zoom", L.."alpha" }) do
+     local v = gv(k)
+     if type(v) ~= "number" then readable = false break end
+   end
+ end
+ if not readable then
+   delayed_time = nil
+   local wk = "IndividualDelay_H:missing:" .. L
+   if global[wk] == nil then
+     global[wk] = "1"
+     print("@warn", "[個別遅延_H] " .. L:sub(1, -2) .. " の値を読めないので動かしません（親レイヤーが空き・フィルタオブジェクトなど）")
+   end
+   return
+ end
+
+do
+ local rx,ry,rz = obj.rx,obj.ry,obj.rz
+ local alpha = obj.alpha
+ local zoom=obj.zoom
+ local x,y,z=obj.ox, obj.oy, obj.oz
+
+ if mode=="counter" then
+   rx,ry,rz = -gv("rx")+obj.rx,-gv("ry")+obj.ry,-gv("rz")+obj.rz
+   alpha = obj.alpha*100/gv(L.."alpha")/100
+   zoom=obj.zoom*100/gv(L.."zoom")
+   x,y,z=obj.ox-obj.x, obj.oy-obj.y, obj.oz-obj.z
+ end
+
+ obj.ox=x+gv(L.."x",id)*magp
+ obj.oy=y+gv(L.."y",id)*magp
+ obj.oz=z+gv(L.."z",id)*magp
+ obj.rx=rx+gv(L.."rx",id)*magr
+ obj.ry=ry+gv(L.."ry",id)*magr
+ obj.rz=rz+gv(L.."rz",id)*magr
+ obj.zoom  = zoom*gv(L.."zoom",id)/100
+ obj.alpha = alpha*gv(L.."alpha",id)
+ obj.aspect= gv(L.."aspect",id)
+  if(rotation==1)then
+   --回転
+   local ROT = function(x,y,z,rx0,ry0,rz0)
+   local sin,cos,rad=math.sin,math.cos,math.rad
+   local function Rx(x,y,z,ang) return x                     ,y*cos(ang)-z*sin(ang), y*sin(ang)+z*cos(ang) end
+   local function Ry(x,y,z,ang) return x*cos(ang)+z*sin(ang) ,y                    ,-x*sin(ang)+z*cos(ang) end
+   local function Rz(x,y,z,ang) return x*cos(ang)-y*sin(ang) ,x*sin(ang)+y*cos(ang), z                     end
+    local X,Y,Z
+    X,Y,Z=Rz(x,y,z,rz0)
+    X,Y,Z=Ry(X,Y,Z,ry0)
+    X,Y,Z=Rx(X,Y,Z,rx0)
+    return X,Y,Z
+   end
+   obj.ox,obj.oy,obj.oz = ROT(obj.ox,obj.oy,obj.oz, math.rad(rx+gv(L.."rx",id)*magr) , math.rad(ry+gv(L.."ry",id)*magr) ,math.rad(rz+gv(L.."rz",id)*magr))
+  end
+
+ end
+
+end
+
+-- 最後の中間点の時刻（getvalue に渡す時刻の基準）。中間点が無い・読めなければ nil
+local function last_key_time(p)
+  if p == nil or p == 0 or p == obj.layer then
+    local sections = tonumber((obj.getoption("section_num")))
+    if sections == nil or sections < 2 then return nil end
+    return tonumber((obj.getvalue("time", 0, sections - 1)))
+  end
+  -- 別のレイヤーの区間の数を読む API が無いので、中間点の時刻が増えていく間だけ数える。
+  -- 中間点の数を超えた番号が何を返しても（nil / 終了点 / 同じ時刻）そこで止まる
+  local key = "layer" .. p .. ".time"
+  local t_end = tonumber((obj.getvalue(key, 0, -1)))
+  if t_end == nil then return nil end
+  local last, prev = nil, 0
+  for k = 1, 64 do
+    local t = tonumber((obj.getvalue(key, 0, k)))
+    if t == nil or t <= prev or t >= t_end then break end
+    last, prev = t, t
+  end
+  return last
+end
+
+--アニメーション効果震える簡易版
+local function shake(interval,min,max,seed)
+    if not min then min,max,seed=-1,1,0 end
+    seed=seed or 0
+   if interval==0 then
+    return obj.rand(min,max,seed)
+   else
+    local s=seed
+    min,max=min*1000,max*1000
+    local t = obj.time*100/interval
+    local p = math.floor(t)
+    t = t-p
+    local x0 = obj.rand(min,max,s,p+0)/1000
+    local x1 = obj.rand(min,max,s,p+1)/1000
+    local x2 = obj.rand(min,max,s,p+2)/1000
+    local x3 = obj.rand(min,max,s,p+3)/1000
+    return obj.interpolation(t,x0,x1,x2,x3)
+   end
+end
+
+local Delaytime   = delay
+local Correct_in  = correct[1]
+local Correct_out = correct[2]
+local Random      = random/100
+local Timeshake   = shake_amt/10
+local Index       = obj.index
+if fullrand==1 then Index=Index+1 end
+local zoom = obj.getvalue("zoom")/100
+if obj.getoption("multi_object") then
+ if(check0)then
+  Index = obj.num-Index
+ end
+ if(DN==1)then
+   if(Order2==0 or Order2=="debug")then
+    Index = Index/(obj.num-1) *10
+   else
+    Index = Index/(obj.num) *10
+   end
+  end
+else
+  Index = 1
+end
+
+-- 配り方（v1.10。AE の Lazy に当たる）: 順番の位置 0〜1 を、(0,0)-(x1,y1)-(x2,y2)-(1,1) のベジェで写す。
+-- 等間隔 では使わない。x は 0〜1 に収める（時間の成分が単調になるように）
+local function dist_curve(u)
+  local b = dist_bezier
+  if type(b) ~= "table" then return u end
+  local x1 = math.min(math.max(tonumber(b[1]) or 0.42, 0), 1)
+  local y1 = tonumber(b[2]) or 0
+  local x2 = math.min(math.max(tonumber(b[3]) or 0.58, 0), 1)
+  local y2 = tonumber(b[4]) or 1
+  local lo, hi, s = 0, 1, u
+  for _ = 1, 40 do
+    local w = 1 - s
+    local x = 3 * w * w * s * x1 + 3 * w * s * s * x2 + s * s * s
+    if x < u then lo = s else hi = s end
+    s = (lo + hi) * 0.5
+  end
+  local w = 1 - s
+  return 3 * w * w * s * y1 + 3 * w * s * s * y2 + s * s * s
+end
+-- 位置 p（lo〜hi の範囲）を配り方で写す
+local function distribute(p, lo, hi)
+  if dist_mode ~= 1 or not (hi > lo) then return p end
+  local u = math.min(math.max((p - lo) / (hi - lo), 0), 1)
+  return lo + (hi - lo) * dist_curve(u)
+end
+
+local Order1        = order
+local Order2        = Order2 or 0
+if Order2=="debug" then Order2=0 dbg=2 end
+local Pattern     = Index
+-- 配り方（v1.10）: 番号順では、最初と最後の個別オブジェクトの順位（上の Index と同じ式）の間で写す
+if Order1==0 and obj.getoption("multi_object") and obj.num > 1 then
+  local function index_of(i)
+    local v = i
+    if fullrand==1 then v = v + 1 end
+    if check0 then v = obj.num - v end
+    if DN==1 then
+      if (Order2==0) then v = v/(obj.num-1)*10 else v = v/(obj.num)*10 end
+    end
+    return v
+  end
+  local a, b = index_of(0), index_of(obj.num - 1)
+  if a > b then a, b = b, a end
+  Pattern = distribute(Pattern, a, b)
+end
+local X,Y,Z       = obj.ox-obj.cx*zoom,obj.oy-obj.cy*zoom,obj.oz
+local mag = mag or {100,100}
+local magp,magr=mag[1]/100,mag[2]/100
+if fullrand==1 then
+  if Order1==0 then
+   Order2=Order2-Index
+  else
+   Order2=Order2+Index/(obj.num/5)
+  end
+end
+
+if(DN==1 or Order1>0)then
+ Random = Random/10
+end
+
+if Delaytime==0 then
+   Random=0
+ else
+   Random = Random/Delaytime*10
+end
+
+if random>0 then
+ Pattern = Pattern +  obj.rand(1,1000,obj.index,seed)*Random * Delaytime/100
+end
+
+if shake_amt>0 then
+ Pattern = Pattern + shake(interval,-1000,1000,obj.index,seed)/1000*Timeshake
+end
+
+
+if Order1==0 then
+  Delay_id(
+  Delaytime,
+  Correct_in*obj.num/Index ,             -- in補正
+  Correct_out*obj.num/Index,             -- out補正
+  Pattern + Order2,                      -- 行動パターン(index)
+  magp,magr,
+  parent,
+  RotW
+  )
+
+else
+
+ if obj.index==0 then XX,YY=X,Y end
+
+ local CR=1
+ if obj.getoption("multi_object") then
+  if not (check0) then
+   if        Order1==1 then
+        Pattern = math.abs(XX+obj.ox-obj.cx*zoom) / math.abs(XX)/2    --左
+      elseif Order1==2 then
+         Pattern = math.abs(-YY+obj.oy-obj.cy*zoom) / math.abs(YY)/2  --下
+      elseif Order1==3 then
+        Pattern = math.abs(X) / math.abs(XX)              --外縦
+      elseif Order1==4 then
+        Pattern = math.abs(Y) / math.abs(YY)              --外横
+      elseif Order1==5 then
+        Pattern = math.sqrt(X^2+Y^2) / math.sqrt((XX)^2+(YY)^2)
+   end
+  else
+   if        Order1==1 then
+        Pattern = math.abs(-XX+obj.ox-obj.cx*zoom) / math.abs(XX)/2  --右
+      elseif Order1==2 then
+        Pattern = math.abs(YY+obj.oy-obj.cy*zoom) / math.abs(YY)/2   --下
+      elseif Order1==3 then
+        Pattern = 1-math.abs(X) / math.abs(XX)           --中縦
+      elseif Order1==4 then
+        Pattern = 1-math.abs(Y) / math.abs(YY)           --中横
+      elseif Order1==5 then
+        Pattern = 1-math.sqrt(X^2+Y^2) / math.sqrt((XX)^2+(YY)^2)      --内
+   end
+  end
+  -- 配り方（v1.10）: 位置の順位は 0〜1 なので、そのまま写す
+  Pattern=distribute(Pattern, 0, 1)*10
+ end
+
+
+ if obj.index==obj.num-1 then XX,YY=nil,nil end
+
+  if random>0 then
+   Pattern = Pattern + obj.rand(000,1000,obj.index,seed)*Random * Delaytime/100
+  end
+
+  if shake_amt>0 then
+    Pattern = Pattern + shake(interval,-1000,1000,obj.index,seed)/1000*Timeshake
+  end
+
+ Delay_id(
+ Delaytime/CR,
+ Correct_in,              -- in補正
+ Correct_out,             -- out補正
+ Pattern + Order2,        -- 行動パターン(index)
+ magp,magr,
+ parent,
+ RotW
+ )
+end
+
+
+if DM==nil then DM={} end
+local layer="layer"..obj.layer
+
+if obj.index==0 then
+ DM[layer] = {} end
+
+if (put_pos>0) and (put_pos<=2) then
+  table.insert(DM[layer],obj.ox+obj.x)
+  table.insert(DM[layer],obj.oy+obj.y)
+if put_pos==1 then
+  table.insert(DM[layer],obj.oz+obj.z)
+end
+else
+ DM[layer]=nil
+end
+
+
+
+
+ local PT=order
+ OrderNN=PT
+ PTNN=(Pattern + Order2)
+
+if dbg==1 then
+ local PTND = PTNN*Delaytime/100
+ local x,y,z=obj.ox,obj.oy,obj.oz
+ local cx,cy,cz=obj.cx,obj.cy,obj.cz
+ local rx,ry,rz = obj.rx,obj.ry,obj.rz
+ local zoom,alpha = obj.zoom,obj.alpha
+
+ local line,alp_org,alp2 = 1000,1,0.7
+ local w,h=obj.getpixel()
+ local S=math.max(w,h)
+ local asp=(h/w*w)/S - (w/h*h)/S
+
+ obj.setoption("drawtarget","tempbuffer",w,h)
+ obj.draw(0,0,0,1,alp_org)
+
+local red  = HSV(10, math.min(500,91*(math.max(0,PTND)/10)),100)
+local blue = HSV(202,math.min(500,65*(-PTND/10)), 65)
+ obj.load("figure","四角形", red , S, line, asp)
+ if PTNN<0 or Delaytime<0 then obj.effect("単色化","color",blue ,"輝度を保持する",0,"強さ",100*-PTND/10) end
+ obj.draw(0,0,0,1,alp2)
+
+
+ obj.load("figure","四角形", red , S, 1, asp)
+ if PTNN<0 or Delaytime<0 then obj.effect("単色化","color",blue,"輝度を保持する",0,"強さ",100*-PTND/10) end
+ obj.draw(0,0,0,1,0.9)
+
+  if dbg==2 then
+   obj.setfont("Bell Gothic Std Black",math.min(w/4,20),0,0xffffff)
+   obj.load("id."..obj.index)
+   obj.draw(-w/2+obj.w/2,-h/2+obj.h/1.5,0,0.6,1)
+   obj.load(string.format("%.2f",PTNN*Delaytime/1000))
+   obj.effect("単色化","color",0xff3325,"輝度を保持する",0,"強さ",100*(1-PTNN/10))
+   obj.draw(0,0,0,0.8,0.9)
+
+   if obj.index==obj.num-1 then
+    obj.load("ORDER="..Order1.."")
+    obj.draw(0,-15,0,0.4,1)
+    obj.load(math.floor(obj.time*10)/10)
+    obj.draw(0,15,0,0.5,1)
+   end
+  end
+
+ obj.copybuffer("obj","tmp")
+ obj.ox,obj.oy,obj.oz = x,y,z
+ obj.rx,obj.ry,obj.rz  =rx,ry,rz
+ obj.cx,obj.cy,obj.cz = cx,cy,cz
+ obj.zoom,obj.alpha = zoom,alpha
+
+
+end
+
+
+
+obj.setoption("drawtarget","framebuffer")
+
+-- 遅れた時刻が最後の中間点に届いた個別オブジェクトを消す（その先は終点まで動かない）
+if hide_last == 1 and delayed_time ~= nil then
+  local tk = last_key_time(parent)
+  if tk ~= nil and delayed_time >= tk - 1e-6 then
+    obj.alpha = 0
+  end
+end

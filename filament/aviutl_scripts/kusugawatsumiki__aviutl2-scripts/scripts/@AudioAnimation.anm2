@@ -1,0 +1,105 @@
+
+@Beat Accumulator
+--information:Beat Accumulator v0.1 by kusugawatsumiki
+--label:AudioAnimation
+--track@bpm:BPM,60,300,120,1
+--track@vinterval:縦間隔,0,512,20,0.01
+--track@hinterval:横間隔,0,512,20,0.01
+--separator:拍子
+--string@beat:拍子(コンマ区切り)
+
+local function getbeatarray()
+  local result = {}
+  local i = 1
+  for s in string.gmatch(beat, "([^,]+)") do
+    result[i] = tonumber(s)
+    i = i + 1
+  end
+  return result
+end
+
+local beatcount = math.ceil(obj.frame / (obj.framerate * 60 / bpm))
+local beats = getbeatarray()
+
+for i, beat in ipairs(beats) do
+  if beatcount <= 0 then
+    break
+  end
+
+  local rowcount = math.min(beatcount, beat)
+  for j = 1, rowcount do
+    -- x, y, z, zoom, alpha
+    obj.draw((j - 1) * hinterval, (i - 1) * vinterval, 0, 1, 1)
+    beatcount = beatcount - 1
+  end
+end
+
+
+
+@Random Beat Accumulator
+--information:Random Beat Accumulator v0.1 by kusugawatsumiki
+--label:AudioAnimation
+--track@bpm:BPM,60,1000,120,1
+--track@vinterval:縦間隔,0,512,20,0.01
+--track@hinterval:横間隔,0,512,20,0.01
+--separator:拍子
+--string@beat:拍子(コンマ区切り)
+--value@seed:シード,1024
+
+local function getbeatarray()
+  local result = {}
+  local i = 1
+  for s in string.gmatch(beat, "([^,]+)") do
+    result[i] = tonumber(s)
+    i = i + 1
+  end
+  return result
+end
+
+local function sumof(array)
+  local result = 0
+  for i, value in pairs(array) do
+    result = result + value
+  end
+  return result
+end
+
+local function xorshift(x)
+  local x = XOR(x, SHIFT(x, 13))
+  x = XOR(x, SHIFT(x, -17))
+  x = XOR(x, SHIFT(x, 5))
+  return x
+end
+
+local function index(max_index)
+  local s = xorshift(seed)
+  return (s % max_index + 1)
+end
+
+local beatcount = math.ceil(obj.frame / (obj.framerate * 60 / bpm))
+local beats = getbeatarray()
+
+-- swap
+local alphaarray = {}
+for i = 1, sumof(beats) do
+  if i <= beatcount then
+    alphaarray[i] = 1
+  else
+    alphaarray[i] = 0
+  end
+end
+
+for i = sumof(beats), 1, -1 do
+  local j = index(i)
+  alphaarray[i], alphaarray[j] = alphaarray[j], alphaarray[i]
+end
+
+-- draw
+local n = 1
+for i, beat in ipairs(beats) do
+  for j = 1, beat do
+    -- x, y, z, zoom, alpha
+    obj.draw((j - 1) * hinterval, (i - 1) * vinterval, 0, 1, alphaarray[n])
+    n = n + 1
+  end
+end

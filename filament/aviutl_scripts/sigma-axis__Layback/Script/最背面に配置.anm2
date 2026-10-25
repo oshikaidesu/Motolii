@@ -1,0 +1,27 @@
+--information:最背面に配置 v1.10 by σ軸
+--label:配置
+--require:2010000
+--[[pixelshader@identity:
+Texture2D src : register(t0);
+float4 identity(float4 pos : SV_Position) : SV_Target
+{
+	return src.Load(int3(pos.xy, 0));
+}
+]]
+local obj = obj;
+
+-- cannot handle under camera controls.
+if obj.getoption("camera_mode") ~= 0 then return end
+
+-- backup framebuffer and apply the subsequent filters.
+local cache_name = "cache:layback/frm#"..obj.effect_id;
+obj.copybuffer(cache_name, "framebuffer");
+obj.clearbuffer("framebuffer");
+obj.effect();
+
+-- draw to framebuffer in a usual manner.
+-- obj.w and obj.h seem to be zero if "draw_state" is true.
+if obj.w > 0 and obj.h > 0 then obj.draw() end
+
+-- combine with the cached framebuffer.
+obj.pixelshader("identity", "framebuffer", cache_name, nil, "draw");

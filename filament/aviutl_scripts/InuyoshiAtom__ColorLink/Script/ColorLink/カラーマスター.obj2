@@ -1,0 +1,11 @@
+--color@colorA:色A,0xff0000
+--color@colorB:色B,0xffffff
+--color@colorC:色C,0x0080ff
+--information:カラーマスター v1.0.0
+
+--[[
+ColorMaster
+
+カラーリンクから参照する3色を保持します。
+このオブジェクト自体は何も描画しません。
+]]

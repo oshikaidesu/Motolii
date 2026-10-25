@@ -1,0 +1,186 @@
+--information:RhythmShapes v1.0.0
+--label:RhythmShapes
+--group:同期,true
+--select@sync_mode:同期方式=0,BPMグリッド=0,手動BPM=1,自動検出=2
+--select@subdiv:拍分割=1,1=1,2=2,4=4,8=8
+--track@bpm:BPM,40,240,120,1
+--track@offset_ms:オフセットms,-2000,2000,0,1
+--hide@bpm:sync_mode==2
+--hide@offset_ms:sync_mode==2
+--hide@subdiv:sync_mode==2
+--track@sensitivity:検出感度,0,100,50,1
+--track@min_interval:最小間隔ms,40,500,120,1
+--track@w_bass:低音の重み,0,100,100,1
+--track@w_mid:中音の重み,0,100,40,1
+--track@w_high:高音の重み,0,100,20,1
+--hide@sensitivity:sync_mode==0
+--hide@sensitivity:sync_mode==1
+--hide@min_interval:sync_mode==0
+--hide@min_interval:sync_mode==1
+--hide@w_bass:sync_mode==0
+--hide@w_bass:sync_mode==1
+--hide@w_mid:sync_mode==0
+--hide@w_mid:sync_mode==1
+--hide@w_high:sync_mode==0
+--hide@w_high:sync_mode==1
+--group
+--group:図形,true
+--select@preset:プリセット=6,カスタム=0,Beat Burst=1,Geometric Orbit=2,Rhythm Grid=3,Bass Pulse=4,Minimal Motion=5,フラット図形=6
+--select@shape:図形=0,円=0,四角=1,三角=2,多角形=3,線=4,混合=5
+--select@layout:配置=0,Scatter=0,Grid=1,Orbit=2,Radial=3,構図=4
+--hide@shape:preset~=0
+--hide@layout:preset~=0
+--track@count:個数,1,64,24,1
+--track@size:サイズ,4,400,48,1
+--color@col:色,0x4ec8f0
+--check@fill:塗り,true
+--check@outline:アウトライン,true
+--track@line_width:線幅,1,40,3,0.1
+--track@alpha:透明度,0,100,90,1
+--track@sides:頂点数,3,12,6,1
+--track@seed:シード,1,99999,1,1
+--group
+--group:アニメーション,true
+--track@scale_amt:拡大%,0,300,80,1
+--track@rotate_amt:回転量,0,360,25,1
+--track@move_amt:移動量,0,400,30,1
+--track@decay_ms:減衰ms,20,2000,180,1
+--select@ease:イージング=1,linear=0,outQuad=1,outCubic=2,outExpo=3
+--track@accent:強拍強調,0,100,40,1
+--select@map_scale:拡大の反応=0,拍=0,強拍=1,音量=2,低音=3,中音=4,高音=5,打音=6
+--select@map_rotate:回転の反応=0,拍=0,強拍=1,音量=2,低音=3,中音=4,高音=5,打音=6
+--select@map_move:移動の反応=0,拍=0,強拍=1,音量=2,低音=3,中音=4,高音=5,打音=6
+--select@map_alpha:透明度の反応=0,拍=0,強拍=1,音量=2,低音=3,中音=4,高音=5,打音=6
+--select@map_color:色の反応=5,拍=0,強拍=1,音量=2,低音=3,中音=4,高音=5,打音=6
+--select@map_width:線幅の反応=0,拍=0,強拍=1,音量=2,低音=3,中音=4,高音=5,打音=6
+--hide@ease:preset~=0
+--hide@map_scale:preset~=0
+--hide@map_rotate:preset~=0
+--hide@map_move:preset~=0
+--hide@map_alpha:preset~=0
+--hide@map_color:preset~=0
+--hide@map_width:preset~=0
+--group
+--group:詳細,false
+--check@debug_log:計測ログ,false
+--group
+
+local function boot_error(message)
+    pcall(function()
+        obj.setfont("メイリオ", 28, 0, 0xffdddd, 0x111111)
+        obj.load("text", message)
+    end)
+end
+
+local script_path = ""
+pcall(function()
+    script_path = obj.getinfo("script_path") or ""
+end)
+if script_path ~= "" then
+    local entry = script_path .. "\\RhythmShapes\\?.lua"
+    if not package.path:find(entry, 1, true) then
+        package.path = script_path .. "\\?.lua;" .. entry .. ";" .. package.path
+    end
+end
+
+-- 読み込みに失敗すると package.loaded に印が残り、次フレームは
+-- 「loop or previous error」になる。毎フレーム消してから読み直す。
+local module_names = {
+    "rs_host", "rs_util", "rs_audio", "rs_beat", "rs_grid",
+    "rs_motion", "rs_layout", "rs_shape", "rs_preset", "rs_figure", "version",
+}
+for i = 1, #module_names do
+    package.loaded[module_names[i]] = nil
+end
+
+local ok_req, host = pcall(require, "rs_host")
+if not ok_req then
+    for i = 1, #module_names do
+        package.loaded[module_names[i]] = nil
+    end
+    boot_error("RhythmShapes: 補助Luaが見つかりません。\nRhythmShapesフォルダごと配置してください。\n" .. tostring(host))
+    return
+end
+
+local ui = {
+    sync_mode = sync_mode,
+    subdivision = subdiv,
+    bpm = bpm,
+    offset_ms = offset_ms,
+    sensitivity = sensitivity,
+    min_interval_ms = min_interval,
+    weight_bass = w_bass,
+    weight_mid = w_mid,
+    weight_high = w_high,
+    preset = preset,
+    shape = shape,
+    layout = layout,
+    count = count,
+    size = size,
+    color = col,
+    fill = fill,
+    outline = outline,
+    line_width = line_width,
+    alpha = alpha,
+    sides = sides,
+    seed = seed,
+    scale_amt = scale_amt,
+    rotate_amt = rotate_amt,
+    move_amt = move_amt,
+    decay_ms = decay_ms,
+    ease = ease,
+    accent = accent,
+    map_scale = map_scale,
+    map_rotate = map_rotate,
+    map_move = map_move,
+    map_alpha = map_alpha,
+    map_color = map_color,
+    map_width = map_width,
+}
+
+local ok_run, err = pcall(function()
+    local grabbed = host.fetch_audio(obj.getaudio, host.MAX_PCM)
+    local bpm_list = nil
+    if sync_mode == 0 then
+        bpm_list = host.fetch_bpm(obj.getinfo)
+    end
+    local frame = host.build_frame({
+        scene_time = host.scene_time(obj.frame_s, obj.frame, obj.framerate),
+        screen_w = obj.screen_w,
+        screen_h = obj.screen_h,
+        pcm = grabbed.pcm,
+        fourier = grabbed.fourier,
+        spectrum = grabbed.spectrum,
+        rate = grabbed.rate,
+        bpm_list = bpm_list,
+        ui = ui,
+        max_shapes = host.MAX_SHAPES,
+    })
+    host.draw(obj, frame.vertices, frame.buffer_w, frame.buffer_h)
+    if debug_log then
+        local ms = obj.getinfo("script_time") or 0
+        local age = frame.beat.age
+        if age == math.huge then age = -1 end
+        print(string.format(
+            "RhythmShapes src=%s rms=%.3f bass=%.3f mid=%.3f high=%.3f fired=%s age=%.3f bpm_est=%s conf=%.2f beat=%d down=%s shown=%d verts=%d ms=%.2f",
+            tostring(frame.audio.source),
+            frame.audio.rms,
+            frame.audio.bass,
+            frame.audio.mid,
+            frame.audio.high,
+            tostring(frame.beat.fired),
+            age,
+            tostring(frame.beat.estimated_bpm),
+            frame.beat.bpm_confidence or 0,
+            frame.grid.beat_index,
+            tostring(frame.grid.is_downbeat),
+            frame.shown,
+            #frame.vertices,
+            ms
+        ))
+    end
+end)
+
+if not ok_run then
+    host.show_error(obj, "RhythmShapes: " .. tostring(err))
+end

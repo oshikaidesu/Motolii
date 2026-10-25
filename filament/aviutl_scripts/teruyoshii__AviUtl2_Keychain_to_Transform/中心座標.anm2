@@ -1,0 +1,42 @@
+--information:中心座標 ver1.0.1 by sikemoti
+--label:基本効果
+--track@x:X,-1000,1000,0,0.01
+--track@y:Y,-1000,1000,0,0.01
+--track@z:Z,-1000,1000,0,0.01
+--check@position_correction:位置補正,1
+--check@is_percent_mode:パーセントで指定,1
+--check@is_zoom_consider:拡大率を考慮する,1
+
+-- sikemoti氏の「中心座標調整」ver1.0.1 を、Keychain to Transform に同梱するため「中心座標」に改名したものです。
+-- 改名、ラベル(--label:基本効果)の追加、外部から値を渡すためのparams_tableの削除以外の変更はありません。ライセンスは同梱の「中心座標_LICENSE.txt」(MIT License, Copyright (c) 2026 sikemoti)を参照してください。
+
+local w, h = obj.getpixel()
+
+if (is_percent_mode) then
+    x = x * w / 2 / 100
+    y = y * h / 2 / 100
+    if (is_zoom_consider == 1) then
+        x = x * obj.zoom * (obj.getvalue("zoom") / 100)
+        y = y * obj.zoom * (obj.getvalue("zoom") / 100)
+    end
+end
+
+if (position_correction) then
+    obj.ox = obj.ox + x
+    obj.oy = obj.oy + y
+    obj.oz = obj.oz + z
+end
+
+local cx = x
+local cy = y
+local cz = z
+
+if (is_zoom_consider) then
+    cx = x / obj.zoom / (obj.getvalue("zoom") / 100)
+    cy = y / obj.zoom / (obj.getvalue("zoom") / 100)
+    cz = z
+end
+
+obj.cx = obj.cx + cx
+obj.cy = obj.cy + cy
+obj.cz = obj.cz + cz

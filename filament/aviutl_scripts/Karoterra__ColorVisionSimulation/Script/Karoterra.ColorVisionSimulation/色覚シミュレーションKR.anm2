@@ -1,0 +1,167 @@
+--information:色覚シミュレーションKR for AviUtl2 v1.1.1 by karoterra
+--label:色調整
+--filter
+
+--track@severity:Severity,0,100,100,0.01
+--select@visionType:Type=1,Normal=0,Protan=1,Deutan=2,Tritan=3,Achromat=4
+--[[pixelshader@brettel1997:
+Texture2D src : register(t0);
+
+cbuffer constant0 : register(b0) {
+    float3 normal;
+    float3x3 mat1;
+    float3x3 mat2;
+    float severity;
+};
+
+float3 SRGBToLinear(float3 srgb) {
+    float3 low  = srgb / 12.92;
+    float3 high = pow(abs((srgb + 0.055) / 1.055), 2.4);
+    float3 mask = step(0.04045, srgb);
+    return lerp(low, high, mask);
+}
+
+float3 LinearToSRGB(float3 lrgb) {
+    float3 low  = lrgb * 12.92;
+    float3 high = 1.055 * pow(abs(lrgb), 1.0 / 2.4) - 0.055;
+    float3 mask = step(0.0031308, lrgb);
+    return lerp(low, high, mask);
+}
+
+float4 brettel1997(float4 pos : SV_Position) : SV_Target {
+    float4 color = src.Load(int3(pos.xy, 0));
+    float3 linearColor = SRGBToLinear(color.rgb);
+    float x = dot(linearColor, normal);
+    float3 high = mul(linearColor, mat1);
+    float3 low = mul(linearColor, mat2);
+    float3 simColor = lerp(low, high, step(0.0, x));
+    float3 resultColor = lerp(linearColor, simColor, severity);
+    return float4(LinearToSRGB(resultColor), color.a);
+}
+
+]]
+--[[pixelshader@vienot1999:
+Texture2D src : register(t0);
+
+cbuffer constant0 : register(b0) {
+    float3x3 mat;
+    float severity;
+};
+
+float3 SRGBToLinear(float3 srgb) {
+    float3 low  = srgb / 12.92;
+    float3 high = pow(abs((srgb + 0.055) / 1.055), 2.4);
+    float3 mask = step(0.04045, srgb);
+    return lerp(low, high, mask);
+}
+
+float3 LinearToSRGB(float3 lrgb) {
+    float3 low  = lrgb * 12.92;
+    float3 high = 1.055 * pow(abs(lrgb), 1.0 / 2.4) - 0.055;
+    float3 mask = step(0.0031308, lrgb);
+    return lerp(low, high, mask);
+}
+
+float4 vienot1999(float4 pos : SV_Position) : SV_Target {
+    float4 color = src.Load(int3(pos.xy, 0));
+    float3 linearColor = SRGBToLinear(color.rgb);
+    float3 simColor = mul(linearColor, mat);
+    float3 resultColor = lerp(linearColor, simColor, severity);
+    return float4(LinearToSRGB(resultColor), color.a);
+}
+
+]]
+--[[pixelshader@achromat:
+Texture2D src : register(t0);
+
+cbuffer constant0 : register(b0) {
+    float severity;
+};
+
+float3 SRGBToLinear(float3 srgb) {
+    float3 low  = srgb / 12.92;
+    float3 high = pow(abs((srgb + 0.055) / 1.055), 2.4);
+    float3 mask = step(0.04045, srgb);
+    return lerp(low, high, mask);
+}
+
+float3 LinearToSRGB(float3 lrgb) {
+    float3 low  = lrgb * 12.92;
+    float3 high = 1.055 * pow(abs(lrgb), 1.0 / 2.4) - 0.055;
+    float3 mask = step(0.0031308, lrgb);
+    return lerp(low, high, mask);
+}
+
+float4 achromat(float4 pos : SV_Position) : SV_Target {
+    float4 color = src.Load(int3(pos.xy, 0));
+    float3 linearColor = SRGBToLinear(color.rgb);
+    float3 simColor = dot(linearColor, float3(0.2126, 0.7152, 0.0722));
+    float3 resultColor = lerp(linearColor, simColor, severity);
+    return float4(LinearToSRGB(resultColor), color.a);
+}
+
+]]
+
+local severity = severity / 100.0
+local visionType = visionType or 1
+
+if visionType == 1 then
+  -- protan
+  obj.pixelshader(
+    "brettel1997", "object", {"object"},
+    {
+      -- normal
+      0.00048, 0.00393, -0.00441, 0.0,
+      -- mat1
+      0.14980,  1.19548, -0.34528, 0.0,
+      0.10764,  0.84864,  0.04372, 0.0,
+      0.00384, -0.00540,  1.00156, 0.0,
+
+      -- mat2
+      0.14570,  1.16172, -0.30742, 0.0,
+      0.10816,  0.85291, 0.03892, 0.0,
+      0.00386, -0.00524, 1.00139,
+      -- severity
+      severity,
+    },
+    "copy"
+  )
+elseif visionType == 2 then
+  -- deutan
+  obj.pixelshader(
+    "brettel1997", "object", {"object"},
+    {
+      -- normal
+      -0.00281, -0.00611, 0.00892, 0.0,
+      -- mat1
+      0.36477,  0.86381, -0.22858, 0.0,
+      0.26294,  0.64245,  0.09462, 0.0,
+      -0.02006, 0.02728,  0.99278, 0.0,
+      -- mat2
+      0.37298,  0.88166, -0.25464, 0.0,
+      0.25954,  0.63506,  0.10540, 0.0,
+      -0.01980, 0.02784,  0.99196,
+      -- severity
+      severity,
+    },
+    "copy"
+  )
+elseif visionType == 3 then
+  -- tritan
+  obj.pixelshader(
+    "vienot1999", "object", {"object"},
+    {
+      -- mat
+      1.00000,  0.14461, -0.14461, 0.0,
+      0.00000,  0.85924,  0.14076, 0.0,
+      -0.00000, 0.85924,  0.14076,
+      -- severity
+      severity,
+    },
+    "copy"
+  )
+elseif visionType == 4 then
+  -- achromat
+  obj.pixelshader("achromat", "object", {"object"}, {severity}, "copy")
+end
+

@@ -1,0 +1,683 @@
+--information:枠内自動フィット_H v1.20 by HexBrowns
+--label:HexScript
+--object
+
+--group:文字
+--text@text:テキスト,ここに文字を入力
+--font@font:フォント,Yu Gothic UI
+--group
+
+--group:枠
+--track@box_w:枠の幅,10,4000,600,1
+--track@box_h:枠の高さ,10,4000,200,1
+--check@show_box:枠を表示,0
+--check@mark_overflow:収まらない時に枠を赤くする,0
+--hide@mark_overflow:show_box==0
+--group
+
+--group:調整
+--track@min_size:最小フォントサイズ,4,400,12,1
+--track@max_size:最大フォントサイズ,4,400,100,1
+--select@fit_mode:調整方法=0,サイズのみ=0,サイズ＋字間=1,サイズ＋字間＋行間=2
+--check@allow_overflow:収まらないときは枠からはみ出す,0
+--check@wrap:自動改行,0
+--check@kinsoku:禁則処理,1
+--hide@kinsoku:wrap==0
+--group
+
+--group:詰め
+--track@min_charspace:字間の下限,-50,0,-10,0.1
+--hide@min_charspace:fit_mode==0
+--track@min_linespace:行間の下限,-50,0,-10,0.1
+--hide@min_linespace:fit_mode~=2
+--group
+
+--group:余白
+--track@padding:内側の余白,0,200,0,0.1
+--group
+
+--group:体裁
+--color@text_color:文字色,0xffffff
+--color@edge_color:影・縁色,0x000000
+--select@font_type:文字装飾=0,標準文字=0,影付き文字=1,影付き文字(薄)=2,縁取り文字=3,縁取り文字(細)=4,縁取り文字(太)=5,縁取り文字(角)=6
+--check@bold:太字,0
+--check@italic:斜体,0
+--select@align:文字揃え=4,左寄[上]=0,中央[上]=1,右寄[上]=2,左寄[中]=3,中央[中]=4,右寄[中]=5,左寄[下]=6,中央[下]=7,右寄[下]=8,縦書 上段[右]=9,縦書 中段[右]=10,縦書 下段[右]=11,縦書 上段[中]=12,縦書 中段[中]=13,縦書 下段[中]=14,縦書 上段[左]=15,縦書 中段[左]=16,縦書 下段[左]=17
+--group
+
+-- 指定した枠に収まる最大のフォントサイズを二分探索で決めて、その設定で
+-- テキストを画像として生成するカスタムオブジェクト。
+--
+-- アニメーション効果(.anm2)版は成立しなかったので .obj2 として作り直したもの。
+-- lua.txt の「関数」の obj.load の「テキスト」: obj.load("text",...) は「テキストオブジェクトには使用出来ません」。
+-- .anm2 はテキストオブジェクトに適用する前提なので、決めたサイズで描き直せない。
+-- .obj2 は自前で画像を作るカスタムオブジェクトなので obj.load("text") を使える。
+--
+-- --object について: lua.txt に記載は無く、.obj2 全 99 件のうち 35 件が使い
+-- 64 件が使っていない（@Basic_S.obj2 / @Path_S.obj2 は使わない側）。
+-- ただし自作で動作実績のある @ローポリ背景.obj2 と カウントアップ_H.obj2 は
+-- どちらも付けているので、動くと分かっている側に揃えて付けてある。
+
+-- 反復回数の上限。単調性が崩れても必ずここで止まる。
+local MAX_ITER_SIZE = 12
+local MAX_ITER_SPACE = 10
+
+-- ガイド枠の線幅(px)。枠の内側に引くので出力サイズには影響しない。
+local BOX_LINE = 2
+
+-- --check@ は既定値の書き方で number / boolean のどちらにもなり得る
+local function is_on(v)
+  return v == 1 or v == true
+end
+
+local font_name = font or ""
+local f_type = math.floor(font_type + 0.5)
+local f_bold = is_on(bold)
+local f_italic = is_on(italic)
+local align_id = math.floor(align + 0.5)
+local mode = math.floor(fit_mode + 0.5)
+local wrap_on = is_on(wrap)
+local kinsoku_on = is_on(kinsoku)
+-- 縦書き（文字揃え 9..17）では 1 行が縦に伸びるので、改行は高さで決める
+local vertical = align_id >= 9
+
+-- 字間・行間の基準値。カスタムオブジェクトなので継承元が無く、0 から詰める。
+local base_cs, base_ls = 0, 0
+
+if text == nil or text == "" then return end
+
+local inner_w = math.max(1, box_w - padding * 2)
+local inner_h = math.max(1, box_h - padding * 2)
+
+-- 0. 自動改行（自動改行 ON のときだけ使う）
+--    サイズ・字間・行間を決めるたびに、枠の幅（縦書きは高さ）で折り返した文字列を作り直す。
+--    行の長さは文字幅の足し算ではなく obj.load("text.layout") で実測する（字形・カーニング・
+--    制御文字の <s> などをそのまま反映するため）。1 行の長さは「その行の先頭までに出た状態系の
+--    制御文字（<s> <@> <#> <gw> など）＋その行」を測る。前の行を含めて測ると、前の行が
+--    単独で枠を超えたとき（1 文字でも収まらないとき）に後ろの行がすべて「収まらない」になる。
+--
+--    文字列は「文字単位」に分ける。1 単位 = 直前の制御文字（pre）＋見える 1 文字（ch）。
+--    ch は書記素のまとまりで、絵文字の結合（ZWJ・異体字セレクタ・肌色・国旗の 2 文字・
+--    結合文字）を 1 単位にまとめるので、禁則処理の有無にかかわらず途中で折り返さない。
+--    <&絵文字> <?スクリプト?> とルビのブロック（</>漢字<!>かな</>）は見える 1 単位として扱う。
+--
+--    単位を「折り返せない塊（atom）」にまとめ、行ごとに入る塊の数を二分探索で決める。
+--    禁則処理 ON なら、行頭禁則の文字は前の塊に、行末禁則の文字は次の塊に付け、
+--    ASCII の連続（英単語・数字）も 1 塊にする。半角スペースは単独の塊で、
+--    折り返し位置のスペースは描かない（行頭・行末から外す。付いていた制御文字は残す）。
+--    1 塊だけで行に収まらないときは、その塊を文字単位に割って詰める。
+
+-- 折り返しに入れる改行は、元の文字列の改行コードに合わせる
+local NL = text:find("\r\n", 1, true) and "\r\n" or "\n"
+
+-- UTF-8 の 1 文字を読む。戻り値は (文字列, コードポイント, 次の位置)。
+-- 不正なバイトは 1 バイトの文字として扱う（落とさない）。
+local function utf8_at(s, i)
+  local c = s:byte(i)
+  local len, cp
+  if c < 0x80 then return s:sub(i, i), c, i + 1
+  elseif c >= 0xF0 and c <= 0xF7 then len, cp = 4, c - 0xF0
+  elseif c >= 0xE0 then len, cp = 3, c - 0xE0
+  elseif c >= 0xC0 then len, cp = 2, c - 0xC0
+  else return s:sub(i, i), c, i + 1 end
+  if i + len - 1 > #s then return s:sub(i, i), c, i + 1 end
+  for k = 1, len - 1 do
+    local b = s:byte(i + k)
+    if b < 0x80 or b > 0xBF then return s:sub(i, i), c, i + 1 end
+    cp = cp * 64 + (b - 0x80)
+  end
+  return s:sub(i, i + len - 1), cp, i + len
+end
+
+local function char_set(s)
+  local set, i = {}, 1
+  while i <= #s do
+    local ch, _, nx = utf8_at(s, i)
+    set[ch] = true
+    i = nx
+  end
+  return set
+end
+
+-- 行頭に来てはいけない文字（句読点・閉じ括弧・小書きの仮名・長音など）
+local NO_START = char_set("、。，．・：；？！゛゜ヽヾゝゞ々〻ー」』）〕］｝〉》】〙〗〟’”ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶ‐゠–〜～…‥!),.:;?]}｡｣､･ｧｨｩｪｫｬｭｮｯｰﾞﾟ")
+-- 行末に来てはいけない文字（開き括弧）
+local NO_END = char_set("「『（〔［｛〈《【〘〖〝‘“([{｢")
+
+-- 前の文字と 1 つの書記素にまとめるコードポイント
+local function is_extender(cp)
+  return cp == 0x200D                          -- ZWJ
+    or (cp >= 0xFE00 and cp <= 0xFE0F)         -- 異体字セレクタ
+    or (cp >= 0xE0100 and cp <= 0xE01EF)       -- 異体字セレクタ補助
+    or (cp >= 0x1F3FB and cp <= 0x1F3FF)       -- 肌の色
+    or cp == 0x20E3                            -- キーキャップ
+    or (cp >= 0x0300 and cp <= 0x036F)         -- 結合用ダイアクリティカルマーク
+    or cp == 0x3099 or cp == 0x309A            -- 結合用の濁点・半濁点
+    or (cp >= 0xE0020 and cp <= 0xE007F)       -- タグ文字（地域の旗）
+end
+
+local function is_ri(cp)
+  return cp >= 0x1F1E6 and cp <= 0x1F1FF       -- 国旗の地域指示子（2 つで 1 つの旗）
+end
+
+-- 後ろの行の計測に持ち越す制御文字（文字の大きさ・字形・字間に効くもの）。
+-- <p>（座標）<r> <w> <c>（時間）</> <!>（ブロック・ルビ）は持ち越さない
+local STATE_PREFIX = { "<#", "<s", "<@", "<$", "<gw", "<gh", "<tw", "<th", "<tr" }
+local function is_state_tag(tag)
+  for _, p in ipairs(STATE_PREFIX) do
+    if tag:sub(1, #p) == p then return true end
+  end
+  return false
+end
+
+-- 文字列を段落（元の改行で区切った単位）ごとの文字単位の列に分ける
+local function tokenize(s)
+  local paras = { {} }
+  local pre, st = {}, {}
+  local joinable = false   -- 直前の単位に結合文字を付けてよいか
+  local ri_open = false    -- 直前の単位が対になっていない地域指示子か
+  local i, n = 1, #s
+
+  local function push(ch)
+    local units = paras[#paras]
+    units[#units + 1] = { pre = table.concat(pre), st = table.concat(st), ch = ch }
+    pre, st = {}, {}
+  end
+  local function flush_tail()
+    if #pre > 0 then push("") end
+  end
+  local function add_tag(tag)
+    pre[#pre + 1] = tag
+    if is_state_tag(tag) then st[#st + 1] = tag end
+    joinable, ri_open = false, false
+  end
+
+  while i <= n do
+    local c = s:byte(i)
+    if c == 13 and s:byte(i + 1) == 10 or c == 10 then
+      flush_tail()
+      paras[#paras + 1] = {}
+      i = i + (c == 13 and 2 or 1)
+      joinable, ri_open = false, false
+    elseif c == 60 then   -- "<"
+      local e, kind
+      if s:sub(i, i + 2) == "<//" then
+        e = s:find("//>", i + 3, true)
+        if e then e, kind = e + 2, "tag" end
+      elseif s:sub(i, i + 1) == "<?" then
+        e = s:find("?>", i + 2, true)
+        if e then e, kind = e + 1, "unit" end
+      elseif s:sub(i, i + 2) == "</>" then
+        -- </>漢字<!>かな</> はルビのブロック。丸ごと 1 単位にして途中で折り返さない
+        local close = s:find("</>", i + 3, true)
+        local seg = close and s:sub(i, close + 2)
+        if seg and seg:find("<!", 1, true) and not seg:find("[\r\n]") then
+          e, kind = close + 2, "unit"
+        else
+          e, kind = i + 2, "tag"
+        end
+      else
+        local close = s:find(">", i + 1, true)
+        if close and not s:sub(i + 1, close - 1):find("[<\r\n]") then
+          e = close
+          kind = (s:sub(i + 1, i + 1) == "&") and "unit" or "tag"
+        end
+      end
+      if kind == "tag" then
+        add_tag(s:sub(i, e))
+        i = e + 1
+      elseif kind == "unit" then
+        push(s:sub(i, e))
+        joinable, ri_open = true, false
+        i = e + 1
+      else
+        -- 閉じていない "<" は普通の文字
+        push("<")
+        joinable, ri_open = true, false
+        i = i + 1
+      end
+    else
+      local ch, cp, nx = utf8_at(s, i)
+      local units = paras[#paras]
+      local last = units[#units]
+      if last and #pre == 0 and last.ch ~= "" and joinable
+          and (is_extender(cp) or last.zwj or (ri_open and is_ri(cp))) then
+        last.ch = last.ch .. ch
+        last.zwj = (cp == 0x200D)
+        ri_open = false
+      else
+        push(ch)
+        units[#units].zwj = (cp == 0x200D)
+        ri_open = is_ri(cp)
+      end
+      joinable = true
+      i = nx
+    end
+  end
+  flush_tail()
+  return paras
+end
+
+local function is_word(ch)
+  if #ch ~= 1 then return false end
+  local b = ch:byte(1)
+  return b >= 0x21 and b <= 0x7E
+end
+
+-- 文字単位の列を、折り返せない塊の列にする
+local function build_atoms(units)
+  local atoms = {}
+  for _, u in ipairs(units) do
+    local a = atoms[#atoms]
+    local sp = (u.ch == " ")
+    local glue = false
+    if a then
+      local last = a.units[#a.units]
+      if u.ch == "" then
+        glue = true   -- 段落末尾の制御文字だけの単位は前に付ける
+      elseif kinsoku_on and not sp and not a.space then
+        glue = NO_START[u.ch] or NO_END[last.ch] or (is_word(u.ch) and is_word(last.ch)) or false
+      end
+    end
+    if glue then
+      a.units[#a.units + 1] = u
+    else
+      atoms[#atoms + 1] = { units = { u }, space = sp }
+    end
+  end
+  return atoms
+end
+
+-- 塊の文字列。drop が真のスペースの塊は、スペースを描かずに制御文字だけ残す
+local function atom_text(a, drop)
+  local t = {}
+  for _, u in ipairs(a.units) do
+    t[#t + 1] = u.pre
+    if not (drop and a.space) then t[#t + 1] = u.ch end
+  end
+  return table.concat(t)
+end
+
+local function atom_state(a)
+  local t = {}
+  for _, u in ipairs(a.units) do t[#t + 1] = u.st end
+  return table.concat(t)
+end
+
+-- 見える文字が 2 つ以上ある塊は、文字単位に割れる
+local function split_atom(a)
+  local out = {}
+  for _, u in ipairs(a.units) do
+    if u.ch == "" and #out > 0 then
+      local last = out[#out]
+      last.units[#last.units + 1] = u
+    else
+      out[#out + 1] = { units = { u }, space = (u.ch == " ") }
+    end
+  end
+  return out
+end
+
+local para_atoms
+if wrap_on then
+  para_atoms = {}
+  for k, units in ipairs(tokenize(text)) do para_atoms[k] = build_atoms(units) end
+end
+
+-- 今の obj.setfont の設定で、全段落を折り返した文字列を作る
+local function wrap_text()
+  local state = ""
+  local out_paras = {}
+  local guess = math.huge   -- 前の行の塊数。最初は段落全体が 1 行に入るかから試す
+  for p, src in ipairs(para_atoms) do
+    local atoms = {}
+    for k = 1, #src do atoms[k] = src[k] end   -- 割るときに元を壊さないよう写す
+    local lines = {}
+    local n = #atoms
+    local i = 1
+    local first = true
+    local carry, carry_st = "", ""
+
+    -- atoms[i..j] を 1 行にしたときの長さ。行末のスペースは描かない
+    local function line_text(i0, j0)
+      local jj = j0
+      while jj >= i0 and atoms[jj].space do jj = jj - 1 end
+      local t = { carry }
+      for k = i0, j0 do t[#t + 1] = atom_text(atoms[k], k > jj) end
+      return table.concat(t)
+    end
+    local function fits_line(i0, j0)
+      local w, h = obj.load("text.layout", state .. line_text(i0, j0), 0, 0, align_id)
+      if vertical then return (h or 0) <= inner_h end
+      return (w or 0) <= inner_w
+    end
+
+    -- i から始まる行に入る最後の塊 j を返す。1 塊も入らなければ nil。
+    -- 行の長さはふつう前の行と同じくらいなので、前の行の塊数 guess から当たりを付け、
+    -- 1, 2, 4, ... と広げて「入る lo / 入らない hi」を挟んでから二分探索する。
+    -- 当たりが合えば 2 回の計測で決まる（毎行 n までの二分探索だと log2(n) 回かかる）。
+    local function find_line_end(i0, n0, g)
+      local lo, hi
+      local g0 = math.max(i0, math.min(n0, i0 + g - 1))
+      local step = 1
+      if fits_line(i0, g0) then
+        lo = g0
+        while true do
+          if lo >= n0 then return n0 end
+          local nx = math.min(n0, lo + step)
+          if fits_line(i0, nx) then lo = nx else hi = nx break end
+          step = step * 2
+        end
+      else
+        hi = g0
+        while true do
+          if hi <= i0 then return nil end
+          local nx = math.max(i0, hi - step)
+          if fits_line(i0, nx) then lo = nx break end
+          hi = nx
+          step = step * 2
+        end
+      end
+      while hi - lo > 1 do
+        local mid = math.floor((lo + hi) / 2)
+        if fits_line(i0, mid) then lo = mid else hi = mid end
+      end
+      return lo
+    end
+
+    while i <= n do
+      if not first then
+        -- 折り返した行の頭のスペースは描かない（付いていた制御文字は次の行へ持ち越す）
+        while i <= n and atoms[i].space do
+          carry = carry .. atom_text(atoms[i], true)
+          carry_st = carry_st .. atom_state(atoms[i])
+          i = i + 1
+        end
+        if i > n then
+          lines[#lines] = lines[#lines] .. carry
+          state = state .. carry_st
+          carry, carry_st = "", ""
+          break
+        end
+      end
+
+      local j = find_line_end(i, n, guess)
+      if j == nil then
+        local parts = split_atom(atoms[i])
+        if #parts > 1 then
+          -- 1 塊で収まらないので文字単位に割って、同じ位置からやり直す
+          table.remove(atoms, i)
+          for k = #parts, 1, -1 do table.insert(atoms, i, parts[k]) end
+          n = #atoms
+        else
+          j = i   -- 1 文字でも収まらない。そのまま置く（サイズの探索で縮む）
+        end
+      end
+
+      if j then
+        guess = j - i + 1
+        lines[#lines + 1] = line_text(i, j)
+        local st = { state, carry_st }
+        for k = i, j do st[#st + 1] = atom_state(atoms[k]) end
+        state = table.concat(st)
+        carry, carry_st = "", ""
+        i = j + 1
+        first = false
+      end
+    end
+    out_paras[p] = table.concat(lines, NL)
+  end
+  return table.concat(out_paras, NL)
+end
+
+-- サイズ・字間・行間の組ごとに折り返しを覚えておく（最後の描画で同じ組をもう一度使う）
+local wrapped_memo = {}
+
+-- obj.setfont を済ませた状態で、描く文字列を返す
+local function layout_text(size, cs, ls)
+  if not wrap_on then return text end
+  local key = size .. "," .. cs .. "," .. ls
+  local t = wrapped_memo[key]
+  if t == nil then
+    t = wrap_text()
+    wrapped_memo[key] = t
+  end
+  return t
+end
+
+-- 1. 計測
+--    obj.load("text.layout") は「現在のオブジェクト情報を更新しないでサイズの
+--    返却のみ」（lua.txt の「関数」の obj.load の「テキストレイアウト」）なので、探索中に画像を作らずに済む。
+--    obj.setfont は呼び出し毎に指定が要る（lua.txt の「関数」の obj.setfont）。
+local function measure(size, cs, ls)
+  obj.setfont(font_name, size, f_type, text_color, edge_color, f_bold, f_italic, cs, ls)
+  local w, h = obj.load("text.layout", layout_text(size, cs, ls), 0, 0, align_id)
+  return w or 0, h or 0
+end
+
+local function fits(size, cs, ls)
+  local w, h = measure(size, cs, ls)
+  return w <= inner_w and h <= inner_h
+end
+
+-- 2. フォントサイズの二分探索
+--    区間 [lo,hi] は毎回 lo=mid+1 か hi=mid-1 で必ず 1 以上狭まるので、
+--    単調性が崩れていても有限回で終わる。トラックの値域は 4〜400 なので
+--    幅は最大 397、ceil(log2(397)) = 9 < MAX_ITER_SIZE。
+local lo_size = math.floor(math.min(min_size, max_size) + 0.5)
+local hi_size = math.floor(math.max(min_size, max_size) + 0.5)
+
+local function solve_size(cs, ls)
+  local lo, hi, best = lo_size, hi_size, nil
+  for _ = 1, MAX_ITER_SIZE do
+    if lo > hi then break end
+    local mid = math.floor((lo + hi) / 2)
+    if fits(mid, cs, ls) then
+      best = mid
+      lo = mid + 1
+    else
+      hi = mid - 1
+    end
+  end
+  return best
+end
+
+-- 3. 字間・行間の二分探索。下限側ほど収まりやすいので、収まる最大値を返す。
+--    反復回数が固定なので必ず終わる。
+--
+--    判定に fits()（幅と高さの両方）を使ってはいけない。字間は幅だけ、行間は
+--    高さだけを動かす（縦書きでは逆）ので、収まらない原因が「そのパラメータで
+--    動かせない側の軸」だと probe(lo_v) が常に false になり、下限へ即座に
+--    張り付く。詰め量が枠サイズに追従しなくなる原因はこれ。
+--    そこで両端を実測して「実際に動いた軸」を選び、その軸だけで判定する。
+--    軸の対応は書字方向で変わるため決め打ちにせず実測で決める。
+--
+--    measure_at(v) は v を適用したときの (w,h) を返す。
+local function solve_space(lo_v, hi_v, measure_at)
+  local w_hi, h_hi = measure_at(hi_v)
+  local w_lo, h_lo = measure_at(lo_v)
+  local dw = math.abs(w_hi - w_lo)
+  local dh = math.abs(h_hi - h_lo)
+  -- どちらの軸も動かないなら詰めても無意味。詰めない値を返す
+  if dw < 0.5 and dh < 0.5 then return hi_v end
+
+  -- 自動改行が ON なら、字間を詰めると 1 行に入る文字が増えて行数（高さ）が減る。
+  -- 動かせる軸が幅と高さの両方になるので、両方で判定する。
+  local use_w = dw >= dh
+  local function axis_fits(w, h)
+    if wrap_on then return w <= inner_w and h <= inner_h end
+    if use_w then return w <= inner_w end
+    return h <= inner_h
+  end
+
+  if axis_fits(w_hi, h_hi) then return hi_v end
+  if not axis_fits(w_lo, h_lo) then return lo_v end
+  local lo, hi = lo_v, hi_v
+  for _ = 1, MAX_ITER_SPACE do
+    local mid = (lo + hi) * 0.5
+    local w, h = measure_at(mid)
+    if axis_fits(w, h) then lo = mid else hi = mid end
+  end
+  -- UI の移動単位 0.1 に丸める。切り捨て側なら収まる方に倒れる。
+  -- 丸めで下限を下回らないようにクランプする。
+  return math.max(lo_v, math.floor(lo * 10) / 10)
+end
+
+-- 自動改行が ON のときは、決まった結果をフレームをまたいで使い回す。
+-- 折り返しは行ごとに計測するので、長文だと 1 フレームで数百回 text.layout を呼ぶ。
+-- 静止したテロップでは毎フレーム同じ答えになるので、入力が 1 つも変わっていなければ探索を飛ばす。
+-- global は文字列しか持てない（lua.txt の「変数」の global）ので、入力の署名と結果を 1 本の文字列にする。
+-- 1 オブジェクトに 1 件（obj.id はアプリ起動ごとのオブジェクトの固有 ID。lua.txt の「変数」の obj.id）。
+-- 文字色・影縁色は大きさに効かないので署名に入れない。
+local cache_key, cache_sig
+if wrap_on and obj.id ~= nil and global ~= nil then
+  cache_key = "枠内自動フィット_H:" .. obj.id
+  cache_sig = table.concat({
+    "v1.20", font_name, f_type, tostring(f_bold), tostring(f_italic), tostring(kinsoku_on),
+    box_w, box_h, padding, min_size, max_size, mode, min_charspace, min_linespace, align_id,
+    #text,
+  }, "\t") .. "\t" .. text .. "\n"
+end
+
+local cs, ls = base_cs, base_ls
+local size
+local cache_hit = false
+
+if cache_key ~= nil then
+  local v = global[cache_key]
+  if v ~= nil and #v > #cache_sig and v:sub(1, #cache_sig) == cache_sig then
+    local head, body = v:sub(#cache_sig + 1):match("^([^\n]*)\n(.*)$")
+    local a, b, c = (head or ""):match("^([^,]+),([^,]+),([^,]+)$")
+    if a ~= nil then
+      size, cs, ls = tonumber(a), tonumber(b), tonumber(c)
+      wrapped_memo[size .. "," .. cs .. "," .. ls] = body
+      cache_hit = true
+    end
+  end
+end
+
+if not cache_hit then
+  size = solve_size(cs, ls)
+
+  if size == nil and mode >= 1 then
+    local lo_cs = math.min(min_charspace, cs)
+    cs = solve_space(lo_cs, cs, function(v) return measure(lo_size, v, ls) end)
+    size = solve_size(cs, ls)
+  end
+
+  if size == nil and mode >= 2 then
+    local lo_ls = math.min(min_linespace, ls)
+    ls = solve_space(lo_ls, ls, function(v) return measure(lo_size, cs, v) end)
+    size = solve_size(cs, ls)
+  end
+
+  -- どうしても収まらないときは下限の設定で描画する（枠からはみ出た分は切れる）
+  if size == nil then size = lo_size end
+end
+
+-- 4. 決まった設定で実際に描画する
+obj.setfont(font_name, size, f_type, text_color, edge_color, f_bold, f_italic, cs, ls)
+local draw_text = layout_text(size, cs, ls)
+if cache_key ~= nil and not cache_hit then
+  global[cache_key] = cache_sig .. string.format("%.17g,%.17g,%.17g", size, cs, ls) .. "\n" .. draw_text
+end
+local loaded = obj.load("text", draw_text, 0, 0, align_id)
+if loaded == false then return end
+
+-- 5. 枠と同じ大きさの仮想バッファへ配置し直す
+--    「枠を描くと画像サイズが変わって中心座標がずれる」問題への対処として、
+--    ガイド枠の有無・文字量にかかわらず出力を常に枠サイズちょうどにする。
+--    後乗せ（枠の分だけ広げる）にすると show_box の切り替えでサイズが変わり、
+--    中心座標が動いてしまうため採らない。枠線は枠の内側に引く。
+--    副作用として、最小サイズでも収まらないテキストは枠で切り取られる。
+--    allow_overflow を ON にしたときだけ、収まらない場合に限りバッファを
+--    実測サイズまで広げて切り取らない（既定は OFF＝従来どおり切り取る）。
+local tw, th = obj.w, obj.h
+
+-- 収まったかどうかは探索の途中経過ではなく最終的な実測で判定する
+local overflow = (tw > inner_w) or (th > inner_h)
+
+-- 文字揃え種別から枠内での配置を決める（lua.txt の「関数」の obj.load の「テキスト」の align）
+--   横書 0..8  : hpos = align%3 (0=左/1=中/2=右), vpos = floor(align/3) (0=上/1=中/2=下)
+--   縦書 9..17 : vpos = (align-9)%3 (0=上/1=中/2=下)
+--                floor((align-9)/3) が 0=右/1=中/2=左 なので hpos は 2 から引く
+local hpos, vpos
+if align_id < 9 then
+  hpos = align_id % 3
+  vpos = math.floor(align_id / 3)
+else
+  local k = align_id - 9
+  vpos = k % 3
+  hpos = 2 - math.floor(k / 3)
+end
+
+local function offset(pos, inner, len)
+  if pos == 1 then return 0 end
+  local slack = (inner - len) * 0.5
+  if pos == 0 then return -slack end
+  return slack
+end
+
+local dx = math.floor(offset(hpos, inner_w, tw) + 0.5)
+local dy = math.floor(offset(vpos, inner_h, th) + 0.5)
+
+local box_px_w = math.max(math.floor(box_w + 0.5), 1)
+local box_px_h = math.max(math.floor(box_h + 0.5), 1)
+local W, H = box_px_w, box_px_h
+
+-- 収まっている間は枠ちょうどのまま（出力サイズを暴れさせない）。
+-- 収まらないときだけ、内容が切れない最小の大きさまで広げる。
+-- 内容は中心 (dx,dy) に幅 tw で置かれるので、必要な半幅は |dx| + tw/2。
+-- 枠と同じ余白を外側にも残す。
+if is_on(allow_overflow) and overflow then
+  W = math.max(W, math.ceil((math.abs(dx) + tw * 0.5) * 2 + padding * 2))
+  H = math.max(H, math.ceil((math.abs(dy) + th * 0.5) * 2 + padding * 2))
+end
+
+local max_x, max_y = obj.getinfo("image_max")
+W = math.min(W, max_x)
+H = math.min(H, max_y)
+
+-- align を指定した obj.load("text") は中心座標を設定する（lua.txt の「関数」の obj.load の「テキスト」）。
+-- 出力は常に枠そのものなので、中心は枠の中心へ戻す。
+obj.cx = 0
+obj.cy = 0
+
+obj.setoption("drawtarget", "tempbuffer", W, H)
+obj.draw(dx, dy, 0, 1, 1)
+
+-- 6. ガイド枠の表示
+if is_on(show_box) then
+  -- はみ出しでバッファを広げた場合でも、枠線は「枠」の大きさで引く。
+  -- 内容もバッファ中心基準で配置されているので中心は一致する。
+  local bw = math.min(box_px_w, W)
+  local bh = math.min(box_px_h, H)
+  local t = math.min(BOX_LINE, math.floor(math.min(bw, bh) / 2))
+  if t > 0 then
+    local hw, hh = bw * 0.5, bh * 0.5
+
+    -- 頂点色を指定した obj.drawpoly はオブジェクトの画像を使わない（lua.txt の「関数」の obj.drawpoly({table}) の r,g,b,a）
+    -- ので、図形を読み込まずに枠線を引ける。色は α を掛けないストレートで渡す（lua.txt は「乗算済みα」と書くが、
+    -- 実機では本体が α を掛ける。ルール au2-shader-lua）。ここでは α = 1 だけなので、どちらでも同じ絵になる。
+    local r, g, b, a = 1, 1, 1, 1
+    -- 収まらなかったことを調整中に気付けるようにする（表示だけ。ログは出さない）
+    if is_on(mark_overflow) and overflow then r, g, b, a = 1, 0, 0, 1 end
+    local function bar(x0, y0, x1, y1)
+      return {
+        x0, y0, 0, x1, y0, 0, x1, y1, 0, x0, y1, 0,
+        r, g, b, a, r, g, b, a, r, g, b, a, r, g, b, a,
+      }
+    end
+    obj.drawpoly({
+      bar(-hw, -hh, hw, -hh + t),
+      bar(-hw, hh - t, hw, hh),
+      bar(-hw, -hh + t, -hw + t, hh - t),
+      bar(hw - t, -hh + t, hw, hh - t),
+    })
+  end
+end
+
+-- 描画先を戻し、フレームバッファ未描画の状態にしてから画像を差し替える
+obj.setoption("drawtarget", "framebuffer")
+obj.setoption("draw_state", false)
+obj.copybuffer("object", "tempbuffer")

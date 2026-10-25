@@ -1,0 +1,14 @@
+; Tooltip definitions
+;===============================================================
+; Target: Basic_S (https://github.com/sigma-axis/aviutl2_script_AutoClipping_S)
+; Target Version: v1.20
+; Language: Default
+
+[Language]
+Information=Default tooltips for AutoClipping_S v1.20 (日本語)
+
+;===============================================================
+
+[Tips.AutoClipping_S]
+effect.name=オブジェクトの不透明ピクセルを含む最小サイズなるように，上下左右端をクリッピングします．
+PI=PI = {\n  thresh: number?,\n  move_center: boolean|number|nil,\n  pad_u: number?,\n  pad_d: number?,\n  pad_l: number?,\n  pad_r: number?,\n  enable_u: boolean|number|nil,\n  enable_d: boolean|number|nil,\n  enable_l: boolean|number|nil,\n  enable_r: boolean|number|nil,\n}

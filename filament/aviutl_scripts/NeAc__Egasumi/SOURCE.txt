@@ -1,0 +1,5 @@
+エ霞(えがすみ) by 猫愛
+licence: MIT
+from: https://github.com/nea-c/aviutl2_script_Egasumi/releases/download/r2/Egasumi.zip (tag r2, commit b2159c46a8f2)
+page: https://github.com/nea-c/aviutl2_script_Egasumi
+Put here unchanged for Motolii (filament/aviutl_scripts).

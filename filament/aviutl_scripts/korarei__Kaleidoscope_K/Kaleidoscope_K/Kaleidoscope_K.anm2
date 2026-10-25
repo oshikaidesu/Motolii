@@ -1,0 +1,198 @@
+--information:Kaleidoscope_K v1.0.3 by Korarei
+--label:変形
+--track0:X Center,-4000,4000,0,0.01
+--track1:Y Center,-4000,4000,0,0.01
+--track2:Tile Size,0,1000,100,0.01
+--track3:Rotation,-3600,3600,0,0.01
+--track4:Scale,0,1000,100,0.01
+--check0:Floating Center,0
+--select@s0:Mirroring,Unfold=0,Wheel=1,Fish Head=2,Can Meas=3,Flip Flop=4,Flower=5,Dia Cross=6,Flipper=7,Starlish=8,Tiler=9
+--value@_0:PI,{}
+--[[pixelshader@kaleidoscope:
+Texture2D src : register(t0);
+SamplerState smp : register(s0);
+cbuffer params : register(b0) {
+    column_major float2x2 rm;
+    float2 offset;
+    float2 pivot;
+    float aspect;
+    float size;
+    float scale;
+    float mirroring;
+};
+
+static const float rsqrt2 =  rsqrt(2.0);
+
+struct PS_Input {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD;
+};
+
+struct Tile {
+    int2 odd;
+    float2 pos;
+};
+
+inline float2 r45(float2 pos) {
+    return float2(pos.x - pos.y, pos.x + pos.y) * rsqrt2;
+}
+
+inline float2 pingpong(float2 pos) {
+    return 1.0 - abs(mad(frac(pos * 0.5), 2.0, -1.0));
+}
+
+inline Tile wrap(float2 pos) {
+    Tile tile;
+    float2 idx = floor(pos);
+    tile.odd = int2(idx) & 1;
+    tile.pos = pos - idx;
+    return tile;
+}
+
+inline Tile mirror(float2 pos) {
+    Tile tile;
+    float2 idx = floor(pos);
+    tile.odd = int2(idx) & 1;
+    tile.pos = abs(tile.odd + idx - pos);
+    return tile;
+}
+
+inline float2 unfold(float2 pos) {
+    return pingpong(pos);
+}
+
+inline float2 wheel(float2 pos) {
+    Tile tile = mirror(pos);
+    int flag = tile.odd.x ^ tile.odd.y;
+    return lerp(tile.pos, tile.pos.yx, flag);
+}
+
+inline float2 fish_head(float2 pos) {
+    Tile tile = mirror(pos);
+    return lerp(tile.pos.yx, tile.pos, tile.odd.x);
+}
+
+inline float2 can_meas(float2 pos) {
+    Tile tile = mirror(pos);
+    return lerp(tile.pos.yx, tile.pos, tile.odd.y);
+}
+
+inline float2 flip_flop(float2 pos) {
+    Tile tile = wrap(pos);
+    return abs(float2(tile.odd.x, 1.0) - tile.pos);
+}
+
+inline float2 flower(float2 pos) {
+    pos = pingpong(pos);
+    return lerp(pos, pos.yx, step(pos.y, pos.x));
+}
+
+inline float2 dia_cross(float2 pos) {
+    pos = mad(frac(mad(pos, 0.5, 0.5)), 2.0, -1.0);
+    return r45(abs(r45(pos)).yx);
+}
+
+inline float2 flipper(float2 pos) {
+    Tile tile = wrap(pos);
+    return abs(tile.odd.y - tile.pos);
+}
+
+inline float2 starlish(float2 pos) {
+    float2 p0 = flower(pos);
+    float2 p1 = r45(p0.yx);
+    return lerp(p0, p1, step(p1.x, p0.x));
+}
+
+float4 kaleidoscope(PS_Input input) : SV_Target {
+    float2 pos = (input.uv - offset) * 2.0 * rcp(size) * rcp(scale);
+    pos.y *= aspect;
+    pos = -pos;
+
+    switch (int(mirroring)) {
+        case 0:
+            pos = unfold(pos);
+            break;
+        case 1:
+            pos = wheel(pos);
+            break;
+        case 2:
+            pos = fish_head(pos);
+            break;
+        case 3:
+            pos = can_meas(pos);
+            break;
+        case 4:
+            pos = flip_flop(pos);
+            break;
+        case 5:
+            pos = flower(pos);
+            break;
+        case 6:
+            pos = dia_cross(pos);
+            break;
+        case 7:
+            pos = flipper(pos);
+            break;
+        case 8:
+            pos = starlish(pos);
+            break;
+        default:
+            break;
+    }
+
+    pos = mul(rm, -pos);
+    pos.y *= rcp(aspect);
+    float2 coord = mad(pos, 0.5 * size, pivot);
+    return src.Sample(smp, coord);
+}
+
+]]
+
+if (obj.getinfo("version") < 2001800) then
+    debug_print("AviUtl ExEdit2 beta18 or later is required.")
+    return
+end
+
+obj.setanchor("track", 0, "line")
+
+local eps = 1.0e-4
+local w, h = obj.getpixel()
+
+local function tobool(v, d)
+    if (type(v) == "boolean") then
+        return v
+    elseif (type(v) == "number") then
+        return v ~= 0
+    else
+        return d
+    end
+end
+
+_0 = _0 or {}
+local cx = (tonumber(_0.cx) or obj.track0) / w + 0.5
+local cy = (tonumber(_0.cy) or obj.track1) / h + 0.5
+local size = math.max((tonumber(_0.tile_size) or obj.track2) * 0.01, eps)
+local rot = math.rad(tonumber(_0.rotation) or obj.track3)
+local scale = math.max((tonumber(_0.scale) or obj.track4) * 0.01, eps)
+local floating_c = tobool(_0.floating_center, obj.check0)
+local mirroring = tonumber(_0.mirroring) or s0 s0 = nil
+_0 = nil
+
+local aspect = h / w
+local ox, oy = 0.5, 0.5
+if (floating_c) then
+    ox, oy = cx, cy
+end
+
+local c = math.cos(rot)
+local s = math.sin(rot)
+obj.pixelshader("kaleidoscope", "object", "object", {
+    c,  s, 0.0, 0.0, -- Padding
+    -s, c,
+    ox, oy,
+    cx, cy,
+    aspect,
+    size,
+    scale,
+    mirroring
+}, "copy", "mirror")

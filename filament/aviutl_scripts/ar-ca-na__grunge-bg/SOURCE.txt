@@ -1,0 +1,5 @@
+グランジ背景を生成 by arcana
+licence: MIT
+from: https://github.com/ar-ca-na/aviutl2-grunge-bg/releases/download/v1.0.0/aviutl2-grunge-bg-v1.0.0.zip (tag v1.0.0, commit b19ec90ac07f)
+page: https://github.com/ar-ca-na/aviutl2-grunge-bg
+Put here unchanged for Motolii (filament/aviutl_scripts).

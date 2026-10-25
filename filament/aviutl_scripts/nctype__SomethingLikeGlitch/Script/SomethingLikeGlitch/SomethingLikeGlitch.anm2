@@ -1,0 +1,543 @@
+--label:加工
+--information:SomethingLikeGlitch v1.0.2
+--track@strength:強さ,0,100,65,0.1
+--track@second_strength:第2層の強さ,0,100,60,0.1,オフ
+--select@pattern:ティアリングモード=0,滑らか=0,ステップ=1
+--select@rhythm:タイミングモード=0,連続=0,周期=1,ランダム=2
+--track@burst_interval:間隔(s),0.02,30,1,0.01
+--track@burst_duration:持続時間(s),0.01,30,0.18,0.01
+--track@burst_randomness:ランダム度(%),0,100,60,0.1
+--hide@burst_interval:rhythm==0
+--hide@burst_duration:rhythm==0
+--hide@burst_randomness:rhythm~=2
+--check@tear_missing:ティア元を空ける,1
+--check@contour_only:エッジのみ,0
+--track@contour_width:エッジ幅(%),0,25,2,0.1
+--hide@contour_width:contour_only==0
+--track@displacement:ズレ(%),0,100,8,0.1
+--track@coverage:カバー率(%),0,100,35,0.1
+--track@block_size:ブロックサイズ(%),0.1,100,5,0.1
+--track@stretch:横伸び,1,40,8,0.1
+--track@line_ratio:ライン割合(%),0,100,25,0.1
+--track@evolution:変化速度,0,60,8,0.1,フリーズ
+--track@seed:乱数シード,0,99999,1,1
+--group:カラーブロック,true
+--check@flash_enabled:カラーブロック,1
+--track@flash_strength:カラーブロック::カバー率(%),0,100,20,0.1,オフ
+--color@flash_color:カラーブロック::色1,0x36ebf2
+--color@flash_color2:カラーブロック::色2,0xff3864
+--color@flash_color3:カラーブロック::色3,0xffffff
+--group:色ズレ,true
+--track@rgb_offset:RGB::ズレ(%),0,10,0.45,0.01,オフ
+--check@rgb_follow:RGB::ティアリングに連動,1
+--track@rgb_angle:RGB::向き(°),-180,180,0,0.1
+--select@rgb_type:RGB::タイプ=3,赤・青=0,赤・シアン=1,緑・マゼンタ=2,カスタム2色=3
+--color@rgb_color1:RGB::色1,0xff0000
+--color@rgb_color2:RGB::色2,0x00ffff
+--hide@rgb_angle:rgb_follow==1
+--hide@rgb_color1:rgb_type~=3
+--hide@rgb_color2:rgb_type~=3
+--group:詳細設定,false
+--track@alpha_threshold:アルファ閾値(%),0,100,1,0.1
+--hide@alpha_threshold:contour_only==0
+--track@tear_angle:ティアリング方向(°),-180,180,0,0.1
+--select@edge:端の処理=0,透明=0,端を延長=1,ループ=2
+--group
+--[[pixelshader@glitch_tear_layer:
+Texture2D<float4> source_image : register(t0);
+Texture2D<float4> protected_image : register(t1);
+Texture2D<float4> original_image : register(t2);
+SamplerState source_sampler : register(s0);
+cbuffer Parameters : register(b0) {
+    float4 geometry;   // width, height, master strength, evolution time
+    float4 tear;       // displacement, coverage, cell size, horizontal stretch
+    float4 control;    // mode, seed, tear angle in radians, burst gate
+    float4 rgb;        // offset, follow tear, angle, channel arrangement
+    float4 flash;      // selection ratio, enabled, reserved
+    float4 color_area; // first flash color, reserved
+    float4 flash_second; // flash RGB 2, move source fragments and leave holes
+    float4 flash_third;  // third flash color, reserved
+    float4 rgb_first;    // positive channel weights, reserved
+    float4 rgb_second;   // negative channel weights, reserved
+    float4 layers; // line fraction, current layer, second-layer strength, reserved
+    float4 contour; // enabled, reserved
+};
+
+// The core comes from the original current frame, shared unchanged by all passes.
+bool in_core(int2 pixel) {
+    if (any(pixel<0) || any(pixel>=int2(geometry.xy))) return false;
+    return protected_image.Load(int3(pixel,0)).r > 0.5;
+}
+float4 contour_texel(int2 pixel) {
+    if (any(pixel<0) || any(pixel>=int2(geometry.xy)) || in_core(pixel)) return 0.0;
+    return source_image.Load(int3(pixel,0));
+}
+float4 sample_fragment(float2 uv) {
+    float4 result = source_image.SampleLevel(source_sampler,uv,0);
+    // Mask each bilinear tap before interpolation, so interior colors cannot leak out.
+    [branch] if (contour.x > 0.5) {
+        float2 p=uv*geometry.xy-0.5;
+        int2 q=(int2)floor(p); float2 f=frac(p);
+        result = lerp(lerp(contour_texel(q),contour_texel(q+int2(1,0)),f.x),
+                      lerp(contour_texel(q+int2(0,1)),contour_texel(q+int2(1,1)),f.x),f.y);
+    }
+    return result;
+}
+// Integer hashes are independent of rendering order and previous frames.
+uint scramble(uint x) {
+    x ^= x >> 16; x *= 0x7feb352du;
+    x ^= x >> 15; x *= 0x846ca68bu;
+    return x ^ (x >> 16);
+}
+float random_value(int2 cell, int tick, uint stream) {
+    uint h = scramble(asuint(cell.x) ^ scramble(asuint(cell.y)));
+    h = scramble(h ^ scramble(asuint(tick)) ^ scramble((uint)control.y + stream));
+    return (h >> 8) * (1.0 / 16777216.0);
+}
+float evolving_value(int2 cell, float time, uint stream) {
+    int tick = (int)floor(time);
+    float f = frac(time);
+    f = f*f*(3.0-2.0*f);
+    return lerp(random_value(cell,tick,stream),random_value(cell,tick+1,stream),f);
+}
+
+// Groups distribute shapes; their cells never clip the rectangles.
+// Every active group has eight slots. Interior line ratios retain squares and rectangles.
+uint layer_stream(int layer) { return 1001u+(uint)layer*1009u; }
+float shape_random(int2 cell, int slot, int layer, uint channel) {
+    uint stream = layer_stream(layer)+(uint)(slot+1)*43u+channel;
+    return control.x < 0.5 ? evolving_value(cell,geometry.w,stream) :
+                            random_value(cell,(int)floor(geometry.w),stream);
+}
+float layer_unit(int layer) {
+    return max(1.0,min(geometry.x,geometry.y)*tear.z*(layer==0 ? 1.0 : 0.55));
+}
+float2 group_pitch(int layer) {
+    float unit = layer_unit(layer);
+    return float2(unit*max(1.0,tear.w),unit*2.0);
+}
+float layer_amplitude(int layer) {
+    return min(geometry.x,geometry.y)*tear.x*geometry.z*control.w*
+           (layer==0 ? 1.0 : layers.z);
+}
+int line_slots() {
+    if (layers.x <= 0.0) return 0;
+    if (layers.x >= 1.0) return 8;
+    return clamp((int)floor(layers.x*8.0+0.5),1,6);
+}
+int shape_kind(int slot) {
+    int ordinary = 8-line_slots();
+    return slot >= ordinary ? 2 : (slot & 1);
+}
+bool group_enabled(int2 cell, int layer) {
+    return tear.y >= 1.0 || shape_random(cell,-1,layer,0u) < tear.y;
+}
+float4 mixed_bounds(int2 cell, int slot, int layer) {
+    float unit = layer_unit(layer);
+    float2 pitch = group_pitch(layer);
+    float2 jitter = float2(shape_random(cell,slot,layer,1u),shape_random(cell,slot,layer,2u))-0.5;
+    float2 center = geometry.xy*0.5+(float2(cell)+jitter)*pitch;
+    float a = shape_random(cell,slot,layer,3u);
+    float b = shape_random(cell,slot,layer,4u);
+    float2 size;
+    int kind = shape_kind(slot);
+    if (kind==0) {
+        float side = max(1.0,unit*lerp(0.45,1.0,a));
+        size = float2(side,side);
+    } else if (kind==1) {
+        float width = max(1.0,pitch.x*lerp(0.3,1.0,a));
+        size = float2(width,min(width,max(1.0,unit*lerp(0.18,0.7,b))));
+    } else {
+        size = float2(max(1.0,pitch.x*lerp(0.4,1.0,a)),
+                      max(1.0,min(2.0,unit*0.04)*lerp(0.5,1.0,b)));
+    }
+    return float4(center-size*0.5,center+size*0.5);
+}
+bool contains_pixel(float2 pixel, float4 bounds) {
+    return all(pixel>=bounds.xy) && all(pixel<bounds.zw);
+}
+float shape_shift(int2 cell, int slot, int layer) {
+    return (shape_random(cell,slot,layer,5u)*2.0-1.0)*layer_amplitude(layer);
+}
+float4 glitch_tear_layer(float4 position : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    [branch] if (contour.x > 0.5 && in_core((int2)position.xy))
+        return original_image.Load(int3((int2)position.xy,0));
+    int layer = (int)layers.y;
+    float2 pixel = uv*geometry.xy;
+    float2 pitch = group_pitch(layer);
+    float amplitude = layer_amplitude(layer);
+    float4 original = source_image.SampleLevel(source_sampler,uv,0);
+    if (amplitude <= 0.00001 || tear.y <= 0.0) return original;
+    float2 direction = float2(cos(control.z),sin(control.z));
+    // Exact bounds for every source rectangle that can cover this destination.
+    // Shift changes only the search span, never the maximum image size.
+    float2 reach = pitch+abs(direction)*amplitude;
+    int2 begin = (int2)ceil((pixel-geometry.xy*0.5-reach)/pitch);
+    int2 end = (int2)floor((pixel-geometry.xy*0.5+reach)/pitch);
+    bool hole = false;
+    float4 fragments = float4(0,0,0,0);
+    [loop] for (int y=begin.y; y<=end.y; ++y) {
+        [loop] for (int x=begin.x; x<=end.x; ++x) {
+            int2 cell = int2(x,y);
+            if (!group_enabled(cell,layer)) continue;
+            [loop] for (int slot=0; slot<8; ++slot) {
+                float distance = shape_shift(cell,slot,layer);
+                if (abs(distance) <= 0.00001) continue;
+                float4 bounds = mixed_bounds(cell,slot,layer);
+                if (flash_second.w > 0.5 && contains_pixel(pixel,bounds)) hole = true;
+                float2 source_pixel = pixel-direction*distance;
+                if (contains_pixel(source_pixel,bounds)) {
+                    if (flash_second.w > 0.5 && (any(source_pixel<0.0) || any(source_pixel>=geometry.xy))) continue;
+                    float4 fragment = sample_fragment(source_pixel/geometry.xy);
+                    // A fragment keeps its source alpha; strength selects whole shapes.
+                    int tick = (int)floor(geometry.w);
+                    uint stream = 700u+(uint)(slot+1)*37u+(uint)layer*409u;
+                    if (flash.y > 0.5 && random_value(cell,tick,stream) < flash.x) {
+                        float choice = random_value(cell,tick,stream+1709u);
+                        float3 color = choice < 1.0/3.0 ? color_area.rgb :
+                            (choice < 2.0/3.0 ? flash_second.rgb : flash_third.rgb);
+                        fragment.rgb = color*fragment.a;
+                    }
+                    // Stable painter order: later fragments cover earlier fragments.
+                    fragments = fragment+fragments*(1.0-fragment.a);
+                }
+            }
+        }
+    }
+    return fragments+(hole ? float4(0,0,0,0) : original)*(1.0-fragments.a);
+}
+]]
+--[[pixelshader@glitch_rgb:
+Texture2D<float4> source_image : register(t0);
+Texture2D<float4> protected_image : register(t1);
+Texture2D<float4> original_image : register(t2);
+SamplerState source_sampler : register(s0);
+cbuffer Parameters : register(b0) {
+    float4 geometry;   // width, height, master strength, evolution time
+    float4 tear;       // displacement, coverage, cell size, horizontal stretch
+    float4 control;    // mode, seed, tear angle in radians, burst gate
+    float4 rgb;        // offset, follow tear, angle, channel arrangement
+    float4 flash;      // selection ratio, enabled, reserved
+    float4 color_area; // first flash color, reserved
+    float4 flash_second; // flash RGB 2, move source fragments and leave holes
+    float4 flash_third;  // third flash color, reserved
+    float4 rgb_first;    // positive channel weights, reserved
+    float4 rgb_second;   // negative channel weights, reserved
+    float4 layers; // line fraction, current layer, second-layer strength, reserved
+    float4 contour; // enabled, reserved
+};
+
+// The core comes from the original current frame, shared unchanged by all passes.
+bool in_core(int2 pixel) {
+    if (any(pixel<0) || any(pixel>=int2(geometry.xy))) return false;
+    return protected_image.Load(int3(pixel,0)).r > 0.5;
+}
+float4 contour_texel(int2 pixel) {
+    if (any(pixel<0) || any(pixel>=int2(geometry.xy)) || in_core(pixel)) return 0.0;
+    return source_image.Load(int3(pixel,0));
+}
+float4 sample_fragment(float2 uv) {
+    float4 result = source_image.SampleLevel(source_sampler,uv,0);
+    // Mask each bilinear tap before interpolation, so interior colors cannot leak out.
+    [branch] if (contour.x > 0.5) {
+        float2 p=uv*geometry.xy-0.5;
+        int2 q=(int2)floor(p); float2 f=frac(p);
+        result = lerp(lerp(contour_texel(q),contour_texel(q+int2(1,0)),f.x),
+                      lerp(contour_texel(q+int2(0,1)),contour_texel(q+int2(1,1)),f.x),f.y);
+    }
+    return result;
+}
+// Integer hashes are independent of rendering order and previous frames.
+uint scramble(uint x) {
+    x ^= x >> 16; x *= 0x7feb352du;
+    x ^= x >> 15; x *= 0x846ca68bu;
+    return x ^ (x >> 16);
+}
+float random_value(int2 cell, int tick, uint stream) {
+    uint h = scramble(asuint(cell.x) ^ scramble(asuint(cell.y)));
+    h = scramble(h ^ scramble(asuint(tick)) ^ scramble((uint)control.y + stream));
+    return (h >> 8) * (1.0 / 16777216.0);
+}
+float evolving_value(int2 cell, float time, uint stream) {
+    int tick = (int)floor(time);
+    float f = frac(time);
+    f = f*f*(3.0-2.0*f);
+    return lerp(random_value(cell,tick,stream),random_value(cell,tick+1,stream),f);
+}
+
+// Groups distribute shapes; their cells never clip the rectangles.
+// Every active group has eight slots. Interior line ratios retain squares and rectangles.
+uint layer_stream(int layer) { return 1001u+(uint)layer*1009u; }
+float shape_random(int2 cell, int slot, int layer, uint channel) {
+    uint stream = layer_stream(layer)+(uint)(slot+1)*43u+channel;
+    return control.x < 0.5 ? evolving_value(cell,geometry.w,stream) :
+                            random_value(cell,(int)floor(geometry.w),stream);
+}
+float layer_unit(int layer) {
+    return max(1.0,min(geometry.x,geometry.y)*tear.z*(layer==0 ? 1.0 : 0.55));
+}
+float2 group_pitch(int layer) {
+    float unit = layer_unit(layer);
+    return float2(unit*max(1.0,tear.w),unit*2.0);
+}
+int line_slots() {
+    if (layers.x <= 0.0) return 0;
+    if (layers.x >= 1.0) return 8;
+    return clamp((int)floor(layers.x*8.0+0.5),1,6);
+}
+int shape_kind(int slot) {
+    int ordinary = 8-line_slots();
+    return slot >= ordinary ? 2 : (slot & 1);
+}
+bool group_enabled(int2 cell, int layer) {
+    return tear.y >= 1.0 || shape_random(cell,-1,layer,0u) < tear.y;
+}
+float4 mixed_bounds(int2 cell, int slot, int layer) {
+    float unit = layer_unit(layer);
+    float2 pitch = group_pitch(layer);
+    float2 jitter = float2(shape_random(cell,slot,layer,1u),shape_random(cell,slot,layer,2u))-0.5;
+    float2 center = geometry.xy*0.5+(float2(cell)+jitter)*pitch;
+    float a = shape_random(cell,slot,layer,3u);
+    float b = shape_random(cell,slot,layer,4u);
+    float2 size;
+    int kind = shape_kind(slot);
+    if (kind==0) {
+        float side = max(1.0,unit*lerp(0.45,1.0,a));
+        size = float2(side,side);
+    } else if (kind==1) {
+        float width = max(1.0,pitch.x*lerp(0.3,1.0,a));
+        size = float2(width,min(width,max(1.0,unit*lerp(0.18,0.7,b))));
+    } else {
+        size = float2(max(1.0,pitch.x*lerp(0.4,1.0,a)),
+                      max(1.0,min(2.0,unit*0.04)*lerp(0.5,1.0,b)));
+    }
+    return float4(center-size*0.5,center+size*0.5);
+}
+bool contains_pixel(float2 pixel, float4 bounds) {
+    return all(pixel>=bounds.xy) && all(pixel<bounds.zw);
+}
+// RGB linking uses the union of the two source masks, not an averaged displacement.
+float2 layer_region(float2 pixel, int layer) {
+    float2 pitch = group_pitch(layer);
+    int2 anchor = (int2)floor((pixel-geometry.xy*0.5)/pitch);
+    float amount = 0.0;
+    float active = 0.0;
+    [loop] for (int y=anchor.y-1; y<=anchor.y+1; ++y) {
+        [loop] for (int x=anchor.x-1; x<=anchor.x+1; ++x) {
+            int2 cell = int2(x,y);
+            if (!group_enabled(cell,layer)) continue;
+            [loop] for (int slot=0; slot<8; ++slot) {
+                if (contains_pixel(pixel,mixed_bounds(cell,slot,layer))) {
+                    amount = max(amount,abs(shape_random(cell,slot,layer,5u)*2.0-1.0));
+                    active = 1.0;
+                }
+            }
+        }
+    }
+    return float2(amount,active);
+}
+float2 tear_field(float2 uv) {
+    float2 first = layer_region(uv*geometry.xy,0);
+    if (layers.z > 0.0) first = max(first,layer_region(uv*geometry.xy,1));
+    return first;
+}
+float4 glitch_rgb(float4 position : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    [branch] if (contour.x > 0.5 && in_core((int2)position.xy))
+        return original_image.Load(int3((int2)position.xy,0));
+    float4 c = source_image.SampleLevel(source_sampler,uv,0);
+    float short_side = min(geometry.x,geometry.y);
+    if (rgb.x > 0.0) {
+        float2 field = tear_field(uv);
+        float angle = rgb.y > 0.5 ? control.z : rgb.z;
+        float follow = rgb.y > 0.5 ? field.y*(0.3+0.7*abs(field.x)) : 1.0;
+        float2 offset = float2(cos(angle),sin(angle))*short_side*rgb.x*
+                        geometry.z*control.w*follow/geometry.xy;
+        float4 positive = sample_fragment(uv-offset);
+        float4 negative = sample_fragment(uv+offset);
+        if (rgb.w < 0.5) {
+            c.rgb = float3(positive.r,c.g,negative.b);
+        } else if (rgb.w < 1.5) {
+            c.rgb = float3(positive.r,negative.g,negative.b);
+        } else if (rgb.w < 2.5) {
+            c.rgb = float3(negative.r,positive.g,negative.b);
+        } else {
+            // Normalize overlapping colors and retain any unassigned source channels.
+            // Red/cyan is exactly the corresponding channel split; zero offset is identity.
+            float3 denominator = max(1.0,rgb_first.rgb+rgb_second.rgb);
+            float3 weight_a = rgb_first.rgb/denominator;
+            float3 weight_b = rgb_second.rgb/denominator;
+            c.rgb = c.rgb*(1.0-weight_a-weight_b)+positive.rgb*weight_a+negative.rgb*weight_b;
+        }
+        c.a = max(c.a,max(positive.a,negative.a));
+    }
+    return c;
+}
+]]
+--[[pixelshader@glitch_contour_seed:
+Texture2D<float4> input_image : register(t0);
+cbuffer MaskParameters : register(b0) { float4 mask_params; } // width, height, threshold, step
+float4 glitch_contour_seed(float4 pos : SV_Position) : SV_Target {
+    float occupied = input_image.Load(int3((int2)pos.xy,0)).a > mask_params.z ? 1.0 : 0.0;
+    return float4(occupied,occupied,occupied,1);
+}
+]]
+--[[pixelshader@glitch_contour_erode:
+Texture2D<float4> input_image : register(t0);
+cbuffer MaskParameters : register(b0) { float4 mask_params; }
+float mask_at(int2 p) {
+    if (any(p<0) || any(p>=int2(mask_params.xy))) return 0;
+    return input_image.Load(int3(p,0)).r;
+}
+float4 glitch_contour_erode(float4 pos : SV_Position) : SV_Target {
+    int2 p=(int2)pos.xy; int step=(int)mask_params.w;
+    float core=1.0;
+    [unroll] for(int y=-1;y<=1;++y) {
+        [unroll] for(int x=-1;x<=1;++x) core=min(core,mask_at(p+int2(x,y)*step));
+    }
+    return float4(core,core,core,1);
+}
+]]
+
+
+
+
+--[[pixelshader@glitch_contour_rect:
+Texture2D<float4> input_image : register(t0);
+cbuffer MaskParameters : register(b0) { float4 mask_params; } // dimensions, axis, cell size
+float4 glitch_contour_rect(float4 pos : SV_Position) : SV_Target {
+    int2 pixel = (int2)pos.xy;
+    int axis = (int)mask_params.z;
+    int size = (int)mask_params.w;
+    // Center-anchored cells keep scaling symmetric about the object center.
+    int origin = (int)floor((axis == 0 ? mask_params.x : mask_params.y)*0.5);
+    int coordinate = axis == 0 ? pixel.x : pixel.y;
+    int start = (int)floor((coordinate-origin)/(float)size)*size+origin;
+    float core = 0;
+    [loop] for (int i=0;i<size;++i) {
+        int2 sample_pixel = axis == 0 ? int2(start+i,pixel.y) : int2(pixel.x,start+i);
+        if (all(sample_pixel>=0) && all(sample_pixel<int2(mask_params.xy)))
+            core = max(core,input_image.Load(int3(sample_pixel,0)).r);
+    }
+    return float4(core,core,core,1);
+}
+]]
+
+-- Procedural time advances every frame; burst rhythm gates the effect.
+if strength <= 0 or (contour_only == 1 and contour_width <= 0) then return end
+local object_w, object_h = obj.getpixel()
+if object_w <= 0 or object_h <= 0 then return end
+local frame_rate = math.max(obj.framerate, 0.001)
+local effect_time = obj.frame / frame_rate
+
+local function random01(index, stream)
+    -- Park-Miller arithmetic stays exact in Lua's double precision range.
+    local n = ((index % 2147483646) + seed * 131 + stream * 8191) % 2147483646 + 1
+    n = (n * 16807) % 2147483647
+    n = (n * 16807) % 2147483647
+    return n / 2147483647
+end
+
+local gate = 1
+if rhythm ~= 0 then
+    local gap = math.max(burst_interval, 0.02)
+    local duration = math.max(burst_duration, 0.01)
+    local jitter = burst_randomness / 100
+    gate = 0
+    if rhythm == 1 or jitter <= 0 then
+        local period = duration+gap
+        local cycle = math.floor(effect_time/period)
+        if effect_time-cycle*period < duration then gate = 1 end
+    else
+        -- Rebuild a deterministic renewal timeline; seeking never depends on playback order.
+        -- Every event is followed by its own strictly positive silent interval.
+        local start_time = 0
+        local event = 0
+        while start_time <= effect_time do
+            local event_duration = duration*(1+(random01(event,2)-0.5)*jitter)
+            local event_gap = gap*(1+(random01(event,1)-0.5)*jitter)
+            if effect_time < start_time+event_duration then
+                gate = 1
+                break
+            end
+            if effect_time < start_time+event_duration+event_gap then break end
+            start_time = start_time+event_duration+event_gap
+            event = event+1
+        end
+    end
+end
+if gate == 0 then return end
+
+local radians = math.pi / 180
+local function channels(color)
+    return math.floor(color / 65536) % 256 / 255,
+           math.floor(color / 256) % 256 / 255, color % 256 / 255
+end
+local r, g, b = channels(flash_color)
+local r2, g2, b2 = channels(flash_color2)
+local r3, g3, b3 = channels(flash_color3)
+local ra, ga, ba = channels(rgb_color1)
+local rb, gb, bb = channels(rgb_color2)
+local sampler = ({[0]="clip",[1]="clamp",[2]="loop"})[edge] or "clip"
+-- Constants are shared by the independent passes; no cross-frame image cache.
+local constants = {
+    object_w, object_h, strength/100, effect_time*evolution,
+    displacement/100, coverage/100, block_size/100, stretch,
+    pattern, seed, tear_angle*radians, gate,
+    rgb_offset/100, rgb_follow, rgb_angle*radians, rgb_type,
+    flash_strength/100, flash_enabled, 0, 0,
+    r, g, b, 0,
+    r2, g2, b2, tear_missing,
+    r3, g3, b3, 0,
+    ra, ga, ba, 0,
+    rb, gb, bb, 0,
+    line_ratio/100, 0, second_strength/100, 0,
+    contour_only, 0, 0, 0
+}
+-- Rebuild from the ORIGINAL alpha of this frame, not a previously torn frame.
+local resources = {"object"}
+if contour_only == 1 then
+    local suffix = tostring(obj.effect_id or 0) .. "_" .. tostring(obj.index or 0)
+    local original = "cache:glitch_v010_original_" .. suffix
+    local core = "cache:glitch_v010_core_" .. suffix
+    assert(obj.copybuffer(original, "object"), "glitch_test: could not copy contour source")
+    obj.clearbuffer(core, object_w, object_h)
+    obj.pixelshader("glitch_contour_seed", core, {original},
+                    {object_w, object_h, alpha_threshold/100, 0}, "copy")
+    local radius = math.max(1, math.floor(math.min(object_w, object_h)*contour_width/100+0.5))
+    local covered = 0
+    -- Increasing tap distances give an exact square erosion in logarithmic passes.
+    -- The intervals touch or overlap, so even narrow transparent holes are retained.
+    while covered < radius do
+        local step = math.min(covered*2+1, radius-covered)
+        obj.pixelshader("glitch_contour_erode", core, {core},
+                        {object_w, object_h, 0, step}, "copy")
+        covered = covered+step
+    end
+    -- Expand protection to whole cells, creating horizontal and vertical steps.
+    -- Using max prevents any original interior pixel from becoming exposed.
+    local grid_size = math.max(1, math.floor(math.min(
+        math.min(object_w,object_h)*block_size/200, radius/2)+0.5))
+    if grid_size > 1 then
+        obj.pixelshader("glitch_contour_rect", core, {core},
+                        {object_w, object_h, 0, grid_size}, "copy")
+        obj.pixelshader("glitch_contour_rect", core, {core},
+                        {object_w, object_h, 1, grid_size}, "copy")
+    end
+    resources = {"object", core, original}
+end
+-- Each pass samples the current result. Disabled modules perform no draw or copy.
+if displacement > 0 and coverage > 0 then
+    constants[42] = 0
+    obj.pixelshader("glitch_tear_layer", "object", resources, constants, "copy", sampler)
+    if second_strength > 0 then
+        -- Input is the just-rendered first layer; the second pass really tears it again.
+        constants[42] = 1
+        obj.pixelshader("glitch_tear_layer", "object", resources, constants, "copy", sampler)
+    end
+    constants[42] = 0
+end
+if rgb_offset > 0 then
+    -- Missing fragments outside the canvas stay transparent in subsequent RGB samples.
+    local rgb_sampler = tear_missing == 1 and displacement > 0 and coverage > 0 and "clip" or sampler
+    obj.pixelshader("glitch_rgb", "object", resources, constants, "copy", rgb_sampler)
+end

@@ -1,0 +1,112 @@
+
+@Beat
+--information:Beat v0.1 by kusugawatsumiki
+--label:AudioObject
+--track@bpm:BPM,60,300,120,1
+--track@time:拍子,1,16,4,1
+--figure@figure:図形,円
+--color@color:色,0xffffff
+--track@size:サイズ,10,200,100,1
+--track@interval:間隔,0,5,1,0.01
+
+local beatcount = math.floor(obj.frame / (obj.framerate * 60 / bpm))
+local beat = beatcount % time
+
+obj.load("figure", figure, color, size, size / 2, false)
+for i = 0, beat do
+  -- x, y, z, zoom, alpha
+  obj.draw(i * size * (1 + interval), 0, 0, 1, 1) 
+end
+
+
+
+@Beat2
+--information:Beat2 v0.1 by kusugawatsumiki
+--label:AudioObject
+--track@bpm:BPM,60,300,120,1
+--track@time:拍子,1,16,4,1
+--color@color:色,0xffffff
+--track@length:長さ,1,300,20,1
+--track@weight:線の太さ,1,300,5,1
+--track@radius:半径,0,300,20,1
+--track@scale:拡張率,1,10,2,0.1
+--track@offset:回転,0,360,0,0.01
+
+local function lineposition(radius, linelength, linewidth, linerotation)
+  local rad = math.rad(linerotation)
+  local x = -math.sin(rad) * radius
+  local y = math.cos(rad) * radius
+  return x, y
+end
+
+local beatcount = math.floor(obj.frame / (obj.framerate * 60 / bpm))
+local beat = beatcount % time
+
+obj.load("figure", "四角形", color, length * scale, length * scale, false)
+obj.copybuffer("tempbuffer", "object")
+
+for i = 0, time - 1 do
+  local rotation = ((360 / time) * i) + offset
+  if i <= beat then
+    obj.load("tempbuffer", 0, 0, weight, length * scale)
+    local line_x, line_y = lineposition(radius, length * scale, width, rotation)
+    obj.draw(line_x, line_y, 0, 1, 1, 0, 0, rotation)
+  else
+    obj.load("tempbuffer", 0, 0, weight, length)
+    local line_x, line_y = lineposition(radius, length, width, rotation)
+    obj.draw(line_x, line_y, 0, 1, 1, 0, 0, rotation)
+  end
+end
+
+
+
+@Bit Spectrum Matrix
+--information:Bit Spectrum Matrix v0.1 by kusugawatsumiki
+--label:AudioObject
+--separator:マトリクス
+--track@row:行数,1,32,8,1
+--track@column:列数,1,32,8,1
+--separator:セル
+--track@cellsize:セルサイズ,1,100,20,1
+--track@cellwidth:線幅,1,100,1,1
+--color@color:色,0xffffff
+--separator:スペクトラム
+--track@threshold:閾値,0,100,1,0.01
+--check@shuffle:ランダム配置,false
+--value@seed:シード,1024
+
+local function xorshift(x)
+  local x = XOR(x, SHIFT(x, 13))
+  x = XOR(x, SHIFT(x, -17))
+  x = XOR(x, SHIFT(x, 5))
+  return x
+end
+
+local function index(max_index)
+  if shuffle then
+    local s = xorshift(seed)
+    return (s % max_index + 1)
+  else
+    return max_index
+  end
+end
+
+local n, rate, buffer = obj.getaudio(nil, "audiobuffer", "spectrum", row * column)
+obj.load("figure", "四角形", color, cellsize, cellwidth, false)
+
+-- swap
+for i = row * column, 1, -1 do
+  local j = index(i)
+  buffer[i], buffer[j] = buffer[j], buffer[i]
+end
+
+for i = 1, row do
+  for j = 1, column do
+    local value = math.log(buffer[(i - 1) * column + j]) 
+    if value >= threshold then
+      local x = (j - 1) * (cellsize - 1)
+      local y = (i - 1) * (cellsize - 1)
+      obj.draw(x, y, 0, 1, 1)
+    end
+  end
+end

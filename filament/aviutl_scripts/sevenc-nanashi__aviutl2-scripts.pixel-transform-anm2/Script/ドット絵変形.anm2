@@ -1,0 +1,1565 @@
+--label:変形
+--information:https://github.com/sevenc-nanashi/aviutl2-scripts/blob/main/scripts/%E3%83%89%E3%83%83%E3%83%88%E7%B5%B5%E5%A4%89%E5%BD%A2.anm2
+
+-- ========================================================================================================================
+-- 最新版をダウンロード：https://aviutl2-scripts-download.sevenc7c.workers.dev/%E3%83%89%E3%83%83%E3%83%88%E7%B5%B5%E5%A4%89%E5%BD%A2.anm2
+-- 説明書をブラウザで読む：https://github.com/sevenc-nanashi/aviutl2-scripts/blob/main/scripts/%E3%83%89%E3%83%83%E3%83%88%E7%B5%B5%E5%A4%89%E5%BD%A2/README.md
+--
+-- ドット絵の拡大縮小・回転を行うスクリプト。
+--
+-- 標準描画と違い、これはドット絵でもドットのまま変形されます。
+-- また、発展補間オプションを有効にすると線がより綺麗に補間されます。
+-- （発展補間はまだ実験的機能です！バージョンの更新により動作が変わる可能性があります。）
+--
+-- [ ピクセル補正について ]
+--   ドット絵を変形するとき、変形後の画像の位置がピクセルグリッドに乗らずにぼやけてしまうことがあります。
+--   （シーンの左上から見た画像の左上の位置が(1.3, 2.7)のように小数点になる場合）
+--   ピクセル補正を有効にすると、変形後の画像がピクセルグリッドに乗るように調整され、ぼやけを防止します。
+--
+--   ┌ 💡 Tips
+--   │ sigma-axis氏のaviutl2_script_PixelSnap_Sも同様の動作を行います： https://github.com/sigma-axis/aviutl2_script_PixelSnap_S
+--   └─────
+--
+--   [ モード ]
+--     - 中心移動式：画像の左上がピクセルグリッドに乗るように中心点が調整されます。
+--     - 描画移動式：画像の左上がピクセルグリッドに乗るように描画位置が調整されます。
+--     - サンプラー式：AviUtl2のピクセル補間モードを変更します。
+--       このエフェクトの後にエフェクトを追加するとピクセル補正が無効になるかもしれません。
+--     - オフ：ピクセル補正を行いません。
+--
+-- [ 発展補間について ]
+--   有効にすると、ドット絵の線が塗りの上に描画されるように補間され、線が消えにくくなります。
+--   また、拡大時に斜めの線がより綺麗に補間されます。
+--   この機能はcleanEdgeをベースにしています。cleanEdgeについてはこのページを参照してください： https://torcado.com/cleanEdge/
+--
+--   [ パラメーター ]
+--     - 基準色：線の上書き判定に使う色。例えば#ffffffの場合は明るい色が優先されます。もしドット絵に外枠がある場合は、外枠を設定すると綺麗になります。
+--       cleanEdgeのHighest Colorに相当します。
+--     - 線の太さ：線の太さを指定します。ピクセルが何マス分に広がるかを指定します。45度の線を綺麗にしたい場合は0.707付近にしてください。
+--       cleanEdgeのLine Widthに相当します。
+--     - 斜め補間：拡大時に補間する傾斜を指定します。
+--       cleanEdgeのSlopesに相当します。
+--       - 1:1：45度の線のみ補間します。
+--       - 1:1 + 1:2：45度と26.565度（1:2の傾き）の線を補間します。
+--       - 1:1 + 1:2（補正）：45度と26.565度（1:2の傾き）の線を補間し、さらに1:2の線をより綺麗に補間します。
+--     - 補間閾値：斜め補間をするときに、どのくらい似ている色を同じ色として扱うかを指定します。
+--       高めると似ている色の間が滑らかに補間されるようになりますが、高すぎると乱れが発生します。
+--       可能な限り低く設定することをお勧めします。
+--       cleanEdgeのSimilar Thresholdに相当します。
+--
+-- [ PI ]
+--   - `scale`：拡大率（1.0で等倍）
+--   - `scale_x`：X拡大率（1.0で等倍）
+--   - `scale_y`：Y拡大率（1.0で等倍）
+--   - `center_x`：中心X（ピクセル単位）
+--   - `center_y`：中心Y（ピクセル単位）
+--   - `angle_deg`：回転（度）
+--   - `enable_cleanedge`：発展補間
+--   - `highest_color`：基準色
+--   - `line_width`：線の太さ
+--   - `slopes`：斜め補間（0 = 「1:1のみ」、1 = 「1:1 + 1:2」、2 = 「1:1 + 1:2（補正）」）
+--   - `similar_threshold`：補間閾値
+--   - `alpha_grid`：透明グリッド
+--   - `pixelsnap`：ピクセル補正（1 = 中心移動式、2 = 描画移動式、3 = サンプラー式、0 = オフ）
+--   - `debug`：デバッグモード
+--
+-- --< 更新履歴 >----------------------------------------------------------------------------------------------------------
+--
+-- [ v3.5（2026/8/18） ]
+--   - Tipsを追加
+--
+-- [ v3.4（2026/7/6） ]
+--   - 英語の言語ファイルを追加
+--
+-- [ v3.3（2026/06/20） ]
+--   - 拡大率X・Yを同時に変更できるパラメーターを追加
+--
+-- [ v3.2（2025/12/13） ]
+--   - 回転のガタガタを完全に解決
+--
+-- [ v3.1（2025/12/13） ]
+--   - ピクセルスナップを追加
+--
+-- [ v3.0（2025/12/12） ]
+--   - cleanEdgeベースの発展補間オプションを追加
+--
+-- [ v2.1（2025/12/11） ]
+--   - 回転時にピクセルがガタつく問題を修正
+--
+-- [ v2.0（2025/12/10） ]
+--   - アルゴリズムを完全に書き直し、回転でもドットが維持されるように改善
+--
+-- [ v1.0（2025/12/4） ]
+--   - 初版リリース
+--
+-- ========================================================================================================================
+
+
+-- This script is based on cleanEdge.
+-- Great Appreciation to torcado, the author of cleanEdge.
+-- ------------------------------------------------------------------------------------------------------------------------
+-- Copyright (c) 2022 torcado
+-- Permission is hereby granted, free of charge, to any person
+-- obtaining a copy of this software and associated documentation
+-- files (the "Software"), to deal in the Software without
+-- restriction, including without limitation the rights to use,
+-- copy, modify, merge, publish, distribute, sublicense, and/or sell
+-- copies of the Software, and to permit persons to whom the
+-- Software is furnished to do so, subject to the following
+-- conditions:
+-- The above copyright notice and this permission notice shall be
+-- included in all copies or substantial portions of the Software.
+-- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+-- EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+-- OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+-- NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+-- HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+-- WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+-- FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+-- OTHER DEALINGS IN THE SOFTWARE.
+-- ------------------------------------------------------------------------------------------------------------------------
+
+--group:中心移動,true
+
+--track@center_x:中心X,-5000,5000,0,0.01
+--track@center_y:中心Y,-5000,5000,0,0.01
+--group:拡大縮小,true
+
+--track@scale:拡大率,1,10000,100,0.001
+--track@scale_x:X拡大率,1,10000,100,0.001
+--track@scale_y:Y拡大率,1,10000,100,0.001
+--group:回転,true
+
+--track@angle_deg:回転（度）,-360,360,0,0.1
+--group:発展補間設定,true
+
+--check@enable_cleanedge:発展補間,false
+--track@line_width:線の太さ,0,4,1,0.01
+--select@slopes:斜め補間=2,1:1のみ=0,1:1 + 1:2=1,1:1 + 1:2（補正）=2
+--color@highest_color:基準色,0xffffff
+--track@similar_threshold:補間閾値,0,255,16,1
+--group:高度な設定,false
+--track@alpha_grid:透明グリッド,0,1000,0,1
+--select@pixelsnap:ピクセル補正=1,中心移動式=1,描画移動式=2,サンプラー式=3,オフ=0
+--check@debug:デバッグモード,false
+--value@PI:PI,{}
+--[[pixelshader@alpha_grid:
+Texture2D tex0 : register(t0);
+SamplerState sampler0 : register(s0);
+cbuffer cb0 : register(b0) { float size; };
+
+float4 alpha_grid(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+  float checker = fmod(floor(pos.x / size) + floor(pos.y / size), 2.0);
+
+  if (checker < 1.0) {
+    return float4(0.25, 0.25, 0.25, 1);
+  } else {
+    return float4(0, 0, 0, 1);
+  }
+}
+
+// vim: set ft=hlsl ts=4 sts=4 sw=4 noet:
+
+]]
+--[[pixelshader@transform:
+Texture2D tex0 : register(t0);
+SamplerState sampler0 : register(s0);
+
+cbuffer cb0 : register(b0) {
+  float min_x;
+  float min_y;
+  float base_w;
+  float base_h;
+  float center_x;
+  float center_y;
+  float scale_x;
+  float scale_y;
+  float angle;
+};
+
+float2 rotate_point(float x, float y, float angle) {
+  float cos_a = cos(angle);
+  float sin_a = sin(angle);
+  float rx = cos_a * x - sin_a * y;
+  float ry = sin_a * x + cos_a * y;
+  return float2(rx, ry);
+}
+
+float4 transform(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+  float new_x = min_x + pos.x;
+  float new_y = min_y + pos.y;
+
+  float rel_x = new_x - center_x;
+  float rel_y = new_y - center_y;
+
+  float2 rotated = rotate_point(rel_x, rel_y, -angle);
+  float2 scaled = float2(rotated.x / scale_x, rotated.y / scale_y);
+
+  float sample_x = scaled.x + center_x;
+  float sample_y = scaled.y + center_y;
+
+  if (sample_x < 0 || sample_x >= base_w || sample_y < 0 || sample_y >= base_h) {
+    // NOTE: sampler = "dot"は範囲外を透明にするという仕様になっているけど一応明示的に透明にする
+    return float4(0, 0, 0, 0);
+  } else {
+    float2 sample_uv = float2(sample_x / base_w, sample_y / base_h);
+    return tex0.Sample(sampler0, sample_uv);
+  }
+}
+
+// vim: set ft=hlsl ts=4 sts=4 sw=4 noet:
+
+]]
+--[[pixelshader@cleanedge_vanilla:
+#define DEFINE_THIS_MACRO_IN_MAIN_LUA
+#define ENTRYPOINT cleanedge_vanilla
+/*
+    Based on "cleanEdge" by torcado
+        https://gist.github.com/torcado194/e2794f5a4b22049ac0a41f972d14c329
+
+        Copyright (c) 2022 torcado
+        Permission is hereby granted, free of charge, to any person
+        obtaining a copy of this software and associated documentation
+        files (the "Software"), to deal in the Software without
+        restriction, including without limitation the rights to use,
+        copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the
+        Software is furnished to do so, subject to the following
+        conditions:
+        The above copyright notice and this permission notice shall be
+        included in all copies or substantial portions of the Software.
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+        EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+        OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+        NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+        HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+        WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+        FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+        OTHER DEALINGS IN THE SOFTWARE.
+*/
+
+Texture2D tex0 : register(t0);
+SamplerState sampler0 : register(s0);
+
+cbuffer cb0 : register(b0) {
+  float min_x;
+  float min_y;
+  float base_w;
+  float base_h;
+  float center_x;
+  float center_y;
+  float scale_x;
+  float scale_y;
+  float angle;
+
+  float new_w;
+  float new_h;
+
+  // cleanEdge params
+  // highest_color in 0..1 each channel
+  float highest_r;
+  float highest_g;
+  float highest_b;
+  // thresholds are expected in 0..1
+  float similar_threshold;
+  // line width (typical 0..4, 0.707 for 45deg nice look)
+  float line_width;
+};
+
+#ifndef DEFINE_THIS_MACRO_IN_MAIN_LUA
+// Enables 2:1 slopes
+#define ENABLE_SLOPE
+// Cleans up small slope transitions
+#define ENABLE_CLEANUP
+#endif
+
+float2 rotate_point(float x, float y, float angle) {
+  float cos_a = cos(angle);
+  float sin_a = sin(angle);
+  float rx = cos_a * x - sin_a * y;
+  float ry = sin_a * x + cos_a * y;
+  return float2(rx, ry);
+}
+
+float4 get_pixel(float2 xy) {
+  float2 base = float2(base_w, base_h);
+  // NOTE: AviUtl2のtexelはピクセル中心が(0.5, 0.5)なので補正する
+  float2 uv = (xy + 0.5) / base;
+  return tex0.Sample(sampler0, uv);
+}
+
+// Helpers ported from GLSL implementation
+bool similar(float4 col1, float4 col2) {
+  return ((col1.a == 0.0 && col2.a == 0.0) || distance(col1, col2) <= similar_threshold);
+}
+
+bool similar3(float4 c1, float4 c2, float4 c3) { return similar(c1, c2) && similar(c2, c3); }
+
+bool similar4(float4 c1, float4 c2, float4 c3, float4 c4) {
+  return similar(c1, c2) && similar(c2, c3) && similar(c3, c4);
+}
+
+bool similar5(float4 c1, float4 c2, float4 c3, float4 c4, float4 c5) {
+  return similar(c1, c2) && similar(c2, c3) && similar(c3, c4) && similar(c4, c5);
+}
+
+bool higher(float4 thisCol, float4 otherCol) {
+  if (similar(thisCol, otherCol)) return false;
+  if (thisCol.a == otherCol.a) {
+    float3 highest = float3(highest_r, highest_g, highest_b);
+    return distance(thisCol.rgb, highest) < distance(otherCol.rgb, highest);
+  } else {
+    return thisCol.a > otherCol.a;
+  }
+}
+
+float cd(float4 col1, float4 col2) { return distance(col1, col2); }
+
+float distToLine(float2 testPt, float2 pt1, float2 pt2, float2 dir) {
+  float2 lineDir = pt2 - pt1;
+  float2 perpDir = float2(lineDir.y, -lineDir.x);
+  float2 dirToPt1 = pt1 - testPt;
+  return (dot(perpDir, dir) > 0.0 ? 1.0 : -1.0) * dot(normalize(perpDir), dirToPt1);
+}
+
+// Returns float4(-1) if slice not applied, else the chosen color.
+float4 sliceDist(float2 base_point, float2 main_dir, float2 point_dir, float4 ub, float4 u, float4 uf, float4 uff,
+                 float4 b, float4 c, float4 f, float4 ff, float4 db, float4 d, float4 df, float4 dff, float4 ddb,
+                 float4 dd, float4 ddf) {
+  // float min_width;
+  // float max_width;
+  // #ifdef ENABLE_SLOPE
+  // min_width = 0.45;
+  // max_width = 1.142;
+  // #else
+  // min_width = 0.0;
+  // max_width = 1.4;
+  // #endif
+  // float local_line_width = clamp(line_width, min_width, max_width);
+  float local_line_width = line_width;
+  base_point = main_dir * (base_point - 0.5) + 0.5;  // flip point by main_dir
+
+  // edge detection
+  float dist_against = 4.0 * cd(f, d) + cd(uf, c) + cd(c, db) + cd(ff, df) + cd(df, dd);
+  float dist_towards = 4.0 * cd(c, df) + cd(u, f) + cd(f, dff) + cd(b, d) + cd(d, ddf);
+  bool should_slice = (dist_against < dist_towards) || ((dist_against < dist_towards + 0.001) && !higher(c, f));
+  if (similar4(f, d, b, u) && similar4(uf, df, db, ub) && !similar(c, f)) {
+    should_slice = false;  // checkerboard edge case
+  }
+  if (!should_slice) return float4(-1.0, -1.0, -1.0, -1.0);
+
+  float dist = 1.0;
+  bool flip = false;
+  float2 center = float2(0.5, 0.5);
+
+#ifdef ENABLE_SLOPE
+  // lower shallow 2:1 slant
+  if (similar3(f, d, db) && !similar3(f, d, b) && !similar(uf, db)) {
+    if (similar(c, df) && higher(c, f)) {
+      // no flip
+    } else {
+      if (higher(c, f)) flip = true;
+      if (similar(u, f) && !similar(c, df) && !higher(c, u)) flip = true;
+    }
+
+    if (flip) {
+      dist = local_line_width - distToLine(base_point, center + point_dir * float2(1.5, -1.0),
+                                           center + point_dir * float2(-0.5, 0.0), -point_dir);
+    } else {
+      dist = distToLine(base_point, center + point_dir * float2(1.5, 0.0), center + point_dir * float2(-0.5, 1.0),
+                        point_dir);
+    }
+
+#ifdef ENABLE_CLEANUP
+    if (!flip && similar(c, uf) && !(similar3(c, uf, uff) && !similar3(c, uf, ff) && !similar(d, uff))) {
+      float dist2 = distToLine(base_point, center + point_dir * float2(2.0, -1.0),
+                               center + point_dir * float2(-0.0, 1.0), point_dir);
+      dist = min(dist, dist2);
+    }
+#endif
+
+    dist -= (local_line_width / 2.0);
+    return (dist <= 0.0) ? ((cd(c, f) <= cd(c, d)) ? f : d) : float4(-1.0, -1.0, -1.0, -1.0);
+  }
+  // forward steep 2:1 slant
+  else if (similar3(uf, f, d) && !similar3(u, f, d) && !similar(uf, db)) {
+    if (similar(c, df) && higher(c, d)) {
+      // no flip
+    } else {
+      if (higher(c, d)) flip = true;
+      if (similar(b, d) && !similar(c, df) && !higher(c, d)) flip = true;
+    }
+
+    if (flip) {
+      dist = local_line_width - distToLine(base_point, center + point_dir * float2(0.0, -0.5),
+                                           center + point_dir * float2(-1.0, 1.5), -point_dir);
+    } else {
+      dist = distToLine(base_point, center + point_dir * float2(1.0, -0.5), center + point_dir * float2(0.0, 1.5),
+                        point_dir);
+    }
+
+#ifdef ENABLE_CLEANUP
+    if (!flip && similar(c, db) && !(similar3(c, db, ddb) && !similar3(c, db, dd) && !similar(f, ddb))) {
+      float dist2 = distToLine(base_point, center + point_dir * float2(1.0, 0.0),
+                               center + point_dir * float2(-1.0, 2.0), point_dir);
+      dist = min(dist, dist2);
+    }
+#endif
+
+    dist -= (local_line_width / 2.0);
+    return (dist <= 0.0) ? ((cd(c, f) <= cd(c, d)) ? f : d) : float4(-1.0, -1.0, -1.0, -1.0);
+  }
+#endif  // ENABLE_SLOPE
+
+  // 45 diagonal
+  if (similar(f, d)) {
+    if (similar(c, df) && higher(c, f)) {
+      if (!similar(c, dd) && !similar(c, ff)) {
+        flip = true;
+      }
+    } else {
+      if (higher(c, f)) flip = true;
+      if (!similar(c, b) && similar4(b, f, d, u)) flip = true;
+    }
+
+    // single pixel 2:1 slope, don't flip
+    if (((similar(f, db) && similar3(u, f, df)) || (similar(uf, d) && similar3(b, d, df))) && !similar(c, df)) {
+      flip = true;
+    }
+
+    if (flip) {
+      dist = local_line_width - distToLine(base_point, center + point_dir * float2(1.0, -1.0),
+                                           center + point_dir * float2(-1.0, 1.0), -point_dir);
+    } else {
+      dist = distToLine(base_point, center + point_dir * float2(1.0, 0.0), center + point_dir * float2(0.0, 1.0),
+                        point_dir);
+    }
+
+#ifdef ENABLE_SLOPE
+#ifdef ENABLE_CLEANUP
+    if (!flip && similar3(c, uf, uff) && !similar3(c, uf, ff) && !similar(d, uff)) {
+      float dist2 = distToLine(base_point, center + point_dir * float2(1.5, 0.0),
+                               center + point_dir * float2(-0.5, 1.0), point_dir);
+      dist = max(dist, dist2);
+    }
+    if (!flip && similar3(ddb, db, c) && !similar3(dd, db, c) && !similar(ddb, f)) {
+      float dist2 = distToLine(base_point, center + point_dir * float2(1.0, -0.5),
+                               center + point_dir * float2(0.0, 1.5), point_dir);
+      dist = max(dist, dist2);
+    }
+#endif
+#endif
+
+    dist -= (local_line_width / 2.0);
+    return (dist <= 0.0) ? ((cd(c, f) <= cd(c, d)) ? f : d) : float4(-1.0, -1.0, -1.0, -1.0);
+  }
+#ifdef ENABLE_SLOPE
+  // far corner of shallow slant
+  else if (similar3(ff, df, d) && !similar3(ff, df, c) && !similar(uff, d)) {
+    if (similar(f, dff) && higher(f, ff)) {
+      // no flip
+    } else {
+      if (higher(f, ff)) flip = true;
+      if (similar(uf, ff) && !similar(f, dff) && !higher(f, uf)) flip = true;
+    }
+    if (flip) {
+      dist = local_line_width - distToLine(base_point, center + point_dir * float2(2.5, -1.0),
+                                           center + point_dir * float2(0.5, 0.0), -point_dir);
+    } else {
+      dist = distToLine(base_point, center + point_dir * float2(2.5, 0.0), center + point_dir * float2(0.5, 1.0),
+                        point_dir);
+    }
+    dist -= (local_line_width / 2.0);
+    return (dist <= 0.0) ? ((cd(f, ff) <= cd(f, df)) ? ff : df) : float4(-1.0, -1.0, -1.0, -1.0);
+  }
+  // far corner of steep slant
+  else if (similar3(f, df, dd) && !similar3(c, df, dd) && !similar(f, ddb)) {
+    if (similar(d, ddf) && higher(d, dd)) {
+      // no flip
+    } else {
+      if (higher(d, dd)) flip = true;
+      if (similar(db, dd) && !similar(d, ddf) && !higher(d, dd)) flip = true;
+    }
+    if (flip) {
+      dist = local_line_width - distToLine(base_point, center + point_dir * float2(0.0, 0.5),
+                                           center + point_dir * float2(-1.0, 2.5), -point_dir);
+    } else {
+      dist = distToLine(base_point, center + point_dir * float2(1.0, 0.5), center + point_dir * float2(0.0, 2.5),
+                        point_dir);
+    }
+    dist -= (local_line_width / 2.0);
+    return (dist <= 0.0) ? ((cd(d, df) <= cd(d, dd)) ? df : dd) : float4(-1.0, -1.0, -1.0, -1.0);
+  }
+#endif
+
+  return float4(-1.0, -1.0, -1.0, -1.0);
+}
+
+float4 ENTRYPOINT(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+  float2 min_xy = float2(min_x, min_y);
+  float2 base_size = float2(base_w, base_h);
+  float2 center_xy = float2(center_x, center_y);
+  float2 scale_xy = float2(scale_x, scale_y);
+  float2 new_size = float2(new_w, new_h);
+
+  float2 new_pos = min_xy + pos.xy;
+
+  float2 rel_pos = new_pos - center_xy;
+
+  float2 rotated = angle == 0 ? rel_pos : rotate_point(rel_pos.x, rel_pos.y, -angle);
+  float2 scaled = rotated / scale_xy;
+
+  float sample_x = scaled.x + center_x;
+  float sample_y = scaled.y + center_y;
+  float2 sample_coord = float2(sample_x, sample_y);
+
+  float2 sample_px = sample_coord / base_size * (base_size + 0.0001);
+  float2 sample_local = frac(sample_px);
+  sample_px = floor(sample_px);
+  float2 point_dir = step(0.5, sample_local) * 2.0 - 1.0;
+
+  // NOTE: back / present / front
+  // NOTE: up / center / down
+  float4 uub = get_pixel(sample_px + point_dir * float2(-1.0, -2.0));
+  float4 uup = get_pixel(sample_px + point_dir * float2(0.0, -2.0));
+  float4 uuf = get_pixel(sample_px + point_dir * float2(1.0, -2.0));
+
+  float4 ubb = get_pixel(sample_px + point_dir * float2(-2.0, -1.0));
+  float4 ub = get_pixel(sample_px + point_dir * float2(-1.0, -1.0));
+  float4 up = get_pixel(sample_px + point_dir * float2(0.0, -1.0));
+  float4 uf = get_pixel(sample_px + point_dir * float2(1.0, -1.0));
+  float4 uff = get_pixel(sample_px + point_dir * float2(2.0, -1.0));
+
+  float4 cbb = get_pixel(sample_px + point_dir * float2(-2.0, 0.0));
+  float4 cb = get_pixel(sample_px + point_dir * float2(-1.0, 0.0));
+  float4 cp = get_pixel(sample_px + point_dir * float2(0.0, 0.0));
+  float4 cf = get_pixel(sample_px + point_dir * float2(1.0, 0.0));
+  float4 cff = get_pixel(sample_px + point_dir * float2(2.0, 0.0));
+
+  float4 dbb = get_pixel(sample_px + point_dir * float2(-2.0, 1.0));
+  float4 db = get_pixel(sample_px + point_dir * float2(-1.0, 1.0));
+  float4 dp = get_pixel(sample_px + point_dir * float2(0.0, 1.0));
+  float4 df = get_pixel(sample_px + point_dir * float2(1.0, 1.0));
+  float4 dff = get_pixel(sample_px + point_dir * float2(2.0, 1.0));
+
+  float4 ddb = get_pixel(sample_px + point_dir * float2(-1.0, 2.0));
+  float4 ddp = get_pixel(sample_px + point_dir * float2(0.0, 2.0));
+  float4 ddf = get_pixel(sample_px + point_dir * float2(1.0, 2.0));
+
+  float4 col = cp;
+
+  // corner, back, up slices (only these 3 quadrants can be reached)
+  float4 c_col = sliceDist(sample_local, float2(1.0, 1.0), point_dir, ub, up, uf, uff, cb, cp, cf, cff, db, dp, df, dff,
+                           ddb, ddp, ddf);
+
+  float4 b_col = sliceDist(sample_local, float2(-1.0, 1.0), point_dir, uf, up, ub, ubb, cf, cp, cb, cbb, df, dp, db,
+                           dbb, ddf, ddp, ddb);
+
+  float4 u_col = sliceDist(sample_local, float2(1.0, -1.0), point_dir, db, dp, df, dff, cb, cp, cf, cff, ub, up, uf,
+                           uff, uub, uup, uuf);
+
+  if (c_col.r >= 0.0) col = c_col;
+  if (b_col.r >= 0.0) col = b_col;
+  if (u_col.r >= 0.0) col = u_col;
+
+  return col;
+}
+
+// vim: set ft=hlsl ts=4 sts=4 sw=4 noet:
+
+]]
+--[[pixelshader@cleanedge_slope:
+#define DEFINE_THIS_MACRO_IN_MAIN_LUA
+#define ENABLE_SLOPE
+#define ENTRYPOINT cleanedge_slope
+/*
+    Based on "cleanEdge" by torcado
+        https://gist.github.com/torcado194/e2794f5a4b22049ac0a41f972d14c329
+
+        Copyright (c) 2022 torcado
+        Permission is hereby granted, free of charge, to any person
+        obtaining a copy of this software and associated documentation
+        files (the "Software"), to deal in the Software without
+        restriction, including without limitation the rights to use,
+        copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the
+        Software is furnished to do so, subject to the following
+        conditions:
+        The above copyright notice and this permission notice shall be
+        included in all copies or substantial portions of the Software.
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+        EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+        OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+        NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+        HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+        WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+        FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+        OTHER DEALINGS IN THE SOFTWARE.
+*/
+
+Texture2D tex0 : register(t0);
+SamplerState sampler0 : register(s0);
+
+cbuffer cb0 : register(b0) {
+  float min_x;
+  float min_y;
+  float base_w;
+  float base_h;
+  float center_x;
+  float center_y;
+  float scale_x;
+  float scale_y;
+  float angle;
+
+  float new_w;
+  float new_h;
+
+  // cleanEdge params
+  // highest_color in 0..1 each channel
+  float highest_r;
+  float highest_g;
+  float highest_b;
+  // thresholds are expected in 0..1
+  float similar_threshold;
+  // line width (typical 0..4, 0.707 for 45deg nice look)
+  float line_width;
+};
+
+#ifndef DEFINE_THIS_MACRO_IN_MAIN_LUA
+// Enables 2:1 slopes
+#define ENABLE_SLOPE
+// Cleans up small slope transitions
+#define ENABLE_CLEANUP
+#endif
+
+float2 rotate_point(float x, float y, float angle) {
+  float cos_a = cos(angle);
+  float sin_a = sin(angle);
+  float rx = cos_a * x - sin_a * y;
+  float ry = sin_a * x + cos_a * y;
+  return float2(rx, ry);
+}
+
+float4 get_pixel(float2 xy) {
+  float2 base = float2(base_w, base_h);
+  // NOTE: AviUtl2のtexelはピクセル中心が(0.5, 0.5)なので補正する
+  float2 uv = (xy + 0.5) / base;
+  return tex0.Sample(sampler0, uv);
+}
+
+// Helpers ported from GLSL implementation
+bool similar(float4 col1, float4 col2) {
+  return ((col1.a == 0.0 && col2.a == 0.0) || distance(col1, col2) <= similar_threshold);
+}
+
+bool similar3(float4 c1, float4 c2, float4 c3) { return similar(c1, c2) && similar(c2, c3); }
+
+bool similar4(float4 c1, float4 c2, float4 c3, float4 c4) {
+  return similar(c1, c2) && similar(c2, c3) && similar(c3, c4);
+}
+
+bool similar5(float4 c1, float4 c2, float4 c3, float4 c4, float4 c5) {
+  return similar(c1, c2) && similar(c2, c3) && similar(c3, c4) && similar(c4, c5);
+}
+
+bool higher(float4 thisCol, float4 otherCol) {
+  if (similar(thisCol, otherCol)) return false;
+  if (thisCol.a == otherCol.a) {
+    float3 highest = float3(highest_r, highest_g, highest_b);
+    return distance(thisCol.rgb, highest) < distance(otherCol.rgb, highest);
+  } else {
+    return thisCol.a > otherCol.a;
+  }
+}
+
+float cd(float4 col1, float4 col2) { return distance(col1, col2); }
+
+float distToLine(float2 testPt, float2 pt1, float2 pt2, float2 dir) {
+  float2 lineDir = pt2 - pt1;
+  float2 perpDir = float2(lineDir.y, -lineDir.x);
+  float2 dirToPt1 = pt1 - testPt;
+  return (dot(perpDir, dir) > 0.0 ? 1.0 : -1.0) * dot(normalize(perpDir), dirToPt1);
+}
+
+// Returns float4(-1) if slice not applied, else the chosen color.
+float4 sliceDist(float2 base_point, float2 main_dir, float2 point_dir, float4 ub, float4 u, float4 uf, float4 uff,
+                 float4 b, float4 c, float4 f, float4 ff, float4 db, float4 d, float4 df, float4 dff, float4 ddb,
+                 float4 dd, float4 ddf) {
+  // float min_width;
+  // float max_width;
+  // #ifdef ENABLE_SLOPE
+  // min_width = 0.45;
+  // max_width = 1.142;
+  // #else
+  // min_width = 0.0;
+  // max_width = 1.4;
+  // #endif
+  // float local_line_width = clamp(line_width, min_width, max_width);
+  float local_line_width = line_width;
+  base_point = main_dir * (base_point - 0.5) + 0.5;  // flip point by main_dir
+
+  // edge detection
+  float dist_against = 4.0 * cd(f, d) + cd(uf, c) + cd(c, db) + cd(ff, df) + cd(df, dd);
+  float dist_towards = 4.0 * cd(c, df) + cd(u, f) + cd(f, dff) + cd(b, d) + cd(d, ddf);
+  bool should_slice = (dist_against < dist_towards) || ((dist_against < dist_towards + 0.001) && !higher(c, f));
+  if (similar4(f, d, b, u) && similar4(uf, df, db, ub) && !similar(c, f)) {
+    should_slice = false;  // checkerboard edge case
+  }
+  if (!should_slice) return float4(-1.0, -1.0, -1.0, -1.0);
+
+  float dist = 1.0;
+  bool flip = false;
+  float2 center = float2(0.5, 0.5);
+
+#ifdef ENABLE_SLOPE
+  // lower shallow 2:1 slant
+  if (similar3(f, d, db) && !similar3(f, d, b) && !similar(uf, db)) {
+    if (similar(c, df) && higher(c, f)) {
+      // no flip
+    } else {
+      if (higher(c, f)) flip = true;
+      if (similar(u, f) && !similar(c, df) && !higher(c, u)) flip = true;
+    }
+
+    if (flip) {
+      dist = local_line_width - distToLine(base_point, center + point_dir * float2(1.5, -1.0),
+                                           center + point_dir * float2(-0.5, 0.0), -point_dir);
+    } else {
+      dist = distToLine(base_point, center + point_dir * float2(1.5, 0.0), center + point_dir * float2(-0.5, 1.0),
+                        point_dir);
+    }
+
+#ifdef ENABLE_CLEANUP
+    if (!flip && similar(c, uf) && !(similar3(c, uf, uff) && !similar3(c, uf, ff) && !similar(d, uff))) {
+      float dist2 = distToLine(base_point, center + point_dir * float2(2.0, -1.0),
+                               center + point_dir * float2(-0.0, 1.0), point_dir);
+      dist = min(dist, dist2);
+    }
+#endif
+
+    dist -= (local_line_width / 2.0);
+    return (dist <= 0.0) ? ((cd(c, f) <= cd(c, d)) ? f : d) : float4(-1.0, -1.0, -1.0, -1.0);
+  }
+  // forward steep 2:1 slant
+  else if (similar3(uf, f, d) && !similar3(u, f, d) && !similar(uf, db)) {
+    if (similar(c, df) && higher(c, d)) {
+      // no flip
+    } else {
+      if (higher(c, d)) flip = true;
+      if (similar(b, d) && !similar(c, df) && !higher(c, d)) flip = true;
+    }
+
+    if (flip) {
+      dist = local_line_width - distToLine(base_point, center + point_dir * float2(0.0, -0.5),
+                                           center + point_dir * float2(-1.0, 1.5), -point_dir);
+    } else {
+      dist = distToLine(base_point, center + point_dir * float2(1.0, -0.5), center + point_dir * float2(0.0, 1.5),
+                        point_dir);
+    }
+
+#ifdef ENABLE_CLEANUP
+    if (!flip && similar(c, db) && !(similar3(c, db, ddb) && !similar3(c, db, dd) && !similar(f, ddb))) {
+      float dist2 = distToLine(base_point, center + point_dir * float2(1.0, 0.0),
+                               center + point_dir * float2(-1.0, 2.0), point_dir);
+      dist = min(dist, dist2);
+    }
+#endif
+
+    dist -= (local_line_width / 2.0);
+    return (dist <= 0.0) ? ((cd(c, f) <= cd(c, d)) ? f : d) : float4(-1.0, -1.0, -1.0, -1.0);
+  }
+#endif  // ENABLE_SLOPE
+
+  // 45 diagonal
+  if (similar(f, d)) {
+    if (similar(c, df) && higher(c, f)) {
+      if (!similar(c, dd) && !similar(c, ff)) {
+        flip = true;
+      }
+    } else {
+      if (higher(c, f)) flip = true;
+      if (!similar(c, b) && similar4(b, f, d, u)) flip = true;
+    }
+
+    // single pixel 2:1 slope, don't flip
+    if (((similar(f, db) && similar3(u, f, df)) || (similar(uf, d) && similar3(b, d, df))) && !similar(c, df)) {
+      flip = true;
+    }
+
+    if (flip) {
+      dist = local_line_width - distToLine(base_point, center + point_dir * float2(1.0, -1.0),
+                                           center + point_dir * float2(-1.0, 1.0), -point_dir);
+    } else {
+      dist = distToLine(base_point, center + point_dir * float2(1.0, 0.0), center + point_dir * float2(0.0, 1.0),
+                        point_dir);
+    }
+
+#ifdef ENABLE_SLOPE
+#ifdef ENABLE_CLEANUP
+    if (!flip && similar3(c, uf, uff) && !similar3(c, uf, ff) && !similar(d, uff)) {
+      float dist2 = distToLine(base_point, center + point_dir * float2(1.5, 0.0),
+                               center + point_dir * float2(-0.5, 1.0), point_dir);
+      dist = max(dist, dist2);
+    }
+    if (!flip && similar3(ddb, db, c) && !similar3(dd, db, c) && !similar(ddb, f)) {
+      float dist2 = distToLine(base_point, center + point_dir * float2(1.0, -0.5),
+                               center + point_dir * float2(0.0, 1.5), point_dir);
+      dist = max(dist, dist2);
+    }
+#endif
+#endif
+
+    dist -= (local_line_width / 2.0);
+    return (dist <= 0.0) ? ((cd(c, f) <= cd(c, d)) ? f : d) : float4(-1.0, -1.0, -1.0, -1.0);
+  }
+#ifdef ENABLE_SLOPE
+  // far corner of shallow slant
+  else if (similar3(ff, df, d) && !similar3(ff, df, c) && !similar(uff, d)) {
+    if (similar(f, dff) && higher(f, ff)) {
+      // no flip
+    } else {
+      if (higher(f, ff)) flip = true;
+      if (similar(uf, ff) && !similar(f, dff) && !higher(f, uf)) flip = true;
+    }
+    if (flip) {
+      dist = local_line_width - distToLine(base_point, center + point_dir * float2(2.5, -1.0),
+                                           center + point_dir * float2(0.5, 0.0), -point_dir);
+    } else {
+      dist = distToLine(base_point, center + point_dir * float2(2.5, 0.0), center + point_dir * float2(0.5, 1.0),
+                        point_dir);
+    }
+    dist -= (local_line_width / 2.0);
+    return (dist <= 0.0) ? ((cd(f, ff) <= cd(f, df)) ? ff : df) : float4(-1.0, -1.0, -1.0, -1.0);
+  }
+  // far corner of steep slant
+  else if (similar3(f, df, dd) && !similar3(c, df, dd) && !similar(f, ddb)) {
+    if (similar(d, ddf) && higher(d, dd)) {
+      // no flip
+    } else {
+      if (higher(d, dd)) flip = true;
+      if (similar(db, dd) && !similar(d, ddf) && !higher(d, dd)) flip = true;
+    }
+    if (flip) {
+      dist = local_line_width - distToLine(base_point, center + point_dir * float2(0.0, 0.5),
+                                           center + point_dir * float2(-1.0, 2.5), -point_dir);
+    } else {
+      dist = distToLine(base_point, center + point_dir * float2(1.0, 0.5), center + point_dir * float2(0.0, 2.5),
+                        point_dir);
+    }
+    dist -= (local_line_width / 2.0);
+    return (dist <= 0.0) ? ((cd(d, df) <= cd(d, dd)) ? df : dd) : float4(-1.0, -1.0, -1.0, -1.0);
+  }
+#endif
+
+  return float4(-1.0, -1.0, -1.0, -1.0);
+}
+
+float4 ENTRYPOINT(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+  float2 min_xy = float2(min_x, min_y);
+  float2 base_size = float2(base_w, base_h);
+  float2 center_xy = float2(center_x, center_y);
+  float2 scale_xy = float2(scale_x, scale_y);
+  float2 new_size = float2(new_w, new_h);
+
+  float2 new_pos = min_xy + pos.xy;
+
+  float2 rel_pos = new_pos - center_xy;
+
+  float2 rotated = angle == 0 ? rel_pos : rotate_point(rel_pos.x, rel_pos.y, -angle);
+  float2 scaled = rotated / scale_xy;
+
+  float sample_x = scaled.x + center_x;
+  float sample_y = scaled.y + center_y;
+  float2 sample_coord = float2(sample_x, sample_y);
+
+  float2 sample_px = sample_coord / base_size * (base_size + 0.0001);
+  float2 sample_local = frac(sample_px);
+  sample_px = floor(sample_px);
+  float2 point_dir = step(0.5, sample_local) * 2.0 - 1.0;
+
+  // NOTE: back / present / front
+  // NOTE: up / center / down
+  float4 uub = get_pixel(sample_px + point_dir * float2(-1.0, -2.0));
+  float4 uup = get_pixel(sample_px + point_dir * float2(0.0, -2.0));
+  float4 uuf = get_pixel(sample_px + point_dir * float2(1.0, -2.0));
+
+  float4 ubb = get_pixel(sample_px + point_dir * float2(-2.0, -1.0));
+  float4 ub = get_pixel(sample_px + point_dir * float2(-1.0, -1.0));
+  float4 up = get_pixel(sample_px + point_dir * float2(0.0, -1.0));
+  float4 uf = get_pixel(sample_px + point_dir * float2(1.0, -1.0));
+  float4 uff = get_pixel(sample_px + point_dir * float2(2.0, -1.0));
+
+  float4 cbb = get_pixel(sample_px + point_dir * float2(-2.0, 0.0));
+  float4 cb = get_pixel(sample_px + point_dir * float2(-1.0, 0.0));
+  float4 cp = get_pixel(sample_px + point_dir * float2(0.0, 0.0));
+  float4 cf = get_pixel(sample_px + point_dir * float2(1.0, 0.0));
+  float4 cff = get_pixel(sample_px + point_dir * float2(2.0, 0.0));
+
+  float4 dbb = get_pixel(sample_px + point_dir * float2(-2.0, 1.0));
+  float4 db = get_pixel(sample_px + point_dir * float2(-1.0, 1.0));
+  float4 dp = get_pixel(sample_px + point_dir * float2(0.0, 1.0));
+  float4 df = get_pixel(sample_px + point_dir * float2(1.0, 1.0));
+  float4 dff = get_pixel(sample_px + point_dir * float2(2.0, 1.0));
+
+  float4 ddb = get_pixel(sample_px + point_dir * float2(-1.0, 2.0));
+  float4 ddp = get_pixel(sample_px + point_dir * float2(0.0, 2.0));
+  float4 ddf = get_pixel(sample_px + point_dir * float2(1.0, 2.0));
+
+  float4 col = cp;
+
+  // corner, back, up slices (only these 3 quadrants can be reached)
+  float4 c_col = sliceDist(sample_local, float2(1.0, 1.0), point_dir, ub, up, uf, uff, cb, cp, cf, cff, db, dp, df, dff,
+                           ddb, ddp, ddf);
+
+  float4 b_col = sliceDist(sample_local, float2(-1.0, 1.0), point_dir, uf, up, ub, ubb, cf, cp, cb, cbb, df, dp, db,
+                           dbb, ddf, ddp, ddb);
+
+  float4 u_col = sliceDist(sample_local, float2(1.0, -1.0), point_dir, db, dp, df, dff, cb, cp, cf, cff, ub, up, uf,
+                           uff, uub, uup, uuf);
+
+  if (c_col.r >= 0.0) col = c_col;
+  if (b_col.r >= 0.0) col = b_col;
+  if (u_col.r >= 0.0) col = u_col;
+
+  return col;
+}
+
+// vim: set ft=hlsl ts=4 sts=4 sw=4 noet:
+
+]]
+--[[pixelshader@cleanedge_slope_cleanup:
+#define DEFINE_THIS_MACRO_IN_MAIN_LUA
+#define ENABLE_SLOPE
+#define ENABLE_CLEANUP
+#define ENTRYPOINT cleanedge_slope_cleanup
+/*
+    Based on "cleanEdge" by torcado
+        https://gist.github.com/torcado194/e2794f5a4b22049ac0a41f972d14c329
+
+        Copyright (c) 2022 torcado
+        Permission is hereby granted, free of charge, to any person
+        obtaining a copy of this software and associated documentation
+        files (the "Software"), to deal in the Software without
+        restriction, including without limitation the rights to use,
+        copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the
+        Software is furnished to do so, subject to the following
+        conditions:
+        The above copyright notice and this permission notice shall be
+        included in all copies or substantial portions of the Software.
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+        EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+        OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+        NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+        HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+        WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+        FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+        OTHER DEALINGS IN THE SOFTWARE.
+*/
+
+Texture2D tex0 : register(t0);
+SamplerState sampler0 : register(s0);
+
+cbuffer cb0 : register(b0) {
+  float min_x;
+  float min_y;
+  float base_w;
+  float base_h;
+  float center_x;
+  float center_y;
+  float scale_x;
+  float scale_y;
+  float angle;
+
+  float new_w;
+  float new_h;
+
+  // cleanEdge params
+  // highest_color in 0..1 each channel
+  float highest_r;
+  float highest_g;
+  float highest_b;
+  // thresholds are expected in 0..1
+  float similar_threshold;
+  // line width (typical 0..4, 0.707 for 45deg nice look)
+  float line_width;
+};
+
+#ifndef DEFINE_THIS_MACRO_IN_MAIN_LUA
+// Enables 2:1 slopes
+#define ENABLE_SLOPE
+// Cleans up small slope transitions
+#define ENABLE_CLEANUP
+#endif
+
+float2 rotate_point(float x, float y, float angle) {
+  float cos_a = cos(angle);
+  float sin_a = sin(angle);
+  float rx = cos_a * x - sin_a * y;
+  float ry = sin_a * x + cos_a * y;
+  return float2(rx, ry);
+}
+
+float4 get_pixel(float2 xy) {
+  float2 base = float2(base_w, base_h);
+  // NOTE: AviUtl2のtexelはピクセル中心が(0.5, 0.5)なので補正する
+  float2 uv = (xy + 0.5) / base;
+  return tex0.Sample(sampler0, uv);
+}
+
+// Helpers ported from GLSL implementation
+bool similar(float4 col1, float4 col2) {
+  return ((col1.a == 0.0 && col2.a == 0.0) || distance(col1, col2) <= similar_threshold);
+}
+
+bool similar3(float4 c1, float4 c2, float4 c3) { return similar(c1, c2) && similar(c2, c3); }
+
+bool similar4(float4 c1, float4 c2, float4 c3, float4 c4) {
+  return similar(c1, c2) && similar(c2, c3) && similar(c3, c4);
+}
+
+bool similar5(float4 c1, float4 c2, float4 c3, float4 c4, float4 c5) {
+  return similar(c1, c2) && similar(c2, c3) && similar(c3, c4) && similar(c4, c5);
+}
+
+bool higher(float4 thisCol, float4 otherCol) {
+  if (similar(thisCol, otherCol)) return false;
+  if (thisCol.a == otherCol.a) {
+    float3 highest = float3(highest_r, highest_g, highest_b);
+    return distance(thisCol.rgb, highest) < distance(otherCol.rgb, highest);
+  } else {
+    return thisCol.a > otherCol.a;
+  }
+}
+
+float cd(float4 col1, float4 col2) { return distance(col1, col2); }
+
+float distToLine(float2 testPt, float2 pt1, float2 pt2, float2 dir) {
+  float2 lineDir = pt2 - pt1;
+  float2 perpDir = float2(lineDir.y, -lineDir.x);
+  float2 dirToPt1 = pt1 - testPt;
+  return (dot(perpDir, dir) > 0.0 ? 1.0 : -1.0) * dot(normalize(perpDir), dirToPt1);
+}
+
+// Returns float4(-1) if slice not applied, else the chosen color.
+float4 sliceDist(float2 base_point, float2 main_dir, float2 point_dir, float4 ub, float4 u, float4 uf, float4 uff,
+                 float4 b, float4 c, float4 f, float4 ff, float4 db, float4 d, float4 df, float4 dff, float4 ddb,
+                 float4 dd, float4 ddf) {
+  // float min_width;
+  // float max_width;
+  // #ifdef ENABLE_SLOPE
+  // min_width = 0.45;
+  // max_width = 1.142;
+  // #else
+  // min_width = 0.0;
+  // max_width = 1.4;
+  // #endif
+  // float local_line_width = clamp(line_width, min_width, max_width);
+  float local_line_width = line_width;
+  base_point = main_dir * (base_point - 0.5) + 0.5;  // flip point by main_dir
+
+  // edge detection
+  float dist_against = 4.0 * cd(f, d) + cd(uf, c) + cd(c, db) + cd(ff, df) + cd(df, dd);
+  float dist_towards = 4.0 * cd(c, df) + cd(u, f) + cd(f, dff) + cd(b, d) + cd(d, ddf);
+  bool should_slice = (dist_against < dist_towards) || ((dist_against < dist_towards + 0.001) && !higher(c, f));
+  if (similar4(f, d, b, u) && similar4(uf, df, db, ub) && !similar(c, f)) {
+    should_slice = false;  // checkerboard edge case
+  }
+  if (!should_slice) return float4(-1.0, -1.0, -1.0, -1.0);
+
+  float dist = 1.0;
+  bool flip = false;
+  float2 center = float2(0.5, 0.5);
+
+#ifdef ENABLE_SLOPE
+  // lower shallow 2:1 slant
+  if (similar3(f, d, db) && !similar3(f, d, b) && !similar(uf, db)) {
+    if (similar(c, df) && higher(c, f)) {
+      // no flip
+    } else {
+      if (higher(c, f)) flip = true;
+      if (similar(u, f) && !similar(c, df) && !higher(c, u)) flip = true;
+    }
+
+    if (flip) {
+      dist = local_line_width - distToLine(base_point, center + point_dir * float2(1.5, -1.0),
+                                           center + point_dir * float2(-0.5, 0.0), -point_dir);
+    } else {
+      dist = distToLine(base_point, center + point_dir * float2(1.5, 0.0), center + point_dir * float2(-0.5, 1.0),
+                        point_dir);
+    }
+
+#ifdef ENABLE_CLEANUP
+    if (!flip && similar(c, uf) && !(similar3(c, uf, uff) && !similar3(c, uf, ff) && !similar(d, uff))) {
+      float dist2 = distToLine(base_point, center + point_dir * float2(2.0, -1.0),
+                               center + point_dir * float2(-0.0, 1.0), point_dir);
+      dist = min(dist, dist2);
+    }
+#endif
+
+    dist -= (local_line_width / 2.0);
+    return (dist <= 0.0) ? ((cd(c, f) <= cd(c, d)) ? f : d) : float4(-1.0, -1.0, -1.0, -1.0);
+  }
+  // forward steep 2:1 slant
+  else if (similar3(uf, f, d) && !similar3(u, f, d) && !similar(uf, db)) {
+    if (similar(c, df) && higher(c, d)) {
+      // no flip
+    } else {
+      if (higher(c, d)) flip = true;
+      if (similar(b, d) && !similar(c, df) && !higher(c, d)) flip = true;
+    }
+
+    if (flip) {
+      dist = local_line_width - distToLine(base_point, center + point_dir * float2(0.0, -0.5),
+                                           center + point_dir * float2(-1.0, 1.5), -point_dir);
+    } else {
+      dist = distToLine(base_point, center + point_dir * float2(1.0, -0.5), center + point_dir * float2(0.0, 1.5),
+                        point_dir);
+    }
+
+#ifdef ENABLE_CLEANUP
+    if (!flip && similar(c, db) && !(similar3(c, db, ddb) && !similar3(c, db, dd) && !similar(f, ddb))) {
+      float dist2 = distToLine(base_point, center + point_dir * float2(1.0, 0.0),
+                               center + point_dir * float2(-1.0, 2.0), point_dir);
+      dist = min(dist, dist2);
+    }
+#endif
+
+    dist -= (local_line_width / 2.0);
+    return (dist <= 0.0) ? ((cd(c, f) <= cd(c, d)) ? f : d) : float4(-1.0, -1.0, -1.0, -1.0);
+  }
+#endif  // ENABLE_SLOPE
+
+  // 45 diagonal
+  if (similar(f, d)) {
+    if (similar(c, df) && higher(c, f)) {
+      if (!similar(c, dd) && !similar(c, ff)) {
+        flip = true;
+      }
+    } else {
+      if (higher(c, f)) flip = true;
+      if (!similar(c, b) && similar4(b, f, d, u)) flip = true;
+    }
+
+    // single pixel 2:1 slope, don't flip
+    if (((similar(f, db) && similar3(u, f, df)) || (similar(uf, d) && similar3(b, d, df))) && !similar(c, df)) {
+      flip = true;
+    }
+
+    if (flip) {
+      dist = local_line_width - distToLine(base_point, center + point_dir * float2(1.0, -1.0),
+                                           center + point_dir * float2(-1.0, 1.0), -point_dir);
+    } else {
+      dist = distToLine(base_point, center + point_dir * float2(1.0, 0.0), center + point_dir * float2(0.0, 1.0),
+                        point_dir);
+    }
+
+#ifdef ENABLE_SLOPE
+#ifdef ENABLE_CLEANUP
+    if (!flip && similar3(c, uf, uff) && !similar3(c, uf, ff) && !similar(d, uff)) {
+      float dist2 = distToLine(base_point, center + point_dir * float2(1.5, 0.0),
+                               center + point_dir * float2(-0.5, 1.0), point_dir);
+      dist = max(dist, dist2);
+    }
+    if (!flip && similar3(ddb, db, c) && !similar3(dd, db, c) && !similar(ddb, f)) {
+      float dist2 = distToLine(base_point, center + point_dir * float2(1.0, -0.5),
+                               center + point_dir * float2(0.0, 1.5), point_dir);
+      dist = max(dist, dist2);
+    }
+#endif
+#endif
+
+    dist -= (local_line_width / 2.0);
+    return (dist <= 0.0) ? ((cd(c, f) <= cd(c, d)) ? f : d) : float4(-1.0, -1.0, -1.0, -1.0);
+  }
+#ifdef ENABLE_SLOPE
+  // far corner of shallow slant
+  else if (similar3(ff, df, d) && !similar3(ff, df, c) && !similar(uff, d)) {
+    if (similar(f, dff) && higher(f, ff)) {
+      // no flip
+    } else {
+      if (higher(f, ff)) flip = true;
+      if (similar(uf, ff) && !similar(f, dff) && !higher(f, uf)) flip = true;
+    }
+    if (flip) {
+      dist = local_line_width - distToLine(base_point, center + point_dir * float2(2.5, -1.0),
+                                           center + point_dir * float2(0.5, 0.0), -point_dir);
+    } else {
+      dist = distToLine(base_point, center + point_dir * float2(2.5, 0.0), center + point_dir * float2(0.5, 1.0),
+                        point_dir);
+    }
+    dist -= (local_line_width / 2.0);
+    return (dist <= 0.0) ? ((cd(f, ff) <= cd(f, df)) ? ff : df) : float4(-1.0, -1.0, -1.0, -1.0);
+  }
+  // far corner of steep slant
+  else if (similar3(f, df, dd) && !similar3(c, df, dd) && !similar(f, ddb)) {
+    if (similar(d, ddf) && higher(d, dd)) {
+      // no flip
+    } else {
+      if (higher(d, dd)) flip = true;
+      if (similar(db, dd) && !similar(d, ddf) && !higher(d, dd)) flip = true;
+    }
+    if (flip) {
+      dist = local_line_width - distToLine(base_point, center + point_dir * float2(0.0, 0.5),
+                                           center + point_dir * float2(-1.0, 2.5), -point_dir);
+    } else {
+      dist = distToLine(base_point, center + point_dir * float2(1.0, 0.5), center + point_dir * float2(0.0, 2.5),
+                        point_dir);
+    }
+    dist -= (local_line_width / 2.0);
+    return (dist <= 0.0) ? ((cd(d, df) <= cd(d, dd)) ? df : dd) : float4(-1.0, -1.0, -1.0, -1.0);
+  }
+#endif
+
+  return float4(-1.0, -1.0, -1.0, -1.0);
+}
+
+float4 ENTRYPOINT(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+  float2 min_xy = float2(min_x, min_y);
+  float2 base_size = float2(base_w, base_h);
+  float2 center_xy = float2(center_x, center_y);
+  float2 scale_xy = float2(scale_x, scale_y);
+  float2 new_size = float2(new_w, new_h);
+
+  float2 new_pos = min_xy + pos.xy;
+
+  float2 rel_pos = new_pos - center_xy;
+
+  float2 rotated = angle == 0 ? rel_pos : rotate_point(rel_pos.x, rel_pos.y, -angle);
+  float2 scaled = rotated / scale_xy;
+
+  float sample_x = scaled.x + center_x;
+  float sample_y = scaled.y + center_y;
+  float2 sample_coord = float2(sample_x, sample_y);
+
+  float2 sample_px = sample_coord / base_size * (base_size + 0.0001);
+  float2 sample_local = frac(sample_px);
+  sample_px = floor(sample_px);
+  float2 point_dir = step(0.5, sample_local) * 2.0 - 1.0;
+
+  // NOTE: back / present / front
+  // NOTE: up / center / down
+  float4 uub = get_pixel(sample_px + point_dir * float2(-1.0, -2.0));
+  float4 uup = get_pixel(sample_px + point_dir * float2(0.0, -2.0));
+  float4 uuf = get_pixel(sample_px + point_dir * float2(1.0, -2.0));
+
+  float4 ubb = get_pixel(sample_px + point_dir * float2(-2.0, -1.0));
+  float4 ub = get_pixel(sample_px + point_dir * float2(-1.0, -1.0));
+  float4 up = get_pixel(sample_px + point_dir * float2(0.0, -1.0));
+  float4 uf = get_pixel(sample_px + point_dir * float2(1.0, -1.0));
+  float4 uff = get_pixel(sample_px + point_dir * float2(2.0, -1.0));
+
+  float4 cbb = get_pixel(sample_px + point_dir * float2(-2.0, 0.0));
+  float4 cb = get_pixel(sample_px + point_dir * float2(-1.0, 0.0));
+  float4 cp = get_pixel(sample_px + point_dir * float2(0.0, 0.0));
+  float4 cf = get_pixel(sample_px + point_dir * float2(1.0, 0.0));
+  float4 cff = get_pixel(sample_px + point_dir * float2(2.0, 0.0));
+
+  float4 dbb = get_pixel(sample_px + point_dir * float2(-2.0, 1.0));
+  float4 db = get_pixel(sample_px + point_dir * float2(-1.0, 1.0));
+  float4 dp = get_pixel(sample_px + point_dir * float2(0.0, 1.0));
+  float4 df = get_pixel(sample_px + point_dir * float2(1.0, 1.0));
+  float4 dff = get_pixel(sample_px + point_dir * float2(2.0, 1.0));
+
+  float4 ddb = get_pixel(sample_px + point_dir * float2(-1.0, 2.0));
+  float4 ddp = get_pixel(sample_px + point_dir * float2(0.0, 2.0));
+  float4 ddf = get_pixel(sample_px + point_dir * float2(1.0, 2.0));
+
+  float4 col = cp;
+
+  // corner, back, up slices (only these 3 quadrants can be reached)
+  float4 c_col = sliceDist(sample_local, float2(1.0, 1.0), point_dir, ub, up, uf, uff, cb, cp, cf, cff, db, dp, df, dff,
+                           ddb, ddp, ddf);
+
+  float4 b_col = sliceDist(sample_local, float2(-1.0, 1.0), point_dir, uf, up, ub, ubb, cf, cp, cb, cbb, df, dp, db,
+                           dbb, ddf, ddp, ddb);
+
+  float4 u_col = sliceDist(sample_local, float2(1.0, -1.0), point_dir, db, dp, df, dff, cb, cp, cf, cff, ub, up, uf,
+                           uff, uub, uup, uuf);
+
+  if (c_col.r >= 0.0) col = c_col;
+  if (b_col.r >= 0.0) col = b_col;
+  if (u_col.r >= 0.0) col = u_col;
+
+  return col;
+}
+
+// vim: set ft=hlsl ts=4 sts=4 sw=4 noet:
+
+]]
+
+-- PIからパラメータを取得
+if type(PI.center_x) == "number" then
+  center_x = PI.center_x
+end
+if type(PI.center_y) == "number" then
+  center_y = PI.center_y
+end
+if type(PI.scale) == "number" then
+  scale = PI.scale * 100
+end
+if type(PI.scale_x) == "number" then
+  scale_x = PI.scale_x * 100
+end
+if type(PI.scale_y) == "number" then
+  scale_y = PI.scale_y * 100
+end
+if type(PI.angle_deg) == "number" then
+  angle_deg = PI.angle_deg
+end
+if type(PI.enable_cleanedge) == "boolean" then
+  enable_cleanedge = PI.enable_cleanedge
+end
+if type(PI.line_width) == "number" then
+  line_width = PI.line_width
+end
+if type(PI.slopes) == "number" then
+  slopes = PI.slopes
+end
+if type(PI.highest_color) == "number" then
+  highest_color = PI.highest_color
+end
+if type(PI.similar_threshold) == "number" then
+  similar_threshold = PI.similar_threshold
+end
+if type(PI.pixelsnap) == "number" then
+  pixelsnap = PI.pixelsnap
+end
+if type(PI.debug) == "boolean" then
+  debug = PI.debug
+end
+if type(PI.alpha_grid) == "boolean" then
+  if PI.alpha_grid then
+    alpha_grid = 10
+  else
+    alpha_grid = 0
+  end
+elseif type(PI.alpha_grid) == "number" then
+  alpha_grid = PI.alpha_grid
+end
+
+-- デバッグ用関数
+local function debug_dump_internal(o)
+  if type(o) == "table" then
+    local s = "{ "
+    local keys = {}
+    local is_array = true
+    local max_index = 0
+    for k, _ in pairs(o) do
+      table.insert(keys, k)
+      if type(k) ~= "number" or k < 1 or math.floor(k) ~= k then
+        is_array = false
+      else
+        if k > max_index then
+          max_index = k
+        end
+      end
+    end
+    if is_array then
+      table.sort(keys, function(a, b)
+        return a < b
+      end)
+    else
+      table.sort(keys, function(a, b)
+        return tostring(a) < tostring(b)
+      end)
+    end
+    for i, k in ipairs(keys) do
+      local v = o[k]
+      if i > 1 then
+        s = s .. ", "
+      end
+      if is_array then
+        s = s .. debug_dump_internal(v)
+      else
+        s = s .. tostring(k) .. " = " .. debug_dump_internal(v)
+      end
+    end
+
+    return s .. " }"
+  else
+    return tostring(o)
+  end
+end
+local function debug_dump(m, o)
+  if debug then
+    if o == nil then
+      debug_print(debug_dump_internal(m))
+    else
+      debug_print(m .. ": " .. debug_dump_internal(o))
+    end
+  end
+end
+
+-- 回転の計算
+local function rotate_point(x, y, angle_rad)
+  -- ( cos theta, -sin theta ) ( x )
+  -- ( sin theta,  cos theta ) ( y )
+  local cos_a = math.cos(angle_rad)
+  local sin_a = math.sin(angle_rad)
+  local rx = cos_a * x - sin_a * y
+  local ry = sin_a * x + cos_a * y
+  return rx, ry
+end
+
+local rscale_x = scale_x / 100 * (scale / 100)
+local rscale_y = scale_y / 100 * (scale / 100)
+
+local vanilla_cx = obj.w / 2
+local vanilla_cy = obj.h / 2
+
+local cx = vanilla_cx + center_x
+local cy = vanilla_cy + center_y
+
+local angle_rad = math.rad(angle_deg)
+
+-- 中心から見た四隅の座標を計算
+local left_top_x, left_top_y = rotate_point(-cx * rscale_x, -cy * rscale_y, angle_rad)
+local right_top_x, right_top_y = rotate_point((obj.w - cx) * rscale_x, -cy * rscale_y, angle_rad)
+local left_bottom_x, left_bottom_y = rotate_point(-cx * rscale_x, (obj.h - cy) * rscale_y, angle_rad)
+local right_bottom_x, right_bottom_y = rotate_point((obj.w - cx) * rscale_x, (obj.h - cy) * rscale_y, angle_rad)
+left_top_x = left_top_x + cx
+left_top_y = left_top_y + cy
+right_top_x = right_top_x + cx
+right_top_y = right_top_y + cy
+left_bottom_x = left_bottom_x + cx
+left_bottom_y = left_bottom_y + cy
+right_bottom_x = right_bottom_x + cx
+right_bottom_y = right_bottom_y + cy
+debug_dump("coords", {
+  left_top = { x = left_top_x, y = left_top_y },
+  right_top = { x = right_top_x, y = right_top_y },
+  left_bottom = { x = left_bottom_x, y = left_bottom_y },
+  right_bottom = { x = right_bottom_x, y = right_bottom_y },
+})
+
+local min_x = math.floor(math.min(left_top_x, right_top_x, left_bottom_x, right_bottom_x))
+local max_x = math.ceil(math.max(left_top_x, right_top_x, left_bottom_x, right_bottom_x))
+local min_y = math.floor(math.min(left_top_y, right_top_y, left_bottom_y, right_bottom_y))
+local max_y = math.ceil(math.max(left_top_y, right_top_y, left_bottom_y, right_bottom_y))
+
+-- 変形する画像を準備（透明グリッドを追加）
+local transform_source
+if alpha_grid > 0 then
+  obj.setoption("drawtarget", "tempbuffer", math.ceil(obj.w), math.ceil(obj.h))
+  obj.pixelshader("alpha_grid", "tempbuffer", {}, { alpha_grid })
+  obj.draw()
+  obj.setoption("draw_state", false)
+  if not obj.copybuffer("cache:alpha_grid", "tempbuffer") then
+    error("Failed to create alpha grid cache.")
+    return
+  end
+  transform_source = "cache:alpha_grid"
+else
+  transform_source = "object"
+end
+
+local new_w = max_x - min_x
+local new_h = max_y - min_y
+obj.setoption("drawtarget", "tempbuffer", new_w, new_h)
+
+if enable_cleanedge then
+  -- cleanEdge
+  local highest_r, highest_g, highest_b = RGB(highest_color)
+  local args = {
+    min_x,
+    min_y,
+    obj.w,
+    obj.h,
+    cx,
+    cy,
+    rscale_x,
+    rscale_y,
+    angle_rad,
+    new_w,
+    new_h,
+    highest_r / 255,
+    highest_g / 255,
+    highest_b / 255,
+    similar_threshold / 255,
+    line_width,
+  }
+  -- シェーダー名を決定
+  local shader_name
+  if slopes == 0 then
+    shader_name = "cleanedge_vanilla"
+  elseif slopes == 1 then
+    shader_name = "cleanedge_slope"
+  else
+    shader_name = "cleanedge_slope_cleanup"
+  end
+  debug_dump("shader_name", shader_name)
+  debug_dump("cleanedge args", args)
+  -- transform_sourceに`"cache:xxx"`を指定すると型エラーになるため警告を無視する
+  ---@diagnostic disable-next-line: param-type-mismatch
+  obj.pixelshader(shader_name, "tempbuffer", transform_source, args, "copy", "dot")
+else
+  -- ただのニアレストネイバー
+  local args = {
+    min_x,
+    min_y,
+    obj.w,
+    obj.h,
+    cx,
+    cy,
+    rscale_x,
+    rscale_y,
+    angle_rad,
+  }
+  debug_dump("transform args", args)
+  ---@diagnostic disable-next-line: param-type-mismatch
+  obj.pixelshader("transform", "tempbuffer", transform_source, args, "copy", "dot")
+end
+
+-- 画像を差し替える直前に元のオブジェクト情報を保存
+local original_obj = {}
+for k, v in pairs(obj) do
+  original_obj[k] = v
+end
+
+-- 画像を差し替え
+obj.load("tempbuffer")
+
+-- オブジェクト情報を調整
+obj.ox = original_obj.ox
+obj.oy = original_obj.oy
+obj.cx = original_obj.cx
+obj.cy = original_obj.cy
+
+-- オブジェクトの中央から見た中心位置を回転・拡大縮小後の位置に更新
+local new_cx, new_cy = rotate_point(center_x * rscale_x, center_y * rscale_y, angle_rad)
+obj.cx = obj.cx + new_cx
+obj.cy = obj.cy + new_cy
+
+-- オブジェクトの左上位置を維持するように調整
+-- 中心点を基準にして、
+-- - 新画像の左上座標（expected）
+-- - 現在の左上座標（current）
+-- を計算し、その差分を中心点に加算する
+local expected_left_top_x = -original_obj.w / 2 - center_x + min_x
+local expected_left_top_y = -original_obj.h / 2 - center_y + min_y
+local current_left_top_x = -new_w / 2 - obj.cx
+local current_left_top_y = -new_h / 2 - obj.cy
+
+obj.cx = obj.cx - (expected_left_top_x - current_left_top_x)
+obj.cy = obj.cy - (expected_left_top_y - current_left_top_y)
+
+if pixelsnap == 1 or pixelsnap == 2 then
+  local final_left_top_x = original_obj.screen_w / 2 + original_obj.x + original_obj.ox - (new_w / 2 + obj.cx)
+  local final_left_top_y = original_obj.screen_h / 2 + original_obj.y + original_obj.oy - (new_h / 2 + obj.cy)
+  local snapped_left_top_x = math.floor(final_left_top_x + 0.1)
+  local snapped_left_top_y = math.floor(final_left_top_y + 0.1)
+
+  if pixelsnap == 1 then
+    obj.cx = obj.cx - (snapped_left_top_x - final_left_top_x)
+    obj.cy = obj.cy - (snapped_left_top_y - final_left_top_y)
+  elseif pixelsnap == 2 then
+    obj.ox = obj.ox + (snapped_left_top_x - final_left_top_x)
+    obj.oy = obj.oy + (snapped_left_top_y - final_left_top_y)
+  end
+elseif pixelsnap == 3 then
+  --aviutl2.luaの定義が古い
+  ---@diagnostic disable-next-line: param-type-mismatch
+  obj.setoption("sampler", "dot")
+end
+

@@ -1,0 +1,203 @@
+--information:BezierPath r3 by 猫愛
+--label:配置
+
+--track@trackbar_offset:オフセット,-1000,1000,0,0.01
+--track@rzPlus:回転,-180,180,0,0.01
+--track@trackbar_space:字間倍率,-9000,9000,100,0.01
+--track@order:次数,2,99,3,1
+--check@fix:向く,1
+--value@anchors:---,{0,0,0,0,0,0,0,0}
+--check@guide_visible:ガイド表示,1
+--group:ガイド関連,false
+--track@line_sizeD:線幅,1,1000,5,1
+--track@line_density:線密度,1,2000,100,1
+--track@handle_sizeD:ハンドルサイズ,1,1000,50,1
+--check@guide_saving_disable:出力時非表示,1
+
+
+--/////////////////////////////////////////////////////////
+local function bernstein_bezier(ti, n, point)
+  local returnData = { x = 0, y = 0 }
+  local binomial = 1
+  for i = 1, n do
+    local m = binomial * ti ^ (i - 1) * (1 - ti) ^ (n - i)
+    returnData = { x = returnData.x + point[i].x * m, y = returnData.y + point[i].y * m }
+    binomial = binomial * (n - i) / i
+  end
+  return returnData
+end
+--/////////////////////////////////////////////////////////
+local function get_length(a, b)
+  return math.sqrt((b[1] - a[1]) ^ 2 + (b[2] - a[2]) ^ 2)
+end
+--/////////////////////////////////////////////////////////
+local function anchor_adjust(point, order, zoom)
+  local point_return = {}
+  local zm = zoom / 100
+  for i = 0, order do
+    -- 値がない場合は0にする
+      point[i*2-1] = point[i*2-1] == nil and 0 or point[i * 2 - 1]
+      point[i*2] = point[i*2] == nil and 0 or point[i * 2]
+
+    point_return[i] = { x = 0, y = 0 }
+    point_return[i].x = ((point[i * 2 - 1] - point[1]) * zm)
+    point_return[i].y = ((point[i * 2] - point[2]) * zm)
+  end
+    point_return[-10] = { x = point[1] * zm, y = point[2] * zm}
+  return point_return
+end
+--/////////////////////////////////////////////////////////
+local function linear_time_bezier_table(point, density)
+  local p1 = {}
+  local check = {}
+  check[0] = { 0, 0 }
+  local l = {}
+  l[0] = 0
+  local order = #point
+  local t
+  for n = 0, density do
+    t = n / density
+    local result = bernstein_bezier(t, order, point)
+    check[n + 1] = { result.x, result.y }
+    l[n + 1] = l[n] + get_length(check[n + 1], check[n])
+  end
+
+  local curve_length = l[#l]
+  for i = 0, #l do
+    l[i] = l[i] / curve_length
+  end
+  return l
+end
+--/////////////////////////////////////////////////////////
+local function linear_time_bezier(ti, point)
+  local l = point
+  local i1 = 1
+  local i2 = #l
+  local im = -1
+
+  while (i1 < i2) do
+    im = math.floor((i1 + i2) / 2)
+    if (ti < l[im]) then
+      i2 = im - 1
+    else
+      i1 = im + 1
+    end
+  end
+
+  local ratio = (ti - l[im]) / math.max(l[im + 1] - l[im], 1e-5)
+  return (im * (1 - ratio) + (im + 1) * ratio) * (1 / #l)
+end
+
+--/////////////////////////////////////////////////////////////////////////////////////////////
+
+--
+
+local offset = trackbar_offset / 100
+local space = trackbar_space / 100 / 2
+
+obj.setanchor("anchors", order + 1, "line") --アンカー/////////////////////////////////
+
+order = order + 1
+
+local fix = fix == 1
+local point = anchor_adjust(anchors, order, obj.getvalue("zoom"))
+local guide_visible = (guide_visible == 1) and (guide_saving_disable == 0 or not obj.getinfo("saving")) or false
+
+
+local zoom = 100 / obj.getvalue("zoom")
+local alpha = 1 / obj.getvalue("alpha")
+local rx = -obj.rx
+local ry = -obj.ry
+local rz = -obj.rz
+
+
+if BezierPathTable == nil then
+  BezierPathTable = {}
+end
+if BezierPathTable[obj.effect_id] == nil then
+  BezierPathTable[obj.effect_id] = {}
+end
+
+if (not obj.getoption("multi_object")) then
+  BezierPathTable[obj.effect_id].l = linear_time_bezier_table(point, 10000)
+elseif (obj.index == 0) then
+  BezierPathTable[obj.effect_id].l = linear_time_bezier_table(point, 10000)
+end
+
+
+local iii = offset - (1 - (obj.index + 1) / obj.num) * space
+local t0 = linear_time_bezier(iii, BezierPathTable[obj.effect_id].l)
+local t1 = linear_time_bezier((iii - 0.01), BezierPathTable[obj.effect_id].l)
+local result = bernstein_bezier(t0, order, point)
+local result_ago = bernstein_bezier(t1, order, point)
+obj.ox = result.x + point[-10].x
+obj.oy = result.y + point[-10].y
+local deg = 0
+if fix then
+  deg = math.deg(math.atan2(result.y - result_ago.y, result.x - result_ago.x))
+end
+
+if BezierPathTable[obj.effect_id].deg == nil then
+  BezierPathTable[obj.effect_id].deg = {}
+end
+if BezierPathTable[obj.effect_id].deg[obj.index] == nil then
+  BezierPathTable[obj.effect_id].deg[obj.index] = {}
+end
+
+local tmp = BezierPathTable[obj.effect_id].deg[obj.index][obj.frame-1] and BezierPathTable[obj.effect_id].deg[obj.index][obj.frame-1] or 0
+local diff = (tmp - deg) % 360
+if diff > 180 then
+  diff = diff - 360
+end
+deg = tmp - diff
+BezierPathTable[obj.effect_id].deg[obj.index][obj.frame] = deg
+
+
+obj.rz = -rz + deg + rzPlus
+
+
+if (iii < 0 or 1 < iii) then
+  obj.alpha = 0
+else
+  if (guide_visible) then
+    obj.effect()
+    obj.draw()
+  end
+end
+--////////////////////////////////////////////////////////////////////////////////////
+
+--debug_print()
+--ガイドの描画//////////////////////////////////////////////
+if (guide_visible and (obj.index == obj.num - 1)) then
+  local line_size = line_sizeD + 2 or 3
+  local handle_size = handle_sizeD or 15
+  --曲線/////////////////////////////////////////////////////////////////////
+  obj.load("figure", "円", 0x2ca9e1, line_size)
+  local l = linear_time_bezier_table(point, line_density * 100)
+  for iii = 0, line_density do
+    local t = linear_time_bezier(iii / line_density, l)
+    local result = bernstein_bezier(t, order, point)
+    result.x = result.x + point[-10].x
+    result.y = result.y + point[-10].y
+    obj.draw(result.x, result.y, 0, zoom, alpha, rx, ry, rz)
+  end
+  --開始/終了座標の点/////////////////////////////////////////////////////////////////////
+  obj.load("figure", "四角形", 0x3de02d, handle_size)
+  obj.draw(point[-10].x, point[-10].y, 0, zoom, alpha, rx, ry, rz)
+  obj.load("figure", "四角形", 0xc21fd2, handle_size)
+  obj.draw(point[#point].x + point[-10].x, point[#point].y + point[-10].y, 0, zoom, alpha, rx, ry, rz)
+  --ハンドルの点/////////////////////////////////////////////////////////////////////
+  obj.load("figure", "円", 0x2ca9e1, handle_size)
+  for i = 2, order - 1 do
+    obj.draw(point[i].x + point[-10].x, point[i].y + point[-10].y, 0, zoom, alpha, rx, ry, rz)
+  end
+  --数字/////////////////////////////////////////////////////////////////////
+  for i = 1, order do
+    local handle_txt_size = handle_size * 0.7
+    local handle_txt_offset = handle_txt_size * 0.5
+    obj.setfont("メイリオ", handle_txt_size, 3)
+    obj.load("text", i)
+    obj.draw(point[i].x + handle_txt_offset + point[-10].x, point[i].y + handle_txt_offset + point[-10].y, 0, zoom, alpha, rx, ry, rz)
+  end
+  --///////////////////////////////////////////////////////////////////////////////
+end

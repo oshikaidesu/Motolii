@@ -1,0 +1,37 @@
+[ FlowType_K ]
+
+AviUtl ExEdit2向けテキストアニメーション作成支援ツール
+
+Version: 0.3.3
+License: MIT
+Author: Korarei
+Website: https://github.com/korarei/AviUtl2_FlowType_K_Script
+Report Issue: https://github.com/korarei/AviUtl2_FlowType_K_Script/issues
+
+以下の機能が追加される
+
+アニメーション効果
+
+- Text\Motion@FlowType_K: 全自動リリックモーション
+- Text\Island@FlowType_K: パーツ分解
+- Text\Kerning@FlowType_K: 全自動カーニング
+- Text\Repeat@FlowType_K: 高機能画像ループ
+- Text\Trim@FlowType_K: 余白除去
+- Text\Deform@FlowType_K: 変形
+- Text\Align@FlowType_K: 整列
+- Text\Transform@FlowType_K: 座標変換
+- Text\Blink@FlowType_K: 点滅
+- Text\Echo@FlowType_K: 残像
+
+オブジェクトメニュー (オブジェクトを右クリック)
+
+- FlowType_K\テキストを文字ごとに分解: テキスト分解
+
+プロパティメニュー (オブジェクト設定項目を右クリック)
+
+- FlowType_K\現在値で上書き: 現在値を指定した区間にコピー
+- FlowType_K\値を反転: 指定した区間の値を反転 (符号，ON/Off)
+- FlowType_K\プロパティ名をコピー: 指定した形式でプロパティ名をクリップボードへコピー
+- FlowType_K\参照式をコピー: 参照式をクリップボードへコピー
+
+- FlowType_K\エフェクトをコピー: 指定した形式でエフェクト情報をクリップボードへコピー

@@ -1,0 +1,1267 @@
+--information:プロシージャル模様_H v1.20 by HexBrowns
+--label:HexScript
+--object
+
+--group:出力サイズ
+--track@width:幅,16,4000,1920,1
+--track@height:高さ,16,4000,1080,1
+--group
+
+--select@form:基本形=0,雲=0,縞=1,セル=2,六方格子=3,反応拡散=4
+
+--group:形
+--track@scale:大きさ,1,400,100,0.1
+--track@aspect:縦横比,10,1000,100,0.1
+--track@angle:向き,-180,180,0,0.1
+--track@seed:シード,0,9999,0,1
+--group
+
+--group:粒度
+--track@octaves:重ね回数,1,6,3,1
+--track@gain:減衰率,0.20,0.80,0.40,0.01
+--track@lacunarity:周波数倍率,1.50,3.00,2.00,0.01
+--group
+
+--group:歪み
+--track@warp:歪み量,0,300,0,0.1
+--track@warp_scale:歪みの大きさ,10,800,200,0.1
+--track@warp_iter:歪みの反復,1,8,1,1
+-- v1.01: 「歪み量が 0 なら隠す」の 2 行を外した。--hide@ の条件にトラックは書けず、
+-- ホストが起動のたびに invalid hide rule condition item を出して隠していなかった。
+-- 項目は常に出る（保存値・描画は v1.00 と同じ）。
+-- issue: AI/scripts/issues/20260923_procedural_texture_hide_rule_on_track.md
+--group
+
+--group:雲
+--select@noise_type:ノイズの種類=0,勾配ノイズ=0,値ノイズ=1,ブロック=2,セルノイズ=3
+--hide@noise_type:form~=0
+-- v1.20: 雲のノイズの種類を足した。既定の勾配ノイズは v1.10 までと同じ fbm（歪み・縞の不均等は種類によらず勾配ノイズ）。
+-- 値ノイズは格子に沿った縞が出る、ブロックは補間しない（ドット絵の雲）、セルノイズは泡状の雲。
+--group
+
+--group:縞
+--track@uneven:不均等,0,200,0,0.1
+--hide@uneven:form~=1
+--group
+
+--group:セル
+--select@cell_out:セル出力=1,距離=0,境界=1,セル番号=2
+--hide@cell_out:form~=2
+--track@jitter:ばらけ,0,100,80,0.1
+--hide@jitter:form~=2
+--select@cell_dist:距離の種類=0,ユークリッド=0,マンハッタン=1,チェビシェフ=2,ミンコフスキー=3
+--hide@cell_dist:form~=2
+--track@mink_p:距離の次数,1.00,10.00,3.00,0.01
+--hide@mink_p:form~=2
+--hide@mink_p:cell_dist~=3
+-- v1.20: セルの距離の種類を足した。既定のユークリッドは v1.10 までと同じ voronoi。
+-- マンハッタンはひし形・斜めの境界、チェビシェフは四角いセル。ミンコフスキーは次数 1 でマンハッタン、
+-- 2 でユークリッド、大きいほどチェビシェフに近づく。
+--group
+
+--group:六方格子
+--select@hex_out:格子出力=0,点=0,セル距離=1,セル番号=2
+--hide@hex_out:form~=3
+--track@dot:点の大きさ,0,100,40,0.1
+--hide@dot:form~=3
+--track@dot_var:大きさのばらつき,0,50,0,0.1
+--hide@dot_var:form~=3
+--group
+
+--group:反応拡散
+--track@rd_feed:供給率,0.010,0.090,0.055,0.001
+--hide@rd_feed:form~=4
+--track@rd_kill:除去率,0.040,0.075,0.062,0.001
+--hide@rd_kill:form~=4
+--track@rd_steps:ステップ数,100,2000,800,1
+--hide@rd_steps:form~=4
+--group
+
+--group:整形
+--select@shape:階調=0,連続=0,段=1,線=2,累乗=3,閾値=4
+--track@steps:段数,1,32,8,1
+--hide@steps:shape==0
+--hide@steps:shape>2
+--track@line_w:線幅,0.5,20.0,2.0,0.1
+--hide@line_w:shape~=2
+--track@power:指数,0.1,32.0,4.0,0.1
+--hide@power:shape~=3
+--track@thresh:しきい値,0,100,80,0.1
+--hide@thresh:shape~=4
+--track@soft:柔らかさ,0,50,5,0.1
+--hide@soft:shape~=4
+--track@contrast:コントラスト,-100,100,0,0.1
+--check@invert:反転,0
+-- v1.02: 階調「段」の段数 1 を 2 値（段数 2 と同じ）にした（v1.01 まではほぼ全面が暗くなった）。
+-- コントラストのマイナス側を -100 で平らになるまで弱めるだけにした（v1.01 までは -33 で平らになり、
+-- それより下で明暗が反転した）。0 以上と、マイナスを使っていない保存値の絵は v1.01 と同じ。
+-- issue: AI/scripts/issues/20260926_manual_review_minor_findings.md
+--group
+
+--group:出力レベル
+--track@amp:振幅,0,100,10,0.1
+--track@level:基準,0,100,50,0.1
+--color@col_lo:暗色,0x000000
+--color@col_hi:明色,0xffffff
+--select@color_space:色空間=0,sRGB=0,リニア=1,Oklab=2,HSV=3,HSL=4,Lab=5,LCh=6,Oklch=7,HWB=9
+--select@hue_path:色相経路=0,短経路=0,長経路=1
+--hide@hue_path:color_space<3
+--hide@hue_path:color_space==5
+-- v1.10: 暗色→明色の補間に 色空間・色相経路 を足した。既定の sRGB は v1.02 までと同じ lerp。
+-- 仕様: AI/specifications/20261013_色空間拡張_spec.md
+--group
+
+--[[
+プロシージャル模様_H v1.00
+
+  自然界の模様を手続き的に生成するカスタムオブジェクト。
+  仕様: AI/docs/procedural-texture-presets.md（用途1「資料の背景」）
+  検証: AI/scripts/プロシージャルテクスチャ_H/verify_phase1.py
+
+  ※このコメント内で行頭に @ を置かないこと（マルチセクションの偽登録を招く）。
+
+  --- 構成 ---
+
+  仕様の 7 部品 A〜G をすべて 1 本にまとめてある。プリセットごとに別コードを
+  書くのではなく、「基本形を選び、共通のつまみを足すと別の絵になる」構造にした。
+
+      基本形 → 歪み → 整形 → 出力レベル
+
+  基本形が 5 つ（雲 / 縞 / セル / 六方格子 / 反応拡散）、他は全部つまみ。
+  部品G（流体移流）は基本形ではなく**歪みの反復**として入っている。
+  仕様の 3 用途 22 項目がこの組み合わせで出る。
+
+  用途1（資料の背景）の 7 項目はこの組み合わせで出る。
+
+      霞         雲、大きさ 180、歪み 0
+      抽象大理石 縞、大きさ 120、歪み 60 / 歪みの大きさ 160
+      等高線     雲、大きさ 150、階調=段（段数 10）
+      網目       セル（境界）、大きさ 110、階調=線（段数 1、線幅 2）
+      網点       六方格子、大きさ 28、点の大きさ 32
+      風紋       縞、大きさ 90、歪み 40 / 歪みの大きさ 400、重ね回数 2
+      紙質感     雲、大きさ 3.5、重ね回数 1、振幅 4
+
+  この値は Preset/プロシージャル模様_H.資料の背景.*.preset として配ってある。
+  正本は verify_phase1.py の PRESETS で、build_presets.py が書き出す。
+
+  抽象大理石と風紋はどちらも「縞＋歪み」。歪みの大きさで描き分けている。
+  大理石は短い波長で乱れ、風紋は長い波長で緩くうねる。ここを近づけると
+  2 つが見分けられなくなるので、既定値は離してある。
+
+  --- 用途2: クリッピング素材 ---
+
+  文字やロゴの形に切り抜いて中身にする。**特徴サイズを切り抜き形状の最細部の
+  1/3〜1/8 に収める**のが仕様の唯一の前提で、超えると単色面に、
+  下回りすぎるとノイズに見える。大きさ で合わせる。
+
+      大理石       縞、歪み 90 / 大きさ 150（反復 1）      細い文字にも耐える
+      煙           雲、大きさ 200、重ね 5、減衰 0.55       太い文字
+      マーブリング 縞、歪み 200 / 大きさ 140、**反復 5**   面積が要る
+      反応拡散     基本形=反応拡散、供給 0.055 / 除去 0.062 中〜太
+      ステンドグラス セル（セル番号）、ばらけ 45           中〜太
+      貫入         セル（境界）＋反転＋累乗 8              大きめの文字
+      地層         縞、向き 90、**不均等 120**             横組み文字と相性良
+      鱗           六方格子（セル距離）、点 95             規則性が欲しいとき
+
+  配色は後から載せ替える前提なので、生成段階はグレースケール（暗色/明色の既定）。
+
+  --- 部品F と G の実装 ---
+
+  **部品G（流体移流 = マーブリング）は新しい基本形ではなく「歪みの反復」。**
+  歪みを繰り返し掛けると筋が伸びて渦になる。仕様は「複数パスが要る」と
+  書いているが、シェーダー内のループで足りた。1 回なら大理石、3〜8 回でマーブル。
+
+  **部品F（反応拡散）だけは基本形を足した。** Lua 側で 2 枚の cache: を
+  ping-pong しながら Gray-Scott を回し、その場を t0 で受け取る。
+  実機で 2048 回の dispatch が 1 回も欠けずに積めることを確認済み（PRB 節）。
+
+  作業解像度は **256 固定**。必要ステップ数は解像度の 2 乗に比例するので、
+  解像度を上げるのが最も高くつく。模様の特徴サイズはグリッドのセル数で
+  決まりピクセル数では決まらないため、ここで作って引き伸ばせば
+  絵は変わらずコストだけ下がる。
+
+  種は**ランダムなセル**にしてある。規則正しい格子を種にすると対称性が崩れず、
+  何ステップ回しても格子状のリングのまま機械的な絵になった（実機で確認）。
+
+  --- 地層と鱗のために足したもの ---
+
+  **縞の不均等**: 帯の座標だけを 1 次元で歪める。2 次元の歪み（部品B）だと
+  帯が曲がってしまい、「真っ直ぐなまま厚みだけ不均等」が作れなかった。
+
+  **六方格子の出力**: 点 / セル距離 / セル番号。鱗はセル距離（中心 1 → 縁 0 の
+  勾配）で出す。点のままだと水玉にしか見えない。
+
+  --- 用途3: オーバーレイ素材 ---
+
+  合成モードで既存の絵に重ねる素材。前提が背景用と逆で、
+  **振幅は圧縮せず（振幅 100 / 基準 50）、輝度分布を両極へ寄せる**。
+  中間調が多いと、どの合成モードでも「霞がかかっただけ」になる。
+
+      コースティクス セル境界＋反転＋累乗 指数 9、歪み 55        → スクリーン
+      光筋           雲＋縦横比 900＋閾値 74 / 柔らかさ 24       → スクリーン
+      霜             セル境界＋反転＋累乗 指数 6、歪み 60        → スクリーン
+      放電           セル境界＋反転＋閾値 98 / 柔らかさ 2        → 加算
+      ひび           セル境界＋反転＋累乗 指数 10、暗色と明色を入替 → 乗算
+      グレイン       雲、大きさ 2.5、重ね回数 1、振幅 30         → ソフトライト
+      水滴           セル距離＋反転＋累乗 指数 14               → スクリーン
+
+  乗算用の「白地に黒線」は、反転をもう 1 段足すのではなく
+  **暗色と明色を入れ替えて**作る。整形の前後に反転が 2 つあると、
+  どちらが効いているのか読めなくなるため。
+
+  光筋だけ閾値整形。累乗だと fBm の中間調が残って「霞がかかっただけ」になる。
+  指数を上げれば中間調は減るが明部まで暗くなり、コントラストを足すと
+  両端が飽和して平均が上がる。どちらも前提を満たせなかった（実測）。
+
+  --- 用途3 で足りなかったもの ---
+
+  縦横比だけ。等方なノイズは何を掛けても方向を持たないので、光筋のような
+  方向のある絵は座標を伸ばすしか作りようがない。逆に言えば、フェーズ3 で
+  増えた生成部品はこれ 1 つで、あとは整形段の 累乗 / 閾値 で足りた。
+
+  薄膜色（仕様の表にある 8 番目）は入れていない。位相を色相へ写す処理が要り、
+  「生成段階はグレースケール、配色は後から」という全体の方針と衝突する。
+  仕様自身も「この分類で唯一、色が生成側に固定される」と書いている。
+
+  --- なぜこの粒度か ---
+
+  部品ごとに独立したスクリプトへ割らなかった理由は 3 つ。
+
+  1. 仕様が「用途別プリセットは、すべてこの 7 部品のパラメータ違い」と定義している。
+     コードを割ると、同じ式が複数の場所に写って静かにズレる
+  2. 歪み（部品B）は全部の基本形に掛かる。割ると 4 回複製することになる
+  3. マルチセクションにすると HLSL のヘルパーがセクション間で共有できず
+     （au2-hlsl-strict）、noise / voronoi / hash を丸ごと複製する羽目になる
+
+  逆に、これ以上は共通化しない。基本形を 1 つの数式へ畳んで
+  「係数で縞にも雲にもなる」形にはしていない。読めなくなるし、
+  --hide@ で出し分ける単位も失う。**ユーザーが選ぶ単位＝基本形**で止める。
+
+  分岐のコストは無視できる。form / shape は cbuffer 由来で描画ごとに一定なので、
+  ワープ内で分岐が割れない（uniform branch）。
+
+  --- --hide@ について ---
+
+  同じ項目に複数行書くと OR で効く（au2-script-header）。線幅を
+  「階調が 連続 でも 段 でもないときだけ出す」形で使っている。
+
+  --- v1.20: 方式の選択（演出として選べるアルゴリズムの違い） ---
+
+  雲のノイズの種類（勾配ノイズ / 値ノイズ / ブロック / セルノイズ）と、
+  セルの距離の種類（ユークリッド / マンハッタン / チェビシェフ / ミンコフスキー）。
+  **既定はどちらも v1.10 までの式をそのまま通る**（新しい関数は別に置き、既定では呼ばない）。
+  値ノイズ・ブロック・セルノイズは、1 段の標準偏差が勾配ノイズと揃うように係数を決めてある
+  （同じ 振幅 / コントラスト で同じくらいの明暗になる）。ユークリッド以外の距離は
+  F1 の取りこぼしを避けて近傍を 5x5 に広げた（次数 1 以上なら 5x5 で F1 は取りこぼさない）。
+  検証: AI/scripts/プロシージャルテクスチャ_H/verify_modes.py
+
+  --- 未対応 ---
+
+  タイル状に繰り返しても継ぎ目が出ない（シームレス）生成には対応していない。
+  背景 1 枚として使う前提。必要になったら別途。
+
+  出力は常に不透明。加算・スクリーン・乗算で重ねる分にはこれで足りる
+  （黒は加算で無効、白は乗算で無効）が、通常合成で重ねたいならアルファが要る。
+
+  時間で動かす手当てはしていない。仕様の「動かす場合」は未着手。
+]]
+
+--[[pixelshader@ps_ptex_field:
+cbuffer Params : register(b0) {
+    float3 col_lo;       //  0- 2
+    float amp;           //  3
+    float3 col_hi;       //  4- 6
+    float level;         //  7
+    float2 img_size;     //  8- 9
+    float form;          // 10
+    float scale;         // 11
+    float angle;         // 12   ラジアン
+    float seed;          // 13
+    float octaves;       // 14
+    float gain;          // 15
+    float lacunarity;    // 16
+    float cell_out;      // 17
+    float jitter;        // 18
+    float dot_size;      // 19
+    float dot_var;       // 20
+    float warp;          // 21
+    float warp_scale;    // 22
+    float shape;         // 23
+    float steps;         // 24
+    float line_w;        // 25
+    float contrast;      // 26
+    float invert;        // 27
+    float aspect;        // 28
+    float power;         // 29
+    float thresh;        // 30
+    float soft;          // 31
+    float warp_iter;     // 32
+    float uneven;        // 33
+    float hex_out;       // 34
+    float cs_space;      // 35   色空間（0 sRGB = v1.02 までと同じ lerp。それ以外は col_lo / col_hi がその色空間の値）
+    float hue_long;      // 36   色相経路（1 で長い方を回る）
+    float cell_dist;     // 37   セルの距離の種類（0 ユークリッド = v1.10 までと同じ voronoi）
+    float mink_p;        // 38   ミンコフスキーの次数（1〜10）
+    float noise_kind;    // 39   雲のノイズの種類（0 勾配ノイズ = v1.10 までと同じ fbm）
+};
+
+Texture2D pre : register(t0);
+SamplerState smp : register(s0);
+
+// ベクトル型を先に並べて 16 バイト境界の穴を無くしてある（au2-shader-lua）。
+// 40 スロット。ダミーは 1 つも要らない。
+// 追加はスカラーだけなので末尾に積んでよい。ここに float2 以上を足すと
+// 境界をまたいで穴が開くので、そのときは並べ直すこと。
+
+// ==== colorspace.hlsl ここから（AI/tools/sync_colorspace.py が書き写す。直すのは正本） ====
+// colorspace.hlsl v1.01 — 色空間の変換・補間・色相回転・色差（HexBrowns）
+// 正本: AI/tools/assets/colorspace.hlsl。各スクリプトの印の間へは AI/tools/sync_colorspace.py が書き写す（写しを直さない）
+// Lua 側の同じ式: Script/EffectUtils_ColorSpace.lua。机上検証: AI/scripts/色空間拡張/verify_colorspace.py
+//
+// 色はすべてストレート（乗算済みでない）の sRGB（0〜1）で受け渡す。
+// 色空間の番号（全スクリプト共通。@図形グラデーション_H と同じ）
+//   0 sRGB / 1 リニア / 2 Oklab / 3 HSV / 4 HSL / 5 Lab / 6 LCh / 7 Oklch / 8 XYZ / 9 HWB
+// 色相のある色空間（3 / 4 / 6 / 7 / 9）は x に色相（0〜1 周）を置く。
+//   HSV (h, s, v) / HSL (h, s, l) / HWB (h, w, b) / LCh (h, C, L) / Oklch (h, C, L)
+// Lab は D65 の白（XYZ を経由。CSS の lab() は D50 なので値は少し違う）。
+// 色差の種類: 0 RGB / 1 YCbCr（色差だけ。明るさを見ない）/ 2 Oklab / 3 CIEDE2000。
+//   どれも黒と白の差がおよそ 1 になるように割ってある（YCbCr は明るさを見ないので黒と白は 0）
+
+#define CS_TAU 6.28318530717958647692
+
+float cs_lin1(float c) {
+    return c <= 0.04045 ? c / 12.92 : pow(abs((c + 0.055) / 1.055), 2.4);
+}
+
+float cs_srgb1(float c) {
+    return c <= 0.0031308 ? c * 12.92 : 1.055 * pow(abs(c), 1.0 / 2.4) - 0.055;
+}
+
+float3 cs_to_linear(float3 c) {
+    return float3(cs_lin1(c.r), cs_lin1(c.g), cs_lin1(c.b));
+}
+
+// リニア → sRGB。範囲外は切り詰める
+float3 cs_to_srgb(float3 c) {
+    float3 s = saturate(c);
+    return float3(cs_srgb1(s.r), cs_srgb1(s.g), cs_srgb1(s.b));
+}
+
+float cs_cbrt(float x) {
+    return sign(x) * pow(abs(x), 1.0 / 3.0);
+}
+
+// Oklab（Björn Ottosson, 2020）
+float3 cs_linear_to_oklab(float3 c) {
+    float l = 0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b;
+    float m = 0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b;
+    float s = 0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b;
+    float l_ = cs_cbrt(l);
+    float m_ = cs_cbrt(m);
+    float s_ = cs_cbrt(s);
+    return float3(
+        0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
+        1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+        0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_);
+}
+
+float3 cs_oklab_to_linear(float3 c) {
+    float l_ = c.x + 0.3963377774 * c.y + 0.2158037573 * c.z;
+    float m_ = c.x - 0.1055613458 * c.y - 0.0638541728 * c.z;
+    float s_ = c.x - 0.0894841775 * c.y - 1.2914855480 * c.z;
+    float l = l_ * l_ * l_;
+    float m = m_ * m_ * m_;
+    float s = s_ * s_ * s_;
+    return float3(
+         4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s);
+}
+
+// sRGB（D65）のリニア ⇔ XYZ（IEC 61966-2-1）
+float3 cs_linear_to_xyz(float3 c) {
+    return float3(
+        0.4124564 * c.r + 0.3575761 * c.g + 0.1804375 * c.b,
+        0.2126729 * c.r + 0.7151522 * c.g + 0.0721750 * c.b,
+        0.0193339 * c.r + 0.1191920 * c.g + 0.9503041 * c.b);
+}
+
+float3 cs_xyz_to_linear(float3 c) {
+    return float3(
+         3.2404542 * c.x - 1.5371385 * c.y - 0.4985314 * c.z,
+        -0.9692660 * c.x + 1.8760108 * c.y + 0.0415560 * c.z,
+         0.0556434 * c.x - 0.2040259 * c.y + 1.0572252 * c.z);
+}
+
+// CIE 15: ε = 216/24389、κ = 24389/27
+float cs_lab_f(float t) {
+    return t > 0.008856452 ? cs_cbrt(t) : (903.2963 * t + 16.0) / 116.0;
+}
+
+float cs_lab_finv(float f) {
+    float f3 = f * f * f;
+    return f3 > 0.008856452 ? f3 : (116.0 * f - 16.0) / 903.2963;
+}
+
+float3 cs_xyz_to_lab(float3 c) {
+    float fx = cs_lab_f(c.x / 0.95047);
+    float fy = cs_lab_f(c.y);
+    float fz = cs_lab_f(c.z / 1.08883);
+    return float3(116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz));
+}
+
+float3 cs_lab_to_xyz(float3 c) {
+    float fy = (c.x + 16.0) / 116.0;
+    float fx = fy + c.y / 500.0;
+    float fz = fy - c.z / 200.0;
+    return float3(cs_lab_finv(fx) * 0.95047, cs_lab_finv(fy), cs_lab_finv(fz) * 1.08883);
+}
+
+// (L, a, b) → (色相 0〜1 周, C, L)
+float3 cs_lab_to_polar(float3 v) {
+    return float3(frac(atan2(v.z, v.y) / CS_TAU + 1.0), length(float2(v.y, v.z)), v.x);
+}
+
+float3 cs_polar_to_lab(float3 p) {
+    return float3(p.z, p.y * cos(p.x * CS_TAU), p.y * sin(p.x * CS_TAU));
+}
+
+float cs_hue_of(float3 c, float mx, float mn) {
+    float d = mx - mn;
+    float h = 0.0;
+    if (d > 0.000001) {
+        if (mx == c.r) {
+            h = (c.g - c.b) / d;
+        } else if (mx == c.g) {
+            h = (c.b - c.r) / d + 2.0;
+        } else {
+            h = (c.r - c.g) / d + 4.0;
+        }
+    }
+    return frac(h / 6.0 + 1.0);
+}
+
+float3 cs_hue_rgb(float h) {
+    float3 p = abs(frac(float3(h, h, h) + float3(1.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
+    return saturate(p - 1.0);
+}
+
+float3 cs_rgb_to_hsv(float3 c) {
+    float mx = max(c.r, max(c.g, c.b));
+    float mn = min(c.r, min(c.g, c.b));
+    float s = mx > 0.000001 ? (mx - mn) / mx : 0.0;
+    return float3(cs_hue_of(c, mx, mn), s, mx);
+}
+
+float3 cs_hsv_to_rgb(float3 c) {
+    return c.z * lerp(float3(1.0, 1.0, 1.0), cs_hue_rgb(c.x), saturate(c.y));
+}
+
+float3 cs_rgb_to_hsl(float3 c) {
+    float mx = max(c.r, max(c.g, c.b));
+    float mn = min(c.r, min(c.g, c.b));
+    float l = (mx + mn) * 0.5;
+    float den = 1.0 - abs(2.0 * l - 1.0);
+    float s = den > 0.000001 ? (mx - mn) / den : 0.0;
+    return float3(cs_hue_of(c, mx, mn), s, l);
+}
+
+float3 cs_hsl_to_rgb(float3 c) {
+    float chroma = (1.0 - abs(2.0 * c.z - 1.0)) * saturate(c.y);
+    return (cs_hue_rgb(c.x) - 0.5) * chroma + c.z;
+}
+
+float3 cs_rgb_to_hwb(float3 c) {
+    float mx = max(c.r, max(c.g, c.b));
+    float mn = min(c.r, min(c.g, c.b));
+    return float3(cs_hue_of(c, mx, mn), mn, 1.0 - mx);
+}
+
+float3 cs_hwb_to_rgb(float3 c) {
+    float w = max(c.y, 0.0);
+    float b = max(c.z, 0.0);
+    float sum = w + b;
+    if (sum > 1.0) {
+        w = w / sum;
+        b = b / sum;
+    }
+    return cs_hue_rgb(c.x) * (1.0 - w - b) + w;
+}
+
+// リニアが sRGB の範囲に入っているか。float32 の誤差の分だけ、値の大きさに比例して許す
+// （決まった幅で許すと、値の小さい暗い色で切り詰めたときに色相がずれる）
+bool cs_in_gamut(float3 lin) {
+    float e = max(abs(lin.r), max(abs(lin.g), abs(lin.b))) * 0.000002 + 0.000000001;
+    return all(lin >= -e) && all(lin <= 1.0 + e);
+}
+
+// Oklch (h, C, L) をリニアへ。sRGB に無い色は、明るさと色相を保ったまま C を下げて収める（二分探索 16 回）
+float3 cs_oklch_to_linear_fit(float3 p) {
+    float3 lab = cs_polar_to_lab(p);
+    float3 lin = cs_oklab_to_linear(lab);
+    if (!cs_in_gamut(lin)) {
+        float lo = 0.0;
+        float hi = max(p.y, 0.0);
+        [loop]
+        for (int i = 0; i < 16; i++) {
+            float mid = (lo + hi) * 0.5;
+            float3 t = cs_oklab_to_linear(cs_polar_to_lab(float3(p.x, mid, p.z)));
+            if (cs_in_gamut(t)) {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        lin = cs_oklab_to_linear(cs_polar_to_lab(float3(p.x, lo, p.z)));
+    }
+    return lin;
+}
+
+// sRGB → 色空間の値
+float3 cs_to_space(float3 c, float space) {
+    float3 r = c;
+    if (space > 8.5) {
+        r = cs_rgb_to_hwb(c);
+    } else if (space > 7.5) {
+        r = cs_linear_to_xyz(cs_to_linear(c));
+    } else if (space > 6.5) {
+        r = cs_lab_to_polar(cs_linear_to_oklab(cs_to_linear(c)));
+    } else if (space > 5.5) {
+        r = cs_lab_to_polar(cs_xyz_to_lab(cs_linear_to_xyz(cs_to_linear(c))));
+    } else if (space > 4.5) {
+        r = cs_xyz_to_lab(cs_linear_to_xyz(cs_to_linear(c)));
+    } else if (space > 3.5) {
+        r = cs_rgb_to_hsl(c);
+    } else if (space > 2.5) {
+        r = cs_rgb_to_hsv(c);
+    } else if (space > 1.5) {
+        r = cs_linear_to_oklab(cs_to_linear(c));
+    } else if (space > 0.5) {
+        r = cs_to_linear(c);
+    }
+    return r;
+}
+
+// 色空間の値 → sRGB（0〜1）。Oklch だけは C を下げて sRGB に収め、ほかは切り詰める
+float3 cs_from_space(float3 v, float space) {
+    float3 r = saturate(v);
+    if (space > 8.5) {
+        r = saturate(cs_hwb_to_rgb(v));
+    } else if (space > 7.5) {
+        r = cs_to_srgb(cs_xyz_to_linear(v));
+    } else if (space > 6.5) {
+        r = cs_to_srgb(cs_oklch_to_linear_fit(v));
+    } else if (space > 5.5) {
+        r = cs_to_srgb(cs_xyz_to_linear(cs_lab_to_xyz(cs_polar_to_lab(v))));
+    } else if (space > 4.5) {
+        r = cs_to_srgb(cs_xyz_to_linear(cs_lab_to_xyz(v)));
+    } else if (space > 3.5) {
+        r = saturate(cs_hsl_to_rgb(v));
+    } else if (space > 2.5) {
+        r = saturate(cs_hsv_to_rgb(v));
+    } else if (space > 1.5) {
+        r = cs_to_srgb(cs_oklab_to_linear(v));
+    } else if (space > 0.5) {
+        r = cs_to_srgb(v);
+    }
+    return r;
+}
+
+bool cs_is_polar(float space) {
+    return (space > 2.5 && space < 4.5) || (space > 5.5 && space < 7.5) || space > 8.5;
+}
+
+// 色相を持たない（無彩色の）値か
+bool cs_no_hue(float3 v, float space) {
+    bool r = v.y < 0.0001;
+    if (space > 8.5) {
+        r = v.y + v.z > 0.9999;
+    } else if (space > 6.5) {
+        r = v.y < 0.0002;
+    } else if (space > 5.5) {
+        r = v.y < 0.05;
+    }
+    return r;
+}
+
+// 色空間の値どうしの補間。a0 / a1 は不透明度で、乗算済みのまま混ぜる（透明へ向かっても黒ずまない。CSS と同じ）。
+// 色相のある色空間では色相だけは乗算せず、無彩色の側は相手の色相に合わせる。hue_long > 0.5 で長い方を回る。
+// 戻り値の xyz は色空間の値（cs_from_space で sRGB に戻す）、w は不透明度
+float4 cs_mix_values(float3 v0, float a0, float3 v1, float a1, float u, float space, float hue_long) {
+    float a = lerp(a0, a1, u);
+    float3 v = v0;
+    if (cs_is_polar(space)) {
+        float3 x0 = v0;
+        float3 x1 = v1;
+        if (cs_no_hue(x0, space)) {
+            x0.x = x1.x;
+        } else if (cs_no_hue(x1, space)) {
+            x1.x = x0.x;
+        }
+        float dh = x1.x - x0.x;
+        if (hue_long > 0.5) {
+            if (dh > 0.0 && dh < 0.5) {
+                dh = dh - 1.0;
+            } else if (dh <= 0.0 && dh > -0.5) {
+                dh = dh + 1.0;
+            }
+        } else {
+            if (dh > 0.5) {
+                dh = dh - 1.0;
+            } else if (dh < -0.5) {
+                dh = dh + 1.0;
+            }
+        }
+        float2 yz = lerp(float2(x0.y, x0.z) * a0, float2(x1.y, x1.z) * a1, u);
+        yz = a > 0.000001 ? yz / a : lerp(float2(x0.y, x0.z), float2(x1.y, x1.z), u);
+        v = float3(frac(x0.x + dh * u + 1.0), yz.x, yz.y);
+    } else {
+        float3 pc = lerp(v0 * a0, v1 * a1, u);
+        v = a > 0.000001 ? pc / a : lerp(v0, v1, u);
+    }
+    return float4(v, a);
+}
+
+// ストレートの sRGB 2 色を色空間で補間する。戻り値はストレートの sRGB と不透明度
+float4 cs_mix(float4 c0, float4 c1, float u, float space, float hue_long) {
+    float3 v0 = cs_to_space(c0.rgb, space);
+    float3 v1 = cs_to_space(c1.rgb, space);
+    float4 m = cs_mix_values(v0, c0.a, v1, c1.a, u, space, hue_long);
+    return float4(cs_from_space(m.xyz, space), m.w);
+}
+
+// 色相を turns 周だけ回す。space: 3 HSV / 4 HSL / 6 LCh / 7 Oklch / 9 HWB（それ以外は HSV）。
+// Oklch と LCh は明るさと C を保つ（Oklch は sRGB に無ければ C を下げる）
+float3 cs_hue_shift(float3 c, float turns, float space) {
+    float sp = cs_is_polar(space) ? space : 3.0;
+    float3 v = cs_to_space(c, sp);
+    v.x = frac(v.x + turns + 1.0);
+    return cs_from_space(v, sp);
+}
+
+// 鮮やかさを k 倍にする。space: 0 sRGB（Rec.709 の輝度との間で伸ばす。従来の式）/ 3 HSV / 4 HSL / 6 LCh / 7 Oklch
+float3 cs_scale_chroma(float3 c, float k, float space) {
+    float3 r = c;
+    if (cs_is_polar(space) && space < 8.5) {
+        float3 v = cs_to_space(c, space);
+        v.y = max(v.y * k, 0.0);
+        r = cs_from_space(v, space);
+    } else {
+        float y = dot(c, float3(0.2126, 0.7152, 0.0722));
+        r = saturate(lerp(float3(y, y, y), c, k));
+    }
+    return r;
+}
+
+// 明るさ（0〜1）。space: 0 sRGB（Rec.709 をガンマのまま。従来の式）/ 1 リニア（相対輝度 Y）/ 2・7 Oklab の L / 5・6 Lab の L / 3 HSV の V / 4 HSL の L
+float cs_lightness(float3 c, float space) {
+    float r = dot(c, float3(0.2126, 0.7152, 0.0722));
+    if (space > 6.5 && space < 7.5) {
+        r = cs_linear_to_oklab(cs_to_linear(c)).x;
+    } else if (space > 4.5 && space < 6.5) {
+        r = cs_xyz_to_lab(cs_linear_to_xyz(cs_to_linear(c))).x / 100.0;
+    } else if (space > 3.5 && space < 4.5) {
+        r = cs_rgb_to_hsl(c).z;
+    } else if (space > 2.5 && space < 3.5) {
+        r = max(c.r, max(c.g, c.b));
+    } else if (space > 1.5 && space < 2.5) {
+        r = cs_linear_to_oklab(cs_to_linear(c)).x;
+    } else if (space > 0.5 && space < 1.5) {
+        r = dot(cs_to_linear(c), float3(0.2126729, 0.7151522, 0.0721750));
+    }
+    return r;
+}
+
+// CIEDE2000（Sharma, Wu, Dalal 2005）。Lab（D65）の値どうし。戻り値は ΔE00（0〜100 程度）
+float cs_ciede2000(float3 lab1, float3 lab2) {
+    float c1 = length(lab1.yz);
+    float c2 = length(lab2.yz);
+    float cb = (c1 + c2) * 0.5;
+    float cb7 = pow(cb, 7.0);
+    float g = 0.5 * (1.0 - sqrt(cb7 / (cb7 + 6103515625.0)));
+    float a1p = lab1.y * (1.0 + g);
+    float a2p = lab2.y * (1.0 + g);
+    float c1p = length(float2(a1p, lab1.z));
+    float c2p = length(float2(a2p, lab2.z));
+    float h1p = (abs(a1p) + abs(lab1.z)) > 0.0 ? atan2(lab1.z, a1p) : 0.0;
+    float h2p = (abs(a2p) + abs(lab2.z)) > 0.0 ? atan2(lab2.z, a2p) : 0.0;
+    if (h1p < 0.0) {
+        h1p = h1p + CS_TAU;
+    }
+    if (h2p < 0.0) {
+        h2p = h2p + CS_TAU;
+    }
+    float dl = lab2.x - lab1.x;
+    float dc = c2p - c1p;
+    float dh = 0.0;
+    float hbp = h1p + h2p;
+    if (c1p * c2p > 0.0) {
+        dh = h2p - h1p;
+        if (dh > 3.14159265) {
+            dh = dh - CS_TAU;
+        } else if (dh < -3.14159265) {
+            dh = dh + CS_TAU;
+        }
+        if (abs(h1p - h2p) > 3.14159265) {
+            hbp = (h1p + h2p < CS_TAU) ? (h1p + h2p + CS_TAU) * 0.5 : (h1p + h2p - CS_TAU) * 0.5;
+        } else {
+            hbp = (h1p + h2p) * 0.5;
+        }
+    }
+    float dhh = 2.0 * sqrt(c1p * c2p) * sin(dh * 0.5);
+    float lbp = (lab1.x + lab2.x) * 0.5;
+    float cbp = (c1p + c2p) * 0.5;
+    float t = 1.0 - 0.17 * cos(hbp - 0.523598776) + 0.24 * cos(2.0 * hbp)
+        + 0.32 * cos(3.0 * hbp + 0.104719755) - 0.20 * cos(4.0 * hbp - 1.099557429);
+    float dtheta = 0.523598776 * exp(-pow((hbp * 57.29577951 - 275.0) / 25.0, 2.0));
+    float cbp7 = pow(cbp, 7.0);
+    float rc = 2.0 * sqrt(cbp7 / (cbp7 + 6103515625.0));
+    float l50 = (lbp - 50.0) * (lbp - 50.0);
+    float sl = 1.0 + 0.015 * l50 / sqrt(20.0 + l50);
+    float sc = 1.0 + 0.045 * cbp;
+    float sh = 1.0 + 0.015 * cbp * t;
+    float rt = -sin(2.0 * dtheta) * rc;
+    float tl = dl / sl;
+    float tc = dc / sc;
+    float th = dhh / sh;
+    return sqrt(max(tl * tl + tc * tc + th * th + rt * tc * th, 0.0));
+}
+
+// 2 色の差。metric: 0 RGB / 1 YCbCr（BT.709 の色差だけ）/ 2 Oklab / 3 CIEDE2000。黒と白の差がおよそ 1
+float cs_distance(float3 c0, float3 c1, float metric) {
+    float r = length(c0 - c1) * 0.57735027;
+    if (metric > 2.5) {
+        float3 l0 = cs_xyz_to_lab(cs_linear_to_xyz(cs_to_linear(c0)));
+        float3 l1 = cs_xyz_to_lab(cs_linear_to_xyz(cs_to_linear(c1)));
+        r = cs_ciede2000(l0, l1) / 100.0;
+    } else if (metric > 1.5) {
+        r = length(cs_linear_to_oklab(cs_to_linear(c0)) - cs_linear_to_oklab(cs_to_linear(c1)));
+    } else if (metric > 0.5) {
+        float3 d = c0 - c1;
+        float cb = dot(d, float3(-0.1146, -0.3854, 0.5));
+        float cr = dot(d, float3(0.5, -0.4542, -0.0458));
+        r = length(float2(cb, cr)) * 1.41421356;
+    }
+    return r;
+}
+// ==== colorspace.hlsl ここまで ====
+
+// hash22 / hash21: Dave Hoskins "Hash without Sine" (MIT, Copyright (c) 2014 David Hoskins) https://www.shadertoy.com/view/4djSRW
+float2 hash22(float2 p) {
+    float3 p3 = frac(float3(p.x, p.y, p.x) * float3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, float3(p3.y, p3.z, p3.x) + 33.33);
+    return frac((float2(p3.x, p3.x) + float2(p3.y, p3.z)) * float2(p3.z, p3.y));
+}
+
+float hash21(float2 p) {
+    float3 p3 = frac(float3(p.x, p.y, p.x) * 0.1031);
+    p3 += dot(p3, float3(p3.y, p3.z, p3.x) + 33.33);
+    return frac((p3.x + p3.y) * p3.z);
+}
+
+// 勾配ノイズ。値ノイズだと格子に沿った縞が見えるので勾配側を使う。
+// 戻り値は概ね -0.7〜0.7。
+float gnoise(float2 p) {
+    float2 i = floor(p);
+    float2 f = frac(p);
+    float2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+
+    float2 g00 = normalize(hash22(i + float2(0.0, 0.0)) * 2.0 - float2(1.0, 1.0));
+    float2 g10 = normalize(hash22(i + float2(1.0, 0.0)) * 2.0 - float2(1.0, 1.0));
+    float2 g01 = normalize(hash22(i + float2(0.0, 1.0)) * 2.0 - float2(1.0, 1.0));
+    float2 g11 = normalize(hash22(i + float2(1.0, 1.0)) * 2.0 - float2(1.0, 1.0));
+
+    float n00 = dot(g00, f - float2(0.0, 0.0));
+    float n10 = dot(g10, f - float2(1.0, 0.0));
+    float n01 = dot(g01, f - float2(0.0, 1.0));
+    float n11 = dot(g11, f - float2(1.0, 1.0));
+
+    return lerp(lerp(n00, n10, u.x), lerp(n01, n11, u.x), u.y);
+}
+
+// fBm。オクターブ数は cbuffer 由来なので、固定 6 回のループを条件で間引く。
+// 動的な上限を [unroll] に渡せないための書き方。
+float fbm(float2 p) {
+    float sum = 0.0;
+    float a = 1.0;
+    float norm = 0.0;
+    float2 q = p;
+    int n = (int)(octaves + 0.5);
+    for (int i = 0; i < 6; ++i) {
+        if (i < n) {
+            sum += gnoise(q) * a;
+            norm += a;
+            q *= lacunarity;
+            a *= gain;
+        }
+    }
+    return sum / max(norm, 1.0e-5);
+}
+
+// Voronoi。3x3 の近傍だけ見る（jitter<=1 ならこれで最近傍を取りこぼさない）。
+// x=F1, y=F2, z=セルのハッシュ
+float3 voronoi(float2 p) {
+    float2 ip = floor(p);
+    float2 fp = p - ip;
+    float f1 = 8.0;
+    float f2 = 8.0;
+    float id = 0.0;
+    for (int j = -1; j <= 1; ++j) {
+        for (int i = -1; i <= 1; ++i) {
+            float2 g = float2((float)i, (float)j);
+            float2 o = hash22(ip + g);
+            float2 pt = g + float2(0.5, 0.5) + (o - float2(0.5, 0.5)) * jitter;
+            float d = length(pt - fp);
+            if (d < f1) {
+                f2 = f1;
+                f1 = d;
+                id = hash21(ip + g);
+            } else if (d < f2) {
+                f2 = d;
+            }
+        }
+    }
+    return float3(f1, f2, id);
+}
+
+// ---- v1.20: 方式の選択。ここから下の関数は既定（勾配ノイズ・ユークリッド）では呼ばない ----
+
+// 値ノイズ。格子点にハッシュの値を置き、gnoise と同じ 5 次の補間で繋ぐ。
+// 格子に沿った縞が出るのが癖（gnoise の上のコメントでわざと避けていたもの）。
+// 1 段の標準偏差は勾配ノイズとほぼ同じ（0.22 / 0.21。verify_modes.py で測った）ので係数は掛けない。
+float vnoise(float2 p) {
+    float2 i = floor(p);
+    float2 f = frac(p);
+    float2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    float a = hash21(i);
+    float b = hash21(i + float2(1.0, 0.0));
+    float c = hash21(i + float2(0.0, 1.0));
+    float d = hash21(i + float2(1.0, 1.0));
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y) - 0.5;
+}
+
+// ブロック。補間しない値ノイズ（格子の 1 マスが 1 色）。重ねるとドット絵の雲になる。
+// 一様乱数の標準偏差 0.289 を 0.75 倍して勾配ノイズ（0.21）に揃える
+float bnoise(float2 p) {
+    return (hash21(floor(p)) - 0.5) * 0.75;
+}
+
+// セルノイズ。ばらけ 1 の F1（最も近い点までの距離）を反転したもの。点の上が明るい泡になる。
+// 0.43 は F1 の平均、1.1 は標準偏差を勾配ノイズに揃える係数（verify_modes.py で測った）
+float cnoise(float2 p) {
+    float2 ip = floor(p);
+    float2 fp = p - ip;
+    float f1 = 8.0;
+    for (int j = -1; j <= 1; ++j) {
+        for (int i = -1; i <= 1; ++i) {
+            float2 g = float2((float)i, (float)j);
+            float2 pt = g + hash22(ip + g);
+            f1 = min(f1, length(pt - fp));
+        }
+    }
+    return (0.43 - f1) * 1.1;
+}
+
+// fbm の種類違い。kind: 1 値ノイズ / 2 ブロック / 3 セルノイズ（0 は上の fbm を使う）
+float fbm_kind(float2 p, int kind) {
+    float sum = 0.0;
+    float a = 1.0;
+    float norm = 0.0;
+    float2 q = p;
+    int n = (int)(octaves + 0.5);
+    for (int i = 0; i < 6; ++i) {
+        if (i < n) {
+            float nv = 0.0;
+            if (kind == 1) {
+                nv = vnoise(q);
+            } else if (kind == 2) {
+                nv = bnoise(q);
+            } else {
+                nv = cnoise(q);
+            }
+            sum += nv * a;
+            norm += a;
+            q *= lacunarity;
+            a *= gain;
+        }
+    }
+    return sum / max(norm, 1.0e-5);
+}
+
+// セルの距離。cell_dist: 1 マンハッタン / 2 チェビシェフ / 3 ミンコフスキー（0 ユークリッドは上の voronoi）
+float cell_metric(float2 d) {
+    float r = abs(d.x) + abs(d.y);
+    if (cell_dist > 2.5) {
+        float pp = clamp(mink_p, 1.0, 10.0);
+        r = pow(abs(pow(abs(d.x), pp) + pow(abs(d.y), pp)), 1.0 / pp);
+    } else if (cell_dist > 1.5) {
+        r = max(abs(d.x), abs(d.y));
+    }
+    return r;
+}
+
+// voronoi の距離違い。返り値の形は voronoi と同じ（x=F1, y=F2, z=セルのハッシュ）。
+// マンハッタンでは自分のマスの点まで最大 2 離れるので、3x3 だと 2 マス先の点を取りこぼす。
+// 5x5 なら 3 マス先の点は 2 以上離れるので、次数 1 以上で F1 を取りこぼさない
+float3 voronoi_metric(float2 p) {
+    float2 ip = floor(p);
+    float2 fp = p - ip;
+    float f1 = 64.0;
+    float f2 = 64.0;
+    float id = 0.0;
+    [loop]
+    for (int j = -2; j <= 2; ++j) {
+        [loop]
+        for (int i = -2; i <= 2; ++i) {
+            float2 g = float2((float)i, (float)j);
+            float2 o = hash22(ip + g);
+            float2 pt = g + float2(0.5, 0.5) + (o - float2(0.5, 0.5)) * jitter;
+            float d = cell_metric(pt - fp);
+            if (d < f1) {
+                f2 = f1;
+                f1 = d;
+                id = hash21(ip + g);
+            } else if (d < f2) {
+                f2 = d;
+            }
+        }
+    }
+    return float3(f1, f2, id);
+}
+
+// 六方格子。2 つのずらした矩形格子のうち近い方を採る。
+// xy=セル中心からの相対、zw=セルの識別座標
+float4 hex_local(float2 p) {
+    float2 s = float2(1.0, 1.7320508);
+    float2 hs = s * 0.5;
+    float2 a = p - floor(p / s) * s - hs;
+    float2 b = (p - hs) - floor((p - hs) / s) * s - hs;
+    float2 gv = (dot(a, a) < dot(b, b)) ? a : b;
+    float2 id = p - gv;
+    return float4(gv.x, gv.y, id.x, id.y);
+}
+
+float4 ps_ptex_field(float4 sv_pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    // 短辺を 1 とする座標。縦横比で模様が潰れないようにする。
+    float short_side = max(min(img_size.x, img_size.y), 1.0);
+    float2 asp = float2(max(img_size.x, 1.0), max(img_size.y, 1.0)) / short_side;
+    float2 q = (uv - float2(0.5, 0.5)) * asp;
+
+    float ca = cos(angle);
+    float sa = sin(angle);
+    q = float2(q.x * ca - q.y * sa, q.x * sa + q.y * ca);
+
+    // 縦横比: 100 で等方。上げると模様が縦へ伸びる（回転後に掛けるので
+    // 向き で筋の方向が決まる）。等方なノイズは何を掛けても方向を持たないので、
+    // 光筋のような方向のある絵はここでしか作れない。
+    q.y /= max(aspect / 100.0, 0.01);
+
+    // 大きさ 100 で短辺に 4 単位。値を上げるほど模様が大きくなる。
+    float freq = 4.0 * 100.0 / max(scale, 0.01);
+    float2 p = q * freq + float2(seed * 13.7, seed * 7.3);
+
+    // 歪み（部品B）。歪ませる側は本体より低い周波数にする。
+    //
+    // **繰り返し掛けると流体移流（マーブリング）になる**（部品G）。
+    // 1 回なら大理石、3〜8 回で筋が伸びて渦になる。仕様は部品G に
+    // 「複数パスが要る」と書いているが、ここのループで足りる。
+    // 総量を反復数で割るので、反復を増やしても全体の歪み量は変わらない。
+    if (warp > 0.0) {
+        int wn = (int)(warp_iter + 0.5);
+        wn = max(wn, 1);
+        float wstep = (warp / 100.0) * 2.0 / (float)wn;
+        float wk = max(scale, 0.01) / max(warp_scale, 0.01);
+        for (int wi = 0; wi < 8; ++wi) {
+            if (wi < wn) {
+                float2 wp = p * wk;
+                float wx = fbm(wp + float2(11.5, 3.7));
+                float wy = fbm(wp + float2(-7.1, 19.3));
+                p += float2(wx, wy) * wstep;
+            }
+        }
+    }
+
+    int mode = (int)(form + 0.5);
+    float v = 0.5;
+
+    if (mode == 0) {
+        // 雲: fBm を 0〜1 へ載せる。係数 1.2 は実測で決めた
+        // （0.7 だと場が範囲を使い切らず、指定した振幅の半分しか出ない。
+        //   1.2 で pp 0.90〜0.96 / クリップ 5% 以下。重ね回数 1〜6 で確認）
+        int nk = (int)(noise_kind + 0.5);
+        if (nk == 0) {
+            v = saturate(fbm(p) * 1.2 + 0.5);
+        } else {
+            // v1.20: ノイズの種類違い。係数 1.2 と 0.5 は勾配ノイズと同じ（1 段の標準偏差を揃えてある）
+            v = saturate(fbm_kind(p, nk) * 1.2 + 0.5);
+        }
+    } else if (mode == 1) {
+        // 縞: 1 単位で 1 周期。歪みを足すと大理石・風紋になる
+        //
+        // 不均等: 帯の座標だけを 1 次元で歪める。2 次元の歪みと違って
+        // **帯は真っ直ぐなまま厚みだけが変わる**（地層）。
+        // 周波数を 0.6 に固定しているのは、縞の周期（1 単位）に対する比で
+        // 決めたいため。歪みの大きさ を流用すると縞の細かさに追従せず、
+        // 画面全体が一様にずれるだけになった（実測）。
+        float u = p.x;
+        if (uneven > 0.0) {
+            u += fbm(float2(p.x * 0.6 + 31.7, 0.0)) * (uneven / 100.0) * 2.0;
+        }
+        v = sin(u * 6.2831853) * 0.5 + 0.5;
+    } else if (mode == 2) {
+        float3 vo = float3(0.0, 0.0, 0.0);
+        if (cell_dist > 0.5) {
+            vo = voronoi_metric(p);   // v1.20: マンハッタン / チェビシェフ / ミンコフスキー
+        } else {
+            vo = voronoi(p);
+        }
+        int co = (int)(cell_out + 0.5);
+        if (co == 0) {
+            v = saturate(vo.x);                    // 距離: 丸い塊
+        } else if (co == 1) {
+            // 境界: 0 が境界線。係数 1.0 は飽和させないための実測値
+            // （1.5 だと 5% の画素が 1.0 に張り付き、そこが平坦になって
+            //   線の判定が誤爆する。1.0 なら飽和 0%）
+            v = saturate(vo.y - vo.x);
+        } else {
+            v = vo.z;                              // セル番号: 塗り分け
+        }
+    } else if (mode == 3) {
+        // 六方格子: セル中心からの距離を点の半径で切る
+        float4 hx = hex_local(p);
+        float2 gv = float2(hx.x, hx.y);
+        float r = (dot_size / 100.0) * 0.5;
+        r *= 1.0 + (hash21(float2(hx.z, hx.w)) - 0.5) * (dot_var / 50.0);
+        float d = length(gv);
+        int ho = (int)(hex_out + 0.5);
+        if (ho == 1) {
+            // セル距離: 中心 1 → 縁 0 の勾配。鱗・タイルの陰影になる
+            v = saturate(1.0 - d / max(r, 1.0e-4));
+        } else if (ho == 2) {
+            v = hash21(float2(hx.z, hx.w));   // セル番号: 平らに塗り分ける
+        } else {
+            float aa = max(fwidth(d), 1.0e-5);
+            v = 1.0 - smoothstep(r - aa, r + aa, d);
+        }
+    } else {
+        // 反応拡散（部品F）。Lua 側が 256x256 の場を作って t0 に渡す。
+        // サンプラーは "loop" なので巡回し、場の端も回り込ませてあるため
+        // **タイル状に並べても継ぎ目が出ない**。
+        float2 fu = p * 0.25 + float2(0.5, 0.5);
+        v = saturate(pre.Sample(smp, fu).g / 0.35);
+    }
+
+    // --- 整形 ---
+    // コントラスト: プラスは 100 で傾き 4 倍、マイナスは -100 で傾き 0（平らな灰色）。
+    // v1.01 までは両側とも 1 + c * 3 で、-33 で平らになり、それより下で明暗が反転していた
+    float c_gain = (contrast < 0.0) ? (1.0 + contrast / 100.0) : (1.0 + contrast / 100.0 * 3.0);
+    v = saturate((v - 0.5) * c_gain + 0.5);
+    if (invert > 0.5) {
+        v = 1.0 - v;
+    }
+
+    int sh = (int)(shape + 0.5);
+    if (sh == 1) {
+        // 段: 等高線の地形図。段数 1 は 2 値（段数 2 と同じ）。
+        // v1.01 までは n = 1 で floor(v) になり、v = 1 の画素以外が全部暗くなっていた
+        float n = max(steps, 2.0);
+        v = saturate(floor(v * n) / (n - 1.0));
+    } else if (sh == 2) {
+        // 線: 段の境界だけを残す。線幅は fwidth で画面ピクセル基準にする
+        float n = max(steps, 1.0);
+        float t = frac(v * n);
+        float d = min(t, 1.0 - t);
+        float w = fwidth(v) * n * max(line_w, 0.1) * 0.5;
+        // 場が平坦な領域では線幅が 0 になる。そこを線として塗ると
+        // 面が丸ごと白くなるので、地として残す。
+        v = (w > 1.0e-6) ? (1.0 - smoothstep(0.0, w, d)) : 0.0;
+    } else if (sh == 3) {
+        // 累乗: 暗部を潰して明部だけ残す。加算・スクリーンで重ねる素材向け。
+        // 乗算で使うなら、反転するか 暗色/明色 を入れ替える。
+        v = pow(saturate(v), max(power, 0.01));
+    } else if (sh == 4) {
+        // 閾値: 柔らかさ 0 で硬い 2 値。放電のような極端な分布に使う
+        float e = max(soft / 100.0, 1.0e-4);
+        float c = thresh / 100.0;
+        v = smoothstep(c - e, c + e, v);
+    }
+
+    // --- 出力レベル ---
+    // 振幅は p-p 値。10 なら輝度の幅が 0.10 に収まる。
+    float t = saturate(level / 100.0 + (v - 0.5) * (amp / 100.0));
+    float3 rgb = lerp(col_lo, col_hi, t);
+    if (cs_space > 0.5) {
+        // v1.10: Lua が 2 色を先にその色空間へ変換して渡している。混ぜてから sRGB へ戻す（2 色とも不透明）
+        rgb = cs_from_space(cs_mix_values(col_lo, 1.0, col_hi, 1.0, t, cs_space, hue_long).xyz, cs_space);
+    }
+
+    // 不透明。Premultiplied Alpha だが a=1 なので rgb はそのまま。
+    return float4(rgb, 1.0);
+}
+]]
+
+--[[pixelshader@ps_ptex_rd_seed:
+cbuffer RDParams : register(b0) {
+    float2 rd_size;
+    float rd_feed;
+    float rd_kill;
+    float rd_seed;
+};
+
+float rd_hash(float2 p) {
+    float h = sin(p.x * 127.1 + p.y * 311.7) * 43758.5453;
+    return frac(abs(h));
+}
+
+// 種は**ランダムなセル**。規則正しい格子を種にすると対称性が崩れず、
+// 何ステップ回しても格子状のリングのまま機械的な絵になる（実測で確認）。
+// ここをランダムにするだけで迷路・斑・虫食いが有機的に出る。
+// A は種の中で 0 にする。1 のままだと A*B*B の消費が勝って B が全部消える。
+float4 ps_ptex_rd_seed(float4 sv_pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float2 cell = floor(uv * 24.0 + float2(rd_seed * 7.0, rd_seed * 3.0));
+    float a = 1.0;
+    float b = 0.0;
+    if (rd_hash(cell) > 0.80) {
+        a = 0.0;
+        b = 1.0;
+    }
+    float n = rd_hash(sv_pos.xy * float2(1.7, 2.3));
+    return float4(a, saturate(b + n * 0.02), 0.0, 1.0);
+}
+]]
+
+--[[pixelshader@ps_ptex_rd_step:
+cbuffer RDParams : register(b0) {
+    float2 rd_size;
+    float rd_feed;
+    float rd_kill;
+    float rd_seed;
+};
+
+Texture2D rd_src : register(t0);
+
+// Gray-Scott。9 点カーネル（辺 0.2 / 角 0.05 / 中心 -1）。
+// 5 点（中心 -4）に dt=1 を掛けると安定条件を外れて市松ノイズになる。
+// 端は回り込ませる（int の % は X3556 になるので条件で書く）。
+float4 ps_ptex_rd_step(float4 sv_pos : SV_Position) : SV_Target {
+    int w = (int)max(rd_size.x, 1.0);
+    int h = (int)max(rd_size.y, 1.0);
+    int x = (int)sv_pos.x;
+    int y = (int)sv_pos.y;
+    int xm = (x > 0) ? (x - 1) : (w - 1);
+    int xp = (x < w - 1) ? (x + 1) : 0;
+    int ym = (y > 0) ? (y - 1) : (h - 1);
+    int yp = (y < h - 1) ? (y + 1) : 0;
+
+    float2 c  = rd_src.Load(int3(x,  y,  0)).rg;
+    float2 l  = rd_src.Load(int3(xm, y,  0)).rg;
+    float2 r  = rd_src.Load(int3(xp, y,  0)).rg;
+    float2 u  = rd_src.Load(int3(x,  ym, 0)).rg;
+    float2 d  = rd_src.Load(int3(x,  yp, 0)).rg;
+    float2 lu = rd_src.Load(int3(xm, ym, 0)).rg;
+    float2 ru = rd_src.Load(int3(xp, ym, 0)).rg;
+    float2 ld = rd_src.Load(int3(xm, yp, 0)).rg;
+    float2 rd = rd_src.Load(int3(xp, yp, 0)).rg;
+
+    float2 lap = (l + r + u + d) * 0.2 + (lu + ru + ld + rd) * 0.05 - c;
+
+    float a = c.x;
+    float b = c.y;
+    float abb = a * b * b;
+    float na = a + (lap.x - abb + rd_feed * (1.0 - a));
+    float nb = b + (0.5 * lap.y + abb - (rd_feed + rd_kill) * b);
+    return float4(saturate(na), saturate(nb), 0.0, 1.0);
+}
+]]
+
+local color = require("EffectUtils_ColorGrade")
+
+local max_x, max_y = obj.getinfo("image_max")
+local W = math.min(math.max(math.floor(width + 0.5), 1), max_x)
+local H = math.min(math.max(math.floor(height + 0.5), 1), max_y)
+
+local lo_r, lo_g, lo_b = color.color_from_hex(col_lo)
+local hi_r, hi_g, hi_b = color.color_from_hex(col_hi)
+
+-- v1.10: 色空間。sRGB（既定）以外では 2 色を先にその色空間へ変換して渡し、シェーダーで混ぜてから戻す
+-- （共有部品 EffectUtils_ColorSpace.lua / colorspace.hlsl）。sRGB は v1.02 までと同じ値を渡す
+local cs_space = math.floor((tonumber(color_space) or 0) + 0.5)
+local cs_long = 0
+if cs_space ~= 0 then
+  cs_long = (math.floor((tonumber(hue_path) or 0) + 0.5) == 1) and 1 or 0
+  local cs = require("EffectUtils_ColorSpace")
+  lo_r, lo_g, lo_b = cs.to_space(lo_r, lo_g, lo_b, cs_space)
+  hi_r, hi_g, hi_b = cs.to_space(hi_r, hi_g, hi_b, cs_space)
+end
+
+local mode = math.floor(form + 0.5)
+
+-- 反応拡散の作業解像度。**固定で 256。**
+-- 必要ステップ数は解像度の 2 乗に比例するので、解像度を上げるのは最も高くつく。
+-- 模様の特徴サイズはグリッドのセル数で決まりピクセル数では決まらないため、
+-- ここで作って出力サイズへ引き伸ばせば絵は変わらずコストだけが下がる。
+-- issue: AI/scripts/issues/20260916_reaction_diffusion_steps_scale_with_resolution.md
+local RD_RES = 256
+
+-- キャッシュバッファの名前は全オブジェクトで共通（lua.txt）。前置して衝突を避ける。
+local RD_A = "cache:ptex_h/rd_a"
+local RD_B = "cache:ptex_h/rd_b"
+local FIELD = "cache:ptex_h/none"
+
+if mode == 4 then
+  local RP = { RD_RES, RD_RES, rd_feed, rd_kill, seed }
+  obj.clearbuffer(RD_A, RD_RES, RD_RES)
+  obj.clearbuffer(RD_B, RD_RES, RD_RES)
+  obj.pixelshader("ps_ptex_rd_seed", RD_A, nil, RP)
+  local src, dst = RD_A, RD_B
+  for _ = 1, math.floor(rd_steps + 0.5) do
+    obj.pixelshader("ps_ptex_rd_step", dst, { src }, RP)
+    src, dst = dst, src
+  end
+  FIELD = src
+else
+  -- 反応拡散以外でも t0 は束縛しておく（参照しないので 4x4 で足りる）
+  obj.clearbuffer(FIELD, 4, 4)
+end
+
+-- clearbuffer はサイズ変更とクリアを同時に行う（obj.clear は存在しない）
+obj.clearbuffer("object", W, H)
+
+obj.pixelshader("ps_ptex_field", "object", { FIELD }, {
+  lo_r, lo_g, lo_b,
+  amp,
+  hi_r, hi_g, hi_b,
+  level,
+  W, H,
+  mode,
+  scale,
+  angle * math.pi / 180,
+  seed,
+  math.floor(octaves + 0.5),
+  gain,
+  lacunarity,
+  math.floor(cell_out + 0.5),
+  jitter / 100,
+  dot,
+  dot_var,
+  warp,
+  warp_scale,
+  math.floor(shape + 0.5),
+  math.floor(steps + 0.5),
+  line_w,
+  contrast,
+  (invert == 1 or invert == true) and 1 or 0,
+  aspect,
+  power,
+  thresh,
+  soft,
+  math.floor(warp_iter + 0.5),
+  uneven,
+  math.floor(hex_out + 0.5),
+  cs_space,
+  cs_long,
+  -- v1.20: 方式の選択。既定（ユークリッド・勾配ノイズ）は 0 で、シェーダーは v1.10 までの式を通る
+  math.floor(cell_dist + 0.5),
+  mink_p,
+  math.floor(noise_type + 0.5),
+}, "copy", "loop")

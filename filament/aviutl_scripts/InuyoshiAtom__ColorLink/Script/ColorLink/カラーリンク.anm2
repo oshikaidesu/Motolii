@@ -1,0 +1,65 @@
+--select@group:カラーグループ,A=1,B=2,C=3
+--information:カラーリンク v1.0.0
+
+--[[
+ColorLink
+
+自分より上のレイヤーを検索し、
+最も近い「カラーマスター」を参照します。
+
+カラーマスターが見つからない場合は
+何も処理しません。
+]]
+
+local masterLayer = nil
+
+-- 最も近いカラーマスターを検索
+for layer = obj.layer - 1, 1, -1 do
+    local testColor = obj.getvalue(
+        layer,
+        "カラーマスター",
+        "色A"
+    )
+
+    if testColor ~= nil then
+        masterLayer = layer
+        break
+    end
+end
+
+-- マスターが存在しない場合は元の表示を維持
+if masterLayer == nil then
+    return
+end
+
+local colorName
+
+if group == 1 then
+    colorName = "色A"
+elseif group == 2 then
+    colorName = "色B"
+elseif group == 3 then
+    colorName = "色C"
+else
+    return
+end
+
+-- 選択された色を取得
+local color = obj.getvalue(
+    masterLayer,
+    "カラーマスター",
+    colorName
+)
+
+-- 色を取得できなかった場合も何もしない
+if color == nil then
+    return
+end
+
+-- 元オブジェクトの形状・透明度を維持したまま着色
+obj.effect(
+    "単色化",
+    "強さ", 100.0,
+    "色", color,
+    "輝度を保持する", 0
+)

@@ -1,0 +1,722 @@
+--label:CJF
+--information:破線縁取り for AviUtl ExEdit2 / AviUtl2 only
+--track@dist:距離,0,200,16,0.1
+--track@stroke:太さ,0.5,40,2,0.1
+--track@dashLen:破線の長さ,0.5,200,10,0.1
+--track@gap:間隔,0.5,200,8,0.1
+--track@phase:位相,-2000,2000,0,0.1
+--track@opacity:不透明度,0,100,100,0.1
+--color@col:色,0xe53935
+--select@cap:端の形状,丸める=0,まっすぐ切る=1
+--check@keep:元画像を残す,true
+--[[pixelshader@sanitize_premul:
+Texture2D tex0 : register(t0);
+float4 sanitize_premul(float4 pos : SV_Position) : SV_Target {
+	float4 c = tex0.Load(int3(pos.xy, 0));
+	if (c.a < 0.001) return float4(0, 0, 0, 0);
+	c.rgb = min(c.rgb, c.aaa);
+	return c;
+}
+]]
+--[[pixelshader@binarize:
+Texture2D tex0 : register(t0);
+cbuffer constant0 : register(b0) { float4 p0; };
+float4 binarize(float4 pos : SV_Position) : SV_Target {
+	float a = tex0.Load(int3(pos.xy, 0)).a;
+	float v = a >= p0.x ? 1.0 : 0.0;
+	return float4(v, v, v, v);
+}
+]]
+--[[pixelshader@jfa_init_alpha:
+Texture2D tex0 : register(t0);
+float4 jfa_init_alpha(float4 pos : SV_Position) : SV_Target {
+	int2 id = int2(pos.xy);
+	float a = tex0.Load(int3(id, 0)).a;
+	if (a > 0.5) return float4((float)id.x, (float)id.y, 0.0, 1.0);
+	return float4(-1.0, -1.0, 0.0, 0.0);
+}
+]]
+--[[pixelshader@jfa_step:
+Texture2D tex0 : register(t0);
+cbuffer constant0 : register(b0) { float4 p0; };
+float4 jfa_step(float4 pos : SV_Position) : SV_Target {
+	int stepSize = (int)p0.x;
+	int w = (int)p0.y;
+	int h = (int)p0.z;
+	int2 base = int2(pos.xy);
+	float4 best = float4(-1.0, -1.0, 0.0, 0.0);
+	float bestDist = 1e20;
+	[unroll] for (int oy = -1; oy <= 1; oy++) {
+		[unroll] for (int ox = -1; ox <= 1; ox++) {
+			int2 np = base + int2(ox, oy) * stepSize;
+			if (np.x < 0 || np.y < 0 || np.x >= w || np.y >= h) continue;
+			float4 s = tex0.Load(int3(np, 0));
+			if (s.a < 0.5) continue;
+			float2 seed = s.xy;
+			float d = dot(float2(base) - seed, float2(base) - seed);
+			if (d < bestDist) {
+				bestDist = d;
+				best = float4(seed, s.z, 1.0);
+			}
+		}
+	}
+	return best;
+}
+]]
+--[[pixelshader@pack_dist:
+Texture2D seedTex : register(t0);
+float4 pack_dist(float4 pos : SV_Position) : SV_Target {
+	int2 ip = int2(pos.xy);
+	float4 seed = seedTex.Load(int3(ip, 0));
+	float dist = 255.0;
+	if (seed.a > 0.5) dist = min(length(float2(ip) - seed.xy), 255.0);
+	return float4(dist / 255.0, 0.0, 0.0, 1.0);
+}
+]]
+--[[pixelshader@extract_ring:
+Texture2D distTex : register(t0);
+cbuffer constant0 : register(b0) { float4 p0; }; // offset, w, h, unused
+float4 extract_ring(float4 pos : SV_Position) : SV_Target {
+	int2 ip = int2(pos.xy);
+	float offsetI = p0.x;
+	int w = (int)p0.y;
+	int h = (int)p0.z;
+	float d = distTex.Load(int3(ip, 0)).r * 255.0;
+	if (abs(d - offsetI) > 1.0) return float4(0.0, 0.0, 0.0, 0.0);
+	bool hasIn = false;
+	bool hasOut = false;
+	[unroll] for (int i = 0; i < 4; i++) {
+		int2 dxy = (i == 0) ? int2(1, 0) : (i == 1) ? int2(-1, 0) : (i == 2) ? int2(0, 1) : int2(0, -1);
+		int2 np = ip + dxy;
+		if (np.x < 0 || np.y < 0 || np.x >= w || np.y >= h) {
+			hasOut = true;
+		} else {
+			float nd = distTex.Load(int3(np, 0)).r * 255.0;
+			if (nd < offsetI) hasIn = true;
+			if (nd > offsetI) hasOut = true;
+		}
+	}
+	if (hasIn && hasOut) return float4(1.0, 1.0, 1.0, 1.0);
+	return float4(0.0, 0.0, 0.0, 0.0);
+}
+]]
+--[[pixelshader@dash_from_arc:
+Texture2D arcTex : register(t0);
+cbuffer constant0 : register(b0) { float4 p0; }; // dashLen, period, unused
+float4 dash_from_arc(float4 pos : SV_Position) : SV_Target {
+	float4 c = arcTex.Load(int3(pos.xy, 0));
+	if (c.a < 0.5) return float4(0.0, 0.0, 0.0, 0.0);
+	float dashLen = max(p0.x, 0.0);
+	float period = max(p0.y, 1e-3);
+	if (dashLen >= period) return float4(1.0, 1.0, 1.0, 1.0);
+	// R stores (s+phase) mod period, normalized to [0,1].
+	float on = (c.r * period < dashLen) ? 1.0 : 0.0;
+	return float4(on, on, on, on);
+}
+]]
+--[[pixelshader@composite_dash:
+Texture2D srcTex : register(t0);
+Texture2D maskTex : register(t1);
+cbuffer constant0 : register(b0) {
+	float4 p0; // rgb, alpha
+	float4 p1; // keep, unused...
+};
+float4 composite_dash(float4 pos : SV_Position) : SV_Target {
+	int2 ip = int2(pos.xy);
+	float4 src = srcTex.Load(int3(ip, 0));
+	if (src.a < 0.001) src = float4(0, 0, 0, 0);
+	else src.rgb = min(src.rgb, src.aaa);
+
+	float m = maskTex.Load(int3(ip, 0)).a;
+	float outA = m * saturate(p0.w);
+	float4 outline = float4(p0.rgb * outA, outA);
+	if (p1.x < 0.5) return outline;
+	return src + outline * (1.0 - src.a);
+}
+]]
+--[[pixelshader@composite_dilate_dash:
+Texture2D srcTex : register(t0);
+Texture2D distTex : register(t1);
+cbuffer constant0 : register(b0) {
+	float4 p0; // rgb, alpha
+	float4 p1; // halfW, aa, keep, unused
+};
+float4 composite_dilate_dash(float4 pos : SV_Position) : SV_Target {
+	int2 ip = int2(pos.xy);
+	float4 src = srcTex.Load(int3(ip, 0));
+	if (src.a < 0.001) src = float4(0, 0, 0, 0);
+	else src.rgb = min(src.rgb, src.aaa);
+
+	float d = distTex.Load(int3(ip, 0)).r * 255.0;
+	float halfW = max(p1.x, 0.25);
+	float aa = max(p1.y, 0.75);
+	float m = 1.0 - smoothstep(halfW - aa * 0.5, halfW + aa * 0.5, d);
+	float outA = m * saturate(p0.w);
+	float4 outline = float4(p0.rgb * outA, outA);
+	if (p1.z < 0.5) return outline;
+	return src + outline * (1.0 - src.a);
+}
+]]
+
+local ffi = require("ffi")
+
+-- anm2: pixelshader OUTPUT can only be object/tempbuffer. cache is storage/input only.
+local function run_jfa_ps(initName, initResource, maxStep, bw, bh)
+	obj.pixelshader(initName, "object", initResource, nil, "copy", "clamp")
+	local onObject = true
+	local step = 1
+	local limit = math.max(1, math.floor(maxStep))
+	while step * 2 <= limit do
+		step = step * 2
+	end
+	while step >= 1 do
+		if onObject then
+			obj.pixelshader("jfa_step", "tempbuffer", "object", { step, bw, bh, 0 }, "copy", "clamp")
+			onObject = false
+		else
+			obj.pixelshader("jfa_step", "object", "tempbuffer", { step, bw, bh, 0 }, "copy", "clamp")
+			onObject = true
+		end
+		step = math.floor(step / 2)
+	end
+	return onObject and "object" or "tempbuffer"
+end
+
+local function pack_from_seed(seedBuf)
+	if seedBuf == "object" then
+		obj.pixelshader("pack_dist", "tempbuffer", "object", nil, "copy", "clamp")
+		return "tempbuffer"
+	end
+	obj.pixelshader("pack_dist", "object", "tempbuffer", nil, "copy", "clamp")
+	return "object"
+end
+
+local CACHE_NAME = "__cjf_dash_soft_cache_v10"
+local cacheRoot = rawget(_G, CACHE_NAME)
+if type(cacheRoot) ~= "table" then
+	cacheRoot = { soft = {}, byUid = {} }
+	rawset(_G, CACHE_NAME, cacheRoot)
+end
+-- Lua pixel backup cap (~4K RGBA with pad). Soft-hit requires these bytes:
+-- GPU cache:* alone is wiped when other objects are edited, which made outlines vanish.
+local MAX_CACHE_BYTES = 48 * 1024 * 1024
+
+-- Blocky alpha fingerprint: local PSD part edits flip nearby cells.
+local function cheap_hash_alpha(data, bw, bh)
+	local p = ffi.cast("const unsigned char*", data)
+	local acc = 2166136261
+	local gx = math.min(64, math.max(8, bw))
+	local gy = math.min(64, math.max(8, bh))
+	for iy = 0, gy - 1 do
+		local y0 = math.floor(iy * bh / gy)
+		local y1 = math.floor((iy + 1) * bh / gy) - 1
+		if y1 < y0 then y1 = y0 end
+		local ym = math.floor((y0 + y1) * 0.5)
+		for ix = 0, gx - 1 do
+			local x0 = math.floor(ix * bw / gx)
+			local x1 = math.floor((ix + 1) * bw / gx) - 1
+			if x1 < x0 then x1 = x0 end
+			local xm = math.floor((x0 + x1) * 0.5)
+			local aSum = 0
+			local xs = { x0, xm, x1 }
+			local ys = { y0, ym, y1 }
+			for yi = 1, 3 do
+				local yy = ys[yi]
+				if yy >= 0 and yy < bh then
+					for xi = 1, 3 do
+						local xx = xs[xi]
+						if xx >= 0 and xx < bw then
+							local o = (yy * bw + xx) * 4
+							aSum = aSum + p[o + 3]
+							aSum = aSum + p[o] + p[o + 1] + p[o + 2]
+						end
+					end
+				end
+			end
+			acc = (acc * 16777619 + aSum + ix * 131 + iy * 17) % 2147483647
+		end
+	end
+	return acc + bw * 131 + bh * 17 + gx * gy
+end
+
+local pad = math.ceil(dist + stroke * 0.5) + 2
+if pad > 0 then
+	obj.effect("領域拡張", "上", pad, "下", pad, "左", pad, "右", pad)
+end
+
+obj.pixelshader("sanitize_premul", "object", "object", nil, "copy", "clamp")
+
+local w, h = obj.getpixel()
+if w < 1 or h < 1 then
+	return
+end
+
+-- Unique per stacked effect on the same object (effect_id separates instances).
+local uid = table.concat({
+	tostring(math.floor(tonumber(obj.layer) or 0)),
+	tostring(math.floor(tonumber(obj.frame_s) or 0)),
+	tostring(obj.id or 0),
+	tostring(obj.effect_id or 0)
+}, ":")
+local c_src = "cache:dsh_src_" .. uid
+local c_out = "cache:dsh_out_" .. uid
+local roundCap = (cap < 0.5)
+local keepN = keep and 1 or 0
+
+local frameN = math.floor(tonumber(obj.frame) or 0)
+local frameSN = math.floor(tonumber(obj.frame_s) or 0)
+local sxN = tonumber(obj.sx) or 1
+local syN = tonumber(obj.sy) or 1
+local zoomN = tonumber(obj.zoom) or 1
+local gsx = tonumber(obj.getvalue("sx")) or 100
+local gsy = tonumber(obj.getvalue("sy")) or 100
+
+-- Meta without content hash: skip fingerprint work when params/frame cannot hit.
+local metaKey = table.concat({
+	uid,
+	tostring(frameSN),
+	tostring(frameN),
+	tostring(w),
+	tostring(h),
+	string.format("%.3f", dist),
+	string.format("%.3f", stroke),
+	string.format("%.3f", dashLen),
+	string.format("%.3f", gap),
+	string.format("%.3f", phase),
+	string.format("%.3f", opacity),
+	tostring(math.floor(tonumber(col) or 0)),
+	tostring(roundCap and 0 or 1),
+	tostring(keepN),
+	string.format("%.4f", sxN),
+	string.format("%.4f", syN),
+	string.format("%.4f", zoomN),
+	string.format("%.3f", gsx),
+	string.format("%.3f", gsy)
+}, "|")
+
+obj.copybuffer(c_src, "object")
+
+-- Low-res fingerprint from c_src. Always restores full object from c_src.
+local function fingerprint_source()
+	local scale = (math.max(w, h) >= 128) and 0.25 or 1.0
+	local aw = math.max(1, math.floor(w * scale + 0.5))
+	local ah = math.max(1, math.floor(h * scale + 0.5))
+	if scale < 1.0 then
+		obj.setoption("drawtarget", "tempbuffer", aw, ah)
+		obj.copybuffer("object", c_src)
+		obj.draw(0, 0, 0, scale)
+		obj.copybuffer("object", "tempbuffer")
+	else
+		obj.copybuffer("object", c_src)
+	end
+	local data, dw, dh = obj.getpixeldata("object", "rgba")
+	local hash = nil
+	if data and dw == aw and dh == ah then
+		hash = cheap_hash_alpha(data, aw, ah)
+	end
+	if scale < 1.0 then
+		obj.setoption("drawtarget", "framebuffer")
+	end
+	obj.copybuffer("object", c_src)
+	return hash
+end
+
+local shapeHash = nil
+local hit = cacheRoot.byUid[uid]
+-- Soft-hit only when Lua bytes exist. GPU c_out alone is unreliable after other-object edits.
+if hit and hit.metaKey == metaKey and hit.w == w and hit.h == h and hit.shapeHash ~= nil and hit.bytes ~= nil then
+	shapeHash = fingerprint_source()
+	if shapeHash ~= nil and shapeHash == hit.shapeHash then
+		local data, dw, dh = obj.getpixeldata("object", "rgba")
+		if data and dw == w and dh == h then
+			local nbytes = w * h * 4
+			local dst = ffi.cast("unsigned char*", data)
+			if ffi.copy then
+				ffi.copy(dst, hit.bytes, nbytes)
+			else
+				local src = ffi.cast("const unsigned char*", hit.bytes)
+				for i = 0, nbytes - 1 do
+					dst[i] = src[i]
+				end
+			end
+			obj.putpixeldata("object", data, w, h, "rgba")
+			return
+		end
+	end
+end
+
+-- Miss: continue from source.
+obj.copybuffer("object", c_src)
+if shapeHash == nil then
+	shapeHash = fingerprint_source()
+end
+obj.copybuffer("tempbuffer", "object")
+obj.pixelshader("binarize", "tempbuffer", "tempbuffer", { 0.5, 0, 0, 0 }, "copy", "clamp")
+
+-- Only flood as far as the offset ring needs (same idea as fixed outline).
+local need = math.ceil(dist + stroke * 0.5) + 8
+local jfaLimit = math.min(math.max(w, h), math.max(need, 1))
+local distSeedBuf = run_jfa_ps("jfa_init_alpha", "tempbuffer", jfaLimit, w, h)
+local distPackBuf = pack_from_seed(distSeedBuf)
+
+-- GPU ring extract (same hasIn/hasOut rule as former CPU scan).
+local offsetI = dist
+local ringBuf
+if distPackBuf == "object" then
+	obj.pixelshader("extract_ring", "tempbuffer", "object", { offsetI, w, h, 0 }, "copy", "clamp")
+	ringBuf = "tempbuffer"
+else
+	obj.pixelshader("extract_ring", "object", "tempbuffer", { offsetI, w, h, 0 }, "copy", "clamp")
+	ringBuf = "object"
+end
+
+local ringData, rw, rh = obj.getpixeldata(ringBuf, "rgba")
+if not ringData or rw ~= w or rh ~= h then
+	obj.copybuffer("object", c_src)
+	return
+end
+local rp = ffi.cast("const unsigned char*", ringData)
+
+local ring = ffi.new("uint8_t[?]", w * h)
+local maxStarts = math.min(w * h, math.floor(32 * (w + h) + 2048))
+local ringXs = ffi.new("int32_t[?]", math.max(1, maxStarts))
+local ringYs = ffi.new("int32_t[?]", math.max(1, maxStarts))
+local countRing = 0
+local countStored = 0
+
+-- Single-pass collect: alpha mark only (neighbor tests already done on GPU).
+for y = 0, h - 1 do
+	local row = y * w
+	for x = 0, w - 1 do
+		if rp[(row + x) * 4 + 3] ~= 0 then
+			ring[row + x] = 1
+			countRing = countRing + 1
+			if countStored < maxStarts then
+				ringXs[countStored] = x
+				ringYs[countStored] = y
+				countStored = countStored + 1
+			end
+		end
+	end
+end
+
+if countRing < 2 then
+	obj.copybuffer("object", c_src)
+	return
+end
+
+-- Trace contours into flat FFI polylines with true arc-length.
+local visited = ffi.new("uint8_t[?]", w * h)
+local nx8 = ffi.new("const int32_t[8]", 1, 1, 0, -1, -1, -1, 0, 1)
+local ny8 = ffi.new("const int32_t[8]", 0, 1, 1, 1, 0, -1, -1, -1)
+local contours = {}
+local pathGuardMax = math.min(countRing * 2 + 8, w * h)
+
+local function walk_contour(sx, sy)
+	local px = ffi.new("int32_t[?]", pathGuardMax + 1)
+	local py = ffi.new("int32_t[?]", pathGuardMax + 1)
+	local n = 1
+	px[1] = sx
+	py[1] = sy
+	visited[sy * w + sx] = 1
+	local x, y = sx, sy
+	local dir = 0
+	local guard = 0
+	while guard < pathGuardMax do
+		guard = guard + 1
+		local found = false
+		for i = 0, 7 do
+			local nd = (dir + 6 + i) % 8
+			local nx = x + nx8[nd]
+			local ny = y + ny8[nd]
+			if nx >= 0 and ny >= 0 and nx < w and ny < h and ring[ny * w + nx] == 1 then
+				local nidx = ny * w + nx
+				if visited[nidx] == 0 then
+					visited[nidx] = 1
+					n = n + 1
+					px[n] = nx
+					py[n] = ny
+					x, y = nx, ny
+					dir = nd
+					found = true
+					break
+				elseif nx == sx and ny == sy and n > 3 then
+					return px, py, n, true
+				end
+			end
+		end
+		if not found then
+			return px, py, n, false
+		end
+	end
+	return px, py, n, false
+end
+
+local function add_contour_from(x, y)
+	local idx = y * w + x
+	if ring[idx] ~= 1 or visited[idx] ~= 0 then
+		return
+	end
+	local px, py, n, closed = walk_contour(x, y)
+	if n >= 2 and n <= pathGuardMax then
+		local cum = ffi.new("double[?]", n + 1)
+		cum[1] = 0
+		local total = 0
+		for i = 2, n do
+			local dx = px[i] - px[i - 1]
+			local dy = py[i] - py[i - 1]
+			total = total + math.sqrt(dx * dx + dy * dy)
+			cum[i] = total
+		end
+		if closed then
+			local dx = px[1] - px[n]
+			local dy = py[1] - py[n]
+			total = total + math.sqrt(dx * dx + dy * dy)
+		end
+		contours[#contours + 1] = { px = px, py = py, n = n, cum = cum, total = total, closed = closed }
+	end
+end
+
+-- Prefer compact start list; if ring was denser than the list, fall back to full scan
+-- so complex silhouettes are not silently dropped.
+if countStored >= countRing then
+	for ri = 0, countStored - 1 do
+		add_contour_from(ringXs[ri], ringYs[ri])
+	end
+else
+	for y = 0, h - 1 do
+		local row = y * w
+		for x = 0, w - 1 do
+			if ring[row + x] == 1 then
+				add_contour_from(x, y)
+			end
+		end
+	end
+end
+
+if #contours == 0 then
+	obj.copybuffer("object", c_src)
+	return
+end
+
+-- Arc-length field on contour pixels -> GPU dash (round) or vertex stamps (butt).
+-- putpixeldata requires AviUtl userdata from getpixeldata (raw ffi.new is rejected).
+obj.copybuffer("object", c_src)
+local maskData, mw, mh = obj.getpixeldata("object", "rgba")
+if not maskData or mw ~= w or mh ~= h then
+	obj.copybuffer("object", c_src)
+	return
+end
+ffi.fill(maskData, w * h * 4)
+local mask = ffi.cast("unsigned char*", maskData)
+
+local halfW = math.max(0.5, math.min(stroke * 0.5, math.max(dist - 1.0, 0.25)))
+local period = math.max(dashLen + gap, 0.001)
+local phase0 = phase
+local startPhase = phase0 % period
+if startPhase < 0 then startPhase = startPhase + period end
+
+local function set_px(x, y)
+	local ix = math.floor(x + 0.5)
+	local iy = math.floor(y + 0.5)
+	if ix < 0 or iy < 0 or ix >= w or iy >= h then
+		return
+	end
+	mask[(iy * w + ix) * 4 + 3] = 255
+end
+
+local function stamp_span(cx, cy, nx, ny, radius)
+	local steps = math.max(1, math.ceil(radius * 2))
+	for i = -steps, steps do
+		local t = (i / steps) * radius
+		set_px(cx + nx * t, cy + ny * t)
+	end
+end
+
+local function write_arc(x, y, s)
+	local ix = math.floor(x + 0.5)
+	local iy = math.floor(y + 0.5)
+	if ix < 0 or iy < 0 or ix >= w or iy >= h then
+		return
+	end
+	local u = (s + startPhase) % period
+	if u < 0 then u = u + period end
+	local o = (iy * w + ix) * 4
+	local byte = math.floor((u / period) * 255.0 + 0.5)
+	if byte > 255 then byte = 255 end
+	mask[o] = byte
+	mask[o + 3] = 255
+end
+
+local function dash_on(s)
+	local u = (s + startPhase) % period
+	if u < 0 then u = u + period end
+	return u < dashLen
+end
+
+local function tangent_at(px, py, n, closed, i)
+	local i0, i1
+	if i < n then
+		i0, i1 = i, i + 1
+	elseif closed then
+		i0, i1 = n, 1
+	else
+		i0, i1 = math.max(1, n - 1), n
+	end
+	local tx = px[i1] - px[i0]
+	local ty = py[i1] - py[i0]
+	local tl = math.sqrt(tx * tx + ty * ty)
+	if tl > 1e-6 then
+		return tx / tl, ty / tl
+	end
+	return 1, 0
+end
+
+local function emit_seg_arc(px, py, i0, i1, s0, s1)
+	write_arc(px[i0], py[i0], s0)
+	local len = s1 - s0
+	if len > 1.0 then
+		local steps = math.floor(len)
+		for k = 1, steps - 1 do
+			local t = k / steps
+			write_arc(px[i0] + (px[i1] - px[i0]) * t, py[i0] + (py[i1] - py[i0]) * t, s0 + len * t)
+		end
+	end
+end
+
+local function emit_seg_butt(px, py, i0, i1, s0, s1)
+	local tx = px[i1] - px[i0]
+	local ty = py[i1] - py[i0]
+	local tl = math.sqrt(tx * tx + ty * ty)
+	if tl > 1e-6 then tx, ty = tx / tl, ty / tl else tx, ty = 1, 0 end
+	local nx, ny = -ty, tx
+	local function maybe_stamp(x, y, s)
+		if dash_on(s) then
+			stamp_span(x, y, nx, ny, halfW)
+		end
+	end
+	maybe_stamp(px[i0], py[i0], s0)
+	local len = s1 - s0
+	if len > 0.5 then
+		local steps = math.max(1, math.floor(len / math.max(0.5, math.min(1.0, halfW * 0.55))))
+		for k = 1, steps do
+			local t = k / steps
+			maybe_stamp(px[i0] + (px[i1] - px[i0]) * t, py[i0] + (py[i1] - py[i0]) * t, s0 + len * t)
+		end
+	end
+end
+
+for _, c in ipairs(contours) do
+	local px, py, n, cum, total, closed = c.px, c.py, c.n, c.cum, c.total, c.closed
+	if total >= 1 and n >= 2 then
+		if roundCap then
+			for i = 1, n - 1 do
+				emit_seg_arc(px, py, i, i + 1, cum[i], cum[i + 1])
+			end
+			if closed then
+				emit_seg_arc(px, py, n, 1, cum[n], total)
+			else
+				write_arc(px[n], py[n], cum[n])
+			end
+		else
+			for i = 1, n - 1 do
+				emit_seg_butt(px, py, i, i + 1, cum[i], cum[i + 1])
+			end
+			if closed then
+				emit_seg_butt(px, py, n, 1, cum[n], total)
+			elseif dash_on(cum[n]) then
+				local tx, ty = tangent_at(px, py, n, false, n)
+				stamp_span(px[n], py[n], -ty, tx, halfW)
+			end
+		end
+	end
+end
+
+local r, g, b = RGB(col)
+local a = opacity / 100
+
+if roundCap then
+	obj.putpixeldata("object", maskData, w, h, "rgba")
+	obj.pixelshader("dash_from_arc", "tempbuffer", "object", { dashLen, period, 0, 0 }, "copy", "clamp")
+	local dilateLimit = math.min(math.max(w, h), math.max(1, math.ceil(halfW) + 2))
+	local dilateSeed = run_jfa_ps("jfa_init_alpha", "tempbuffer", dilateLimit, w, h)
+	local dilateDist = pack_from_seed(dilateSeed)
+	local aa = math.max(0.75, math.min(1.5, halfW * 0.35))
+	obj.pixelshader(
+		"composite_dilate_dash",
+		"object",
+		{ c_src, dilateDist },
+		{
+			r / 255, g / 255, b / 255, a,
+			halfW, aa, keepN, 0
+		},
+		"copy",
+		"clamp"
+	)
+else
+	obj.copybuffer("tempbuffer", c_src)
+	obj.putpixeldata("tempbuffer", maskData, w, h, "rgba")
+	obj.pixelshader(
+		"composite_dash",
+		"object",
+		{ c_src, "tempbuffer" },
+		{
+			r / 255, g / 255, b / 255, a,
+			keepN, 0, 0, 0
+		},
+		"copy",
+		"clamp"
+	)
+end
+
+-- Persist Lua pixel backup for reliable soft-hit (survives other-object edits).
+local prev = cacheRoot.byUid[uid]
+if prev and prev.metaKey and prev.metaKey ~= metaKey then
+	cacheRoot.soft[prev.metaKey] = nil
+end
+-- Save composed result before any fingerprint that restores from c_src.
+obj.copybuffer(c_out, "object")
+if shapeHash == nil then
+	shapeHash = fingerprint_source()
+	obj.copybuffer("object", c_out)
+end
+if shapeHash == nil then
+	if prev and prev.metaKey then
+		cacheRoot.soft[prev.metaKey] = nil
+	end
+	cacheRoot.byUid[uid] = nil
+else
+	local stored = nil
+	local nbytes = w * h * 4
+	if nbytes <= MAX_CACHE_BYTES then
+		local outData, ow, oh = obj.getpixeldata("object", "rgba")
+		if outData and ow == w and oh == h then
+			obj.putpixeldata("object", outData, w, h, "rgba")
+			stored = ffi.new("uint8_t[?]", nbytes)
+			if ffi.copy then
+				ffi.copy(stored, ffi.cast("const unsigned char*", outData), nbytes)
+			else
+				local src = ffi.cast("const unsigned char*", outData)
+				for i = 0, nbytes - 1 do
+					stored[i] = src[i]
+				end
+			end
+		end
+	end
+	if stored ~= nil then
+		cacheRoot.byUid[uid] = {
+			metaKey = metaKey,
+			shapeHash = shapeHash,
+			w = w,
+			h = h,
+			bytes = stored
+		}
+		cacheRoot.soft[metaKey] = uid
+	else
+		-- No Lua backup => no soft-hit (avoids empty GPU restore after edits).
+		if prev and prev.metaKey then
+			cacheRoot.soft[prev.metaKey] = nil
+		end
+		cacheRoot.byUid[uid] = nil
+	end
+end

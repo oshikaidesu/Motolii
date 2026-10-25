@@ -1,0 +1,328 @@
+@画像ループ改
+--information:画像ループ改 ver1.12
+--label:配置
+
+--select@area:範囲=0,回数指定=0,画面全体=1
+
+--track@nx:横回数,1,100,3,1
+--track@ny:縦回数,1,100,3,1
+--trackgroup@nx,ny:回数
+
+--track@zoom:タイル拡大率,1,800,100,0.01
+
+--track@gapx:間隔X(%),0,1000,100,0.01
+--track@gapy:間隔Y(%),0,1000,100,0.01
+--trackgroup@gapx,gapy:間隔
+
+--track@zstep:ループ毎拡大率(%),1,400,100,0.01
+--select@zdir:拡大の向き=0,中心から外へ=0,左から右へ=1,上から下へ=2
+
+--track@spx:速度X,-10000,10000,0,0.1
+--track@spy:速度Y,-10000,10000,0,0.1
+--trackgroup@spx,spy:速度(px/秒)
+
+--track@ofsx:オフセットX,-10000,10000,0,0.1
+--track@ofsy:オフセットY,-10000,10000,0,0.1
+--trackgroup@ofsx,ofsy:オフセット
+
+--track@rowshift:行ずらし(%),-100,100,0,0.1
+--track@colshift:列ずらし(%),-100,100,0,0.1
+
+--select@mirror:反転=0,なし=0,左右交互=1,上下交互=2,上下左右交互=3
+
+--check@snap:整数座標に丸める,0
+
+--hide@nx:area==1
+--hide@ny:area==1
+--hide@zdir:zstep==100
+
+-- ============================================================
+-- 画像ループ改
+--   オブジェクトの画像をタイル状に縦横へ繰り返し並べる。
+--   速度を与えると時間に応じて継ぎ目なくスクロールする。
+--   交互反転(ミラー)・行/列ずらし(レンガ積み)・間隔・拡大率・
+--   ループ毎の拡大率変化に対応。
+--
+--   間隔は「タイルの中心どうしの距離」をタイルの大きさに対する % で
+--   指定する。0% = 全部ぴったり重なる / 100% = すき間なく接する。
+--
+--   仕組み: tempbuffer に出力サイズのキャンバスを用意し、必要な範囲の
+--   タイルを obj.drawpoly で描いてから、オブジェクトの画像を
+--   キャンバスで置き換える。タイルの反転やずらしは「絶対タイル番号」の
+--   偶奇で決めるので、スクロールしても模様が入れ替わらない。
+--
+--   タイルが細かすぎて枚数が膨大になる場合は、まず偶数×偶数枚の
+--   「ブロック」を1枚描き、それを並べる2段階描画に切り替える
+--   (偶数枚なので反転・ずらしの偶奇がブロック間でも保たれる)。
+--   どの経路でも drawpoly の回数は MAXTILES 以下に抑えるので、
+--   どんな設定でも固まらない。
+-- ============================================================
+
+local MAXTILES = 10000   -- 1フレームで描くタイルの上限(フリーズ防止)
+local DIRECT   = 4000    -- これを超えたらブロック描画を試みる
+local MAXSCALE = 50      -- ループ毎拡大率で大きくなりすぎないための上限
+local ZTILES   = 3000    -- ループ毎拡大率を使う画面全体モードでの上限(大きいタイルは描画が重い)
+local scap     = MAXSCALE
+local FILL     = 40      -- 描く面積の合計がキャンバス何枚ぶんを超えたら打ち切るか(重さ対策)
+
+local floor, ceil, abs = math.floor, math.ceil, math.abs
+local max, min = math.max, math.min
+
+local w, h = obj.w, obj.h
+if w <= 0 or h <= 0 then return end
+
+-- ---------- タイルとセルの大きさ ----------
+local tw = w * zoom / 100           -- タイル(画像)の大きさ
+local th = h * zoom / 100
+local cw = tw * gapx / 100          -- セル = タイル中心どうしの距離
+local ch = th * gapy / 100
+local NX, NY = max(1, floor(nx)), max(1, floor(ny))
+local screen = (area == 1)
+
+-- 画面全体では 1px 未満のセルは意味が無い上に枚数が爆発するので 1px に丸める。
+-- (ちょうど 0 のときはその軸の全タイルが重なるので1枚だけ描く)
+if screen then
+	if cw > 0 and cw < 1 then cw = 1 end
+	if ch > 0 and ch < 1 then ch = 1 end
+end
+
+-- ---------- ループ毎の拡大率 ----------
+-- 基準タイルから d 個離れたタイルは rate^d 倍。
+local ci = screen and 0 or (NX - 1) / 2
+local cj = screen and 0 or (NY - 1) / 2
+local rate = zstep / 100
+local function scale(i, j)
+	if rate == 1 then return 1 end
+	local d
+	if zdir == 1 then
+		d = i - ci
+	elseif zdir == 2 then
+		d = j - cj
+	else
+		d = max(abs(i - ci), abs(j - cj))
+	end
+	return min(scap, rate ^ d)
+end
+
+-- ---------- 出力キャンバスの大きさ ----------
+local W, H
+if screen then
+	W, H = obj.screen_w, obj.screen_h
+else
+	-- 基本はセル単位(間隔が端に半分ずつ入り、出力をさらに並べても継ぎ目が揃う)。
+	-- タイルがセルからはみ出す場合(間隔 < 100% や拡大率変化)は全体が入る大きさにする。
+	local ex, ey = 0, 0
+	for j = 0, NY - 1 do
+		for i = 0, NX - 1 do
+			local s = scale(i, j)
+			ex = max(ex, abs((i - ci) * cw) + tw * s / 2)
+			ey = max(ey, abs((j - cj) * ch) + th * s / 2)
+		end
+	end
+	W = max(NX * cw, 2 * ex)
+	H = max(NY * ch, 2 * ey)
+end
+-- 回数指定でタイルが一周する長さ(クランプ前の正確な値)
+local QX, QY = W, H
+local maxw, maxh = obj.getinfo("image_max")
+W = min(max(1, ceil(W)), maxw or 4096)
+H = min(max(1, ceil(H)), maxh or 4096)
+local hw, hh = W / 2, H / 2
+if screen then
+	-- 画面の2倍より大きいタイルは見た目が変わらないので、そこで頭打ちにする
+	scap = min(MAXSCALE, max(1, 2 * max(W, H) / max(tw, th, 1e-9)))
+end
+
+-- ---------- スクロール量と原点 ----------
+-- obj.time はオブジェクト先頭からの経過秒。
+-- x0, y0 はタイル番号 (0,0) の中心位置。
+local x0 = -ci * cw + ofsx + spx * obj.time
+local y0 = -cj * ch + ofsy + spy * obj.time
+
+local rsh = cw * rowshift / 100     -- 奇数行の横ずらし量
+local csh = ch * colshift / 100     -- 奇数列の縦ずらし量
+local mirx = (mirror == 1 or mirror == 3)
+local miry = (mirror == 2 or mirror == 3)
+
+local function rnd(v)
+	if snap == 1 then return floor(v + 0.5) end
+	return v
+end
+
+-- 1軸ぶんの描画範囲(タイル番号)。half はキャンバス半幅、mh はタイル半幅の最大。
+-- ずらし量は最大でもセル1個ぶんなので余裕を2個ずつ取る。
+local function axis_range(half, cell, origin, mh, n)
+	if cell <= 0 then
+		if screen then return 0, 0 end
+		return 0, n - 1
+	end
+	return floor((-half - mh - origin) / cell) - 2,
+	       ceil((half + mh - origin) / cell) + 2
+end
+
+-- 範囲を中心 c のまわりに k 個へ切り詰める
+local function trim(a, b, c, k)
+	if b - a + 1 <= k then return a, b end
+	local half = floor(k / 2)
+	c = floor(c + 0.5)
+	return max(a, c - half), min(b, c - half + k - 1)
+end
+
+-- タイル1枚を描く。u,v 指定なし = 画像全体
+local function tile(x, y, sw, sh, i, j)
+	local L, R = rnd(x - sw / 2), rnd(x + sw / 2)
+	local T, B = rnd(y - sh / 2), rnd(y + sh / 2)
+	if mirx and i % 2 == 1 then L, R = R, L end
+	if miry and j % 2 == 1 then T, B = B, T end
+	obj.drawpoly(L, T, 0, R, T, 0, R, B, 0, L, B, 0)
+end
+
+-- 描いた面積(キャンバス内に入る部分)を数え、予算を超えたら false を返す。
+-- ループ毎拡大率で巨大なタイルが大量に重なるとGPUが重くなるのを防ぐ。
+local fill_used, fill_max = 0, 0
+local function budget(x, y, sw, sh, lx, ly)
+	local cwid = min(x + sw / 2, lx) - max(x - sw / 2, -lx)
+	local chei = min(y + sh / 2, ly) - max(y - sh / 2, -ly)
+	if cwid > 0 and chei > 0 then fill_used = fill_used + cwid * chei end
+	return fill_used <= fill_max
+end
+
+if not screen then
+	-- ============ 回数指定: ちょうど 横回数 × 縦回数 枚だけ描く ============
+	-- タイルは長さ QX × QY の「輪」の上に並んでいて、スクロールすると
+	-- 右端から出た部分が左端から入ってくる(はみ出た分だけ反対側にも描く)。
+	-- 止まっているときは輪の継ぎ目がキャンバスの端と一致するので、
+	-- 間隔を狭めても指定した枚数より多くは見えない。
+	local sx = ofsx + spx * obj.time
+	local sy = ofsy + spy * obj.time
+	local lx, ly = min(hw, QX / 2), min(hh, QY / 2)
+	local function wrap(v, q)
+		if q <= 0 then return v end
+		return (v + q / 2) % q - q / 2
+	end
+
+	fill_max = FILL * W * H
+	obj.setoption("drawtarget", "tempbuffer", W, H)
+	for j = 0, NY - 1 do
+		local rowoff = (j % 2 == 1) and rsh or 0
+		for i = 0, NX - 1 do
+			local s = scale(i, j)
+			local sw, sh = tw * s, th * s
+			if sw >= 0.25 and sh >= 0.25 then
+				local x = wrap((i - ci) * cw + rowoff + sx, QX)
+				local y = wrap((j - cj) * ch + ((i % 2 == 1) and csh or 0) + sy, QY)
+				for b = -1, 1 do
+					for a = -1, 1 do
+						local xx, yy = x + a * QX, y + b * QY
+						if abs(xx) - sw / 2 < lx and abs(yy) - sh / 2 < ly
+							and budget(xx, yy, sw, sh, lx, ly) then
+							tile(xx, yy, sw, sh, i, j)
+						end
+					end
+				end
+			end
+		end
+	end
+	obj.copybuffer("object", "tempbuffer")
+else
+	-- ---------- 描画範囲 ----------
+	local i0, i1 = axis_range(hw, cw, x0, tw / 2, NX)
+	local j0, j1 = axis_range(hh, ch, y0, th / 2, NY)
+	if rate ~= 1 then
+		-- 端のタイルが大きくなる場合、そのぶん外側のタイルもキャンバスへ入り得る
+		local smax = max(scale(i0, j0), scale(i1, j1), scale(i0, j1), scale(i1, j0), 1)
+		smax = max(smax, scale(i0, cj), scale(i1, cj), scale(ci, j0), scale(ci, j1))
+		local mh = min(max(tw, th) * smax / 2, max(W, H))
+		i0, i1 = axis_range(hw, cw, x0, min(tw * smax / 2, mh), NX)
+		j0, j1 = axis_range(hh, ch, y0, min(th * smax / 2, mh), NY)
+	end
+	local count = (i1 - i0 + 1) * (j1 - j0 + 1)
+
+	if count > DIRECT and rate == 1 and cw > 0 and ch > 0 then
+		-- ============ ブロック描画(タイルが細かいとき) ============
+		-- ブロック = kx × ky 枚(どちらも偶数、32px 以上)
+		local kx = 2 * ceil(16 / cw)
+		local ky = 2 * ceil(16 / ch)
+		local bw, bh = kx * cw, ky * ch
+		-- タイルがセルより大きいと隣のブロックへはみ出すので、外側も mx, my 枚ぶん描く
+		local mx = ceil(tw / 2 / cw) + 2
+		local my = ceil(th / 2 / ch) + 2
+		local a0, a1 = trim(-mx, kx - 1 + mx, (kx - 1) / 2, floor(MAXTILES ^ 0.5))
+		local b0, b1 = trim(-my, ky - 1 + my, (ky - 1) / 2, floor(MAXTILES ^ 0.5))
+		local BW, BH = ceil(bw) + 2, ceil(bh) + 2
+		local px, py = (BW - bw) / 2, (BH - bh) / 2
+
+		obj.setoption("drawtarget", "tempbuffer", BW, BH)
+		for b = b0, b1 do
+			local rowoff = (b % 2 == 1) and rsh or 0
+			for a = a0, a1 do
+				local x = (a - (kx - 1) / 2) * cw + rowoff
+				local y = (b - (ky - 1) / 2) * ch + ((a % 2 == 1) and csh or 0)
+				if abs(x) - tw / 2 < BW / 2 and abs(y) - th / 2 < BH / 2 then
+					tile(x, y, tw, th, a, b)
+				end
+			end
+		end
+		obj.copybuffer("object", "tempbuffer")
+
+		-- ブロックを並べる。ブロック I はタイル I*kx .. I*kx+kx-1 を含む。
+		local bx0 = x0 + (kx - 1) / 2 * cw
+		local by0 = y0 + (ky - 1) / 2 * ch
+		local I0 = floor((-hw - bw / 2 - bx0) / bw) - 1
+		local I1 = ceil((hw + bw / 2 - bx0) / bw) + 1
+		local J0 = floor((-hh - bh / 2 - by0) / bh) - 1
+		local J1 = ceil((hh + bh / 2 - by0) / bh) + 1
+		I0, I1 = trim(I0, I1, -bx0 / bw, floor(MAXTILES ^ 0.5))
+		J0, J1 = trim(J0, J1, -by0 / bh, floor(MAXTILES ^ 0.5))
+
+		obj.setoption("drawtarget", "tempbuffer", W, H)
+		local u0, u1, v0, v1 = px, px + bw, py, py + bh
+		for J = J0, J1 do
+			for I = I0, I1 do
+				local x, y = bx0 + I * bw, by0 + J * bh
+				local L, R = rnd(x - bw / 2), rnd(x + bw / 2)
+				local T, B = rnd(y - bh / 2), rnd(y + bh / 2)
+				if R > -hw and L < hw and B > -hh and T < hh then
+					obj.drawpoly(L, T, 0, R, T, 0, R, B, 0, L, B, 0,
+						u0, v0, u1, v0, u1, v1, u0, v1)
+				end
+			end
+		end
+		obj.copybuffer("object", "tempbuffer")
+	else
+		-- ============ 通常描画 ============
+		local limit = (rate ~= 1) and ZTILES or MAXTILES
+		if count > limit then
+			-- ここに来るのはループ毎拡大率を使っていて枚数が多すぎる場合など。
+			-- キャンバス中央付近を優先して枚数を切り詰める。
+			local k = limit / count
+			local ki = max(1, floor((i1 - i0 + 1) * k ^ 0.5))
+			local kj = max(1, floor(limit / ki))
+			i0, i1 = trim(i0, i1, cw > 0 and -x0 / cw or 0, ki)
+			j0, j1 = trim(j0, j1, ch > 0 and -y0 / ch or 0, kj)
+		end
+
+		fill_max = FILL * W * H
+		obj.setoption("drawtarget", "tempbuffer", W, H)
+		for j = j0, j1 do
+			local rowoff = (j % 2 == 1) and rsh or 0
+			for i = i0, i1 do
+				local s = scale(i, j)
+				local sw, sh = tw * s, th * s
+				local x = x0 + i * cw + rowoff
+				local y = y0 + j * ch + ((i % 2 == 1) and csh or 0)
+				-- キャンバス外のタイルと、0.25px 未満の見えないタイルは描かない
+				if abs(x) - sw / 2 < hw and abs(y) - sh / 2 < hh
+					and sw >= 0.25 and sh >= 0.25 and budget(x, y, sw, sh, hw, hh) then
+					tile(x, y, sw, sh, i, j)
+				end
+			end
+		end
+		obj.copybuffer("object", "tempbuffer")
+	end
+end
+
+-- オフセットを画面上でドラッグできるようにする
+if obj.getoption("gui") then
+	obj.setanchor("ofsx,ofsy", 0, "line")
+end

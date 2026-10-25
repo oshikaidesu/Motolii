@@ -1,0 +1,1131 @@
+--[[
+MIT License
+
+Copyright (c) 2025-2026 sigma-axis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+https://mit-license.org/
+]]
+
+--
+-- v1.32
+--
+
+-- https://github.com/sigma-axis/aviutl2_script_Tile_S
+
+@四角タイルσ
+--information:四角タイルσ@Tile_S v1.32 by σ軸
+--label:Tile_S
+--require:2010800
+--track@width:幅,0,4000,320,1,,0.25
+--track@height:高さ,0,4000,320,1,,0.25
+--checksection@screen_size:背景サイズ,false,false
+--hide@width:screen_size==1
+--hide@height:screen_size==1
+--select@limit_tiles:タイル種類=2,1種類=0,2種類=1,4種類=2
+--group:色設定,false
+--color@col1:色1,0xffffff
+--color@col_inner1:内部色1,0x606060
+--color@col2:色2,0xe0e0e0
+--hide@col2:limit_tiles<1
+--color@col_inner2:内部色2,0x404040
+--hide@col_inner2:limit_tiles<1
+--color@col3:色3,0xa0a0a0
+--hide@col3:limit_tiles<2
+--color@col_inner3:内部色3,0x000000
+--hide@col_inner3:limit_tiles<2
+--color@col4:色4,0xc0c0c0
+--hide@col4:limit_tiles<2
+--color@col_inner4:内部色4,0x202020
+--hide@col_inner4:limit_tiles<2
+--color@col_back:余白色,0x000000
+--track@alpha1:透明度1,0,100,0,0.01
+--track@alpha2:透明度2,0,100,0,0.01
+--hide@alpha2:limit_tiles<1
+--track@alpha3:透明度3,0,100,0,0.01
+--hide@alpha3:limit_tiles<2
+--track@alpha4:透明度4,0,100,0,0.01
+--hide@alpha4:limit_tiles<2
+--track@alpha_back:余白透明度,0,100,100,0.01
+--group:タイル設定,false
+--track@block_w:マス幅,1,2000,64,0.01,,0.25
+--track@block_h:マス高さ,1,2000,64,0.01,,0.25
+--checksection@block_square:マス正方形(幅のみで指定),true,false
+--hide@block_h:block_square~=0
+--track@line:ライン幅,0,1000,1000,0.01,,0.25
+--track@radius:角半径,0,1000,0,0.01,,0.25
+--track@back_w:余白幅,0,2000,0,0.01,,0.25
+--track@back_h:余白高さ,0,2000,0,0.01,,0.25
+--group:タイル配置,false
+--track@rotate:回転,-3600,3600,0,0.01,,0.1
+--track@X:X,-4000,4000,0,0.01,,0.25
+--track@Y:Y,-4000,4000,0,0.01,,0.25
+--trackgroup@X,Y:tile_pos
+--group:その他,false
+--checksection@antialias:アンチエイリアス,false,false
+--value@PI:PI,{}
+--[[pixelshader@draw:
+struct figure {
+	float4 color, color_inner;
+	float2 outer;
+	float line_thick, radius;
+};
+cbuffer constant0 : register(b0) {
+	figure fig[4];
+	float4 color_back;
+	float2x2 to_lattice;
+	float2 offset, size;
+	float antialias_f;
+};
+static const bool antialias = antialias_f > 0;
+int2 modf_n(float2 pt, out float2 pt_f)
+{
+	pt_f = frac(pt);
+	return int2(round(pt - pt_f));
+}
+void min_max(float x, float y, out float m, out float M)
+{
+	if (x < y) { m = x; M = y; }
+	else { m = y; M = x; }
+}
+float aa_step(float x)
+{
+	return saturate(0.5 + (antialias ? x : sign(x)));
+}
+float4 mix_color(float dist, float aa_dist, float line_thick, float4 color, float4 color_inner)
+{
+	const float t1 = aa_step(dist) * aa_step(aa_dist), t2 = aa_step(dist - line_thick);
+	return t1 * lerp(color, color_inner, t2);
+}
+float4 find_color(float2 pt, uint idx)
+{
+	float2 u = pt - fig[idx].outer;
+	float dist, aa_dist; min_max(u.x, u.y, dist, aa_dist);
+	u = fig[idx].radius - u;
+	if (all(u > 0))
+		dist = min(dist, fig[idx].radius - length(u));
+
+	return mix_color(dist, aa_dist,
+		fig[idx].line_thick, fig[idx].color, fig[idx].color_inner);
+}
+float4 draw(float4 pos : SV_Position) : SV_Target
+{
+	float2 pt;
+	const int2 pt_i = modf_n(mul(to_lattice, pos.xy - offset), pt);
+	const uint idx = uint(pt_i.x & 1) | (uint(pt_i.y & 1) << 1);
+
+	pt = max(pt, pow(2, -24));
+	pt = min(pt, 1 - pt);
+	pt *= size;
+	const float4 col = find_color(pt, idx)
+		+ find_color(float2(-pt.x, pt.y), idx ^ 1)
+		+ find_color(float2(pt.x, -pt.y), idx ^ 2)
+		+ find_color(float2(-pt.x, -pt.y), idx ^ 3);
+	return col + (1 - col.a) * color_back;
+}
+
+]]
+local obj, tonumber, type, math, bit = obj, tonumber, type, math, require("bit");
+
+-- set anchors.
+obj.setanchor("X,Y", 0, "line");
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+local function field_as_num(src, tgt, fld)
+	local t = src[fld];
+	if type(t) == "table" then
+		tgt[1][fld], tgt[2][fld], tgt[3][fld], tgt[4][fld] =
+			tonumber(t[1]) or tgt[1][fld],
+			tonumber(t[2]) or tgt[2][fld],
+			tonumber(t[3]) or tgt[3][fld],
+			tonumber(t[4]) or tgt[4][fld];
+	elseif type(t) == "number" then
+		tgt[1][fld], tgt[2][fld], tgt[3][fld], tgt[4][fld] = t, t, t, t;
+	end
+end
+local function as_bool(t, v)
+	if type(t) == "boolean" then return t;
+	elseif type(t) == "number" then return t ~= 0;
+	else return v end
+end
+local fig = {
+	{ line = line, radius = radius, back_w = back_w, back_h = back_h, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col1, col_inner = col_inner1, alpha = alpha1, },
+	{ line = line, radius = radius, back_w = back_w, back_h = back_h, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col2, col_inner = col_inner2, alpha = alpha2, },
+	{ line = line, radius = radius, back_w = back_w, back_h = back_h, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col3, col_inner = col_inner3, alpha = alpha3, },
+	{ line = line, radius = radius, back_w = back_w, back_h = back_h, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col4, col_inner = col_inner4, alpha = alpha4, },
+};
+width = tonumber(PI.width) or width;
+height = tonumber(PI.height) or height;
+screen_size = as_bool(PI.screen_size, screen_size);
+if type(PI.limit_tiles) == "string" then
+	local name2num = { ["1種類"] = 0, ["2種類"] = 1, ["4種類"] = 2 };
+	limit_tiles = name2num[PI.limit_tiles] or limit_tiles;
+end
+field_as_num(PI, fig, "col");
+field_as_num(PI, fig, "col_inner");
+field_as_num(PI, fig, "alpha");
+block_w = tonumber(PI.block_w) or block_w;
+block_h = tonumber(PI.block_h) or block_h;
+block_square = as_bool(PI.block_square, block_square);
+field_as_num(PI, fig, "line");
+field_as_num(PI, fig, "radius");
+col_back = tonumber(PI.col_back) or col_back;
+alpha_back = tonumber(PI.alpha_back) or alpha_back;
+field_as_num(PI, fig, "back_w");
+field_as_num(PI, fig, "back_h");
+rotate = tonumber(PI.rotate) or rotate;
+X = tonumber(PI.X) or X;
+Y = tonumber(PI.Y) or Y;
+antialias = as_bool(PI.antialias, antialias);
+
+-- normalize parameters.
+if screen_size then
+	width, height = obj.screen_w, obj.screen_h;
+else
+	width = math.max(math.floor(0.5 + width), 0);
+	height = math.max(math.floor(0.5 + height), 0);
+end
+limit_tiles = math.min(math.max(math.floor(0.5 + limit_tiles), 0), 2);
+for i = 1, #fig do
+	local f = fig[i];
+	f.col = math.floor(0.5 + f.col) % 2 ^ 24;
+	f.col_inner = math.floor(0.5 + f.col_inner) % 2 ^ 24;
+	f.alpha = math.min(math.max(1 - f.alpha / 100, 0), 1);
+	f.line = math.max(f.line, 0);
+	f.radius = math.max(f.radius, 0);
+	f.back_w = math.max(f.back_w, 0);
+	f.back_h = math.max(f.back_h, 0);
+end
+block_w = math.max(block_w, 1);
+block_h = math.max(block_h, 1);
+col_back = math.floor(0.5 + col_back) % 2 ^ 24;
+alpha_back = math.min(math.max(1 - alpha_back / 100, 0), 1);
+rotate = 2 * math.pi * ((rotate / 360) % 1);
+local dx, dy = X + width / 2, Y + height / 2;
+
+--#endregion PI / normalize parameters.
+
+-- further calculations.
+if block_square then block_h = block_w end
+dx, dy = dx + 2 ^ -9, dy + 1.5 * 2 ^ -9;
+local function rgb(col, alpha)
+	return
+		alpha * (bit.band(col, 0xff0000) / 0xff0000),
+		alpha * (bit.band(col, 0x00ff00) / 0x00ff00),
+		alpha * (bit.band(col, 0x0000ff) / 0x0000ff);
+end
+local function col_pair(l, col_o, col_i, alpha)
+	-- remove artifacts when line width is near 0.
+	local t = l < 1 and 6 * l / (5 * l + 1) or 1;
+	local r_o, g_o, b_o = rgb(col_o, alpha);
+	local r_i, g_i, b_i = rgb(col_i, alpha);
+	return
+		t * r_o + (1 - t) * r_i,
+		t * g_o + (1 - t) * g_i,
+		t * b_o + (1 - t) * b_i,
+		r_i, g_i, b_i;
+end
+for i = 1, #fig do
+	local f = fig[i];
+	f.r, f.g, f.b, f.r_i, f.g_i, f.b_i = col_pair(f.line, f.col, f.col_inner, f.alpha);
+	f.radius = math.min(f.radius, (block_w - f.back_w) / 2, (block_h - f.back_h) / 2);
+	f.back_w, f.back_h = f.back_w / 2, f.back_h / 2;
+end
+if limit_tiles == 0 then fig[2], fig[3], fig[4] = fig[1], fig[1], fig[1];
+elseif limit_tiles == 1 then fig[3], fig[4] = fig[1], fig[2] end
+local r_bk, g_bk, b_bk = rgb(col_back, alpha_back);
+
+local m11, m12, m21, m22 do
+	local c, s = math.cos(rotate), math.sin(rotate);
+	m11, m12, m21, m22 = c, s, -s, c;
+	m11, m12, m21, m22 = m11 / block_w, m12 / block_w, m21 / block_h, m22 / block_h;
+end
+
+-- draw by shader.
+obj.clearbuffer("object", width, height);
+obj.pixelshader("draw", "object", nil, {
+	fig[2].r,   fig[2].g,   fig[2].b,   fig[2].alpha;
+	fig[2].r_i, fig[2].g_i, fig[2].b_i, fig[2].alpha;
+	fig[2].back_w, fig[2].back_h, fig[2].line, fig[2].radius;
+
+	fig[3].r,   fig[3].g,   fig[3].b,   fig[3].alpha;
+	fig[3].r_i, fig[3].g_i, fig[3].b_i, fig[3].alpha;
+	fig[3].back_w, fig[3].back_h, fig[3].line, fig[3].radius;
+
+	fig[1].r,   fig[1].g,   fig[1].b,   fig[1].alpha;
+	fig[1].r_i, fig[1].g_i, fig[1].b_i, fig[1].alpha;
+	fig[1].back_w, fig[1].back_h, fig[1].line, fig[1].radius;
+
+	fig[4].r,   fig[4].g,   fig[4].b,   fig[4].alpha;
+	fig[4].r_i, fig[4].g_i, fig[4].b_i, fig[4].alpha;
+	fig[4].back_w, fig[4].back_h, fig[4].line, fig[4].radius;
+
+	r_bk, g_bk, b_bk, alpha_back;
+
+	m11, m21, 0, 0,
+	m12, m22;
+
+	dx, dy; block_w, block_h; antialias and 1 or 0;
+});
+
+@三角タイルσ
+--information:三角タイルσ@Tile_S v1.32 by σ軸
+--label:Tile_S
+--require:2010800
+--track@width:幅,0,4000,320,1,,0.25
+--track@height:高さ,0,4000,320,1,,0.25
+--checksection@screen_size:背景サイズ,false,false
+--hide@width:screen_size==1
+--hide@height:screen_size==1
+--select@limit_tiles:タイル種類=3,1種類=0,2種類=1,3種類=2,6種類=3
+--group:色設定,false
+--color@col1:色1,0xffffff
+--color@col_inner1:内部色1,0xa0a0a0
+--color@col2:色2,0xe0e0e0
+--hide@col2:limit_tiles<1
+--color@col_inner2:内部色2,0x808080
+--hide@col_inner2:limit_tiles<1
+--color@col3:色3,0xc0c0c0
+--hide@col3:limit_tiles<2
+--color@col_inner3:内部色3,0x606060
+--hide@col_inner3:limit_tiles<2
+--color@col4:色4,0xa0a0a0
+--hide@col4:limit_tiles<3
+--color@col_inner4:内部色4,0x404040
+--hide@col_inner4:limit_tiles<3
+--color@col5:色5,0x808080
+--hide@col5:limit_tiles<3
+--color@col_inner5:内部色5,0x202020
+--hide@col_inner5:limit_tiles<3
+--color@col6:色6,0x606060
+--hide@col6:limit_tiles<3
+--color@col_inner6:内部色6,0x000000
+--hide@col_inner6:limit_tiles<3
+--color@col_back:余白色,0x808080
+--track@alpha1:透明度1,0,100,0,0.01
+--track@alpha2:透明度2,0,100,0,0.01
+--hide@alpha2:limit_tiles<1
+--track@alpha3:透明度3,0,100,0,0.01
+--hide@alpha3:limit_tiles<2
+--track@alpha4:透明度4,0,100,0,0.01
+--hide@alpha4:limit_tiles<3
+--track@alpha5:透明度5,0,100,0,0.01
+--hide@alpha5:limit_tiles<3
+--track@alpha6:透明度6,0,100,0,0.01
+--hide@alpha6:limit_tiles<3
+--track@alpha_back:余白透明度,0,100,100,0.01
+--group:タイル設定,false
+--track@block:マス幅,1,2000,64,0.01,,0.25
+--track@line:ライン幅,0,1000,1000,0.01,,0.25
+--track@radius:角半径,0,1000,0,0.01,,0.25
+--track@back:余白幅,0,2000,0,0.01,,0.25
+--group:タイル配置,false
+--track@rotate:回転,-3600,3600,0,0.01,,0.1
+--track@X:X,-4000,4000,0,0.01,,0.25
+--track@Y:Y,-4000,4000,0,0.01,,0.25
+--trackgroup@X,Y:tile_pos
+--group:その他,false
+--checksection@antialias:アンチエイリアス,true,false
+--value@PI:PI,{}
+--[[pixelshader@draw:
+struct figure {
+	float4 color, color_inner;
+	float outer, line_thick, radius;
+};
+cbuffer constant0 : register(b0) {
+	figure fig[6];
+	float4 color_back;
+	float2x2 to_lattice;
+	float2 offset;
+	float size, antialias_f;
+};
+static const bool antialias = antialias_f > 0;
+int2 modf_n(float2 pt, out float2 pt_f)
+{
+	pt_f = frac(pt);
+	return int2(round(pt - pt_f));
+}
+float aa_step(float x)
+{
+	return saturate(0.5 + (antialias ? x : sign(x)));
+}
+float4 mix_color(float dist, float line_thick, float4 color, float4 color_inner)
+{
+	const float t1 = aa_step(dist), t2 = aa_step(dist - line_thick);
+	return t1 * lerp(color, color_inner, t2);
+}
+float4 find_color(float2 pt, uint idx, inout float sum_weight)
+{
+	static const float2
+		vec_offset = { sqrt(3), 1 },
+		vec_normal = { sqrt(3) / 2, -0.5 };
+	float2 u = pt - fig[idx].outer * vec_offset;
+	float dist = min(dot(vec_normal, u), u.y);
+	if (fig[idx].radius > 0) {
+		const float2 v = fig[idx].radius * vec_offset - u;
+		if (all(float2(v.x, dot(v, vec_offset.yx / 2)) > 0))
+			dist = min(dist, fig[idx].radius - length(v));
+	}
+
+	sum_weight += aa_step(min(dot(vec_normal, pt), pt.y));
+	return mix_color(dist, fig[idx].line_thick, fig[idx].color, fig[idx].color_inner);
+}
+uint modulo3(int x)
+{
+	return uint(x + 0x7ffffffe) % 3; // incorrect exceptions at x = -2^31, -2^31+1 (unlikely occur).
+}
+float4 draw(float4 pos : SV_Position) : SV_Target
+{
+	static const float2x2 to_triangle = { 1, -0.5, 0, sqrt(3) / 2 };
+	static const float2 n[6] = {
+		{ sqrt(3) / 2, -0.5 },
+		{ 0, 0 },
+		{ 0, 1 },
+		{ 0.5, sqrt(3) / 2 },
+		{ sqrt(3) / 2, 0.5 },
+		{ 1, 0 },
+	};
+
+	float2 pt;
+	const int2 pt_i = modf_n(mul(to_lattice, pos.xy - offset), pt);
+
+	uint3 idx1 = { 0, 2, 1 }, idx2;
+	idx1 += modulo3(dot(pt_i, 1)); idx1 %= 3; idx2 = idx1 + 3;
+
+	if (pt.x < pt.y) {
+		pt = pt.yx;
+		uint3 t = idx1; idx1 = idx2; idx2 = t;
+	}
+	if (dot(pt, 1) > 1) {
+		pt = 1 - pt.yx;
+		idx1.yz = idx1.zy;
+		idx2.yz = idx2.zy;
+	}
+	if (dot(pt, float2(2, -1)) > 1) {
+		pt.x = 1 - pt.x + pt.y;
+		idx1.xz = idx1.zx;
+		idx2.yz = idx2.zy;
+	}
+
+	pt.y = max(pt.y, pow(2, -24)); pt.x = max(pt.x - pt.y, pow(2, -24)) + pt.y;
+	pt = size * mul(to_triangle, pt);
+	float sum_weight = 0;
+	float4 col = find_color(pt, idx2[0], sum_weight)
+		+ find_color(pt - 2 * dot(pt, n[0]) * n[0], idx1[0], sum_weight)
+		+ find_color(pt - 2 * dot(pt, n[2]) * n[2], idx1[1], sum_weight)
+		+ find_color(pt - 2 * dot(pt, n[3]) * n[3], idx2[2], sum_weight)
+		+ find_color(pt - 2 * dot(pt, n[4]) * n[4], idx1[2], sum_weight)
+		+ find_color(pt - 2 * dot(pt, n[5]) * n[5], idx2[1], sum_weight);
+	col /= sum_weight;
+	return col + (1 - col.a) * color_back;
+}
+
+]]
+local obj, tonumber, type, math, bit = obj, tonumber, type, math, require("bit");
+
+-- set anchors.
+obj.setanchor("X,Y", 0, "line");
+
+--#region PI / normalize parameters.
+
+--take parameters.
+local function field_as_num(src, tgt, fld)
+	local t = src[fld];
+	if type(t) == "table" then
+		tgt[1][fld], tgt[2][fld], tgt[3][fld], tgt[4][fld], tgt[5][fld], tgt[6][fld] =
+			tonumber(t[1]) or tgt[1][fld],
+			tonumber(t[2]) or tgt[2][fld],
+			tonumber(t[3]) or tgt[3][fld],
+			tonumber(t[4]) or tgt[4][fld],
+			tonumber(t[5]) or tgt[5][fld],
+			tonumber(t[6]) or tgt[6][fld];
+	elseif type(t) == "number" then
+		tgt[1][fld], tgt[2][fld], tgt[3][fld], tgt[4][fld], tgt[5][fld], tgt[6][fld] = t, t, t, t, t, t;
+	end
+end
+local function as_bool(t, v)
+	if type(t) == "boolean" then return t;
+	elseif type(t) == "number" then return t ~= 0;
+	else return v end
+end
+local fig = {
+	{ line = line, radius = radius, back = back, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col1, col_inner = col_inner1, alpha = alpha1, },
+	{ line = line, radius = radius, back = back, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col2, col_inner = col_inner2, alpha = alpha2, },
+	{ line = line, radius = radius, back = back, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col3, col_inner = col_inner3, alpha = alpha3, },
+	{ line = line, radius = radius, back = back, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col4, col_inner = col_inner4, alpha = alpha4, },
+	{ line = line, radius = radius, back = back, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col5, col_inner = col_inner5, alpha = alpha5, },
+	{ line = line, radius = radius, back = back, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col6, col_inner = col_inner6, alpha = alpha6, },
+};
+width = tonumber(PI.width) or width;
+height = tonumber(PI.height) or height;
+screen_size = as_bool(PI.screen_size, screen_size);
+if type(PI.limit_tiles) == "string" then
+	local name2num = { ["1種類"] = 0, ["2種類"] = 1, ["3種類"] = 2, ["6種類"] = 3 };
+	limit_tiles = name2num[PI.limit_tiles] or limit_tiles;
+end
+field_as_num(PI, fig, "col");
+field_as_num(PI, fig, "col_inner");
+field_as_num(PI, fig, "alpha");
+block = tonumber(PI.block) or block;
+field_as_num(PI, fig, "line");
+field_as_num(PI, fig, "radius");
+col_back = tonumber(PI.col_back) or col_back;
+alpha_back = tonumber(PI.alpha_back) or alpha_back;
+field_as_num(PI, fig, "back");
+rotate = tonumber(PI.rotate) or rotate;
+X = tonumber(PI.X) or X;
+Y = tonumber(PI.Y) or Y;
+antialias = as_bool(PI.antialias, antialias);
+
+-- normalize parameters.
+if screen_size then
+	width, height = obj.screen_w, obj.screen_h;
+else
+	width = math.max(math.floor(0.5 + width), 0);
+	height = math.max(math.floor(0.5 + height), 0);
+end
+limit_tiles = math.min(math.max(math.floor(0.5 + limit_tiles), 0), 3);
+for i = 1, #fig do
+	local f = fig[i];
+	f.col = math.floor(0.5 + f.col) % 2 ^ 24;
+	f.col_inner = math.floor(0.5 + f.col_inner) % 2 ^ 24;
+	f.alpha = math.min(math.max(1 - f.alpha / 100, 0), 1);
+	f.line = math.max(f.line, 0);
+	f.radius = math.max(f.radius, 0);
+	f.back = math.max(f.back, 0);
+end
+block = math.max(block, 1);
+col_back = math.floor(0.5 + col_back) % 2 ^ 24;
+alpha_back = math.min(math.max(1 - alpha_back / 100, 0), 1);
+rotate = 2 * math.pi * ((rotate / 360) % 1);
+local dx, dy = X + width / 2, Y + height / 2;
+
+--#endregion PI / normalize parameters.
+
+-- further calculations.
+dx, dy = dx + 2 ^ -9, dy + 1.5 * 2 ^ -9;
+local function rgb(col, alpha)
+	return
+		alpha * (bit.band(col, 0xff0000) / 0xff0000),
+		alpha * (bit.band(col, 0x00ff00) / 0x00ff00),
+		alpha * (bit.band(col, 0x0000ff) / 0x0000ff);
+end
+local function col_pair(l, col_o, col_i, alpha)
+	-- remove artifacts when line width is near 0.
+	local t = l < 1 and 6 * l / (5 * l + 1) or 1;
+	local r_o, g_o, b_o = rgb(col_o, alpha);
+	local r_i, g_i, b_i = rgb(col_i, alpha);
+	return
+		t * r_o + (1 - t) * r_i,
+		t * g_o + (1 - t) * g_i,
+		t * b_o + (1 - t) * b_i,
+		r_i, g_i, b_i;
+end
+for i = 1, #fig do
+	local f = fig[i];
+	f.r, f.g, f.b, f.r_i, f.g_i, f.b_i = col_pair(f.line, f.col, f.col_inner, f.alpha);
+	f.back = math.min(f.back / 2, block / (2 * 3 ^ 0.5));
+	f.radius = math.min(f.radius, block / (2 * 3 ^ 0.5) - f.back);
+end
+if limit_tiles == 0 then fig[2], fig[3], fig[4], fig[5], fig[6] = fig[1], fig[1], fig[1], fig[1], fig[1];
+elseif limit_tiles == 1 then fig[3], fig[4], fig[5], fig[6] = fig[1], fig[2], fig[1], fig[2];
+elseif limit_tiles == 2 then fig[4], fig[5], fig[6] = fig[1], fig[2], fig[3] end
+local r_bk, g_bk, b_bk = rgb(col_back, alpha_back);
+
+local m11, m12, m21, m22 =
+	1, -1 / 3 ^ 0.5,
+	0, -2 / 3 ^ 0.5 do
+	local c, s = math.cos(rotate) / block, math.sin(rotate) / block;
+	m11, m12, m21, m22 =
+		-- multiplication of M * (rotation matrix).
+		m11 * c - m12 * s, m11 * s + m12 * c,
+		m21 * c - m22 * s, m21 * s + m22 * c;
+end
+
+-- draw by shader.
+obj.clearbuffer("object", width, height);
+obj.pixelshader("draw", "object", nil, {
+	fig[1].r,   fig[1].g,   fig[1].b,   fig[1].alpha;
+	fig[1].r_i, fig[1].g_i, fig[1].b_i, fig[1].alpha;
+	fig[1].back, fig[1].line, fig[1].radius, 0;
+
+	fig[5].r,   fig[5].g,   fig[5].b,   fig[5].alpha;
+	fig[5].r_i, fig[5].g_i, fig[5].b_i, fig[5].alpha;
+	fig[5].back, fig[5].line, fig[5].radius, 0;
+
+	fig[3].r,   fig[3].g,   fig[3].b,   fig[3].alpha;
+	fig[3].r_i, fig[3].g_i, fig[3].b_i, fig[3].alpha;
+	fig[3].back, fig[3].line, fig[3].radius, 0;
+
+	fig[2].r,   fig[2].g,   fig[2].b,   fig[2].alpha;
+	fig[2].r_i, fig[2].g_i, fig[2].b_i, fig[2].alpha;
+	fig[2].back, fig[2].line, fig[2].radius, 0;
+
+	fig[4].r,   fig[4].g,   fig[4].b,   fig[4].alpha;
+	fig[4].r_i, fig[4].g_i, fig[4].b_i, fig[4].alpha;
+	fig[4].back, fig[4].line, fig[4].radius, 0;
+
+	fig[6].r,   fig[6].g,   fig[6].b,   fig[6].alpha;
+	fig[6].r_i, fig[6].g_i, fig[6].b_i, fig[6].alpha;
+	fig[6].back, fig[6].line, fig[6].radius, 0;
+
+	r_bk, g_bk, b_bk, alpha_back;
+
+	m11, m21, 0, 0,
+	m12, m22;
+
+	dx, dy; block; antialias and 1 or 0;
+});
+
+@六角タイルσ
+--information:六角タイルσ@Tile_S v1.32 by σ軸
+--label:Tile_S
+--require:2010800
+--track@width:幅,0,4000,320,1,,0.25
+--track@height:高さ,0,4000,320,1,,0.25
+--checksection@screen_size:背景サイズ,false,false
+--hide@width:screen_size==1
+--hide@height:screen_size==1
+--select@limit_tiles:タイル種類=1,1種類=0,3種類=1
+--group:色設定,false
+--color@col1:色1,0xffffff
+--color@col_inner1:内部色1,0x404040
+--color@col2:色2,0xe0e0e0
+--hide@col2:limit_tiles<1
+--color@col_inner2:内部色2,0x202020
+--hide@col_inner2:limit_tiles<1
+--color@col3:色3,0xc0c0c0
+--hide@col3:limit_tiles<1
+--color@col_inner3:内部色3,0x000000
+--hide@col_inner3:limit_tiles<1
+--color@col_back:余白色,0x808080
+--track@alpha1:透明度1,0,100,0,0.01
+--track@alpha2:透明度2,0,100,0,0.01
+--hide@alpha2:limit_tiles<1
+--track@alpha3:透明度3,0,100,0,0.01
+--hide@alpha3:limit_tiles<1
+--track@alpha_back:余白透明度,0,100,100,0.01
+--group:タイル設定,false
+--track@block:マス幅,1,2000,64,0.01,,0.25
+--track@line:ライン幅,0,1000,1000,0.01,,0.25
+--track@radius:角半径,0,1000,0,0.01,,0.25
+--track@back:余白幅,0,2000,0,0.01,,0.25
+--group:タイル配置,false
+--track@rotate:回転,-3600,3600,0,0.01,,0.1
+--track@X:X,-4000,4000,0,0.01,,0.25
+--track@Y:Y,-4000,4000,0,0.01,,0.25
+--trackgroup@X,Y:tile_pos
+--group:その他,false
+--checksection@antialias:アンチエイリアス,true,false
+--value@PI:PI,{}
+--[[pixelshader@draw:
+struct figure {
+	float4 color, color_inner;
+	float outer, line_thick, radius;
+};
+cbuffer constant0 : register(b0) {
+	figure fig[3];
+	float4 color_back;
+	float2x2 to_lattice;
+	float2 offset;
+	float size, antialias_f;
+};
+static const bool antialias = antialias_f > 0;
+int2 modf_n(float2 pt, out float2 pt_f)
+{
+	pt_f = frac(pt);
+	return int2(round(pt - pt_f));
+}
+float aa_step(float x)
+{
+	return saturate(0.5 + (antialias ? x : sign(x)));
+}
+float4 mix_color(float dist, float line_thick, float4 color, float4 color_inner)
+{
+	const float t1 = aa_step(dist), t2 = aa_step(dist - line_thick);
+	return t1 * lerp(color, color_inner, t2);
+}
+float4 find_color(float2 pt, uint idx)
+{
+	static const float2
+		vec_offset = { 1 / sqrt(3), 1 },
+		vec_normal = { sqrt(3) / 2, 0.5 },
+		vec_tangent = { -0.5, sqrt(3) / 2 };
+	float2 u = pt - fig[idx].outer * vec_offset;
+	float dist = min(dot(vec_normal, u), u.y);
+	dist = min(dist, dot(u, vec_offset) - (antialias ? 1.0 / 6 : 0));
+	u = fig[idx].radius * vec_offset - u;
+	if (all(float2(u.x, dot(u, vec_tangent)) > 0))
+		dist = min(dist, fig[idx].radius - length(u));
+
+	return mix_color(dist,
+		fig[idx].line_thick, fig[idx].color, fig[idx].color_inner);
+}
+uint modulo3(int x)
+{
+	return uint(x + 0x7ffffffe) % 3; // incorrect exceptions at x = -2^31, -2^31+1 (unlikely occur).
+}
+float4 draw(float4 pos : SV_Position) : SV_Target
+{
+	static const float2x2 to_triangle = { 1, -0.5, 0, sqrt(3) / 2 };
+	static const float2 n[3] = {
+		{ 0, 0 },
+		{ 0, 1 },
+		{ sqrt(3) / 2, 0.5 },
+	};
+
+	float2 pt;
+	const int2 pt_i = modf_n(mul(to_lattice, pos.xy - offset), pt);
+	uint3 idx = { 1, 2, 0 };
+	idx += modulo3(dot(pt_i, int2(1, -1)));
+	switch (modulo3(dot(pt_i, 1))) {
+	case 0: break;
+	case 1:
+		if (pt.x > pt.y) {
+			idx += 2;
+			idx.yz = idx.zy;
+			pt = pt.yx;
+		}
+		pt.x = dot(pt, float2(-1, 1));
+		idx += 2;
+		break;
+	case 2:
+		pt = 1 - pt.yx;
+		break;
+	}
+	if (pt.x < pt.y) {
+		pt = pt.yx;
+		idx.yz = idx.zy;
+	}
+	if (dot(pt, float2(2, -1)) > 1)
+		pt.x = 1 - pt.x + pt.y;
+	idx %= 3;
+
+	pt = max(pt, pow(2, -24));
+	pt = size * mul(to_triangle, pt);
+	const float4 col = find_color(pt, idx[0])
+		+ find_color(pt - 2 * dot(pt, n[1]) * n[1], idx[1])
+		+ find_color(pt - 2 * dot(pt, n[2]) * n[2], idx[2]);
+	return col + (1 - col.a) * color_back;
+}
+
+]]
+local obj, tonumber, type, math, bit = obj, tonumber, type, math, require("bit");
+
+-- set anchors.
+obj.setanchor("X,Y", 0, "line");
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+local function field_as_num(src, tgt, fld)
+	local t = src[fld];
+	if type(t) == "table" then
+		tgt[1][fld], tgt[2][fld], tgt[3][fld] =
+			tonumber(t[1]) or tgt[1][fld],
+			tonumber(t[2]) or tgt[2][fld],
+			tonumber(t[3]) or tgt[3][fld];
+	elseif type(t) == "number" then
+		tgt[1][fld], tgt[2][fld], tgt[3][fld] = t, t, t;
+	end
+end
+local function as_bool(t, v)
+	if type(t) == "boolean" then return t;
+	elseif type(t) == "number" then return t ~= 0;
+	else return v end
+end
+local fig = {
+	{ line = line, radius = radius, back = back, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col1, col_inner = col_inner1, alpha = alpha1, },
+	{ line = line, radius = radius, back = back, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col2, col_inner = col_inner2, alpha = alpha2, },
+	{ line = line, radius = radius, back = back, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col3, col_inner = col_inner3, alpha = alpha3, },
+};
+width = tonumber(PI.width) or width;
+height = tonumber(PI.height) or height;
+screen_size = as_bool(PI.screen_size, screen_size);
+if type(PI.limit_tiles) == "string" then
+	local name2num = { ["1種類"] = 0, ["3種類"] = 1 };
+	limit_tiles = name2num[PI.limit_tiles] or limit_tiles;
+end
+field_as_num(PI, fig, "col");
+field_as_num(PI, fig, "col_inner");
+field_as_num(PI, fig, "alpha");
+block = tonumber(PI.block) or block;
+field_as_num(PI, fig, "line");
+field_as_num(PI, fig, "radius");
+col_back = tonumber(PI.col_back) or col_back;
+alpha_back = tonumber(PI.alpha_back) or alpha_back;
+field_as_num(PI, fig, "back");
+rotate = tonumber(PI.rotate) or rotate;
+X = tonumber(PI.X) or X;
+Y = tonumber(PI.Y) or Y;
+antialias = as_bool(PI.antialias, antialias);
+
+-- normalize parameters.
+if screen_size then
+	width, height = obj.screen_w, obj.screen_h;
+else
+	width = math.max(math.floor(0.5 + width), 0);
+	height = math.max(math.floor(0.5 + height), 0);
+end
+limit_tiles = math.min(math.max(math.floor(0.5 + limit_tiles), 0), 1);
+for i = 1, #fig do
+	local f = fig[i];
+	f.col = math.floor(0.5 + f.col) % 2 ^ 24;
+	f.col_inner = math.floor(0.5 + f.col_inner) % 2 ^ 24;
+	f.alpha = math.min(math.max(1 - f.alpha / 100, 0), 1);
+	f.line = math.max(f.line, 0);
+	f.radius = math.max(f.radius, 0);
+	f.back = math.max(f.back, 0);
+end
+block = math.max(block, 1);
+col_back = math.floor(0.5 + col_back) % 2 ^ 24;
+alpha_back = math.min(math.max(1 - alpha_back / 100, 0), 1);
+rotate = math.pi / 180 * rotate;
+local dx, dy = X + width / 2, Y + height / 2;
+
+--#endregion PI / normalize parameters.
+
+-- further calculations.
+dx, dy = dx + 2 ^ -9, dy + 1.5 * 2 ^ -9;
+local function rgb(col, alpha)
+	return
+		alpha * (bit.band(col, 0xff0000) / 0xff0000),
+		alpha * (bit.band(col, 0x00ff00) / 0x00ff00),
+		alpha * (bit.band(col, 0x0000ff) / 0x0000ff);
+end
+local function col_pair(l, col_o, col_i, alpha)
+	-- remove artifacts when line width is near 0.
+	local t = l < 1 and 6 * l / (5 * l + 1) or 1;
+	local r_o, g_o, b_o = rgb(col_o, alpha);
+	local r_i, g_i, b_i = rgb(col_i, alpha);
+	return
+		t * r_o + (1 - t) * r_i,
+		t * g_o + (1 - t) * g_i,
+		t * b_o + (1 - t) * b_i,
+		r_i, g_i, b_i;
+end
+for i = 1, #fig do
+	local f = fig[i];
+	f.r, f.g, f.b, f.r_i, f.g_i, f.b_i = col_pair(f.line, f.col, f.col_inner, f.alpha);
+	f.back = math.min(f.back, (3 ^ 0.5 / 2) * block) / 2;
+	f.radius = math.min(f.radius, (3 ^ 0.5 / 4) * block - f.back);
+end
+if limit_tiles == 0 then fig[2], fig[3] = fig[1], fig[1] end
+local r_bk, g_bk, b_bk = rgb(col_back, alpha_back);
+
+local m11, m12, m21, m22 =
+	1, -1 / 3 ^ 0.5,
+	0, -2 / 3 ^ 0.5 do
+	local c, s = -math.sin(rotate) * 2 / block, math.cos(rotate) * 2 / block; -- `rotate` added by pi/2.
+	m11, m12, m21, m22 =
+		-- multiplication of M * (rotation matrix).
+		m11 * c - m12 * s, m11 * s + m12 * c,
+		m21 * c - m22 * s, m21 * s + m22 * c;
+end
+
+-- draw by shader.
+obj.clearbuffer("object", width, height);
+obj.pixelshader("draw", "object", {},
+{
+	fig[1].r,   fig[1].g,   fig[1].b,   fig[1].alpha;
+	fig[1].r_i, fig[1].g_i, fig[1].b_i, fig[1].alpha;
+	fig[1].back, fig[1].line, fig[1].radius, 0;
+
+	fig[2].r,   fig[2].g,   fig[2].b,   fig[2].alpha;
+	fig[2].r_i, fig[2].g_i, fig[2].b_i, fig[2].alpha;
+	fig[2].back, fig[2].line, fig[2].radius, 0;
+
+	fig[3].r,   fig[3].g,   fig[3].b,   fig[3].alpha;
+	fig[3].r_i, fig[3].g_i, fig[3].b_i, fig[3].alpha;
+	fig[3].back, fig[3].line, fig[3].radius, 0;
+
+	r_bk, g_bk, b_bk, alpha_back;
+
+	m11, m21, 0, 0,
+	m12, m22;
+
+	dx, dy; block / 2; antialias and 1 or 0;
+});
+
+@菱形タイルσ
+--information:菱形タイルσ@Tile_S v1.32 by σ軸
+--label:Tile_S
+--require:2010800
+--track@width:幅,0,4000,320,1,,0.25
+--track@height:高さ,0,4000,320,1,,0.25
+--checksection@screen_size:背景サイズ,false,false
+--hide@width:screen_size==1
+--hide@height:screen_size==1
+--select@limit_tiles:タイル種類=2,1種類=0,2種類=1,4種類=2
+--group:色設定,false
+--color@col1:色1,0xffffff
+--color@col_inner1:内部色1,0x606060
+--color@col2:色2,0xe0e0e0
+--hide@col2:limit_tiles<1
+--color@col_inner2:内部色2,0x404040
+--hide@col_inner2:limit_tiles<1
+--color@col3:色3,0xa0a0a0
+--hide@col3:limit_tiles<2
+--color@col_inner3:内部色3,0x000000
+--hide@col_inner3:limit_tiles<2
+--color@col4:色4,0xc0c0c0
+--hide@col4:limit_tiles<2
+--color@col_inner4:内部色4,0x202020
+--hide@col_inner4:limit_tiles<2
+--color@col_back:余白色,0x000000
+--track@alpha1:透明度1,0,100,0,0.01
+--track@alpha2:透明度2,0,100,0,0.01
+--hide@alpha2:limit_tiles<1
+--track@alpha3:透明度3,0,100,0,0.01
+--hide@alpha3:limit_tiles<2
+--track@alpha4:透明度4,0,100,0,0.01
+--hide@alpha4:limit_tiles<2
+--track@alpha_back:余白透明度,0,100,100,0.01
+--group:タイル設定,false
+--track@block_w:マス幅,1,2000,96,0.01,,0.25
+--track@block_h:マス高さ,1,2000,64,0.01,,0.25
+--track@line:ライン幅,0,1000,1000,0.01,,0.25
+--track@radius:角半径,0,1000,0,0.01,,0.25
+--track@back:余白幅,0,2000,0,0.01,,0.25
+--group:タイル配置,false
+--track@rotate:回転,-3600,3600,0,0.01,,0.1
+--track@X:X,-4000,4000,0,0.01,,0.25
+--track@Y:Y,-4000,4000,0,0.01,,0.25
+--trackgroup@X,Y:tile_pos
+--group:その他,false
+--checksection@antialias:アンチエイリアス,true,false
+--value@PI:PI,{}
+--[[pixelshader@draw:
+struct figure {
+	float4 color, color_inner;
+	float outer, line_thick, radius;
+};
+cbuffer constant0 : register(b0) {
+	figure fig[4];
+	float4 color_back;
+	float2x2 to_lattice;
+	float2 offset, size;
+	float antialias_f;
+};
+static const bool antialias = antialias_f > 0;
+int2 modf_n(float2 pt, out float2 pt_f)
+{
+	pt_f = frac(pt);
+	return int2(round(pt - pt_f));
+}
+float aa_step(float x)
+{
+	return saturate(0.5 + (antialias ? x : sign(x)));
+}
+float4 mix_color(float dist, float aa_dist, float line_thick, float4 color, float4 color_inner)
+{
+	const float t1 = aa_step(dist) * aa_step(aa_dist), t2 = aa_step(dist - line_thick);
+	return t1 * lerp(color, color_inner, t2);
+}
+static const float l_size = length(size);
+static const float2 flip = { 1, -1 }, n_size = size / l_size;
+float4 find_color(float2 pt, float2 slope, uint idx)
+{
+	float2 dist = pt.x < pt.y ? pt : pt.yx;
+	dist *= size.x * size.y / l_size; dist -= fig[idx].outer;
+
+	float2 u = slope * (flip * pt + pt.yx) / 2;
+	u.x -= slope.x / 2;
+	if (dot(u, slope) > 0) u *= -1;
+	if (dot(u, flip * slope) > 0) {
+		u = flip * u.yx;
+		slope = slope.yx;
+	}
+	u.x += slope.x / 2;
+	u *= l_size;
+	u.x = (fig[idx].outer + fig[idx].radius) / slope.y - u.x;
+	if (all(float2(dot(u, slope), dot(u, flip * slope)) > 0))
+		dist[0] = min(dist[0], fig[idx].radius - length(u));
+
+	return mix_color(dist[0], dist[1],
+		fig[idx].line_thick, fig[idx].color, fig[idx].color_inner);
+}
+float4 draw(float4 pos : SV_Position) : SV_Target
+{
+	float2 pt;
+	const int2 pt_i = modf_n(mul(to_lattice, pos.xy - offset), pt);
+	const uint idx = (pt_i.x & 1) | ((pt_i.y & 1) << 1);
+	if (pt.x >= 0.5) pt = 1 - pt;
+	const float2 slope = pt.y >= 0.5 ? n_size.yx : n_size;
+	pt.y = min(pt.y, 1 - pt.y);
+	pt = max(pt, pow(2, -24));
+
+	const float4 col = find_color(pt, slope, idx)
+		+ find_color(flip * pt.yx, slope.yx, idx ^ 1)
+		+ find_color(-pt, slope, idx ^ 3)
+		+ find_color(-flip * pt.yx, slope.yx, idx ^ 2);
+	return col + (1 - col.a) * color_back;
+}
+
+]]
+local obj, tonumber, type, math, bit = obj, tonumber, type, math, require("bit");
+
+-- set anchors.
+obj.setanchor("X,Y", 0, "line");
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+local function field_as_num(src, tgt, fld)
+	local t = src[fld];
+	if type(t) == "table" then
+		tgt[1][fld], tgt[2][fld], tgt[3][fld], tgt[4][fld] =
+			tonumber(t[1]) or tgt[1][fld],
+			tonumber(t[2]) or tgt[2][fld],
+			tonumber(t[3]) or tgt[3][fld],
+			tonumber(t[4]) or tgt[4][fld];
+	elseif type(t) == "number" then
+		tgt[1][fld], tgt[2][fld], tgt[3][fld], tgt[4][fld] = t, t, t, t;
+	end
+end
+local function as_bool(t, v)
+	if type(t) == "boolean" then return t;
+	elseif type(t) == "number" then return t ~= 0;
+	else return v end
+end
+local fig = {
+	{ line = line, radius = radius, back = back, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col1, col_inner = col_inner1, alpha = alpha1, },
+	{ line = line, radius = radius, back = back, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col2, col_inner = col_inner2, alpha = alpha2, },
+	{ line = line, radius = radius, back = back, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col3, col_inner = col_inner3, alpha = alpha3, },
+	{ line = line, radius = radius, back = back, r = 0.0, g = 0.0, b = 0.0, r_i = 0.0, g_i = 0.0, b_i = 0.0, col = col4, col_inner = col_inner4, alpha = alpha4, },
+};
+width = tonumber(PI.width) or width;
+height = tonumber(PI.height) or height;
+screen_size = as_bool(PI.screen_size, screen_size);
+if type(PI.limit_tiles) == "string" then
+	local name2num = { ["1種類"] = 0, ["2種類"] = 1, ["4種類"] = 2 };
+	limit_tiles = name2num[PI.limit_tiles] or limit_tiles;
+end
+field_as_num(PI, fig, "col");
+field_as_num(PI, fig, "col_inner");
+field_as_num(PI, fig, "alpha");
+block_w = tonumber(PI.block_w) or block_w;
+block_h = tonumber(PI.block_h) or block_h;
+field_as_num(PI, fig, "line");
+field_as_num(PI, fig, "radius");
+col_back = tonumber(PI.col_back) or col_back;
+alpha_back = tonumber(PI.alpha_back) or alpha_back;
+field_as_num(PI, fig, "back");
+rotate = tonumber(PI.rotate) or rotate;
+X = tonumber(PI.X) or X;
+Y = tonumber(PI.Y) or Y;
+antialias = as_bool(PI.antialias, antialias);
+
+-- normalize parameters.
+if screen_size then
+	width, height = obj.screen_w, obj.screen_h;
+else
+	width = math.max(math.floor(0.5 + width), 0);
+	height = math.max(math.floor(0.5 + height), 0);
+end
+limit_tiles = math.min(math.max(math.floor(0.5 + limit_tiles), 0), 2);
+for i = 1, #fig do
+	local f = fig[i];
+	f.col = math.floor(0.5 + f.col) % 2 ^ 24;
+	f.col_inner = math.floor(0.5 + f.col_inner) % 2 ^ 24;
+	f.alpha = math.min(math.max(1 - f.alpha / 100, 0), 1);
+	f.line = math.max(f.line, 0);
+	f.radius = math.max(f.radius, 0);
+	f.back = math.max(f.back, 0);
+end
+block_w = math.max(block_w, 1);
+block_h = math.max(block_h, 1);
+col_back = math.floor(0.5 + col_back) % 2 ^ 24;
+alpha_back = math.min(math.max(1 - alpha_back / 100, 0), 1);
+rotate = math.pi / 180 * rotate;
+local dx, dy = X + width / 2, Y + height / 2;
+
+--#endregion PI / normalize parameters.
+
+-- further calculations.
+dx, dy = dx + 2 ^ -9, dy + 1.5 * 2 ^ -9;
+local function rgb(col, alpha)
+	return
+		alpha * (bit.band(col, 0xff0000) / 0xff0000),
+		alpha * (bit.band(col, 0x00ff00) / 0x00ff00),
+		alpha * (bit.band(col, 0x0000ff) / 0x0000ff);
+end
+local function col_pair(l, col_o, col_i, alpha)
+	-- remove artifacts when line width is near 0.
+	local t = l < 1 and 6 * l / (5 * l + 1) or 1;
+	local r_o, g_o, b_o = rgb(col_o, alpha);
+	local r_i, g_i, b_i = rgb(col_i, alpha);
+	return
+		t * r_o + (1 - t) * r_i,
+		t * g_o + (1 - t) * g_i,
+		t * b_o + (1 - t) * b_i,
+		r_i, g_i, b_i;
+end
+local H = 0.5 * block_w * block_h / (block_w ^ 2 + block_h ^ 2) ^ 0.5
+for i = 1, #fig do
+	local f = fig[i];
+	f.r, f.g, f.b, f.r_i, f.g_i, f.b_i = col_pair(f.line, f.col, f.col_inner, f.alpha);
+	f.back = math.min(f.back / 2, H);
+	f.radius = math.min(f.radius, H - f.back);
+end
+if limit_tiles == 0 then fig[2], fig[3], fig[4] = fig[1], fig[1], fig[1];
+elseif limit_tiles == 1 then fig[3], fig[4] = fig[1], fig[2] end
+local r_bk, g_bk, b_bk = rgb(col_back, alpha_back);
+
+local m11, m12, m21, m22 =
+	1 / block_w, -1 / block_h,
+	1 / block_w, 1 / block_h do
+	local c, s = math.cos(rotate), math.sin(rotate);
+	m11, m12, m21, m22 =
+		-- multiplication of M * (rotation matrix).
+		m11 * c - m12 * s, m11 * s + m12 * c,
+		m21 * c - m22 * s, m21 * s + m22 * c;
+end
+
+-- draw by shader.
+obj.clearbuffer("object", width, height);
+obj.pixelshader("draw", "object", {},
+{
+	fig[2].r,   fig[2].g,   fig[2].b,   fig[2].alpha;
+	fig[2].r_i, fig[2].g_i, fig[2].b_i, fig[2].alpha;
+	fig[2].back, fig[2].line, fig[2].radius, 0;
+
+	fig[3].r,   fig[3].g,   fig[3].b,   fig[3].alpha;
+	fig[3].r_i, fig[3].g_i, fig[3].b_i, fig[3].alpha;
+	fig[3].back, fig[3].line, fig[3].radius, 0;
+
+	fig[1].r,   fig[1].g,   fig[1].b,   fig[1].alpha;
+	fig[1].r_i, fig[1].g_i, fig[1].b_i, fig[1].alpha;
+	fig[1].back, fig[1].line, fig[1].radius, 0;
+
+	fig[4].r,   fig[4].g,   fig[4].b,   fig[4].alpha;
+	fig[4].r_i, fig[4].g_i, fig[4].b_i, fig[4].alpha;
+	fig[4].back, fig[4].line, fig[4].radius, 0;
+
+	r_bk, g_bk, b_bk, alpha_back;
+
+	m11, m21, 0, 0,
+	m12, m22;
+
+	dx, dy; block_w; block_h, antialias and 1 or 0;
+});
+

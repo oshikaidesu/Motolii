@@ -1,0 +1,432 @@
+--information:相対移動+@PSD v1.0.0 by NNeko
+--label:NNeko
+--require:2010500
+--script:lua
+
+--value@id:キャラクターID,""
+--track@ref_layer:参照レイヤー,0,100,0,1
+--select@motion_mode:動作=0,通常=0,反復=1,反復+=2,ランダム=3
+--track@origin_x:起点X,-10000,10000,0,0.01
+--track@origin_y:起点Y,-10000,10000,0,0.01
+--track@x:X,-10000,10000,0,0.01
+--hide@x:motion_mode==2
+--track@y:Y,-10000,10000,0,0.01
+--hide@y:motion_mode==2
+--track@z:Z,-10000,10000,0,0.01
+--hide@z:motion_mode==2
+--track@period:周期(秒),0.01,10,0.60,0.01
+--hide@period:motion_mode==0
+--track@seed:シード,0,999999,1,1
+--hide@seed:motion_mode<2
+
+--track@plus_x_min:X最小,-10000,10000,-10,0.01
+--hide@plus_x_min:motion_mode~=2
+--track@plus_x_max:X最大,-10000,10000,10,0.01
+--hide@plus_x_max:motion_mode~=2
+--track@plus_y_min:Y最小,-10000,10000,-5,0.01
+--hide@plus_y_min:motion_mode~=2
+--track@plus_y_max:Y最大,-10000,10000,5,0.01
+--hide@plus_y_max:motion_mode~=2
+--track@plus_angle_min:角度最小,-360,360,-3,0.01
+--hide@plus_angle_min:motion_mode~=2
+--track@plus_angle_max:角度最大,-360,360,3,0.01
+--hide@plus_angle_max:motion_mode~=2
+--track@plus_smoothness:なめらかさ,0,100,100,1
+--hide@plus_smoothness:motion_mode~=2
+--track@plus_hold:停止(秒),0,5,0.10,0.01
+--hide@plus_hold:motion_mode~=2
+
+local EFFECT_NAMES = {
+	"パーツ上書き@PSDToolKit",
+	"パーツ上書き@PSD",
+	"セリフ準備@PSDToolKit",
+	"セリフ準備@PSD",
+}
+
+local function trim(value)
+	return tostring(value or ""):match("^%s*(.-)%s*$")
+end
+
+local function each_id(value, callback)
+	for single_id in string.gmatch(tostring(value or ""), "([^,]+)") do
+		single_id = trim(single_id)
+		if single_id ~= "" and callback(single_id) then
+			return true
+		end
+	end
+	return false
+end
+
+local function id_matches(requested, registered, layer)
+	local registered_ids = {}
+	each_id(registered, function(single_id)
+		registered_ids[single_id] = true
+		return false
+	end)
+	local layer_id = "L" .. tostring(layer)
+	return each_id(requested, function(single_id)
+		return single_id == layer_id or registered_ids[single_id] == true
+	end)
+end
+
+local function get_registered_id(layer, effect_name)
+	local ok, value = pcall(
+		obj.getvalue,
+		layer,
+		effect_name,
+		"キャラクターID"
+	)
+	if ok and value ~= nil then
+		return tostring(value)
+	end
+	return nil
+end
+
+local function has_layer_state(character_id, layer)
+	for _, effect_name in ipairs(EFFECT_NAMES) do
+		local registered_id = get_registered_id(layer, effect_name)
+		if registered_id ~= nil and id_matches(character_id, registered_id, layer) then
+			return true
+		end
+	end
+	return false
+end
+
+local function layer_has_object(layer)
+	local ok, exists = pcall(
+		obj.getvalue,
+		"layer" .. tostring(layer)
+	)
+	return ok and (exists == true or tonumber(exists) == 1)
+end
+
+local function find_character_layer(character_id)
+	local ok, layer_max = pcall(obj.getinfo, "layer_max")
+	if not ok then
+		return nil
+	end
+	layer_max = math.floor(tonumber(layer_max) or 0)
+	if layer_max < 1 then
+		return nil
+	end
+
+	local existing_layers = {}
+	for layer = 1, layer_max do
+		if layer_has_object(layer) then
+			existing_layers[#existing_layers + 1] = layer
+		end
+	end
+
+	local found_layer = nil
+	each_id(character_id, function(single_id)
+		for _, layer in ipairs(existing_layers) do
+			if has_layer_state(single_id, layer) then
+				found_layer = layer
+				return true
+			end
+		end
+		return false
+	end)
+	return found_layer
+end
+
+local function get_layer_value(layer, name)
+	local ok, value = pcall(
+		obj.getvalue,
+		"layer" .. tostring(layer) .. "." .. tostring(name)
+	)
+	if ok then
+		return tonumber(value)
+	end
+	return nil
+end
+
+local CACHE_SEPARATOR = "\30"
+local CACHE_PREFIX = "nn_relative_motion_psd_v100_"
+
+local function cache_storage()
+	if type(global) == "table" then
+		return global
+	end
+	_G.__nn_relative_motion_psd_cache = _G.__nn_relative_motion_psd_cache or {}
+	return _G.__nn_relative_motion_psd_cache
+end
+
+local function cache_key()
+	local effect_id = tonumber(obj.effect_id) or tonumber(obj.id) or 0
+	return CACHE_PREFIX .. tostring(math.floor(effect_id))
+end
+
+local function split_cache_record(value)
+	local fields = {}
+	for field in string.gmatch(tostring(value or "") .. CACHE_SEPARATOR, "(.-)" .. CACHE_SEPARATOR) do
+		fields[#fields + 1] = field
+	end
+	return fields
+end
+
+local function write_reference_cache(record)
+	cache_storage()[cache_key()] = table.concat({
+		tostring(record.layer),
+		tostring(record.mode),
+		tostring(record.character_id),
+		tostring(record.active_scene_frame),
+		tostring(record.active_time),
+		tostring(record.reference_frame_s),
+		tostring(record.reference_frame_e),
+		tostring(record.framerate),
+		tostring(record.period),
+		tostring(record.release_end or -1),
+	}, CACHE_SEPARATOR)
+end
+
+local function read_reference_cache(character_id, layer, mode)
+	local fields = split_cache_record(cache_storage()[cache_key()])
+	if #fields ~= 10 then
+		return nil
+	end
+	if (layer ~= nil and tonumber(fields[1]) ~= layer) or
+		tonumber(fields[2]) ~= mode or fields[3] ~= character_id then
+		return nil
+	end
+	local record = {
+		layer = tonumber(fields[1]),
+		mode = mode,
+		character_id = character_id,
+		active_scene_frame = tonumber(fields[4]),
+		active_time = tonumber(fields[5]),
+		reference_frame_s = tonumber(fields[6]),
+		reference_frame_e = tonumber(fields[7]),
+		framerate = tonumber(fields[8]),
+		period = tonumber(fields[9]),
+		release_end = tonumber(fields[10]),
+	}
+	if record.active_scene_frame == nil or record.active_time == nil or
+		record.reference_frame_s == nil or record.reference_frame_e == nil or
+		record.framerate == nil or record.period == nil then
+		return nil
+	end
+	return record
+end
+
+local function clear_reference_cache()
+	cache_storage()[cache_key()] = ""
+end
+
+local function current_scene_frame()
+	local frame_s = tonumber(obj.frame_s)
+	local frame = tonumber(obj.frame)
+	if frame_s == nil or frame == nil then
+		return nil
+	end
+	return frame_s + frame
+end
+
+local function positive_mod(value, modulus)
+	return value - math.floor(value / modulus) * modulus
+end
+
+local function clamp(value, minimum, maximum)
+	return math.max(minimum, math.min(maximum, value))
+end
+
+local function cycle_end_at_or_after(time, cycle_period)
+	local safe_time = math.max(0, tonumber(time) or 0)
+	local safe_period = math.max(tonumber(cycle_period) or 0.60, 0.000001)
+	local cycle = math.ceil(safe_time / safe_period - 0.000000001)
+	return math.max(0, cycle) * safe_period
+end
+
+-- 参照中は参照オブジェクト基準の時刻を使う。
+-- 参照終了後の反復系は、最後に確認した状態から周期終端まで進めて起点で停止する。
+local function get_reference_motion_state(character_id, mode)
+	local configured_layer = math.floor(tonumber(ref_layer) or 0)
+	if configured_layer < 1 and character_id == "" then
+		clear_reference_cache()
+		return true, math.max(0, tonumber(obj.time) or 0)
+	end
+
+	local layer
+	local reference_found
+	if configured_layer >= 1 then
+		layer = configured_layer
+		reference_found = layer_has_object(layer)
+	else
+		layer = find_character_layer(character_id)
+		reference_found = layer ~= nil
+	end
+
+	local scene_frame = current_scene_frame()
+	local framerate = math.max(tonumber(obj.framerate) or 0, 0.000001)
+	local safe_period = math.max(tonumber(period) or 0.60, 0.000001)
+
+	if reference_found then
+		local reference_time = math.max(0, get_layer_value(layer, "time") or 0)
+		if mode == 1 or mode == 2 then
+			local reference_frame_s = get_layer_value(layer, "frame_s")
+			local reference_frame_e = get_layer_value(layer, "frame_e")
+			if scene_frame ~= nil and reference_frame_s ~= nil and reference_frame_e ~= nil then
+				write_reference_cache({
+					layer = layer,
+					mode = mode,
+					character_id = character_id,
+					active_scene_frame = scene_frame,
+					active_time = reference_time,
+					reference_frame_s = reference_frame_s,
+					reference_frame_e = reference_frame_e,
+					framerate = framerate,
+					period = safe_period,
+					release_end = -1,
+				})
+			end
+		else
+			clear_reference_cache()
+		end
+		return true, reference_time
+	end
+
+	if mode ~= 1 and mode ~= 2 then
+		clear_reference_cache()
+		return false, 0
+	end
+
+	local cached_layer = configured_layer >= 1 and configured_layer or nil
+	local record = read_reference_cache(character_id, cached_layer, mode)
+	if record == nil or scene_frame == nil or scene_frame < record.active_scene_frame then
+		return false, 0
+	end
+
+	local motion_time = record.active_time +
+		(scene_frame - record.active_scene_frame) / record.framerate
+	if record.release_end == nil or record.release_end < 0 then
+		local first_missing_frame = scene_frame
+		if scene_frame > record.reference_frame_e then
+			first_missing_frame = record.reference_frame_e + 1
+		end
+		local first_missing_time = record.active_time +
+			(first_missing_frame - record.active_scene_frame) / record.framerate
+		record.release_end = cycle_end_at_or_after(first_missing_time, record.period)
+		write_reference_cache(record)
+	end
+
+	return true, math.min(math.max(0, motion_time), record.release_end)
+end
+
+local function repeat_motion(time, offset_x, offset_y, offset_z)
+	local safe_period = math.max(tonumber(period) or 0.60, 0.000001)
+	local phase = positive_mod(time / safe_period, 1)
+	local amount = phase < 0.5 and phase * 2 or (1 - phase) * 2
+	return offset_x * amount, offset_y * amount, offset_z * amount
+end
+
+local HASH_MODULUS = 2147483647
+
+local function deterministic_random(random_seed, segment, axis)
+	local value = positive_mod(math.floor(random_seed or 0), HASH_MODULUS)
+	value = positive_mod(value + positive_mod(segment + 1, HASH_MODULUS) * 130363, HASH_MODULUS)
+	value = positive_mod(value + axis * 15485863, HASH_MODULUS)
+	value = positive_mod(value * 48271 + 1, HASH_MODULUS)
+	value = positive_mod(value * 48271 + 1, HASH_MODULUS)
+	return value / HASH_MODULUS * 2 - 1
+end
+
+local function random_motion(time, offset_x, offset_y, offset_z)
+	local safe_period = math.max(tonumber(period) or 0.60, 0.000001)
+	local segment = math.floor(time / safe_period)
+	local fraction = time / safe_period - segment
+	local smooth_fraction = fraction * fraction * (3 - 2 * fraction)
+	local random_seed = math.floor(tonumber(seed) or 0)
+
+	local function interpolate_axis(axis, maximum)
+		maximum = math.abs(maximum)
+		local current = deterministic_random(random_seed, segment, axis) * maximum
+		local next_value = deterministic_random(random_seed, segment + 1, axis) * maximum
+		return current + (next_value - current) * smooth_fraction
+	end
+
+	return interpolate_axis(1, offset_x), interpolate_axis(2, offset_y), interpolate_axis(3, offset_z)
+end
+
+local function random_in_range(random_seed, pose_index, axis, minimum, maximum)
+	minimum = tonumber(minimum) or 0
+	maximum = tonumber(maximum) or 0
+	if minimum > maximum then
+		minimum, maximum = maximum, minimum
+	end
+	local unit = (deterministic_random(random_seed, pose_index, axis) + 1) * 0.5
+	return minimum + (maximum - minimum) * unit
+end
+
+-- 1周期ごとにランダムな姿勢へ移動し、周期の終わりで元の姿勢へ戻る。
+local function repeat_plus_motion(time)
+	local safe_period = math.max(tonumber(period) or 0.60, 0.000001)
+	local cycle = math.floor(time / safe_period)
+	local cycle_time = time - cycle * safe_period
+	local hold_time = clamp(tonumber(plus_hold) or 0, 0, safe_period * 0.90)
+	local move_time = math.max((safe_period - hold_time) * 0.5, safe_period * 0.05)
+	local smoothness = clamp((tonumber(plus_smoothness) or 100) / 100, 0, 1)
+	local random_seed = math.floor(tonumber(seed) or 0)
+
+	local function ease(progress)
+		progress = clamp(progress, 0, 1)
+		local smoother_progress = progress * progress * progress * (progress * (progress * 6 - 15) + 10)
+		return progress + (smoother_progress - progress) * smoothness
+	end
+
+	local amount
+	if cycle_time < move_time then
+		amount = ease(cycle_time / move_time)
+	elseif cycle_time < move_time + hold_time then
+		amount = 1
+	else
+		amount = 1 - ease((cycle_time - move_time - hold_time) / move_time)
+	end
+
+	local target_index = cycle + 1
+	local target_x = random_in_range(random_seed, target_index, 11, plus_x_min, plus_x_max)
+	local target_y = random_in_range(random_seed, target_index, 12, plus_y_min, plus_y_max)
+	local target_angle = random_in_range(random_seed, target_index, 13, plus_angle_min, plus_angle_max)
+
+	return target_x * amount, target_y * amount, target_angle * amount
+end
+
+local function calculate_motion(time, mode)
+	local offset_x = tonumber(x) or 0
+	local offset_y = tonumber(y) or 0
+	local offset_z = tonumber(z) or 0
+	time = math.max(0, tonumber(time) or 0)
+	mode = math.floor(tonumber(mode) or 0)
+
+	if mode == 1 then
+		return repeat_motion(time, offset_x, offset_y, offset_z)
+	end
+	if mode == 2 then
+		local plus_x, plus_y, plus_angle = repeat_plus_motion(time)
+		return plus_x, plus_y, 0, plus_angle
+	end
+	if mode == 3 then
+		return random_motion(time, offset_x, offset_y, offset_z)
+	end
+	return offset_x, offset_y, offset_z, 0
+end
+
+local function apply_relative_position()
+	local character_id = trim(id)
+	local mode = math.floor(tonumber(motion_mode) or 0)
+	local should_apply, motion_time = get_reference_motion_state(character_id, mode)
+	if not should_apply then
+		return
+	end
+
+	local offset_x, offset_y, offset_z, offset_angle = calculate_motion(motion_time, mode)
+	obj.ox = (tonumber(obj.ox) or 0) + (tonumber(origin_x) or 0) + offset_x
+	obj.oy = (tonumber(obj.oy) or 0) + (tonumber(origin_y) or 0) + offset_y
+	obj.oz = (tonumber(obj.oz) or 0) + offset_z
+	obj.rz = (tonumber(obj.rz) or 0) + (tonumber(offset_angle) or 0)
+end
+
+-- 連携失敗時は画像や透明度を変更せず、現在の描画をそのまま残す。
+local ok, message = pcall(apply_relative_position)
+if not ok then
+	pcall(print, "相対移動+@PSD: " .. tostring(message))
+end

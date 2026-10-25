@@ -1,0 +1,6 @@
+スピード線 by 猫愛
+licence: MIT
+from: https://github.com/nea-c/aviutl2_script_SpeedLine/releases/download/r3/SpeedLine.zip (tag r3, commit a18bd57db057)
+page: https://github.com/nea-c/aviutl2_script_SpeedLine
+left out: 1 .webp (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

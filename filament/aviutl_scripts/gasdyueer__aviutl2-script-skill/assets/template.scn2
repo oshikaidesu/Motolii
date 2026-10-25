@@ -1,0 +1,9 @@
+--information:シーンチェンジ ver1.00
+-- 场景切换模板 (.scn2)
+-- 对象 = 切换前的图像
+-- フレームバッファ = 切换后的图像
+-- obj.getvalue("scenechange"): 0.0=切换前, 1.0=切换后
+
+-- クロスフェード
+a = 1 - obj.getvalue("scenechange")
+obj.draw(0, 0, 0, 1, a)

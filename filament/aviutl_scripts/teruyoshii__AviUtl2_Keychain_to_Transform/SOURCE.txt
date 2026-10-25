@@ -1,0 +1,6 @@
+AviUtl2_Keychain_to_Transform by teruyoshii
+licence: MIT
+from: https://github.com/teruyoshii/AviUtl2_Keychain_to_Transform (branch main, commit 51cbb6d331b8) (commit 51cbb6d331b8)
+page: https://github.com/teruyoshii/AviUtl2_Keychain_to_Transform
+left out: 1 other, 1 .aux2, 1 .cpp (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

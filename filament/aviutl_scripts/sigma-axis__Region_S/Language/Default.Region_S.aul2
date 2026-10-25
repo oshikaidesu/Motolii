@@ -1,0 +1,45 @@
+; Tooltip definitions
+;===============================================================
+; Target: Region_S (https://github.com/sigma-axis/aviutl2_script_Region_S)
+; Target Version: v1.10
+; Language: Default
+
+[Language]
+Information=Default tooltips for Region_S v1.10 (日本語)
+
+;===============================================================
+
+[Tips.連結成分塗りつぶし@Region_S]
+effect.name=アンカーで指定した点と不透明ピクセルでつながっているピクセルの範囲に対して，色を付けて塗りつぶしたり透明にしたりできます．
+適用する操作=スクリプトには color, intensity, keep_luma の変数が使えます．
+PI=PI = {\n  X, Y: number?,\n  invert: boolean|number|nil,\n  fixed_size: boolean|number|nil,\n  num_points: number?,\n  points: table?,\n  mode_filter: string?,\n  color: number?,\n  intensity: number?,\n  keep_luma: boolean|number|nil,\n  alpha_eff: number?,\n  alpha_src: number?,\n  mode_draw: string?,\n  blend: string?,\n  thresh: number?,\n  inflation: number?,\n  conn_corner: boolean|number|nil,\n}
+
+[Tips.連結成分個別オブジェクト化@Region_S]
+effect.name=アンカーで指定した点と不透明ピクセルでつながっているピクセルの範囲に対して，個別オブジェクトとして分割します．
+開始遅延=「絶対指定」: T1, T2, T3, ...\n「相対指定」: [[0] = T1,] T2 - T1, T3 - T2, ...\n省略時は最後の数値を繰り返す．
+PI=PI = {\n  num_pieces: number?,\n  points: table?,\n  delay: table?,\n  delay_time: string?,\n  delay_outoftime: string?,\n  thresh: number?,\n  conn_corner: boolean|number|nil,\n  fixed_size: boolean|number|nil,\n}
+
+[Tips.色領域塗りつぶし@Region_S]
+effect.name=アンカーで指定した点と近い色でつながっているピクセル範囲に対して，色を付けて塗りつぶしたり透明にしたりできます．
+適用する操作=スクリプトには color, intensity, keep_luma の変数が使えます．
+PI=PI = {\n  X, Y: number?,\n  invert: boolean|number|nil,\n  fixed_size: boolean|number|nil,\n  mode_filter: string?,\n  color: number?,\n  intensity: number?,\n  keep_luma: boolean|number|nil,\n  alpha_eff: number?,\n  alpha_src: number?,\n  mode_draw: string?,\n  blend: string?,\n  range: number?,\n  range_R,range_G, range_B: number?,\n  inflation: number?,\n  conn_corner: boolean|number|nil,\n  union_left: boolean|number|nil,\n  union_right: boolean|number|nil,\n  union_top: boolean|number|nil,\n  union_bottom: boolean|number|nil,\n  conn_empty: boolean|number|nil,\n}
+
+[Tips.透明領域塗りつぶし@Region_S]
+effect.name=アンカーで指定した透明ピクセルとつながっているピクセル範囲に対して，色を付けて塗りつぶしします．
+PI=PI = {\n  X, Y: number?,\n  color: number?,\n  alpha: number?,\n  invert: boolean|number|nil,\n  num_points: number?,\n  points: table?,\n  extra_filter: string?,\n  alpha_src: number?,\n  mode_draw: string?,\n  blend: string?,\n  thresh: number?,\n  inflation: number?,\n  conn_corner: boolean|number|nil,\n  union_left: boolean|number|nil,\n  union_right: boolean|number|nil,\n  union_top: boolean|number|nil,\n  union_bottom: boolean|number|nil,\n}
+
+[Tips.穴埋め@Region_S]
+effect.name=画像の上下左右の端からつながっていない透明ピクセルに対して，色を付けて塗りつぶします．
+PI=PI = {\n  color: number?,\n  alpha: number?,\n  invert: boolean|number|nil,\n  extra_filter: string?,\n  alpha_src: number?,\n  mode_draw: string?,\n  blend: string?,\n  thresh: number?,\n  inflation: number?,\n  conn_corner: boolean|number|nil,\n  union_left: boolean|number|nil,\n  union_right: boolean|number|nil,\n  union_top: boolean|number|nil,\n  union_bottom: boolean|number|nil,\n}
+
+[Tips.領域クロマキー@Region_S]
+effect.name=標準の「クロマキー」を画像全体に対してではなく，アンカーで指定した点からつながっている範囲だけ透過するように適用します．
+PI=PI = {\n  X, Y: number?,\n  invert: boolean|number|nil,\n  num_points: number?,\n  points: table?,\n  range_hue: number?,\n  range_sat: number?,\n  blur: number?,\n  color: number|boolean|nil,\n  adjust_chroma: boolean|number|nil,\n  adjust_alpha: boolean|number|nil,\n  thresh: number?,\n  inflation: number?,\n  conn_corner: boolean|number|nil,\n  union_left: boolean|number|nil,\n  union_right: boolean|number|nil,\n  union_top: boolean|number|nil,\n  union_bottom: boolean|number|nil,\n}
+
+[Tips.領域カラーキー@Region_S]
+effect.name=標準の「カラーキー」を画像全体に対してではなく，アンカーで指定した点からつながっている範囲だけ透過するように適用します．
+PI=PI = {\n  X, Y: number?,\n  invert: boolean|number|nil,\n  num_points: number?,\n  points: table?,\n  range_luma: number?,\n  range_chroma: number?,\n  blur: number?,\n  color: number|boolean|nil,\n  thresh: number?,\n  inflation: number?,\n  conn_corner: boolean|number|nil,\n  union_left: boolean|number|nil,\n  union_right: boolean|number|nil,\n  union_top: boolean|number|nil,\n  union_bottom: boolean|number|nil,\n}
+
+[Tips.領域ルミナンスキー@Region_S]
+effect.name=標準の「ルミナンスキー」を画像全体に対してではなく，アンカーで指定した点からつながっている範囲だけ透過するように適用します．
+PI=PI = {\n  X, Y: number?,\n  invert: boolean|number|nil,\n  num_points: number?,\n  points: table?,\n  thresh_luma: number?,\n  range_luma: number?,\n  mode: string?,\n  thresh: number?,\n  inflation: number?,\n  conn_corner: boolean|number|nil,\n  union_left: boolean|number|nil,\n  union_right: boolean|number|nil,\n  union_top: boolean|number|nil,\n  union_bottom: boolean|number|nil,\n}

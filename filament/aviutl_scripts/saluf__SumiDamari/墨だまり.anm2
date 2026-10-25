@@ -1,0 +1,333 @@
+--filter
+--label:加工
+--information:墨だまり v1.0 by saluf
+
+--track@radius:溜まり半径,1,20,6,0.1
+--track@threshold:しきい値,25,100,50,1
+--track@roundness:丸め強度,0,100,100,1
+
+
+--[[pixelshader@ps_mask:
+cbuffer constant0 : register(b0) {
+    float threshold;
+    float pad0;
+    float pad1;
+    float pad2;
+};
+
+Texture2D tex : register(t0);
+SamplerState smp : register(s0);
+
+float4 ps_mask(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float4 src = tex.Sample(smp, uv);
+    float a = src.a;
+
+    float t = threshold / 100.0;
+    a = smoothstep(t - 0.25, t + 0.25, a);
+
+    return float4(a, a, a, a);
+}
+]]
+
+
+--[[pixelshader@ps_dilate:
+cbuffer constant0 : register(b0) {
+    float radius;
+    float width;
+    float height;
+    float roundness;
+};
+
+Texture2D tex : register(t0);
+SamplerState smp : register(s0);
+
+float4 ps_dilate(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float2 px = float2(1.0 / width, 1.0 / height);
+
+    int r = (int)ceil(radius);
+    float maxA = 0.0;
+
+    for (int y = -20; y <= 20; y++) {
+        for (int x = -20; x <= 20; x++) {
+            if (abs(x) > r || abs(y) > r) continue;
+
+            float2 ofs = float2(x, y);
+
+            float distRound = length(ofs);
+            float distBox = max(abs(ofs.x), abs(ofs.y));
+            float dist = lerp(distBox, distRound, roundness / 100.0);
+
+            if (dist > radius) continue;
+
+            float a = tex.SampleLevel(smp, uv + ofs * px, 0).a;
+            maxA = max(maxA, a);
+        }
+    }
+
+    return float4(maxA, maxA, maxA, maxA);
+}
+]]
+
+
+--[[pixelshader@ps_erode:
+cbuffer constant0 : register(b0) {
+    float radius;
+    float width;
+    float height;
+    float roundness;
+};
+
+Texture2D tex : register(t0);
+SamplerState smp : register(s0);
+
+float4 ps_erode(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float2 px = float2(1.0 / width, 1.0 / height);
+
+    int r = (int)ceil(radius);
+    float minA = 1.0;
+
+    for (int y = -20; y <= 20; y++) {
+        for (int x = -20; x <= 20; x++) {
+            if (abs(x) > r || abs(y) > r) continue;
+
+            float2 ofs = float2(x, y);
+
+            float distRound = length(ofs);
+            float distBox = max(abs(ofs.x), abs(ofs.y));
+            float dist = lerp(distBox, distRound, roundness / 100.0);
+
+            if (dist > radius) continue;
+
+            float a = tex.SampleLevel(smp, uv + ofs * px, 0).a;
+            minA = min(minA, a);
+        }
+    }
+
+    return float4(minA, minA, minA, minA);
+}
+]]
+
+
+--[[pixelshader@ps_output_solid:
+cbuffer constant0 : register(b0) {
+    float outR;
+    float outG;
+    float outB;
+    float pad0;
+};
+
+Texture2D maskTex : register(t0);
+SamplerState smp : register(s0);
+
+float solidifyAlpha(float a) {
+    const float alphaFix = 100.0;
+
+    const float solidFill = 70.0;
+
+    float f = saturate(alphaFix / 100.0);
+    float hi = lerp(0.35, 0.08, f);
+    a = smoothstep(0.01, hi, a);
+
+    float s = saturate(solidFill / 100.0);
+    float hardA = (a > 0.001) ? 1.0 : 0.0;
+    a = lerp(a, hardA, s);
+
+    return saturate(a);
+}
+
+float4 ps_output_solid(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float a = maskTex.Sample(smp, uv).a;
+    a = solidifyAlpha(a);
+
+    float3 col = float3(outR, outG, outB);
+
+    return float4(col * a, a);
+}
+]]
+
+
+
+local w = obj.w
+local h = obj.h
+
+local seamFix = 3
+
+local function clamp255(v)
+    v = tonumber(v) or 0
+    if v < 0 then return 0 end
+    if v > 255 then return 255 end
+    return math.floor(v + 0.5)
+end
+
+local function packColor(r, g, b)
+    r = clamp255(r)
+    g = clamp255(g)
+    b = clamp255(b)
+    return r * 0x10000 + g * 0x100 + b
+end
+
+local function isValidColor(c)
+    return type(c) == "number" and c >= 0 and c <= 0xffffff
+end
+
+local function getTextSettingColor()
+    local candidates = {
+        { "テキスト", "文字色" },
+        { "テキスト", "文字色1" },
+        { "テキスト", "色" },
+    }
+
+    for i = 1, #candidates do
+        local effect = candidates[i][1]
+        local item = candidates[i][2]
+        local ok, c = pcall(function()
+            return obj.getvalue(effect, item)
+        end)
+        if ok and isValidColor(c) then
+            return c
+        end
+    end
+
+    return nil
+end
+
+local function sampleTextColorFromObject()
+    local ok = pcall(function()
+        obj.pixeloption("get", "object")
+        obj.pixeloption("type", "rgb")
+    end)
+    if not ok then
+        return nil
+    end
+
+    local stepX = math.max(1, math.floor(w / 96))
+    local stepY = math.max(1, math.floor(h / 96))
+
+    local bestA = -1
+    local bestR, bestG, bestB = 255, 255, 255
+
+    for y = 0, h - 1, stepY do
+        for x = 0, w - 1, stepX do
+            local ok2, r, g, b, a = pcall(function()
+                return obj.getpixel(x, y, "rgb")
+            end)
+
+            if ok2 and a ~= nil then
+                r = tonumber(r) or 0
+                g = tonumber(g) or 0
+                b = tonumber(b) or 0
+                a = tonumber(a) or 0
+
+                if a > bestA then
+                    bestA = a
+                    bestR, bestG, bestB = r, g, b
+                end
+            end
+        end
+    end
+
+    if bestA <= 0 then
+        return nil
+    end
+
+    return packColor(bestR, bestG, bestB)
+end
+
+local outCol = getTextSettingColor() or sampleTextColorFromObject() or 0xffffff
+
+local outR = math.floor(outCol / 0x10000) % 0x100
+local outG = math.floor(outCol / 0x100) % 0x100
+local outB = outCol % 0x100
+local outRf = outR / 255.0
+local outGf = outG / 255.0
+local outBf = outB / 255.0
+
+
+obj.clearbuffer("tempbuffer", w, h)
+
+obj.pixelshader(
+    "ps_mask",
+    "tempbuffer",
+    { "object" },
+    {
+        threshold,
+        0,
+        0,
+        0
+    },
+    "copy",
+    "clip"
+)
+
+obj.pixelshader(
+    "ps_dilate",
+    "object",
+    { "tempbuffer" },
+    {
+        radius,
+        w,
+        h,
+        roundness
+    },
+    "copy",
+    "clip"
+)
+
+obj.clearbuffer("tempbuffer", w, h)
+obj.pixelshader(
+    "ps_erode",
+    "tempbuffer",
+    { "object" },
+    {
+        radius,
+        w,
+        h,
+        roundness
+    },
+    "copy",
+    "clip"
+)
+
+if seamFix > 0 then
+    obj.pixelshader(
+        "ps_dilate",
+        "object",
+        { "tempbuffer" },
+        {
+            seamFix,
+            w,
+            h,
+            100
+        },
+        "copy",
+        "clip"
+    )
+
+    obj.pixelshader(
+        "ps_erode",
+        "tempbuffer",
+        { "object" },
+        {
+            seamFix,
+            w,
+            h,
+            100
+        },
+        "copy",
+        "clip"
+    )
+end
+
+obj.pixelshader(
+    "ps_output_solid",
+    "object",
+    { "tempbuffer" },
+    {
+        outRf,
+        outGf,
+        outBf,
+        0
+    },
+    "copy",
+    "clamp"
+)

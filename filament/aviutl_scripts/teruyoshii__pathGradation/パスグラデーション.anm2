@@ -1,0 +1,407 @@
+--information:パスグラデーション v1.2 by teruyoshi | ベジェ曲線に沿って色が変わるグラデーション
+--label:teruyoshi
+-- Azuriteさんのグラデーション+(https://github.com/azurite581/AviUtl2-GradientPlus)を参考に作成しました
+--group:パス設定,false
+-- 各座標はオブジェクト中心からの相対座標
+--track@p1x:始点X,-4000,4000,-200,0.01
+--track@p1y:始点Y,-4000,4000,-200,0.01
+--trackgroup@p1x,p1y:始点位置
+--track@p2x:始点ハンドルX,-4000,4000,-200,0.01
+--track@p2y:始点ハンドルY,-4000,4000,-150,0.01
+--trackgroup@p2x,p2y:始点ハンドル
+--track@p3x:終点ハンドルX,-4000,4000,150,0.01
+--track@p3y:終点ハンドルY,-4000,4000,200,0.01
+--trackgroup@p3x,p3y:終点ハンドル
+--track@p4x:終点X,-4000,4000,200,0.01
+--track@p4y:終点Y,-4000,4000,200,0.01
+--trackgroup@p4x,p4y:終点位置
+-- 旧版(v1.1.1以前)のパスの設定。常に非表示。初期値から変わっている場合は、互換性のためこちらを優先する
+-- P1x,P1y,P2x,P2yの順で制御点を指定
+--value@beginPoint:始点,{-200,-200,-200,-150}
+--hide@beginPoint
+-- P3x,P3y,P4x,P4yの順で制御点を指定
+--value@endPoint:終点,{150,200,200,200}
+--hide@endPoint
+
+--group:グラデーション設定,true
+--track@str:強さ,0,100,100,0.01
+--select@shape:形状=0,最近点=0,距離=1,なめらか=2,直交=3
+-- 最近点: 曲線の上で一番近い場所の色。曲線から離れた所に色の継ぎ目ができることがあり、ぼかし幅でその継ぎ目をぼかせる
+-- 距離: 曲線からの距離で色を決める(曲線の上が開始色、幅だけ離れた所が終了色)
+-- なめらか: 曲線の全体から距離に応じた重みで色を集める。色の継ぎ目ができない(等電位線のように、色の境目が交わらない)
+-- 直交: 色の境目が曲線を直角に横切る(曲線を1本の電気力線とみなした時の等電位線)。曲線から離れた所は追従度に応じてなだらかにつなぐ
+--track@blurWidth:ぼかし幅,0,500,0,0.01
+--hide@blurWidth:shape~=0
+--track@distWidth:距離の幅,1,4000,200,0.01
+--hide@distWidth:shape~=1
+--track@follow:追従度,1.5,8,3,0.01 --大きいほど近い場所の色が強く出る(なめらかは最近点の見た目に近づき、直交は離れた所の色の変わり目が鋭くなる)
+--hide@follow:shape<2
+--track3:🕒️ｸﾞﾗﾃﾞ曲線0→100,0,100,0,0.01 --時間制御でグラデーションの遷移を制御する
+--track@resolution:精度,2,500,100,1
+
+--group:色設定,true
+--color@rgb1:開始色,0xffffff
+--track@a1:開始色透明度,0,100,0,0.01
+--color@rgb2:終了色,0x000000
+--track@a2:終了色透明度,0,100,0,0.01
+--select@colorSpace:色空間=0,RGB=0,HSL短経路=1,HSL長経路=2,HSL右回り=3,HSL左回り=4
+
+--group:その他の設定,false
+--select@blendMode:合成モード=0,通常=0,加算=1,減算=2,乗算=3,スクリーン=4,オーバーレイ=5,比較(明)=6,比較(暗)=7,輝度=8,色差=9,陰影=10,明暗=11,差分=12,アルファ加算=13,アルファ最大値=14,アルファ減算=15,アルファ加算2=16
+--check@clear:元オブジェクトをクリア,0
+--check@showBezier:ベジェ曲線を描画,0
+--color@bezierColor:ベジェ曲線色,0xff0000
+--hide@bezierColor:showBezier==0
+
+local MaxResolution = 500 -- グラデーションカーブの解像度
+-- 重い場合はMaxResolutionを下げてください(下のシェーダー側のMaxResolutionも同じ値にしてください)
+local BM = {"none", "add", "sub", "mul", "screen", "overlay", "light", "dark", "brightness", "chroma", "shadow", "light_dark", "diff", "alpha_add", "alpha_max", "alpha_sub", "alpha_add2"}
+-- 旧版の始点・終点が初期値から変わっている場合は、旧版の設定を使う
+local legacy = beginPoint[1] ~= -200 or beginPoint[2] ~= -200 or beginPoint[3] ~= -200 or beginPoint[4] ~= -150
+  or endPoint[1] ~= 150 or endPoint[2] ~= 200 or endPoint[3] ~= 200 or endPoint[4] ~= 200
+if legacy then
+  local num = obj.setanchor("beginPoint", 2, "line")
+  local num2 = obj.setanchor("endPoint", 2, "line")
+  p1x, p1y, p2x, p2y = beginPoint[1], beginPoint[2], beginPoint[3], beginPoint[4]
+  p3x, p3y, p4x, p4y = endPoint[1], endPoint[2], endPoint[3], endPoint[4]
+else
+  obj.setanchor("p1x,p1y", 0)
+  obj.setanchor("p2x,p2y", 0, "small")
+  obj.setanchor("p3x,p3y", 0, "small")
+  obj.setanchor("p4x,p4y", 0)
+  obj.setanchor({p1x, p1y, p2x, p2y}, 2, "line") -- 始点と始点ハンドルを結ぶ線(表示のみ)
+  obj.setanchor({p3x, p3y, p4x, p4y}, 2, "line") -- 終点ハンドルと終点を結ぶ線(表示のみ)
+  if obj.getoption("track_mode", "p1x") ~= 0 or obj.getoption("track_mode", "p1y") ~= 0 or obj.getoption("track_mode", "p2x") ~= 0 or obj.getoption("track_mode", "p2y") ~= 0 then
+    obj.setanchor({obj.getvalue("track.p1x", 0), obj.getvalue("track.p1y", 0), obj.getvalue("track.p2x", 0), obj.getvalue("track.p2y", 0)}, 2, "line", "color", 0xa0ffa0)
+    obj.setanchor({obj.getvalue("track.p1x", 0,-1), obj.getvalue("track.p1y", 0,-1), obj.getvalue("track.p2x", 0,-1), obj.getvalue("track.p2y", 0,-1)}, 2, "line", "color", 0xffa0a0)
+  end
+  if obj.getoption("track_mode", "p3x") ~= 0 or obj.getoption("track_mode", "p3y") ~= 0 or obj.getoption("track_mode", "p4x") ~= 0 or obj.getoption("track_mode", "p4y") ~= 0 then
+    obj.setanchor({obj.getvalue("track.p3x", 0), obj.getvalue("track.p3y", 0), obj.getvalue("track.p4x", 0), obj.getvalue("track.p4y", 0)}, 2, "line", "color", 0xa0ffa0)
+    obj.setanchor({obj.getvalue("track.p3x", 0,-1), obj.getvalue("track.p3y", 0,-1), obj.getvalue("track.p4x", 0,-1), obj.getvalue("track.p4y", 0,-1)}, 2, "line", "color", 0xffa0a0)
+  end
+end
+
+--[[pixelshader@PathGradient:
+  static const uint MaxResolution = 500; // 上のLua側のMaxresolutionと同じ値にすること
+  static const float weight = 10.0; // 線の太さ
+
+  float4 rgb2hsl(float4 rgba) {
+    float r = rgba.r;
+    float g = rgba.g;
+    float b = rgba.b;
+    float maxc = max(r, max(g, b));
+    float minc = min(r, min(g, b));
+    float h = 0.0;
+    float s = 0.0;
+    float l = (maxc + minc) / 2.0;
+    if (maxc != minc) {
+      float delta = maxc - minc;
+      if (l < 0.5) s = delta / (maxc + minc);
+      else s = delta / (2.0 - maxc - minc);
+      if (maxc == r) h = (g - b) / delta + (g < b ? 6.0 : 0.0);
+      else if (maxc == g) h = (b - r) / delta + 2.0;
+      else h = (r - g) / delta + 4.0;
+      h /= 6.0;
+    }
+    return float4(h, s, l, rgba.w);
+  }
+  float4 hue2rgb(float hue){
+    float r = abs(hue * 6.0 - 3.0) - 1.0;
+    float g = 2.0 - abs(hue * 6.0 - 2.0);
+    float b = 2.0 - abs(hue * 6.0 - 4.0);
+    return float4(r, g, b, 1.0);
+  }
+  float4 hsl2rgb(float4 hsla) {
+    float r = abs(hsla.x * 6.0 - 3.0) -1.0;
+    float g = 2.0 - abs(hsla.x * 6.0 - 2.0);
+    float b = 2.0 - abs(hsla.x * 6.0 - 4.0);
+    float C = (1.0 - abs(2.0 * hsla.z - 1.0)) * hsla.y;
+    return float4((float3(r,g,b) - 0.5) * C + hsla.z, hsla.w);
+  }
+
+  float4 lerpRGB(float4 c1, float4 c2, float t) {
+    return lerp(c1, c2, t);
+  }
+  float4 lerpHSL_short(float4 c1, float4 c2, float t) {
+    float4 hsla1 = rgb2hsl(c1);
+    float4 hsla2 = rgb2hsl(c2);
+    // 短経路補正
+    if (abs(hsla2.x - hsla1.x) > 0.5) {
+      if (hsla1.x > hsla2.x) hsla2.x += 1.0;
+      else hsla1.x += 1.0;
+    }
+    float4 hsla = lerp(hsla1, hsla2, t);
+    if (hsla.x > 1.0) hsla.x -= 1.0;
+    if (hsla.x < 0.0) hsla.x += 1.0;
+    return  hsl2rgb(hsla);
+  }
+  float4 lerpHSL_long(float4 c1, float4 c2, float t) {
+    float4 hsla1 = rgb2hsl(c1);
+    float4 hsla2 = rgb2hsl(c2);
+    // 短経路補正
+    if (abs(hsla2.x - hsla1.x) < 0.5) {
+      if (hsla1.x > hsla2.x) hsla2.x += 1.0;
+      else hsla1.x += 1.0;
+    }
+    float4 hsla = lerp(hsla1, hsla2, t);
+    if (hsla.x > 1.0) hsla.x -= 1.0;
+    if (hsla.x < 0.0) hsla.x += 1.0;
+    return  hsl2rgb(hsla);
+  }
+  float4 lerpHSL_r(float4 c1, float4 c2, float t) {
+    float4 hsla1 = rgb2hsl(c1);
+    float4 hsla2 = rgb2hsl(c2);
+    if (hsla2.x < hsla1.x) hsla2.x += 1.0;
+    float4 hsla = lerp(hsla1, hsla2, t);
+    if (hsla.x > 1.0) hsla.x -= 1.0;
+    if (hsla.x < 0.0) hsla.x += 1.0;
+    return  hsl2rgb(hsla);
+  }
+  float4 lerpHSL_l(float4 c1, float4 c2, float t) {
+    float4 hsla1 = rgb2hsl(c1);
+    float4 hsla2 = rgb2hsl(c2);
+    if (hsla1.x > hsla2.x) hsla1.x -= 1.0;
+    float4 hsla = lerp(hsla2, hsla1, t);
+    if (hsla.x > 1.0) hsla.x -= 1.0;
+    if (hsla.x < 0.0) hsla.x += 1.0;
+    return  hsl2rgb(hsla);
+  }
+
+  Texture2D tex : register(t0);
+  cbuffer constant0 : register(b0) {
+    //float str;
+    float2 p1;
+    float2 p2;
+    float2 p3;
+    float2 p4;
+    float3 rgb1;
+    float a1;
+    float3 rgb2;
+    float a2;
+    float3 bezierColor;
+    float colorSpace;
+    float resolution;
+    float showBezier;
+    float shape;
+    float follow;
+    float blurWidth;
+    float distWidth;
+    float2 padding;
+    float gCurve[MaxResolution + 1];
+  };
+  SamplerState samLinear : register(s0);
+  struct PS_INPUT {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+  };
+
+  // 複素数の計算(float2のxを実部、yを虚部とする)
+  float2 cmul(float2 a, float2 b) {
+    return float2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x);
+  }
+  float2 cdiv(float2 a, float2 b) {
+    return float2(a.x*b.x + a.y*b.y, a.y*b.x - a.x*b.y) / max(dot(b, b), 1e-30);
+  }
+  float2 csqrt(float2 a) {
+    float r = length(a);
+    float th = (r > 0.0 ? atan2(a.y, a.x) : 0.0) * 0.5;
+    return sqrt(r) * float2(cos(th), sin(th));
+  }
+  float2 ccbrt(float2 a) {
+    float r = length(a);
+    float th = (r > 0.0 ? atan2(a.y, a.x) : 0.0) / 3.0;
+    return pow(r, 1.0 / 3.0) * float2(cos(th), sin(th));
+  }
+
+  // 直交: ベジェ曲線の式B(t)のtを複素数に広げ、B(t)=画素の位置 を解いたtの実部を位置とする
+  // (実部が電位、虚部が流れ関数にあたり、虚部が0の線=曲線そのものが電気力線になる)
+  float fieldLinePosition(float2 uv, float scale) {
+    // 桁あふれを防ぐため、座標をオブジェクトの対角線で割ってから計算する
+    float2 q1 = p1 / scale;
+    float2 q2 = p2 / scale;
+    float2 q3 = p3 / scale;
+    float2 q4 = p4 / scale;
+    // B(t) - z = a*t^3 + b*t^2 + c*t + d
+    float2 a = -q1 + 3.0*q2 - 3.0*q3 + q4;
+    float2 b = 3.0*q1 - 6.0*q2 + 3.0*q3;
+    float2 c = 3.0*(q2 - q1);
+    float2 d = q1 - uv / scale;
+    float la = length(a);
+    float lb = length(b);
+    float lc = length(c);
+    float2 far = float2(1e6, 1e6); // 解が3つ無い時の埋め草(選ばれない)
+    float2 r[3] = {far, far, far};
+    if (la > 1e-4 * max(lb, lc)) {
+      // 3次方程式の解の公式
+      float2 D0 = cmul(b, b) - 3.0*cmul(a, c);
+      float2 D1 = 2.0*cmul(b, cmul(b, b)) - 9.0*cmul(a, cmul(b, c)) + 27.0*cmul(cmul(a, a), d);
+      float2 sq = csqrt(cmul(D1, D1) - 4.0*cmul(D0, cmul(D0, D0)));
+      float2 u = D1 + sq;
+      float2 v = D1 - sq;
+      if (dot(v, v) > dot(u, u)) u = v; // 桁落ちしない方を使う
+      float2 C = ccbrt(u * 0.5);
+      for (int k = 0; k < 3; k++) {
+        if (dot(C, C) > 0.0) r[k] = -cdiv(b + C + cdiv(D0, C), 3.0*a);
+        else r[k] = -cdiv(b, 3.0*a);
+        C = cmul(C, float2(-0.5, 0.8660254));
+      }
+    } else if (lb > 1e-4 * lc) {
+      // 3次の係数がほぼ0(2次方程式)
+      float2 sq = csqrt(cmul(c, c) - 4.0*cmul(b, d));
+      r[0] = cdiv(-c + sq, 2.0*b);
+      r[1] = cdiv(-c - sq, 2.0*b);
+    } else if (lc > 0.0) {
+      // 直線
+      r[0] = cdiv(-d, c);
+    } else {
+      // 制御点が全て同じ位置
+      r[0] = float2(0.0, 0.0);
+    }
+    // 3つの解を、tの平面での曲線の範囲(実軸の0〜1)への近さで重み付けして混ぜる
+    // (一番近い解だけを採ると、解が入れ替わる所が色の継ぎ目になる。曲線の近くでは一番近い解がほぼそのまま出る)
+    float sumW = 0.0;
+    float sumT = 0.0;
+    for (int m = 0; m < 3; m++) {
+      float2 t = r[m];
+      for (int j = 0; j < 3; j++) { // ニュートン法で解の誤差を減らす
+        float2 f = cmul(cmul(cmul(a, t) + b, t) + c, t) + d;
+        float2 df = cmul(3.0*cmul(a, t) + 2.0*b, t) + c;
+        if (dot(df, df) > 1e-20) t -= cdiv(f, df);
+      }
+      float2 off = t - float2(saturate(t.x), 0.0);
+      float w = pow(dot(off, off) + 1e-8, -0.5 * follow);
+      sumW += w;
+      sumT += w * saturate(t.x);
+    }
+    return sumT / sumW;
+  }
+
+  float4 PathGradient(PS_INPUT input) : SV_Target {
+    float2 uv = input.pos.xy;
+    float minDist = 10000.0; // 曲線の上の点までの距離(ベジェ曲線の描画用)
+    float original_a = tex.Sample(samLinear, input.uv).a; // 元オブジェクトの透明度
+    float4 rgba1 = float4(rgb1 * original_a*a1, a1 * original_a);
+    float4 rgba2 = float4(rgb2 * original_a*a2, a2 * original_a);
+    // 最近点・なめらか用: 重みの合計と、重みを掛けた位置の合計
+    float sumW = 0.0;
+    float sumT = 0.0;
+    float texW, texH;
+    tex.GetDimensions(texW, texH);
+    float scale2 = texW * texW + texH * texH; // 距離をオブジェクトの対角線で割ってから累乗する(桁あふれを防ぐ)
+    float minSegDist = 1e9; // 折れ線までの距離
+    float softMin = 1e9;
+    float sigma = max(blurWidth, 0.01);
+    float2 prevPoint = p1;
+    uint n = (uint)resolution;
+    for (uint i = 0; i <= n; i++) {
+      float t = i / resolution;
+      float u = 1.0 - t;
+      float2 bezierPoint = u*u*u*p1 + 3.0*u*u*t*p2 + 3.0*u*t*t*p3 + t*t*t*p4;
+      minDist = min(minDist, length(uv - bezierPoint));
+      if (i > 0) {
+        // 曲線を折れ線とみなし、区間の上で一番近い点を求める
+        float2 seg = bezierPoint - prevPoint;
+        float segLen2 = max(dot(seg, seg), 1e-8);
+        float h = saturate(dot(uv - prevPoint, seg) / segLen2);
+        float2 d = uv - (prevPoint + seg * h);
+        float segDist = length(d);
+        minSegDist = min(minSegDist, segDist);
+        float w = 0.0;
+        if (shape == 2) {
+          // なめらか: 距離の累乗に反比例する重み
+          w = sqrt(segLen2) * pow(max(dot(d, d), 1.0) / scale2, -0.5 * follow);
+        } else if (shape == 0) {
+          // 最近点: 一番近い距離との差に応じて減る重み(ぼかし幅が0なら、一番近い区間だけが残る)
+          // (距離が大きいと指数が0に潰れるので、それまでの最小の距離を基準にして合計を掛け直す)
+          if (segDist < softMin) {
+            float k = exp(-(softMin - segDist) / sigma);
+            sumW *= k;
+            sumT *= k;
+            softMin = segDist;
+          }
+          w = sqrt(segLen2) * exp(-(segDist - softMin) / sigma);
+        }
+        sumW += w;
+        sumT += w * (i - 1 + h);
+      }
+      prevPoint = bezierPoint;
+    }
+    float pos;
+    if (shape == 3) pos = fieldLinePosition(uv, sqrt(scale2));
+    else if (shape == 1) pos = minSegDist / distWidth;
+    else pos = sumT / (sumW * resolution);
+    // 位置が連続なので、グラデ曲線も隣の値との間を補間して引く
+    float x = saturate(pos) * MaxResolution;
+    uint xi = min((uint)x, MaxResolution - 1);
+    float mapped_minPosition = lerp(gCurve[xi], gCurve[xi + 1], x - xi);
+
+    if (minDist < 10 && showBezier == 1) {
+      return float4(bezierColor, 1.0);
+    }
+    switch (colorSpace) {
+      case 0: // RGB補間
+        return lerpRGB(rgba1, rgba2, mapped_minPosition);
+      case 1 : // HSL短経路補間
+        return lerpHSL_short(rgba1, rgba2, mapped_minPosition);
+      case 2 : // HSL長経路補間
+        return lerpHSL_long(rgba1, rgba2, mapped_minPosition);
+      case 3 : // HSL右回り補間
+        return lerpHSL_r(rgba1, rgba2, mapped_minPosition);
+      case 4 : // HSL左回り補間
+        return lerpHSL_l(rgba2, rgba1, mapped_minPosition);
+      default:
+        return lerpRGB(rgba1, rgba2, mapped_minPosition);
+    }
+  }
+]]
+
+--ｸﾞﾗﾃﾞ曲線からグラデーションカーブの配列を作成
+local gCurves = {}
+if obj.getoption("track_mode", "3") == 0 then -- 時間制御が設定されていない場合は直線移動とみなす
+  for i = 0, MaxResolution*4 do
+    gCurves[i] = i/(MaxResolution*4)
+  end
+else
+  for i = 0, MaxResolution*4 do
+    gCurves[i] = obj.getvalue(3,(obj.totaltime-1/obj.framerate)*i/(MaxResolution*4))/100
+  end
+end
+
+obj.setoption("drawtarget", "tempbuffer", obj.w, obj.h)
+if clear == 0 then
+  obj.draw()
+end
+-- 色をrgbに分解
+local r1 , g1, b1 = RGB(rgb1)
+local r2 , g2, b2 = RGB(rgb2)
+local r3 , g3, b3 = RGB(bezierColor)
+-- 中心座標
+local cx = obj.w / 2
+local cy = obj.h / 2
+obj.pixelshader("PathGradient", "object", "object", {
+    --str/100.0,
+    p1x+cx, p1y+cy,
+    p2x+cx, p2y+cy,
+    p3x+cx, p3y+cy,
+    p4x+cx, p4y+cy,
+    r1/255.0, g1/255.0, b1/255.0,
+    1-a1/100.0,
+    r2/255.0, g2/255.0, b2/255.0,
+    1-a2/100.0,
+    r3/255.0, g3/255.0, b3/255.0,
+    colorSpace,
+    resolution,
+    showBezier,
+    shape,
+    follow,
+    blurWidth,
+    distWidth,
+    0, 0,
+    unpack(gCurves, 0)
+  },
+  "copy"
+)
+obj.setoption("blend", BM[blendMode+1])
+obj.draw(0,0,0,1.0,str/100.0)
+obj.setoption("blend", "none")
+obj.copybuffer("obj","tmp")

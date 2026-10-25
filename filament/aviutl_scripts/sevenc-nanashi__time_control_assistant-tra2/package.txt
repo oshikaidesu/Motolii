@@ -1,0 +1,6 @@
+[ time_control_assistant.tra2 ]
+
+時間制御（オブジェクト）用のトラックバー移動スクリプト。
+
+作者：名無し。（@sevenc_nanashi / https://sevenc7c.com ）
+配布：https://github.com/sevenc-nanashi/time_control_assistant.tra2

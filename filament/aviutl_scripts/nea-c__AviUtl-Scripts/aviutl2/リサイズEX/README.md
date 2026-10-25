@@ -1,0 +1,20 @@
+# リサイズEX
+
+リサイズをさらに細かく調整できるようにしたバージョン
+
+### [導入方法](https://github.com/nea-c/AviUtl-Scripts/blob/master/aviutl2/README.md)
+
+## 最新 / Latest
+
+**r3**
+
+## 変更履歴 / Change log
+
+- r3
+    - リサイズのバグ対策処理を削除(AviUtl2 beta4にて修正されたため)
+
+- r2
+    - 下オプションを"上パラメータを参照する"にしてもしたパラメータの操作が適応される問題の修正
+
+- r1
+    - AviUtl2へ移植。さらに機能追加

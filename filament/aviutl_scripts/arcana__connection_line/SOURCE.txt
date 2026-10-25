@@ -1,0 +1,5 @@
+連結ライン by arcana
+licence: MIT
+from: https://github.com/ar-ca-na/connection_line/releases/download/v1.2.0/connection_line-v1.2.0.zip (tag v1.2.0, commit 575e31890b64)
+page: https://github.com/ar-ca-na/connection_line
+Put here unchanged for Motolii (filament/aviutl_scripts).

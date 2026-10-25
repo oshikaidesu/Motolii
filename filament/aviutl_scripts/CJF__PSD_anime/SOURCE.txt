@@ -1,0 +1,6 @@
+PSD連携アニメーション(非公式) by CJF
+licence: MIT
+from: https://github.com/ColorJellyFish/aviutl2_cjf_psdanimation/releases/download/v0.1.1/cjf_psd-v0.1.1.au2pkg.zip (tag v0.1.1, commit 516550965032)
+page: https://github.com/ColorJellyFish/aviutl2_cjf_psdanimation
+licence/README from: https://github.com/ColorJellyFish/aviutl2_cjf_psdanimation at v0.1.1
+Put here unchanged for Motolii (filament/aviutl_scripts).

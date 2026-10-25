@@ -1,0 +1,6 @@
+RhythmShapesForAviutl2 by coffin299
+licence: MIT
+from: https://github.com/coffin299/RhythmShapesForAviutl2 (branch main, commit c34f4d7c17cb) (commit c34f4d7c17cb)
+page: https://github.com/coffin299/RhythmShapesForAviutl2
+left out: 2 .py (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

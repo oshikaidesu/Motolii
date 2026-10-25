@@ -1,0 +1,6 @@
+one download for: HexBrowns.Filters_H, HexBrowns.FineParticles_H, HexBrowns.ExtendedParticle_H, HexBrowns.Lowpoly, HexBrowns.Bubbles_H, HexBrowns.VerticalText, HexBrowns.HandheldCamera_H, HexBrowns.Beam_H, HexBrowns.OpticalBokeh, HexBrowns.ShapeDistort_H, HexBrowns.Grid_H, HexBrowns.LightShaft_H, HexBrowns.ProceduralPattern_H, HexBrowns.LightPath_H, HexBrowns.RadioWaves_H, HexBrowns.DecoParticle_H, HexBrowns.Caustics_H, HexBrowns.AutoFitText_H, HexBrowns.Lighting2D_H, HexBrowns.SceneTransitions, HexBrowns.CardDance_H, HexBrowns.Extrude_H, HexBrowns.TimeWarp_H, HexBrowns.VectorBlur_H, HexBrowns.BallAction_H, HexBrowns.Keying_H, HexBrowns.TestPattern_H, HexBrowns.RangeWarning_H, HexBrowns.PlanarTracking_H, HexBrowns.ContentAwareFill_H, HexBrowns.ColorSpaceBlend_H
+licence: MIT No Attribution
+from: https://github.com/HexBrowns/HexScript/releases/download/v1.16.0/HexScript_v1.16.0.zip (tag v1.16.0, commit b3aaecb51b26)
+page: https://github.com/HexBrowns/HexScript
+left out: 3 .mod2 (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

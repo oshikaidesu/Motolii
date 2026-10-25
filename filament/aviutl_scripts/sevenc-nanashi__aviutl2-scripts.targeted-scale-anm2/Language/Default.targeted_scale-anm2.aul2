@@ -1,0 +1,6 @@
+[Language]
+Information=Default Language for sevenc-nanashi/aviutl2-scripts / https://github.com/sevenc-nanashi/aviutl2-scripts
+[Tips.目標指定拡大縮小]
+effect.name=目標のピクセル数を指定し、アスペクト比を維持したまま拡大縮小を行うスクリプト。\n
+モード=- 下限指定：指定した範囲が埋まるように拡大縮小します。（CSSにおけるcoverに相当）\n- 上限指定：指定した範囲に収まるように拡大縮小します。（CSSにおけるcontainに相当）\n- 幅指定：幅が指定したピクセル数になるように拡大縮小します。\n- 高さ指定：高さが指定したピクセル数になるように拡大縮小します。\n
+PI=- `target_width`：目標幅（ピクセル単位）\n- `target_height`：目標高さ（ピクセル単位）\n- `mode`：モード（0 = 最小指定、1 = 最大指定、2 = 幅指定、3 = 高さ指定）\n- `debug`：デバッグモード\n

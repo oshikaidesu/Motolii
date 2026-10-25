@@ -1,0 +1,63 @@
+[ 概要 ]
+
+Practical Real-Time Hex-Tiling (https://jcgt.org/published/0011/03/05/) の実装を AviUtl2 に移植したものです。
+テクスチャの繰り返しを目立ちにくくするため、六角形グリッド上でサンプリングを再配置・ブレンドするエフェクトです。
+
+[ インストールされるファイル ]
+
+・Hex-Tiling.anm2
+
+・English.Hex-Tiling.aul2
+翻訳ファイル（英語）
+
+[ 使い方 ]
+
+GitHub リポジトリ(https://github.com/azurite581/AviUtl2-Hex-Tiling) を参照してください。
+
+[ ライセンス ]
+
+Practical Real-Time Hex-Tiling の実装（主に HLSL シェーダー部分）はオリジナルに基づき、 MIT License で提供されます。
+
+MIT License
+
+Copyright (c) 2022 mmikk
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+それ以外の部分は MIT No Attribution License (MIT-0) に基づくものとします。
+
+MIT No Attribution
+
+Copyright 2026 azurite
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

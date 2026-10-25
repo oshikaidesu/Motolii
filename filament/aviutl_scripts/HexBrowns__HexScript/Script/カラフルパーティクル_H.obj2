@@ -1,0 +1,230 @@
+--information:カラフルパーティクル_H v1.20 by HexBrowns
+--label:HexScript
+--object
+
+--group:発生
+--track@track0:頻度,0.1,500,10,0.1
+--track@track1:距離,1,10000,500,1
+--track@track2:速度,1,2000,400,1
+--track@track3:方向,-360,360,0,0.1
+--track@dir_ran:ランダム方向,0,360,30,0.1
+--track@v_ran:ランダム速度[-%],0,100,0,0.1
+--track@x_ran:X軸ランダム,0,10000,0,1
+--track@y_ran:Y軸ランダム,0,10000,0,1
+--select@sampling:散らし方=0,一様乱数=0,ジッター格子=1,Halton列=2
+--group
+
+--group:図形
+--figure@name:種類,円
+--track@f_size:サイズ,1,2000,100,1
+--track@f_line:ライン幅,1,4000,4000,1
+--check@colorful:カラフル,1
+--color@col:色,0xffffff
+--hide@col:colorful==1
+--select@color_space:色空間=0,今まで=0,HSV=3,Oklch=7
+--hide@color_space:colorful==0
+--track@ok_l:明度(L),0,100,75,0.1
+--hide@ok_l:colorful==0
+--hide@ok_l:color_space~=7
+--track@ok_c:彩度(C),0,0.4,0.15,0.001
+--hide@ok_c:colorful==0
+--hide@ok_c:color_space~=7
+--group
+
+--group:変化
+--track@av:透過速度[%],0,100,100,0.1
+--track@sv:拡大速度[%],-100,1000,0,0.1
+--track@s_ran:ランダム拡大[-%],0,100,0,0.1
+--track@rz_ran:ランダムZ角度,0,360,0,0.1
+--track@rzv_ran:ランダムZ回転,0,3600,0,0.1
+--group
+
+--[[
+@FIGURE.obj2 の @カラフルパーティクル（第三者作）を軽くした版。原作は残してある。
+
+原作が重い理由
+  オブジェクトの長さ全体で出る粒（頻度 x 長さ 個）すべてについて、毎フレーム
+  「図形の読み込み → フィルタ効果の実行 → 描画」をしていた。まだ出ていない粒と
+  消えた粒は透明度 0 で描かれるだけで、見た目には何も出ていない。
+
+本版で変えたこと
+  ・いま飛んでいる粒（頻度 x 寿命 個）だけを回す。描く順・位置・色・乱数は原作と同じ
+  ・「カラフル」を OFF にすると色を指定でき、図形の読み込みとフィルタ効果の実行が 1 フレーム 1 回になる
+  ・旧形式の --dialog を --track@ / --figure@ / --check@ に置き換えた
+  ・原作で常に 0 だった未使用の乱数（XY 角度・Z など）を呼ばない
+
+カラフルの色空間（v1.10）
+  今まで : 原作の式。乱数 c（-0.5〜0.5）で G = cos、負なら B・正なら R = sin。青〜緑〜赤だけで紫・マゼンタは出ない
+  HSV    : 同じ乱数で色相を一周から選ぶ。彩度・明度は 100%
+  Oklch  : 同じ乱数で色相を一周から選び、明度(L)・彩度(C) は項目の値。sRGB に無い色は L と色相を保って C を下げる
+  どれも乱数は 1 粒に obj.rand(0, 100, i, 100) を 1 回だけ引く（位置・回転・大きさの乱数は色空間で変わらない）
+
+散らし方（v1.20。方向・速度・X軸ランダム・Y軸ランダムの引き方。回転・大きさ・色の乱数は変わらない）
+  一様乱数     : v1.10 までと同じ。粒ごとに obj.rand で引く。同じ向きに固まる所と空く所ができる
+  ジッター格子 : 同時に飛んでいる粒の数 m（頻度 x 寿命）を段の数にする。方向と速度は m 段、X・Y のずれは
+                 「列 x 行 >= m」のマス（縦横比は X軸ランダム・Y軸ランダムに合わせる）に分け、段・マスの中はランダム。
+                 粒 i の段は (i * 歩幅 + ずらし) % m（歩幅は m と互いに素）なので、続いた m 粒は全部の段に 1 粒ずつ入る。
+                 頻度・距離・速度・X軸ランダム・Y軸ランダムを変えると段の分け方が変わり、全部の粒の位置が変わる
+  Halton列     : 低食い違い列。粒 i の方向・速度・X・Y を 2・3・5・7 進の radical inverse で決める。
+                 続いた番号の粒ほど離れた向きに出る。粒 i の値は頻度などによらない。
+                 列の読み始めをオブジェクトごとの乱数でずらす
+  どれも決定的（同じ設定なら毎フレーム同じ粒が同じ所にいる）
+
+版の履歴
+  v1.00 初版
+  v1.10（2026-10-13）カラフルの色空間（今まで / HSV / Oklch。既定は今まで）を足した。
+        仕様: AI/specifications/20261013_色空間拡張_spec.md
+  v1.20（2026-10-15）散らし方（一様乱数 / ジッター格子 / Halton列。既定は一様乱数）を足した。
+        候補一覧: AI/docs/20261015_方式の選択肢_候補.md の 12
+
+検証器: AI/scripts/カラフルパーティクル_H/verify_colorful_particle.py
+        AI/scripts/カラフルパーティクル_H/verify_colorspace_ext.py（色空間）
+        AI/scripts/カラフルランダム配置_H/verify_sampling.py（散らし方。2 本まとめて）
+
+散らし方の部品（gcd・coprime_step・radinv）はカラフルランダム配置_H.obj2 と同じ。直すときは両方を直す
+]]
+
+local obj, math = obj, math
+
+local b = 1 / track0          -- 出力間隔(秒)
+local l = track1              -- 距離
+local v = l / track2          -- 距離を進むのにかかる時間(=寿命)
+local dir = -track3 + 90      -- 出力方向
+local rad = math.pi / 180
+local time = obj.time
+local n = obj.totaltime / b
+
+-- 粒 i は時刻 i*b に出て i*b + v に消える。見えるのは (time - v) < i*b < time の粒だけ。
+-- 端は下のループの中で原作と同じ t の判定をするので、ここは 1 つずつ広めに取る
+local i_lo = math.max(0, math.floor((time - v) / b) - 1)
+local i_hi = math.min(math.ceil(n) - 1, math.ceil(time / b) + 1)
+
+-- Oklch は共有部品で計算する。読めなければ今までの式で描く
+local cs
+if colorful == 1 and color_space == 7 then
+  local okc, m = pcall(require, "EffectUtils_ColorSpace")
+  if okc and m then
+    cs = m
+  elseif not _COLORFUL_PARTICLE_H_WARNED then
+    _COLORFUL_PARTICLE_H_WARNED = true
+    print("@warn", "[カラフルパーティクル_H] Oklch に EffectUtils_ColorSpace.lua が要ります（Script/ に置いてください）。今までの式で描きます")
+  end
+end
+
+-- 粒 i の色。乱数は色空間によらず obj.rand(0, 100, i, 100) を 1 回だけ引く（0〜100 の 101 通り）
+local function colorful_color(i)
+  local r = obj.rand(0, 100, i, 100)
+  if color_space == 3 then
+    return HSV(r / 101 * 360, 100, 100)
+  elseif cs then
+    return cs.pack(cs.from_space(r / 101, ok_c, ok_l / 100, 7))
+  end
+  local c = (r - 50) / 100
+  if c < 0 then
+    return math.floor(math.cos(math.pi * c) * 255) * 256 + math.floor(math.sin(math.pi * -c) * 255)
+  end
+  return math.floor(math.cos(math.pi * c) * 255) * 256 + math.floor(math.sin(math.pi * c) * 255) * 65536
+end
+
+-- 散らし方の部品（カラフルランダム配置_H.obj2 と同じ）
+local function gcd(a, b)
+  while b ~= 0 do a, b = b, a % b end
+  return a
+end
+-- 0〜m-1 を一周する並べ替え (i * 歩幅 + ずらし) % m の歩幅。m と互いに素で m * f に近いもの
+local function coprime_step(m, f)
+  if m <= 2 then return 1 end
+  local a = math.max(1, math.floor(m * f + 0.5))
+  while gcd(a, m) ~= 1 do a = a + 1 end
+  return a
+end
+-- k を b 進で書いた桁を小数点の後ろへ逆順に並べた値（0 以上 1 未満）
+local function radinv(k, b)
+  local f, r = 1 / b, 0
+  while k > 0 do
+    local d = k % b
+    r = r + d * f
+    k = (k - d) / b
+    f = f / b
+  end
+  return r
+end
+
+local mode = sampling or 0
+local sp = {}   -- 散らし方の定数（ローカル変数の数を増やさないよう表にまとめる）
+if mode == 1 then
+  -- 同時に飛んでいる粒の数（寿命 / 出力間隔）を段の数にする
+  local m = math.max(1, math.ceil(v / b - 1e-6))
+  local cols
+  if y_ran <= 0 and x_ran <= 0 then
+    cols = math.floor(math.sqrt(m) + 0.5)
+  elseif y_ran <= 0 then
+    cols = m
+  elseif x_ran <= 0 then
+    cols = 1
+  else
+    cols = math.floor(math.sqrt(m * x_ran / y_ran) + 0.5)
+  end
+  cols = math.max(1, math.min(m, cols))
+  sp.m, sp.cols = m, cols
+  sp.rows = math.ceil(m / cols)
+  sp.cells = cols * sp.rows
+  sp.dstep, sp.doff = coprime_step(m, 0.618), obj.rand(0, m - 1, 0, 30)
+  sp.sstep, sp.soff = coprime_step(m, 0.382), obj.rand(0, m - 1, 0, 31)
+  sp.gstep, sp.goff = coprime_step(sp.cells, 0.755), obj.rand(0, sp.cells - 1, 0, 33)
+elseif mode == 2 then
+  sp.hoff = obj.rand(0, 9999, 0, 32)
+end
+
+local loaded, drawn = false, false
+for i = i_lo, i_hi do
+  -- 原作のループ範囲（0 〜 n-1）の外は描かない
+  if i <= n - 1 then
+    local t = (v - time + i * b) / v
+    t = math.min(1, math.max(t, 0))
+    if t ~= 0 and t ~= 1 then
+      if colorful == 1 then
+        obj.load("figure", name, colorful_color(i), f_size, f_line)
+        obj.effect()
+      elseif not loaded then
+        obj.load("figure", name, col, f_size, f_line)
+        obj.effect()
+        loaded = true
+      end
+      local direct, k, x, y
+      if mode == 1 or mode == 2 then
+        local ud, us, ux, uy
+        if mode == 1 then
+          local m, cols = sp.m, sp.cols
+          ud = ((i * sp.dstep + sp.doff) % m + obj.rand1(i, 20)) / m
+          us = ((i * sp.sstep + sp.soff) % m + obj.rand1(i, 21)) / m
+          local c = (i * sp.gstep + sp.goff) % sp.cells
+          ux = (c % cols + obj.rand1(i, 22)) / cols
+          uy = (math.floor(c / cols) + obj.rand1(i, 23)) / sp.rows
+        else
+          local h = i + 1 + sp.hoff
+          ud, us, ux, uy = radinv(h, 2), radinv(h, 3), radinv(h, 5), radinv(h, 7)
+        end
+        direct = (dir - dir_ran / 2 + ud * dir_ran) * rad
+        k = l * (1 - t) * (100 - v_ran + us * v_ran) / 100
+        x = k * math.cos(direct) + (ux - 0.5) * x_ran
+        y = k * math.sin(direct) + (uy - 0.5) * y_ran
+      else
+        direct = obj.rand(dir - dir_ran / 2, dir + dir_ran / 2, i, 0) * rad
+        k = l * (1 - t) * obj.rand(100 - v_ran, 100, i, 12) / 100
+        x = k * math.cos(direct) + obj.rand(-x_ran / 2, x_ran / 2, i, 1)
+        y = k * math.sin(direct) + obj.rand(-y_ran / 2, y_ran / 2, i, 2)
+      end
+      local zoom = 1 + sv / 100 * (1 - t) - obj.rand(0, s_ran, i, 10) / 100
+      local alpha = 1 - av / 100 * (1 - t)
+      local rz = obj.rand(-rz_ran / 2, rz_ran / 2, i, 6) + obj.rand(-rzv_ran / 2, rzv_ran / 2, i, 9) * time
+      obj.draw(x, y, 0, zoom, alpha, 0, 0, rz)
+      drawn = true
+    end
+  end
+end
+
+-- 見える粒が 1 つも無いフレームは何も描かない（原作も透明な粒しか描いていない）
+if not drawn then
+  obj.setoption("draw_state", true)
+end

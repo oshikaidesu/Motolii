@@ -1,0 +1,7 @@
+中心ずらし_A by azurite
+licence: MIT
+from: https://github.com/azurite581/AviUtl2-AdjustPivot_A/releases/download/v0.5.0/AdjustPivot_A-v0.5.0.au2pkg.zip (tag v0.5.0, commit c4fffc655ecd)
+page: https://github.com/azurite581/AviUtl2-AdjustPivot_A
+licence/README from: https://github.com/azurite581/AviUtl2-AdjustPivot_A at v0.5.0
+left out: 1 .aux2 (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

@@ -1,0 +1,1040 @@
+--information:PuniCollision v0.7.5
+--label:変形
+--require:2011300
+--track@collision_id:グループID,1,9999,1,1
+--check@rigid_body:剛体,false
+--check@show_range:範囲表示,false
+--track@deform_strength:変形範囲,0,100,60,1
+--hide@deform_strength:rigid_body==1
+--track@softness:押出量,0,100,50,1
+--hide@softness:rigid_body==1
+--track@rebound_tail:反発,0,100,50,1
+--hide@rebound_tail:rigid_body==1
+--select@boundary_mode:剛体形状,自動生成=0,手動指定=1
+--hide@boundary_mode:rigid_body==0
+--track@point_count:制御点の数,2,36,4,1
+--hide@point_count:rigid_body==0
+--hide@point_count:boundary_mode==0
+--select@soft_boundary_mode:軟体形状,自動生成=0,手動指定=1
+--hide@soft_boundary_mode:rigid_body==1
+--track@soft_point_count:軟体の制御点の数,3,36,4,1
+--hide@soft_point_count:rigid_body==1
+--hide@soft_point_count:soft_boundary_mode==0
+--value@soft_vertices:軟体の内部頂点,{}
+--hide@soft_vertices
+--value@vertices:内部頂点,{}
+--hide@vertices
+local function polygon(raw,count,width,height)
+    local old={}
+    if type(raw)=="table" then
+        for _,v in ipairs(raw) do old[#old+1]=tonumber(v) or 0 end
+    elseif type(raw)=="string" then
+        for token in raw:gmatch("[^,%s{}]+") do
+            local v=tonumber(token)
+            if v then old[#old+1]=v end
+        end
+    end
+    if #old==count*2 then return old end
+    local result={}
+    if #old>=4 and #old%2==0 then
+        local n=#old/2
+        for i=0,count-1 do
+            local f=i*n/count
+            local a=math.floor(f)%n
+            local b=(a+1)%n
+            local t=f-math.floor(f)
+            result[#result+1]=old[2*a+1]*(1-t)+old[2*b+1]*t
+            result[#result+1]=old[2*a+2]*(1-t)+old[2*b+2]*t
+        end
+    elseif count==2 then
+        result={-width/2,height/2,width/2,height/2}
+    elseif count==4 then
+        result={-width/2,-height/2,width/2,-height/2,width/2,height/2,-width/2,height/2}
+    else
+        for i=0,count-1 do
+            local angle=-math.pi/2+i*math.pi*2/count
+            result[#result+1]=math.cos(angle)*width/2
+            result[#result+1]=math.sin(angle)*height/2
+        end
+    end
+    return result
+end
+
+local function finite(v)
+    return type(v)=="number" and v==v and math.abs(v)<math.huge
+end
+local function clamp(v,a,b) return math.max(a,math.min(b,v)) end
+local function pose(prefix,time,relative)
+    local function get(key,default)
+        local v
+        if time==nil then v=obj.getvalue(prefix..key) else v=obj.getvalue(prefix..key,time,0) end
+        return finite(v) and v or default
+    end
+    local x,y=get("x"),get("y")
+    if not x or not y then return nil end
+    local rel=relative or {}
+    -- Half-turn X/Y rotations remain in the image plane. Treat them as signed
+    -- scales for both the current object and peer discovery/capture/history.
+    local function half_turn_sign(degrees)
+        local angle=degrees%360
+        if angle<0.00001 or angle>359.99999 then return 1 end
+        if math.abs(angle-180)<0.00001 then return -1 end
+        return nil
+    end
+    local flip_y=half_turn_sign(get("ry",0)+(rel.ry or 0))
+    local flip_x=half_turn_sign(get("rx",0)+(rel.rx or 0))
+    if not flip_x or not flip_y then return nil end
+    local sx=get("sx",1)*(rel.sx or 1)*flip_y
+    local sy=get("sy",1)*(rel.sy or 1)*flip_x
+    if math.abs(sx)<0.00001 or math.abs(sy)<0.00001 then return nil end
+    local angle=math.rad(get("rz",0)+(rel.rz or 0))
+    local c,s=math.cos(angle),math.sin(angle)
+    local a,b,c2,d=c*sx,-s*sy,s*sx,c*sy
+    local cx,cy=get("cx",0)+(rel.cx or 0),get("cy",0)+(rel.cy or 0)
+    local ox=x+(rel.ox or 0)-a*cx-b*cy
+    local oy=y+(rel.oy or 0)-c2*cx-d*cy
+    local determinant=a*d-b*c2
+    local ia,ib,ic,id=d/determinant,-b/determinant,-c2/determinant,a/determinant
+    return {a=a,b=b,c=c2,d=d,x=ox,y=oy,ia=ia,ib=ib,ic=ic,id=id,
+        ix=-ia*ox-ib*oy,iy=-ic*ox-id*oy,pixel=math.min(math.abs(sx),math.abs(sy))}
+end
+local function world(p,x,y) return p.x+p.a*x+p.b*y,p.y+p.c*x+p.d*y end
+-- A material grid carries the texture. Marching-triangle alpha contours carry
+-- contact constraints, including concavities and disconnected components.
+local function mesh_new(width,height,alpha,strength,soft)
+    local cols=math.max(4,math.ceil(20*width/math.max(width,height)))
+    local rows=math.max(4,math.ceil(20*height/math.max(width,height)))
+    local m={nodes={},triangles={},edges={},skin={},samples={},soft=soft}
+    local nodes=m.nodes
+    local step_x,step_y=width/cols,height/rows
+    -- One transparent outer ring closes contours even for opaque rectangles.
+    cols,rows=cols+2,rows+2
+    local function index(x,y) return y*(cols+1)+x+1 end
+    for y=0,rows do for x=0,cols do
+        local u,v=(x-1)*step_x,(y-1)*step_y
+        if x==0 then u=-1 elseif x==cols then u=width+1 end
+        if y==0 then v=-1 elseif y==rows then v=height+1 end
+        local a=0
+        if x>0 and x<cols and y>0 and y<rows then
+            a=alpha(math.min(width-1,math.max(0,u)),math.min(height-1,math.max(0,v)))
+        end
+        nodes[#nodes+1]={u=u,v=v,lx=u-width/2,ly=v-height/2,a=a,
+            x=0,y=0,vx=0,vy=0,weight=1,depth=math.huge}
+    end end
+    local crossing={}
+    local function cut(a,b)
+        local lo,hi=math.min(a,b),math.max(a,b)
+        local key=lo..":"..hi
+        if crossing[key] then return crossing[key] end
+        local na,nb=nodes[a],nodes[b]
+        local low,high=0,1
+        for iteration=1,10 do
+            local mid=(low+high)*0.5
+            local x,y=na.u+(nb.u-na.u)*mid,na.v+(nb.v-na.v)*mid
+            local value=0
+            if x>=0 and x<width and y>=0 and y<height then value=alpha(x,y) end
+            if (value>=0.05)==(na.a>=0.05) then low=mid else high=mid end
+        end
+        local t=(low+high)*0.5
+        local p={a=a,b=b,t=t}
+        crossing[key]=p;m.samples[#m.samples+1]=p
+        na.depth,nb.depth=0,0
+        return p
+    end
+    local edge_set={}
+    local function edge(a,b,k)
+        local key=math.min(a,b)..":"..math.max(a,b)
+        if not edge_set[key] then
+            m.edges[#m.edges+1]={a,b,k};edge_set[key]=true
+        end
+    end
+    local function triangle(a,b,c)
+        m.triangles[#m.triangles+1]={a,b,c}
+        edge(a,b,0.18);edge(b,c,0.18);edge(c,a,0.18)
+        local hits={}
+        for _,e in ipairs({{a,b},{b,c},{c,a}}) do
+            if (nodes[e[1]].a>=0.05)~=(nodes[e[2]].a>=0.05) then hits[#hits+1]=cut(e[1],e[2]) end
+        end
+        if #hits==2 then m.skin[#m.skin+1]={hits[1],hits[2]} end
+    end
+    for y=0,rows-1 do for x=0,cols-1 do
+        local a,b,c,d=index(x,y),index(x+1,y),index(x+1,y+1),index(x,y+1)
+        if (x+y)%2==0 then triangle(a,b,c);triangle(a,c,d)
+        else triangle(a,b,d);triangle(b,c,d) end
+        if x+2<=cols then edge(a,index(x+2,y),0.12) end
+        if y+2<=rows then edge(a,index(x,y+2),0.12) end
+    end end
+    -- Graph distance to the skin controls the depth of affected material.
+    for pass=1,math.max(cols,rows) do
+        for _,e in ipairs(m.edges) do
+            local a,b=nodes[e[1]],nodes[e[2]]
+            a.depth=math.min(a.depth,b.depth+1);b.depth=math.min(b.depth,a.depth+1)
+        end
+    end
+    local reach=1+strength*math.max(cols,rows)
+    for _,n in ipairs(nodes) do
+        n.weight=clamp(1-n.depth/reach,0,1)
+        if strength>=0.999 then n.weight=1 end
+    end
+    m.step=math.min(step_x,step_y)
+    return m
+end
+local mesh_guard
+local function mesh_pose(m,p,dt,reset)
+    local previous=m.pose
+    m.pose=p;m.step_world=m.step*p.pixel
+    for _,n in ipairs(m.nodes) do
+        local x,y=world(p,n.lx,n.ly)
+        if reset then n.x,n.y=x,y;n.vx,n.vy=0,0
+        else
+            -- The keyframe path moves the rest shape; elastic velocity is relative
+            -- to that path, not an accumulated gravity or free-flight trajectory.
+            n.oldx,n.oldy=n.x,n.y
+            local determinant=previous.a*previous.d-previous.b*previous.c
+            local ox,oy=n.x-previous.x,n.y-previous.y
+            local lx=(previous.d*ox-previous.b*oy)/determinant
+            local ly=(-previous.c*ox+previous.a*oy)/determinant
+            n.x,n.y=world(p,lx,ly)
+            n.safe_x,n.safe_y=n.x,n.y
+            n.x=n.x+n.vx*dt;n.y=n.y+n.vy*dt
+        end
+        n.tx,n.ty=x,y;n.before_x,n.before_y=n.x,n.y
+        if reset then n.oldx,n.oldy=n.x,n.y end
+    end
+    if not reset and m.triangles then mesh_guard(m) end
+end
+local function mesh_relax(m)
+    local nodes=m.nodes
+    for _,n in ipairs(nodes) do n.safe_x,n.safe_y=n.x,n.y end
+    for _,n in ipairs(nodes) do
+        local k= n.weight==0 and 1 or 0.025
+        n.x=n.x+(n.tx-n.x)*k;n.y=n.y+(n.ty-n.y)*k
+    end
+    for _,e in ipairs(m.edges) do
+        local a,b=nodes[e[1]],nodes[e[2]]
+        local dx,dy=b.x-a.x,b.y-a.y
+        local length=math.sqrt(dx*dx+dy*dy)
+        local rx,ry=b.tx-a.tx,b.ty-a.ty
+        local rest=math.sqrt(rx*rx+ry*ry)
+        local mass=a.weight+b.weight
+        if length>0.000001 and mass>0 then
+            local f=(length-rest)/length*e[3]/mass
+            a.x=a.x+dx*f*a.weight;a.y=a.y+dy*f*a.weight
+            b.x=b.x-dx*f*b.weight;b.y=b.y-dy*f*b.weight
+        end
+    end
+    for _,t in ipairs(m.triangles) do
+        local a,b,c=nodes[t[1]],nodes[t[2]],nodes[t[3]]
+        local rest=(b.tx-a.tx)*(c.ty-a.ty)-(b.ty-a.ty)*(c.tx-a.tx)
+        local area=(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x)
+        local target=rest
+        local stiffness=0.65*m.soft
+        -- Preserve orientation even with softness zero; folded triangles cannot
+        -- provide an invertible textured surface or a coherent contact contour.
+        if area/rest<0.12 then target=rest*0.12;stiffness=1 end
+        local gx,gy=b.y-c.y,c.x-b.x
+        local hx,hy=c.y-a.y,a.x-c.x
+        local ix,iy=a.y-b.y,b.x-a.x
+        local denom=a.weight*(gx*gx+gy*gy)+b.weight*(hx*hx+hy*hy)+c.weight*(ix*ix+iy*iy)
+        if denom>0.000001 then
+            local f=clamp((target-area)*stiffness/denom,-0.35,0.35)
+            a.x=a.x+gx*f*a.weight;a.y=a.y+gy*f*a.weight
+            b.x=b.x+hx*f*b.weight;b.y=b.y+hy*f*b.weight
+            c.x=c.x+ix*f*c.weight;c.y=c.y+iy*f*c.weight
+        end
+    end
+end
+mesh_guard=function(m)
+    -- Resolve compression locally before the conservative fallback. Otherwise
+    -- a single almost-flat cell can lock the entire object's deformation.
+    for pass=1,12 do
+        local repaired=false
+        for _,t in ipairs(m.triangles) do
+            local a,b,c=m.nodes[t[1]],m.nodes[t[2]],m.nodes[t[3]]
+            local rest=(b.tx-a.tx)*(c.ty-a.ty)-(b.ty-a.ty)*(c.tx-a.tx)
+            local area=(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x)
+            if area/rest<0.15 then
+                local gx,gy=b.y-c.y,c.x-b.x
+                local hx,hy=c.y-a.y,a.x-c.x
+                local ix,iy=a.y-b.y,b.x-a.x
+                local denom=a.weight*(gx*gx+gy*gy)+b.weight*(hx*hx+hy*hy)+c.weight*(ix*ix+iy*iy)
+                if denom>0.000001 then
+                    local f=(rest*0.15-area)/denom
+                    a.x=a.x+gx*f*a.weight;a.y=a.y+gy*f*a.weight
+                    b.x=b.x+hx*f*b.weight;b.y=b.y+hy*f*b.weight
+                    c.x=c.x+ix*f*c.weight;c.y=c.y+iy*f*c.weight
+                    repaired=true
+                end
+            end
+        end
+        if not repaired then break end
+    end
+    -- A backtracking step preserves every material triangle's orientation.
+    -- Limit the proposed deformation itself, never repair it by clipping alpha.
+    local fraction=1
+    for _,t in ipairs(m.triangles) do
+        local a,b,c=m.nodes[t[1]],m.nodes[t[2]],m.nodes[t[3]]
+        local rest=(b.tx-a.tx)*(c.ty-a.ty)-(b.ty-a.ty)*(c.tx-a.tx)
+        local function valid(f)
+            local ax,ay=a.safe_x+(a.x-a.safe_x)*f,a.safe_y+(a.y-a.safe_y)*f
+            local bx,by=b.safe_x+(b.x-b.safe_x)*f,b.safe_y+(b.y-b.safe_y)*f
+            local cx,cy=c.safe_x+(c.x-c.safe_x)*f,c.safe_y+(c.y-c.safe_y)*f
+            return ((bx-ax)*(cy-ay)-(by-ay)*(cx-ax))/rest>=0.025
+        end
+        if not valid(fraction) then
+            local lo,hi=0,fraction
+            for i=1,12 do local mid=(lo+hi)*0.5;if valid(mid) then lo=mid else hi=mid end end
+            fraction=lo*0.98
+        end
+    end
+    if fraction<1 then
+        for _,n in ipairs(m.nodes) do
+            n.x=n.safe_x+(n.x-n.safe_x)*fraction;n.y=n.safe_y+(n.y-n.safe_y)*fraction
+        end
+    end
+end
+local function skin_point(m,s)
+    local a,b=m.nodes[s.a],m.nodes[s.b]
+    return a.x+(b.x-a.x)*s.t,a.y+(b.y-a.y)*s.t
+end
+local function skin_update(m)
+    m.minx,m.miny,m.maxx,m.maxy=math.huge,math.huge,-math.huge,-math.huge
+    for _,s in ipairs(m.samples) do
+        s.x,s.y=skin_point(m,s)
+        m.minx=math.min(m.minx,s.x);m.maxx=math.max(m.maxx,s.x)
+        m.miny=math.min(m.miny,s.y);m.maxy=math.max(m.maxy,s.y)
+    end
+end
+local function nearest_skin(m,x,y)
+    if x<m.minx or x>m.maxx or y<m.miny or y>m.maxy then return nil end
+    local inside=false
+    local best,distance,ratio,bx,by=nil,math.huge,0,0,0
+    for _,e in ipairs(m.skin) do
+        local a,b=e[1],e[2]
+        if (a.y>y)~=(b.y>y) and x<(b.x-a.x)*(y-a.y)/(b.y-a.y)+a.x then inside=not inside end
+        local dx,dy=b.x-a.x,b.y-a.y
+        local t=clamp(((x-a.x)*dx+(y-a.y)*dy)/math.max(dx*dx+dy*dy,0.000001),0,1)
+        local px,py=a.x+dx*t,a.y+dy*t
+        local d=(x-px)^2+(y-py)^2
+        if d<distance then best,distance,ratio,bx,by=e,d,t,px,py end
+    end
+    if not inside then return nil end
+    return best,ratio,bx,by,math.sqrt(distance)
+end
+local function mesh_contact(a,b)
+    if a.maxx<b.minx or b.maxx<a.minx or a.maxy<b.miny or b.maxy<a.miny then return end
+    local corrections={}
+    for _,s in ipairs(a.samples) do
+        local x,y=skin_point(a,s)
+        local e,t,px,py,depth=nearest_skin(b,x,y)
+        if e and depth>0.000001 then
+            local nx,ny=(px-x)/depth,(py-y)/depth
+            local terms={}
+            local function add(m,p,scale)
+                for _,v in ipairs({{p.a,1-p.t},{p.b,p.t}}) do
+                    local n=m.nodes[v[1]]
+                    terms[n]=(terms[n] or 0)+v[2]*scale
+                end
+            end
+            add(a,s,1);add(b,e[1],-(1-t));add(b,e[2],-t)
+            local denom=0
+            for n,w in pairs(terms) do denom=denom+w*w*n.weight end
+            if denom>0.000001 then
+                local step=b.fixed and a.step_world or math.min(a.step_world,b.step_world)
+                local push=math.min(depth+0.08,step*0.6)/denom
+                for n,w in pairs(terms) do
+                    if n.weight>0 and math.abs(w)>0.001 then
+                        local c=corrections[n] or {0,0,0}
+                        c[1]=c[1]+nx*push*w*n.weight;c[2]=c[2]+ny*push*w*n.weight;c[3]=c[3]+1
+                        corrections[n]=c
+                    end
+                end
+            end
+        end
+    end
+    for n,c in pairs(corrections) do
+        n.x=n.x+c[1]/c[3];n.y=n.y+c[2]/c[3]
+    end
+end
+local function mesh_velocity(m,dt)
+    -- Tail controls velocity decay independently of area preservation.
+    local damping=math.exp(-dt*(9-3*m.rebound))
+    local cap=m.step_world*18
+    for _,n in ipairs(m.nodes) do
+        -- Position projection changes velocity, causing release rebound.
+        n.vx=(n.vx+(n.x-n.before_x)/dt)*damping
+        n.vy=(n.vy+(n.y-n.before_y)/dt)*damping
+        local speed=math.sqrt(n.vx*n.vx+n.vy*n.vy)
+        if speed>cap then n.vx=n.vx*cap/speed;n.vy=n.vy*cap/speed end
+    end
+end
+local function line_contact(a,b)
+    local u,v=b.samples[1],b.samples[2]
+    local dx,dy=v.x-u.x,v.y-u.y
+    local length=math.sqrt(dx*dx+dy*dy)
+    if length<0.000001 then return end
+    local nx,ny=-dy/length,dx/length
+    for _,s in ipairs(a.samples) do
+        local p,q=a.nodes[s.a],a.nodes[s.b]
+        local x,y=skin_point(a,s)
+        local ox=p.oldx+(q.oldx-p.oldx)*s.t
+        local oy=p.oldy+(q.oldy-p.oldy)*s.t
+        local old=(ox-u.x)*nx+(oy-u.y)*ny
+        local now=(x-u.x)*nx+(y-u.y)*ny
+        local along=((x-u.x)*dx+(y-u.y)*dy)/(length*length)
+        if old*now<0 and along>=0 and along<=1 then
+            local denom=(1-s.t)^2*p.weight+s.t^2*q.weight
+            if denom>0.000001 then
+                local correction=(-now+(old>0 and 0.08 or -0.08))/denom
+                p.x=p.x+nx*correction*(1-s.t)*p.weight
+                p.y=p.y+ny*correction*(1-s.t)*p.weight
+                q.x=q.x+nx*correction*s.t*q.weight
+                q.y=q.y+ny*correction*s.t*q.weight
+            end
+        end
+    end
+end
+local function mesh_rigid_polygon(vertices,count)
+    local m={nodes={},samples={},skin={},step=1,soft=0,fixed=true,open=count==2}
+    for i=1,count do
+        m.nodes[i]={lx=vertices[i*2-1],ly=vertices[i*2],weight=0,vx=0,vy=0}
+        m.samples[i]={a=i,b=i,t=0}
+    end
+    for i=1,(count==2 and 1 or count) do m.skin[i]={m.samples[i],m.samples[i%count+1]} end
+    return m
+end
+
+-- A low-frequency collision cage is independent of the textured material grid.
+-- Alpha moments describe the body; angular area quantiles suppress thin details.
+local function proxy_new(width,height,alpha,soft)
+    local points,total,cx,cy={},0,0,0
+    local step=math.max(1,math.ceil(math.max(width,height)/64))
+    for y=step*.5,height-1,step do for x=step*.5,width-1,step do
+        local a=alpha(x,y)
+        if a>0.05 then
+            points[#points+1]={x-width/2,y-height/2,a}
+            total=total+a;cx=cx+(x-width/2)*a;cy=cy+(y-height/2)*a
+        end
+    end end
+    if total==0 then return nil end
+    cx,cy=cx/total,cy/total
+    local xx,xy,yy=0,0,0
+    for _,p in ipairs(points) do
+        local x,y=p[1]-cx,p[2]-cy
+        xx=xx+x*x*p[3];xy=xy+x*y*p[3];yy=yy+y*y*p[3]
+    end
+    xx,xy,yy=xx/total,xy/total,yy/total
+    local angle=0.5*math.atan2(2*xy,xx-yy)
+    local co,si=math.cos(angle),math.sin(angle)
+    local disc=math.sqrt((xx-yy)^2+4*xy*xy)
+    local rx=math.max(step,2*math.sqrt(math.max(0,(xx+yy+disc)*.5)))
+    local ry=math.max(step,2*math.sqrt(math.max(0,(xx+yy-disc)*.5)))
+    local bins,radii={},{}
+    for i=1,32 do bins[i]={} end
+    for _,p in ipairs(points) do
+        local x,y=p[1]-cx,p[2]-cy
+        local u,v=(co*x+si*y)/rx,(-si*x+co*y)/ry
+        local index=math.floor((math.atan2(v,u)%(2*math.pi))*32/(2*math.pi))%32+1
+        bins[index][#bins[index]+1]={math.sqrt(u*u+v*v),p[3]}
+    end
+    for i,bin in ipairs(bins) do
+        table.sort(bin,function(a,b) return a[1]<b[1] end)
+        local sum=0;for _,v in ipairs(bin) do sum=sum+v[2] end
+        local partial,extent=0,1
+        for _,v in ipairs(bin) do partial=partial+v[2];if partial>=sum*.94 then extent=v[1];break end end
+        radii[i]=clamp(.7+.3*extent,.82,1.18)
+    end
+    for pass=1,8 do
+        local next_r={}
+        for i=1,32 do next_r[i]=(radii[(i-2)%32+1]+2*radii[i]+radii[i%32+1])*.25 end
+        radii=next_r
+    end
+    local m={nodes={},triangles={},edges={},skin={},samples={},soft=soft,step=math.min(rx,ry)*.22,cx=cx,cy=cy}
+    for i=1,32 do
+        local a=(i-.5)*2*math.pi/32
+        local x,y=rx*radii[i]*math.cos(a),ry*radii[i]*math.sin(a)
+        m.nodes[i]={lx=cx+co*x-si*y,ly=cy+si*x+co*y,weight=1,vx=0,vy=0}
+        m.samples[i]={a=i,b=i,t=0}
+        m.edges[#m.edges+1]={i,i%32+1,.12}
+        m.edges[#m.edges+1]={i,(i+1)%32+1,.08}
+        m.edges[#m.edges+1]={i,33,.025}
+        m.triangles[i]={33,i,i%32+1}
+    end
+    m.nodes[33]={lx=cx,ly=cy,weight=.6,vx=0,vy=0}
+    for i=1,32 do m.skin[i]={m.samples[i],m.samples[i%32+1]} end
+    return m
+end
+local function proxy_manual(raw,count,width,height,soft)
+    count=clamp(math.floor(tonumber(count) or 4),3,36)
+    local v=polygon(raw,count,width,height)
+    local function cross(a,b,c)
+        return (v[b*2-1]-v[a*2-1])*(v[c*2]-v[a*2])-(v[b*2]-v[a*2])*(v[c*2-1]-v[a*2-1])
+    end
+    local area=0
+    for i=1,count do local j=i%count+1;area=area+v[i*2-1]*v[j*2]-v[j*2-1]*v[i*2] end
+    if math.abs(area)<.0001 then error("PuniCollision: manual soft boundary needs a nonzero area") end
+    local sign=area>0 and 1 or -1
+    -- Reject crossing or touching non-adjacent edges before triangulation.
+    for i=1,count do for j=i+1,count do
+        local a,b=i%count+1,j%count+1
+        if a~=j and b~=i then
+            local p,q,r,t=cross(i,a,j),cross(i,a,b),cross(j,b,i),cross(j,b,a)
+            if p*q<=0 and r*t<=0 then
+                local function overlap(k)
+                    return math.max(math.min(v[i*2-k],v[a*2-k]),math.min(v[j*2-k],v[b*2-k]))<=
+                        math.min(math.max(v[i*2-k],v[a*2-k]),math.max(v[j*2-k],v[b*2-k]))
+                end
+                if overlap(0) and overlap(1) then error("PuniCollision: manual soft boundary edges must not cross or touch") end
+            end
+        end
+    end end
+    -- Subdivide straight edges for contact sampling; user handles stay unchanged.
+    local sampled={}
+    local divisions=math.max(1,math.ceil(32/count))
+    for i=1,count do
+        local j=i%count+1
+        for k=0,divisions-1 do
+            local t=k/divisions
+            sampled[#sampled+1]=v[i*2-1]*(1-t)+v[j*2-1]*t
+            sampled[#sampled+1]=v[i*2]*(1-t)+v[j*2]*t
+        end
+    end
+    v=sampled;count=#v/2
+    local m={nodes={},triangles={},edges={},skin={},samples={},soft=soft,step=math.sqrt(math.abs(area)*.5)*.22}
+    local remaining={}
+    for i=1,count do
+        local j=i%count+1
+        if (v[i*2-1]-v[j*2-1])^2+(v[i*2]-v[j*2])^2<.0001 then
+            error("PuniCollision: manual soft boundary has duplicate points")
+        end
+        m.nodes[i]={lx=v[i*2-1],ly=v[i*2],weight=1,vx=0,vy=0}
+        m.samples[i]={a=i,b=i,t=0};remaining[i]=i
+        m.edges[#m.edges+1]={i,j,.12}
+    end
+    for i=1,count do m.skin[i]={m.samples[i],m.samples[i%count+1]} end
+    -- Ear clipping supports concave outlines without a center fan crossing them.
+    while #remaining>3 do
+        local found=false
+        for k,b in ipairs(remaining) do
+            local a,c=remaining[(k-2)%#remaining+1],remaining[k%#remaining+1]
+            if cross(a,b,c)*sign>.000001 then
+                local occupied=false
+                for _,p in ipairs(remaining) do
+                    if p~=a and p~=b and p~=c and cross(a,b,p)*sign>=-.000001 and cross(b,c,p)*sign>=-.000001 and cross(c,a,p)*sign>=-.000001 then occupied=true;break end
+                end
+                if not occupied then
+                    m.triangles[#m.triangles+1]={a,b,c}
+                    m.edges[#m.edges+1]={a,c,.08}
+                    table.remove(remaining,k);found=true;break
+                end
+            end
+        end
+        if not found then error("PuniCollision: manual soft boundary cannot be triangulated") end
+    end
+    if math.abs(cross(remaining[1],remaining[2],remaining[3]))<.000001 then
+        error("PuniCollision: manual soft boundary contains a degenerate triangle")
+    end
+    m.triangles[#m.triangles+1]=remaining
+    return m
+end
+local function proxy_relax(m)
+    mesh_relax(m)
+    local dx,dy={},{}
+    -- Smooth the deformation field instead of smoothing away the rest outline.
+    for i=1,#m.samples do
+        local n,a,b=m.nodes[i],m.nodes[(i-2)%#m.samples+1],m.nodes[i%#m.samples+1]
+        dx[i]=(a.x-a.tx+b.x-b.tx)*.5-(n.x-n.tx)
+        dy[i]=(a.y-a.ty+b.y-b.ty)*.5-(n.y-n.ty)
+    end
+    for i=1,#m.samples do m.nodes[i].x=m.nodes[i].x+dx[i]*.28;m.nodes[i].y=m.nodes[i].y+dy[i]*.28 end
+end
+local function proxy_weights(cage,x,y)
+    local dx,dy,r,t,w={},{},{},{},{}
+    for i=1,#cage.samples do
+        dx[i],dy[i]=cage.nodes[i].lx-x,cage.nodes[i].ly-y
+        r[i]=math.sqrt(dx[i]^2+dy[i]^2)
+        if r[i]<.000001 then for j=1,#cage.samples do w[j]=j==i and 1 or 0 end;return w end
+    end
+    for i=1,#cage.samples do
+        local j=i%#cage.samples+1
+        local cross=dx[i]*dy[j]-dy[i]*dx[j]
+        local dot=dx[i]*dx[j]+dy[i]*dy[j]
+        if math.abs(cross)<.000001 and dot<0 then
+            for k=1,#cage.samples do w[k]=0 end
+            w[i],w[j]=r[j]/(r[i]+r[j]),r[i]/(r[i]+r[j]);return w
+        end
+        local angle=math.atan2(cross,dot)
+        t[i]=math.tan(angle*.5)
+    end
+    local sum=0
+    for i=1,#cage.samples do w[i]=(t[(i-2)%#cage.samples+1]+t[i])/r[i];sum=sum+w[i] end
+    if math.abs(sum)<.000001 then
+        sum=0;for i=1,#cage.samples do w[i]=1/(r[i]*r[i]);sum=sum+w[i] end
+    end
+    for i=1,#cage.samples do w[i]=w[i]/sum end
+    return w
+end
+local function proxy_apply(m,cage)
+    if not cage or not cage.active then return end
+    for _,n in ipairs(m.nodes) do
+        local weights=proxy_weights(cage,n.lx,n.ly)
+        local x,y=0,0
+        for i,w in ipairs(weights) do
+            x=x+(cage.nodes[i].x-cage.nodes[i].tx)*w
+            y=y+(cage.nodes[i].y-cage.nodes[i].ty)*w
+        end
+        n.safe_x,n.safe_y=n.x,n.y
+        n.x=n.x+x*n.weight;n.y=n.y+y*n.weight
+    end
+    mesh_guard(m)
+end
+local function proxy_solve(bodies,span,steps,dt,scene,group,rigids)
+    rigids=rigids or {}
+    local cages={}
+    local signature={"proxy075",tostring(span),tostring(steps),tostring(dt)}
+    local function add(v) signature[#signature+1]=string.format("%.17g",v) end
+    for _,m in ipairs(bodies) do if m.cage then
+        local c=m.cage;c.layer=m.layer;c.relative=m.relative;c.time=m.time;c.history={}
+        cages[#cages+1]=c;add(c.layer);add(c.soft);add(c.rebound);add(#c.nodes)
+        for _,n in ipairs(c.nodes) do add(n.lx);add(n.ly) end
+        for frame=0,steps do
+            local age=span-frame*dt
+            local p=c.time+.000001>=age and pose("layer"..c.layer..".",math.max(0,c.time-age),c.relative) or nil
+            c.history[frame+1]=p or false
+            if p then
+                add(1);for _,key in ipairs({"a","b","c","d","x","y","pixel"}) do add(p[key]) end
+            else add(0) end
+        end
+    end end
+    for index,r in ipairs(rigids) do
+        add(-index);add(r.open and 1 or 0)
+        for _,n in ipairs(r.nodes) do add(n.lx);add(n.ly) end
+        for _,s in ipairs(r.samples) do add(s.a);add(s.b);add(s.t) end
+        r.history={}
+        for frame=0,steps do
+            local age=span-frame*dt
+            local p=r.time+.000001>=age and pose("layer"..r.layer..".",math.max(0,r.time-age),r.relative) or nil
+            r.history[frame+1]=p or false
+            if p then add(1);for _,k in ipairs({"a","b","c","d","x","y","pixel"}) do add(p[k]) end
+            else add(0) end
+        end
+    end
+    local key="PuniProxy075:"..tostring(scene)..":"..tostring(group)
+    local sig=table.concat(signature,",")
+    local cached=global[key..":result"]
+    if global[key..":signature"]==sig and type(cached)=="string" then
+        local numbers={};for token in cached:gmatch("[^,]+") do numbers[#numbers+1]=tonumber(token) end
+        local expected=0;for _,c in ipairs(cages) do expected=expected+#c.nodes*2 end
+        if #numbers==expected then
+            local k=1
+            for _,c in ipairs(cages) do
+                local p=c.history[steps+1];c.active=p~=false
+                if p then mesh_pose(c,p,dt,true) end
+                for _,n in ipairs(c.nodes) do n.x,n.y=numbers[k],numbers[k+1];k=k+2 end
+            end
+            return
+        end
+    end
+    for frame=0,steps do
+        for _,r in ipairs(rigids) do
+            local p=r.history[frame+1];r.active=p~=false
+            if p then mesh_pose(r,p,dt,true);skin_update(r) end
+        end
+        for _,c in ipairs(cages) do
+            local p=c.history[frame+1];c.active=p~=false
+            if p then mesh_pose(c,p,dt,not c.initialized);c.initialized=true;skin_update(c)
+            else c.initialized=false end
+        end
+        for iteration=1,(frame==0 and 24 or 12) do
+            for _,c in ipairs(cages) do if c.active then proxy_relax(c);skin_update(c) end end
+            for i,a in ipairs(cages) do if a.active then
+                for j=i+1,#cages do local b=cages[j];if b.active then
+                    mesh_contact(a,b);skin_update(a);skin_update(b)
+                    mesh_contact(b,a);skin_update(a);skin_update(b)
+                end end
+                for _,r in ipairs(rigids) do if r.active then
+                    if r.open then line_contact(a,r) else mesh_contact(a,r) end
+                    skin_update(a)
+                end end
+            end end
+            for _,c in ipairs(cages) do if c.active then mesh_guard(c);skin_update(c) end end
+        end
+        if frame>0 then for _,c in ipairs(cages) do if c.active then mesh_velocity(c,dt) end end end
+    end
+    local result={}
+    for _,c in ipairs(cages) do for _,n in ipairs(c.nodes) do
+        result[#result+1]=string.format("%.17g",n.x or 0);result[#result+1]=string.format("%.17g",n.y or 0)
+    end end
+    -- Keep only the latest signature/result per group. No unbounded frame cache,
+    -- and no previous-frame state that can survive edits undetected.
+    global[key..":result"]=table.concat(result,",");global[key..":signature"]=sig
+end
+
+local transform_fields={"ox","oy","oz","rx","ry","rz","cx","cy","cz","sx","sy","sz","alpha"}
+local function save_transform()
+    local saved={}
+    for _,name in ipairs(transform_fields) do saved[name]=obj[name] end
+    return saved
+end
+local function capture_key(layer)
+    return "PuniCapture060:"..tostring(obj.scene_id)..":"..tostring(obj.originframe)..":"..layer
+end
+local function capture_incoming(saved)
+    local request=tonumber(global[capture_key(0)..":effect"])
+    local key=capture_key(obj.layer)
+    if type(request)=="number" then
+        -- Effect-layer numbers and media-layer numbers are distinct.
+        if (obj.effect_layer or obj.layer)~=request then return true end
+        key=capture_key(request)
+    end
+    local cache=global[key]
+    if type(cache)~="string" or cache=="" then return false end
+    if obj.copybuffer(cache,"object") then
+        local values={}
+        for _,f in ipairs(transform_fields) do
+            values[#values+1]=string.format("%.17g",saved[f] or (f:sub(1,1)=="s" and 1 or 0))
+        end
+        global[key..":transform"]=table.concat(values,",")
+        global[key..":ready"]=cache
+        global[key..":media"]=obj.layer
+    end
+    return true
+end
+local function load_psdtoolkit()
+    if package.loaded["PSDToolKit"] or package.preload["PSDToolKit"] then
+        return require("PSDToolKit")
+    end
+    -- Nested evaluation starts with this effect's module search directory.
+    -- Resolve the sibling PSDToolKit installation without depending on load order.
+    local directory=obj.getinfo("script_path"):gsub("\\","/"):gsub("/+$","")
+    local parent=directory:match("^(.*)/[^/]+$")
+    local original=package.path
+    local paths={original,directory.."/PSDToolKit/?.lua"}
+    if parent then paths[#paths+1]=parent.."/PSDToolKit/?.lua" end
+    package.path=table.concat(paths,";")
+    local ok,module=pcall(require,"PSDToolKit")
+    package.path=original
+    if not ok then error("PuniCollision: cannot load the installed PSDToolKit module: "..tostring(module)) end
+    return module
+end
+local function prepare_psd_capture(layer)
+    local file=obj.getvalue(layer,"PSDファイル@PSDToolKit","PSDファイル")
+    if type(file)~="string" or file=="" then return end
+    -- AviUtl2 uses a separate Lua context for nested effect/layer evaluation.
+    -- PSDToolKit's scene initializer has not run in that context. Without it,
+    -- the nested PSD becomes an error-text image, which is not a collision body.
+    -- Enter the same nested context through a no-draw invocation of this effect.
+    local key=capture_key(obj.layer)..":psd_prepare"
+    local previous=global[key] or ""
+    global[key]="1"
+    local ok,err=pcall(obj.effect,"PuniCollision")
+    global[key]=previous
+    if not ok then error("PuniCollision: PSD capture initialization failed: "..tostring(err)) end
+end
+local function capture_peer(effect_layer,cache)
+    local key=capture_key(effect_layer)
+    local request_key=capture_key(0)..":effect"
+    local previous={global[key] or "",global[key..":transform"] or "",global[key..":ready"] or "",global[key..":media"] or "",global[request_key] or ""}
+    global[key],global[key..":transform"],global[key..":ready"],global[key..":media"]=cache,"","",0
+    local media,data,result
+    local standalone=not obj.getvalue("layer"..effect_layer)
+    local fallback
+    local ok,err=pcall(function()
+        -- Prefer a pre-collision callback. Standalone effects require the
+        -- preceding media load fallback because layer loads exclude them.
+        for candidate=effect_layer,1,-1 do
+            if obj.getvalue("layer"..candidate) then
+                prepare_psd_capture(candidate)
+                global[request_key]=effect_layer
+                if standalone then
+                    -- Do not carry the caller's relative transform into a peer load.
+                    for _,f in ipairs(transform_fields) do
+                        obj[f]=(f:sub(1,1)=="s" or f=="alpha") and 1 or 0
+                    end
+                end
+                result=obj.load("layer",candidate,true)
+                global[request_key]=previous[5]
+                if result and global[key..":ready"]==cache then
+                    media=tonumber(global[key..":media"])
+                    data=global[key..":transform"]
+                    break
+                end
+                if standalone then
+                    -- Layer existence queries only identify media objects. Loading
+                    -- media does not execute standalone effects below that media.
+                    if result then
+                        media=candidate
+                        fallback=save_transform()
+                        if not obj.copybuffer(cache,"object") then error("PuniCollision: peer image copy failed") end
+                    end
+                    break
+                end
+            end
+        end
+    end)
+    global[key],global[key..":transform"],global[key..":ready"],global[key..":media"],global[request_key]=previous[1],previous[2],previous[3],previous[4],previous[5]
+    if not ok then error(err) end
+    if not media then error("PuniCollision: failed to capture media for effect layer "..effect_layer..": "..tostring(result)) end
+    if fallback then return fallback,media end
+    local saved,i={},1
+    for value in data:gmatch("[^,]+") do saved[transform_fields[i]]=tonumber(value);i=i+1 end
+    if i~=#transform_fields+1 or not obj.copybuffer("object",cache) then error("PuniCollision: invalid peer capture") end
+    return saved,media
+end
+local function make_mesh(strength,soft)
+    obj.pixeloption("get","object")
+    return mesh_new(obj.w,obj.h,function(x,y)
+        local _,a=obj.getpixel(math.floor(x),math.floor(y),"col")
+        return a or 0
+    end,strength,soft)
+end
+local function make_proxy(soft,mode,count,raw)
+    if tonumber(mode)==1 or mode=="手動指定" then
+        return proxy_manual(raw,count,obj.w,obj.h,soft)
+    end
+    obj.pixeloption("get","object")
+    return proxy_new(obj.w,obj.h,function(x,y)
+        local _,a=obj.getpixel(math.floor(x),math.floor(y),"col")
+        return a or 0
+    end,soft)
+end
+local function is_rigid(value)
+    return value==true or tonumber(value)==1
+end
+local function draw_range(m,p)
+    if not m then return end
+    local saved=save_transform()
+    local width,height=obj.w,obj.h
+    local lines={}
+    local maxx,maxy=width/2,height/2
+    local function point(sample)
+        local a,b=m.nodes[sample.a],m.nodes[sample.b]
+        local x,y
+        if p then
+            local wx,wy=a.x+(b.x-a.x)*sample.t,a.y+(b.y-a.y)*sample.t
+            x,y=p.ia*wx+p.ib*wy+p.ix,p.ic*wx+p.id*wy+p.iy
+        else x,y=a.lx+(b.lx-a.lx)*sample.t,a.ly+(b.ly-a.ly)*sample.t end
+        return x,y
+    end
+    local function vertex(x,y)
+        lines[#lines+1]={x,y,0,.5,.5}
+        maxx,maxy=math.max(maxx,math.abs(x)),math.max(maxy,math.abs(y))
+    end
+    for _,edge in ipairs(m.skin) do
+        local ax,ay=point(edge[1]);local bx,by=point(edge[2])
+        local dx,dy=bx-ax,by-ay
+        local length=math.sqrt(dx*dx+dy*dy)
+        if length>.000001 then
+            -- A two-pixel object-local stroke is part of the output image.
+            local nx,ny=-dy/length,dx/length
+            vertex(ax+nx,ay+ny);vertex(bx+nx,by+ny);vertex(bx-nx,by-ny)
+            vertex(ax+nx,ay+ny);vertex(bx-nx,by-ny);vertex(ax-nx,ay-ny)
+        end
+    end
+    if #lines==0 then return end
+    local ow,oh=math.ceil(maxx*2)+4,math.ceil(maxy*2)+4
+    local mw,mh=obj.getinfo("image_max")
+    if ow>mw or oh>mh then error("PuniCollision: range display exceeds host image size limit") end
+    obj.setoption("drawtarget","tempbuffer",ow,oh)
+    obj.setoption("sampler","clip")
+    obj.drawpoly({{-width/2,-height/2,0,0,0},{width/2,-height/2,0,1,0},
+        {width/2,height/2,0,1,1},{-width/2,height/2,0,0,1}},4)
+    obj.load("figure","四角形",0x00a9e8,2)
+    obj.drawpoly(lines,3)
+    obj.copybuffer("object","tempbuffer")
+    for _,f in ipairs(transform_fields) do obj[f]=saved[f] end
+    obj.setoption("drawtarget","framebuffer")
+    obj.setoption("sampler")
+end
+local function main()
+    if global[capture_key(obj.layer)..":psd_prepare"]=="1" then
+        load_psdtoolkit().new_frame()
+        return
+    end
+    local saved=save_transform()
+    if capture_incoming(saved) then return end
+    if not is_rigid(rigid_body) and soft_boundary_mode==1 and obj.getoption("gui") and not obj.getinfo("saving") then
+        local count=clamp(math.floor(soft_point_count),3,36)
+        obj.setanchor("soft_vertices",count,"loop","color",0xff33bb,polygon(soft_vertices,count,obj.w,obj.h))
+    end
+    if is_rigid(rigid_body) then
+        -- Native handles stay object-local and never enter the rendered image.
+        if boundary_mode==1 and obj.getoption("gui") and not obj.getinfo("saving") then
+            local count=clamp(math.floor(point_count),2,36)
+            obj.setanchor("vertices",count,count==2 and "line" or "loop","color",0xff33bb,
+                polygon(vertices,count,obj.w,obj.h))
+        end
+        if is_rigid(show_range) then
+            local range
+            if boundary_mode==1 then
+                local count=clamp(math.floor(point_count),2,36)
+                range=mesh_rigid_polygon(polygon(vertices,count,obj.w,obj.h),count)
+            else range=make_mesh(1,0) end
+            draw_range(range)
+        end
+        return
+    end
+    -- The effect slot is not the media object. Use the media's drawing
+    -- parameters and clock for both simulation and inverse texture mapping.
+    local layer,group=obj.layer,math.floor(collision_id)
+    local media_prefix="layer"..layer.."."
+    local media_time=obj.getvalue(media_prefix.."time")
+    if not finite(media_time) then return end
+    local self_pose=pose(media_prefix,media_time,saved)
+    if not self_pose or obj.w<=0 or obj.h<=0 then return end
+    local width,height=obj.w,obj.h
+    local cache="cache:PuniMesh:"..tostring(obj.id)..":"..tostring(obj.effect_id)
+    local source=cache..":source"
+    if not obj.copybuffer(source,"object") then return end
+    local bodies,rigids={},{}
+    local seen={[layer]=true}
+    local function restore()
+        obj.copybuffer("object",source)
+        for _,f in ipairs(transform_fields) do obj[f]=saved[f] end
+    end
+    for other=1,(obj.getinfo("layer_max") or layer) do
+        if other~=(obj.effect_layer or layer) then
+            local peer_group=obj.getvalue(other,"PuniCollision:0","グループID")
+            if tonumber(peer_group)==group and not is_rigid(obj.getvalue(other,"PuniCollision:0","剛体")) then
+                local relative,media=capture_peer(other,cache..":layer"..other)
+                if not seen[media] then
+                seen[media]=true
+                local soft=tonumber(obj.getvalue(other,"PuniCollision:0","押出量")) or 50
+                local tail=tonumber(obj.getvalue(other,"PuniCollision:0","反発")) or 50
+                local m={cage=make_proxy(clamp(soft/100,0,1),
+                    obj.getvalue(other,"PuniCollision:0","軟体形状"),
+                    obj.getvalue(other,"PuniCollision:0","軟体の制御点の数"),
+                    obj.getvalue(other,"PuniCollision:0","軟体の内部頂点"))}
+                if m.cage then m.cage.rebound=clamp(tail/100,0,1) end
+                m.layer,m.relative,m.time=media,relative,obj.getvalue("layer"..media..".time") or 0
+                bodies[#bodies+1]=m
+                end
+                restore()
+            else
+                local index=0
+                while true do
+                    local effect="PuniCollision:"..index
+                    local id=obj.getvalue(other,effect,"グループID")
+                    if id==nil then break end
+                    if tonumber(id)==group and is_rigid(obj.getvalue(other,effect,"剛体")) then
+                        local relative,media=capture_peer(other,cache..":rigid"..other)
+                        if media~=layer then
+                        local mode=obj.getvalue(other,effect,"剛体形状")
+                        local m
+                        if tonumber(mode)==1 or mode=="手動指定" then
+                            local count=clamp(math.floor(tonumber(obj.getvalue(other,effect,"制御点の数")) or 4),2,36)
+                            m=mesh_rigid_polygon(polygon(obj.getvalue(other,effect,"内部頂点"),count,obj.w,obj.h),count)
+                        else
+                            m=make_mesh(1,0)
+                            m.fixed=true
+                            for _,n in ipairs(m.nodes) do n.weight=0 end
+                        end
+                        m.layer,m.relative,m.time=media,relative,obj.getvalue("layer"..media..".time") or 0
+                        rigids[#rigids+1]=m
+                        end
+                        restore()
+                    end
+                    index=index+1
+                end
+            end
+        end
+    end
+    restore()
+    if #bodies==0 and #rigids==0 then
+        if is_rigid(show_range) then draw_range(make_proxy(clamp(softness/100,0,1),soft_boundary_mode,soft_point_count,soft_vertices)) end
+        return
+    end
+    -- Construct material geometry only when another collision participant exists.
+    local own=make_mesh(clamp(deform_strength/100,0,1),clamp(softness/100,0,1))
+    own.rebound=clamp(rebound_tail/100,0,1)
+    if #bodies>0 or soft_boundary_mode==1 then
+        own.cage=make_proxy(clamp(softness/100,0,1),soft_boundary_mode,soft_point_count,soft_vertices)
+        if own.cage then own.cage.rebound=own.rebound end
+    end
+    own.layer,own.relative,own.time=layer,saved,media_time
+    bodies[#bodies+1]=own
+    table.sort(bodies,function(a,b) return a.layer<b.layer end)
+    -- Deterministic finite-history integration: scrubbing, reverse playback and
+    -- export do not depend on which frame happened to be evaluated previously.
+    -- Current image content is held during this window; transform keys are read
+    -- at each step. Animated PSD layer changes are not replayed historically.
+    local fps=math.max(1,obj.framerate)
+    local span=math.min(0.6,math.max(0,obj.originframe/fps))
+    local steps=math.max(1,math.ceil(span*60))
+    local dt=span>0 and span/steps or 1/60
+    if #bodies>1 or soft_boundary_mode==1 then
+        proxy_solve(bodies,span,steps,dt,obj.scene_id,group,rigids)
+        mesh_pose(own,self_pose,dt,true);own.active=true
+        proxy_apply(own,own.cage)
+        -- In mixed scenes, keep the existing pixel contour rigid constraints as
+        -- the final material correction after the smooth cage has moved it.
+        for _,r in ipairs(rigids) do
+            local p=pose("layer"..r.layer..".",r.time,r.relative)
+            r.active=p~=nil
+            if p then mesh_pose(r,p,dt,true);skin_update(r) end
+        end
+        for iteration=1,(#rigids>0 and soft_boundary_mode~=1 and 8 or 0) do
+            for _,n in ipairs(own.nodes) do n.safe_x,n.safe_y=n.x,n.y end
+            skin_update(own)
+            for _,r in ipairs(rigids) do if r.active then
+                if r.open then line_contact(own,r) else mesh_contact(own,r) end
+                skin_update(own)
+            end end
+            mesh_guard(own)
+        end
+    else
+    for frame=0,steps do
+        local age=span-frame*dt
+        for _,list in ipairs({bodies,rigids}) do
+            for _,m in ipairs(list) do
+                local p=m.time+0.000001>=age and pose("layer"..m.layer..".",math.max(0,m.time-age),m.relative) or nil
+                m.active=p~=nil
+                if p then
+                    mesh_pose(m,p,dt,not m.initialized or list==rigids)
+                    m.initialized=true;skin_update(m)
+                else m.initialized=false end
+            end
+        end
+        -- At the start of the history window, settle existing contact without
+        -- manufacturing impact velocity from its initial positional correction.
+        for iteration=1,(frame==0 and 32 or 20) do
+            for _,m in ipairs(bodies) do if m.active then mesh_relax(m);skin_update(m) end end
+            for _,a in ipairs(bodies) do if a.active then
+                for _,b in ipairs(rigids) do if b.active then
+                    if b.open then line_contact(a,b) else mesh_contact(a,b) end
+                    skin_update(a)
+                end end
+            end end
+            for _,m in ipairs(bodies) do if m.active then mesh_guard(m);skin_update(m) end end
+        end
+        if frame>0 then for _,m in ipairs(bodies) do if m.active then mesh_velocity(m,dt) end end end
+    end
+    end
+    if not own.active then return end
+    -- Draw the original texture through the material mesh into a local buffer.
+    -- The host then applies the normal object transform once, including flips.
+    local vertices={}
+    local maxx,maxy=width/2,height/2
+    for _,n in ipairs(own.nodes) do
+        n.local_x=self_pose.ia*n.x+self_pose.ib*n.y+self_pose.ix
+        n.local_y=self_pose.ic*n.x+self_pose.id*n.y+self_pose.iy
+        maxx=math.max(maxx,math.abs(n.local_x));maxy=math.max(maxy,math.abs(n.local_y))
+    end
+    local ow,oh=math.ceil(maxx*2)+4,math.ceil(maxy*2)+4
+    local mw,mh=obj.getinfo("image_max")
+    if ow>mw or oh>mh then error("PuniCollision: deformed mesh exceeds host image size limit") end
+    for _,t in ipairs(own.triangles) do
+        for _,index in ipairs(t) do
+            local n=own.nodes[index]
+            vertices[#vertices+1]={n.local_x,n.local_y,0,n.u/width,n.v/height}
+        end
+    end
+    obj.setoption("drawtarget","tempbuffer",ow,oh)
+    obj.setoption("sampler","clip")
+    obj.drawpoly(vertices,3)
+    obj.copybuffer("object","tempbuffer")
+    obj.setoption("drawtarget","framebuffer")
+    obj.setoption("sampler")
+    if is_rigid(show_range) then draw_range(own.cage or own,self_pose) end
+end
+main()

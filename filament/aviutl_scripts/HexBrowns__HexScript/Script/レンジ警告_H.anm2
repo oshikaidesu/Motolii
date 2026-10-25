@@ -1,0 +1,223 @@
+--[[
+レンジ警告_H v1.10
+
+白飛び・黒潰れ・色域外の画素をゼブラ縞で可視化する検査用フィルタ。
+
+ゼブラ縞は**画面座標に固定**される。露出計として見るものなので、オブジェクトが
+動いても縞は画面に貼り付いたままになる（v1.01 はオブジェクトのバッファ座標に
+貼り付いていた。AI/scripts/issues/20260902_rangewarn_zebra_pinned_to_object.md）。
+
+判定方式:
+  チャンネル極値 : 白飛びは R/G/B の最大値、黒潰れは最小値で判定する。
+                   1 チャンネルでも飽和した時点でその画素の情報は失われるので、
+                   素材そのものの検査にはこちらが正しい。既定。
+  輝度           : dot(rgb, float3(0.2126, 0.7152, 0.0722)) で判定する。
+                   白飛び・黒潰れとも同じ輝度値で見る。
+
+淡い色・単色に寄った素材では、チャンネル極値方式だとほぼ全画素が該当することがある。
+そうなると「警告部分だけ表示」で灰色に落とす対象（非該当画素）が残らず、
+何も変わっていないように見える。輝度方式に切り替えるか、しきい値を引き上げて調整する。
+
+色域外（0 未満 / 1 超）は判定方式によらず常にチャンネル極値で見る。
+輝度に均すと 1 チャンネルだけの範囲外が平均に埋もれて検出できないため。
+]]
+
+--information:レンジ警告_H v1.10 by HexBrowns
+--label:HexScript
+--filter
+
+--group:表示
+--check@show_high:白飛びを表示,1
+--check@show_low:黒潰れを表示,1
+--check@show_gamut:色域外を表示,0
+--group
+
+--group:しきい値
+--select@judge_mode:判定方式=0,チャンネル極値=0,輝度=1
+--track@high_threshold:白飛びしきい値,0,100,99,0.1
+--hide@high_threshold:show_high==0
+--track@low_threshold:黒潰れしきい値,0,100,1,0.1
+--hide@low_threshold:show_low==0
+--group
+
+--group:見た目
+--color@high_color:白飛びの色,0xFF0000
+--hide@high_color:show_high==0
+--color@low_color:黒潰れの色,0x0000FF
+--hide@low_color:show_low==0
+--color@gamut_color:色域外の色,0xFFFF00
+--hide@gamut_color:show_gamut==0
+--track@stripe_width:縞の幅,1,64,8,0.1
+--track@stripe_angle:縞の角度,-180,180,45,1
+--track@opacity:警告の濃さ,0,100,80,0.1
+--check@show_only:警告部分だけ表示,0
+--group
+
+--[[pixelshader@ps_rangewarn:
+Texture2D src : register(t0);
+SamplerState smp : register(s0);
+cbuffer constant0 : register(b0) {
+    float high_threshold;
+    float low_threshold;
+    float judge_mode;
+    float show_high;
+    float show_low;
+    float show_gamut;
+    float high_r;
+    float high_g;
+    float high_b;
+    float low_r;
+    float low_g;
+    float low_b;
+    float gamut_r;
+    float gamut_g;
+    float gamut_b;
+    float stripe_ax;
+    float stripe_ay;
+    float stripe_b;
+    float opacity;
+    float show_only;
+};
+float4 ps_rangewarn(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float4 c = src.Sample(smp, uv);
+    // 内部フォーマットは Premultiplied Alpha。素の色に戻してから評価する。
+    // 完全透過は判定対象外（0 除算も避ける）
+    if (c.a <= 0.001) return c;
+    float3 rgb = c.rgb / c.a;
+
+    // 既定はチャンネルの最大値／最小値で判定する。
+    // 輝度 dot(rgb, float3(0.2126, 0.7152, 0.0722)) だと、R だけ 1.0 に
+    // 張り付いた赤（輝度 0.21）や B だけ潰れた色が平均に埋もれて検出できない。
+    // 白飛び・黒潰れは 1 チャンネルでも飽和した時点で情報が失われるので、
+    // 素材の検査にはチャンネル単位の極値で見るのが正しい。
+    float ch_max = max(rgb.r, max(rgb.g, rgb.b));
+    float ch_min = min(rgb.r, min(rgb.g, rgb.b));
+
+    // judge_mode: 0 = チャンネル極値 / 1 = 輝度。
+    // 淡い色や単色に寄った素材では、チャンネル極値だとほぼ全画素が該当してしまうので
+    // 輝度に切り替えられるようにする（白飛び・黒潰れとも同じ輝度値で見る）。
+    // 分岐はヘルパー関数へ切り出さず本体に展開する（strict モードの X4000 回避）。
+    float high_value = ch_max;
+    float low_value = ch_min;
+    if (judge_mode > 0.5) {
+        float judge_lum = dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        high_value = judge_lum;
+        low_value = judge_lum;
+    }
+
+    // 複数条件に該当したときの優先順位: 色域外 > 白飛び > 黒潰れ。
+    // 色域外（0 未満 / 1 超）は白飛び・黒潰れを必ず含むので最優先。
+    // 色域外だけは judge_mode によらず常にチャンネル極値で見る。輝度に均すと
+    // 1 チャンネルだけの範囲外が埋もれて検出できなくなるため。
+    // 白飛びと黒潰れは同時成立しうる（例: しきい値を高低とも 50 にした場合）ので、
+    // 情報の欠落が視覚的に目立つ白飛びを先に採る。
+    float hit = 0.0;
+    float3 warn_rgb = float3(0.0, 0.0, 0.0);
+    if (show_gamut > 0.5 && (ch_max > 1.0001 || ch_min < -0.0001)) {
+        hit = 1.0;
+        warn_rgb = float3(gamut_r, gamut_g, gamut_b);
+    } else if (show_high > 0.5 && high_value >= high_threshold) {
+        hit = 1.0;
+        warn_rgb = float3(high_r, high_g, high_b);
+    } else if (show_low > 0.5 && low_value <= low_threshold) {
+        hit = 1.0;
+        warn_rgb = float3(low_r, low_g, low_b);
+    }
+
+    // 縞の位相は**画面座標**から作る。
+    // SV_Position（pos）は描画先バッファの画素座標であってスクリーン座標ではない。
+    // この効果の描画先は "object"（オブジェクトのバッファ）なので、pos をそのまま
+    // 使うと縞がオブジェクトに貼り付いて一緒に動く（v1.01 の不具合）。
+    // バッファ座標 → 画面座標 → 位相 の変換は Lua 側で 1 次式（ax, ay, b）に畳んである。
+    float phase = pos.x * stripe_ax + pos.y * stripe_ay + stripe_b;
+    float stripe = frac(phase) < 0.5 ? 1.0 : 0.0;
+    float mask = hit * stripe * opacity;
+
+    // 警告も減色もかからないピクセルは無加工で返す。
+    // saturate を通さないので、16bit float の範囲外の値がそのまま後段へ渡る。
+    if (mask <= 0.0 && show_only < 0.5) return c;
+
+    float3 base_rgb = rgb;
+    if (show_only > 0.5 && hit < 0.5) {
+        // 警告に該当しない部分をグレースケールに落として警告色を目立たせる
+        float lum = dot(saturate(rgb), float3(0.2126, 0.7152, 0.0722));
+        base_rgb = float3(lum, lum, lum);
+    }
+    float3 out_rgb = lerp(base_rgb, warn_rgb, mask);
+    // Premultiplied Alpha に戻す
+    return float4(saturate(out_rgb * c.a), c.a);
+}
+]]
+
+local obj, math = obj, math
+
+-- 3 種類とも非表示なら何もしない（検査中に一時的に全部切る使い方を想定）
+if show_high == 0 and show_low == 0 and show_gamut == 0 then return end
+
+-- 0xRRGGBB を 0.0〜1.0 の R/G/B へ分解する
+-- （Script/EffectUtils_ColorGrade.lua の color_from_hex と同じ式）
+local function rgb_of(hex)
+  hex = math.floor(tonumber(hex) or 0xffffff) % 0x1000000
+  return math.floor(hex / 0x10000) / 255,
+         math.floor((hex / 0x100) % 0x100) / 255,
+         math.floor(hex % 0x100) / 255
+end
+
+local hr, hg, hb = rgb_of(high_color)
+local lr, lg, lb = rgb_of(low_color)
+local gr, gg, gb = rgb_of(gamut_color)
+
+-- 縞の向きは Lua 側で cos/sin にしてから渡す（シェーダーで毎ピクセル計算しない）
+local rad = stripe_angle * math.pi / 180
+local dir_x, dir_y = math.cos(rad), math.sin(rad)
+-- トラックバー最小値は 1 だが 0 除算を確実に避ける
+local width = math.max(stripe_width, 0.1)
+
+-- バッファ座標を画面座標へ移す変換。
+-- 最終的な描画位置は「出力項目（標準描画）の設定値」＋「ここまでの効果が動かした obj.*」で決まる
+-- （lua.txt:697「上記の基準xxxxはオブジェクトの出力項目(標準描画等)の設定値になります」）。
+-- 組み立ては Script/モザイク_H.anm2 の「画面固定」の格子と同じ形にした（実機 MOZ-06 / MOZ-08 で ○）。
+-- フィルタオブジェクトとして処理されているときは出力項目が無く、バッファがそのまま
+-- 画面（obj.w = obj.screen_w）なので、恒等写像になる初期値のまま使う。
+local base_x, base_y = 0, 0
+local scale_x, scale_y = 1, 1
+local center_x, center_y = 0, 0
+local cos_r, sin_r = 1, 0
+if not obj.getinfo("filter") then
+  base_x = (obj.getvalue("x") or obj.x or 0) + (obj.ox or 0)
+  base_y = (obj.getvalue("y") or obj.y or 0) + (obj.oy or 0)
+  scale_x = (obj.getvalue("sx") or 1) * (obj.sx or 1)
+  scale_y = (obj.getvalue("sy") or 1) * (obj.sy or 1)
+  center_x = (obj.getvalue("cx") or 0) + (obj.cx or 0)
+  center_y = (obj.getvalue("cy") or 0) + (obj.cy or 0)
+  local rot = ((obj.getvalue("rz") or 0) + (obj.rz or 0)) * math.pi / 180
+  cos_r, sin_r = math.cos(rot), math.sin(rot)
+end
+
+-- バッファの画素 (px, py) が写る画面座標:
+--   u  = (px - obj.w/2 - center_x) * scale_x
+--   v  = (py - obj.h/2 - center_y) * scale_y
+--   sx = screen_w/2 + base_x + u * cos_r - v * sin_r
+--   sy = screen_h/2 + base_y + u * sin_r + v * cos_r
+-- 位相は (sx * dir_x + sy * dir_y) / 幅 なので、(px, py) の 1 次式に畳める。
+-- 畳んでおくとシェーダー側が 1 行で済み、桁の大きい座標の計算を倍精度で持てる。
+local ax = scale_x * (cos_r * dir_x + sin_r * dir_y)
+local ay = scale_y * (cos_r * dir_y - sin_r * dir_x)
+-- 拡大されたオブジェクトでは、画面上で 幅 px の縞がバッファ上では 幅/倍率 px しか無く、
+-- 1 画素を割るとモアレになって消える。**バッファ上の周期は 縞の幅 を下回らせない**。
+-- 縮小側（倍率 < 1）は縞がバッファ上で粗くなるだけなので触らない。
+local eff_width = width * math.max(math.sqrt(ax * ax + ay * ay), 1)
+ax, ay = ax / eff_width, ay / eff_width
+local bias = ((obj.screen_w * 0.5 + base_x) * dir_x
+            + (obj.screen_h * 0.5 + base_y) * dir_y) / eff_width
+            - ax * (obj.w * 0.5 + center_x) - ay * (obj.h * 0.5 + center_y)
+
+obj.pixelshader("ps_rangewarn", "object", {"object"}, {
+  high_threshold / 100, low_threshold / 100, judge_mode,
+  show_high, show_low, show_gamut,
+  hr, hg, hb,
+  lr, lg, lb,
+  gr, gg, gb,
+  ax, ay, bias,
+  opacity / 100, show_only,
+})

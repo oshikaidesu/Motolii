@@ -1,0 +1,200 @@
+--information:Glitch_T v1.0
+--label:加工
+--track@intensity:強さ,0,100,50,1
+--track@slice_h:スライス高さ,1,60,12,1
+--track@rgb_amt:RGBずれ,0,150,30,1
+--track@speed:速度,0,30,5,1
+--track@v_shift:縦ずれ量,0,500,120,1
+--select@blend_mode:合成モード=0,通常=0,加算=1,乗算=2,オーバーレイ=3,差分=4
+--group:詳細設定,false
+--track@threshold_val:しきい値,0,100,50,1
+--track@noise_alpha_val:ノイズ不透明度,0,100,80,1
+--track@grain_size:砂嵐粒子サイズ,1,20,2,1
+--track@line_density:走査線密度,1,100,20,1
+--track@noise_contrast:ノイズコントラスト,0,100,60,1
+--track@seed_offset:シード値,0,100,0,1
+--group
+
+--[[pixelshader@glitch_ps:
+
+Texture2D tex : register(t0);
+SamplerState samp : register(s0);
+
+cbuffer cb0 : register(b0) {
+    float intensity_val;
+    float slice_norm;
+    float rgb_norm;
+    float anim_seed;
+    float inv_w;
+    float inv_h;
+    float v_norm;
+    float blend_mode;
+    float threshold;
+    float grain_size;
+    float line_dens;
+    float noise_contrast;
+    float noise_alpha;
+};
+
+float hash21(float2 p) {
+    float3 p3 = frac(float3(p.xyx) * float3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return frac((p3.x + p3.y) * p3.z);
+}
+
+float hash11(float p) {
+    p = frac(p * 0.1031);
+    p *= p + 33.33;
+    return frac(p * (p + p));
+}
+
+float3 overlay_func(float3 base, float3 blend) {
+    float3 low = 2.0 * base * blend;
+    float3 high = 1.0 - 2.0 * (1.0 - base) * (1.0 - blend);
+    float3 is_high = step(0.5, base);
+    return lerp(low, high, is_high);
+}
+
+float3 apply_blend_mode(float3 base, float3 blend, float amount, float mode) {
+    float3 result = base;
+    if (mode < 0.5) {
+        result = lerp(base, blend, amount);
+    } else if (mode < 1.5) {
+        result = saturate(base + blend * amount);
+    } else if (mode < 2.5) {
+        result = lerp(base, base * blend, amount);
+    } else if (mode < 3.5) {
+        result = lerp(base, overlay_func(base, blend), amount);
+    } else {
+        result = lerp(base, abs(base - blend), amount);
+    }
+    return result;
+}
+
+float4 glitch_ps(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+
+    float raw_intensity = saturate(intensity_val);
+    float intensity = saturate(raw_intensity * (1.0 + (0.5 - threshold) * 1.5));
+
+    float slice_row = floor(uv.y / slice_norm);
+
+    float r_shift  = hash21(float2(slice_row * 0.4,  anim_seed));
+    float r_active = hash21(float2(slice_row * 0.9,  anim_seed + 1.1));
+    float big_on   = step(threshold * 0.8, r_active * intensity);
+    float big_dx   = (r_shift - 0.5) * 2.0 * rgb_norm * 4.0 * big_on;
+
+    float r_fine  = hash21(float2(slice_row * 3.3, anim_seed + 2.2));
+    float fine_dx = (r_fine - 0.5) * rgb_norm * 0.4 * intensity;
+
+    float wave_dx = sin(uv.y * 80.0 + anim_seed * 25.0) * rgb_norm * 0.3 * intensity;
+
+    float dx = big_dx + fine_dx + wave_dx;
+
+    float r_slice_v  = hash21(float2(slice_row * 2.5, anim_seed + 3.7));
+    float slice_v_on = step(threshold * 0.7, r_slice_v * intensity);
+    float slice_dy   = (hash21(float2(slice_row * 4.1, anim_seed + 4.9)) - 0.5) * 3.0 * v_norm * slice_v_on;
+
+    float v_roll_dir = (hash11(floor(anim_seed * 0.15)) - 0.5) * 2.0;
+    float v_roll     = anim_seed * 0.08 * v_roll_dir * v_norm * intensity;
+
+    float r_vy     = hash11(anim_seed + 5.5);
+    float r_vact   = hash11(anim_seed + 6.6);
+    float v_on     = step(threshold * 0.85, r_vact * intensity);
+    float dy       = (r_vy - 0.5) * 4.0 * v_norm * v_on;
+
+    float r_vfine  = hash11(anim_seed + 7.7);
+    float fine_dy  = (r_vfine - 0.5) * v_norm * 0.8 * intensity;
+
+    float total_dy = dy + fine_dy + slice_dy + v_roll;
+
+    float rgb_shift = rgb_norm * intensity;
+    float2 uv_r = float2(frac(uv.x + dx + rgb_shift * 0.8), frac(uv.y + total_dy));
+    float2 uv_g = float2(frac(uv.x + dx                 ), frac(uv.y + total_dy));
+    float2 uv_b = float2(frac(uv.x + dx - rgb_shift * 0.8), frac(uv.y + total_dy));
+
+    float r = tex.Sample(samp, uv_r).r;
+    float g = tex.Sample(samp, uv_g).g;
+    float b = tex.Sample(samp, uv_b).b;
+    float a = tex.Sample(samp, uv_g).a;
+    float4 col = float4(r, g, b, a);
+
+    float cband_y = floor(uv.y * 12.0);
+    float cband_n = hash21(float2(cband_y, anim_seed * 19.3));
+    float cband_active = step(1.0 - intensity * 0.45, cband_n);
+    float3 cband_color = float3(
+        hash21(float2(cband_y * 1.3, anim_seed * 11.1)),
+        hash21(float2(cband_y * 2.7, anim_seed * 22.2)),
+        hash21(float2(cband_y * 4.1, anim_seed * 33.3))
+    );
+    cband_color = saturate(cband_color * 2.0);
+    col.rgb = apply_blend_mode(col.rgb, cband_color, cband_active * 0.65 * intensity * noise_alpha, blend_mode);
+
+    float2 grain_pos = floor(pos.xy / max(1.0, grain_size));
+    float grain_hash = hash21(grain_pos + float2(anim_seed * 17.3, anim_seed * 31.7));
+    float static_grain = lerp(grain_hash, step(1.0 - noise_contrast, grain_hash), noise_contrast);
+    float3 grain_col = float3(static_grain, static_grain, static_grain);
+
+    col.rgb = apply_blend_mode(col.rgb, grain_col, intensity * noise_alpha, blend_mode);
+
+    float row_y = floor(pos.y * max(0.01, line_dens));
+    float line_n = hash21(float2(row_y, anim_seed * 43.1));
+    float line_active = step(threshold * 0.8, line_n * intensity);
+    float line_bright = hash21(float2(row_y * 3.3, anim_seed * 91.7));
+    float3 line_col = float3(line_bright, line_bright, line_bright);
+
+    col.rgb = apply_blend_mode(col.rgb, line_col, line_active * 0.5 * noise_alpha, blend_mode);
+
+    col.a = a;
+
+    return col;
+}
+]]
+
+local threshold_val   = threshold_val or 50
+local noise_alpha_val = noise_alpha_val or 80
+local grain_size      = grain_size or 2
+local line_density    = line_density or 20
+local noise_contrast  = noise_contrast or 60
+local seed_offset     = seed_offset or 0
+
+local intensity_val  = intensity / 100.0
+
+local speed_factor  = speed / 30.0
+local stepped_frame = math.floor(obj.frame * speed_factor * 1.5)
+local smooth_frame  = obj.frame * speed_factor * 0.05
+local anim_seed     = stepped_frame + smooth_frame + seed_offset * 100.0
+
+local blend_val      = blend_mode + 0.0
+
+local threshold_norm   = threshold_val / 100.0
+local grain_sz         = math.max(1.0, grain_size + 0.0)
+local line_dens        = line_density / 100.0
+local contrast_norm    = noise_contrast / 100.0
+local noise_alpha_norm = noise_alpha_val / 100.0
+
+local slice_norm = slice_h / obj.h
+local rgb_norm   = rgb_amt / obj.w
+local v_norm     = v_shift / obj.h
+
+obj.pixelshader(
+    "glitch_ps",
+    "object",
+    "object",
+    {
+        intensity_val,
+        slice_norm,
+        rgb_norm,
+        anim_seed,
+        1.0 / obj.w,
+        1.0 / obj.h,
+        v_norm,
+        blend_val,
+        threshold_norm,
+        grain_sz,
+        line_dens,
+        contrast_norm,
+        noise_alpha_norm
+    },
+    "copy",
+    "clamp"
+)

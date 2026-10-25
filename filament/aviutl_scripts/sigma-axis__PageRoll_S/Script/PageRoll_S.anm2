@@ -1,0 +1,314 @@
+--[[
+MIT License
+
+Copyright (c) 2025-2026 sigma-axis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+https://mit-license.org/
+]]
+
+--
+-- v1.22
+--
+
+-- https://github.com/sigma-axis/aviutl2_script_PageRoll_S
+
+--information:PageRoll_S v1.22 by σ軸
+--label:変形
+--filter
+--require:2010800
+--track@distance:距離,0,4000,0,0.01,,0.5
+--track@angle:角度,-3600,3600,-90,0.01,,0.1
+--track@width:太さ,8,4000,80,0.01,,0.125
+--group:カメラ設定,false
+--track@X:視点X,-4000,4000,0,0.01,,0.25
+--track@Y:視点Y,-4000,4000,0,0.01,,0.25
+--trackgroup@X,Y:camera_pos
+--track@fov:視野角,0,120,70,0.01
+--group
+--track@shadow:陰影,0,100,50,0.01
+--checksection@unbound:領域外も描画,true,false
+--group:裏地設定,false
+--select@backface:裏地種類=1,元画像/画像ファイル=1,フレームバッファ=2,仮想バッファ=3,一時キャッシュ=4
+--file@file_image:裏地画像
+--hide@file_image:backface~=1
+--string@cache_name:キャッシュ名,my_cache
+--hide@cache_name:backface~=4
+--select@back_orient:裏地向き=0,通常=0,左右反転=1,上下反転=2,180°反転=3
+--group:その他,false
+--value@PI:PI,{}
+--[[pixelshader@apply:
+Texture2D img : register(t0);
+Texture2D back : register(t1);
+SamplerState smp : register(s0);
+cbuffer constant0 : register(b0) {
+	float2 size, offset, dir, tilt_z, view_center,
+		back_1, back_0;
+	float radius, hf_width, tan_hf_roll, shadow;
+};
+static const float pi = 3.141592653589793;
+
+float4 thicken(float4 col, float density)
+{
+	const float r = col.a < 1.0 / 1024 ? density * (1 - col.a) :
+		(1 - pow(max(1 - col.a, 0), density)) / col.a;
+	return r * col;
+}
+float4 blend(float4 col_base, float4 col_over)
+{
+	return (1 - col_over.a) * col_base + col_over;
+}
+float4 apply(float4 pos : SV_Position) : SV_Target
+{
+	const float2 pos0 = pos.xy - offset;
+	const float l = dot(dir, pos0 - view_center);
+	float4 col = l >= 0 ? img.Load(int3(floor(pos0), 0)) : 0;
+
+	if (-hf_width <= l && l <= hf_width) {
+		const float r = abs(l / radius), s = r * tan_hf_roll,
+			a00 = atan(s), a01 = acos(min((r - s) / sqrt(1 + s * s), 1)),
+			a1 = l < 0 ? pi / 2 + a00 - a01 : 1.5 * pi - a00 + a01,
+			a2 = l < 0 ? pi / 2 + a00 + a01 : 1.5 * pi - a00 - a01,
+			z1 = radius * (1 - cos(a1)), z2 = radius * (1 - cos(a2)),
+			h = sqrt(max(1 - l * l / (hf_width * hf_width), 0)),
+			sh = 1 - (1 - h) * shadow,
+			density = 1 / max(h, 1.0 / 1024);
+
+		const float2 pt0 = pos0 - l * dir,
+			tilt_z0 = dot(tilt_z, pos0 - view_center) * tilt_z,
+			roll = -2 * pi * radius * dir;
+		float4 col_b = 0, col_f = 0;
+		for (float2 pt = pt0 - a1 * radius * dir - z1 * tilt_z0;
+			all(roll < 0 ? pt >= -0.5 : pt < size + 0.5);
+			pt += roll)
+			col_b = blend(col_b, thicken(img.SampleLevel(smp, pt / size, 0), density));
+		for (pt = pt0 - a2 * radius * dir - z2 * tilt_z0;
+			all(roll < 0 ? pt >= -0.5 : pt < size + 0.5);
+			pt += roll)
+			col_f = blend(thicken(back.SampleLevel(smp, back_1 * pt + back_0, 0), density), col_f);
+
+		col_b.rgb *= sh;
+		col_b = blend(col_b, col_f);
+		col_b.rgb *= sh;
+		col_b *= saturate(hf_width - abs(l));
+		col = blend(col, col_b);
+	}
+	return col;
+}
+
+]]
+local obj, math, tonumber, type, unpack = obj, math, tonumber, type, unpack;
+
+-- set anchors.
+if obj.getoption("gui") then obj.setanchor("X,Y", 0, "line") end
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+local function as_bool(t, v)
+	if type(t) == "boolean" then return t;
+	elseif type(t) == "number" then return t ~= 0;
+	else return v end
+end
+distance = tonumber(PI.distance) or distance;
+angle = tonumber(PI.angle) or angle;
+width = tonumber(PI.width) or width;
+X = tonumber(PI.X) or X;
+Y = tonumber(PI.Y) or Y;
+fov = tonumber(PI.fov) or fov;
+shadow = tonumber(PI.shadow) or shadow;
+unbound = as_bool(PI.unbound, unbound) and not obj.getinfo("filter");
+if PI.backface then
+	local name2num = {
+		[0] = 0, 1, 2, 3; -- legacy compatibility.
+		["元画像"] = 0, ["元画像/画像ファイル"] = 1, ["フレームバッファ"] = 2, ["仮想バッファ"] = 3, ["一時キャッシュ"] = 4
+	};
+	backface = name2num[PI.backface] or backface;
+end
+file_image = type(PI.file_image) == "string" and PI.file_image or file_image;
+cache_name = type(PI.cache_name) == "string" and PI.cache_name or cache_name;
+if PI.back_orient then
+	local name2num = {
+		[0] = 0, 1, 2, 3; -- legacy compatibility.
+		["通常"] = 0, ["左右反転"] = 1, ["上下反転"] = 2, ["180°反転"] = 3
+	};
+	back_orient = name2num[PI.back_orient] or back_orient;
+end
+
+-- normalize parameters.
+distance = math.max(distance, 0);
+angle = math.pi / 180 * angle;
+width = math.max(width, 8);
+X, Y = X + obj.w / 2, Y + obj.h / 2;
+fov = math.min(math.max(math.pi / 180 * fov, 0), (2 / 3) * math.pi);
+shadow = math.min(math.max(shadow / 100, 0), 1);
+backface = math.min(math.max(math.floor(0.5 + backface), 0), 4);
+if #file_image < 4 then
+	-- no valid file name.
+	if backface == 1 then backface = 0 end
+end
+back_orient = math.min(math.max(math.floor(0.5 + back_orient), 0), 3);
+
+--#endregion PI / normalize parameters.
+
+-- early return for trivial cases.
+if distance == 0 then return end
+
+-- further calculations.
+local w, h = obj.w, obj.h;
+local c, s = math.cos(angle), math.sin(angle);
+local pos_x, pos_y =
+	w / 2 - (s > 0 and 1 or -1) * w / 2 + s * distance,
+	h / 2 + (c > 0 and 1 or -1) * h / 2 - c * distance;
+local d = c * (X - pos_x) + s * (Y - pos_y);
+pos_x, pos_y = pos_x + d * c, pos_y + d * s;
+local fov_rate = math.tan(fov / 2);
+local D = (w ^ 2 + h ^ 2) ^ 0.5;
+local tilt_z = (2 / D * fov_rate) ^ 0.5;
+local rad_rate = (width / D) * fov_rate;
+rad_rate = 1 / (rad_rate + (rad_rate ^ 2 + 1) ^ 0.5); -- 1/(tan(t)+cos(t)), where tan(t) = width * tan(fov/2).
+local radius = rad_rate * width / 2;
+
+-- calculate the extension of the region.
+local L, R, T, B = 0, 0, 0, 0;
+if unbound and distance > 0 then
+	-- track the path of the rolled paper.
+	local ts, u0 = {}, s * pos_x - c * pos_y;
+	if u0 > 0 then ts[#ts + 1] = 0 end
+	if u0 - s * w > 0 then ts[#ts + 1] = c * w end
+	if u0 + c * h > 0 then ts[#ts + 1] = s * h end
+	if u0 - s * w + c * h > 0 then ts[#ts + 1] = c * w + s * h end
+	if s ~= 0 then
+		local x = u0 / s;
+		if 0 < x and x < w then ts[#ts + 1] = c * x end
+		x = (c * h + u0) / s;
+		if 0 < x and x < w then ts[#ts + 1] = c * x + s * h end
+	end
+	if c ~= 0 then
+		local y = -u0 / c;
+		if 0 < y and y < h then ts[#ts + 1] = s * y end
+		y = (s * w - u0) / c;
+		if 0 < y and y < h then ts[#ts + 1] = c * w + s * y end
+	end
+
+	if #ts > 0 then
+		-- calculate the visible size of the rolled part.
+		local tm, tM, t0, r =
+			math.min(unpack(ts)), math.max(unpack(ts)), c * pos_x + s * pos_y,
+			1 / (1 - 2 * ((1 - math.cos(math.min(math.pi, distance / radius))) * radius / D) * fov_rate);
+		L, R, T, B =
+			r * c * (tm - t0), r * c * (tM - t0),
+			r * s * (tm - t0), r * s * (tM - t0);
+		local width2 = math.min(width / 2, r * math.sin(math.min(math.pi / 2, distance / radius)) * radius);
+		if L > R then L, R = R, L end
+		if T > B then T, B = B, T end
+		L, R, T, B =
+			L - math.abs(s) * width2 + pos_x, R + math.abs(s) * width2 + pos_x,
+			T - math.abs(c) * width2 + pos_y, B + math.abs(c) * width2 + pos_y;
+
+		-- convert to the extension size.
+		L, R, T, B =
+			math.max(math.ceil(-L), 0),
+			math.max(math.ceil(R - w), 0),
+			math.max(math.ceil(-T), 0),
+			math.max(math.ceil(B - h), 0);
+
+		-- cap to the maximum size of image.
+		local max_w, max_h = obj.getinfo("image_max");
+		if L + w + R > max_w then
+			local M = math.floor((max_w - w) / 2);
+			if L < M then R = 2 * M - L;
+			elseif R < M then L = 2 * M - R;
+			else L, R = M, M end
+		end
+		if T + h + B > max_h then
+			local M = math.floor((max_h - h) / 2);
+			if T < M then B = 2 * M - T;
+			elseif B < M then T = 2 * M - B;
+			else T, B = M, M end
+		end
+	end
+end
+
+-- load the image if specified.
+local cache_orig, cache_canvas = "cache:pageroll_s/obj", "cache:pageroll_s/cvs";
+local img_x, img_x0, img_y, img_y0 = 1, 0, 1, 0;
+if backface > 0 then
+	obj.copybuffer(cache_orig, "object");
+
+	-- try loading the specified image.
+	local has_image = true;
+	if backface == 1 then
+		local obj_props = { obj.ox, obj.oy, obj.oz, obj.cx, obj.cy, obj.cz, obj.rx, obj.ry, obj.rz, obj.sx, obj.sy, obj.sz, obj.alpha };
+		has_image = obj.load("image", file_image);
+		obj.ox, obj.oy, obj.oz, obj.cx, obj.cy, obj.cz, obj.rx, obj.ry, obj.rz, obj.sx, obj.sy, obj.sz, obj.alpha = unpack(obj_props);
+	else
+		local name =
+			backface == 2 and "framebuffer" or
+			backface == 3 and "tempbuffer" or
+			("cache:"..cache_name);
+		has_image = obj.copybuffer("object", name);
+	end
+	if not has_image then
+		-- no valid image.
+		obj.copybuffer("object", cache_orig);
+		backface = 0;
+	end
+
+	-- crop to match the aspect ratio.
+	if obj.w * h < obj.h * w then
+		local top = math.min(math.floor(0.5 + obj.h - obj.w * h / w), obj.h - 1);
+		local btm = math.floor(top / 2);
+		top = top - btm;
+		while top > 0 or btm > 0 do
+			local t, b = math.min(top, 4000), math.min(btm, 4000);
+			top, btm = top - t, btm - b;
+			obj.effect("クリッピング", "上", t, "下", b, "中心の位置を変更", 1);
+		end
+	else
+		local lft = math.min(math.floor(0.5 + obj.w - obj.h * w / h), obj.w - 1);
+		local rit = math.floor(lft / 2);
+		lft = lft - rit;
+		while lft > 0 or rit > 0 do
+			local l, r = math.min(lft, 4000), math.min(rit, 4000);
+			lft, rit = lft - l, rit - r;
+			obj.effect("クリッピング", "左", l, "右", r, "中心の位置を変更", 1);
+		end
+	end
+end
+
+-- handle the orientation.
+if back_orient % 2 == 1 then img_x, img_x0 = -1, 1 end
+if back_orient >= 2 then img_y, img_y0 = -1, 1 end
+
+-- draw by shader.
+obj.clearbuffer(cache_canvas, L + w + R, T + h + B);
+obj.pixelshader("apply", cache_canvas, { backface > 0 and cache_orig or "object", "object" }, {
+	w, h; L, T;
+	s, -c; tilt_z * c, tilt_z * s;
+	pos_x, pos_y;
+	img_x / w, img_y / h; img_x0, img_y0;
+	radius, width / 2, (width / D) * fov_rate * rad_rate, shadow,
+}, "copy", "clip");
+obj.copybuffer("object", cache_canvas);
+
+-- adjust the center.
+obj.cx, obj.cy = obj.cx + (L - R) / 2, obj.cy + (T - B) / 2;
+

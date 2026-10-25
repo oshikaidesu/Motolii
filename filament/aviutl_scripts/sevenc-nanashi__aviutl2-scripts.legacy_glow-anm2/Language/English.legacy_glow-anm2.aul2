@@ -1,0 +1,15 @@
+[Language]
+Information=English Language for sevenc-nanashi/aviutl2-scripts / https://github.com/sevenc-nanashi/aviutl2-scripts
+[旧発光]
+旧発光=Legacy Glow
+強さ=Strength
+拡散=Diffusion
+しきい値=Threshold
+拡散速度=Diffusion speed
+光色=Light color
+サイズ固定=Fixed size
+PI=PI
+
+[Tips.旧発光]
+effect.name=Recreates AviUtl1 glow.\n
+PI=- `strength`: Strength\n- `diffusion`: Diffusion\n- `threshold`: Threshold\n- `speed`: Diffusion speed\n- `light_color`: Light color (`0xRRGGBB`, or `false` to use source chroma)\n- `fixed_size`: Fixed size (`true` / `false`)\n

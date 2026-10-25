@@ -1,0 +1,6 @@
+ColorHalftone by azurite
+licence: MIT
+from: https://github.com/azurite581/AviUtl2-ColorHalftone/releases/download/v2.0.0/AviUtl2-ColorHalftone-v2.0.0.au2pkg.zip (tag v2.0.0, commit f8d52c6f5147)
+page: https://github.com/azurite581/AviUtl2-ColorHalftone
+licence/README from: https://github.com/azurite581/AviUtl2-ColorHalftone at v2.0.0
+Put here unchanged for Motolii (filament/aviutl_scripts).

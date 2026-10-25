@@ -1,0 +1,6 @@
+aviutl2_script_ZoomJustFit by nea-c
+licence: MIT
+from: https://github.com/nea-c/aviutl2_script_ZoomJustFit (branch master, commit d79c6acfd54b) (commit d79c6acfd54b)
+page: https://github.com/nea-c/aviutl2_script_ZoomJustFit
+left out: 1 other (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

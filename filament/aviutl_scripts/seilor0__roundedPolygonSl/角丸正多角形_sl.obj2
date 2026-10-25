@@ -1,0 +1,155 @@
+--information:角丸正多角形_sl v1.2.1 by seilor0
+--label:カスタムオブジェクト
+
+--track@size:サイズ,0,4000,400,1
+--track@n:頂点数,3,40,3,1
+--track@cRatio:角丸[%],0,100,0
+--track@depth:星形[%],0,100,0
+--check@isStar:綺麗な星形にする,false
+--check@cIsTop:常に頂点を真上にする,1
+
+--color@fillColor:塗り,0xffffff
+--track@fillAlpha:塗りα,0,100,100
+
+--group:線,false
+--track@lineW:ライン幅,0,2000,0,1
+--select@linePos:ライン位置=0,内側=0,中央=1,外側=2
+--select@cornerType:角の形状=1,マイター=0,ラウンド=1
+
+--color@lineColor:ライン,0xff0000
+--track@lineAlpha:ラインα,0,100,100
+
+
+--[[pixelshader@psmain:
+  #define PI 3.1415927
+
+  cbuffer constant0: register(b0) {
+    float4 fillColor;
+    float4 lineColor;
+
+    float halfImSize;
+    float halfSize;
+    float depth;
+    float cRatio;
+
+    float lineW;
+    float linePos;
+    float cornerType;
+
+    float n;
+    float cIsTop;
+  }
+
+  float2x2 rotateMatrix (float angle) {
+    return float2x2(cos(angle), -sin(angle), sin(angle), cos(angle));
+  }
+
+  // a:始点, angle:角度(rad)
+  float sdRay (float2 p, float2 a, float angle) {
+    float2 dirVec = float2(cos(angle), sin(angle));
+    float2 ap = p-a;
+    float t = max(0, dot(dirVec,ap));
+    float sign1 = sign(dirVec.x*ap.y - dirVec.y*ap.x);
+    float sign2 = sign(dirVec.x==0 ? dirVec.y : dirVec.x);
+    return sign1 * sign2 * length(ap - dirVec*t);
+  }
+
+  // a:通過点, angle:角度(rad)
+  float sdLine (float2 p, float2 a, float angle) {
+    float2 dirVec = float2(cos(angle), sin(angle));
+    float2 ap = p-a;
+    float t = dot(dirVec,ap);
+    float sign1 = sign(dirVec.x*ap.y - dirVec.y*ap.x);
+    float sign2 = sign(dirVec.x==0 ? dirVec.y : dirVec.x);
+    return sign1 * sign2 * length(ap - dirVec*t);
+  }
+
+  // radius:外接円の半径, depth:切込み深さ
+  float sdStar(float2 p, int n, float radius, float depth) {
+    float halfAngle = PI / n;
+    float notchAngle = atan(depth/tan(halfAngle));
+    float halfArmAngle = 0.5*PI - halfAngle - notchAngle;
+    float cRadius = cRatio * radius * sin(halfAngle) / cos(notchAngle) * tan(halfArmAngle);
+    radius -= cRadius / sin(halfArmAngle);
+
+    if (radius<1e-6) return length(p) - cRadius;
+
+    // cIsTop
+    p = p.yx;
+    float angle1 = halfAngle * fmod(n+1,2) * cIsTop;
+    p = mul(rotateMatrix(-angle1), p);
+
+    // rotate in mirror base
+    float angle = atan2(p.y, p.x);
+    float rotAngle = 2*halfAngle * floor(angle*0.5/halfAngle + 0.5);
+    p = mul(rotateMatrix(-rotAngle), p);
+
+    // symmetry
+    p.y = abs(p.y);
+
+    // pt
+    float2 pt1 = float2(cos(halfAngle), sin(halfAngle)) * radius;
+    float rad = atan2(-pt1.y, -pt1.x*depth);
+    if (cornerType==0.0 && cRatio==0) return -sdLine(p, pt1, rad) - cRadius;
+    else return -sdRay(p, pt1, rad) - cRadius;
+  }
+
+  // src: 前景色, dst: 背景色
+  float4 blend(float4 src, float4 dst) {
+    float4 color = src + dst * (1.0-src.a);
+    return color.a<1e-6 ? float4(0.0,0.0,0.0,0.0) : color;
+  }
+
+  float4 psmain(float4 pos:SV_Position): SV_Target {
+    float2 p = pos.xy - halfImSize;
+    float d = sdStar(p, n, halfSize, depth);
+
+    // fill
+    float alpha1 = saturate((linePos==0&&lineW>0.0 ? 0.0 : 0.5) - d);
+    // line
+    float offset = (linePos-1) * lineW * 0.5;
+    float alpha2 = saturate((lineW+1)/2-abs(d-offset));
+    alpha2 *= (lineW>0.0) ? 1.0 : 0.0;
+    return blend(lineColor*alpha2, fillColor*alpha1);
+  }
+]]
+
+-- depth
+if (isStar and n>4) then depth = math.tan(math.pi/n)^2 else depth=depth/100 end
+
+if size<2 or depth==1 then return end
+
+-- color
+local function color2rgba(col, alpha)
+  local r,g,b = RGB(col)
+  r,g,b = r/255*alpha, g/255*alpha, b/255*alpha
+  return r,g,b,alpha
+end
+local fillColorVec = {color2rgba(fillColor, fillAlpha/100)}
+local lineColorVec = {color2rgba(lineColor, lineAlpha/100)}
+
+-- size
+local offset = 0;
+if (cornerType==0) then
+  local angle = math.pi*(0.5-1/n) - math.atan(depth/math.tan(math.pi/n))
+  local delta = lineW/math.sin(angle)
+  offset = 0.5*linePos*delta
+elseif (cornerType==1) then offset = 0.5*linePos*lineW end
+
+obj.setoption("drawtarget", "tempbuffer",size+offset*2,size+offset*2)
+obj.pixelshader("psmain", "tempbuffer", {},
+  {
+    fillColorVec[1], fillColorVec[2], fillColorVec[3], fillColorVec[4], -- fillColor
+    lineColorVec[1], lineColorVec[2], lineColorVec[3], lineColorVec[4], -- liineColor
+    size*0.5+offset, -- half im size
+    size*0.5, -- half size
+    depth,
+    cRatio*0.01,
+    lineW,
+    linePos,
+    cornerType,
+    n,
+    cIsTop
+  }
+)
+obj.load("tempbuffer")

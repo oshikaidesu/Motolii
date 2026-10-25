@@ -1,0 +1,5 @@
+aviutl2-script-skill by gasdyueer
+licence: MIT
+from: https://github.com/gasdyueer/aviutl2-script-skill (branch master, commit 213c688cbc41) (commit 213c688cbc41)
+page: https://github.com/gasdyueer/aviutl2-script-skill
+Put here unchanged for Motolii (filament/aviutl_scripts).

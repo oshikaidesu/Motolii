@@ -1,0 +1,166 @@
+--[[
+MIT License
+
+Copyright (c) 2025-2026 sigma-axis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+https://mit-license.org/
+]]
+
+--
+-- v1.20
+--
+
+-- https://github.com/sigma-axis/aviutl2_script_AutoClipping_S
+
+--information:AutoClipping_S v1.20 by σ軸
+--label:クリッピング
+--require:2005400
+--track@thresh:αしきい値,0,100,0,0.01
+--checksection@move_center:中心の位置を変更,false,false
+--group:余白,false
+--track@pad_u:上余白,-4000,4000,0,1,,0.05
+--track@pad_d:下余白,-4000,4000,0,1,,0.05
+--track@pad_l:左余白,-4000,4000,0,1,,0.05
+--track@pad_r:右余白,-4000,4000,0,1,,0.05
+--group:有効無効,false
+--checksection@enable_u:上除去,true,false
+--checksection@enable_d:下除去,true,false
+--checksection@enable_l:左除去,true,false
+--checksection@enable_r:右除去,true,false
+--group:その他,false
+--value@PI:PI,{}
+--[[pixelshader@find_minmax:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+	float width, thresh;
+};
+static const int w = int(width);
+
+float4 find_minmax(float4 pos : SV_Position) : SV_Target
+{
+	const int y = int(pos.x);
+	int l = w, r = -1;
+	for (int x = 0; x < w; x++) {
+		if (thresh < src[uint2(x, y)].a) {
+			l = min(l, x); r = max(r, x);
+		}
+	}
+	if (r < 0) return 0;
+	const float4 c = int4(
+		l & 0xff, 0x00 | ((l >> 8) & 0x7f),
+		r & 0xff, 0x80 | ((r >> 8) & 0x7f)) / 255.0;
+	return float4(c.a * c.rgb, c.a);
+}
+
+]]
+local obj, math, tonumber, type, ffi = obj, math, tonumber, type, require("ffi");
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+local function as_bool(t, v)
+	if type(t) == "boolean" then return t;
+	elseif type(t) == "number" then return t ~= 0;
+	else return v end
+end
+pad_u = tonumber(PI.pad_u) or pad_u;
+pad_d = tonumber(PI.pad_d) or pad_d;
+pad_l = tonumber(PI.pad_l) or pad_l;
+pad_r = tonumber(PI.pad_r) or pad_r;
+enable_u = as_bool(PI.enable_u, enable_u);
+enable_d = as_bool(PI.enable_d, enable_d);
+enable_l = as_bool(PI.enable_l, enable_l);
+enable_r = as_bool(PI.enable_r, enable_r);
+thresh = tonumber(PI.thresh) or thresh;
+move_center = as_bool(PI.move_center, move_center);
+
+-- normalize paramters.
+pad_u = math.floor(0.5 + pad_u);
+pad_d = math.floor(0.5 + pad_d);
+pad_l = math.floor(0.5 + pad_l);
+pad_r = math.floor(0.5 + pad_r);
+thresh = math.min(math.max(thresh / 100, 0), 1 - 2 ^ -24);
+
+--#endregion PI / normalize parameters.
+
+-- early return for obvious cases.
+local w, h = obj.w, obj.h;
+if w + pad_l + pad_r <= 0 or h + pad_u + pad_d <= 0 then obj.load("text", ""); return end
+
+-- find boudaries.
+if enable_u or enable_d or enable_l or enable_r then
+	-- prepare for shaders.
+	local cache_name = "cache:auto_clipping_s/stat";
+	obj.clearbuffer(cache_name, h, 1);
+	obj.pixelshader("find_minmax", cache_name, "object", { w, thresh });
+	local data = obj.getpixeldata(cache_name);
+	local ptr = ffi.cast("uint32_t*", data);
+
+	-- find the four edges.
+	local u, d, l, r = h - 1, -1, w - 1, 2 ^ 31;
+	for y = 0, h - 1 do
+		local v = ptr[y];
+		if v >= 2 ^ 31 then
+			u, d = math.min(u, y) , math.max(d, y);
+			l, r = math.min(l, v % 2 ^ 16), math.max(r, v);
+		end
+	end
+	if d < 0 then obj.load("text", ""); return end
+	r = math.min(math.max(math.floor((r - 2 ^ 31) / 2 ^ 16), l), w - 1);
+
+	-- calculate the amount to crop / pad.
+	if enable_u then pad_u = pad_u - u end
+	if enable_d then pad_d = pad_d - (h - (d + 1)) end
+	if enable_l then pad_l = pad_l - l end
+	if enable_r then pad_r = pad_r - (w - (r + 1)) end
+end
+if pad_u == 0 and pad_d == 0 and pad_l == 0 and pad_r == 0 then return end
+
+-- crop / pad the image.
+if w + pad_l + pad_r <= 0 or h + pad_u + pad_d <= 0 then obj.load("text", ""); return;
+elseif w + pad_l <= 0 or w + pad_r <= 0 or h + pad_u <= 0 or h + pad_d <= 0 then
+	obj.clearbuffer("object", w + pad_l + pad_r, h + pad_u + pad_d);
+else
+	local U, D, L, R = pad_u, pad_d, pad_l, pad_r;
+	while U < 0 or D < 0 or L < 0 or R < 0 do
+		local clip_max = 4000;
+		local u, d, l, r =
+			math.min(math.max(-U, 0), clip_max), math.min(math.max(-D, 0), clip_max),
+			math.min(math.max(-L, 0), clip_max), math.min(math.max(-R, 0), clip_max);
+		U, D, L, R = U + u, D + d, L + l, R + r;
+		obj.effect("クリッピング", "中心の位置を変更", 1,
+			"上", u, "下", d, "左", l, "右", r);
+	end
+	while U > 0 or D > 0 or L > 0 or R > 0 do
+		local extend_max = 4000;
+		local u, d, l, r =
+			math.min(math.max(U, 0), extend_max), math.min(math.max(D, 0), extend_max),
+			math.min(math.max(L, 0), extend_max), math.min(math.max(R, 0), extend_max);
+		U, D, L, R = U - u, D - d, L - l, R - r;
+		obj.effect("領域拡張", "上", u, "下", d, "左", l, "右", r);
+	end
+end
+
+-- adjust the center.
+if not move_center then
+	obj.cx, obj.cy = obj.cx + (pad_l - pad_r) / 2, obj.cy + (pad_u - pad_d) / 2;
+end
+

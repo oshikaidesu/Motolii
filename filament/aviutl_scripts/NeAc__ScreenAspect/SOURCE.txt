@@ -1,0 +1,5 @@
+画面アスペクト by 猫愛
+licence: MIT
+from: https://github.com/nea-c/aviutl2_script_ScreenAspect/releases/download/r3/ScreenAspect.zip (tag r3, commit 6f8966b98b46)
+page: https://github.com/nea-c/aviutl2_script_ScreenAspect
+Put here unchanged for Motolii (filament/aviutl_scripts).

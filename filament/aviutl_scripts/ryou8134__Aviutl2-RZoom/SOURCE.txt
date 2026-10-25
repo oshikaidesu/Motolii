@@ -1,0 +1,5 @@
+Aviutl2-RZoom by ryou8134
+licence: MIT
+from: https://github.com/ryou8134/Aviutl2-RZoom (branch main, commit 57424bdfc0f6) (commit 57424bdfc0f6)
+page: https://github.com/ryou8134/Aviutl2-RZoom
+Put here unchanged for Motolii (filament/aviutl_scripts).

@@ -1,0 +1,856 @@
+--filter
+--label:加工
+
+-- ========================================================================================================================
+-- 最新版をダウンロード：https://aviutl2-scripts-download.sevenc7c.workers.dev/GPU%E3%83%94%E3%82%AF%E3%82%BB%E3%83%AB%E3%82%BD%E3%83%BC%E3%83%88.anm2
+-- 説明書をブラウザで読む：https://github.com/sevenc-nanashi/aviutl2-scripts/blob/main/scripts/GPU%E3%83%94%E3%82%AF%E3%82%BB%E3%83%AB%E3%82%BD%E3%83%BC%E3%83%88/README.md
+--
+-- GPUを使用してピクセルソートを行うスクリプト。
+--
+-- ┌ ⚠️ Warning
+-- │ ソート方向のサイズが4096ピクセル以下である必要があります。
+-- └────────
+--
+-- [ PI ]
+--   - `direction`：方向（0=横方向、1=縦方向、2=横方向（反転）、3=縦方向（反転））
+--   - `threshold_min`：しきい値の最小値
+--   - `threshold_max`：しきい値の最大値
+--   - `visualize_sort_range`：ソート範囲を可視化するか
+--   - `visualize_color`：ソート範囲可視化の色（`0xRRGGBB`）
+--   - `visualize_fill_opacity`：ソート範囲可視化の塗りの不透明度
+--   - `visualize_source_opacity`：ソート範囲可視化時の元画像の不透明度
+--
+-- --< 更新履歴 >----------------------------------------------------------------------------------------------------------
+--
+-- [ v1.3（2026/8/18） ]
+--   - Tipsを追加
+--
+-- [ v1.2（2026/7/6） ]
+--   - 英語の言語ファイルを追加
+--
+-- [ v1.1（2026/6/8） ]
+--   - BitonicPixelSorter v1.2.0の単一パスソート処理を移植
+--   - ソート方向の最大サイズを4096ピクセルに拡張
+--   - ソート範囲可視化をcompute shader内で完結するように変更
+--
+-- [ v1.0（2026/6/7） ]
+--   - 初版リリース
+--
+-- ========================================================================================================================
+
+
+-- このスクリプトはBitonicPixelSorterをベースに作成しました。
+-- BitonicPixelSorterの作者であるruccho様に感謝いたします。
+-- 以下はBitonicPixelSorterのライセンス情報です。
+-- ------------------------------------------------------------------------------------------------------------------------
+-- MIT License
+--
+-- Copyright (c) 2020 ruccho
+--
+-- Permission is hereby granted, free of charge, to any person obtaining a copy
+-- of this software and associated documentation files (the "Software"), to deal
+-- in the Software without restriction, including without limitation the rights
+-- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+-- copies of the Software, and to permit persons to whom the Software is
+-- furnished to do so, subject to the following conditions:
+--
+-- The above copyright notice and this permission notice shall be included in all
+-- copies or substantial portions of the Software.
+--
+-- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+-- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+-- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+-- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+-- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+-- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+-- SOFTWARE.
+-- ------------------------------------------------------------------------------------------------------------------------
+
+--select@direction:方向=0,横方向=0,縦方向=1,横方向（反転）=2,縦方向（反転）=3
+--group:しきい値
+--track@threshold_min:しきい値::最小,0,1,0,0.001
+--track@threshold_max:しきい値::最大,0,1,1,0.001
+--group:ソート範囲可視化
+--check@visualize_sort_range:ソート範囲可視化::可視化,false
+--color@visualize_color:ソート範囲可視化::色,0xff00ff
+--separator:不透明度
+--track@visualize_fill_opacity:ソート範囲可視化::塗り,0,1,0.5,0.01
+--track@visualize_source_opacity:ソート範囲可視化::元画像,0,1,0.5,0.01
+--group:その他
+
+--value@PI:PI,{}
+--[[computeshader@bitonic_pixelsort_2048:
+#define ENTRYPOINT bitonic_pixelsort_2048
+#ifdef BPS_SIZE_4096
+#define MAX_THREADS 256  // keeps MAX_PAIRS at 8, same as the default variant
+#define MAX_SIZE 4096    // 16KiB of group shared memory
+#else
+#define MAX_THREADS 128  // threads per SM is usually multiple of 512 (NVIDIA). It may maximize occupancy.
+#define MAX_SIZE 2048    // due to group shared memory limit
+#endif
+#define MAX_PAIRS (MAX_SIZE / MAX_THREADS / 2)
+
+// directionF:
+//   1.0 = horizontal, x方向に処理
+//   0.0 = vertical, y方向に処理
+//
+// orderingF:
+//   1.0 = ascending
+//   0.0 = descending
+
+cbuffer PixelSortParams : register(b0) {
+  float thresholdMin;
+  float thresholdMax;
+
+  float visualizeSortRangeF;
+  float orderingF;
+
+  float directionF;
+  float visualizeRed;
+  float visualizeGreen;
+  float visualizeBlue;
+  float visualizeFillAlpha;
+  float visualizeSourceAlpha;
+};
+
+Texture2D<float4> srcTex : register(t0);
+RWTexture2D<float4> sortTex : register(u0);
+
+groupshared uint groupCache[MAX_SIZE];
+groupshared uint scanCache[MAX_THREADS];
+
+float Brightness(float4 col) { return saturate(0.298912 * col.r + 0.586611 * col.g + 0.114478 * col.b); }
+
+uint GetDirection() { return directionF >= 0.5 ? 1u : 0u; }
+
+uint GetOrdering() { return orderingF >= 0.5 ? 1u : 0u; }
+
+bool GetVisualizeSortRange() { return visualizeSortRangeF >= 0.5; }
+
+uint2 SourcePosition(uint x, uint y, uint dir) { return dir != 0u ? uint2(x, y) : uint2(y, x); }
+
+float4 VisualizeSortRange(float4 current, bool inRange) {
+  float sourceAlpha = saturate(visualizeSourceAlpha);
+
+  if (!inRange) {
+    return current * sourceAlpha;
+  }
+
+  float3 visualizeColor = saturate(float3(visualizeRed, visualizeGreen, visualizeBlue));
+  float fillAlpha = saturate(visualizeFillAlpha);
+  float3 rgb = current.rgb * sourceAlpha + visualizeColor * fillAlpha;
+  return float4(saturate(rgb), current.a);
+}
+
+[numthreads(MAX_THREADS, 1, 1)] void ENTRYPOINT(uint3 gid_l : SV_GroupID, uint3 gtid_l : SV_GroupThreadID) {
+  uint dir = GetDirection();
+  uint ord = GetOrdering();
+  bool visualizeSortRange = GetVisualizeSortRange();
+
+  uint gid = gid_l.x;
+  uint gtid = gtid_l.x;
+
+  uint width;
+  uint height;
+  sortTex.GetDimensions(width, height);
+
+  uint size = dir != 0u ? width : height;
+  uint reducedSize = (size + 1u) >> 1;
+  uint ops = (reducedSize + MAX_THREADS - 1u) / MAX_THREADS;
+  uint pairBase = gtid * ops;
+
+  uint rangeMask = 0u;
+  for (uint loadOp = 0u; loadOp < ops; loadOp++) {
+    uint pair = pairBase + loadOp;
+    uint xL = pair << 1;
+    uint xR = xL + 1u;
+
+    if (pair >= reducedSize) {
+      continue;
+    }
+
+    float brL = 0.0;
+    float brR = 0.0;
+
+    if (xL < size) {
+      brL = Brightness(srcTex.Load(int3(SourcePosition(xL, gid, dir), 0)));
+    }
+
+    if (xR < size) {
+      brR = Brightness(srcTex.Load(int3(SourcePosition(xR, gid, dir), 0)));
+    }
+
+    bool inL = xL < size && thresholdMin <= brL && brL <= thresholdMax;
+    bool inR = xR < size && thresholdMin <= brR && brR <= thresholdMax;
+
+    rangeMask |= (inL ? 1u : 0u) << (loadOp * 2u);
+    rangeMask |= (inR ? 1u : 0u) << (loadOp * 2u + 1u);
+
+    groupCache[xL] = (xL << 16) | (f32tof16(brL) & 0xFFFFu);
+
+    if (xR < size) {
+      groupCache[xR] = (xR << 16) | (f32tof16(brR) & 0xFFFFu);
+    }
+  }
+
+  uint preMeta[MAX_PAIRS];
+
+  {
+    uint seed = 0u;
+    for (uint seedOp = 0u; seedOp < ops; seedOp++) {
+      uint pair = pairBase + seedOp;
+      uint xL = pair << 1;
+
+      if (pair >= reducedSize) {
+        continue;
+      }
+
+      if ((rangeMask & (1u << (seedOp * 2u))) == 0u) {
+        seed = xL + 1u;
+      }
+      if ((rangeMask & (2u << (seedOp * 2u))) == 0u) {
+        seed = xL + 2u;
+      }
+    }
+
+    scanCache[gtid] = seed;
+    GroupMemoryBarrierWithGroupSync();
+
+    for (uint prefixOffset = 1u; prefixOffset < MAX_THREADS; prefixOffset <<= 1u) {
+      uint own = scanCache[gtid];
+      uint other = scanCache[max(gtid, prefixOffset) - prefixOffset];
+      GroupMemoryBarrierWithGroupSync();
+      scanCache[gtid] = max(own, gtid >= prefixOffset ? other : 0u);
+      GroupMemoryBarrierWithGroupSync();
+    }
+
+    uint carry = scanCache[max(gtid, 1u) - 1u];
+    carry = gtid > 0u ? carry : 0u;
+
+    for (uint startOp = 0u; startOp < ops; startOp++) {
+      uint pair = pairBase + startOp;
+      uint xL = pair << 1;
+
+      if (pair >= reducedSize) {
+        preMeta[startOp] = xL << 16;
+        continue;
+      }
+
+      bool inL = (rangeMask & (1u << (startOp * 2u))) != 0u;
+      bool inR = (rangeMask & (2u << (startOp * 2u))) != 0u;
+
+      uint start;
+      if (inL) {
+        start = carry;
+      } else {
+        carry = xL + 1u;
+        start = inR ? carry : xL;
+      }
+      if (!inR) {
+        carry = xL + 2u;
+      }
+
+      preMeta[startOp] = start << 16;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+  }
+
+  uint lineLevels;
+
+  {
+    uint seed = 0xFFFFu;
+    for (uint suffixSeedOp = ops; suffixSeedOp > 0u;) {
+      suffixSeedOp--;
+      uint pair = pairBase + suffixSeedOp;
+      uint xL = pair << 1;
+
+      if (pair >= reducedSize) {
+        continue;
+      }
+
+      if ((rangeMask & (2u << (suffixSeedOp * 2u))) == 0u) {
+        seed = xL + 1u;
+      }
+      if ((rangeMask & (1u << (suffixSeedOp * 2u))) == 0u) {
+        seed = xL;
+      }
+    }
+
+    scanCache[gtid] = seed;
+    GroupMemoryBarrierWithGroupSync();
+
+    for (uint suffixOffset = 1u; suffixOffset < MAX_THREADS; suffixOffset <<= 1u) {
+      uint own = scanCache[gtid];
+      uint other = scanCache[min(gtid + suffixOffset, MAX_THREADS - 1u)];
+      GroupMemoryBarrierWithGroupSync();
+      scanCache[gtid] = min(own, gtid + suffixOffset < MAX_THREADS ? other : 0xFFFFu);
+      GroupMemoryBarrierWithGroupSync();
+    }
+
+    uint carry = scanCache[min(gtid + 1u, MAX_THREADS - 1u)];
+    carry = gtid + 1u < MAX_THREADS ? carry : 0xFFFFu;
+
+    uint maxLen = 1u;
+    for (uint endOp = ops; endOp > 0u;) {
+      endOp--;
+      uint pair = pairBase + endOp;
+      uint xL = pair << 1;
+
+      if (pair >= reducedSize) {
+        continue;
+      }
+
+      bool inL = (rangeMask & (1u << (endOp * 2u))) != 0u;
+      bool inR = (rangeMask & (2u << (endOp * 2u))) != 0u;
+
+      if (!inR) {
+        carry = xL + 1u;
+      }
+
+      uint start = preMeta[endOp] >> 16;
+      uint end = inL || inR ? min(carry, size) - 1u : xL;
+
+      if (!inL) {
+        carry = xL;
+      }
+
+      uint xSlot = xL + (start & 1u);
+      bool valid = end > start && xSlot <= end;
+      start = valid ? start : xSlot;
+      end = valid ? end : xSlot;
+
+      preMeta[endOp] = (start << 16) | end;
+      maxLen = max(maxLen, end - start + 1u);
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    scanCache[gtid] = maxLen;
+    GroupMemoryBarrierWithGroupSync();
+
+    for (uint reduceOffset = MAX_THREADS >> 1u; reduceOffset > 0u; reduceOffset >>= 1u) {
+      if (gtid < reduceOffset) {
+        scanCache[gtid] = max(scanCache[gtid], scanCache[gtid + reduceOffset]);
+      }
+      GroupMemoryBarrierWithGroupSync();
+    }
+
+    maxLen = scanCache[0];
+    lineLevels = maxLen <= 1u ? 0u : (uint)firstbithigh(maxLen) + 1u;
+  }
+
+  for (uint phase = 0u; (phase & 0xFFFFu) < lineLevels; phase++) {
+    for (phase = (phase << 16) + (phase & 0xFFFFu); (phase >> 16) <= 0x7FFFu; phase -= (1u << 16)) {
+      GroupMemoryBarrierWithGroupSync();
+
+      for (uint sortOp = 0u; sortOp < ops; sortOp++) {
+        uint pair = pairBase + sortOp;
+        uint x = pair << 1;
+
+        if (pair >= reducedSize) {
+          continue;
+        }
+
+        uint metaPacked = preMeta[sortOp];
+        uint rangeStart = metaPacked >> 16;
+        uint rangeEnd = metaPacked & 0xFFFFu;
+
+        uint useR = rangeStart & 1u;
+        uint posInRange = x - rangeStart + useR;
+        uint swapIndex = posInRange >> 1;
+        uint comparatorSize = 1u << (phase >> 16);
+
+        uint a =
+            rangeStart + (swapIndex & (comparatorSize - 1u)) + ((swapIndex >> (phase >> 16)) * (comparatorSize << 1));
+
+        uint b = a + comparatorSize;
+        b = b <= rangeEnd ? b : a;
+
+        uint block = (posInRange >> 1) >> phase;
+        uint n = rangeEnd - rangeStart + 1u;
+        uint endBlock = n >> (phase + 1u);
+
+        bool ascPattern = ((endBlock & 1u) == 0u) == (ord != 0u);
+        bool asc = ((block & 1u) == 0u) == ascPattern;
+
+        uint valA = groupCache[a];
+        uint valB = groupCache[b];
+
+        float brA = f16tof32(valA & 0xFFFFu);
+        float brB = f16tof32(valB & 0xFFFFu);
+
+        bool comp = brA < brB;
+
+        uint left = asc == comp ? valA : valB;
+        uint right = asc == comp ? valB : valA;
+
+        groupCache[a] = left;
+        groupCache[b] = right;
+      }
+    }
+  }
+
+  GroupMemoryBarrierWithGroupSync();
+
+  for (uint writeOp = 0u; writeOp < ops; writeOp++) {
+    uint pair = pairBase + writeOp;
+    uint xL = pair << 1;
+    uint xR = xL + 1u;
+
+    if (pair >= reducedSize) {
+      continue;
+    }
+
+    uint valA = groupCache[xL];
+    uint idxLeft = valA >> 16;
+
+    uint metaPacked = preMeta[writeOp];
+    uint rangeStart = metaPacked >> 16;
+    uint rangeEnd = metaPacked & 0xFFFFu;
+
+    float4 colorLeft = srcTex.Load(int3(SourcePosition(idxLeft, gid, dir), 0));
+    if (visualizeSortRange) {
+      bool inRangeLeft = rangeEnd - rangeStart > 1u && xL >= rangeStart && xL <= rangeEnd;
+      colorLeft = VisualizeSortRange(colorLeft, inRangeLeft);
+    }
+
+    sortTex[SourcePosition(xL, gid, dir)] = colorLeft;
+
+    if (xR < size) {
+      uint valB = groupCache[xR];
+      uint idxRight = valB >> 16;
+
+      float4 colorRight = srcTex.Load(int3(SourcePosition(idxRight, gid, dir), 0));
+      if (visualizeSortRange) {
+        bool inRangeRight = rangeEnd - rangeStart > 1u && xR >= rangeStart && xR <= rangeEnd;
+        colorRight = VisualizeSortRange(colorRight, inRangeRight);
+      }
+
+      sortTex[SourcePosition(xR, gid, dir)] = colorRight;
+    }
+  }
+}
+
+]]
+--[[computeshader@bitonic_pixelsort_4096:
+#define BPS_SIZE_4096
+#define ENTRYPOINT bitonic_pixelsort_4096
+#ifdef BPS_SIZE_4096
+#define MAX_THREADS 256  // keeps MAX_PAIRS at 8, same as the default variant
+#define MAX_SIZE 4096    // 16KiB of group shared memory
+#else
+#define MAX_THREADS 128  // threads per SM is usually multiple of 512 (NVIDIA). It may maximize occupancy.
+#define MAX_SIZE 2048    // due to group shared memory limit
+#endif
+#define MAX_PAIRS (MAX_SIZE / MAX_THREADS / 2)
+
+// directionF:
+//   1.0 = horizontal, x方向に処理
+//   0.0 = vertical, y方向に処理
+//
+// orderingF:
+//   1.0 = ascending
+//   0.0 = descending
+
+cbuffer PixelSortParams : register(b0) {
+  float thresholdMin;
+  float thresholdMax;
+
+  float visualizeSortRangeF;
+  float orderingF;
+
+  float directionF;
+  float visualizeRed;
+  float visualizeGreen;
+  float visualizeBlue;
+  float visualizeFillAlpha;
+  float visualizeSourceAlpha;
+};
+
+Texture2D<float4> srcTex : register(t0);
+RWTexture2D<float4> sortTex : register(u0);
+
+groupshared uint groupCache[MAX_SIZE];
+groupshared uint scanCache[MAX_THREADS];
+
+float Brightness(float4 col) { return saturate(0.298912 * col.r + 0.586611 * col.g + 0.114478 * col.b); }
+
+uint GetDirection() { return directionF >= 0.5 ? 1u : 0u; }
+
+uint GetOrdering() { return orderingF >= 0.5 ? 1u : 0u; }
+
+bool GetVisualizeSortRange() { return visualizeSortRangeF >= 0.5; }
+
+uint2 SourcePosition(uint x, uint y, uint dir) { return dir != 0u ? uint2(x, y) : uint2(y, x); }
+
+float4 VisualizeSortRange(float4 current, bool inRange) {
+  float sourceAlpha = saturate(visualizeSourceAlpha);
+
+  if (!inRange) {
+    return current * sourceAlpha;
+  }
+
+  float3 visualizeColor = saturate(float3(visualizeRed, visualizeGreen, visualizeBlue));
+  float fillAlpha = saturate(visualizeFillAlpha);
+  float3 rgb = current.rgb * sourceAlpha + visualizeColor * fillAlpha;
+  return float4(saturate(rgb), current.a);
+}
+
+[numthreads(MAX_THREADS, 1, 1)] void ENTRYPOINT(uint3 gid_l : SV_GroupID, uint3 gtid_l : SV_GroupThreadID) {
+  uint dir = GetDirection();
+  uint ord = GetOrdering();
+  bool visualizeSortRange = GetVisualizeSortRange();
+
+  uint gid = gid_l.x;
+  uint gtid = gtid_l.x;
+
+  uint width;
+  uint height;
+  sortTex.GetDimensions(width, height);
+
+  uint size = dir != 0u ? width : height;
+  uint reducedSize = (size + 1u) >> 1;
+  uint ops = (reducedSize + MAX_THREADS - 1u) / MAX_THREADS;
+  uint pairBase = gtid * ops;
+
+  uint rangeMask = 0u;
+  for (uint loadOp = 0u; loadOp < ops; loadOp++) {
+    uint pair = pairBase + loadOp;
+    uint xL = pair << 1;
+    uint xR = xL + 1u;
+
+    if (pair >= reducedSize) {
+      continue;
+    }
+
+    float brL = 0.0;
+    float brR = 0.0;
+
+    if (xL < size) {
+      brL = Brightness(srcTex.Load(int3(SourcePosition(xL, gid, dir), 0)));
+    }
+
+    if (xR < size) {
+      brR = Brightness(srcTex.Load(int3(SourcePosition(xR, gid, dir), 0)));
+    }
+
+    bool inL = xL < size && thresholdMin <= brL && brL <= thresholdMax;
+    bool inR = xR < size && thresholdMin <= brR && brR <= thresholdMax;
+
+    rangeMask |= (inL ? 1u : 0u) << (loadOp * 2u);
+    rangeMask |= (inR ? 1u : 0u) << (loadOp * 2u + 1u);
+
+    groupCache[xL] = (xL << 16) | (f32tof16(brL) & 0xFFFFu);
+
+    if (xR < size) {
+      groupCache[xR] = (xR << 16) | (f32tof16(brR) & 0xFFFFu);
+    }
+  }
+
+  uint preMeta[MAX_PAIRS];
+
+  {
+    uint seed = 0u;
+    for (uint seedOp = 0u; seedOp < ops; seedOp++) {
+      uint pair = pairBase + seedOp;
+      uint xL = pair << 1;
+
+      if (pair >= reducedSize) {
+        continue;
+      }
+
+      if ((rangeMask & (1u << (seedOp * 2u))) == 0u) {
+        seed = xL + 1u;
+      }
+      if ((rangeMask & (2u << (seedOp * 2u))) == 0u) {
+        seed = xL + 2u;
+      }
+    }
+
+    scanCache[gtid] = seed;
+    GroupMemoryBarrierWithGroupSync();
+
+    for (uint prefixOffset = 1u; prefixOffset < MAX_THREADS; prefixOffset <<= 1u) {
+      uint own = scanCache[gtid];
+      uint other = scanCache[max(gtid, prefixOffset) - prefixOffset];
+      GroupMemoryBarrierWithGroupSync();
+      scanCache[gtid] = max(own, gtid >= prefixOffset ? other : 0u);
+      GroupMemoryBarrierWithGroupSync();
+    }
+
+    uint carry = scanCache[max(gtid, 1u) - 1u];
+    carry = gtid > 0u ? carry : 0u;
+
+    for (uint startOp = 0u; startOp < ops; startOp++) {
+      uint pair = pairBase + startOp;
+      uint xL = pair << 1;
+
+      if (pair >= reducedSize) {
+        preMeta[startOp] = xL << 16;
+        continue;
+      }
+
+      bool inL = (rangeMask & (1u << (startOp * 2u))) != 0u;
+      bool inR = (rangeMask & (2u << (startOp * 2u))) != 0u;
+
+      uint start;
+      if (inL) {
+        start = carry;
+      } else {
+        carry = xL + 1u;
+        start = inR ? carry : xL;
+      }
+      if (!inR) {
+        carry = xL + 2u;
+      }
+
+      preMeta[startOp] = start << 16;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+  }
+
+  uint lineLevels;
+
+  {
+    uint seed = 0xFFFFu;
+    for (uint suffixSeedOp = ops; suffixSeedOp > 0u;) {
+      suffixSeedOp--;
+      uint pair = pairBase + suffixSeedOp;
+      uint xL = pair << 1;
+
+      if (pair >= reducedSize) {
+        continue;
+      }
+
+      if ((rangeMask & (2u << (suffixSeedOp * 2u))) == 0u) {
+        seed = xL + 1u;
+      }
+      if ((rangeMask & (1u << (suffixSeedOp * 2u))) == 0u) {
+        seed = xL;
+      }
+    }
+
+    scanCache[gtid] = seed;
+    GroupMemoryBarrierWithGroupSync();
+
+    for (uint suffixOffset = 1u; suffixOffset < MAX_THREADS; suffixOffset <<= 1u) {
+      uint own = scanCache[gtid];
+      uint other = scanCache[min(gtid + suffixOffset, MAX_THREADS - 1u)];
+      GroupMemoryBarrierWithGroupSync();
+      scanCache[gtid] = min(own, gtid + suffixOffset < MAX_THREADS ? other : 0xFFFFu);
+      GroupMemoryBarrierWithGroupSync();
+    }
+
+    uint carry = scanCache[min(gtid + 1u, MAX_THREADS - 1u)];
+    carry = gtid + 1u < MAX_THREADS ? carry : 0xFFFFu;
+
+    uint maxLen = 1u;
+    for (uint endOp = ops; endOp > 0u;) {
+      endOp--;
+      uint pair = pairBase + endOp;
+      uint xL = pair << 1;
+
+      if (pair >= reducedSize) {
+        continue;
+      }
+
+      bool inL = (rangeMask & (1u << (endOp * 2u))) != 0u;
+      bool inR = (rangeMask & (2u << (endOp * 2u))) != 0u;
+
+      if (!inR) {
+        carry = xL + 1u;
+      }
+
+      uint start = preMeta[endOp] >> 16;
+      uint end = inL || inR ? min(carry, size) - 1u : xL;
+
+      if (!inL) {
+        carry = xL;
+      }
+
+      uint xSlot = xL + (start & 1u);
+      bool valid = end > start && xSlot <= end;
+      start = valid ? start : xSlot;
+      end = valid ? end : xSlot;
+
+      preMeta[endOp] = (start << 16) | end;
+      maxLen = max(maxLen, end - start + 1u);
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    scanCache[gtid] = maxLen;
+    GroupMemoryBarrierWithGroupSync();
+
+    for (uint reduceOffset = MAX_THREADS >> 1u; reduceOffset > 0u; reduceOffset >>= 1u) {
+      if (gtid < reduceOffset) {
+        scanCache[gtid] = max(scanCache[gtid], scanCache[gtid + reduceOffset]);
+      }
+      GroupMemoryBarrierWithGroupSync();
+    }
+
+    maxLen = scanCache[0];
+    lineLevels = maxLen <= 1u ? 0u : (uint)firstbithigh(maxLen) + 1u;
+  }
+
+  for (uint phase = 0u; (phase & 0xFFFFu) < lineLevels; phase++) {
+    for (phase = (phase << 16) + (phase & 0xFFFFu); (phase >> 16) <= 0x7FFFu; phase -= (1u << 16)) {
+      GroupMemoryBarrierWithGroupSync();
+
+      for (uint sortOp = 0u; sortOp < ops; sortOp++) {
+        uint pair = pairBase + sortOp;
+        uint x = pair << 1;
+
+        if (pair >= reducedSize) {
+          continue;
+        }
+
+        uint metaPacked = preMeta[sortOp];
+        uint rangeStart = metaPacked >> 16;
+        uint rangeEnd = metaPacked & 0xFFFFu;
+
+        uint useR = rangeStart & 1u;
+        uint posInRange = x - rangeStart + useR;
+        uint swapIndex = posInRange >> 1;
+        uint comparatorSize = 1u << (phase >> 16);
+
+        uint a =
+            rangeStart + (swapIndex & (comparatorSize - 1u)) + ((swapIndex >> (phase >> 16)) * (comparatorSize << 1));
+
+        uint b = a + comparatorSize;
+        b = b <= rangeEnd ? b : a;
+
+        uint block = (posInRange >> 1) >> phase;
+        uint n = rangeEnd - rangeStart + 1u;
+        uint endBlock = n >> (phase + 1u);
+
+        bool ascPattern = ((endBlock & 1u) == 0u) == (ord != 0u);
+        bool asc = ((block & 1u) == 0u) == ascPattern;
+
+        uint valA = groupCache[a];
+        uint valB = groupCache[b];
+
+        float brA = f16tof32(valA & 0xFFFFu);
+        float brB = f16tof32(valB & 0xFFFFu);
+
+        bool comp = brA < brB;
+
+        uint left = asc == comp ? valA : valB;
+        uint right = asc == comp ? valB : valA;
+
+        groupCache[a] = left;
+        groupCache[b] = right;
+      }
+    }
+  }
+
+  GroupMemoryBarrierWithGroupSync();
+
+  for (uint writeOp = 0u; writeOp < ops; writeOp++) {
+    uint pair = pairBase + writeOp;
+    uint xL = pair << 1;
+    uint xR = xL + 1u;
+
+    if (pair >= reducedSize) {
+      continue;
+    }
+
+    uint valA = groupCache[xL];
+    uint idxLeft = valA >> 16;
+
+    uint metaPacked = preMeta[writeOp];
+    uint rangeStart = metaPacked >> 16;
+    uint rangeEnd = metaPacked & 0xFFFFu;
+
+    float4 colorLeft = srcTex.Load(int3(SourcePosition(idxLeft, gid, dir), 0));
+    if (visualizeSortRange) {
+      bool inRangeLeft = rangeEnd - rangeStart > 1u && xL >= rangeStart && xL <= rangeEnd;
+      colorLeft = VisualizeSortRange(colorLeft, inRangeLeft);
+    }
+
+    sortTex[SourcePosition(xL, gid, dir)] = colorLeft;
+
+    if (xR < size) {
+      uint valB = groupCache[xR];
+      uint idxRight = valB >> 16;
+
+      float4 colorRight = srcTex.Load(int3(SourcePosition(idxRight, gid, dir), 0));
+      if (visualizeSortRange) {
+        bool inRangeRight = rangeEnd - rangeStart > 1u && xR >= rangeStart && xR <= rangeEnd;
+        colorRight = VisualizeSortRange(colorRight, inRangeRight);
+      }
+
+      sortTex[SourcePosition(xR, gid, dir)] = colorRight;
+    }
+  }
+}
+
+]]
+
+if type(PI.direction) == "number" then
+  direction = PI.direction
+end
+
+if type(PI.threshold_min) == "number" then
+  threshold_min = PI.threshold_min
+end
+
+if type(PI.threshold_max) == "number" then
+  threshold_max = PI.threshold_max
+end
+
+if type(PI.visualize_sort_range) == "boolean" then
+  visualize_sort_range = PI.visualize_sort_range
+end
+
+if type(PI.visualize_color) == "number" then
+  visualize_color = PI.visualize_color
+end
+
+if type(PI.visualize_fill_opacity) == "number" then
+  visualize_fill_opacity = PI.visualize_fill_opacity
+end
+
+if type(PI.visualize_source_opacity) == "number" then
+  visualize_source_opacity = PI.visualize_source_opacity
+end
+
+local size, lines
+if direction == 0 or direction == 2 then
+  size = obj.w
+  lines = obj.h
+else
+  size = obj.h
+  lines = obj.w
+end
+
+if size > 4096 then
+  error("too large! size=" .. size .. " must be 4096 or smaller.")
+end
+
+local prefix = "cache:bitonic_pixelsort__"
+
+obj.clearbuffer(prefix .. "sorted", obj.w, obj.h)
+
+local visualize_r_uint, visualize_g_uint, visualize_b_uint = RGB(visualize_color)
+local visualize_r = visualize_r_uint / 255
+local visualize_g = visualize_g_uint / 255
+local visualize_b = visualize_b_uint / 255
+local common_params = {
+  threshold_min,
+  threshold_max,
+  visualize_sort_range and 1 or 0,
+  math.floor(direction / 2),
+  (direction + 1) % 2,
+  visualize_r,
+  visualize_g,
+  visualize_b,
+  visualize_fill_opacity,
+  visualize_source_opacity,
+}
+local shader_name = size <= 2048 and "bitonic_pixelsort_2048" or "bitonic_pixelsort_4096"
+obj.computeshader(shader_name, { prefix .. "sorted" }, "object", common_params, lines, 1, 1)
+obj.copybuffer("object", prefix .. "sorted")
+

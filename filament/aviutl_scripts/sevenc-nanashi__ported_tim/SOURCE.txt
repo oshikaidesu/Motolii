@@ -1,0 +1,7 @@
+ported_tim by Nanashi.
+licence: MIT
+from: https://github.com/sevenc-nanashi/ported_tim/releases/download/0.2.1/sevenc-nanashi.ported_tim-v0.2.1.au2pkg.zip (tag 0.2.1, commit e3028788c882)
+page: https://github.com/sevenc-nanashi/ported_tim
+licence/README from: https://github.com/sevenc-nanashi/ported_tim at 0.2.1
+left out: 1 .anm2, 1 .mod2 (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

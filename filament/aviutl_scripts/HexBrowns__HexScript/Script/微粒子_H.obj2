@@ -1,0 +1,159 @@
+--information:微粒子_H v1.10 by HexBrowns
+--label:HexScript
+
+--group:配置
+--track@width:幅,0,4000,1920,1
+--track@height:高さ,0,4000,1080,1
+--check@screen_size:画面サイズ,1
+--track@density:密度,4,400,80,1
+--track@scatter:散らばり,0,100,80,0.1
+--track@thinning:間引き,0,100,0,0.1
+--track@seed:シード,0,9999,0,1
+--group
+
+--group:粒
+--color@col:色,0xf2fafc
+--track@size:サイズ,0.1,20,2,0.1
+--track@size2:サイズ2,0.1,20,2,0.1
+--track@mix2:サイズ2の比率,0,100,0,0.1
+--track@alpha:不透明度,0,100,100,0.1
+--group
+
+--group:動き
+--track@speed_x:速度X,-200,200,0,0.01
+--track@speed_y:速度Y,-200,200,0,0.01
+--group
+
+--[[pixelshader@ps_particles:
+cbuffer constant0 : register(b0) {
+    float3 col;        // 0-2  色 (0.0-1.0)
+    float alpha;       // 3    不透明度 (0.0-1.0)
+    float2 offset;     // 4-5  スクロール量 (px)
+    float cell;        // 6    セル辺長 (px)
+    float scatter;     // 7    セル内のずれ幅 (0.0-1.0)
+    float thinning;    // 8    間引き率 (0.0-1.0)
+    float seed;        // 9    シード
+    float size1;       // 10   粒の半径A (px)
+    float size2;       // 11   粒の半径B (px)
+    float mix2;        // 12   半径Bを選ぶ確率 (0.0-1.0)
+};
+
+// セル座標とシードから、互いに独立な 0.0-1.0 の乱数を 4 つ返す
+// （x=間引き / y=ずれX / z=ずれY / w=サイズ2の選択）。
+// v1.00 は 1 つのハッシュ値に定数を足して 4 つを作っていたので、4 つの差が
+// セルによらず一定だった。ずれは斜めの線の上にしか散らず、間引きとサイズ2の
+// 選択も粒の位置と連動していた（間引き 50 で粒がセルの決まった側に寄る）。
+// ここでは pcg4d（Jarzynski & Olano 2020）で 32bit 整数のまま 4 成分を混ぜる。
+// 整数演算なので float の桁落ちが無く、机上の検証器（numpy の uint32）と一致する。
+// 検証器: AI/scripts/微粒子_H/verify_particles.py
+float4 hash44(float2 id, float s) {
+    int2 ii = int2(id);
+    uint4 v = uint4(asuint(ii.x), asuint(ii.y), asuint(int(s)), 0x9e3779b9u);
+    v = v * 1664525u + 1013904223u;
+    v.x += v.y * v.w;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v.w += v.y * v.z;
+    v = v ^ (v >> 16u);
+    v.x += v.y * v.w;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v.w += v.y * v.z;
+    return float4(v >> 8u) * (1.0 / 16777216.0);
+}
+
+float4 ps_particles(float4 pos : SV_Position) : SV_Target {
+    // ピクセル単位でグリッドを引く。uv 基準ではないので、
+    // キャンバスが 16:9 でもセルは常に正方形になり、粒が横長に潰れない。
+    float2 p = pos.xy + offset;
+    float2 gi = floor(p / cell);
+
+    float acc = 0.0;
+
+    // 散らばりで粒が隣のセルへはみ出すため、3x3 の近傍を走査する。
+    // 自セルだけを見ると、はみ出した粒が描画されず欠ける。
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            float2 id = gi + float2(x, y);
+
+            float4 hv = hash44(id, seed);
+            if (hv.x < thinning) continue;
+
+            float2 c = (id + 0.5 + (hv.yz - 0.5) * scatter) * cell;
+            float r = (hv.w < mix2) ? size2 : size1;
+
+            // 遷移幅をピクセル単位で固定する。半径が数px でも
+            // 同じ柔らかさのエッジになり、粒の大小が揃って見える。
+            float d = length(p - c);
+            float a = 1.0 - smoothstep(r - 0.7, r + 0.7, d);
+            acc = max(acc, a);
+        }
+    }
+
+    float o = saturate(acc) * alpha;
+    return float4(col * o, o);   // Premultiplied Alpha
+}
+]]
+
+local w, h
+if screen_size == 1 then
+  w, h = obj.screen_w, obj.screen_h
+else
+  w = math.max(math.floor(width + 0.5), 1)
+  h = math.max(math.floor(height + 0.5), 1)
+end
+
+local cell = w / density
+
+local r = bit.band(bit.rshift(col, 16), 0xff) / 255
+local g = bit.band(bit.rshift(col, 8), 0xff) / 255
+local b = bit.band(col, 0xff) / 255
+
+-- 開始から現在までに流れた量（px）。速度トラックの値を時間で積分する。
+-- v1.00 は 速度 × 経過秒 だったので、速度を動かすと「今の速度で開始から
+-- 流れ続けた位置」へ飛び、後半ほど大きく揺れた。速度が一定なら結果は同じ。
+-- 刻みはオブジェクトの長さだけで決める（現在時刻で刻みが変わると、
+-- 台形公式の誤差がフレームごとに変わって揺れる）。区間は 256 までに抑える。
+-- 256 フレーム以下のオブジェクトは 1 フレーム刻みで、フレームの間が直線なら厳密。
+-- それより長いと刻みが粗くなり、刻みの途中で速度が折れる・跳ぶ所では流れた量が
+-- 最大 |Δv|·刻み/2 ずれる（位置は連続のまま。9000 フレームで刻み 1.2 秒）。
+-- 移動の値は obj.getvalue で読む（lua.txt の「関数」の obj.getvalue。"track.変数名"）。
+local function travel(name, v_now)
+  local t = obj.time
+  if t <= 0 then return 0 end
+  local v = obj.getvalue("track." .. name, 0)
+  if type(v) ~= "number" then
+    return v_now * t                -- 読めない本体では v1.00 の式
+  end
+  local fps = obj.framerate
+  local frames = obj.totalframe or 1
+  local step = math.max(1, math.ceil(frames / 256)) / fps
+  local n = math.floor(t / step + 1e-6)
+  local sum = 0
+  for k = 1, n do
+    local v1 = obj.getvalue("track." .. name, k * step)
+    if type(v1) ~= "number" then v1 = v end
+    sum = sum + (v + v1) * 0.5 * step
+    v = v1
+  end
+  local rest = t - n * step
+  if rest > 1e-9 then
+    sum = sum + (v + v_now) * 0.5 * rest
+  end
+  return sum
+end
+
+-- 速度が正のとき粒が右下へ流れるよう、グリッド側を逆へずらす。
+-- ハッシュはセル座標で決まるので、いくらスクロールしても継ぎ目が出ない。
+local ox = -travel("speed_x", speed_x)
+local oy = -travel("speed_y", speed_y)
+
+obj.setoption("drawtarget", "tempbuffer", w, h)
+obj.load("tempbuffer")
+
+obj.pixelshader("ps_particles", "object", {}, {
+  r, g, b, alpha / 100,
+  ox, oy, cell, scatter / 100,
+  thinning / 100, seed, size, size2,
+  mix2 / 100
+})

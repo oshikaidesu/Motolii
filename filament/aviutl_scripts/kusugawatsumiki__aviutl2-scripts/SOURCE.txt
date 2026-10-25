@@ -1,0 +1,5 @@
+aviutl2-scripts by kusugawatsumiki
+licence: MIT
+from: https://github.com/kusugawatsumiki/aviutl2-scripts (branch main, commit bb855e3defbc) (commit bb855e3defbc)
+page: https://github.com/kusugawatsumiki/aviutl2-scripts
+Put here unchanged for Motolii (filament/aviutl_scripts).

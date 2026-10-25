@@ -1,0 +1,13 @@
+# PageRoll_S AviUtl ExEdit2 ページ丸めスクリプト
+
+ページを丸めるように画像を変形するフィルタ効果と，シーンチェンジです．AviUtl (無印) のシーンチェンジ「ロール(横)」「ロール(縦)」の拡張版・AviUtl2 移植版で，めくる方向を斜めにしたり，丸める部分の太さの調整などの追加機能があります．
+
+公開ページ:
+https://github.com/sigma-axis/aviutl2_script_PageRoll_S
+
+紹介動画:
+https://www.nicovideo.jp/watch/sm45441228
+
+お願い:
+ニコニコ動画での親作品登録をしていただけると励みになります．
+作品 ID: sm45441228

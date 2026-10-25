@@ -1,0 +1,22 @@
+[ReflectionOnPane]
+ReflectionOnPane=Reflection on Pane
+ガラス反射=Reflection on Pane
+加工=Processing
+露光=Exposure
+コントラスト=Contrast
+ガンマ=Gamma
+彩度=Saturation
+色相=Hue
+反射強度=Reflection Strength
+ぼかし=Blur
+Xずれ（二重反射）=Ghost Offset X
+Yずれ（二重反射）=Ghost Offset Y
+エッジ方向=Edge Direction
+なし=None
+左→右=Left to Right
+右→左=Right to Left
+上→下=Top to Bottom
+下→上=Bottom to Top
+エッジ範囲=Edge Range
+エッジ柔らかさ=Edge Softness
+ミラー=Mirror

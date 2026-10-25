@@ -1,0 +1,94 @@
+--label:色調整
+--information:GB_Style
+
+--group:変換設定
+--track@intensity:強さ,0,100,100,1
+--select@palette_type:パレット=0,GB風(緑)=0,GB風(グレー)=1,3DSVC風(緑)=2,3DSVC風(グレー)=3 
+--group:
+--filter:
+
+--[[pixelshader@GBConverterShader:
+    cbuffer Params : register(b0) {
+        float intensity; 
+        float palette_type; 
+        float2 padding; 
+    };
+
+    Texture2D tex0 : register(t0); 
+    SamplerState smp : register(s0); 
+
+    // パレット定義 (Array of Arrays は HLSL で扱いにくいため、フラットに展開するかSwitchで分岐する)
+    // ここではSwitch内で定数を割り当てる方式を採用
+
+    float3 get_palette_color(int type, int index) {
+        // GB Green
+        if (type == 0) {
+            if (index == 0) return float3(15, 56, 15) / 255.0;
+            if (index == 1) return float3(48, 98, 48) / 255.0;
+            if (index == 2) return float3(139, 172, 15) / 255.0;
+            return float3(155, 188, 15) / 255.0;
+        }
+        // GB Gray
+        if (type == 1) {
+            if (index == 0) return float3(0.1, 0.1, 0.1);
+            if (index == 1) return float3(0.4, 0.4, 0.4);
+            if (index == 2) return float3(0.7, 0.7, 0.7);
+            return float3(0.9, 0.9, 0.9);
+        }
+        // 3DS VC Green
+        if (type == 2) {
+            if (index == 0) return float3(48, 48, 48) / 255.0;
+            if (index == 1) return float3(56, 96, 40) / 255.0;
+            if (index == 2) return float3(104, 168, 24) / 255.0;
+            return float3(128, 176, 16) / 255.0;
+        }
+        // 3DS VC Gray
+        else {
+            if (index == 0) return float3(40, 40, 24) / 255.0;
+            if (index == 1) return float3(104, 104, 80) / 255.0;
+            if (index == 2) return float3(160, 160, 136) / 255.0;
+            return float3(200, 200, 168) / 255.0;
+        }
+    }
+
+    float4 GBConverterShader(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target { 
+        float4 src = tex0.Sample(smp, uv); 
+        
+        // 透明ピクセルは計算しない
+        if (src.a <= 0.0) return float4(0,0,0,0);
+
+        // Premultiplied Alpha を解除 (Unpremultiply)
+        // これを行わないと、半透明部分が黒っぽく判定されてしまう
+        float3 rgb = src.rgb / src.a;
+
+        // 輝度計算 (NTSC係数)
+        float lum = dot(rgb, float3(0.299, 0.587, 0.114)); 
+        
+        // 4階調に量子化 (0, 1, 2, 3)
+        // lum * 3.99 により 1.0 が 4.0 になって配列外参照するのを防ぐ
+        int palette_index = (int)clamp(lum * 4.0, 0.0, 3.0); 
+        
+        // パレット色取得
+        float3 converted_rgb = get_palette_color((int)palette_type, palette_index); 
+
+        // 強度に基づいてブレンド
+        float3 final_rgb = lerp(rgb, converted_rgb, intensity); 
+
+        // 再度 Premultiply して出力
+        return float4(final_rgb * src.a, src.a); 
+    }
+]]
+
+do
+    -- サンプラー設定
+    obj.setoption("sampler", "clamp")
+
+    local params = {
+        intensity / 100.0,
+        palette_type + 0.0, -- float化
+        0, 0
+    }
+
+    -- シェーダー実行
+    obj.pixelshader("GBConverterShader", "object", "object", params, "copy", "clamp")
+end

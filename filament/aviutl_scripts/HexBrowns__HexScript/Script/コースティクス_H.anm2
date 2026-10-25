@@ -1,0 +1,199 @@
+--information:コースティクス_H v1.00 by HexBrowns
+--label:HexScript
+--filter
+
+--group:波
+--track@wave_scale:波の大きさ,10,2000,120,0.1
+--track@wave_amp:高さ,0,200,4,0.01
+--track@wave_speed:速さ,0,2000,60,0.1
+--track@wave_dir:向き,-360,360,0,0.01
+--track@wave_spread:ばらつき,0,360,90,0.01
+--select@octaves:複雑さ=2,1=1,2=2,3=3,4=4
+--track@seed:シード,0,10000,0,1
+--group
+
+--group:波紋
+--check@ripple_on:波紋を出す,0
+--track@ripple_x:波紋の中心X,-4000,4000,0,0.1
+--hide@ripple_x:ripple_on==0
+--track@ripple_y:波紋の中心Y,-4000,4000,0,0.1
+--hide@ripple_y:ripple_on==0
+--track@ripple_amp:波紋の高さ,0,200,6,0.01
+--hide@ripple_amp:ripple_on==0
+--track@ripple_len:波紋の波長,4,2000,60,0.1
+--hide@ripple_len:ripple_on==0
+--track@ripple_speed:波紋の速さ,0,4000,200,0.1
+--hide@ripple_speed:ripple_on==0
+--track@ripple_decay:波紋の減衰,10,10000,600,0.1
+--hide@ripple_decay:ripple_on==0
+--group
+
+--group:光と水
+--track@refract:屈折,0,1000,40,0.1
+--track@caustics:コースティクス,0,200,60,0.1
+--track@focus:集光の距離,0,5000,150,0.1
+--color@light_color:光の色,0xffffff
+--track@spec:ハイライト,0,100,20,0.1
+--track@light_dir:光の向き,-360,360,135,0.01
+--color@water_color:水の色,0x1a6e8c
+--track@water_amt:水の濃さ,0,100,0,0.1
+--select@view:表示=0,合成=0,コースティクスだけ=1,高さマップ=2
+--group
+
+--[[
+After Effects の「ウェーブワールド」と「コースティクス」を合わせた効果。水面の高さ h(x, y, t) を数式で作り、
+その下に置いた画像（このオブジェクト）を屈折させ、水面で集まった光（コースティクス）を明るくする。
+
+- 波: 向きのばらついた 6 本の正弦波を 1 組とし、複雑さの数だけ半分の大きさの組を重ねる。
+  波長ごとの速さは深い水の分散（速さ ∝ √波長）。前のフレームの状態は使わない（毎フレーム数式で決まる）
+- 波紋: 中心から 波紋の速さ で広がる同心円の波。まだ届いていない所は平ら
+- 屈折: 画像を p - 屈折 x ∇h から読む
+- コースティクス: 光の写像 p → p - 集光の距離 x ∇h の面積比の逆数 1 / |det(I - D·∇²h)| を光の強さにする
+  （点ごとの近似なので、集光が強いほど全体はやや明るくなる。det の平均は 1）。∇²h は 1px 先の勾配との差で求める
+- 表示: 合成 / コースティクスだけ（加算で重ねる用）/ 高さマップ（0.5 が水面の高さ 0）
+
+オブジェクトの大きさと変数は変えない（フィルタオブジェクトでも使える）。
+机上検証: AI/scripts/コースティクス_H/verify_caustics.py
+]]
+
+--[[pixelshader@ps_caustics_h:
+cbuffer P : register(b0) {
+    float2 size;        // 0-1   大きさ（px）
+    float2 ripple_c;    // 2-3   波紋の中心（バッファの px）
+    float3 light_col;   // 4-6   光の色（0..1）
+    float caust;        // 7     コースティクスの強さ（0..2）
+    float3 water_col;   // 8-10  水の色（0..1）
+    float water_amt;    // 11    水の濃さ（0..1）
+    float scale;        // 12    波の大きさ（波長 px）
+    float amp;          // 13    高さ（px）
+    float speed;        // 14    速さ（px/秒。波の大きさの波）
+    float dir;          // 15    向き（ラジアン）
+    float spread;       // 16    ばらつき（ラジアン）
+    float octaves;      // 17    重ねる組の数
+    float tnow;         // 18    時刻（秒）
+    float seed;         // 19    シード
+    float r_on;         // 20    1 で波紋を出す
+    float r_amp;        // 21    波紋の高さ（px）
+    float r_len;        // 22    波紋の波長（px）
+    float r_speed;      // 23    波紋の速さ（px/秒）
+    float r_decay;      // 24    波紋の減衰（px）
+    float refr;         // 25    屈折（px）
+    float focus;        // 26    集光の距離（px）
+    float spec;         // 27    ハイライト（0..1）
+    float light_dir;    // 28    光の向き（ラジアン）
+    float mode;         // 29    0 合成 / 1 コースティクスだけ / 2 高さマップ
+};
+Texture2D src : register(t0);
+SamplerState smp : register(s0);
+
+static const float TAU = 6.2831853;
+
+float hash1(float n) {
+    return frac(sin(n * 12.9898 + seed * 78.233) * 43758.5453);
+}
+
+// 水面の高さと勾配 (h, dh/dx, dh/dy)
+float3 wave_h(float2 p) {
+    float3 acc = float3(0.0, 0.0, 0.0);
+    float sc = scale;
+    float am = amp;
+    [loop] for (float o = 0.0; o < octaves; o += 1.0) {
+        [loop] for (float i = 0.0; i < 6.0; i += 1.0) {
+            float id = o * 16.0 + i;
+            float lam = sc * lerp(0.6, 1.4, hash1(id * 3.0 + 1.0));
+            float ang = dir + spread * (hash1(id * 3.0 + 2.0) - 0.5);
+            float2 kd = float2(cos(ang), sin(ang));
+            float k = TAU / lam;
+            float c = speed * sqrt(lam / scale);
+            float ph = k * (dot(kd, p) - c * tnow) + TAU * hash1(id * 3.0 + 3.0);
+            float a = am * 0.408248 * (lam / sc);   // 6 本の二乗和の平方根がおおよそ am になるように 1/√6
+            acc.x += a * sin(ph);
+            acc.yz += (a * k * cos(ph)) * kd;
+        }
+        sc *= 0.5;
+        am *= 0.5;
+    }
+    if (r_on > 0.5) {
+        float2 d = p - ripple_c;
+        float r = length(d);
+        float front = r_speed * tnow;
+        if (r < front && r > 1e-3) {
+            float kr = TAU / r_len;
+            float ex = exp(-r / r_decay);
+            float sf = saturate((front - r) / r_len);       // 波の先端を 1 波長でぼかす
+            float env = ex * sf;
+            // 包絡の微分: 減衰の分と、先端のぼかしの分（ぼかしの中だけ）
+            float denv = -env / r_decay - ((sf < 1.0) ? ex / r_len : 0.0);
+            float ph = kr * (r - front);
+            acc.x += r_amp * env * sin(ph);
+            acc.yz += (r_amp * (denv * sin(ph) + env * kr * cos(ph)) / r) * d;
+        }
+    }
+    return acc;
+}
+
+float4 ps_caustics_h(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy;
+    float3 w0 = wave_h(p);
+    if (mode > 1.5) {
+        // 高さマップ: 0.5 が高さ 0。全部の波の高さの合計で ±0.5 に収める
+        float total = amp * (2.0 - exp2(1.0 - octaves)) + ((r_on > 0.5) ? r_amp : 0.0);
+        float v = saturate(0.5 + 0.5 * w0.x / max(total, 1e-3));
+        return float4(v, v, v, 1.0);
+    }
+    float2 g = w0.yz;
+    // ∇²h（1px 先の勾配との差）
+    float3 wx = wave_h(p + float2(1.0, 0.0));
+    float3 wy = wave_h(p + float2(0.0, 1.0));
+    float hxx = wx.y - g.x;
+    float hyy = wy.z - g.y;
+    float hxy = 0.5 * ((wx.z - g.y) + (wy.y - g.x));
+    float det = (1.0 - focus * hxx) * (1.0 - focus * hyy) - focus * focus * hxy * hxy;
+    float inten = min(1.0 / max(abs(det), 0.02), 50.0);
+
+    if (mode > 0.5) {
+        // コースティクスだけ: 平らなときより明るい分を光の色で出す（加算で重ねる用）
+        float v = saturate((inten - 1.0) * caust * 0.5);
+        return float4(light_col * v, v);
+    }
+
+    float4 img = src.SampleLevel(smp, (p - refr * g) / size, 0);
+    float3 rgb = img.rgb * max(float3(1.0, 1.0, 1.0) + caust * (inten * light_col - float3(1.0, 1.0, 1.0)), float3(0.0, 0.0, 0.0));
+    rgb = lerp(rgb, water_col * img.a, water_amt);
+    // 水面のハイライト（光は斜め 60 度の高さから）
+    float3 n = normalize(float3(-g.x, -g.y, 1.0));
+    float3 l = float3(0.5 * cos(light_dir), -0.5 * sin(light_dir), 0.8660254);
+    float3 rr = 2.0 * dot(n, l) * n - l;
+    float hl = pow(saturate(rr.z), 40.0) * spec;
+    rgb += hl * img.a * light_col;
+    return float4(rgb, img.a);
+}
+]]
+
+local function num(v, d)
+  v = tonumber(v)
+  if v == nil or v ~= v then return d end
+  return v
+end
+
+local function rgb_of(c, d)
+  c = math.floor(num(c, d)) % 0x1000000
+  return math.floor(c / 0x10000) / 255, math.floor(c / 0x100) % 0x100 / 255, c % 0x100 / 255
+end
+
+local W, H = obj.w, obj.h
+if W <= 0 or H <= 0 then return end
+
+local lr, lg, lb = rgb_of(light_color, 0xffffff)
+local wr, wg, wb = rgb_of(water_color, 0x1a6e8c)
+obj.pixelshader("ps_caustics_h", "object", {"object"}, {
+  W, H, W / 2 + num(ripple_x, 0), H / 2 + num(ripple_y, 0),
+  lr, lg, lb, math.max(num(caustics, 60), 0) / 100,
+  wr, wg, wb, math.min(math.max(num(water_amt, 0), 0), 100) / 100,
+  math.max(num(wave_scale, 120), 1), math.max(num(wave_amp, 4), 0), num(wave_speed, 60), math.rad(num(wave_dir, 0)),
+  math.rad(math.max(num(wave_spread, 90), 0)), math.min(math.max(math.floor(num(octaves, 2) + 0.5), 1), 4),
+  obj.time, math.floor(num(seed, 0) + 0.5),
+  (ripple_on == 1) and 1 or 0, math.max(num(ripple_amp, 6), 0), math.max(num(ripple_len, 60), 1), math.max(num(ripple_speed, 200), 0),
+  math.max(num(ripple_decay, 600), 1), num(refract, 40), num(focus, 150), math.min(math.max(num(spec, 20), 0), 100) / 100,
+  math.rad(num(light_dir, 135)), math.floor(num(view, 0) + 0.5),
+}, "copy", "clamp")

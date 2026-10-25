@@ -1,0 +1,5 @@
+Loop by 猫愛
+licence: MIT
+from: https://github.com/nea-c/aviutl2_script_Loop/releases/download/r3/Loop.zip (tag r3, commit 92c0abfc3dd6)
+page: https://github.com/nea-c/aviutl2_script_Loop
+Put here unchanged for Motolii (filament/aviutl_scripts).

@@ -1,0 +1,6 @@
+トラックバー音声同期 by てるよし
+licence: MIT
+from: https://raw.githubusercontent.com/teruyoshii/Teruyoshi_AviUtl2_Scripts/refs/heads/main/%E9%9F%B3%E5%A3%B0%E5%90%8C%E6%9C%9F.tra2 (commit 130cc155ac7a)
+page: https://x.com/teruyoshi_uec/status/1965389717224276231
+licence/README from: https://github.com/teruyoshii/Teruyoshi_AviUtl2_Scripts at 130cc155ac7a5182b79befd5413c818bd82a5915
+Put here unchanged for Motolii (filament/aviutl_scripts).

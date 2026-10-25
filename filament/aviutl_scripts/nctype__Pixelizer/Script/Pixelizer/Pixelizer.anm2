@@ -1,0 +1,419 @@
+--information:Pixelizer v1.0.0
+--label:加工
+--require:2003700
+
+--group:拡張設定,true
+--select@palette_mode:パレットモード,デフォルト=0,GameBoy=1,16-bit=2,4階調グレースケール=3
+--select@edge_style:エッジスタイル,ソフト=0,エッジ強調=1
+--select@grid_mode:ドット固定,オブジェクト固定=0,画面固定=1
+--group
+
+--group:ベース,true
+--track@pixel_size:ピクセルサイズ,1,64,4,1
+--track@color_levels:色数,2,32,8,1
+--track@tone_steps:階調数,0,8,4,1,無効
+--group
+
+--group:ディザリング,true
+--select@dither_mode:ディザリング,なし=0,2x2=1,4x4=2
+--track@dither_strength:ディザリング強度,0,100,35,1
+--group
+
+--group:エッジ,true
+--track@edge_strength:エッジ強度,0,100,20,1
+--group
+
+--group:透過保護,false
+--check@alpha_protect:透明エッジ保護,1
+--track@alpha_threshold:透過しきい値,0,255,8,1
+--group
+
+--[[pixelshader@dotpaint_advanced:
+Texture2D src_tex : register(t0);
+SamplerState smp : register(s0);
+
+cbuffer constant0 : register(b0) {
+    float4 c0; // width, height, pixel size, color levels
+    float4 c1; // tone steps, dither mode, dither strength, edge strength
+    float4 c2; // alpha protect, alpha threshold, palette mode, reserved
+    float4 c3; // edge style, grid mode, reserved, reserved
+    float4 c4; // screenCenterX, screenCenterY, scaleX, scaleY
+    float4 c5; // cosR, sinR, centerX, centerY
+};
+
+float get_luma(float3 c) {
+    return dot(c, float3(0.299, 0.587, 0.114));
+}
+
+float3 get_straight_rgb(float4 c) {
+    if (c.a <= 0.00001) {
+        return float3(0.0, 0.0, 0.0);
+    }
+    return saturate(c.rgb / c.a);
+}
+
+float sample_straight_luma(float2 uv) {
+    float4 s = src_tex.Sample(smp, saturate(uv));
+    if (s.a <= 0.00001) {
+        return 0.0;
+    }
+    return get_luma(get_straight_rgb(s));
+}
+
+float sample_alpha(float2 uv) {
+    return src_tex.Sample(smp, saturate(uv)).a;
+}
+
+float3 quantize_rgb(float3 rgb, float levels) {
+    levels = max(levels, 2.0);
+    float d = levels - 1.0;
+    return floor(saturate(rgb) * d + 0.5) / d;
+}
+
+float3 quantize_tone(float3 rgb, float steps) {
+    if (steps < 2.0) {
+        return rgb;
+    }
+
+    float lum = get_luma(rgb);
+    if (lum <= 0.00001) {
+        return rgb;
+    }
+
+    float d = steps - 1.0;
+    float q = floor(saturate(lum) * d + 0.5) / d;
+    return saturate(rgb * (q / lum));
+}
+
+float bayer2(float2 p) {
+    float x = fmod(floor(p.x), 2.0);
+    float y = fmod(floor(p.y), 2.0);
+
+    if (y < 0.5) {
+        if (x < 0.5) return 0.0 / 4.0;
+        return 2.0 / 4.0;
+    } else {
+        if (x < 0.5) return 3.0 / 4.0;
+        return 1.0 / 4.0;
+    }
+}
+
+float bayer4(float2 p) {
+    float x = fmod(floor(p.x), 4.0);
+    float y = fmod(floor(p.y), 4.0);
+
+    if (y < 0.5) {
+        if (x < 0.5) return  0.0 / 16.0;
+        if (x < 1.5) return  8.0 / 16.0;
+        if (x < 2.5) return  2.0 / 16.0;
+        return 10.0 / 16.0;
+    }
+    if (y < 1.5) {
+        if (x < 0.5) return 12.0 / 16.0;
+        if (x < 1.5) return  4.0 / 16.0;
+        if (x < 2.5) return 14.0 / 16.0;
+        return  6.0 / 16.0;
+    }
+    if (y < 2.5) {
+        if (x < 0.5) return  3.0 / 16.0;
+        if (x < 1.5) return 11.0 / 16.0;
+        if (x < 2.5) return  1.0 / 16.0;
+        return  9.0 / 16.0;
+    }
+
+    if (x < 0.5) return 15.0 / 16.0;
+    if (x < 1.5) return  7.0 / 16.0;
+    if (x < 2.5) return 13.0 / 16.0;
+    return  5.0 / 16.0;
+}
+
+float ordered_dither(float2 blockPos, float mode) {
+    if (mode < 0.5) {
+        return 0.0;
+    }
+    if (mode < 1.5) {
+        return bayer2(blockPos) - 0.375;
+    }
+    return bayer4(blockPos) - 0.46875;
+}
+
+float simple_edge(float2 uv, float2 stepUV) {
+    float a0 = sample_alpha(uv);
+
+    float l1 = sample_straight_luma(uv + float2(-stepUV.x, 0.0));
+    float l2 = sample_straight_luma(uv + float2( stepUV.x, 0.0));
+    float l3 = sample_straight_luma(uv + float2(0.0, -stepUV.y));
+    float l4 = sample_straight_luma(uv + float2(0.0,  stepUV.y));
+
+    float a1 = sample_alpha(uv + float2(-stepUV.x, 0.0));
+    float a2 = sample_alpha(uv + float2( stepUV.x, 0.0));
+    float a3 = sample_alpha(uv + float2(0.0, -stepUV.y));
+    float a4 = sample_alpha(uv + float2(0.0,  stepUV.y));
+
+    float lumDiff = abs(l1 - l2) + abs(l3 - l4);
+    float alphaDiff = abs(a1 - a2) + abs(a3 - a4) + abs(a0 - a1) + abs(a0 - a2) + abs(a0 - a3) + abs(a0 - a4);
+
+    return saturate(lumDiff * 1.2 + alphaDiff * 1.0);
+}
+
+float dist2(float3 a, float3 b) {
+    float3 d = a - b;
+    return dot(d, d);
+}
+
+float3 nearest_palette_color(float3 rgb, float3 p0, float3 p1, float3 p2, float3 p3) {
+    float3 best = p0;
+    float bestD = dist2(rgb, p0);
+    float d1 = dist2(rgb, p1);
+    float d2 = dist2(rgb, p2);
+    float d3 = dist2(rgb, p3);
+
+    if (d1 < bestD) { bestD = d1; best = p1; }
+    if (d2 < bestD) { bestD = d2; best = p2; }
+    if (d3 < bestD) { best = p3; }
+
+    return best;
+}
+
+float3 palette_gameboy(float3 rgb) {
+    float3 p0 = float3(15.0, 56.0, 15.0) / 255.0;
+    float3 p1 = float3(48.0, 98.0, 48.0) / 255.0;
+    float3 p2 = float3(139.0, 172.0, 15.0) / 255.0;
+    float3 p3 = float3(155.0, 188.0, 15.0) / 255.0;
+    return nearest_palette_color(rgb, p0, p1, p2, p3);
+}
+
+float3 palette_gray4(float3 rgb) {
+    float lum = get_luma(rgb);
+    float q = floor(saturate(lum) * 3.0 + 0.5) / 3.0;
+    return float3(q, q, q);
+}
+
+float3 quantize_565(float3 rgb) {
+    float r = floor(saturate(rgb.r) * 31.0 + 0.5) / 31.0;
+    float g = floor(saturate(rgb.g) * 63.0 + 0.5) / 63.0;
+    float b = floor(saturate(rgb.b) * 31.0 + 0.5) / 31.0;
+    return float3(r, g, b);
+}
+
+float3 apply_palette_mode(float3 rgb, float paletteMode, float levels) {
+    if (paletteMode > 0.5 && paletteMode < 1.5) {
+        return palette_gameboy(rgb);
+    }
+    if (paletteMode >= 1.5 && paletteMode < 2.5) {
+        return quantize_565(rgb);
+    }
+    if (paletteMode >= 2.5) {
+        return palette_gray4(rgb);
+    }
+    return quantize_rgb(rgb, levels);
+}
+
+float2 object_grid_sample_uv(float2 uv, float2 resolution, float psize) {
+    float2 sourcePos = uv * resolution;
+    float2 blockPos = floor(sourcePos / psize);
+    float2 samplePos = blockPos * psize + psize * 0.5;
+    samplePos.x = min(samplePos.x, resolution.x - 0.5);
+    samplePos.y = min(samplePos.y, resolution.y - 0.5);
+    return samplePos / resolution;
+}
+
+float2 object_pixel_to_screen(float2 sourcePos, float2 resolution) {
+    float localX = (sourcePos.x + 0.5 - resolution.x * 0.5 - c5.z) * c4.z;
+    float localY = (sourcePos.y + 0.5 - resolution.y * 0.5 - c5.w) * c4.w;
+
+    return float2(
+        c4.x + localX * c5.x - localY * c5.y,
+        c4.y + localX * c5.y + localY * c5.x
+    );
+}
+
+float2 screen_to_object_pixel(float2 screenPos, float2 resolution) {
+    float dx = screenPos.x - c4.x;
+    float dy = screenPos.y - c4.y;
+
+    float invX = dx * c5.x + dy * c5.y;
+    float invY = -dx * c5.y + dy * c5.x;
+
+    float safeScaleX = c4.z;
+    float safeScaleY = c4.w;
+
+    if (abs(safeScaleX) < 0.00001) {
+        safeScaleX = 0.00001;
+    }
+    if (abs(safeScaleY) < 0.00001) {
+        safeScaleY = 0.00001;
+    }
+
+    return float2(
+        invX / safeScaleX + resolution.x * 0.5 + c5.z - 0.5,
+        invY / safeScaleY + resolution.y * 0.5 + c5.w - 0.5
+    );
+}
+
+float2 screen_grid_sample_uv(float2 uv, float2 resolution, float psize) {
+    float2 sourcePos = uv * resolution;
+    float2 screenPos = object_pixel_to_screen(sourcePos, resolution);
+
+    float2 snappedScreen = floor(screenPos / psize) * psize + psize * 0.5;
+    float2 samplePos = screen_to_object_pixel(snappedScreen, resolution);
+
+    samplePos.x = clamp(samplePos.x, 0.5, resolution.x - 0.5);
+    samplePos.y = clamp(samplePos.y, 0.5, resolution.y - 0.5);
+
+    return samplePos / resolution;
+}
+
+float2 screen_grid_index(float2 uv, float2 resolution, float psize) {
+    float2 sourcePos = uv * resolution;
+    float2 screenPos = object_pixel_to_screen(sourcePos, resolution);
+    return floor(screenPos / psize);
+}
+
+float4 dotpaint_advanced(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float width  = max(c0.x, 1.0);
+    float height = max(c0.y, 1.0);
+    float psize  = max(c0.z, 1.0);
+    float levels = max(c0.w, 2.0);
+
+    float toneSteps      = max(c1.x, 0.0);
+    float ditherMode     = c1.y;
+    float ditherStrength = saturate(c1.z / 100.0);
+    float edgeStrength   = saturate(c1.w / 100.0);
+
+    float alphaProtect   = c2.x;
+    float alphaThreshold = saturate(c2.y / 255.0);
+    float paletteMode    = c2.z;
+
+    float edgeStyle      = c3.x;
+    float gridMode       = c3.y;
+
+    float2 resolution = float2(width, height);
+    float2 sourcePos = uv * resolution;
+
+    float2 blockPos = floor(sourcePos / psize);
+    float2 sampleUV = object_grid_sample_uv(uv, resolution, psize);
+
+    if (gridMode > 0.5) {
+        sampleUV = screen_grid_sample_uv(uv, resolution, psize);
+        blockPos = screen_grid_index(uv, resolution, psize);
+    }
+
+    float4 src = src_tex.Sample(smp, sampleUV);
+
+    if (src.a <= 0.00001) {
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
+
+    if (alphaProtect > 0.5 && src.a <= alphaThreshold) {
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
+
+    float3 rgb = get_straight_rgb(src);
+
+    rgb = quantize_tone(rgb, toneSteps);
+
+    if (ditherMode > 0.5 && ditherStrength > 0.0) {
+        float dv = ordered_dither(blockPos, ditherMode);
+        float amplitude = ditherStrength / max(levels - 1.0, 1.0);
+        rgb = saturate(rgb + dv * amplitude);
+    }
+
+    rgb = apply_palette_mode(rgb, paletteMode, levels);
+
+    if (edgeStrength > 0.0) {
+        float2 edgeStep = float2(psize / width, psize / height);
+        float e = simple_edge(sampleUV, edgeStep);
+
+        if (edgeStyle > 0.5) {
+            // Strong edge mode: draw a darker contour instead of dimming the whole area.
+            float edgeMask = saturate((e - 0.08) * 2.2) * edgeStrength;
+            rgb = lerp(rgb, rgb * 0.08, edgeMask);
+        } else {
+            // Soft edge mode: darken detected edges conservatively.
+            rgb *= saturate(1.0 - e * edgeStrength * 0.70);
+        }
+    }
+
+    return float4(saturate(rgb) * src.a, src.a);
+}
+]]
+
+local function clamp(v, lo, hi)
+    if v < lo then return lo end
+    if v > hi then return hi end
+    return v
+end
+
+if obj.w <= 0 or obj.h <= 0 then
+    return
+end
+
+local ap = 0
+if alpha_protect == 1 or alpha_protect == true then
+    ap = 1
+end
+
+local dm = tonumber(dither_mode) or 0
+dm = math.floor(clamp(dm, 0, 2))
+
+local pm = tonumber(palette_mode) or 0
+pm = math.floor(clamp(pm, 0, 3))
+
+local es = tonumber(edge_style) or 0
+es = math.floor(clamp(es, 0, 1))
+
+local gm = tonumber(grid_mode) or 0
+gm = math.floor(clamp(gm, 0, 1))
+
+-- Compose the output-item transform with the script-relative transform.
+local output_x = obj.getvalue("x") or obj.x or 0
+local output_y = obj.getvalue("y") or obj.y or 0
+local output_sx = obj.getvalue("sx") or 1
+local output_sy = obj.getvalue("sy") or 1
+local output_cx = obj.getvalue("cx") or 0
+local output_cy = obj.getvalue("cy") or 0
+local output_rz = obj.getvalue("rz") or 0
+
+local base_x = output_x + (obj.ox or 0)
+local base_y = output_y + (obj.oy or 0)
+local scale_x = output_sx * (obj.sx or 1)
+local scale_y = output_sy * (obj.sy or 1)
+local center_x = output_cx + (obj.cx or 0)
+local center_y = output_cy + (obj.cy or 0)
+local rz = (output_rz + (obj.rz or 0)) * math.pi / 180
+local cos_r = math.cos(rz)
+local sin_r = math.sin(rz)
+local screen_center_x = (obj.screen_w or 0) * 0.5 + base_x
+local screen_center_y = (obj.screen_h or 0) * 0.5 + base_y
+
+obj.pixelshader(
+    "dotpaint_advanced",
+    "object",
+    {
+        "object"
+    },
+    {
+        obj.w,
+        obj.h,
+        math.max(pixel_size, 1),
+        math.max(color_levels, 2),
+
+        math.max(tone_steps, 0),
+        dm,
+        clamp(dither_strength, 0, 100),
+        clamp(edge_strength, 0, 100),
+
+        ap,
+        clamp(alpha_threshold, 0, 255),
+        pm,
+        0,
+
+        es, gm, 0, 0,
+
+        screen_center_x, screen_center_y, scale_x, scale_y,
+        cos_r, sin_r, center_x, center_y
+    },
+    "copy",
+    "clamp"
+)

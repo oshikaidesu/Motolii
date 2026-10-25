@@ -1,0 +1,165 @@
+--label:変形
+--information:OpticsCompensation_s for AviUtl2
+--filter
+
+-- ==========================================
+-- UI定義
+-- ==========================================
+--group:歪み設定
+--track@amount:強さ,-100.00,100.00,0.00,0.01
+--track@center_x:中心X,-4000,4000,0,0.1
+--track@center_y:中心Y,-4000,4000,0,0.1
+
+--group:オプション
+--check@use_aa:AA(樽型時),1
+--check@transparent:範囲外を透明にする,1
+--value@anchor_pos:中心点アンカー,{}
+--group:
+
+-- ==========================================
+-- HLSL ピクセルシェーダー (DirectX 11)
+-- ==========================================
+--[[pixelshader@ps_optics:
+    // Lua側から渡されるパラメータ
+    cbuffer Params : register(b0) {
+        float2 center;       // 歪みの中心座標
+        float focal_dist;    // 焦点距離
+        float mode;          // 1.0: 樽型 (Barrel), -1.0: 糸巻き型 (Spool)
+        float use_aa;        // 1.0: アンチエイリアス有効, 0.0: 無効
+        float transparent;   // 1.0: 範囲外を透過, 0.0: 範囲外をクランプ
+        float2 img_size;     // 画像のサイズ (幅, 高さ)
+    };
+
+    Texture2D tex : register(t0);
+    SamplerState smp : register(s0);
+
+    // -----------------------------------------------------------
+    // 指定したピクセル座標の色を取得する関数 (範囲外処理付き)
+    // -----------------------------------------------------------
+    float4 SampleTex(float2 pos) {
+        // ピクセル座標を 0.0 ～ 1.0 のUV空間に変換
+        float2 uv = pos / img_size;
+        
+        if (transparent > 0.5) {
+            // UV範囲外 (0.0未満 または 1.0超過) か判定
+            if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+                // AviUtl2は「乗算済みアルファ(Premultiplied Alpha)」を採用しているため、
+                // 完全な透明を表現する場合はRGB値も0.0にする必要があります。
+                return float4(0.0, 0.0, 0.0, 0.0); 
+            }
+        } else {
+            // 手動でUVを画像の端のピクセル内に制限（Clamp）する
+            // AviUtl2側のサンプラー設定に依存せず、シェーダー内で確実に引き伸ばし処理を行います
+            float2 half_px = 0.5 / img_size;
+            uv = clamp(uv, half_px, 1.0 - half_px);
+        }
+        return tex.Sample(smp, uv);
+    }
+
+    // -----------------------------------------------------------
+    // 歪み適用後の参照元座標を計算する関数
+    // -----------------------------------------------------------
+    float2 CalcCoord(float2 pos) {
+        // 中心点からの相対座標と距離
+        float2 rel = pos - center;
+        float dist = length(rel);
+        
+        // 中心ピクセル（距離がほぼ0）の場合はそのまま返す
+        if (dist < 0.0001) return pos;
+
+        float2 new_pos;
+        if (mode > 0.0) {
+            // 樽型歪み (Barrel)
+            // 距離を焦点距離で割り、tan関数を用いて外側に膨張させる
+            float limit = 1.570796; // PI / 2
+            new_pos = rel / dist * focal_dist * tan(clamp(dist / focal_dist, -limit, limit)) + center;
+        } else {
+            // 糸巻き型歪み (Spool)
+            // atan関数を用いて内側に収縮させる
+            new_pos = rel / dist * focal_dist * atan(dist / focal_dist) + center;
+        }
+        return new_pos;
+    }
+
+    // -----------------------------------------------------------
+    // シェーダー エントリーポイント
+    // -----------------------------------------------------------
+    float4 ps_optics(float4 sv_pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
+        // 現在のピクセル座標を復元
+        float2 pixel_pos = uv * img_size;
+
+        if (mode > 0.0 && use_aa > 0.5) {
+            // 樽型かつAA有効時: 2x2のマルチサンプリング
+            float4 color = 0;
+            float2 offsets[4] = {
+                float2(-0.25, -0.25), float2( 0.25, -0.25),
+                float2(-0.25,  0.25), float2( 0.25,  0.25)
+            };
+            
+            for (int i = 0; i < 4; i++) {
+                float2 smp_pos = CalcCoord(pixel_pos + offsets[i]);
+                color += SampleTex(smp_pos);
+            }
+            return color / 4.0;
+            
+        } else {
+            // 通常サンプリング (糸巻き型 または AA無効時)
+            float2 smp_pos = CalcCoord(pixel_pos);
+            return SampleTex(smp_pos);
+        }
+    }
+]]
+
+-- ==========================================
+-- Lua メイン処理
+-- ==========================================
+
+-- 強さが0の場合は歪みが発生しないため、処理を打ち切って負荷を軽減
+if amount == 0 then
+    return 
+end
+
+-- 画面上で中心点をドラッグ移動できるアンカーを生成
+obj.setanchor("anchor_pos", 1, "line")
+local anchor_x = anchor_pos[1] or 0
+local anchor_y = anchor_pos[2] or 0
+
+-- 内部計算用の値に変換
+local lua_amount = amount / 100.0
+local mode = 1.0
+
+-- 負の値なら糸巻き型(Spool)モードに設定し、絶対値化する
+if lua_amount < 0.0 then
+    mode = -1.0
+    lua_amount = -lua_amount
+end
+
+-- 【バグ修正】amountが100 (1.0) の時、tan(90度)が無限大になり計算が崩壊するのを防ぐリミッター
+if lua_amount > 0.999 then
+    lua_amount = 0.999
+end
+
+-- 焦点距離の計算 (tan(0)によるゼロ除算を回避)
+local focal_dist = 1000000.0
+if lua_amount > 0.0001 then
+    focal_dist = 500.0 / math.tan(0.5 * lua_amount * math.pi)
+end
+
+-- シェーダーに渡す中心座標の算出 (画像中心 + UI設定値 + アンカー移動量)
+local cx = (obj.w / 2.0) + center_x + anchor_x
+local cy = (obj.h / 2.0) + center_y + anchor_y
+
+-- チェックボックスの値を安全に取得（AviUtl2の仕様変更に備えて true と 1 の両方に対応）
+local is_transparent = (transparent == 1 or transparent == true)
+local is_use_aa = (use_aa == 1 or use_aa == true)
+
+-- シェーダーの実行
+-- 第4引数の配列は、HLSL内の cbuffer Params の変数の並び順と一致させる必要があります
+obj.pixelshader("ps_optics", "object", {"object"}, {
+    cx, cy,                           -- float2 center
+    focal_dist,                       -- float focal_dist
+    mode,                             -- float mode
+    is_use_aa and 1.0 or 0.0,         -- float use_aa (HLSL用に0.0か1.0に変換)
+    is_transparent and 1.0 or 0.0,    -- float transparent (HLSL用に0.0か1.0に変換)
+    obj.w, obj.h                      -- float2 img_size
+})

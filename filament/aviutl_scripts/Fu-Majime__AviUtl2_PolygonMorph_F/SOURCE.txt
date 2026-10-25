@@ -1,0 +1,6 @@
+多角形モーフ_F by フマジメ
+licence: MIT
+from: https://github.com/fu-majime/AviUtl2_PolygonMorph_F/releases/download/v1.0/PolygonMorph_F.au2pkg.zip (tag v1.0, commit f0f6053fc8b6)
+page: https://github.com/fu-majime/AviUtl2_PolygonMorph_F
+licence/README from: https://github.com/fu-majime/AviUtl2_PolygonMorph_F at v1.0
+Put here unchanged for Motolii (filament/aviutl_scripts).

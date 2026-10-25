@@ -1,0 +1,126 @@
+--information:JPEGCrush ver1.1.0 by sikemoti
+
+-- 圧縮制御
+--track@jpeg_quality:圧縮品質,1,100,50,1
+
+--group:バイナリ破壊,true
+--check@binary_glitch_enable:バイナリ破壊,0
+--track@binary_glitch_count:破壊バイト数,0,1000,10,1
+--track@binary_range_start:範囲開始(%),0,100,0,1
+--track@binary_range_end:範囲終了(%),0,100,100,1
+--track@binary_seed:シード,0,65535,0,1
+--select@binary_mode:破壊モード,ランダム値置換=0,固定値置換=1
+--track@binary_replace_min:ランダム最小値,0,255,0,1
+--track@binary_replace_max:ランダム最大値,0,255,255,1
+--track@binary_fixed_value:固定値,0,255,0,1
+
+--group:量子化テーブル改ざん(輝度),false
+--check@luma_table_enable:輝度テーブル改ざん,0
+--check@luma_single_enable:単一改ざん有効,0
+--track@luma_table_index:テーブル位置,0,63,0,1
+--track@luma_table_value:上書き値,1,255,1,1
+--check@luma_random_enable:ランダム改ざん有効,0
+--track@luma_random_count:改ざん個数,0,1000,0,1
+--track@luma_random_min:ランダム最小値,1,255,1,1
+--track@luma_random_max:ランダム最大値,1,255,255,1
+--track@luma_table_range_start:ランダム開始位置,0,63,0,1
+--track@luma_table_range_end:ランダム終了位置,0,63,63,1
+--track@luma_random_seed:シード,0,65535,0,1
+
+--group:量子化テーブル改ざん(色差),false
+--check@chroma_table_enable:色差テーブル改ざん,0
+--check@chroma_single_enable:単一改ざん有効,0
+--track@chroma_table_index:テーブル位置,0,63,0,1
+--track@chroma_table_value:上書き値,1,255,1,1
+--check@chroma_random_enable:ランダム改ざん有効,0
+--track@chroma_random_count:改ざん個数,0,1000,0,1
+--track@chroma_random_min:ランダム最小値,1,255,1,1
+--track@chroma_random_max:ランダム最大値,1,255,255,1
+--track@chroma_table_range_start:ランダム開始位置,0,63,0,1
+--track@chroma_table_range_end:ランダム終了位置,0,63,63,1
+--track@chroma_random_seed:シード,0,65535,0,1
+
+--group:デコードバイパス,false
+--check@bypass_idct_enable:周波数成分スキップ,0
+--check@bypass_color_conversion:色変換スキップ,0
+--check@bypass_dequant_enable:量子化スキップ,0
+
+--group:アルファチャンネル設定,false
+--check@alpha_preserve_enable:アルファ保持,1
+--check@alpha_glitch_enable:アルファ破壊,1
+
+--group:リスタートマーカー,false
+--check@restart_marker_enable:リスタートマーカー有効,0
+--track@restart_marker_interval:マーカー間隔,1,100,8,1
+
+--group:その他,false
+--value@PI:PI,{}
+
+-- モジュール読み込み
+local func = obj.module("JPEGCrush")
+
+-- 画像データの取得
+local data, w, h = obj.getpixeldata("object")
+
+-- パラメータテーブルの構築
+local params = {
+    jpeg_quality = jpeg_quality,
+    binary_glitch_enable = binary_glitch_enable,
+    binary_glitch_count = binary_glitch_count,
+    binary_range_start = binary_range_start,
+    binary_range_end = binary_range_end,
+    binary_seed = binary_seed,
+    binary_mode = binary_mode,
+    binary_replace_min = binary_replace_min,
+    binary_replace_max = binary_replace_max,
+    binary_fixed_value = binary_fixed_value,
+    luma_table_enable = luma_table_enable,
+    luma_single_enable = luma_single_enable,
+    luma_table_index = luma_table_index,
+    luma_table_value = luma_table_value,
+    luma_random_enable = luma_random_enable,
+    luma_random_count = luma_random_count,
+    luma_random_min = luma_random_min,
+    luma_random_max = luma_random_max,
+    luma_table_range_start = luma_table_range_start,
+    luma_table_range_end = luma_table_range_end,
+    luma_random_seed = luma_random_seed,
+    chroma_table_enable = chroma_table_enable,
+    chroma_single_enable = chroma_single_enable,
+    chroma_table_index = chroma_table_index,
+    chroma_table_value = chroma_table_value,
+    chroma_random_enable = chroma_random_enable,
+    chroma_random_count = chroma_random_count,
+    chroma_random_min = chroma_random_min,
+    chroma_random_max = chroma_random_max,
+    chroma_table_range_start = chroma_table_range_start,
+    chroma_table_range_end = chroma_table_range_end,
+    chroma_random_seed = chroma_random_seed,
+    bypass_idct_enable = bypass_idct_enable,
+    bypass_color_conversion = bypass_color_conversion,
+    bypass_dequant_enable = bypass_dequant_enable,
+    alpha_preserve_enable = alpha_preserve_enable,
+    alpha_glitch_enable = alpha_glitch_enable,
+    restart_marker_enable = restart_marker_enable,
+    restart_marker_interval = restart_marker_interval
+}
+
+-- PIテーブルによるパラメータ上書き
+if type(PI) == "table" then
+    for key, value in pairs(PI) do
+        if params[key] ~= nil then
+            params[key] = value
+        end
+    end
+end
+
+-- グリッチ処理の実行
+local err_msg = func.jpeg_glitch(data, w, h, params)
+
+-- エラーが存在する場合はログに出力 (Debugビルドのみ)
+if err_msg and err_msg ~= "" then
+    print("@error", "JPEG Glitch: " .. err_msg)
+end
+
+-- 処理済みデータの書き戻し
+obj.putpixeldata("object", data, w, h)

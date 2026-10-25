@@ -1,0 +1,175 @@
+--label:CJF
+--information:フェード@psd: パーツ上書き連動・シーンチェンジ型クロスフェード / AviUtl2 only
+--track@refLayer:参照レイヤー,1,100,1,1
+--value@charId:キャラクターID,""
+--value@watchParts:監視パーツ,""
+--value@overwriteEffect:上書き効果名,""
+--track@fadeDur:フェード時間(秒),0.05,2,0.6,0.01
+--check@debugLog:debugLog,false
+
+--[[pixelshader@crossfade_lerp:
+Texture2D oldTex : register(t0);
+Texture2D newTex : register(t1);
+cbuffer constant0 : register(b0) {
+	float4 p0; // x = blend 0=old .. 1=new
+};
+float4 crossfade_lerp(float4 pos : SV_Position) : SV_Target {
+	int2 ip = int2(pos.xy);
+	float4 o = oldTex.Load(int3(ip, 0));
+	float4 n = newTex.Load(int3(ip, 0));
+	return lerp(o, n, saturate(p0.x));
+}
+]]
+
+-- フェード@psd
+-- Blend only when gates.open (watchParts respected).
+-- Reverse scrub: if playhead moved backward into fade window and snap still
+-- holds a watched-different look, force open for that window only.
+
+local fade_dur = tonumber(fadeDur) or 0.6
+if fade_dur < 0.05 then fade_dur = 0.05 end
+
+local Core = require("ptk_overwrite_react_core")
+local react = Core.update({
+	ref_layer = refLayer,
+	char_id = charId,
+	watch_parts = watchParts,
+	overwrite_effect = overwriteEffect,
+	pre_roll = 0,
+})
+
+local function clamp01(x)
+	if x < 0 then return 0 end
+	if x > 1 then return 1 end
+	return x
+end
+
+local function ease(p)
+	p = clamp01(p)
+	return 0.5 - 0.5 * math.cos(math.pi * p)
+end
+
+local function copy_values(v)
+	if type(v) ~= "table" then return nil end
+	local o = {}
+	local n = Core.PART_COUNT or 16
+	for i = 1, n do o[i] = v[i] end
+	return o
+end
+
+local watch_mask = Core.parse_watch_parts(watchParts)
+
+local function store_snap(st, key, values)
+	local data, w, h = obj.getpixeldata("object", "rgba")
+	if data == nil or w == nil or h == nil or w <= 0 or h <= 0 then
+		return false
+	end
+	st.fade_snap[key] = { data = data, w = w, h = h, values = copy_values(values) }
+	return true
+end
+
+local function snap_differs(snap, curr_values)
+	if snap == nil or snap.data == nil or not snap.w or not snap.h then
+		return false
+	end
+	if type(snap.values) ~= "table" or type(curr_values) ~= "table" then
+		return false
+	end
+	return Core.watched_changed(snap.values, curr_values, watch_mask)
+end
+
+if not react.found then
+	return
+end
+
+local t, tt, remain, src = Core.read_sub_clock(react.ref_layer, react.char_id)
+if t == nil or remain == nil then
+	return
+end
+
+local gates = Core.clip_flip_gates({
+	react = react,
+	watch_parts = watchParts,
+	peek_layer = refLayer,
+	time = t,
+	remain = remain,
+	totaltime = tt,
+	open_half = fade_dur,
+	close_half = 0,
+})
+
+local st = require("ptk_overwrite_react_state")
+if type(st.fade_snap) ~= "table" then st.fade_snap = {} end
+if type(st.fade_last_scene) ~= "table" then st.fade_last_scene = {} end
+if type(st.fade_force_open) ~= "table" then st.fade_force_open = {} end
+if type(st.last_log_frame) ~= "table" then st.last_log_frame = {} end
+if type(st.last_gate_why) ~= "table" then st.last_gate_why = {} end
+-- Drop legacy false-fade source from older builds.
+st.fade_snap_prev = nil
+
+local key = react.key or (tostring(obj.id) .. "#" .. tostring(obj.effect_id))
+local in_fade = (t <= fade_dur + 1e-6)
+local snap = st.fade_snap[key]
+local differs = snap_differs(snap, react.values)
+
+do
+	local scene = (tonumber(obj.frame_s) or 0) + (tonumber(obj.frame) or 0)
+	local last = st.fade_last_scene[key]
+	local scrub_back = (last ~= nil and scene < last)
+	st.fade_last_scene[key] = scene
+	if not in_fade then
+		st.fade_force_open[key] = false
+	elseif scrub_back and differs then
+		-- Reverse into a watched-different snap: allow blend for this window.
+		st.fade_force_open[key] = true
+	end
+end
+
+local allow = gates.open or (st.fade_force_open[key] == true)
+local should_blend = in_fade and allow and snap ~= nil and snap.data ~= nil and snap.w and snap.h
+-- Forced reverse still needs a watched-different snap (do not revive unrelated ghosts).
+if should_blend and not gates.open then
+	should_blend = differs
+end
+
+if debugLog == true or debugLog == 1 then
+	local why = tostring(gates.reason)
+	local why_changed = st.last_gate_why[key] ~= why
+	st.last_gate_why[key] = why
+	local lf = st.last_log_frame[key] or -999
+	local hb = math.max(1, math.floor((obj.framerate or 30) / 2))
+	if in_fade or why_changed or gates.open or should_blend or (obj.frame - lf) >= hb then
+		st.last_log_frame[key] = obj.frame
+		print(string.format(
+			"[フェード@psd] t=%.3f remain=%.3f (%s) open=%s force=%s blend=%s differ=%s why=%s ch=%s",
+			t, remain, tostring(src),
+			tostring(gates.open), tostring(st.fade_force_open[key] == true),
+			tostring(should_blend), tostring(differs), why,
+			tostring(react.changed)
+		))
+	end
+end
+
+if should_blend then
+	local p = (fade_dur > 0) and ease(t / fade_dur) or 1
+	p = clamp01(p)
+
+	obj.copybuffer("cache:fade_new", "object")
+	obj.putpixeldata("cache:fade_old", snap.data, snap.w, snap.h, "rgba")
+	obj.pixelshader("crossfade_lerp", "object", { "cache:fade_old", "cache:fade_new" }, { p, 0, 0, 0 }, "copy", "clamp")
+
+	if p >= 0.999 then
+		store_snap(st, key, react.values)
+		st.fade_force_open[key] = false
+	end
+	return
+end
+
+-- Do not overwrite a differing snap inside the fade window (keeps reverse source).
+if differs and in_fade then
+	return
+end
+
+if st.fade_snap[key] == nil or remain <= fade_dur + 1e-6 then
+	store_snap(st, key, react.values)
+end

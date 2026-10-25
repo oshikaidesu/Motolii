@@ -1,0 +1,72 @@
+--information:円形変位_H v1.00 by HexBrowns
+--label:HexScript
+--group:円形変位
+--track@r:半径,-9999,9999,0,0.01
+--track@theta:角度,-9999,9999,0,0.01
+--track@angle_offset:向き調整,-360,360,0,0.01
+--check@face_outward:外側を向く,0
+--select@face_mode:向き=0,外側を向くに従う=0,回転しない=1,外側=2,内側=3,接線=4
+--check@flip_negative:負の半径で向きを反転,0
+--hide@face_outward:face_mode~=0
+--hide@angle_offset:face_mode==1
+--hide@flip_negative:face_mode==1
+--group
+
+--[[
+円形変位_H v1.00
+
+原作: Script/円形変位.anm2（--information:円形変位 for AviUtl2。作者・版の記載なし）。
+原作を直したフォーク。位置の式は原作と同じで、変えたのは向きの扱いだけ。
+原作の部分の権利は原作者にある。原作者の方は、問題があれば HexBrowns まで連絡をください。
+
+原作との違い
+  1. obj.rz を代入ではなく加算する。前段の効果（ランダム回転・揺れ・スクリプト制御など）が
+     obj.rz に足した回転を消さない。
+     標準描画 の Z軸回転 は obj.rz とは別の値で、描画時に合成される
+     （lua.txt「変数」: 出力項目(標準描画等)の設定値とは別のもの）
+  2. 向き（末尾に追加）
+       外側を向くに従う : 原作と同じ。外側を向く ON で 外側、OFF で 内側
+       回転しない       : 位置だけ円周上へ動かし、obj.rz に触らない（向き調整 も効かない）
+       外側             : 回転 0 のときの右方向（+X）が中心から離れる向き
+       内側             : 同じく中心へ向かう向き
+       接線             : 角度が増える向きの進行方向。角度を減らして動かすときは 向き調整 180
+  3. 負の半径で向きを反転（末尾に追加、既定 OFF）
+       半径が負だと位置は 角度+180 度 の側に出るが、原作の向きの式は半径の符号を見ない。
+       ON にすると半径が負のとき向きに 180 度を足し、外側／内側／接線 を位置と一致させる。
+       既定 OFF なのは、負の半径と 向き調整 90 で向きを合わせている既存の使い方を
+       壊さないため（ON にするとその向きがすべて 180 度変わる）
+
+互換
+  - 項目名（保存キー）の 半径 / 角度 / 向き調整 / 外側を向く は原作と同じ綴り・範囲・既定値。
+    effect.name を 円形変位 から 円形変位_H に書き換えれば設定を引き継げる
+  - 既定値のままなら原作と同じ見た目になる。違いが出るのは、前段の効果が obj.rz を
+    触っているオブジェクトだけ（原作ではその回転が消えていた）
+
+--filter は付けない。原作は付けているが、この効果は obj.ox / obj.oy / obj.rz を
+変えるので、フィルタオブジェクト（フレームバッファ全体）に対しては意味を持たず、
+lua.txt のフィルタオブジェクトの制限（オブジェクトの変数を変更しない）にも反する。
+「フィルタ効果を追加」でレイヤーに置く使い方（直前のメディアオブジェクトに掛かる）は
+--filter の有無に関係なく使える。
+]]
+
+local rad = math.rad(theta)
+
+-- 基準座標（移動前の自分の座標）から 半径 r・角度 theta だけ離れた位置へ移す
+obj.ox = obj.ox + r * math.cos(rad)
+obj.oy = obj.oy + r * math.sin(rad)
+
+-- --select@face_mode の値 → 角度に足す基準の向き。回転しない(1) は載せない
+local FACE_BASE = { [2] = 0, [3] = 180, [4] = 90 }
+local base
+if face_mode == 0 then
+  base = (face_outward == 1) and 0 or 180
+else
+  base = FACE_BASE[face_mode]
+end
+if base == nil then return end
+
+if flip_negative == 1 and r < 0 then
+  base = base + 180
+end
+
+obj.rz = obj.rz + theta + base + angle_offset

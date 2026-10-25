@@ -1,0 +1,772 @@
+--[[
+2Dライティング_H v1.20 by HexBrowns
+MIT No Attribution (MIT-0) / Copyright (c) 2026 HexBrowns
+
+  環境遮蔽 : 明るさ（またはアルファ）を高さとみなし、くぼみ・接触部に陰を落とす 2D のアンビエントオクルージョン
+  大域照明 : 明るい所を光源にして、不透明な所で遮りながら光を周りへ広げて照らす 2D の大域照明（Radiance Cascades）
+  光の帯   : オブジェクトの不透明な所を、光の帯がなめるように横切る（ライトスイープ）
+
+仕様: AI/specifications/20261009_環境遮蔽_H_spec.md / 20261009_大域照明_H_spec.md / 20261012_2Dライティング_H_光の帯_spec.md
+
+v1.10: 光の帯を足した（既存の 2 つは変えていない）
+v1.11: 環境遮蔽 v1.01・大域照明 v1.01。4K・横長の巨大素材でも cache と tempbuffer の枠に収める（元の画像を退避しない・作業解像度を下げる）
+v1.20: 環境遮蔽 v1.10。陰の作り方（ずらしてぼかす／固定／ノイズのまま）を足した（既定は今までと同じ絵）
+]]
+
+@環境遮蔽
+--information:環境遮蔽@2Dライティング_H v1.10 by HexBrowns
+--label:HexScript
+--filter
+--track@strength:強さ,0,200,100,0.1
+--track@radius:半径,1,500,32,0.1
+--track@height:高さ,0,1000,50,0.1
+--select@height_src:高さの元=0,明るさ=0,アルファ=1,明るさとアルファ=2
+--check@invert:高さを反転,0
+--track@dirs:方向数,2,16,8,1
+--track@steps:サンプル数,2,32,8,1
+--select@ao_mode:陰の作り方=0,ずらしてぼかす=0,固定=1,ノイズのまま=2
+--track@pattern:模様の抑制,0,100,30,0.1
+--color@shadow_color:陰の色,0x000000
+--select@blend:合成=0,通常=0,乗算=1
+--check@ao_only:陰だけ,0
+--check@spread:外へ広げる,0
+--select@res:解像度=2,等倍=1,1/2=2
+--hide@spread:filter==1
+--[[pixelshader@ps_ao_pad:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+    float2 src_size;
+    float margin;
+};
+// 四方に margin px の透明を足す（外へ広げるとき）
+float4 ps_ao_pad(float4 pos : SV_Position) : SV_Target {
+    int2 q = int2(pos.xy) - int2(int(margin), int(margin));
+    if (q.x < 0 || q.y < 0 || q.x >= int(src_size.x) || q.y >= int(src_size.y)) return float4(0.0, 0.0, 0.0, 0.0);
+    return src.Load(int3(q, 0));
+}
+]]
+--[[pixelshader@ps_ao_height:
+Texture2D src : register(t0);
+SamplerState smp : register(s0);
+cbuffer constant0 : register(b0) {
+    float height_src;
+    float invert;
+    float height_scale;
+};
+// 作業解像度の高さ（px）を r に。透明な所は高さ 0
+float4 ps_ao_height(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float4 c = src.SampleLevel(smp, uv, 0);
+    float3 s = (c.a > 0.0001) ? c.rgb / c.a : float3(0.0, 0.0, 0.0);
+    float y = dot(saturate(s), float3(0.2126, 0.7152, 0.0722));
+    if (invert > 0.5) y = 1.0 - y;
+    float v = (height_src < 0.5) ? y * step(0.0001, c.a) : ((height_src < 1.5) ? c.a : y * c.a);
+    if (invert > 0.5 && height_src > 0.5 && height_src < 1.5) v = 1.0 - c.a;
+    return float4(v * height_scale, 0.0, 0.0, 1.0);
+}
+]]
+--[[pixelshader@ps_ao_blur:
+Texture2D src : register(t0);
+Texture2D hgt : register(t1);
+cbuffer constant0 : register(b0) {
+    float2 size;
+    float2 dir;
+    float sigma;
+    float radius;
+    float depth_sigma;
+};
+// 1 方向のガウス（r だけ）。depth_sigma > 0 なら高さの差で重みを下げる（バイラテラル。段差の向こうの陰を混ぜない）。
+// 画像の外は数えない（中の重みだけで割る）
+float4 ps_ao_blur(float4 pos : SV_Position) : SV_Target {
+    int2 p = int2(pos.xy);
+    int r = int(radius);
+    float inv2s2 = 1.0 / max(2.0 * sigma * sigma, 0.0001);
+    float inv2d2 = 1.0 / max(2.0 * depth_sigma * depth_sigma, 0.0001);
+    float h0 = hgt.Load(int3(p, 0)).r;
+    float acc = 0.0;
+    float wsum = 0.0;
+    [loop] for (int k = -r; k <= r; k++) {
+        int2 q = p + int2(dir) * k;
+        if (q.x < 0 || q.y < 0 || q.x >= int(size.x) || q.y >= int(size.y)) continue;
+        float w = exp(-float(k * k) * inv2s2);
+        if (depth_sigma > 0.0) {
+            float dh = hgt.Load(int3(q, 0)).r - h0;
+            w *= exp(-dh * dh * inv2d2);
+        }
+        acc += src.Load(int3(q, 0)).r * w;
+        wsum += w;
+    }
+    return float4(acc / max(wsum, 0.000001), 0.0, 0.0, 1.0);
+}
+]]
+--[[pixelshader@ps_ao_main:
+Texture2D hgt : register(t0);
+SamplerState smp : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 size;
+    float radius;
+    float dirs;
+    float steps;
+    float strength;
+    float jitter;
+};
+// Interleaved Gradient Noise（画素位置だけで決まる。毎フレーム同じ）
+float ao_ign(float2 p) {
+    return frac(52.9829189 * frac(dot(p, float2(0.06711056, 0.00583715))));
+}
+// 水平線方式: 方向ごとに、半径の中で最も高く見える遮り（仰角の正接 e）を探し、sin(atan e) を距離で弱めて平均する。
+// jitter > 0.5 なら方向と歩幅を画素ごとにずらす。0 なら方向は 0 から等分・歩幅は間隔の真ん中（全画素で同じ。方向数ぶんの縞が出る）
+float4 ps_ao_main(float4 pos : SV_Position) : SV_Target {
+    float2 p = floor(pos.xy) + 0.5;
+    float h0 = hgt.Load(int3(int2(pos.xy), 0)).r;
+    float n1 = (jitter > 0.5) ? ao_ign(floor(pos.xy)) : 0.0;
+    float n2 = (jitter > 0.5) ? ao_ign(floor(pos.xy) + float2(37.0, 17.0)) : 0.5;
+    int nd = int(dirs);
+    int ns = int(steps);
+    float occ = 0.0;
+    [loop] for (int i = 0; i < nd; i++) {
+        float th = 6.2831853 * (float(i) + n1) / dirs;
+        float2 u = float2(cos(th), sin(th));
+        float emax = 0.0;
+        float tstar = radius;
+        [loop] for (int j = 0; j < ns; j++) {
+            float t = max(radius * (float(j) + n2) / steps, 0.5);
+            float hq = hgt.SampleLevel(smp, (p + u * t) / size, 0).r;
+            float e = (hq - h0) / t;
+            if (e > emax) {
+                emax = e;
+                tstar = t;
+            }
+        }
+        float fall = 1.0 - (tstar / radius) * (tstar / radius);
+        occ += emax / sqrt(1.0 + emax * emax) * fall;
+    }
+    float ao = saturate(strength * occ / dirs);
+    return float4(ao, 0.0, 0.0, 1.0);
+}
+]]
+--[[pixelshader@ps_ao_comp:
+Texture2D src : register(t0);
+Texture2D occ : register(t1);
+SamplerState smp : register(s0);
+cbuffer constant0 : register(b0) {
+    float3 shadow_col;
+    float ao_only;
+    float blend_mode;
+    float spread;
+};
+// 乗算済みのまま陰を付ける。通常は陰の色へ寄せる、乗算は陰の色を掛ける。
+// 外へ広げるなら、透明な所にも陰の色を不透明度 AO で敷き、オブジェクトをその上に重ねる。陰だけなら (陰の色·o, o)
+float4 ps_ao_comp(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float4 c = src.Load(int3(int2(pos.xy), 0));
+    float ao = saturate(occ.SampleLevel(smp, uv, 0).r);
+    if (ao_only > 0.5) {
+        float o = (spread > 0.5) ? ao : ao * c.a;
+        return float4(shadow_col * o, o);
+    }
+    float3 rgb = (blend_mode > 0.5) ? c.rgb * lerp(float3(1.0, 1.0, 1.0), shadow_col, ao)
+                                    : c.rgb * (1.0 - ao) + shadow_col * c.a * ao;
+    if (spread > 0.5) {
+        float under = ao * (1.0 - c.a);
+        return float4(rgb + shadow_col * under, c.a + under);
+    }
+    return float4(rgb, c.a);
+}
+]]
+
+local obj, math = obj, math
+
+-- 環境遮蔽（2D のアンビエントオクルージョン、水平線方式）。明るさかアルファを高さとみなし、くぼみ・接触部に陰を落とす。
+-- 仕様: AI/specifications/20261009_環境遮蔽_H_spec.md。検証器: AI/scripts/2Dライティング_H/verify_ao.py
+-- 外へ広げないときは大きさを変えない（出入りとも obj.w x obj.h）のでフィルタオブジェクトにも置ける。
+-- 外へ広げるときは四方に半径ぶん広げる（フィルタオブジェクトでは広げない。項目も隠れる）
+
+if strength <= 0 then return end
+local w, h = obj.w, obj.h
+if w < 2 or h < 2 then return end
+local grow = (spread == 1) and not obj.getinfo("filter")
+local margin = grow and math.ceil(radius) or 0
+
+-- 作業解像度。半径と高さを同じ倍率で縮めるので、陰の形は解像度で変わらない（仰角は比）
+local div = (res == 2) and 2 or 1
+-- v1.01: cache と tempbuffer の枠（1600 万ドット）に収める。元の画像は object に置いたまま読み（外へ広げるときだけ広げた画像を cache に置く）、
+-- 作業用の 4 枚（h・t・hb・o）が収まらなければ作業解像度を下げる。広げた画像だけで収まらなければ効果を掛けない
+-- （AI/scripts/issues/20261013_cache_budget_4k_wide_materials.md）
+local budget = require("EffectUtils_Budget")
+do
+  local fw, fh = w + margin * 2, h + margin * 2
+  local s = budget.scale(grow and fw * fh or 0, 4 * fw * fh / (div * div))
+  if not s then
+    budget.refuse("環境遮蔽@2Dライティング_H", fw, fh)
+    return
+  end
+  div = div / s
+end
+if grow then
+  w, h = w + margin * 2, h + margin * 2
+  obj.clearbuffer("cache:ao/src", w, h)
+  obj.pixelshader("ps_ao_pad", "cache:ao/src", {"object"}, { w - margin * 2, h - margin * 2, margin }, "copy", "dot")
+end
+local src = grow and "cache:ao/src" or "object"
+local lw, lh = math.ceil(w / div), math.ceil(h / div)
+local rad = math.max(radius / div, 1)
+local hs = height / div
+local nd = math.max(2, math.min(16, math.floor(dirs + 0.5)))
+local ns = math.max(2, math.min(32, math.floor(steps + 0.5)))
+local sr, sg, sb = RGB(tonumber(shadow_color) or 0)
+
+obj.clearbuffer("cache:ao/h", lw, lh)
+obj.pixelshader("ps_ao_height", "cache:ao/h", {src},{ height_src, (invert == 1) and 1 or 0, hs }, "copy", "clamp")
+
+local function blur(name, from, depth, sigma)
+  local r = math.max(1, math.min(64, math.ceil(3 * sigma)))
+  obj.clearbuffer("cache:ao/t", lw, lh)
+  obj.pixelshader("ps_ao_blur", "cache:ao/t", {from, "cache:ao/h"}, { lw, lh, 1, 0, sigma, r, depth }, "copy", "dot")
+  obj.clearbuffer(name, lw, lh)
+  obj.pixelshader("ps_ao_blur", name, {"cache:ao/t", "cache:ao/h"}, { lw, lh, 0, 1, sigma, r, depth }, "copy", "dot")
+end
+
+-- 模様の抑制: 高さを半径 × 割合 / 4 の σ でぼかしてから使う（ベタ塗りの境目の段差を坂にして、陰を弱める）
+local ps = rad * pattern / 100 / 4
+if ps >= 0.5 then
+  blur("cache:ao/hb", "cache:ao/h", 0, ps)
+  obj.copybuffer("cache:ao/h", "cache:ao/hb")
+end
+
+-- 陰の作り方（v1.10）: 0 = 方向を画素ごとにずらし、粒をぼかしで消す（v1.01 までと同じ） / 1 = 固定（ずらさない。ぼかしは掛ける） /
+-- 2 = ノイズのまま（ずらすが、ぼかさない。粒が砂目として残る）
+local mode = math.floor((ao_mode or 0) + 0.5)
+obj.clearbuffer("cache:ao/o", lw, lh)
+obj.pixelshader("ps_ao_main", "cache:ao/o", {"cache:ao/h"}, { lw, lh, rad, nd, ns, strength / 100, (mode == 1) and 0 or 1 }, "copy", "clamp")
+-- 方向のノイズの粒を、高さの差で止めるぼかしで消す
+if mode ~= 2 then
+  blur("cache:ao/o", "cache:ao/o", math.max(hs * 0.05, 0.5), 2)
+end
+
+if grow then obj.clearbuffer("object", w, h) end
+obj.pixelshader("ps_ao_comp", "object", {src, "cache:ao/o"}, {
+  sr / 255, sg / 255, sb / 255, (ao_only == 1) and 1 or 0,
+  blend, grow and 1 or 0,
+}, "copy", "clamp")
+
+@大域照明
+--information:大域照明@2Dライティング_H v1.01 by HexBrowns
+--label:HexScript
+--filter
+--track@threshold:しきい値,0,100,70,0.1
+--track@emit:発光の強さ,0,1000,100,0.1
+--color@emit_color:発光色,nil
+--track@reach:到達距離,1,4000,400,0.1
+--track@occlusion:遮蔽,0,100,100,0.1
+--select@occ_src:遮蔽の元=0,アルファ=0,暗さ=1
+--track@surface:面の照らし,0,100,100,0.1
+--track@rim:縁の幅,0,100,8,0.1
+--track@air:空気の発光,0,100,50,0.1
+--track@ambient:環境光,0,100,0,0.1
+--track@diffuse:拡散,0,100,20,0.1
+--select@res:解像度=2,1/2=2,1/4=4
+--check@light_only:光だけ,0
+--check@spread:外へ広げる,0
+--hide@spread:filter==1
+--[[pixelshader@ps_gi_scene:
+Texture2D src : register(t0);
+SamplerState smp : register(s0);
+cbuffer constant0 : register(b0) {
+    float3 emit_lin;
+    float use_src_color;
+    float2 src_size;
+    float threshold;
+    float emit;
+    float occ;
+    float occ_src;
+    float k_abs;
+    float div;
+    float margin;
+};
+float3 gi_lin(float3 c) {
+    float3 a = abs(c);
+    return sign(c) * ((a <= 0.04045) ? a / 12.92 : pow((a + 0.055) / 1.055, 2.4));
+}
+// 作業解像度の 1 画素のシーン（外へ広げるときは広げた後の座標）。rgb = 放射 × 被覆、a = 被覆（光線がこの画素を横切って吸われる割合）。
+// 光る画素は「光る壁」として光を吸い、その色を返す。遮る物は吸うだけ。元の画像の div x div 画素を 2x2 ずつの双線形で平均する
+float4 ps_gi_scene(float4 pos : SV_Position) : SV_Target {
+    int2 ip = int2(pos.xy);
+    int n = (div > 3.0) ? 2 : 1;
+    float4 acc = float4(0.0, 0.0, 0.0, 0.0);
+    [loop] for (int j = 0; j < n; j++) {
+        [loop] for (int i = 0; i < n; i++) {
+            // 外へ広げるときは、元の画像を余白（margin）の分ずらして読む。元の画像の外は透明
+            float2 c2 = float2(ip) * div + float2(2.0 * float(i) + 1.0, 2.0 * float(j) + 1.0) - margin;
+            bool in_src = c2.x >= 0.0 && c2.y >= 0.0 && c2.x <= src_size.x && c2.y <= src_size.y;
+            float4 c = in_src ? src.SampleLevel(smp, c2 / src_size, 0) : float4(0.0, 0.0, 0.0, 0.0);
+            float a = saturate(c.a);
+            float3 st = (a > 0.0001) ? c.rgb / a : float3(0.0, 0.0, 0.0);
+            float v = dot(saturate(st), float3(0.2126, 0.7152, 0.0722));
+            float we = saturate((v - threshold) / max(1.0 - threshold, 0.001)) * a * step(threshold, 0.9999);
+            float3 E = ((use_src_color > 0.5) ? gi_lin(saturate(st)) : emit_lin) * emit;
+            // 暗さ（写真向け）は物の形ではなく「暗い所ほど光が通りにくい」霞として、遮りを 1/10 にする
+            // （1/10 にしないと、暗い部屋は壁と同じになり、窓の光が部屋へ入らない。机上で確かめた）
+            float occv = (occ_src < 0.5) ? a : a * (1.0 - v) * 0.1;
+            float dens = occ * occv * (1.0 - we) + we;
+            float o = 1.0 - exp(-k_abs * dens);
+            float3 e = (dens > 0.000001) ? E * (we / dens) : float3(0.0, 0.0, 0.0);
+            acc += float4(e * o, o);
+        }
+    }
+    return acc / float(n * n);
+}
+]]
+--[[pixelshader@ps_gi_down:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+    float2 src_size;
+};
+// 1/2 に縮める（被覆と、被覆 × 放射の平均。はみ出した画素は数えない）
+float4 ps_gi_down(float4 pos : SV_Position) : SV_Target {
+    int2 p = int2(pos.xy) * 2;
+    int2 m = int2(src_size) - int2(1, 1);
+    float4 acc = float4(0.0, 0.0, 0.0, 0.0);
+    float n = 0.0;
+    [unroll] for (int j = 0; j < 2; j++) {
+        [unroll] for (int i = 0; i < 2; i++) {
+            int2 q = p + int2(i, j);
+            float w = (q.x <= m.x && q.y <= m.y) ? 1.0 : 0.0;
+            acc += src.Load(int3(min(q, m), 0)) * w;
+            n += w;
+        }
+    }
+    return acc / max(n, 1.0);
+}
+]]
+--[[pixelshader@ps_gi_cascade:
+Texture2D scene : register(t0);
+Texture2D upper : register(t1);
+SamplerState smp : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 grid;
+    float2 scene_size;
+    float2 up_grid;
+    float2 work;
+    float spacing;
+    float side;
+    float t_start;
+    float t_len;
+    float step_len;
+    float has_upper;
+    float texel;
+};
+// 1 段（cascade）の 1 本の光線。テクスチャは方向ごとのブロック（side x side 個）にプローブ（grid）を並べたもの。
+// 間隔 [t_start, t_start + t_len] を step_len ずつ歩いて光 L と透過 T を集め、上の段の同じ向きの 4 方向 × 周りの 4 プローブ（双線形）の
+// 平均 R_up と R = L + T·R_up で継ぐ（Radiance Cascades）。上の段から順に作る
+float4 ps_gi_cascade(float4 pos : SV_Position) : SV_Target {
+    int2 ip = int2(pos.xy);
+    int2 g = int2(grid);
+    int2 blk = int2(uint2(ip) / uint2(g));
+    int2 pr = ip - blk * g;
+    int sd = int(side);
+    if (blk.x >= sd || blk.y >= sd) return float4(0.0, 0.0, 0.0, 1.0);
+    float D = side * side;
+    float d = float(blk.y * sd + blk.x);
+    float th = 6.2831853 * (d + 0.5) / D;
+    float2 dir = float2(cos(th), sin(th));
+    float2 org = (float2(pr) + 0.5) * spacing;
+    int n = max(1, int(t_len / step_len + 0.5));
+    float ex = step_len / texel;
+    float3 L = float3(0.0, 0.0, 0.0);
+    float T = 1.0;
+    [loop] for (int k = 0; k < n; k++) {
+        float2 p = org + dir * (t_start + (float(k) + 0.5) * step_len);
+        if (p.x < 0.0 || p.y < 0.0 || p.x >= work.x || p.y >= work.y) continue;
+        float4 s = scene.SampleLevel(smp, p / texel / scene_size, 0);
+        float o = saturate(s.a);
+        if (o <= 0.000001) continue;
+        float tau = pow(1.0 - o, ex);
+        L += T * (1.0 - tau) * (s.rgb / o);
+        T *= tau;
+    }
+    float3 up = float3(0.0, 0.0, 0.0);
+    if (has_upper > 0.5) {
+        int us = sd * 2;
+        float2 u = clamp(org / (spacing * 2.0) - 0.5, float2(0.0, 0.0), up_grid - 1.0);
+        float2 usize = up_grid * float(us);
+        [unroll] for (int q = 0; q < 4; q++) {
+            uint du = uint(d) * 4u + uint(q);
+            float2 ub = float2(float(du % uint(us)), float(du / uint(us)));
+            up += upper.SampleLevel(smp, (ub * up_grid + u + 0.5) / usize, 0).rgb;
+        }
+        up *= 0.25;
+    }
+    return float4(L + T * up, 1.0);
+}
+]]
+--[[pixelshader@ps_gi_fluence:
+Texture2D c0 : register(t0);
+cbuffer constant0 : register(b0) {
+    float2 grid;
+};
+// 段 0（4 方向）の平均 = その場所に届く光の量
+float4 ps_gi_fluence(float4 pos : SV_Position) : SV_Target {
+    int2 p = int2(pos.xy);
+    int2 g = int2(grid);
+    float3 f = c0.Load(int3(p, 0)).rgb + c0.Load(int3(p + int2(g.x, 0), 0)).rgb
+             + c0.Load(int3(p + int2(0, g.y), 0)).rgb + c0.Load(int3(p + g, 0)).rgb;
+    return float4(f * 0.25, 1.0);
+}
+]]
+--[[pixelshader@ps_gi_blur:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+    float2 size;
+    float2 dir;
+    float sigma;
+    float radius;
+};
+// 1 方向のガウス（光の量。外は数えない）
+float4 ps_gi_blur(float4 pos : SV_Position) : SV_Target {
+    int2 p = int2(pos.xy);
+    int r = int(radius);
+    float inv2s2 = 1.0 / max(2.0 * sigma * sigma, 0.0001);
+    float3 acc = float3(0.0, 0.0, 0.0);
+    float wsum = 0.0;
+    [loop] for (int k = -r; k <= r; k++) {
+        int2 q = p + int2(dir) * k;
+        if (q.x < 0 || q.y < 0 || q.x >= int(size.x) || q.y >= int(size.y)) continue;
+        float w = exp(-float(k * k) * inv2s2);
+        acc += src.Load(int3(q, 0)).rgb * w;
+        wsum += w;
+    }
+    return float4(acc / max(wsum, 0.000001), 1.0);
+}
+]]
+--[[pixelshader@ps_gi_comp:
+Texture2D src : register(t0);
+Texture2D flu : register(t1);
+SamplerState smp : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 extent;
+    float2 src_size;
+    float ambient;
+    float surface;
+    float air;
+    float light_only;
+    float threshold;
+    float margin;
+    float rim;
+};
+float3 gi_lin(float3 c) {
+    float3 a = abs(c);
+    return sign(c) * ((a <= 0.04045) ? a / 12.92 : pow((a + 0.055) / 1.055, 2.4));
+}
+float3 gi_enc(float3 c) {
+    float3 a = abs(c);
+    return sign(c) * ((a <= 0.0031308) ? a * 12.92 : 1.055 * pow(a, 1.0 / 2.4) - 0.055);
+}
+// 届いた光 P（線形）で、不透明な所はその色を照らし（面の照らし）、光そのもの（空気の発光）を全体にスクリーンで重ねる。
+// 透明な所には空気の発光を敷き、その上に元の絵を重ねる。
+// どちらも表示上の明るさ（sRGB）で置く（線形の値をそのまま足すと、見える明るさよりずっと弱くなる）。
+// 不透明な物の内側には光が入らないので、面の照らしには周り（縁の幅）の光の最大を使う（光源に向いた縁がその幅で照らされる）
+float3 gi_P(float2 p) {
+    return max(flu.SampleLevel(smp, p / extent, 0).rgb, float3(0.0, 0.0, 0.0));
+}
+float4 ps_gi_comp(float4 pos : SV_Position) : SV_Target {
+    int2 q = int2(pos.xy) - int2(int(margin), int(margin));
+    bool in_src = q.x >= 0 && q.y >= 0 && q.x < int(src_size.x) && q.y < int(src_size.y);
+    float4 c = in_src ? src.Load(int3(q, 0)) : float4(0.0, 0.0, 0.0, 0.0);
+    float a = saturate(c.a);
+    float3 st = (a > 0.0001) ? c.rgb / a : float3(0.0, 0.0, 0.0);
+    float3 P = gi_P(pos.xy) + ambient;
+    float3 Ps = P;
+    if (rim > 0.5 && a > 0.0001) {
+        [unroll] for (int k = 0; k < 8; k++) {
+            float th = 0.7853982 * float(k);
+            Ps = max(Ps, gi_P(pos.xy + float2(cos(th), sin(th)) * rim) + ambient);
+        }
+    }
+    float3 eP = gi_enc(saturate(P));
+    float3 eS = gi_enc(saturate(Ps));
+    if (light_only > 0.5) {
+        float3 add = saturate(surface * eS * saturate(st) * a + air * eP * (1.0 - a));
+        float la = max(add.r, max(add.g, add.b));
+        return float4(add, la);
+    }
+    // 光っている画素（しきい値を超えた所）は自分の光で照らさない（光源の色が飛ばないように）。しきい値の手前 0.05 でなめらかに切る
+    float v = dot(saturate(st), float3(0.2126, 0.7152, 0.0722));
+    float we = smoothstep(threshold - 0.05, threshold, v) * step(threshold, 0.9999);
+    float3 g = saturate(air * eP);
+    float ga = max(g.r, max(g.g, g.b));
+    float3 lit = saturate(saturate(st) * (1.0 + surface * eS * (1.0 - we)));
+    // 空気の発光は不透明な物の手前にも乗る（スクリーン）。光源そのものには乗せない
+    lit = 1.0 - (1.0 - lit) * (1.0 - g * (1.0 - we));
+    return float4(lit * a + g * (1.0 - a), a + ga * (1.0 - a));
+}
+]]
+
+local obj, math = obj, math
+
+-- 大域照明（2D、Radiance Cascades）。明るい所を光源にして、不透明な所で遮りながら光を周りへ広げ、面を照らす。
+-- 仕様: AI/specifications/20261009_大域照明_H_spec.md。検証器: AI/scripts/2Dライティング_H/verify_gi.py
+-- 外へ広げないときは大きさを変えない（出入りとも obj.w x obj.h）のでフィルタオブジェクトにも置ける。
+-- 外へ広げるときは四方に到達距離ぶん（最大 500px）広げる（フィルタオブジェクトでは広げない。項目も隠れる）
+
+if emit <= 0 and ambient <= 0 then return end
+local w, h = obj.w, obj.h
+if w < 4 or h < 4 then return end
+local grow = (spread == 1) and not obj.getinfo("filter")
+local margin = grow and math.min(math.ceil(reach), 500) or 0
+
+local div = (res == 4) and 4 or 2
+-- 段の数: 最上段の間隔の終わり 2·(4^N − 1)/3 が到達距離（作業解像度の画素）を覆う
+local function cascades(d)
+  local r = math.max(reach / d, 1)
+  return r, math.max(1, math.min(7, math.ceil(math.log(1.5 * r + 1) / math.log(4))))
+end
+
+-- v1.01: cache と tempbuffer の枠（1600 万ドット）に収める。外へ広げないときは元の画像を object に置いたまま読み、
+-- 作業用のバッファ（シーン・縮めたシーン・段 2 枚・光の量）が収まらなければ作業解像度を 2 倍ずつ粗くする。
+-- それでも収まらなければ効果を掛けない（AI/scripts/issues/20261013_cache_budget_4k_wide_materials.md）
+local budget = require("EffectUtils_Budget")
+do
+  local W, H = w + margin * 2, h + margin * 2
+  local function need(d)
+    local lw, lh = math.ceil(W / d), math.ceil(H / d)
+    local _, n = cascades(d)
+    local total, pw, ph = lw * lh, lw, lh
+    for _ = 1, math.max(0, math.min(n - 2, 5)) do
+      pw, ph = math.ceil(pw / 2), math.ceil(ph / 2)
+      total = total + pw * ph
+    end
+    local cmax = 0
+    for i = 0, n - 1 do
+      local sp = 2 ^ (i + 1)
+      cmax = math.max(cmax, math.ceil(lw / sp) * sp * math.ceil(lh / sp) * sp)
+    end
+    return total + 2 * cmax + 2 * math.ceil(lw / 2) * math.ceil(lh / 2) + 1
+  end
+  local fixed = grow and w * h or 0
+  while fixed + need(div) > budget.BUDGET and div < 64 do div = div * 2 end
+  if not budget.check("大域照明@2Dライティング_H", W, H, fixed + need(div)) then return end
+end
+
+local lw, lh = math.ceil(w / div), math.ceil(h / div)
+-- 吸収: 元の画像の 1 画素を、密度 1 の物が横切る光の 1 − e^−2（86%）を止める。作業解像度の 1 画素は div 画素ぶん
+local K = 2 * div
+local rw, N = cascades(div)
+local use_src, er, eg, eb = 1, 0, 0, 0
+if emit_color ~= nil then
+  use_src = 0
+  local r, g, b = RGB(emit_color)
+  local function lin(v)
+    v = v / 255
+    return (v <= 0.04045) and v / 12.92 or ((v + 0.055) / 1.055) ^ 2.4
+  end
+  er, eg, eb = lin(r), lin(g), lin(b)
+end
+
+-- 外へ広げるときは、元の画像をそのまま退避し、シーンと合成で余白の分ずらして読む（広げた画像を cache に作らない。枠を食わない）。
+-- 広げないときは退避せず object を読む（v1.01）
+local sw, sh = w, h
+local src = "object"
+if grow then
+  src = "cache:gi/src"
+  obj.copybuffer(src, "object")
+  w, h = w + margin * 2, h + margin * 2
+  lw, lh = math.ceil(w / div), math.ceil(h / div)
+end
+obj.clearbuffer("cache:gi/s0", lw, lh)
+obj.pixelshader("ps_gi_scene", "cache:gi/s0", {src}, {
+  er, eg, eb, use_src, sw, sh, threshold / 100, emit / 100, occlusion / 100, occ_src, K, div, margin,
+}, "copy", "clamp")
+
+-- 段 i は 1 段細かいシーン（level = i − 1）を、その画素の大きさの歩幅で読む（粗いシーンでは光源と壁が薄まって大きく見えるため）
+local levels = math.max(0, math.min(N - 2, 5))
+local sizes = { [0] = { lw, lh } }
+for l = 1, levels do
+  local pw, ph = sizes[l - 1][1], sizes[l - 1][2]
+  local nw, nh = math.ceil(pw / 2), math.ceil(ph / 2)
+  obj.clearbuffer("cache:gi/s" .. l, nw, nh)
+  obj.pixelshader("ps_gi_down", "cache:gi/s" .. l, {"cache:gi/s" .. (l - 1)}, { pw, ph }, "copy", "dot")
+  sizes[l] = { nw, nh }
+end
+
+obj.clearbuffer("cache:gi/zero", 1, 1)
+local upper, ugw, ugh = "cache:gi/zero", 1, 1
+local bufs = { "cache:gi/ca", "cache:gi/cb" }
+local g0w, g0h
+for i = N - 1, 0, -1 do
+  local sp = 2 ^ (i + 1)
+  local side = 2 ^ (i + 1)
+  local gw, gh = math.ceil(lw / sp), math.ceil(lh / sp)
+  local level = math.max(0, math.min(i - 1, levels))
+  local texel = 2 ^ level
+  local step_len = 2 ^ math.max(i - 1, 0)
+  local out = bufs[(i % 2) + 1]
+  obj.clearbuffer(out, gw * side, gh * side)
+  obj.pixelshader("ps_gi_cascade", out, {"cache:gi/s" .. level, upper}, {
+    gw, gh, sizes[level][1], sizes[level][2], ugw, ugh, lw, lh,
+    sp, side, 2 * (4 ^ i - 1) / 3, 2 * 4 ^ i, step_len, (i < N - 1) and 1 or 0, texel,
+  }, "copy", "clamp")
+  upper, ugw, ugh = out, gw, gh
+  g0w, g0h = gw, gh
+end
+
+obj.clearbuffer("cache:gi/f", g0w, g0h)
+obj.pixelshader("ps_gi_fluence", "cache:gi/f", {upper}, { g0w, g0h }, "copy", "dot")
+-- 拡散: 光の量を 到達距離 × 割合 / 20 の σ（作業解像度。光の量の格子はその 1/2）でぼかし、段の継ぎ目の模様を隠す
+local sig = rw * diffuse / 100 / 20 / 2
+if sig >= 0.3 then
+  local r = math.max(1, math.min(64, math.ceil(3 * sig)))
+  obj.clearbuffer("cache:gi/ft", g0w, g0h)
+  obj.pixelshader("ps_gi_blur", "cache:gi/ft", {"cache:gi/f"}, { g0w, g0h, 1, 0, sig, r }, "copy", "dot")
+  obj.clearbuffer("cache:gi/f", g0w, g0h)
+  obj.pixelshader("ps_gi_blur", "cache:gi/f", {"cache:gi/ft"}, { g0w, g0h, 0, 1, sig, r }, "copy", "dot")
+end
+
+if grow then obj.clearbuffer("object", w, h) end
+obj.pixelshader("ps_gi_comp", "object", {src, "cache:gi/f"}, {
+  div * 2 * g0w, div * 2 * g0h, sw, sh, ambient / 100, surface / 100, air / 100, (light_only == 1) and 1 or 0, threshold / 100, margin,
+  rim,
+}, "copy", "clamp")
+
+@光の帯
+--information:光の帯@2Dライティング_H v1.00 by HexBrowns
+--label:HexScript
+--filter
+--track@progress:進行,0,100,50,0.1
+--select@sweep_loop:繰り返し=0,しない=0,一方向=1,往復=2
+--hide@progress:sweep_loop>0
+--track@sweep_time:移動時間,0.1,60,1,0.01
+--hide@sweep_time:sweep_loop==0
+--track@pause:待ち時間,0,60,2,0.01
+--hide@pause:sweep_loop==0
+--select@shape:形=0,直線=0,放射=1
+--track@angle:角度,-3600,3600,120,0.1
+--hide@angle:shape==1
+--track@band_width:幅,0,4000,40,0.1
+--track@softness:柔らかさ,0,4000,40,0.1
+--track@intensity:強さ,0,500,100,0.1
+--color@light_color:光の色,0xffffff
+--select@blend:合成=1,加算=0,スクリーン=1,覆い焼き=2,通常=3
+--track@edge:縁を強く,0,500,0,0.1
+--track@edge_width:縁の幅,1,200,4,0.1
+--[[pixelshader@ps_ls_main:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+    float3 light_col;
+    float intensity;
+    float2 size;
+    float2 dir;
+    float band_c;
+    float half_w;
+    float soft;
+    float shape;
+    float blend_mode;
+    float edge_amt;
+    float edge_r;
+    float edge_clamp;
+};
+// 帯の重み: 直線は中心からの位置を進む向き dir に投影した値、放射は中心からの距離。帯の中心 band_c から
+// half_w までは 1、そこから soft の幅で 0 へ（smoothstep）。光は不透明な所にだけ乗り、α は変えない（乗算済みのまま）
+float4 ps_ls_main(float4 pos : SV_Position) : SV_Target {
+    float4 c = src.Load(int3(int2(pos.xy), 0));
+    float a = saturate(c.a);
+    if (a <= 0.000001) return c;
+    float2 p = pos.xy - size * 0.5;
+    float s = (shape > 0.5) ? abs(length(p) - band_c) : abs(dot(p, dir) - band_c);
+    float wgt = 1.0 - smoothstep(half_w, half_w + max(soft, 0.0001), s);
+    if (wgt <= 0.0) return c;
+    // 縁を強く: 縁の幅 edge_r と その半分の 8 方向の α の最小を見て、内側の縁ほど 1 に近い量 e を作る
+    // （半分の輪で欠けていれば 1、外の輪だけで欠けていれば 0.5）。外は透明として数える（フィルタオブジェクトでは端の値）
+    float e = 0.0;
+    if (edge_amt > 0.0) {
+        int2 m = int2(size) - int2(1, 1);
+        float amin1 = a;
+        float amin2 = a;
+        [loop] for (int k = 0; k < 8; k++) {
+            float th = 0.7853982 * float(k);
+            float2 u = float2(cos(th), sin(th));
+            int2 q1 = int2(floor(pos.xy + u * edge_r));
+            int2 q2 = int2(floor(pos.xy + u * (edge_r * 0.5)));
+            bool in1 = q1.x >= 0 && q1.y >= 0 && q1.x <= m.x && q1.y <= m.y;
+            bool in2 = q2.x >= 0 && q2.y >= 0 && q2.x <= m.x && q2.y <= m.y;
+            float a1 = (in1 || edge_clamp > 0.5) ? saturate(src.Load(int3(clamp(q1, int2(0, 0), m), 0)).a) : 0.0;
+            float a2 = (in2 || edge_clamp > 0.5) ? saturate(src.Load(int3(clamp(q2, int2(0, 0), m), 0)).a) : 0.0;
+            amin1 = min(amin1, a1);
+            amin2 = min(amin2, a2);
+        }
+        e = saturate(max(a - amin2, 0.5 * (a - amin1)));
+    }
+    float lw = wgt * intensity * (1.0 + edge_amt * e);
+    float3 st = saturate(c.rgb / a);
+    float3 lc = light_col * lw;
+    float3 o = st;
+    if (blend_mode < 0.5) {
+        o = saturate(st + lc);
+    } else if (blend_mode < 1.5) {
+        o = 1.0 - (1.0 - st) * (1.0 - saturate(lc));
+    } else if (blend_mode < 2.5) {
+        o = saturate(st / max(1.0 - saturate(lc), 0.0001));
+    } else {
+        o = lerp(st, light_col, saturate(lw));
+    }
+    return float4(o * a, c.a);
+}
+]]
+
+local obj, math = obj, math
+
+-- 光の帯（ライトスイープ）。オブジェクトの不透明な所を、光の帯が端から端へ横切る。1 パスで大きさを変えないので
+-- フィルタオブジェクトにも置ける。仕様: AI/specifications/20261012_2Dライティング_H_光の帯_spec.md。
+-- 検証器: AI/scripts/2Dライティング_H/verify_light_sweep.py
+-- 進行 0% / 100% は帯（幅の半分 + 柔らかさ）がちょうどオブジェクトの外に出る位置。直線はオブジェクトの四隅を進む向きへ
+-- 投影した範囲、放射は中心から角までの距離を端から端とする
+
+if intensity <= 0 then return end
+local w, h = obj.w, obj.h
+if w < 1 or h < 1 then return end
+
+local prog = progress / 100
+if sweep_loop > 0 then
+  -- 繰り返し: 移動時間で端から端へ動き、待ち時間だけ外で止まる。往復は戻りも同じ
+  local dur = math.max(sweep_time, 0.01)
+  local wait = math.max(pause, 0)
+  local t = math.max(obj.time, 0)
+  if sweep_loop == 1 then
+    local ph = math.fmod(t, dur + wait)
+    prog = math.min(ph / dur, 1)
+  else
+    local ph = math.fmod(t, 2 * (dur + wait))
+    if ph < dur then
+      prog = ph / dur
+    elseif ph < dur + wait then
+      prog = 1
+    elseif ph < 2 * dur + wait then
+      prog = 1 - (ph - dur - wait) / dur
+    else
+      prog = 0
+    end
+  end
+end
+-- 端（0 と 1）では帯がすべて外にあるので描かない
+if prog <= 0 or prog >= 1 then return end
+
+local hw = math.max(band_width, 0) / 2
+local sf = math.max(softness, 0)
+local reach = hw + sf
+if reach <= 0 then return end
+-- 角度: 図形グラデーション_H の線形と同じ向き（0 で下から上、90 で左から右、時計回り）
+local rad = angle * math.pi / 180
+local dx, dy = math.sin(rad), -math.cos(rad)
+local center
+if shape == 1 then
+  center = -reach + prog * (math.sqrt(w * w + h * h) / 2 + 2 * reach)
+else
+  local half = (w * math.abs(dx) + h * math.abs(dy)) / 2
+  center = -half - reach + prog * (2 * half + 2 * reach)
+end
+local lr, lg, lb = RGB(tonumber(light_color) or 0xffffff)
+
+obj.pixelshader("ps_ls_main", "object", {"object"}, {
+  lr / 255, lg / 255, lb / 255, intensity / 100,
+  w, h, dx, dy,
+  center, hw, sf, shape,
+  blend, edge / 100, edge_width, obj.getinfo("filter") and 1 or 0,
+}, "copy", "dot")

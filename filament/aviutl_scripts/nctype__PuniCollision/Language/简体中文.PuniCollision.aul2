@@ -1,0 +1,22 @@
+[Language]
+Information=简体中文 language for PuniCollision 0.7.5
+SubLanguage=简体中文
+
+[PuniCollision]
+グループID=组ID
+剛体=刚体
+変形範囲=变形范围
+押出量=挤出量
+反発=反弹
+剛体形状=刚体形状
+自動生成=自动生成
+手動指定=手动指定
+制御点の数=制御点数量
+内部頂点=内部顶点
+変形=变形
+PuniCollision v0.7.5=PuniCollision v0.7.5
+
+軟体形状=软体形状
+軟体の制御点の数=软体控制点数量
+軟体の内部頂点=软体内部顶点
+範囲表示=范围表示

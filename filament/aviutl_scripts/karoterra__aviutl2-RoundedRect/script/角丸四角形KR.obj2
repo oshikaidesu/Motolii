@@ -1,0 +1,162 @@
+--information:${INFO} ${VERSION} by ${AUTHOR}
+
+---$track:幅
+---min=0
+---max=4000
+---step=1
+local rectW = 100
+
+---$track:高さ
+---min=0
+---max=4000
+---step=1
+local rectH = 100
+
+---$color:フィル色
+local rectColor = 0xffffff
+
+---$track:フィルα
+---min=0
+---max=100
+---step=0.01
+local rectAlpha = 100
+
+---$track:ライン幅
+---min=0
+---max=2000
+---step=1
+local lineW = 100
+
+---$color:ライン色
+local lineColor = 0xffffff
+
+---$track:ラインα
+---min=0
+---max=100
+---step=0.01
+local lineAlpha = 100
+
+---$select:ライン位置
+---内側=0
+---中央=1
+---外側=2
+local linePos = 0
+
+---$track:角丸[%]
+---min=0
+---max=100
+---step=0.01
+local radiusPercent = 40
+
+---$track:左上[%]
+---min=0
+---max=100
+---step=0.01
+local radiusLTPercent = 100
+
+---$track:右上[%]
+---min=0
+---max=100
+---step=0.01
+local radiusRTPercent = 100
+
+---$track:右下[%]
+---min=0
+---max=100
+---step=0.01
+local radiusRBPercent = 100
+
+---$track:左下[%]
+---min=0
+---max=100
+---step=0.01
+local radiusLBPercent = 100
+
+--[[pixelshader@psmain:
+---$include "RoundedRect.hlsl"
+]]
+
+-- 画像サイズ
+local imageW, imageH = rectW, rectH
+if linePos == 1 then
+    imageW = imageW + lineW
+    imageH = imageH + lineW
+elseif linePos == 2 then
+    imageW = imageW + lineW * 2
+    imageH = imageH + lineW * 2
+end
+
+if imageW < 1 or imageH < 1 then
+    return
+end
+
+-- 色
+local function colorToRGBA(col, alpha)
+    local r, g, b = RGB(col)
+    r = r / 255
+    g = g / 255
+    b = b / 255
+    local a = alpha / 100
+    return r, g, b, a
+end
+local rectColorVec = {colorToRGBA(rectColor, rectAlpha)}
+local lineColorVec = {colorToRGBA(lineColor, lineAlpha)}
+
+-- 角丸半径
+local radiusRatio = {
+    radiusPercent * radiusLTPercent / 10000,
+    radiusPercent * radiusRTPercent / 10000,
+    radiusPercent * radiusRBPercent / 10000,
+    radiusPercent * radiusLBPercent / 10000,
+}
+local maxRadius = math.min(rectW, rectH) / 2
+local radius = {}
+for i = 1, #radiusRatio do
+    radius[i] = radiusRatio[i] * maxRadius
+end
+
+local function expand(x)
+    local res = {}
+    for i = 1, #radius do
+        if radius[i] < 1e-6 then
+            res[i] = 0
+        else
+            res[i] = radius[i] + x
+        end
+    end
+    return res
+end
+
+local lineOuterRadius = {}
+if linePos == 0 then
+    lineOuterRadius = radius
+elseif linePos == 1 then
+    lineOuterRadius = expand(lineW / 2)
+elseif linePos == 2 then
+    lineOuterRadius = expand(lineW)
+end
+
+-- 描画
+obj.setoption("drawtarget", "tempbuffer", imageW, imageH)
+obj.pixelshader(
+    "psmain", "tempbuffer", {},
+    {
+        -- rectColor
+        rectColorVec[1], rectColorVec[2], rectColorVec[3], rectColorVec[4],
+        -- lineColor
+        lineColorVec[1], lineColorVec[2], lineColorVec[3], lineColorVec[4],
+        -- radius
+        radius[1], radius[2], radius[3], radius[4],
+        -- lineOuterRadius
+        lineOuterRadius[1], lineOuterRadius[2], lineOuterRadius[3], lineOuterRadius[4],
+        -- halfSize
+        imageW / 2, imageH / 2,
+        -- halfRectSize
+        rectW / 2, rectH / 2,
+        -- lineW
+        lineW,
+    },
+    "copy"
+)
+
+obj.load("tempbuffer")

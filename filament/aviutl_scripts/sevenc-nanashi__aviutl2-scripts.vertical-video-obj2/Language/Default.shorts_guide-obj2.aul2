@@ -1,0 +1,5 @@
+[Language]
+Information=Default Language for sevenc-nanashi/aviutl2-scripts / https://github.com/sevenc-nanashi/aviutl2-scripts
+[Tips.縦動画ガイド]
+effect.name=ニコニコショートのUIで隠れる部分を表示するためのスクリプト。\n\n┌ ℹ️ Note\n│ デフォルトでは出力時に非表示になります。\n│ 出力時にも表示したい場合は、「出力時にも表示」を有効にしてください。\n└──────\n
+PI=- `device`：デバイス\n  - `1`：iPhone 16（iOS 26）\n  - `2`：iPad mini（iPadOS 26）\n- `color`：色（`0xRRGGBB`）\n- `show_forward`：ピン留め動画を表示するか\n- `show_tags`：タグを表示するか\n- `author_name_width`：投稿者名の幅（ピクセル単位）\n- `side_line_width`：左右線の幅（ピクセル単位）\n- `show_on_output`：出力時にも表示するか\n- `layout`：レイアウト設定。`width`、`height`、`footer_height` などの値をテーブルで上書きできます。\n

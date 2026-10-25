@@ -1,0 +1,88 @@
+
+@Line
+--information:Line v0.1 by kusugawatsumiki
+--label:Utility
+--track@length:長さ,0,1920,100,1
+--track@weight:線の太さ,1,20,5,1
+--color@color:色,0xffffff
+
+obj.load("figure", "四角形", color, length, length, false)
+obj.copybuffer("tempbuffer", "object")
+
+obj.load("tempbuffer", 0, 0, weight, length)
+
+
+
+@Elapsed Timer
+--information: Elapsed Timer v0.1 by kusugawatsumiki
+--label:Utility
+--string@format:フォーマット,[ %02d:%02d.%02d ]
+--string@origin:基準フレーム,
+--separator:テキスト
+--track@fontsize:フォントサイズ,1,200,20,1
+--track@charspacing:字間,-500,500,0,0.01
+--font@font:フォント,Yu Gothic UI
+--color@textcolor:文字色,0xffffff
+
+local function startframe(origin)
+  local result = tonumber(origin)
+  if result then return result else return 0 end
+end
+
+local elapsedsecond = (startframe(origin) + obj.frame) / obj.framerate
+local text = string.format(format, elapsedsecond / 60, elapsedsecond % 60, (elapsedsecond * 100) % 100)
+obj.setfont(font, fontsize, 0, textcolor, textcolor, false, false, charspacing, 0)
+obj.load("text", text, 0, 0, 3) 
+
+
+
+@Annotation
+--information:Annotation v0.1 by kusugawatsumiki
+--label:Utility
+--separator:ポインター
+--track@size:サイズ,1,300,20,1
+--track@linewidth:ライン幅,1,20,2,1
+--track@linelength:ライン長さ,0,1920,50,1
+--track@linerotation:ライン回転,-360,360,0,0.01
+--color@color:色,0xffffff
+--separator:テキスト
+--track@fontsize:フォントサイズ,1,200,20,1
+--track@charspacing:字間,-500,500,0,0.01
+--track@offsetx:オフセットX,-100,100,0,0.01
+--track@offsety:オフセットY,-100,100,0,0.01
+--font@font:フォント,Yu Gothic UI
+--color@textcolor:文字色,0xffffff
+--string@text:テキスト,
+
+local function lineposition(size, linelength, linewidth, linerotation)
+  local rad = math.rad(linerotation)
+  local r = (size / 2) + (linelength / 2) - linewidth
+  local x = -math.sin(rad) * r
+  local y = math.cos(rad) * r
+  return x, y
+end
+
+local function textposition(size, linelength, linerotation, fontsize, offsetx, offsety)
+  local rad = math.rad(linerotation)
+  local r = (size / 2) + linelength + (fontsize / 2)
+  local x = -math.sin(rad) * (r + offsetx)
+  local y = math.cos(rad) * (r + offsety)
+  return x, y
+end
+
+-- circle
+obj.load("figure", "円", color, size, linewidth, false)
+obj.draw(0, 0, 0)
+
+-- line
+obj.load("figure", "四角形", color, linelength, linelength, false)
+obj.copybuffer("tempbuffer", "object")
+obj.load("tempbuffer", 0, 0, linewidth, linelength)
+local line_x, line_y = lineposition(size, linelength, linewidth, linerotation)
+obj.draw(line_x, line_y, 0, 1, 1, 0, 0, linerotation)
+
+-- text
+obj.setfont(font, fontsize, 0, textcolor, textcolor, false, false, charspacing, 0)
+obj.load("text", text, 0, 0, 4)
+local text_x, text_y = textposition(size, linelength, linerotation, fontsize, offsetx, offsety)
+obj.draw(text_x, text_y, 0)

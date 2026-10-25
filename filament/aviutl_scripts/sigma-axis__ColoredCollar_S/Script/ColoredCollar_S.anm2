@@ -1,0 +1,363 @@
+--[[
+MIT License
+
+Copyright (c) 2025-2026 sigma-axis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+https://mit-license.org/
+]]
+
+--
+-- v2.11
+--
+
+-- https://github.com/sigma-axis/aviutl2_script_ColoredCollar_S
+
+--information:ColoredCollar_S v2.11 by σ軸
+--label:装飾
+--filter
+--require:2010600
+--track@thick:サイズ,0,500,5,0.01,,0.4
+--track@blur:ぼかし,0,100,5,0.01
+--track@col_blur:色拡散,0,100,5,0.01,,0.5
+--track@threshold:αしきい値,0,100,50,0.01
+--checksection@fixed_size:サイズ固定,false,false
+--hide@fixed_size:filter~=0
+--group:色設定,false
+--color@color:縁色,0xffffff
+--track@col_alpha:色の濃さ,0,100,30,0.01
+--color@color_outer:縁色外側,nil
+--track@col_alpha_outer:outer::色の濃さ,0,100,30,0.01
+--group:透明度設定,false
+--track@alpha:透明度,0,100,0,0.01
+--track@front_alpha:前景透明度,0,100,0,0.01
+--group:その他,false
+--track@mollify:錯視軽減,0,100,0,0.01
+--value@PI:PI,{}
+--[[pixelshader@const_value:
+cbuffer constant0 : register(b0) {
+	float4 color;
+};
+float4 const_value(float4 pos : SV_Position) : SV_Target
+{
+	return color;
+}
+
+]]
+--[[pixelshader@dist_init:
+half2 enc(uint p) { return half2(p >> 8, p & 0xff); }
+half4 enc(uint2 p) { return half4(enc(p.x), enc(p.y)); }
+uint dec(half2 u) { return uint(dot(float2(256, 1), u)); }
+uint2 dec(half4 u) { return uint2(dec(u.xy), dec(u.zw)); }
+bool valid(uint2 p) { return all(p < (1 << 14)); }
+static const uint2 p_none = (1 << 15) - 1;
+
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+	float2 offset;
+	float thresh;
+};
+
+float4 dist_init(float4 pos : SV_Position) : SV_Target
+{
+	return src.Load(int3(floor(pos.xy - offset), 0)).a < thresh ?
+		enc(p_none) : enc(uint2(pos.xy));
+}
+
+]]
+--[[pixelshader@dist_step:
+half2 enc(uint p) { return half2(p >> 8, p & 0xff); }
+half4 enc(uint2 p) { return half4(enc(p.x), enc(p.y)); }
+uint dec(half2 u) { return uint(dot(float2(256, 1), u)); }
+uint2 dec(half4 u) { return uint2(dec(u.xy), dec(u.zw)); }
+bool valid(uint2 p) { return all(p < (1 << 14)); }
+static const uint2 p_none = (1 << 15) - 1;
+
+Texture2D prev : register(t0);
+cbuffer constant0 : register(b0) {
+	float2 size_f;
+	float step_len_f;
+};
+static const uint2 size = uint2(size_f);
+static const int step_len = int(step_len_f);
+
+float4 dist_step(float4 pos : SV_Position) : SV_Target
+{
+	const uint2 p0 = int2(pos.xy);
+
+	uint2 p_min = p_none;
+	int len_sq_min = dot(p_none, p_none);
+	[unroll] for (int j = -1; j <= 1; j++) {
+		[unroll] for (int i = -1; i <= 1; i++) {
+			const uint2 p1 = p0 + int2(i, j) * step_len;
+			if (any(p1 >= size)) continue;
+
+			const uint2 p = dec(prev[p1]);
+			if (!valid(p)) continue;
+
+			const int2 dp = p - p0;
+			const int len_sq = dot(dp, dp);
+			if (len_sq >= len_sq_min) continue;
+
+			p_min = p;
+			len_sq_min = len_sq;
+		}
+	}
+
+	return enc(p_min);
+}
+
+]]
+--[[pixelshader@dist_fin:
+half2 enc(uint p) { return half2(p >> 8, p & 0xff); }
+half4 enc(uint2 p) { return half4(enc(p.x), enc(p.y)); }
+uint dec(half2 u) { return uint(dot(float2(256, 1), u)); }
+uint2 dec(half4 u) { return uint2(dec(u.xy), dec(u.zw)); }
+bool valid(uint2 p) { return all(p < (1 << 14)); }
+static const uint2 p_none = (1 << 15) - 1;
+
+Texture2D prev : register(t0);
+Texture2D src : register(t1);
+cbuffer constant0 : register(b0) {
+	float2 size_f, offset_f;
+};
+static const uint2 size = uint2(size_f),
+	offset = uint2(offset_f);
+
+float4 dist_fin(float4 pos : SV_Position) : SV_Target
+{
+	const uint2 p0 = int2(pos.xy);
+
+	uint2 p_min = p_none;
+	int len_sq_min = dot(p_none, p_none);
+	[unroll] for (int yi = -1; yi <= 1; yi++) {
+		[unroll] for (int xi = -1; xi <= 1; xi++) {
+			const uint2 p1 = p0 + int2(xi, yi);
+			if (any(p1 >= size)) continue;
+
+			const uint2 p = dec(prev[p1]);
+			if (!valid(p)) continue;
+
+			const int2 dp = p - p0;
+			const int len_sq = dot(dp, dp);
+			if (len_sq >= len_sq_min) continue;
+
+			p_min = p;
+			len_sq_min = len_sq;
+		}
+	}
+
+	p_min -= offset;
+	float4 col = 0;
+	[unroll] for (yi = -1; yi <= 1; yi++) {
+		[unroll] for (int xi = -1; xi <= 1; xi++) {
+			const float wt = (2 - abs(xi)) * (2 - abs(yi));
+			col += wt * src.Load(int3(p_min + uint2(xi, yi), 0));
+		}
+	}
+	return float4(col.a > 0 ? col.rgb / col.a : 0, sqrt(len_sq_min));
+}
+
+]]
+--[[computeshader@convol:
+Texture2D src : register(t0);
+RWTexture2D<half4> dst : register(u0);
+cbuffer constant0 : register(b0) {
+	float2 dst_size_f;
+	float span_i_f, span_f, inv_span;
+};
+static const uint2 dst_size = uint2(dst_size_f);
+static const uint span_i = uint(span_i_f);
+int quantize(float v)
+{
+	return int(round((1 << 7) * v));
+}
+[numthreads(1, 64, 1)]
+void convol(uint2 id : SV_DispatchThreadID)
+{
+	if (id.y >= dst_size.x) return;
+	uint dst_x = dst_size.x - 1 - id.y;
+
+	int sum = 0;
+	for (uint x = 0; x < dst_size.y; x++) {
+		const float4 c = src.Load(int3(x, id.y, 0));
+		const float a0 = src.Load(int3(x - span_i, id.y, 0)).a;
+		dst[uint2(dst_x, x)] = float4(c.rgb,
+			inv_span * (sum + span_f * c.a));
+		sum += quantize(c.a) - quantize(a0);
+	}
+}
+
+]]
+--[[pixelshader@put_col:
+Texture2D src : register(t0);
+Texture2D map : register(t1);
+cbuffer constant0 : register(b0) {
+	float4 color[2];
+	float2 size_f, ofs_src_f, ofs_map_f, blur;
+	float alpha_back, alpha_fore, col_blur;
+};
+static const uint2 size = uint2(size_f);
+static const int2
+	ofs_src = int2(ofs_src_f),
+	ofs_map = int2(ofs_map_f);
+
+float4 put_col(float4 pos : SV_Position) : SV_Target
+{
+	const int2 pt0 = int2(pos.xy) - ofs_map;
+	const float4 c_fore = src.Load(int3(int2(pos.xy) - ofs_src, 0));
+	const float d_len = map[pt0].a;
+	const float a = saturate((blur.x - d_len) * blur.y);
+	const float4 c_fill = lerp(color[0], color[1], saturate(d_len / blur.x));
+
+	const float L = a > 0 && c_fill.a < 1 ? col_blur * (sqrt(d_len + 1) - 1) : 0,
+		wt_rate = -3 / ((L + 1) * (L + 1));
+	const int N = ceil(L);
+	float4 c_back = 0;
+	for (int yi = -N; yi <= N; yi++) {
+		for (int xi = -N; xi <= N; xi++) {
+			const uint2 pt = pt0 + uint2(xi, yi);
+			if (any(pt >= size)) continue;
+
+			const float wt = exp(wt_rate * (xi * xi + yi * yi));
+			c_back += wt * float4(map[pt].rgb, 1);
+		}
+	}
+	c_back.rgb /= c_back.a;
+	c_back.rgb = c_fill.rgb + (1 - c_fill.a) * c_back.rgb;
+	c_back.a = max(a - c_fore.a, 0); c_back.rgb *= c_back.a;
+
+	return alpha_fore * c_fore + alpha_back * c_back;
+}
+
+]]
+local obj, math, tonumber, type, bit_band = obj, math, tonumber, type, bit.band;
+
+--#region PI / normalize parameters / further calculations.
+
+-- take parameters.
+local function as_bool(pi_value, gui_value)
+	if type(pi_value) == "boolean" then return pi_value;
+	elseif type(pi_value) == "number" then return pi_value ~= 0;
+	else return gui_value end
+end
+thick = tonumber(PI.thick) or thick;
+blur = tonumber(PI.blur) or blur;
+col_blur = tonumber(PI.col_blur) or col_blur;
+threshold = tonumber(PI.threshold) or threshold;
+fixed_size = as_bool(PI.fixed_size, fixed_size);
+color = tonumber(PI.color) or color;
+col_alpha = tonumber(PI.col_alpha) or col_alpha;
+if PI.color_outer == false then color_outer = nil;
+else color_outer = tonumber(PI.color_outer) or color_outer end
+col_alpha_outer = tonumber(PI.col_alpha_outer) or col_alpha_outer;
+alpha = tonumber(PI.alpha) or alpha;
+front_alpha = tonumber(PI.front_alpha) or front_alpha;
+mollify = tonumber(PI.mollify) or mollify;
+
+-- normalize paramters.
+thick = math.min(math.max(thick, 0), 500);
+blur = math.min(math.max(blur / 100, 0), 1);
+col_blur = math.min(math.max(col_blur / 100, 0), 1);
+threshold = math.min(math.max(threshold / 100, 2 ^ -24), 1 - 2 ^ -13);
+fixed_size = fixed_size or obj.getinfo("filter");
+color = math.floor(color) % 2 ^ 24;
+col_alpha = math.min(math.max(col_alpha / 100, 0), 1);
+if color_outer then
+	color_outer = math.floor(color_outer) % 2 ^ 24;
+	col_alpha_outer = math.min(math.max(col_alpha_outer / 100, 0), 1);
+else color_outer, col_alpha_outer = color, col_alpha end
+alpha = math.min(math.max(1 - alpha / 100, 0), 1);
+front_alpha = math.min(math.max(1 - front_alpha / 100, 0), 1);
+mollify = math.min(math.max(mollify / 100, 0), 1);
+
+-- further calculations.
+local mollify_size = mollify * thick;
+local thick_i, mollify_size_i = fixed_size and 0 or math.ceil(thick), math.ceil(mollify_size);
+local offset_i = thick_i + mollify_size_i;
+local col_blur_rate = (col_blur / ((thick + 12) / 1024)) ^ 0.5;
+local col1_r, col1_g, col1_b =
+	bit_band(color, 0xff0000) / 0xff0000,
+	bit_band(color, 0x00ff00) / 0x00ff00,
+	bit_band(color, 0x0000ff) / 0x0000ff;
+col1_r, col1_g, col1_b = col_alpha * col1_r, col_alpha * col1_g, col_alpha * col1_b;
+local col2_r, col2_g, col2_b =
+	bit_band(color_outer, 0xff0000) / 0xff0000,
+	bit_band(color_outer, 0x00ff00) / 0x00ff00,
+	bit_band(color_outer, 0x0000ff) / 0x0000ff;
+col2_r, col2_g, col2_b = col_alpha_outer * col2_r, col_alpha_outer * col2_g, col_alpha_outer * col2_b;
+if col_alpha >= 1 and col_alpha_outer >= 1 then col_blur = 0 end
+
+--#endregion PI / normalize parameters / further calculations.
+
+-- early return.
+if thick <= 0 or alpha <= 0 then
+	if front_alpha < 1 then
+		if front_alpha > 0 then
+			obj.pixelshader("const_value", "object", nil, {
+				0, 0, 0, front_alpha
+			}, "mask");
+		else obj.clearbuffer("object") end
+	end
+	if thick > 0 then
+		obj.effect("領域拡張", "上", thick_i, "下", thick_i, "左", thick_i, "右", thick_i);
+	end
+	return;
+end
+
+-- create reposition map.
+local w, h = obj.w, obj.h;
+local W, H = w + 2 * offset_i, h + 2 * offset_i;
+local cache_tmp, cache_map = "cache:ColoredCollar_S/tmp1", "cache:ColoredCollar_S/tmp2";
+obj.clearbuffer(cache_tmp, W, H); obj.clearbuffer(cache_map, W, H);
+obj.pixelshader("dist_init", cache_map, "object", { offset_i, offset_i, threshold });
+for i = math.ceil(math.max(math.log(math.max(W, H) / 2, 2), -1)), 0, -1 do
+	obj.pixelshader("dist_step", cache_tmp, cache_map, { W, H; 2 ^ i; });
+	cache_tmp, cache_map = cache_map, cache_tmp;
+end
+obj.pixelshader("dist_fin", cache_tmp, { cache_map, "object" }, { W, H; offset_i, offset_i; });
+cache_tmp, cache_map = cache_map, cache_tmp;
+
+-- mollify the distance part.
+if mollify > 0 then
+	local dim1, dim2, span_i, span_f, inv_span = H, W,
+		mollify_size_i - 1, 2 ^ 7 * (mollify_size - mollify_size_i + 1),
+		2 ^ -7 / mollify_size;
+	if dim1 ~= dim2 then obj.clearbuffer(cache_tmp, dim1, dim2) end
+	for _ = 1, 4 do
+		obj.computeshader("convol", cache_tmp, cache_map, {
+			dim1, dim2; span_i, span_f, inv_span;
+		}, 1, math.ceil(dim1 / 64), 1);
+		cache_tmp, cache_map = cache_map, cache_tmp;
+		dim1, dim2 = dim2, dim1;
+	end
+	obj.clearbuffer(cache_tmp, W - 2 * mollify_size_i, H - 2 * mollify_size_i);
+end
+
+-- put color to the destination.
+obj.pixelshader("put_col", cache_tmp, { "object", cache_map }, {
+	col1_r, col1_g, col1_b, col_alpha;
+	col2_r, col2_g, col2_b, col_alpha_outer;
+	W, H; thick_i, thick_i; -mollify_size_i, -mollify_size_i;
+	thick, 1 / math.max(thick * blur, blur > 0 and 1 or 2 ^ -8);
+	alpha, front_alpha; col_blur_rate;
+});
+assert(obj.copybuffer("object", cache_tmp));
+

@@ -1,0 +1,5 @@
+AutoLyricAnimation_K by Korarei
+licence: MIT
+from: https://github.com/korarei/AviUtl2_AutoLyricAnimation_K_Script/releases/download/v1.0.1/AutoLyricAnimation_K_v1.0.1.zip (tag v1.0.1, commit c9912c9fa7ab)
+page: https://github.com/korarei/AviUtl2_AutoLyricAnimation_K_Script
+Put here unchanged for Motolii (filament/aviutl_scripts).

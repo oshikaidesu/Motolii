@@ -1,0 +1,5 @@
+LyricMotioN by 猫愛
+licence: MIT
+from: https://github.com/nea-c/aviutl2_script_LyricMotioN/releases/download/r5/LyricMotioN.zip (tag r5, commit 9ea80f8b8b56)
+page: https://github.com/nea-c/aviutl2_script_LyricMotioN
+Put here unchanged for Motolii (filament/aviutl_scripts).

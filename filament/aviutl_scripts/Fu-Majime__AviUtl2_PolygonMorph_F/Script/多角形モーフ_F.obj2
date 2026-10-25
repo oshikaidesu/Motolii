@@ -1,0 +1,458 @@
+--information:多角形モーフ_F v1.0 by Fu-Majime
+--label:カスタムオブジェクト
+--group:図形
+--track@vertices:頂点数,3,100,3,1
+--track@size:サイズ,0,4000,100,1
+--track@line:ライン幅,0,4000,4000,0.01
+--color@color:色,0xffffff
+--color@color_back:背景色,0xffffff
+--track@alpha_back:背景透明度,0,100,100,0.01
+--track@radius:角半径,0,2000,20,0.01
+--select@corner_type:角タイプ=1,谷優先=0,先端優先=1
+--track@star:星型歪み[%],0,100,0,0.01
+--group
+--group:モーフィング
+--select@morph_type:補間方法=0,回転=0,直線=1
+--track@correction:回転補正[%],-200,200,100,0.01
+--trackgroup@vertices,correction:モーフィングパラメータ
+--group
+--group:その他,false
+--value@PI:PI,{}
+
+--[[pixelshader@psmain:
+cbuffer constant0 : register(b0) {
+    float2 center;
+    float rotation1;
+    float rotation2;
+    float n_gon;
+    float m_add;
+    float morph_t;
+    float morph_type;
+    float4 color1;
+    float4 color2;
+    float circumradius;
+    float rounding_r;
+    float line_width;
+    float star_warp;
+    float corner_type;
+};
+
+static const float PI = 3.14159265359;
+static const float TAU = 6.28318530718;
+
+bool checkWinding(float2 p, float2 vA, float2 vB) {
+    float2 e = vB - vA;
+    bool cond1 = (vA.y <= p.y && p.y < vB.y && e.x * (p.y - vA.y) > e.y * (p.x - vA.x));
+    bool cond2 = (vB.y <= p.y && p.y < vA.y && e.x * (p.y - vA.y) < e.y * (p.x - vA.x));
+    return cond1 || cond2;
+}
+
+float getMorphedIndex(float idx, float n, float m_add) {
+    if (m_add <= 0.0) return idx;
+    float q = floor(m_add / n) + 1.0;
+    float rem = m_add - floor(m_add / n) * n;
+    if (rem <= 0.0) return idx / q;
+
+    float rem_p = floor(rem * 0.5);
+    bool m_lucky = (rem - 2.0 * rem_p) > 0.5;
+
+    float m = floor(n * 0.5);
+    
+    float b1 = rem_p * (q + 1.0);
+    float b2 = b1 + max(0.0, m - rem_p) * q;
+    float b3 = b2 + (m_lucky ? (q + 1.0) : q);
+    float b4 = b3 + max(0.0, n - rem_p - 1.0 - m) * q;
+    
+    if (idx < b1) {
+        float j = floor(idx / (q + 1.0));
+        return j + (idx - j * (q + 1.0)) / (q + 1.0);
+    } else if (idx < b2) {
+        float idx_rel = idx - b1;
+        float j = rem_p + floor(idx_rel / q);
+        return j + (idx_rel - (j - rem_p) * q) / q;
+    } else if (idx < b3) {
+        float idx_rel = idx - b2;
+        float q_m = m_lucky ? (q + 1.0) : q;
+        return m + idx_rel / q_m;
+    } else if (idx < b4) {
+        float idx_rel = idx - b3;
+        float j = m + 1.0 + floor(idx_rel / q);
+        return j + (idx_rel - (j - (m + 1.0)) * q) / q;
+    } else {
+        float idx_rel = idx - b4;
+        float j = n - rem_p + floor(idx_rel / (q + 1.0));
+        return j + (idx_rel - (j - (n - rem_p)) * (q + 1.0)) / (q + 1.0);
+    }
+}
+
+float2 getStarPerim(float idx, float r, float n, float s_f, float rot) {
+    float j = floor(idx + 0.0001);
+    float f = idx - j;
+    
+    float a1 = (j * TAU / n) + rot;
+    float a2 = ((j + 1.0) * TAU / n) + rot;
+    
+    float2 v1 = r * float2(cos(a1), sin(a1));
+    float2 v2 = r * float2(cos(a2), sin(a2));
+    
+    float mid_angle = (a1 + a2) * 0.5;
+    float2 mid = r * cos(PI / n) * (1.0 - s_f * 0.01) * float2(cos(mid_angle), sin(mid_angle));
+    
+    if (f < 0.5) return lerp(v1, mid, f * 2.0);
+    return lerp(mid, v2, (f - 0.5) * 2.0);
+}
+
+float getSymmetricParent(float i, float n, float q, float rem_p, bool l0) {
+    float c0 = l0 ? (q + 1.0) : q;
+    if (i < c0) return 0.0;
+    float i_rel = i - c0;
+    float b1_rel = rem_p * (q + 1.0);
+    if (i_rel < b1_rel) return 1.0 + floor(i_rel / (q + 1.0));
+    i_rel -= b1_rel;
+    float b2_rel = (n - 1.0 - 2.0 * rem_p) * q;
+    if (i_rel < b2_rel) return 1.0 + rem_p + floor(i_rel / q);
+    i_rel -= b2_rel;
+    return 1.0 + rem_p + (n - 1.0 - 2.0 * rem_p) + floor(i_rel / (q + 1.0));
+}
+
+float2 getMorphedPoint(float k, float N_total, float n, float m, float t_norm, float rot1, float rot2, float star_warp, float morph_type, float r) {
+    float idx = k * 0.5;
+    
+    if (morph_type < 0.5) {
+        // 回転補間モード
+        float i_f = floor(idx);
+        bool is_mid = (idx - i_f) > 0.25;
+
+        float q = floor(N_total / n);
+        float rem = N_total - q * n;
+        float rem_p = floor(rem * 0.5);
+        bool l0 = (rem - 2.0 * rem_p) > 0.5;
+
+        float i_a = getSymmetricParent(i_f, n, q, rem_p, l0);
+        float a1_b = (i_f * TAU / N_total) + rot2;
+        
+        if (!is_mid) {
+            float a1_a = (i_a * TAU / n) + rot1;
+            if (a1_b - a1_a > PI) a1_a += TAU;
+            if (a1_a - a1_b > PI) a1_b += TAU;
+            float angle = lerp(a1_a, a1_b, t_norm);
+            return r * float2(cos(angle), sin(angle));
+        } else {
+            float i_a_next = getSymmetricParent(floor(i_f + 1.01), n, q, rem_p, l0);
+            if (i_a_next >= n) i_a_next -= n;
+            float a2_a = (i_a_next * TAU / n) + rot1;
+            float a2_b = ((i_f + 1.0) * TAU / N_total) + rot2;
+            float a1_a = (i_a * TAU / n) + rot1;
+            
+            if (a1_b - a1_a > PI) a1_a += TAU;
+            if (a1_a - a1_b > PI) a1_b += TAU;
+            if (a2_b - a2_a > PI) a2_a += TAU;
+            if (a2_a - a2_b > PI) a2_b += TAU;
+            
+            float angle_start = lerp(a1_a, a1_b, t_norm);
+            float angle_end   = lerp(a2_a, a2_b, t_norm);
+            
+            float2 v_start = r * float2(cos(angle_start), sin(angle_start));
+            float2 v_end   = r * float2(cos(angle_end), sin(angle_end));
+            
+            float s_f = 1.0 - star_warp * 0.01;
+            float s_f_eff = (i_a == i_a_next) ? lerp(1.0, s_f, t_norm) : s_f;
+            return (v_start + v_end) * 0.5 * s_f_eff;
+        }
+    } else {
+        // 直線補間モード
+        float2 s = getStarPerim(getMorphedIndex(idx, n, m), r, n, star_warp, rot1);
+        float2 t_p = getStarPerim(idx, r, N_total, star_warp, rot2);
+        return lerp(s, t_p, t_norm);
+    }
+}
+
+float sdStarRegular(float2 p, float r, float n, float s_f, float rot) {
+    if (r < 1e-3) return length(p);
+
+    float rad = radians(rot - 90.0);
+    float c_rot = cos(rad), s_rot = sin(rad);
+    p = float2(p.x * c_rot + p.y * s_rot, -p.x * s_rot + p.y * c_rot);
+    
+    float a_step = PI / n;
+    float sector = floor((atan2(p.y, p.x) + a_step) / (2.0 * a_step));
+    float r_a = sector * 2.0 * a_step;
+    
+    float cs = cos(r_a), ss = sin(r_a);
+    p = float2(
+        p.x * cs + p.y * ss,
+       -p.x * ss + p.y * cs
+    );
+    p.y = abs(p.y);
+    
+    float s_rf = cos(a_step) * (1.0 - s_f * 0.01);
+    float2 v0 = float2(r, 0.0);
+    float2 v1 = r * s_rf * float2(cos(a_step), sin(a_step));
+    
+    float2 edge = v1 - v0;
+    float2 p_rel = p - v0;
+    
+    float d2 = dot(edge, edge);
+    float h = (d2 > 1e-6) ? max(dot(p_rel, edge) / d2, 0.0) : 0.0;
+    
+    float dist = length(p_rel - edge * h);
+    float2 edge_normal = float2(-edge.y, edge.x);
+    
+    return dist * -sign(dot(p_rel, edge_normal));
+}
+
+float sdMorphedStar(float2 p, float r, float n, float m, float t) {
+    if (r < 1e-3) return length(p);
+
+    float N_total = n + m;
+    float t_norm = t * 0.01;
+    float rot1 = radians(rotation1 - 90.0);
+    float rot2 = radians(rotation2 - 90.0);
+    
+    float d = 1e38;
+    float winding_sign = 1.0;
+    
+    int num_points = int(N_total * 2.0);
+    
+    float2 p_prev = getMorphedPoint((float)(num_points - 1), N_total, n, m, t_norm, rot1, rot2, star_warp, morph_type, r);
+    float2 p_curr = getMorphedPoint(0.0, N_total, n, m, t_norm, rot1, rot2, star_warp, morph_type, r);
+    float2 p_next = getMorphedPoint(1.0, N_total, n, m, t_norm, rot1, rot2, star_warp, morph_type, r);
+    
+    for (int k = 0; k < 400; k++) {
+        if (k >= num_points) break;
+        
+        float p_nn_idx = (float)(k + 2);
+        if (p_nn_idx >= (float)num_points) p_nn_idx -= (float)num_points;
+        float2 p_nn = getMorphedPoint(p_nn_idx, N_total, n, m, t_norm, rot1, rot2, star_warp, morph_type, r);
+
+        float2 e_seg = p_next - p_curr;
+        float len_seg_sq = dot(e_seg, e_seg);
+        if (len_seg_sq > 1e-10) {
+            float2 pa = p - p_curr;
+            float h = clamp(dot(pa, e_seg) / len_seg_sq, 0.0, 1.0);
+            d = min(d, length(pa - e_seg * h));
+        }
+        
+        float2 e_in = p_curr - p_prev;
+        float2 e_out = p_next - p_curr;
+        float len_in = length(e_in);
+        float len_out = length(e_out);
+        
+        if (len_in > 1e-5 && len_out > 1e-5) {
+            float cross_z = e_in.x * e_out.y - e_in.y * e_out.x;
+            if (cross_z < -1e-4) { // 確実に谷である
+                
+                float2 v_to_p = p - p_curr;
+                float cos_theta = dot(-e_in / len_in, e_out / len_out);
+                float sin_half = sqrt(max(1.0 - cos_theta, 1e-4) / 2.0);
+                float miter_limit = (line_width + 5.0) / sin_half;
+                
+                float max_miter = min(miter_limit, line_width * 5.0 + 10.0);
+                
+                if (dot(v_to_p, e_in) > 0.0 && dot(v_to_p, e_out) < 0.0 && dot(v_to_p, v_to_p) < max_miter * max_miter) {
+                    
+                    float2 n_in = float2(-e_in.y, e_in.x) / len_in;
+                    float2 n_out = float2(-e_out.y, e_out.x) / len_out;
+                    
+                    float d_line_in = abs(dot(v_to_p, n_in));
+                    float d_line_out = abs(dot(v_to_p, n_out));
+                    float miter_d = max(d_line_in, d_line_out);
+                    
+                    d = min(d, miter_d);
+                }
+            }
+        }
+        
+        if (checkWinding(p, p_curr, p_next)) winding_sign *= -1.0;
+        
+        p_prev = p_curr;
+        p_curr = p_next;
+        p_next = p_nn;
+    }
+    
+    return d * winding_sign;
+}
+
+float4 psmain(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy - center;
+    
+    float N_eff = n_gon + m_add * (morph_t * 0.01);
+    float a_step = PI / N_eff;
+    float s_rf = cos(a_step) * (1.0 - star_warp * 0.01);
+    float k_denom = sqrt(max(1e-6, 1.0 + s_rf * s_rf - 2.0 * s_rf * cos(a_step)));
+    float k = (s_rf * sin(a_step)) / k_denom;
+    
+    float r_lim, r_inner;
+    if (int(corner_type) == 0) {
+        r_lim = min(rounding_r, circumradius * k);
+        r_inner = max(0.0, (circumradius * k - r_lim) / k);
+    } else {
+        r_lim = min(rounding_r, circumradius);
+        r_inner = max(0.0, circumradius - r_lim);
+    }
+    float sd = (m_add == 0.0 && morph_t == 0.0) 
+        ? sdStarRegular(p, r_inner, n_gon, star_warp, rotation1) 
+        : sdMorphedStar(p, r_inner, n_gon, m_add, morph_t);
+        
+    float d = sd - r_lim;
+    float mask_outer = saturate(0.5 - d);
+    
+    if (line_width >= circumradius * 2.0) {
+        return color1 * mask_outer;
+    }
+    
+    float mask_inner = saturate(0.5 - (d + line_width));
+    float4 c_outline = color1 * saturate(mask_outer - mask_inner);
+    float4 c_back = color2 * mask_inner;
+    
+    return c_outline + c_back;
+}
+]]
+
+local obj, math, bit = obj, math, bit
+
+local function get_morph_params()
+    -- 中間点無視などを使用しているか、おかしな方法でチェック
+    local num = obj.getoption("section_num")
+    local is_suspicious = (num % 1 ~= 0)
+    if not is_suspicious then
+        for i = 0, num - 1 do
+            if obj.getvalue("track.vertices", 0, i) % 1 ~= 0 then is_suspicious = true; break end
+        end
+    end
+    if not is_suspicious and obj.getvalue("track.vertices", 0, -1) % 1 ~= 0 then
+        is_suspicious = true
+    end
+
+    local now = obj.time
+    local cur_sec = 0
+    if not is_suspicious then
+        for i = 0, num - 1 do
+            local st = obj.getvalue("time", 0, i)
+            local et = (i == num - 1) and obj.getvalue("time", 0, -1) or obj.getvalue("time", 0, i + 1)
+            if now >= st and now <= et then
+                cur_sec = i
+                break
+            end
+        end
+    end
+
+    local v_s, v_e
+    if is_suspicious then
+        v_s = obj.getvalue("track.vertices", 0, 0)
+        v_e = obj.getvalue("track.vertices", 0, -1)
+    else
+        v_s = obj.getvalue("track.vertices", 0, cur_sec)
+        v_e = (cur_sec == num - 1) and obj.getvalue("track.vertices", 0, -1) or obj.getvalue("track.vertices", 0, cur_sec + 1)
+    end
+
+    local start_n = math.floor(v_s + 0.5)
+    local end_n = math.floor(v_e + 0.5)
+    local n_gon = math.floor(math.min(start_n, end_n) + 0.5)
+    local n_target = math.floor(math.max(start_n, end_n) + 0.5)
+    local m_add = n_target - n_gon
+    local is_reversed = (start_n > end_n)
+    local morph_t = 0
+    if m_add > 0 then
+        morph_t = (vertices - n_gon) / m_add * 100
+    end
+    -- correction も vertices と同じく、変な処理をしているが正直うまくいってない
+    local c_t = correction
+    local c_s, c_e
+    if is_suspicious then
+        c_s = obj.getvalue("track.correction", 0, 0)
+        c_e = obj.getvalue("track.correction", 0, -1)
+    else
+        c_s = obj.getvalue("track.correction", 0, cur_sec)
+        c_e = (cur_sec == num - 1) and obj.getvalue("track.correction", 0, -1) or obj.getvalue("track.correction", 0, cur_sec + 1)
+    end
+
+    if m_add == 0 then
+        local rot = -(360 / n_gon) * (c_t / 100)
+        return n_gon, m_add, morph_t, n_target, rot, rot, c_t, cur_sec
+    end
+
+    local safe_start = (start_n >= 1) and start_n or 1
+    local safe_end = (end_n >= 1) and end_n or 1
+    local rot1 = -(360 / safe_start) * (c_s / 100)
+    local rot2 = -(360 / safe_end) * (c_e / 100)
+
+    if is_reversed then
+        local tmp = rot1
+        rot1 = rot2
+        rot2 = tmp
+    end
+    
+    return n_gon, m_add, morph_t, n_target, rot1, rot2, c_t, cur_sec
+end
+
+local function get_rgba(c, a)
+    return bit.band(bit.rshift(c, 16), 0xff) / 255 * a,
+           bit.band(bit.rshift(c, 8), 0xff) / 255 * a,
+           bit.band(c, 0xff) / 255 * a,
+           a
+end
+
+local function build_morph_type_accessor(src)
+    if type(src) == "table" then
+        local tbl = {}
+        for i = 1, #src do
+            tbl[i] = tonumber(src[i]) or src[i]
+        end
+        return function(idx)
+            if not idx then return tbl[1] end
+            return tbl[idx] or tbl[#tbl]
+        end, tbl
+    else
+        local v = tonumber(src) or src
+        return function(idx) return v end, {v}
+    end
+end
+
+local function main()
+    vertices = tonumber(PI.vertices) or vertices
+    correction = tonumber(PI.correction) or correction
+
+    local current_size = tonumber(PI.size) or size
+    local current_color = tonumber(PI.color) or color
+    local current_color_back = tonumber(PI.color_back) or color_back
+    local current_alpha_back = tonumber(PI.alpha_back) or alpha_back
+    local current_radius = tonumber(PI.radius) or radius
+    local current_line = tonumber(PI.line) or line
+    local current_star = tonumber(PI.star) or star
+    local current_corner_type = tonumber(PI.corner_type) or corner_type
+
+    local morph_type_src = PI.morph_type or morph_type
+    local morph_getter, morph_table = build_morph_type_accessor(morph_type_src)
+    local n_gon, m_add, morph_t, n_target, rot1, rot2, correction_t, cur_sec = get_morph_params()
+    
+    rot1 = tonumber(PI.rot1) or rot1
+    rot2 = tonumber(PI.rot2) or rot2
+    morph_t = tonumber(PI.morph_t) or morph_t
+
+    local chosen_morph_type = morph_getter((cur_sec or 0) + 1)
+
+    local c_r = current_size / 2
+    local c_m = current_color
+    local c_b = current_color_back
+    local a_b = 1.0 - current_alpha_back / 100
+
+    local r1, g1, b1, a1 = get_rgba(c_m, 1.0)
+    local r2, g2, b2, a2 = get_rgba(c_b, a_b)
+
+    local width = math.ceil(current_size + 4)
+    if width <= 0 then return end
+
+    obj.setoption("drawtarget", "tempbuffer", width, width)
+    obj.pixelshader("psmain", "tempbuffer", nil, {
+        width / 2, width / 2, rot1, rot2,
+        n_gon, m_add, morph_t, chosen_morph_type,
+        r1, g1, b1, a1, r2, g2, b2, a2,
+        c_r, current_radius, current_line, current_star,
+        current_corner_type
+    })
+    obj.load("tempbuffer")
+end
+
+-- メイン処理実行
+main()

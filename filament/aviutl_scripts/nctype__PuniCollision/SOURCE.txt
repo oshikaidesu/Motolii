@@ -1,0 +1,6 @@
+PuniCollision by nctype
+licence: MIT
+from: https://github.com/nctype/aviutl2_script_PuniCollision/releases/download/v0.7.5/PuniCollision_v0.7.5.au2pkg.zip (tag v0.7.5, commit 88a1bfd0f4fe)
+page: https://github.com/nctype/aviutl2_script_PuniCollision
+licence/README from: https://github.com/nctype/aviutl2_script_PuniCollision at v0.7.5
+Put here unchanged for Motolii (filament/aviutl_scripts).

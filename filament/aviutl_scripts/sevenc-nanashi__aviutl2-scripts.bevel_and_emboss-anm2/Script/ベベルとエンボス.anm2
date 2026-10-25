@@ -1,0 +1,1105 @@
+--label:加工
+
+-- ========================================================================================================================
+-- 最新版をダウンロード：https://aviutl2-scripts-download.sevenc7c.workers.dev/%E3%83%99%E3%83%99%E3%83%AB%E3%81%A8%E3%82%A8%E3%83%B3%E3%83%9C%E3%82%B9.anm2
+-- 説明書をブラウザで読む：https://github.com/sevenc-nanashi/aviutl2-scripts/blob/main/scripts/%E3%83%99%E3%83%99%E3%83%AB%E3%81%A8%E3%82%A8%E3%83%B3%E3%83%9C%E3%82%B9/README.md
+--
+-- 輪郭に光と影を付け、ベベル・エンボスを作るスクリプト。
+--
+-- [ 謝辞 ]
+--   gometh様の「ベベルとエンボス」と、Mr-Ojii様の[Bevel_And_Emboss_M](https://github.com/Mr-Ojii/AviUtl-Bevel_And_Emboss_M-Script)を基に、AviUtl2向けに移植しました。
+--
+-- [ 設定 ]
+--   - **α閾値**：輪郭とみなす不透明度。1～254、初期値206。
+--   - **幅**：ベベルの幅。エンボスとピローでは内外それぞれに半分の幅を使います。0で無効。
+--   - **角度・高度**：光の方向と陰影の強さ。高度90度で陰影が消えます。
+--   - **形状**：ベベル（外側）・ベベル（内側）・エンボス・ピローエンボス。
+--   - **出力**：通常合成・直接描画・ハイライトのみ・シャドウのみ。
+--   - **ぼかし**：作成したハイライト・シャドウのぼかし。
+--   - **参照輪郭ぼかし**：輪郭を抽出する前のぼかし。元画像自体はぼかしません。
+--   - **ハイライト・シャドウ**：色・合成モード・不透明度。不透明度は単独出力にも反映します。合成モードは通常合成・直接描画で使用します。
+--   - **背景色**：外側ベベル・エンボス・ピローの通常合成で使用します。
+--
+-- [ 出力と互換性 ]
+--   輪郭からの距離はGPUのJump Flooding（JFA+1）で近似します。
+--
+-- [ PI ]
+--   - `threshold`：α閾値（1～254）
+--   - `width`：幅
+--   - `angle`：角度（度）
+--   - `elevation`：高度（度）
+--   - `shape`：形状（0：外側ベベル、1：内側ベベル、2：エンボス、3：ピローエンボス）
+--   - `output`：出力（0：通常合成、1：直接描画、2：ハイライトのみ、3：シャドウのみ）
+--   - `blur`：ぼかし
+--   - `preblur`：参照輪郭ぼかし
+--   - `highlight_color`：ハイライトの色（0xRRGGBB）
+--   - `highlight_blend`：ハイライトの合成モード（選択肢と同じ0～12）
+--   - `highlight_opacity`：ハイライトの不透明度（%）
+--   - `shadow_color`：シャドウの色（0xRRGGBB）
+--   - `shadow_blend`：シャドウの合成モード（選択肢と同じ0～12）
+--   - `shadow_opacity`：シャドウの不透明度（%）
+--   - `background_color`：背景色（0xRRGGBB）
+--
+-- --< 更新履歴 >----------------------------------------------------------------------------------------------------------
+--
+-- [ v1.0（2026/9/28） ]
+--   - 初版リリース
+--
+-- ========================================================================================================================
+
+-- Based on Bevel_And_Emboss_M by Mr-Ojii and the original script by gometh.
+-- MIT License
+--
+-- Copyright (c) 2022-2025 Mr-Ojii
+--
+-- Permission is hereby granted, free of charge, to any person obtaining a copy
+-- of this software and associated documentation files (the "Software"), to deal
+-- in the Software without restriction, including without limitation the rights
+-- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+-- copies of the Software, and to permit persons to whom the Software is
+-- furnished to do so, subject to the following conditions:
+--
+-- The above copyright notice and this permission notice shall be included in all
+-- copies or substantial portions of the Software.
+--
+-- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+-- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+-- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+-- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+-- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+-- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+-- SOFTWARE.
+
+
+--track@threshold:α閾値,1,254,206,1
+--track@width:幅,0,150,20,0.1
+--track@angle:角度,-360,360,60,0.1
+--track@elevation:高度,0,90,0,0.1
+--select@shape:形状=1,ベベル（外側）=0,ベベル（内側）=1,エンボス=2,ピローエンボス=3
+--select@output:出力=0,通常合成=0,直接描画=1,ハイライトのみ=2,シャドウのみ=3
+--track@blur:ぼかし,0,100,0,0.1
+--track@preblur:参照輪郭ぼかし,0,100,2,0.1
+--group:ハイライト
+--color@highlight_color:ハイライト::色,0xFFFFFF
+--select@highlight_blend:ハイライト::合成モード=4,通常=0,加算=1,減算=2,乗算=3,スクリーン=4,オーバーレイ=5,比較（明）=6,比較（暗）=7,輝度=8,色差=9,陰影=10,明暗=11,差分=12
+--track@highlight_opacity:ハイライト::不透明度,0,100,100,0.1
+--group:シャドウ
+--color@shadow_color:シャドウ::色,0x000000
+--select@shadow_blend:シャドウ::合成モード=3,通常=0,加算=1,減算=2,乗算=3,スクリーン=4,オーバーレイ=5,比較（明）=6,比較（暗）=7,輝度=8,色差=9,陰影=10,明暗=11,差分=12
+--track@shadow_opacity:シャドウ::不透明度,0,100,100,0.1
+--group
+--color@background_color:背景色,0x808080
+--value@PI:PI,{}
+--[[pixelshader@bevel_seed:
+Texture2D<float4> tex0 : register(t0);
+Texture2D<float4> tex1 : register(t1);
+Texture2D<float4> tex2 : register(t2);
+
+cbuffer Params : register(b0) {
+  float threshold;
+  float bevelWidth;
+  float jumpStep;
+  float shape;
+  float lightX;
+  float lightY;
+  float strength;
+  float outputMode;
+  float red;
+  float green;
+  float blue;
+  float shadow;
+  float opacity;
+};
+
+// Two bytes per component, relative to the current pixel, at 1/64 pixel precision.
+// Values survive both UNORM8 and float16 image buffers; zero means no seed.
+// The supported bevel width (<=150) keeps offsets inside the signed 512-pixel range.
+float4 packOffset(float2 offset) {
+  uint2 value = (uint2)round(offset * 64.0 + 32768.0);
+  return float4(value.x >> 8, value.x & 255, value.y >> 8, value.y & 255) / 255.0;
+}
+
+float2 unpackOffset(float4 value) {
+  float4 bytes = round(value * 255.0);
+  return (float2(bytes.x * 256.0 + bytes.y, bytes.z * 256.0 + bytes.w) - 32768.0) / 64.0;
+}
+
+bool validSeed(float4 value) { return any(value != 0.0); }
+
+float4 bevel_seed(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float a = tex0.Load(int3(p, 0)).a;
+  float left = tex0.Load(int3(p + int2(-1, 0), 0)).a;
+  float right = tex0.Load(int3(p + int2(1, 0), 0)).a;
+  float up = tex0.Load(int3(p + int2(0, -1), 0)).a;
+  float down = tex0.Load(int3(p + int2(0, 1), 0)).a;
+  if (a <= threshold || min(min(left, right), min(up, down)) > threshold) return 0;
+
+  float dx = 0, dy = 0;
+  if (right <= threshold)
+    dx = (a - threshold) / (a - right);
+  else if (left <= threshold)
+    dx = -(a - threshold) / (a - left);
+  if (down <= threshold)
+    dy = (a - threshold) / (a - down);
+  else if (up <= threshold)
+    dy = -(a - threshold) / (a - up);
+  // Same subpixel correction as the source, without division by zero on axial edges.
+  float sum = abs(dx) + abs(dy);
+  return packOffset(sum > 0 ? float2(dx * abs(dx), dy * abs(dy)) / sum : float2(0, 0));
+}
+
+float4 bevel_jump(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  uint w, h;
+  tex0.GetDimensions(w, h);
+  float bestDistance = (bevelWidth + 2.0) * (bevelWidth + 2.0);
+  float4 best = 0;
+  [unroll] for (int y = -1; y <= 1; y++) {
+    [unroll] for (int x = -1; x <= 1; x++) {
+      int2 delta = int2(x, y) * (int)jumpStep;
+      int2 q = p + delta;
+      if (any(q < 0) || q.x >= (int)w || q.y >= (int)h) continue;
+      float4 candidate = tex0.Load(int3(q, 0));
+      if (!validSeed(candidate)) continue;
+      float2 offset = unpackOffset(candidate) + delta;
+      float distanceSquared = dot(offset, offset);
+      if (distanceSquared < bestDistance) {
+        bestDistance = distanceSquared;
+        best = packOffset(offset);
+      }
+    }
+  }
+  return best;
+}
+
+float signedDistance(int2 p) {
+  float4 seed = tex0.Load(int3(p, 0));
+  float distance = validSeed(seed) ? length(unpackOffset(seed)) : bevelWidth + 2.0;
+  return tex1.Load(int3(p, 0)).a > threshold ? -distance : distance;
+}
+
+float4 bevel_shade(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  if (!validSeed(tex0.Load(int3(p, 0)))) return 0;
+  float distance = signedDistance(p);
+  float2 gradient = float2(signedDistance(p + int2(1, 0)) - signedDistance(p - int2(1, 0)),
+                           signedDistance(p + int2(0, 1)) - signedDistance(p - int2(0, 1)));
+  // Central differences span two pixels; preserve cancellation where opposing bevels meet.
+  float gray = dot(gradient / max(length(gradient), 2.0), float2(lightX, lightY)) * strength;
+  return float4(max(gray, 0), max(-gray, 0), saturate(bevelWidth - abs(distance)), distance < 0 ? 1 : 0);
+}
+
+float4 bevel_layer(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float4 field = tex0.Load(int3(p, 0));
+  float originalAlpha = tex1.Load(int3(p, 0)).a;
+  float gray = field.r - field.g;
+  if (shape == 3) gray *= originalAlpha * 2.0 - 1.0;
+  float alpha = max(shadow > 0 ? -gray : gray, 0);
+  if (outputMode == 0) {
+    if (shape == 1)
+      alpha *= field.b;
+    else if (shape >= 2)
+      alpha *= field.b > 0 ? (field.a > 0 ? 1 : field.b) : 0;
+  } else {
+    alpha *= field.b;
+    if (shape == 0) alpha = min(alpha, 1.0 - originalAlpha);
+    if (shape == 1) alpha = min(alpha, originalAlpha);
+  }
+  alpha *= opacity;
+  // AviUtl2 image textures use premultiplied alpha.
+  return float4(float3(red, green, blue) * alpha, alpha);
+}
+
+float4 bevel_base(float4 position : SV_Position) : SV_Target {
+  float4 original = tex0.Load(int3(int2(position.xy), 0));
+  float3 background = float3(red, green, blue);
+  if (shape == 0) return float4(background, 1);
+  if (shape == 1) return float4(original.a > 0 ? original.rgb / original.a : float3(0, 0, 0), 1);
+  return float4(original.rgb + background * (1.0 - original.a), 1);
+}
+
+float4 bevel_finish(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float3 color = tex0.Load(int3(p, 0)).rgb;
+  float4 original = tex1.Load(int3(p, 0));
+  float band = tex2.Load(int3(p, 0)).b;
+  float alpha = shape == 1 ? original.a : max(original.a, band);
+  if (shape == 0) color = original.rgb + color * (1.0 - original.a);
+  return float4(color * alpha, alpha);
+}
+
+]]
+--[[pixelshader@bevel_jump:
+Texture2D<float4> tex0 : register(t0);
+Texture2D<float4> tex1 : register(t1);
+Texture2D<float4> tex2 : register(t2);
+
+cbuffer Params : register(b0) {
+  float threshold;
+  float bevelWidth;
+  float jumpStep;
+  float shape;
+  float lightX;
+  float lightY;
+  float strength;
+  float outputMode;
+  float red;
+  float green;
+  float blue;
+  float shadow;
+  float opacity;
+};
+
+// Two bytes per component, relative to the current pixel, at 1/64 pixel precision.
+// Values survive both UNORM8 and float16 image buffers; zero means no seed.
+// The supported bevel width (<=150) keeps offsets inside the signed 512-pixel range.
+float4 packOffset(float2 offset) {
+  uint2 value = (uint2)round(offset * 64.0 + 32768.0);
+  return float4(value.x >> 8, value.x & 255, value.y >> 8, value.y & 255) / 255.0;
+}
+
+float2 unpackOffset(float4 value) {
+  float4 bytes = round(value * 255.0);
+  return (float2(bytes.x * 256.0 + bytes.y, bytes.z * 256.0 + bytes.w) - 32768.0) / 64.0;
+}
+
+bool validSeed(float4 value) { return any(value != 0.0); }
+
+float4 bevel_seed(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float a = tex0.Load(int3(p, 0)).a;
+  float left = tex0.Load(int3(p + int2(-1, 0), 0)).a;
+  float right = tex0.Load(int3(p + int2(1, 0), 0)).a;
+  float up = tex0.Load(int3(p + int2(0, -1), 0)).a;
+  float down = tex0.Load(int3(p + int2(0, 1), 0)).a;
+  if (a <= threshold || min(min(left, right), min(up, down)) > threshold) return 0;
+
+  float dx = 0, dy = 0;
+  if (right <= threshold)
+    dx = (a - threshold) / (a - right);
+  else if (left <= threshold)
+    dx = -(a - threshold) / (a - left);
+  if (down <= threshold)
+    dy = (a - threshold) / (a - down);
+  else if (up <= threshold)
+    dy = -(a - threshold) / (a - up);
+  // Same subpixel correction as the source, without division by zero on axial edges.
+  float sum = abs(dx) + abs(dy);
+  return packOffset(sum > 0 ? float2(dx * abs(dx), dy * abs(dy)) / sum : float2(0, 0));
+}
+
+float4 bevel_jump(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  uint w, h;
+  tex0.GetDimensions(w, h);
+  float bestDistance = (bevelWidth + 2.0) * (bevelWidth + 2.0);
+  float4 best = 0;
+  [unroll] for (int y = -1; y <= 1; y++) {
+    [unroll] for (int x = -1; x <= 1; x++) {
+      int2 delta = int2(x, y) * (int)jumpStep;
+      int2 q = p + delta;
+      if (any(q < 0) || q.x >= (int)w || q.y >= (int)h) continue;
+      float4 candidate = tex0.Load(int3(q, 0));
+      if (!validSeed(candidate)) continue;
+      float2 offset = unpackOffset(candidate) + delta;
+      float distanceSquared = dot(offset, offset);
+      if (distanceSquared < bestDistance) {
+        bestDistance = distanceSquared;
+        best = packOffset(offset);
+      }
+    }
+  }
+  return best;
+}
+
+float signedDistance(int2 p) {
+  float4 seed = tex0.Load(int3(p, 0));
+  float distance = validSeed(seed) ? length(unpackOffset(seed)) : bevelWidth + 2.0;
+  return tex1.Load(int3(p, 0)).a > threshold ? -distance : distance;
+}
+
+float4 bevel_shade(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  if (!validSeed(tex0.Load(int3(p, 0)))) return 0;
+  float distance = signedDistance(p);
+  float2 gradient = float2(signedDistance(p + int2(1, 0)) - signedDistance(p - int2(1, 0)),
+                           signedDistance(p + int2(0, 1)) - signedDistance(p - int2(0, 1)));
+  // Central differences span two pixels; preserve cancellation where opposing bevels meet.
+  float gray = dot(gradient / max(length(gradient), 2.0), float2(lightX, lightY)) * strength;
+  return float4(max(gray, 0), max(-gray, 0), saturate(bevelWidth - abs(distance)), distance < 0 ? 1 : 0);
+}
+
+float4 bevel_layer(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float4 field = tex0.Load(int3(p, 0));
+  float originalAlpha = tex1.Load(int3(p, 0)).a;
+  float gray = field.r - field.g;
+  if (shape == 3) gray *= originalAlpha * 2.0 - 1.0;
+  float alpha = max(shadow > 0 ? -gray : gray, 0);
+  if (outputMode == 0) {
+    if (shape == 1)
+      alpha *= field.b;
+    else if (shape >= 2)
+      alpha *= field.b > 0 ? (field.a > 0 ? 1 : field.b) : 0;
+  } else {
+    alpha *= field.b;
+    if (shape == 0) alpha = min(alpha, 1.0 - originalAlpha);
+    if (shape == 1) alpha = min(alpha, originalAlpha);
+  }
+  alpha *= opacity;
+  // AviUtl2 image textures use premultiplied alpha.
+  return float4(float3(red, green, blue) * alpha, alpha);
+}
+
+float4 bevel_base(float4 position : SV_Position) : SV_Target {
+  float4 original = tex0.Load(int3(int2(position.xy), 0));
+  float3 background = float3(red, green, blue);
+  if (shape == 0) return float4(background, 1);
+  if (shape == 1) return float4(original.a > 0 ? original.rgb / original.a : float3(0, 0, 0), 1);
+  return float4(original.rgb + background * (1.0 - original.a), 1);
+}
+
+float4 bevel_finish(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float3 color = tex0.Load(int3(p, 0)).rgb;
+  float4 original = tex1.Load(int3(p, 0));
+  float band = tex2.Load(int3(p, 0)).b;
+  float alpha = shape == 1 ? original.a : max(original.a, band);
+  if (shape == 0) color = original.rgb + color * (1.0 - original.a);
+  return float4(color * alpha, alpha);
+}
+
+]]
+--[[pixelshader@bevel_shade:
+Texture2D<float4> tex0 : register(t0);
+Texture2D<float4> tex1 : register(t1);
+Texture2D<float4> tex2 : register(t2);
+
+cbuffer Params : register(b0) {
+  float threshold;
+  float bevelWidth;
+  float jumpStep;
+  float shape;
+  float lightX;
+  float lightY;
+  float strength;
+  float outputMode;
+  float red;
+  float green;
+  float blue;
+  float shadow;
+  float opacity;
+};
+
+// Two bytes per component, relative to the current pixel, at 1/64 pixel precision.
+// Values survive both UNORM8 and float16 image buffers; zero means no seed.
+// The supported bevel width (<=150) keeps offsets inside the signed 512-pixel range.
+float4 packOffset(float2 offset) {
+  uint2 value = (uint2)round(offset * 64.0 + 32768.0);
+  return float4(value.x >> 8, value.x & 255, value.y >> 8, value.y & 255) / 255.0;
+}
+
+float2 unpackOffset(float4 value) {
+  float4 bytes = round(value * 255.0);
+  return (float2(bytes.x * 256.0 + bytes.y, bytes.z * 256.0 + bytes.w) - 32768.0) / 64.0;
+}
+
+bool validSeed(float4 value) { return any(value != 0.0); }
+
+float4 bevel_seed(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float a = tex0.Load(int3(p, 0)).a;
+  float left = tex0.Load(int3(p + int2(-1, 0), 0)).a;
+  float right = tex0.Load(int3(p + int2(1, 0), 0)).a;
+  float up = tex0.Load(int3(p + int2(0, -1), 0)).a;
+  float down = tex0.Load(int3(p + int2(0, 1), 0)).a;
+  if (a <= threshold || min(min(left, right), min(up, down)) > threshold) return 0;
+
+  float dx = 0, dy = 0;
+  if (right <= threshold)
+    dx = (a - threshold) / (a - right);
+  else if (left <= threshold)
+    dx = -(a - threshold) / (a - left);
+  if (down <= threshold)
+    dy = (a - threshold) / (a - down);
+  else if (up <= threshold)
+    dy = -(a - threshold) / (a - up);
+  // Same subpixel correction as the source, without division by zero on axial edges.
+  float sum = abs(dx) + abs(dy);
+  return packOffset(sum > 0 ? float2(dx * abs(dx), dy * abs(dy)) / sum : float2(0, 0));
+}
+
+float4 bevel_jump(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  uint w, h;
+  tex0.GetDimensions(w, h);
+  float bestDistance = (bevelWidth + 2.0) * (bevelWidth + 2.0);
+  float4 best = 0;
+  [unroll] for (int y = -1; y <= 1; y++) {
+    [unroll] for (int x = -1; x <= 1; x++) {
+      int2 delta = int2(x, y) * (int)jumpStep;
+      int2 q = p + delta;
+      if (any(q < 0) || q.x >= (int)w || q.y >= (int)h) continue;
+      float4 candidate = tex0.Load(int3(q, 0));
+      if (!validSeed(candidate)) continue;
+      float2 offset = unpackOffset(candidate) + delta;
+      float distanceSquared = dot(offset, offset);
+      if (distanceSquared < bestDistance) {
+        bestDistance = distanceSquared;
+        best = packOffset(offset);
+      }
+    }
+  }
+  return best;
+}
+
+float signedDistance(int2 p) {
+  float4 seed = tex0.Load(int3(p, 0));
+  float distance = validSeed(seed) ? length(unpackOffset(seed)) : bevelWidth + 2.0;
+  return tex1.Load(int3(p, 0)).a > threshold ? -distance : distance;
+}
+
+float4 bevel_shade(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  if (!validSeed(tex0.Load(int3(p, 0)))) return 0;
+  float distance = signedDistance(p);
+  float2 gradient = float2(signedDistance(p + int2(1, 0)) - signedDistance(p - int2(1, 0)),
+                           signedDistance(p + int2(0, 1)) - signedDistance(p - int2(0, 1)));
+  // Central differences span two pixels; preserve cancellation where opposing bevels meet.
+  float gray = dot(gradient / max(length(gradient), 2.0), float2(lightX, lightY)) * strength;
+  return float4(max(gray, 0), max(-gray, 0), saturate(bevelWidth - abs(distance)), distance < 0 ? 1 : 0);
+}
+
+float4 bevel_layer(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float4 field = tex0.Load(int3(p, 0));
+  float originalAlpha = tex1.Load(int3(p, 0)).a;
+  float gray = field.r - field.g;
+  if (shape == 3) gray *= originalAlpha * 2.0 - 1.0;
+  float alpha = max(shadow > 0 ? -gray : gray, 0);
+  if (outputMode == 0) {
+    if (shape == 1)
+      alpha *= field.b;
+    else if (shape >= 2)
+      alpha *= field.b > 0 ? (field.a > 0 ? 1 : field.b) : 0;
+  } else {
+    alpha *= field.b;
+    if (shape == 0) alpha = min(alpha, 1.0 - originalAlpha);
+    if (shape == 1) alpha = min(alpha, originalAlpha);
+  }
+  alpha *= opacity;
+  // AviUtl2 image textures use premultiplied alpha.
+  return float4(float3(red, green, blue) * alpha, alpha);
+}
+
+float4 bevel_base(float4 position : SV_Position) : SV_Target {
+  float4 original = tex0.Load(int3(int2(position.xy), 0));
+  float3 background = float3(red, green, blue);
+  if (shape == 0) return float4(background, 1);
+  if (shape == 1) return float4(original.a > 0 ? original.rgb / original.a : float3(0, 0, 0), 1);
+  return float4(original.rgb + background * (1.0 - original.a), 1);
+}
+
+float4 bevel_finish(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float3 color = tex0.Load(int3(p, 0)).rgb;
+  float4 original = tex1.Load(int3(p, 0));
+  float band = tex2.Load(int3(p, 0)).b;
+  float alpha = shape == 1 ? original.a : max(original.a, band);
+  if (shape == 0) color = original.rgb + color * (1.0 - original.a);
+  return float4(color * alpha, alpha);
+}
+
+]]
+--[[pixelshader@bevel_layer:
+Texture2D<float4> tex0 : register(t0);
+Texture2D<float4> tex1 : register(t1);
+Texture2D<float4> tex2 : register(t2);
+
+cbuffer Params : register(b0) {
+  float threshold;
+  float bevelWidth;
+  float jumpStep;
+  float shape;
+  float lightX;
+  float lightY;
+  float strength;
+  float outputMode;
+  float red;
+  float green;
+  float blue;
+  float shadow;
+  float opacity;
+};
+
+// Two bytes per component, relative to the current pixel, at 1/64 pixel precision.
+// Values survive both UNORM8 and float16 image buffers; zero means no seed.
+// The supported bevel width (<=150) keeps offsets inside the signed 512-pixel range.
+float4 packOffset(float2 offset) {
+  uint2 value = (uint2)round(offset * 64.0 + 32768.0);
+  return float4(value.x >> 8, value.x & 255, value.y >> 8, value.y & 255) / 255.0;
+}
+
+float2 unpackOffset(float4 value) {
+  float4 bytes = round(value * 255.0);
+  return (float2(bytes.x * 256.0 + bytes.y, bytes.z * 256.0 + bytes.w) - 32768.0) / 64.0;
+}
+
+bool validSeed(float4 value) { return any(value != 0.0); }
+
+float4 bevel_seed(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float a = tex0.Load(int3(p, 0)).a;
+  float left = tex0.Load(int3(p + int2(-1, 0), 0)).a;
+  float right = tex0.Load(int3(p + int2(1, 0), 0)).a;
+  float up = tex0.Load(int3(p + int2(0, -1), 0)).a;
+  float down = tex0.Load(int3(p + int2(0, 1), 0)).a;
+  if (a <= threshold || min(min(left, right), min(up, down)) > threshold) return 0;
+
+  float dx = 0, dy = 0;
+  if (right <= threshold)
+    dx = (a - threshold) / (a - right);
+  else if (left <= threshold)
+    dx = -(a - threshold) / (a - left);
+  if (down <= threshold)
+    dy = (a - threshold) / (a - down);
+  else if (up <= threshold)
+    dy = -(a - threshold) / (a - up);
+  // Same subpixel correction as the source, without division by zero on axial edges.
+  float sum = abs(dx) + abs(dy);
+  return packOffset(sum > 0 ? float2(dx * abs(dx), dy * abs(dy)) / sum : float2(0, 0));
+}
+
+float4 bevel_jump(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  uint w, h;
+  tex0.GetDimensions(w, h);
+  float bestDistance = (bevelWidth + 2.0) * (bevelWidth + 2.0);
+  float4 best = 0;
+  [unroll] for (int y = -1; y <= 1; y++) {
+    [unroll] for (int x = -1; x <= 1; x++) {
+      int2 delta = int2(x, y) * (int)jumpStep;
+      int2 q = p + delta;
+      if (any(q < 0) || q.x >= (int)w || q.y >= (int)h) continue;
+      float4 candidate = tex0.Load(int3(q, 0));
+      if (!validSeed(candidate)) continue;
+      float2 offset = unpackOffset(candidate) + delta;
+      float distanceSquared = dot(offset, offset);
+      if (distanceSquared < bestDistance) {
+        bestDistance = distanceSquared;
+        best = packOffset(offset);
+      }
+    }
+  }
+  return best;
+}
+
+float signedDistance(int2 p) {
+  float4 seed = tex0.Load(int3(p, 0));
+  float distance = validSeed(seed) ? length(unpackOffset(seed)) : bevelWidth + 2.0;
+  return tex1.Load(int3(p, 0)).a > threshold ? -distance : distance;
+}
+
+float4 bevel_shade(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  if (!validSeed(tex0.Load(int3(p, 0)))) return 0;
+  float distance = signedDistance(p);
+  float2 gradient = float2(signedDistance(p + int2(1, 0)) - signedDistance(p - int2(1, 0)),
+                           signedDistance(p + int2(0, 1)) - signedDistance(p - int2(0, 1)));
+  // Central differences span two pixels; preserve cancellation where opposing bevels meet.
+  float gray = dot(gradient / max(length(gradient), 2.0), float2(lightX, lightY)) * strength;
+  return float4(max(gray, 0), max(-gray, 0), saturate(bevelWidth - abs(distance)), distance < 0 ? 1 : 0);
+}
+
+float4 bevel_layer(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float4 field = tex0.Load(int3(p, 0));
+  float originalAlpha = tex1.Load(int3(p, 0)).a;
+  float gray = field.r - field.g;
+  if (shape == 3) gray *= originalAlpha * 2.0 - 1.0;
+  float alpha = max(shadow > 0 ? -gray : gray, 0);
+  if (outputMode == 0) {
+    if (shape == 1)
+      alpha *= field.b;
+    else if (shape >= 2)
+      alpha *= field.b > 0 ? (field.a > 0 ? 1 : field.b) : 0;
+  } else {
+    alpha *= field.b;
+    if (shape == 0) alpha = min(alpha, 1.0 - originalAlpha);
+    if (shape == 1) alpha = min(alpha, originalAlpha);
+  }
+  alpha *= opacity;
+  // AviUtl2 image textures use premultiplied alpha.
+  return float4(float3(red, green, blue) * alpha, alpha);
+}
+
+float4 bevel_base(float4 position : SV_Position) : SV_Target {
+  float4 original = tex0.Load(int3(int2(position.xy), 0));
+  float3 background = float3(red, green, blue);
+  if (shape == 0) return float4(background, 1);
+  if (shape == 1) return float4(original.a > 0 ? original.rgb / original.a : float3(0, 0, 0), 1);
+  return float4(original.rgb + background * (1.0 - original.a), 1);
+}
+
+float4 bevel_finish(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float3 color = tex0.Load(int3(p, 0)).rgb;
+  float4 original = tex1.Load(int3(p, 0));
+  float band = tex2.Load(int3(p, 0)).b;
+  float alpha = shape == 1 ? original.a : max(original.a, band);
+  if (shape == 0) color = original.rgb + color * (1.0 - original.a);
+  return float4(color * alpha, alpha);
+}
+
+]]
+--[[pixelshader@bevel_base:
+Texture2D<float4> tex0 : register(t0);
+Texture2D<float4> tex1 : register(t1);
+Texture2D<float4> tex2 : register(t2);
+
+cbuffer Params : register(b0) {
+  float threshold;
+  float bevelWidth;
+  float jumpStep;
+  float shape;
+  float lightX;
+  float lightY;
+  float strength;
+  float outputMode;
+  float red;
+  float green;
+  float blue;
+  float shadow;
+  float opacity;
+};
+
+// Two bytes per component, relative to the current pixel, at 1/64 pixel precision.
+// Values survive both UNORM8 and float16 image buffers; zero means no seed.
+// The supported bevel width (<=150) keeps offsets inside the signed 512-pixel range.
+float4 packOffset(float2 offset) {
+  uint2 value = (uint2)round(offset * 64.0 + 32768.0);
+  return float4(value.x >> 8, value.x & 255, value.y >> 8, value.y & 255) / 255.0;
+}
+
+float2 unpackOffset(float4 value) {
+  float4 bytes = round(value * 255.0);
+  return (float2(bytes.x * 256.0 + bytes.y, bytes.z * 256.0 + bytes.w) - 32768.0) / 64.0;
+}
+
+bool validSeed(float4 value) { return any(value != 0.0); }
+
+float4 bevel_seed(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float a = tex0.Load(int3(p, 0)).a;
+  float left = tex0.Load(int3(p + int2(-1, 0), 0)).a;
+  float right = tex0.Load(int3(p + int2(1, 0), 0)).a;
+  float up = tex0.Load(int3(p + int2(0, -1), 0)).a;
+  float down = tex0.Load(int3(p + int2(0, 1), 0)).a;
+  if (a <= threshold || min(min(left, right), min(up, down)) > threshold) return 0;
+
+  float dx = 0, dy = 0;
+  if (right <= threshold)
+    dx = (a - threshold) / (a - right);
+  else if (left <= threshold)
+    dx = -(a - threshold) / (a - left);
+  if (down <= threshold)
+    dy = (a - threshold) / (a - down);
+  else if (up <= threshold)
+    dy = -(a - threshold) / (a - up);
+  // Same subpixel correction as the source, without division by zero on axial edges.
+  float sum = abs(dx) + abs(dy);
+  return packOffset(sum > 0 ? float2(dx * abs(dx), dy * abs(dy)) / sum : float2(0, 0));
+}
+
+float4 bevel_jump(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  uint w, h;
+  tex0.GetDimensions(w, h);
+  float bestDistance = (bevelWidth + 2.0) * (bevelWidth + 2.0);
+  float4 best = 0;
+  [unroll] for (int y = -1; y <= 1; y++) {
+    [unroll] for (int x = -1; x <= 1; x++) {
+      int2 delta = int2(x, y) * (int)jumpStep;
+      int2 q = p + delta;
+      if (any(q < 0) || q.x >= (int)w || q.y >= (int)h) continue;
+      float4 candidate = tex0.Load(int3(q, 0));
+      if (!validSeed(candidate)) continue;
+      float2 offset = unpackOffset(candidate) + delta;
+      float distanceSquared = dot(offset, offset);
+      if (distanceSquared < bestDistance) {
+        bestDistance = distanceSquared;
+        best = packOffset(offset);
+      }
+    }
+  }
+  return best;
+}
+
+float signedDistance(int2 p) {
+  float4 seed = tex0.Load(int3(p, 0));
+  float distance = validSeed(seed) ? length(unpackOffset(seed)) : bevelWidth + 2.0;
+  return tex1.Load(int3(p, 0)).a > threshold ? -distance : distance;
+}
+
+float4 bevel_shade(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  if (!validSeed(tex0.Load(int3(p, 0)))) return 0;
+  float distance = signedDistance(p);
+  float2 gradient = float2(signedDistance(p + int2(1, 0)) - signedDistance(p - int2(1, 0)),
+                           signedDistance(p + int2(0, 1)) - signedDistance(p - int2(0, 1)));
+  // Central differences span two pixels; preserve cancellation where opposing bevels meet.
+  float gray = dot(gradient / max(length(gradient), 2.0), float2(lightX, lightY)) * strength;
+  return float4(max(gray, 0), max(-gray, 0), saturate(bevelWidth - abs(distance)), distance < 0 ? 1 : 0);
+}
+
+float4 bevel_layer(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float4 field = tex0.Load(int3(p, 0));
+  float originalAlpha = tex1.Load(int3(p, 0)).a;
+  float gray = field.r - field.g;
+  if (shape == 3) gray *= originalAlpha * 2.0 - 1.0;
+  float alpha = max(shadow > 0 ? -gray : gray, 0);
+  if (outputMode == 0) {
+    if (shape == 1)
+      alpha *= field.b;
+    else if (shape >= 2)
+      alpha *= field.b > 0 ? (field.a > 0 ? 1 : field.b) : 0;
+  } else {
+    alpha *= field.b;
+    if (shape == 0) alpha = min(alpha, 1.0 - originalAlpha);
+    if (shape == 1) alpha = min(alpha, originalAlpha);
+  }
+  alpha *= opacity;
+  // AviUtl2 image textures use premultiplied alpha.
+  return float4(float3(red, green, blue) * alpha, alpha);
+}
+
+float4 bevel_base(float4 position : SV_Position) : SV_Target {
+  float4 original = tex0.Load(int3(int2(position.xy), 0));
+  float3 background = float3(red, green, blue);
+  if (shape == 0) return float4(background, 1);
+  if (shape == 1) return float4(original.a > 0 ? original.rgb / original.a : float3(0, 0, 0), 1);
+  return float4(original.rgb + background * (1.0 - original.a), 1);
+}
+
+float4 bevel_finish(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float3 color = tex0.Load(int3(p, 0)).rgb;
+  float4 original = tex1.Load(int3(p, 0));
+  float band = tex2.Load(int3(p, 0)).b;
+  float alpha = shape == 1 ? original.a : max(original.a, band);
+  if (shape == 0) color = original.rgb + color * (1.0 - original.a);
+  return float4(color * alpha, alpha);
+}
+
+]]
+--[[pixelshader@bevel_finish:
+Texture2D<float4> tex0 : register(t0);
+Texture2D<float4> tex1 : register(t1);
+Texture2D<float4> tex2 : register(t2);
+
+cbuffer Params : register(b0) {
+  float threshold;
+  float bevelWidth;
+  float jumpStep;
+  float shape;
+  float lightX;
+  float lightY;
+  float strength;
+  float outputMode;
+  float red;
+  float green;
+  float blue;
+  float shadow;
+  float opacity;
+};
+
+// Two bytes per component, relative to the current pixel, at 1/64 pixel precision.
+// Values survive both UNORM8 and float16 image buffers; zero means no seed.
+// The supported bevel width (<=150) keeps offsets inside the signed 512-pixel range.
+float4 packOffset(float2 offset) {
+  uint2 value = (uint2)round(offset * 64.0 + 32768.0);
+  return float4(value.x >> 8, value.x & 255, value.y >> 8, value.y & 255) / 255.0;
+}
+
+float2 unpackOffset(float4 value) {
+  float4 bytes = round(value * 255.0);
+  return (float2(bytes.x * 256.0 + bytes.y, bytes.z * 256.0 + bytes.w) - 32768.0) / 64.0;
+}
+
+bool validSeed(float4 value) { return any(value != 0.0); }
+
+float4 bevel_seed(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float a = tex0.Load(int3(p, 0)).a;
+  float left = tex0.Load(int3(p + int2(-1, 0), 0)).a;
+  float right = tex0.Load(int3(p + int2(1, 0), 0)).a;
+  float up = tex0.Load(int3(p + int2(0, -1), 0)).a;
+  float down = tex0.Load(int3(p + int2(0, 1), 0)).a;
+  if (a <= threshold || min(min(left, right), min(up, down)) > threshold) return 0;
+
+  float dx = 0, dy = 0;
+  if (right <= threshold)
+    dx = (a - threshold) / (a - right);
+  else if (left <= threshold)
+    dx = -(a - threshold) / (a - left);
+  if (down <= threshold)
+    dy = (a - threshold) / (a - down);
+  else if (up <= threshold)
+    dy = -(a - threshold) / (a - up);
+  // Same subpixel correction as the source, without division by zero on axial edges.
+  float sum = abs(dx) + abs(dy);
+  return packOffset(sum > 0 ? float2(dx * abs(dx), dy * abs(dy)) / sum : float2(0, 0));
+}
+
+float4 bevel_jump(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  uint w, h;
+  tex0.GetDimensions(w, h);
+  float bestDistance = (bevelWidth + 2.0) * (bevelWidth + 2.0);
+  float4 best = 0;
+  [unroll] for (int y = -1; y <= 1; y++) {
+    [unroll] for (int x = -1; x <= 1; x++) {
+      int2 delta = int2(x, y) * (int)jumpStep;
+      int2 q = p + delta;
+      if (any(q < 0) || q.x >= (int)w || q.y >= (int)h) continue;
+      float4 candidate = tex0.Load(int3(q, 0));
+      if (!validSeed(candidate)) continue;
+      float2 offset = unpackOffset(candidate) + delta;
+      float distanceSquared = dot(offset, offset);
+      if (distanceSquared < bestDistance) {
+        bestDistance = distanceSquared;
+        best = packOffset(offset);
+      }
+    }
+  }
+  return best;
+}
+
+float signedDistance(int2 p) {
+  float4 seed = tex0.Load(int3(p, 0));
+  float distance = validSeed(seed) ? length(unpackOffset(seed)) : bevelWidth + 2.0;
+  return tex1.Load(int3(p, 0)).a > threshold ? -distance : distance;
+}
+
+float4 bevel_shade(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  if (!validSeed(tex0.Load(int3(p, 0)))) return 0;
+  float distance = signedDistance(p);
+  float2 gradient = float2(signedDistance(p + int2(1, 0)) - signedDistance(p - int2(1, 0)),
+                           signedDistance(p + int2(0, 1)) - signedDistance(p - int2(0, 1)));
+  // Central differences span two pixels; preserve cancellation where opposing bevels meet.
+  float gray = dot(gradient / max(length(gradient), 2.0), float2(lightX, lightY)) * strength;
+  return float4(max(gray, 0), max(-gray, 0), saturate(bevelWidth - abs(distance)), distance < 0 ? 1 : 0);
+}
+
+float4 bevel_layer(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float4 field = tex0.Load(int3(p, 0));
+  float originalAlpha = tex1.Load(int3(p, 0)).a;
+  float gray = field.r - field.g;
+  if (shape == 3) gray *= originalAlpha * 2.0 - 1.0;
+  float alpha = max(shadow > 0 ? -gray : gray, 0);
+  if (outputMode == 0) {
+    if (shape == 1)
+      alpha *= field.b;
+    else if (shape >= 2)
+      alpha *= field.b > 0 ? (field.a > 0 ? 1 : field.b) : 0;
+  } else {
+    alpha *= field.b;
+    if (shape == 0) alpha = min(alpha, 1.0 - originalAlpha);
+    if (shape == 1) alpha = min(alpha, originalAlpha);
+  }
+  alpha *= opacity;
+  // AviUtl2 image textures use premultiplied alpha.
+  return float4(float3(red, green, blue) * alpha, alpha);
+}
+
+float4 bevel_base(float4 position : SV_Position) : SV_Target {
+  float4 original = tex0.Load(int3(int2(position.xy), 0));
+  float3 background = float3(red, green, blue);
+  if (shape == 0) return float4(background, 1);
+  if (shape == 1) return float4(original.a > 0 ? original.rgb / original.a : float3(0, 0, 0), 1);
+  return float4(original.rgb + background * (1.0 - original.a), 1);
+}
+
+float4 bevel_finish(float4 position : SV_Position) : SV_Target {
+  int2 p = int2(position.xy);
+  float3 color = tex0.Load(int3(p, 0)).rgb;
+  float4 original = tex1.Load(int3(p, 0));
+  float band = tex2.Load(int3(p, 0)).b;
+  float alpha = shape == 1 ? original.a : max(original.a, band);
+  if (shape == 0) color = original.rgb + color * (1.0 - original.a);
+  return float4(color * alpha, alpha);
+}
+
+]]
+
+-- PIからパラメータを取得
+if type(PI.threshold) == "number" then
+  threshold = PI.threshold
+end
+if type(PI.width) == "number" then
+  width = PI.width
+end
+if type(PI.angle) == "number" then
+  angle = PI.angle
+end
+if type(PI.elevation) == "number" then
+  elevation = PI.elevation
+end
+if type(PI.shape) == "number" then
+  shape = PI.shape
+end
+if type(PI.output) == "number" then
+  output = PI.output
+end
+if type(PI.blur) == "number" then
+  blur = PI.blur
+end
+if type(PI.preblur) == "number" then
+  preblur = PI.preblur
+end
+if type(PI.highlight_color) == "number" then
+  highlight_color = PI.highlight_color
+end
+if type(PI.highlight_blend) == "number" then
+  highlight_blend = PI.highlight_blend
+end
+if type(PI.highlight_opacity) == "number" then
+  highlight_opacity = PI.highlight_opacity
+end
+if type(PI.shadow_color) == "number" then
+  shadow_color = PI.shadow_color
+end
+if type(PI.shadow_blend) == "number" then
+  shadow_blend = PI.shadow_blend
+end
+if type(PI.shadow_opacity) == "number" then
+  shadow_opacity = PI.shadow_opacity
+end
+if type(PI.background_color) == "number" then
+  background_color = PI.background_color
+end
+
+if width <= 0 or obj.w == 0 or obj.h == 0 then
+  return
+end
+
+local bevel_width = shape >= 2 and width / 2 or width
+local margin = math.ceil(preblur + 1 + (shape == 1 and 0 or bevel_width) + blur)
+obj.effect("領域拡張", "上", margin, "下", margin, "左", margin, "右", margin)
+
+local w, h = obj.w, obj.h
+local prefix = "cache:bevel:" .. obj.effect_id .. ":" .. obj.id .. ":" .. obj.index .. ":"
+local original, contour = prefix .. "original", prefix .. "contour"
+local first, second, field = prefix .. "first", prefix .. "second", prefix .. "field"
+obj.copybuffer(original, "object")
+
+local function apply_blur(amount)
+  if amount > 0 then
+    obj.effect("ぼかし", "範囲", amount, "サイズ固定", 1)
+  end
+end
+
+apply_blur(preblur)
+obj.copybuffer(contour, "object")
+for _, buffer in ipairs({ first, second, field }) do
+  obj.clearbuffer(buffer, w, h)
+end
+
+local params = {
+  threshold / 255,
+  bevel_width,
+  0,
+  shape,
+  math.cos(math.rad(angle)),
+  -math.sin(math.rad(angle)),
+  math.cos(math.rad(elevation)),
+  output,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+}
+obj.pixelshader("bevel_seed", first, contour, params)
+
+local step = 1
+while step < bevel_width + 2 do
+  step = step * 2
+end
+while step >= 1 do
+  params[3] = step
+  obj.pixelshader("bevel_jump", second, first, params)
+  first, second = second, first
+  step = step / 2
+end
+params[3] = 1
+obj.pixelshader("bevel_jump", second, first, params)
+obj.pixelshader("bevel_shade", field, { second, contour }, params)
+-- Distance propagation is finished; reuse its two buffers for the output layers.
+local highlight, shadow = first, second
+
+local function set_color(color)
+  local r, g, b = RGB(color)
+  params[9], params[10], params[11] = r / 255, g / 255, b / 255
+end
+
+local function make_layer(buffer, color, is_shadow, opacity)
+  set_color(color)
+  params[12], params[13] = is_shadow, opacity / 100
+  obj.pixelshader("bevel_layer", "object", { field, original }, params)
+  apply_blur(blur)
+  obj.copybuffer(buffer, "object")
+end
+
+if output ~= 3 then
+  make_layer(highlight, highlight_color, 0, highlight_opacity)
+end
+if output ~= 2 then
+  make_layer(shadow, shadow_color, 1, shadow_opacity)
+end
+if output >= 2 then
+  return
+end
+
+local blend, target = obj.getoption("blend"), obj.getoption("drawtarget")
+if output == 1 then
+  local saved = {}
+  for _, key in ipairs({ "ox", "oy", "oz", "rx", "ry", "rz", "cx", "cy", "cz", "sx", "sy", "sz", "alpha" }) do
+    saved[key] = obj[key]
+  end
+  obj.setoption("drawtarget", "framebuffer")
+  for _, layer in ipairs({ { original, blend }, { highlight, highlight_blend }, { shadow, shadow_blend } }) do
+    for key, value in pairs(saved) do
+      obj[key] = value
+    end
+    obj.copybuffer("object", layer[1])
+    obj.setoption("blend", layer[2])
+    obj.effect()
+    obj.draw()
+  end
+  for key, value in pairs(saved) do
+    obj[key] = value
+  end
+else
+  set_color(background_color)
+  obj.clearbuffer("tempbuffer", w, h)
+  obj.pixelshader("bevel_base", "tempbuffer", original, params)
+  obj.setoption("drawtarget", "tempbuffer")
+  for _, layer in ipairs({ { highlight, highlight_blend }, { shadow, shadow_blend } }) do
+    obj.copybuffer("object", layer[1])
+    obj.setoption("blend", layer[2])
+    obj.draw(0, 0, 0, 1, 1)
+  end
+  obj.pixelshader("bevel_finish", "object", { "tempbuffer", original, field }, params)
+end
+obj.setoption("blend", blend)
+obj.setoption("drawtarget", target)
+

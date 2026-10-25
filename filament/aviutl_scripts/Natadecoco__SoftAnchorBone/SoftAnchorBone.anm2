@@ -1,0 +1,293 @@
+--label:アニメーション効果
+--information:SoftAnchorBone
+--require:2004200
+
+--group:基本,false
+--select@preset:プリセット=1,カスタム=0,髪の毛(短め)=1,髪の毛(長め)=2,前髪=3,横髪=4,服=5,スカート=6,リボン=7
+--select@waveType:揺れ方=1,規則的=0,通常=1,ふわふわ=2,振り子風=3
+--track@strength:振れ幅,0,2000,300,1
+--track@influence:揺れ倍率％,0,500,180,1
+--track@speed:揺れ速度％,10,300,100,1
+--track@phase:位相,-360,360,0,1
+
+--group:3点アンカー,false
+--dialog:bone,bone={0,-500,0,-100,0,500};
+
+--group:固定・先端,false
+--track@startSoft:揺れ開始ぼかし,0,1200,120,1
+--track@startBias:揺れ開始補正px,-1000,1000,0,1
+--track@tipPower:先端増幅,0,700,300,1
+
+--group:質感,false
+--track@delay:先端遅れ,0,720,180,1
+--track@subSway:副揺れ,0,100,0,1
+--track@stiff:硬さ,0,100,50,1
+--track@lengthKeep:長さ補正％,0,500,250,1
+--track@direction:揺れ方向,-180,180,0,1
+
+--group:ループ素材化,false
+--check@loopMode:ループ化,false
+--track@loopSec:ループ秒,0.1,60,2,0.01
+--track@loopCount:ループ内揺れ回数,1,8,1,1
+
+--group:軽量化,false
+--track@divY:縦分割,2,64,18,1
+--track@divX:横分割,1,32,8,1
+--check@autoLight:高解像度自動軽量化,true
+
+--group:編集・確認,false
+--check@editMode:変形一時解除,false
+--check@reverse:上下反転,false
+--check@debug:アンカー表示,false
+
+--[[
+SoftAnchorBone SoftAnchorBone v1.0
+
+アンカー：
+1点目：てっぺん / 向きの目印
+2点目：動き始めるところ
+3点目：先端
+
+
+]]
+
+local obj, math, tonumber = obj, math, tonumber
+
+local function clamp(x, a, b)
+    if x < a then return a end
+    if x > b then return b end
+    return x
+end
+
+local function smoother01(x)
+    x = clamp(x, 0, 1)
+    return x * x * x * (x * (x * 6 - 15) + 10)
+end
+
+local function rot(x, y, a)
+    local s, c = math.sin(a), math.cos(a)
+    return c * x - s * y, s * x + c * y
+end
+
+obj.setanchor("bone", 3, "line")
+if not bone or #bone < 6 then
+    bone = {0, -500, 0, -100, 0, 500}
+end
+
+local ax = tonumber(bone[1]) or 0
+local ay = tonumber(bone[2]) or -500
+local bx = tonumber(bone[3]) or 0
+local by = tonumber(bone[4]) or -100
+local cx = tonumber(bone[5]) or 0
+local cy = tonumber(bone[6]) or 500
+
+-- 編集時は変形を完全に止める。アンカーを置きやすくするため。
+-- returnするだけにして、サイズ・位置・描画状態に触らない。
+if editMode then
+    if debug then
+        local function dot(x, y, col, size)
+            obj.load("figure", "円", col, 1)
+            obj.effect("リサイズ", "X", size, "Y", size, "ドット数でサイズ指定", 1)
+            obj.draw(x, y)
+        end
+        dot(ax, ay, 0x44aaff, 14)
+        dot(bx, by, 0xffff44, 14)
+        dot(cx, cy, 0xff6688, 14)
+    end
+    return
+end
+
+local w = tonumber(obj.w) or 0
+local h = tonumber(obj.h) or 0
+if not (w > 0 and h > 0) then
+    w, h = obj.getpixel()
+end
+if not (w and h and w > 0 and h > 0) then return end
+
+local w2, h2 = w * 0.5, h * 0.5
+
+local ixN = math.floor((divX or 8) + 0.5)
+local iyN = math.floor((divY or 18) + 0.5)
+if autoLight then
+    local maxSide = math.max(w, h)
+    if maxSide >= 7000 then
+        ixN = math.min(ixN, 4)
+        iyN = math.min(iyN, 10)
+    elseif maxSide >= 5000 then
+        ixN = math.min(ixN, 5)
+        iyN = math.min(iyN, 12)
+    elseif maxSide >= 3500 then
+        ixN = math.min(ixN, 6)
+        iyN = math.min(iyN, 16)
+    elseif maxSide >= 2500 then
+        ixN = math.min(ixN, 8)
+        iyN = math.min(iyN, 20)
+    end
+end
+ixN = clamp(ixN, 1, 32)
+iyN = clamp(iyN, 2, 64)
+
+-- B→C を揺れの主軸にする。
+local vx, vy = cx - bx, cy - by
+local len = math.sqrt(vx * vx + vy * vy)
+if len < 1 then len = 1 end
+local dx, dy = vx / len, vy / len
+local nx0, ny0 = -dy, dx
+nx0, ny0 = rot(nx0, ny0, (direction or 0) * math.pi / 180)
+
+-- プリセット補正
+local ampBase, periodBase, delayBase, tipMul, subMul, stiffAdd = 36, 2.0, 1.0, 1.0, 1.0, 0.0
+if preset == 1 then
+    ampBase, periodBase, delayBase, tipMul, subMul, stiffAdd = 30, 1.65, 0.85, 0.90, 0.75, 0.25
+elseif preset == 2 then
+    ampBase, periodBase, delayBase, tipMul, subMul, stiffAdd = 50, 2.45, 1.45, 1.00, 1.05, 0.05
+elseif preset == 3 then
+    ampBase, periodBase, delayBase, tipMul, subMul, stiffAdd = 20, 1.35, 0.55, 0.75, 0.45, 0.35
+elseif preset == 4 then
+    ampBase, periodBase, delayBase, tipMul, subMul, stiffAdd = 40, 2.05, 1.10, 0.92, 0.90, 0.15
+elseif preset == 5 then
+    ampBase, periodBase, delayBase, tipMul, subMul, stiffAdd = 28, 2.10, 0.75, 0.80, 0.50, 0.30
+elseif preset == 6 then
+    ampBase, periodBase, delayBase, tipMul, subMul, stiffAdd = 48, 2.70, 1.25, 0.95, 0.85, 0.10
+elseif preset == 7 then
+    ampBase, periodBase, delayBase, tipMul, subMul, stiffAdd = 38, 1.75, 0.95, 0.85, 1.15, 0.20
+end
+
+-- strengthは基本の振れ幅、influenceは全体倍率。
+local amp = ampBase * ((strength or 100) / 100) * ((influence or 100) / 100)
+local period = math.max(periodBase * (100 / math.max(speed or 100, 1)), 0.05)
+local hard = clamp((stiff or 50) / 100 + stiffAdd, 0, 1)
+local tipExp = math.max(((tipPower or 120) / 180) * tipMul + hard * 0.20, 0.03)
+local localDelay = delayBase * ((delay or 180) / 180) * (1 - hard * 0.35)
+local sub = ((subSway or 20) / 100) * subMul
+local ph = (phase or 0) * math.pi / 180
+local keep = clamp((lengthKeep or 70) / 100, 0, 3)
+local t = obj.time or 0
+local wt = math.floor((waveType or 1) + 0.5)
+
+-- 揺れ方：
+-- 0 規則的   : 副揺れなし。一定周期の単振動。ループ素材に最も向く。
+-- 1 通常     : v0.5相当。控えめな副揺れを混ぜる。
+-- 2 ふわふわ : 副揺れを強め、少し漂う感じ。
+-- 3 振り子風 : 単振動に戻り感を足す。完全物理ではなくループしやすい疑似振り子。
+local function wave_at(u)
+    local base
+    if loopMode then
+        local ls = math.max(loopSec or 2, 0.1)
+        local count = math.max(math.floor((loopCount or 1) + 0.5), 1)
+        base = 2 * math.pi * (t / ls) * count
+    else
+        base = 2 * math.pi * t / period
+    end
+
+    local delayU = localDelay * u
+
+    if wt <= 0 then
+        -- 規則的：完全に単純なsin波。見た目の不規則さを消す。
+        return math.sin(base - delayU - ph)
+    end
+
+    local wave1 = math.sin(base - delayU - ph)
+
+    if wt == 1 then
+        -- 通常：整数倍の副揺れにすることで、非ループ時でも不規則感を少し抑える。
+        local wave2 = math.sin(base * 2 - delayU * 1.35 + 1.4 - ph * 0.37)
+        return wave1 + wave2 * sub
+    elseif wt == 2 then
+        -- ふわふわ：副揺れ多め。少し自然だが規則性は下がる。
+        local wave2 = math.sin(base * 2 - delayU * 1.45 + 1.4 - ph * 0.37)
+        local wave3 = math.sin(base * 3 - delayU * 0.75 + 0.6 + ph * 0.21)
+        return wave1 + wave2 * sub * 1.35 + wave3 * sub * 0.35
+    else
+        -- 振り子風：戻りで少し粘る形。周期自体は一定。
+        local s1 = math.sin(base - delayU - ph)
+        local s2 = math.sin(base * 2 - delayU * 1.1 - ph)
+        return s1 + s2 * sub * 0.55 - (s1 * s1 * s1) * sub * 0.22
+    end
+end
+
+local function point_offset(px, py)
+    local qy = py
+    if reverse then qy = -qy end
+
+    local relx, rely = px - bx, qy - by
+    local u = (relx * dx + rely * dy) / len
+    u = clamp(u, 0, 1)
+
+    -- B点からすぐ揺れ始める。開始位置補正pxは、正で早め、負で遅め。
+    local distFromStart = u * len + (startBias or 0)
+    local ss = startSoft or 120
+    local startFade
+    if ss <= 0 then
+        startFade = distFromStart >= 0 and 1 or 0
+    else
+        startFade = smoother01((distFromStart + ss * 0.5) / ss)
+    end
+
+    local gain = (u ^ tipExp) * startFade
+    local ofs = amp * gain * wave_at(u)
+
+    -- 長さ補正：横に振れたぶん、ボーン軸方向の長さが縮むように根元側へ少し戻す。
+    -- これで毛先が横に滑るだけでなく、揺れた時に少し上がる。
+    local s = math.max(u * len, len * 0.12, 1)
+    local lift = 0
+    if keep > 0 then
+        lift = (ofs * ofs) / (2 * s) * keep
+        -- 強すぎると跳ね上がるので、横振れ量に対して上限をかける。
+        lift = clamp(lift, 0, math.abs(ofs) * 0.85 + len * 0.05)
+        lift = lift * smoother01(u)
+    end
+
+    local ox = nx0 * ofs - dx * lift
+    local oy = ny0 * ofs - dy * lift
+    if reverse then oy = -oy end
+    return ox, oy
+end
+
+local verts = {}
+local function add_quad(x0, y0, x1, y1)
+    local u0, v0 = x0 + w2, y0 + h2
+    local u1, v1 = x1 + w2, y1 + h2
+
+    local ox00, oy00 = point_offset(x0, y0)
+    local ox10, oy10 = point_offset(x1, y0)
+    local ox11, oy11 = point_offset(x1, y1)
+    local ox01, oy01 = point_offset(x0, y1)
+
+    verts[#verts + 1] = {
+        x0 + ox00, y0 + oy00, 0,
+        x1 + ox10, y0 + oy10, 0,
+        x1 + ox11, y1 + oy11, 0,
+        x0 + ox01, y1 + oy01, 0,
+        u0, v0,
+        u1, v0,
+        u1, v1,
+        u0, v1
+    }
+end
+
+for yy = 0, iyN - 1 do
+    local y0 = -h2 + h * yy / iyN
+    local y1 = -h2 + h * (yy + 1) / iyN
+    for xx = 0, ixN - 1 do
+        local x0 = -w2 + w * xx / ixN
+        local x1 = -w2 + w * (xx + 1) / ixN
+        add_quad(x0, y0, x1, y1)
+    end
+end
+
+obj.setoption("drawtarget", "framebuffer")
+obj.setoption("blend", "alpha_add2")
+obj.drawpoly(verts)
+
+if debug then
+    obj.setoption("blend", "alpha_add")
+    local function dot(x, y, col, size)
+        obj.load("figure", "円", col, 1)
+        obj.effect("リサイズ", "X", size, "Y", size, "ドット数でサイズ指定", 1)
+        obj.draw(x, y)
+    end
+    dot(ax, ay, 0x44aaff, 14)
+    dot(bx, by, 0xffff44, 14)
+    dot(cx, cy, 0xff6688, 14)
+end

@@ -1,0 +1,43 @@
+;===============================================================
+; Target: Pixelizer
+; Language: English
+
+[Language]
+Information=Pixelizer English translation
+SubLanguage=English
+
+[Pixelizer]
+Pixelizer=Pixelizer
+
+拡張設定=Advanced
+パレットモード=Palette Mode
+デフォルト=Default
+GameBoy=GameBoy
+16-bit=16-bit
+4階調グレースケール=4-tone Grayscale
+エッジスタイル=Edge Style
+ソフト=Soft
+エッジ強調=Strong Outline
+ドット固定=Dot Locked
+オブジェクト固定=Object Locked
+画面固定=Screen Locked
+
+
+ベース=Basic
+ピクセルサイズ=Pixel Size
+色数=Color Levels
+階調数=Tone Steps
+無効=Off
+
+ディザリング=Dithering
+なし=Off
+2x2=2x2
+4x4=4x4
+ディザリング強度=Dither Strength
+
+エッジ=Edge
+エッジ強度=Edge Strength
+
+透過保護=Alpha Guard
+透明エッジ保護=Transparent Edge Guard
+透過しきい値=Alpha Threshold

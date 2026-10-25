@@ -1,0 +1,132 @@
+--[[
+MIT License
+
+Copyright (c) 2025-2026 sigma-axis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+https://mit-license.org/
+]]
+
+--
+-- v1.20
+--
+
+-- https://github.com/sigma-axis/aviutl2_script_PixelSnap_S
+
+--information:PixelSnap_S v1.20 by σ軸
+--label:配置
+--require:2011000
+local obj, math = obj, math;
+local cx0, cy0, cz0 = obj.getvalue("center");
+cx0, cy0, cz0 = obj.cx + cx0 + obj.w / 2, obj.cy + cy0 + obj.h / 2, obj.cz + cz0;
+local cx, cy = math.floor(0.5 + cx0 + cy0), math.floor(0.5 + cx0 - cy0);
+cx, cy = (cx + cy) / 2, (cx - cy) / 2;
+
+local sx, sy, sz = obj.getvalue("scale");
+sx, sy, sz = obj.sx * sx, obj.sy * sy, obj.sz * sz;
+
+local rx, ry, rz = obj.getvalue("angle");
+rx, ry, rz = obj.rx + rx, obj.ry + ry, obj.rz + rz;
+
+local x0, y0, tx0, ty0, z0 = 0, 0, obj.getvalue("pos");
+tx0, ty0, z0 = tx0 + obj.ox, ty0 + obj.oy, z0 + obj.oz;
+
+local function rot_mat(x, y, z)
+	x, y, z =
+		2 * math.pi * ((x / 360) % 1),
+		2 * math.pi * ((y / 360) % 1),
+		2 * math.pi * ((z / 360) % 1);
+	local c_x, s_x, c_y, s_y, c_z, s_z =
+		math.cos(x), math.sin(x), math.cos(y), math.sin(y), math.cos(z), math.sin(z);
+	return {
+		c_y * c_z, -c_y * s_z, s_y;
+		s_x * s_y * c_z + c_x * s_z, c_x * c_z - s_x * s_y * s_z, -s_x * c_y;
+		-c_x * s_y * c_z + s_x * s_z, s_x * c_z + c_x * s_y * s_z,  c_x * c_y;
+	};
+end
+local function mul_vec(M, x, y, z)
+	return
+		M[1] * x + M[2] * y + M[3] * z,
+		M[4] * x + M[5] * y + M[6] * z,
+		M[7] * x + M[8] * y + M[9] * z;
+end
+local function mul_mat_r(M1, M2)
+	M2[1], M2[4], M2[7] = mul_vec(M1, M2[1], M2[4], M2[7]);
+	M2[2], M2[5], M2[8] = mul_vec(M1, M2[2], M2[5], M2[8]);
+	M2[3], M2[6], M2[9] = mul_vec(M1, M2[3], M2[6], M2[9]);
+	return M2;
+end
+
+local dx, dy, dz = cx - cx0, cy - cy0, -cz0;
+dx, dy, dz = sx * dx, sy * dy, sz * dz;
+dx, dy, dz = mul_vec(rot_mat(rx, ry, rz), dx, dy, dz);
+
+-- group controls.
+local group_layer, group_M, group_s = obj.getoption("group_info", 0), nil, 1;
+if group_layer > 0 then
+	group_M = { 1, 0, 0; 0, 1, 0; 0, 0, 1 };
+	for i = 1, obj.layer - 1 do
+		x0, y0 = x0 + tx0, y0 + ty0;
+
+		local s = (obj.getvalue(group_layer, "グループ制御", "拡大率") or 100) / 100;
+		dx, dy, dz = s * dx, s * dy, s * dz;
+		x0, y0, z0 = s * x0, s * y0, s * z0;
+		group_s = s * group_s;
+
+		local N = rot_mat(
+			obj.getvalue(group_layer, "グループ制御", "X軸回転") or 0,
+			obj.getvalue(group_layer, "グループ制御", "Y軸回転") or 0,
+			obj.getvalue(group_layer, "グループ制御", "Z軸回転") or 0);
+		dx, dy, dz = mul_vec(N, dx, dy, dz);
+		x0, y0, z0 = mul_vec(N, x0, y0, z0);
+		mul_mat_r(N, group_M);
+
+		tx0, ty0, z0 =
+			obj.getvalue(group_layer, "グループ制御", "X") or 0,
+			obj.getvalue(group_layer, "グループ制御", "Y") or 0,
+			z0 + (obj.getvalue(group_layer, "グループ制御", "Z") or 0);
+
+		group_layer = obj.getoption("group_info", i);
+		if group_layer <= 0 then break end
+	end
+end
+
+tx0, ty0 = tx0 + obj.screen_w / 2, ty0 + obj.screen_h / 2;
+local pz = 1 + (z0 + dz) / 1024;
+local x, y, frac =
+	tx0 + (x0 + dx) / pz,
+	ty0 + (y0 + dy) / pz, cx % 1;
+x, y =
+	math.floor(0.5 + x - frac) + frac,
+	math.floor(0.5 + y - frac) + frac;
+dx, dy, dz = x - tx0, y - ty0, 0;
+if group_M ~= nil then
+	-- apply the inverse transform of the group control.
+	dx, dy = dx * pz - x0, dy * pz - y0;
+	dx, dy, dz = mul_vec({
+		group_M[1], group_M[4], group_M[7];
+		group_M[2], group_M[5], group_M[8];
+		group_M[3], group_M[6], group_M[9];
+	}, dx, dy, dz);
+	dx, dy, dz = dx / group_s, dy / group_s, dz / group_s;
+end
+obj.ox, obj.oy, obj.oz = obj.ox + dx, obj.oy + dy, obj.oz + dz;
+obj.cx, obj.cy = obj.cx + (cx - cx0), obj.cy + (cy - cy0);
+

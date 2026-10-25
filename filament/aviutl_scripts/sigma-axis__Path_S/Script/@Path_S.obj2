@@ -1,0 +1,1418 @@
+--[[
+MIT License
+
+Copyright (c) 2025-2026 sigma-axis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+https://mit-license.org/
+]]
+
+--
+-- v2.42
+--
+
+-- https://github.com/sigma-axis/aviutl2_script_Path_S
+
+@パス図形σ
+--information:パス図形σ@Path_S v2.42 by σ軸
+--label:Path_S\図形
+--require:2011000
+--track@line:ライン幅,0,1000,5,0.01,,0.2
+--color@color_line:ライン色,0x808080
+--color@color_fill:塗り色,0xffffff
+--group:パス設定,true
+--value@num_points:頂点数,4
+--select@path_type:線タイプ=3,折れ線=0,補間移動=1,2次ベジェ曲線=2,3次ベジェ曲線=3
+--value@points:点リスト,{0,-100,55.23,-100,100,-55.23,100,0,100,55.23,55.23,100,0,100,-55.23,100,-100,55.23,-100,0,-100,-55.23,-55.23,-100}
+--checksection@loop:ループ,true,false
+--track@precision:曲線精度,1,128,8,1,,0.25
+--group:ライン設定,false
+--track@alpha_line:ライン透明度,0,100,0,0.01
+--track@start_pos:開始位置,-400,400,0,0.001,,0.25
+--track@end_pos:終了位置,-400,400,100,0.001,,0.25
+--select@end_shape:端の形状=0,円=0,四角=1,平坦=2,三角=3,リボン=4
+--select@join_shape:線結合の形状=0,ラウンド=0,ベベル=1,マイター=2,ブランク=3,ブランク+ラウンド=4,ブランク+ベベル=5
+--track@miter_limit:マイター限界,100,3200,400,0.001,,0.25
+--hide@miter_limit:join_shape<2
+--hide@miter_limit:join_shape==3
+--value@dash_pat:破線パターン,{100,0}
+--checksection@dash_adj:破線周期補正,true,false
+--track@dash_pos:破線位置,-4000,4000,0,0.01,,0.25
+--select@dash_end_shape:dash::端の形状=0,円=0,四角=1,平坦=2,三角=3,リボン=4
+--group:ライン境界設定,false
+--track@antialias:ぼかし幅,0,1000,1,0.01,,0.2
+--select@dither_pattern:ディザリング=0,なし=0,Checker=1,Bayer 2x2=2,Bayer 4x4=3,Bayer 256x256=4,IGN=5,White Noise=6,Halftone=7,Halftone Honeycomb=8,Halftone Square=9,Stripe=10
+--track@dither_seed:dither::ノイズシード,-65536,65535,10000,1
+--hide@dither_seed:dither_pattern==0
+--hide@dither_seed:dither_pattern==1
+--hide@dither_seed:dither_pattern==2
+--hide@dither_seed:dither_pattern==3
+--hide@dither_seed:dither_pattern==4
+--hide@dither_seed:dither_pattern==7
+--hide@dither_seed:dither_pattern==8
+--hide@dither_seed:dither_pattern==9
+--hide@dither_seed:dither_pattern==10
+--track@dither_rate:ディザ強さ,0,100,100,0.01
+--hide@dither_rate:dither_pattern==0
+--track@dither_size:dither::ドットサイズ,100,6400,100,0.01,,0.0625
+--hide@dither_size:dither_pattern==0
+--track@dither_X:dither::移動X,-4000,4000,0,0.01,,0.25
+--hide@dither_X:dither_pattern==0
+--track@dither_Y:dither::移動Y,-4000,4000,0,0.01,,0.25
+--hide@dither_Y:dither_pattern==0
+--trackgroup@dither_X,dither_Y:DitherPos
+--track@dither_angle:dither::回転,-3600,3600,0,0.01,,0.1
+--hide@dither_angle:dither_pattern==0
+--group:塗り設定,false
+--track@inflation:塗り追加幅,0,1000,0,0.01,,0.2
+--track@alpha_fill:塗り透明度,0,100,0,0.01
+--select@mode_fill:塗り範囲=0,内側=0,奇偶=1
+--group:塗り境界設定,false
+--track@fill_antialias:fill::ぼかし幅,0,1000,1,0.01,,0.2
+--select@fill_dither_pattern:fill::ディザリング=0,なし=0,Checker=1,Bayer 2x2=2,Bayer 4x4=3,Bayer 256x256=4,IGN=5,White Noise=6,Halftone=7,Halftone Honeycomb=8,Halftone Square=9,Stripe=10
+--track@fill_dither_seed:fill::dither::ノイズシード,-65536,65535,20000,1
+--hide@fill_dither_seed:fill_dither_pattern==0
+--hide@fill_dither_seed:fill_dither_pattern==1
+--hide@fill_dither_seed:fill_dither_pattern==2
+--hide@fill_dither_seed:fill_dither_pattern==3
+--hide@fill_dither_seed:fill_dither_pattern==4
+--hide@fill_dither_seed:fill_dither_pattern==7
+--hide@fill_dither_seed:fill_dither_pattern==8
+--hide@fill_dither_seed:fill_dither_pattern==9
+--hide@fill_dither_seed:fill_dither_pattern==10
+--track@fill_dither_rate:fill::ディザ強さ,0,100,100,0.01
+--hide@fill_dither_rate:fill_dither_pattern==0
+--track@fill_dither_size:fill::dither::ドットサイズ,100,6400,100,0.01,,0.0625
+--hide@fill_dither_size:fill_dither_pattern==0
+--track@fill_dither_X:fill::dither::移動X,-4000,4000,0,0.01,,0.25
+--hide@fill_dither_X:fill_dither_pattern==0
+--track@fill_dither_Y:fill::dither::移動Y,-4000,4000,0,0.01,,0.25
+--hide@fill_dither_Y:fill_dither_pattern==0
+--trackgroup@fill_dither_X,fill_dither_Y:FillDitherPos
+--track@fill_dither_angle:fill::dither::回転,-3600,3600,0,0.01,,0.1
+--hide@fill_dither_angle:fill_dither_pattern==0
+--group:ランダム変化,false
+--track@rand_period:ランダム周期,4,1024,32,0.001,,0.25
+--track@rand_amplify:ランダム振幅,0,1024,0,0.01,,0.125
+--checksection@rand_fix_end:ランダム固定端,true,false
+--hide@rand_fix_end:loop==1
+--track@rand_seed:ランダムシード,-65536,65535,10000,1
+--group:スナップ設定,false
+--select@snap_grid:snap::グリッド=0,なし=0,横のみ=1,縦のみ=2,縦横=3
+--track@snap_grid_X:snap::間隔X,1,1000,40,0.01,,0.1
+--hide@snap_grid_X:snap_grid==0
+--hide@snap_grid_X:snap_grid==2
+--track@snap_grid_Y:snap::間隔Y,1,1000,40,0.01,,0.1
+--hide@snap_grid_Y:snap_grid==0
+--hide@snap_grid_Y:snap_grid==1
+--check@snap_show_grid:snap::グリッド表示,false
+--hide@snap_show_grid:snap_grid==0
+--select@snap_angle_pos:snap::隣との角度=0,なし=0,90°=1,45°=2,30°=3,15°=4,5°=5
+--select@snap_angle_ctrl:snap::制御点の角度=0,なし=0,90°=1,45°=2,30°=3,15°=4,5°=5
+--hide@snap_angle_ctrl:path_type<2
+--select@snap_prev_ctrl:snap::隣の制御点=0,なし=0,角度=1,長さ=2,角度と長さ=3
+--hide@snap_prev_ctrl:path_type<2
+--track@snap_threshold:snap::スナップ距離,0,200,8,0.01,,0.1
+--group:その他,false
+--value@PI:PI,{}
+local path_s = require("Path_S");
+local obj, math, tonumber, type = obj, math, tonumber, type;
+
+-- process snapping.
+if (snap_grid ~= 0 or snap_angle_pos ~= 0 or snap_angle_ctrl ~= 0 or snap_prev_ctrl ~= 0) and snap_threshold > 0 then
+	path_s.snap_anchors(path_type,
+		points, num_points, loop,
+		(snap_grid == 1 or snap_grid == 3) and snap_grid_X or 0,
+		(snap_grid == 2 or snap_grid == 3) and snap_grid_Y or 0,
+		snap_angle_pos, snap_angle_ctrl, snap_prev_ctrl, snap_threshold,
+		snap_show_grid and snap_grid ~= 0 and obj.getoption("gui"), 5);
+end
+
+-- set anchors.
+if obj.getoption("gui") then
+	num_points = math.max(math.floor(0.5 + (tonumber(num_points) or 4)), 2);
+	path_type = math.min(math.max(math.floor(0.5 + path_type), 0), 3);
+	local _, pts = path_s.anchor("points", path_type, points, num_points - (loop and 0 or 1), loop);
+	points = pts;
+end
+
+--#region PI / normalize parameters.
+
+-- take parameters. (they don't affect to anchors.)
+line = tonumber(PI.line) or line;
+color_line = tonumber(PI.color_line) or color_line;
+color_fill = tonumber(PI.color_fill) or color_fill;
+num_points = tonumber(PI.num_points) or num_points;
+if type(PI.path_type) == "string" then
+	local name2num = {
+		["折れ線"] = 0, ["補間移動"] = 1, ["2次ベジェ曲線"] = 2, ["3次ベジェ曲線"] = 3,
+	};
+	path_type = name2num[PI.path_type] or path_type;
+end
+if type(PI.points) == "table" then points = PI.points end
+loop = path_s.PI.as_bool(PI.loop, loop);
+precision = tonumber(PI.precision) or precision;
+alpha_line = tonumber(PI.alpha_line) or alpha_line;
+start_pos = tonumber(PI.start_pos) or start_pos;
+end_pos = tonumber(PI.end_pos) or end_pos;
+end_shape = path_s.PI.end_shape(PI.end_shape, end_shape);
+join_shape = path_s.PI.join_shape(PI.join_shape, join_shape);
+miter_limit = tonumber(PI.miter_limit) or miter_limit;
+if type(PI.dash_pat) == "table" then dash_pat = PI.dash_pat end
+dash_adj = path_s.PI.as_bool(PI.dash_adj, dash_adj);
+dash_pos = tonumber(PI.dash_pos) or dash_pos;
+dash_end_shape = path_s.PI.end_shape(PI.dash_end_shape, dash_end_shape);
+antialias = tonumber(PI.antialias) or antialias;
+dither_pattern = path_s.PI.dither_pattern(PI.dither_pattern, dither_pattern);
+dither_seed = tonumber(PI.dither_seed) or dither_seed;
+dither_rate = tonumber(PI.dither_rate) or dither_rate;
+dither_size = tonumber(PI.dither_size) or dither_size;
+dither_X = tonumber(PI.dither_X) or dither_X;
+dither_Y = tonumber(PI.dither_Y) or dither_Y;
+dither_angle = tonumber(PI.dither_angle) or dither_angle;
+inflation = tonumber(PI.inflation) or inflation;
+alpha_fill = tonumber(PI.alpha_fill) or alpha_fill;
+if type(PI.mode_fill) == "string" then
+	local name2num = {
+		["内側"] = 0, ["奇偶"] = 1,
+	};
+	mode_fill = name2num[PI.mode_fill] or mode_fill;
+end
+fill_antialias = tonumber(PI.fill_antialias) or fill_antialias;
+fill_dither_pattern = path_s.PI.dither_pattern(PI.fill_dither_pattern, fill_dither_pattern);
+fill_dither_seed = tonumber(PI.fill_dither_seed) or fill_dither_seed;
+fill_dither_rate = tonumber(PI.fill_dither_rate) or fill_dither_rate;
+fill_dither_size = tonumber(PI.fill_dither_size) or fill_dither_size;
+fill_dither_X = tonumber(PI.fill_dither_X) or fill_dither_X;
+fill_dither_Y = tonumber(PI.fill_dither_Y) or fill_dither_Y;
+fill_dither_angle = tonumber(PI.fill_dither_angle) or fill_dither_angle;
+rand_period = tonumber(PI.rand_period) or rand_period;
+rand_amplify = tonumber(PI.rand_amplify) or rand_amplify;
+rand_fix_end = path_s.PI.as_bool(PI.rand_fix_end, rand_fix_end);
+rand_seed = tonumber(PI.rand_seed) or rand_seed;
+
+-- normalize parameters.
+line = math.max(line, 0);
+color_line = color_line % 2 ^ 24;
+color_fill = color_fill % 2 ^ 24;
+num_points = math.max(math.floor(0.5 + num_points), 2);
+path_type = math.min(math.max(math.floor(0.5 + path_type), 0), 3);
+precision = math.max(precision, 1);
+alpha_line = math.min(math.max(1 - alpha_line / 100, 0), 1);
+start_pos = start_pos / 100;
+end_pos = end_pos / 100;
+miter_limit = math.max(miter_limit / 100, 1);
+antialias = math.max(antialias, 0);
+dither_seed = math.floor(0.5 + dither_seed);
+if dither_seed >= 0 then
+	dither_seed = dither_seed +  2525 * (obj.id % 2 ^ 20);
+end
+dither_seed = dither_seed % 2 ^ 20;
+dither_rate = math.min(math.max(dither_rate / 100, 0), 1);
+dither_size = math.max(dither_size / 100, 1);
+dither_angle = 2 * math.pi * ((dither_angle / 360) % 1);
+inflation = math.max(inflation, 0);
+alpha_fill = math.min(math.max(1 - alpha_fill / 100, 0), 1);
+mode_fill = math.min(math.max(math.floor(0.5 + mode_fill), 0), 1);
+fill_antialias = math.max(fill_antialias, 0);
+fill_dither_seed = math.floor(0.5 + fill_dither_seed);
+if fill_dither_seed >= 0 then
+	fill_dither_seed = fill_dither_seed +  2525 * (obj.id % 2 ^ 20);
+end
+fill_dither_seed = fill_dither_seed % 2 ^ 20;
+fill_dither_rate = math.min(math.max(fill_dither_rate / 100, 0), 1);
+fill_dither_size = math.max(fill_dither_size / 100, 1);
+fill_dither_angle = 2 * math.pi * ((fill_dither_angle / 360) % 1);
+rand_period = math.max(rand_period, 4);
+rand_amplify = math.max(rand_amplify, 0);
+rand_seed = math.min(math.max(math.floor(0.5 + rand_seed), -2 ^ 16), 2 ^ 16 - 1);
+
+--#endregion PI / normalize parameters.
+
+-- further calculations.
+local has_fill, has_chrome = alpha_fill > 0,
+	line > 0 and alpha_line > 0 and start_pos <= end_pos;
+
+-- parse/measure the path.
+points, num_points = path_s.poll(path_type, points, num_points - (loop and 0 or 1), loop, precision);
+if rand_amplify > 0 then
+	-- randomize the path.
+	points, num_points = path_s.randomize(points, num_points, rand_period, rand_amplify,
+		loop and 2 or rand_fix_end and 1 or 0, rand_seed);
+end
+local L, R, T, B, len = path_s.measure(points, num_points);
+local th = math.max(path_s.line_inflation(end_shape, dash_end_shape, join_shape,
+	line, antialias, miter_limit, dash_pat), fill_antialias);
+L, T = math.floor(L - th), math.floor(T - th);
+R, B = math.max(math.ceil(R + th), L + 1), math.max(math.ceil(B + th), T + 1);
+
+-- prepare the canvas.
+obj.clearbuffer("object", R - L, B - T);
+obj.cx, obj.cy = -(L + R) / 2, -(T + B) / 2;
+
+-- draw the figures.
+if has_fill or has_chrome then
+	local cache_name, num_segments = "tempbuffer", num_points;
+	if has_fill and has_chrome then
+		cache_name = "cache:path_s/coords";
+		obj.setoption("drawtarget", "tempbuffer", obj.w, obj.h);
+	end
+
+	if not loop and has_fill then
+		-- close the loop for drawing the filling part.
+		num_points = num_points + 1;
+		points[2 * num_points - 1], points[2 * num_points] = points[1], points[2];
+	end
+	path_s.send(points, num_points, -L, -T, cache_name);
+
+	-- draw the shape of the filling part.
+	if has_fill then
+		obj.clearbuffer(has_chrome and "tempbuffer" or "object", color_fill);
+		path_s.path_mask_area_buffered(
+			0, alpha_fill, mode_fill, inflation, {
+				width = fill_antialias,
+				pattern = fill_dither_pattern, seed = fill_dither_seed,
+				rate = fill_dither_rate,
+				cx = obj.cx + obj.w / 2 + fill_dither_X, cy = obj.cy + obj.h / 2 + fill_dither_Y,
+				size = fill_dither_size, rot = fill_dither_angle,
+			},
+			cache_name, num_points,
+			has_chrome and { name = "tempbuffer", w = obj.w, h = obj.h } or nil);
+	end
+
+	-- then the outline part.
+	if has_chrome then
+		obj.clearbuffer("object", color_line);
+		path_s.path_mask_line_buffered(
+			0, alpha_line, line, {
+				width = antialias,
+				pattern = dither_pattern, seed = dither_seed,
+				rate = dither_rate,
+				cx = obj.cx + obj.w / 2 + dither_X, cy = obj.cy + obj.h / 2 + dither_Y,
+				size = dither_size, rot = dither_angle,
+			},
+			cache_name, num_segments, len, loop,
+			start_pos, end_pos, end_shape, join_shape, miter_limit,
+			dash_pat, dash_pos, dash_adj, dash_end_shape);
+		if has_fill then
+			obj.draw();
+			assert(obj.copybuffer("object", "tempbuffer"));
+		end
+	end
+end
+
+@ラインσ
+--information:ラインσ@Path_S v2.42 by σ軸
+--label:Path_S\図形
+--require:2011000
+--track@start_X:始点X,-4000,4000,0,0.01,,0.25
+--track@start_Y:始点Y,-4000,4000,0,0.01,,0.25
+--trackgroup@start_X,start_Y:start_point
+--track@end_X:終点X,-4000,4000,256,0.01,,0.25
+--track@end_Y:終点Y,-4000,4000,0,0.01,,0.25
+--trackgroup@X,Y:end_point
+--track@line:ライン幅,0,1000,5,0.01,,0.2
+--color@color:色,0xffffff
+--group:曲線設定,true
+--select@line_shape:形状=1,直線=0,正弦波=1,三角波=2,矩形波=3,のこぎり波=4
+--track@line_period:周期,4,1024,64,0.001,,0.25
+--hide@line_period:line_shape==0
+--track@line_phase:周期位置,-4000,4000,0,0.01,,0.25
+--hide@line_phase:line_shape==0
+--track@line_amplify:振幅,0,1024,32,0.01,,0.125
+--hide@line_amplify:line_shape==0
+--group:ライン設定,false
+--track@start_pos:開始位置,0,100,0,0.001
+--track@end_pos:終了位置,0,100,100,0.001
+--select@end_shape:端の形状=0,円=0,四角=1,平坦=2,三角=3,リボン=4
+--select@join_shape:線結合の形状=0,ラウンド=0,ベベル=1,マイター=2,ブランク=3,ブランク+ラウンド=4,ブランク+ベベル=5
+--track@miter_limit:マイター限界,100,3200,400,0.001,,0.25
+--hide@miter_limit:join_shape<2
+--hide@miter_limit:join_shape==3
+--value@dash_pat:破線パターン,{100,0}
+--track@dash_pos:破線位置,-4000,4000,0,0.01,,0.25
+--select@dash_end_shape:dash::端の形状=0,円=0,四角=1,平坦=2,三角=3,リボン=4
+--group:ライン境界設定,false
+--track@antialias:ぼかし幅,0,1000,1,0.01,,0.2
+--select@dither_pattern:ディザリング=0,なし=0,Checker=1,Bayer 2x2=2,Bayer 4x4=3,Bayer 256x256=4,IGN=5,White Noise=6,Halftone=7,Halftone Honeycomb=8,Halftone Square=9,Stripe=10
+--track@dither_seed:dither::ノイズシード,-65536,65535,10000,1
+--hide@dither_seed:dither_pattern==0
+--hide@dither_seed:dither_pattern==1
+--hide@dither_seed:dither_pattern==2
+--hide@dither_seed:dither_pattern==3
+--hide@dither_seed:dither_pattern==4
+--hide@dither_seed:dither_pattern==7
+--hide@dither_seed:dither_pattern==8
+--hide@dither_seed:dither_pattern==9
+--hide@dither_seed:dither_pattern==10
+--track@dither_rate:ディザ強さ,0,100,100,0.01
+--hide@dither_rate:dither_pattern==0
+--track@dither_size:dither::ドットサイズ,100,6400,100,0.01,,0.0625
+--hide@dither_size:dither_pattern==0
+--track@dither_X:dither::移動X,-4000,4000,0,0.01,,0.25
+--hide@dither_X:dither_pattern==0
+--track@dither_Y:dither::移動Y,-4000,4000,0,0.01,,0.25
+--hide@dither_Y:dither_pattern==0
+--trackgroup@dither_X,dither_Y:DitherPos
+--track@dither_angle:dither::回転,-3600,3600,0,0.01,,0.1
+--hide@dither_angle:dither_pattern==0
+--group:ランダム変化,false
+--track@rand_period:ランダム周期,4,1024,32,0.01,,0.25
+--track@rand_amplify:ランダム振幅,0,1024,0,0.001,,0.125
+--checksection@rand_fix_end:ランダム固定端,true,false
+--track@rand_seed:ランダムシード,-65536,65535,10000,1
+--group:その他,false
+--value@PI:PI,{}
+local path_s = require("Path_S");
+local obj, math, tonumber, type = obj, math, tonumber, type;
+
+-- set anchors.
+if obj.getoption("gui") then
+	obj.setanchor("start_X,start_Y", 0, "line", "color", 0xa0ffa0);
+	obj.setanchor("end_X,end_Y", 0, "line", "color", 0xffa0a0);
+	obj.setanchor({ start_X, start_Y, end_X, end_Y }, 2, "line");
+end
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+start_X = tonumber(PI.start_X) or start_X;
+start_Y = tonumber(PI.start_Y) or start_Y;
+end_X = tonumber(PI.end_X) or end_X;
+end_Y = tonumber(PI.end_Y) or end_Y;
+line = tonumber(PI.line) or line;
+color = tonumber(PI.color) or color;
+if type(PI.line_shape) == "string" then
+	local name2num = {
+		["直線"] = 0,["正弦波"] = 1,["三角波"] = 2,["矩形波"] = 3, ["のこぎり波"] = 4,
+	};
+	line_shape = name2num[PI.line_shape] or line_shape;
+end
+line_period = tonumber(PI.line_period) or line_period;
+line_phase = tonumber(PI.line_phase) or line_phase;
+line_amplify = tonumber(PI.line_amplify) or line_amplify;
+start_pos = tonumber(PI.start_pos) or start_pos;
+end_pos = tonumber(PI.end_pos) or end_pos;
+end_shape = path_s.PI.end_shape(PI.end_shape, end_shape);
+join_shape = path_s.PI.join_shape(PI.join_shape, join_shape);
+miter_limit = tonumber(PI.miter_limit) or miter_limit;
+dash_pat = type(PI.dash_pat) == "table" and PI.dash_pat or dash_pat;
+dash_pos = tonumber(PI.dash_pos) or dash_pos;
+dash_end_shape = path_s.PI.end_shape(PI.dash_end_shape, dash_end_shape);
+antialias = tonumber(PI.antialias) or antialias;
+dither_pattern = path_s.PI.dither_pattern(PI.dither_pattern, dither_pattern);
+dither_seed = tonumber(PI.dither_seed) or dither_seed;
+dither_rate = tonumber(PI.dither_rate) or dither_rate;
+dither_size = tonumber(PI.dither_size) or dither_size;
+dither_X = tonumber(PI.dither_X) or dither_X;
+dither_Y = tonumber(PI.dither_Y) or dither_Y;
+dither_angle = tonumber(PI.dither_angle) or dither_angle;
+rand_period = tonumber(PI.rand_period) or rand_period;
+rand_amplify = tonumber(PI.rand_amplify) or rand_amplify;
+rand_fix_end = path_s.PI.as_bool(PI.rand_fix_end, rand_fix_end);
+rand_seed = tonumber(PI.rand_seed) or rand_seed;
+
+-- normalize parameters.
+line = math.max(line, 0);
+color = math.floor(0.5 + color) % 2 ^ 24;
+line_shape = math.min(math.max(math.floor(0.5 + line_shape), 0), 4);
+line_period = math.max(line_period, 4);
+line_amplify = math.max(line_amplify, 0);
+start_pos = math.min(math.max(start_pos / 100, 0), 1);
+end_pos = math.min(math.max(end_pos / 100, 0), 1);
+miter_limit = math.max(miter_limit / 100, 1);
+antialias = math.max(antialias, 0);
+dither_seed = math.floor(0.5 + dither_seed);
+if dither_seed >= 0 then
+	dither_seed = dither_seed + 2525 * (obj.id % 2 ^ 20);
+end
+dither_seed = dither_seed % 2 ^ 20;
+dither_rate = math.min(math.max(dither_rate / 100, 0), 1);
+dither_size = math.max(dither_size / 100, 1);
+dither_angle = 2 * math.pi * ((dither_angle / 360) % 1);
+rand_period = math.max(rand_period, 4);
+rand_amplify = math.max(rand_amplify, 0);
+rand_seed = math.min(math.max(math.floor(0.5 + rand_seed), -2 ^ 16), 2 ^ 16 - 1);
+
+--#endregion PI / normalize parameters.
+
+-- further calculations.
+local length = ((end_X - start_X) ^ 2 + (end_Y - start_Y) ^ 2) ^ 0.5;
+if length <= 0 then
+	-- no image.
+	obj.setoption("draw_state", true);
+	return;
+end
+
+-- make the table of the points for the curve.
+local n_pts, pts
+if line_shape == 0 or line_amplify <= 0 then
+	-- straight line.
+	n_pts, pts = 2, { 0, 0, length, 0 };
+elseif line_shape == 1 then
+	-- sine wave.
+	local dp, p = math.min(2 ^ -math.ceil(math.log((line_period + line_amplify) / 8, 2)), 1 / 16),
+		((-line_phase) / line_period) % 1;
+	n_pts, pts = 1, { 0, line_amplify * math.sin(2 * math.pi * p) };
+	local x do
+		local p1 = (math.floor(p / dp) + 1) * dp;
+		x = (p1 - p) * line_period;
+		p = p1 % 1;
+	end
+	while x < length do
+		n_pts = n_pts + 1;
+		pts[2 * n_pts - 1], pts[2 * n_pts] =
+			x, line_amplify * math.sin(2 * math.pi * p);
+		x, p = x + dp * line_period, (p + dp) % 1;
+	end
+	p = (p - (x - length) / line_period) % 1;
+	n_pts = n_pts + 1;
+	pts[2 * n_pts - 1], pts[2 * n_pts] =
+		length, line_amplify * math.sin(2 * math.pi * p);
+elseif line_shape == 2 then
+	-- triangular wave.
+	local p = (((-line_phase) / line_period) - 0.25) % 1;
+	n_pts, pts = 1, { 0, line_amplify * (4 * math.abs(p - 0.5) - 1) };
+	local x do
+		local p1 = (math.floor(2 * p) + 1) / 2;
+		x = (p1 - p) * line_period;
+		p = p1 % 1;
+	end
+	while x < length do
+		n_pts = n_pts + 1;
+		pts[2 * n_pts - 1], pts[2 * n_pts] =
+			x, line_amplify * (p > 0 and -1 or 1);
+		x, p = x + 0.5 * line_period, (p + 0.5) % 1;
+	end
+	p = (p - (x - length) / line_period) % 1;
+	n_pts = n_pts + 1;
+	pts[2 * n_pts - 1], pts[2 * n_pts] =
+		length, line_amplify * (4 * math.abs(p - 0.5) - 1);
+elseif line_shape == 3 then
+	-- square wave.
+	local p = ((-line_phase) / line_period) % 1;
+	n_pts, pts = 1, { 0, line_amplify * (p < 0.5 and -1 or 1) };
+	local x do
+		local p1 = (math.floor(2 * p) + 1) / 2;
+		x = (p1 - p) * line_period;
+		p = p1 % 1;
+	end
+	while x < length do
+		n_pts = n_pts + 2;
+		pts[2 * n_pts - 3], pts[2 * n_pts - 2] =
+			x, line_amplify * (p > 0 and -1 or 1);
+		pts[2 * n_pts - 1], pts[2 * n_pts] = pts[2 * n_pts - 3], -pts[2 * n_pts - 2];
+		x, p = x + 0.5 * line_period, (p + 0.5) % 1;
+	end
+	p = ((x - length) / line_period - p) % 1;
+	n_pts = n_pts + 1;
+	pts[2 * n_pts - 1], pts[2 * n_pts] =
+		length, line_amplify * (p < 0.5 and 1 or -1);
+else -- line_shape == 4
+	-- saw wave.
+	local p = ((-line_phase) / line_period) % 1;
+	n_pts, pts = 1, { 0, line_amplify * (2 * p - 1) };
+	local x do
+		local p1 = (math.floor(p) + 1);
+		x = (p1 - p) * line_period;
+		p = 0;
+	end
+	while x < length do
+		n_pts = n_pts + 2;
+		pts[2 * n_pts - 3], pts[2 * n_pts - 2] =
+			x, line_amplify;
+		pts[2 * n_pts - 1], pts[2 * n_pts] = pts[2 * n_pts - 3], -pts[2 * n_pts - 2];
+		x = x + line_period;
+	end
+	p = 1 - (((x - length) / line_period) % 1);
+	n_pts = n_pts + 1;
+	pts[2 * n_pts - 1], pts[2 * n_pts] =
+		length, line_amplify * (2 * p - 1);
+end
+
+-- randomize the line.
+if rand_amplify > 0 then
+	pts, n_pts = path_s.randomize(pts, n_pts, rand_period, rand_amplify,
+		rand_fix_end and 1 or 0, rand_seed);
+end
+
+-- measure and move the path.
+path_s.transform(pts, n_pts, 1, math.atan2(end_Y - start_Y, end_X - start_X), start_X, start_Y);
+local L, R, T, B = path_s.measure(pts, n_pts);
+local th = path_s.line_inflation(end_shape, dash_end_shape, join_shape,
+	line, antialias, miter_limit, dash_pat);
+L, T = math.floor(L - th), math.floor(T - th);
+R, B = math.max(math.ceil(R + th), L + 1), math.max(math.ceil(B + th), T + 1);
+
+-- prepare the canvas.
+obj.cx, obj.cy = -(L + R) / 2, -(T + B) / 2;
+obj.clearbuffer("object", R - L, B - T, color);
+
+-- draw the line.
+path_s.path_mask_line(
+	0, 1, line, {
+		width = antialias,
+		pattern = dither_pattern, seed = dither_seed,
+		rate = dither_rate,
+		cx = obj.cx + obj.w / 2 + dither_X, cy = obj.cy + obj.h / 2 + dither_Y,
+		size = dither_size, rot = dither_angle,
+	},
+	nil, pts, n_pts - 1, false, 1,
+	start_pos, end_pos, end_shape, join_shape, miter_limit,
+	dash_pat, dash_pos, false, dash_end_shape,
+	1, 0, obj.cx, obj.cy);
+
+@スパイラルσ
+--information:スパイラルσ@Path_S v2.42 by σ軸
+--label:Path_S\図形
+--require:2011000
+--track@start_X:始点X,-4000,4000,0,0.01,,0.25
+--track@start_Y:始点Y,-4000,4000,0,0.01,,0.25
+--trackgroup@start_X,start_Y:start_point
+--track@end_X:終点X,-4000,4000,0,0.01,,0.25
+--track@end_Y:終点Y,-4000,4000,0,0.01,,0.25
+--trackgroup@end_X,end_Y:end_point
+--track@start_radius:開始半径,0,2000,0,0.01,,0.25
+--track@end_radius:終了半径,0,2000,256,0.01,,0.25
+--track@line:ライン幅,0,1000,5,0.01,,0.2
+--color@color:色,0xffffff
+--group:螺旋設定,true
+--select@line_shape:形状=1,アルキメデス螺旋=0,対数螺旋=1
+--track@slope:傾き,-400,400,10,0.001,,0.25
+--track@rotate:回転,-3600,3600,0,0.01,,0.1
+--group:ライン設定,false
+--track@start_pos:開始位置,0,100,0,0.001
+--track@end_pos:終了位置,0,100,100,0.001
+--select@end_shape:端の形状=0,円=0,四角=1,平坦=2,三角=3,リボン=4
+--track@precision:曲線精度,1,128,8,1,,0.25
+--value@dash_pat:破線パターン,{100,0}
+--track@dash_pos:破線位置,-4000,4000,0,0.01,,0.25
+--select@dash_end_shape:dash::端の形状=0,円=0,四角=1,平坦=2,三角=3,リボン=4
+--group:ライン境界設定,false
+--track@antialias:ぼかし幅,0,1000,1,0.01,,0.2
+--select@dither_pattern:ディザリング=0,なし=0,Checker=1,Bayer 2x2=2,Bayer 4x4=3,Bayer 256x256=4,IGN=5,White Noise=6,Halftone=7,Halftone Honeycomb=8,Halftone Square=9,Stripe=10
+--track@dither_seed:dither::ノイズシード,-65536,65535,10000,1
+--hide@dither_seed:dither_pattern==0
+--hide@dither_seed:dither_pattern==1
+--hide@dither_seed:dither_pattern==2
+--hide@dither_seed:dither_pattern==3
+--hide@dither_seed:dither_pattern==4
+--hide@dither_seed:dither_pattern==7
+--hide@dither_seed:dither_pattern==8
+--hide@dither_seed:dither_pattern==9
+--hide@dither_seed:dither_pattern==10
+--track@dither_rate:ディザ強さ,0,100,100,0.01
+--hide@dither_rate:dither_pattern==0
+--track@dither_size:dither::ドットサイズ,100,6400,100,0.01,,0.0625
+--hide@dither_size:dither_pattern==0
+--track@dither_X:dither::移動X,-4000,4000,0,0.01,,0.25
+--hide@dither_X:dither_pattern==0
+--track@dither_Y:dither::移動Y,-4000,4000,0,0.01,,0.25
+--hide@dither_Y:dither_pattern==0
+--trackgroup@dither_X,dither_Y:DitherPos
+--track@dither_angle:dither::回転,-3600,3600,0,0.01,,0.1
+--hide@dither_angle:dither_pattern==0
+--group:ランダム変化,false
+--track@rand_period:ランダム周期,4,1024,32,0.01,,0.25
+--track@rand_amplify:ランダム振幅,0,1024,0,0.001,,0.125
+--checksection@rand_fix_end:ランダム固定端,false,false
+--track@rand_seed:ランダムシード,-65536,65535,10000,1
+--group:その他,false
+--value@PI:PI,{}
+local path_s = require("Path_S");
+local obj, math, tonumber, type = obj, math, tonumber, type;
+
+-- set anchors.
+if obj.getoption("gui") then
+	obj.setanchor("start_X,start_Y", 0, "line", "color", 0xa0ffa0);
+	obj.setanchor("end_X,end_Y", 0, "line", "color", 0xffa0a0);
+	obj.setanchor({ start_X, start_Y, end_X, end_Y }, 2, "line");
+end
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+start_X = tonumber(PI.start_X) or start_X;
+start_Y = tonumber(PI.start_Y) or start_Y;
+end_X = tonumber(PI.end_X) or end_X;
+end_Y = tonumber(PI.end_Y) or end_Y;
+start_radius = tonumber(PI.start_radius) or start_radius;
+end_radius = tonumber(PI.end_radius) or end_radius;
+line = tonumber(PI.line) or line;
+color = tonumber(PI.color) or color;
+if type(PI.line_shape) == "string" then
+	local name2num = {
+		["アルキメデス螺旋"] = 0, ["対数螺旋"] = 1,
+	};
+	line_shape = name2num[PI.line_shape] or line_shape;
+end
+slope = tonumber(PI.slope) or slope;
+rotate = tonumber(PI.rotate) or rotate;
+start_pos = tonumber(PI.start_pos) or start_pos;
+end_pos = tonumber(PI.end_pos) or end_pos;
+end_shape = path_s.PI.end_shape(PI.end_shape, end_shape);
+precision = tonumber(PI.precision) or precision;
+dash_pat = type(PI.dash_pat) == "table" and PI.dash_pat or dash_pat;
+dash_pos = tonumber(PI.dash_pos) or dash_pos;
+dash_end_shape = path_s.PI.end_shape(PI.dash_end_shape, dash_end_shape);
+antialias = tonumber(PI.antialias) or antialias;
+dither_pattern = path_s.PI.dither_pattern(PI.dither_pattern, dither_pattern);
+dither_seed = tonumber(PI.dither_seed) or dither_seed;
+dither_rate = tonumber(PI.dither_rate) or dither_rate;
+dither_size = tonumber(PI.dither_size) or dither_size;
+dither_X = tonumber(PI.dither_X) or dither_X;
+dither_Y = tonumber(PI.dither_Y) or dither_Y;
+dither_angle = tonumber(PI.dither_angle) or dither_angle;
+rand_period = tonumber(PI.rand_period) or rand_period;
+rand_amplify = tonumber(PI.rand_amplify) or rand_amplify;
+rand_fix_end = path_s.PI.as_bool(PI.rand_fix_end, rand_fix_end);
+rand_seed = tonumber(PI.rand_seed) or rand_seed;
+
+-- normalize parameters.
+start_radius = math.max(start_radius, 0);
+end_radius = math.max(end_radius, 0);
+line = math.max(line, 0);
+color = math.floor(0.5 + color) % 2 ^ 24;
+line_shape = math.min(math.max(math.floor(0.5 + line_shape), 0), 1);
+rotate = math.pi / 180 * (rotate % 360);
+start_pos = math.min(math.max(start_pos / 100, 0), 1);
+end_pos = math.min(math.max(end_pos / 100, 0), 1);
+precision = math.max(precision, 1);
+antialias = math.max(antialias, 0);
+dither_seed = math.floor(0.5 + dither_seed);
+if dither_seed >= 0 then
+	dither_seed = dither_seed + 2525 * (obj.id % 2 ^ 20);
+end
+dither_seed = dither_seed % 2 ^ 20;
+dither_rate = math.min(math.max(dither_rate / 100, 0), 1);
+dither_size = math.max(dither_size / 100, 1);
+dither_angle = 2 * math.pi * ((dither_angle / 360) % 1);
+rand_period = math.max(rand_period, 4);
+rand_amplify = math.max(rand_amplify, 0);
+rand_seed = math.min(math.max(math.floor(0.5 + rand_seed), -2 ^ 16), 2 ^ 16 - 1);
+
+--#endregion PI / normalize parameters.
+
+-- prepare the function for the curve, which maps from a radius to a pair (angle, diff_radius).
+local curve_func if line_shape == 0 then
+	-- archimedean spiral.
+	local s, d = (2 * math.pi / 1024) * slope, precision;
+	local a0 = 128 * s;
+	function curve_func(r)
+		local a = s * r;
+		return a - a0, (1 + a ^ 2) ^ -0.5 * d;
+	end
+else -- line_shape == 1.
+	-- logarithmic spiral.
+	local s, d, log = slope, (1 + slope ^ 2) ^ -0.5 * precision, math.log;
+	function curve_func(r)
+		return r > 0 and s * log(r / 128) or 0, d;
+	end
+end
+
+-- make the array of the points for the curve.
+local pts, n_pts = {}, 0 do
+	-- poll points from inner to outer.
+	local r, R, x, y, dx, dy =
+		start_radius, end_radius, start_X, start_Y,
+		(end_X - start_X) / (end_radius - start_radius),
+		(end_Y - start_Y) / (end_radius - start_radius);
+	if r > R then r, R, x, y = R, r, end_X, end_Y end
+	while true do
+		local a, dr = curve_func(r);
+		n_pts = n_pts + 1;
+		pts[2 * n_pts - 1], pts[2 * n_pts] =
+			r * math.sin(a + rotate) + x,
+			r * math.cos(a + rotate) + y;
+		if r >= R then break end
+		r, dr = math.min(r + dr, R), math.min(dr, R - r);
+		x, y = x + dr * dx, y + dr * dy;
+	end
+
+	-- reverse the array if necessary.
+	if start_radius > end_radius then
+		for i = 1, math.floor(n_pts / 2) do
+			local j = n_pts + 1 - i;
+			pts[2 * i - 1], pts[2 * j - 1] = pts[2 * j - 1], pts[2 * i - 1];
+			pts[2 * i], pts[2 * j] = pts[2 * j], pts[2 * i];
+		end
+	end
+end
+
+-- randomize the path.
+if rand_amplify > 0 then
+	pts, n_pts = path_s.randomize(pts, n_pts, rand_period, rand_amplify,
+		rand_fix_end and 1 or 0, rand_seed);
+end
+
+-- measure and move the path.
+local L, R, T, B, len = path_s.measure(pts, n_pts);
+local th = path_s.line_inflation(end_shape, dash_end_shape, 0,
+	line, antialias, 1, dash_pat);
+L, T = math.floor(L - th), math.floor(T - th);
+R, B = math.max(math.ceil(R + th), L + 1), math.max(math.ceil(B + th), T + 1);
+
+-- prepare the canvas.
+obj.cx, obj.cy = -(L + R) / 2, -(T + B) / 2;
+obj.clearbuffer("object", R - L, B - T, color);
+
+-- draw the path.
+path_s.path_mask_line(
+	0, 1, line, {
+		width = antialias,
+		pattern = dither_pattern, seed = dither_seed,
+		rate = dither_rate,
+		cx = obj.cx + obj.w / 2 + dither_X, cy = obj.cy + obj.h / 2 + dither_Y,
+		size = dither_size, rot = dither_angle,
+	},
+	nil, pts, n_pts - 1, false, 1,
+	start_pos, end_pos, end_shape, 0, 1,
+	dash_pat, dash_pos, false, dash_end_shape,
+	1, 0, obj.cx, obj.cy);
+
+@アローσ
+--information:アローσ@Path_S v2.42 by σ軸
+--label:Path_S\図形
+--require:2011000
+--track@line:ライン幅,0,1000,5,0.01,,0.2
+--track@head_size:矢じりサイズ,0,2048,32,0.01,,0.125
+--color@color:色,0xffffff
+--group:パス設定,true
+--value@num_points:頂点数,4
+--select@path_type:線タイプ=3,折れ線=0,補間移動=1,2次ベジェ曲線=2,3次ベジェ曲線=3
+--value@points:点リスト,{-100.00,50.00,-75.00,0.00,-50.00,-50.00,-25.00,-50.00,0.00,-50.00,0.00,50.00,25.00,50.00,50.00,50.00,75.00,0.00,100.00,-50.00}
+--track@precision:曲線精度,1,128,8,1,,0.25
+--group:ライン設定,false
+--track@start_pos:開始位置,0,100,0,0.001
+--track@end_pos:終了位置,0,100,100,0.001
+--select@end_shape:端の形状=0,円=0,四角=1,平坦=2,三角=3,リボン=4
+--select@join_shape:線結合の形状=0,ラウンド=0,ベベル=1,マイター=2,ブランク=3,ブランク+ラウンド=4,ブランク+ベベル=5
+--track@miter_limit:マイター限界,100,3200,400,0.001,,0.25
+--hide@miter_limit:join_shape<2
+--hide@miter_limit:join_shape==3
+--value@dash_pat:破線パターン,{100,0}
+--track@dash_pos:破線位置,-4000,4000,0,0.01,,0.25
+--select@dash_end_shape:dash::端の形状=0,円=0,四角=1,平坦=2,三角=3,リボン=4
+--group:ライン境界設定,false
+--track@antialias:ぼかし幅,0,1000,1,0.01,,0.2
+--select@dither_pattern:ディザリング=0,なし=0,Checker=1,Bayer 2x2=2,Bayer 4x4=3,Bayer 256x256=4,IGN=5,White Noise=6,Halftone=7,Halftone Honeycomb=8,Halftone Square=9,Stripe=10
+--track@dither_seed:dither::ノイズシード,-65536,65535,10000,1
+--hide@dither_seed:dither_pattern==0
+--hide@dither_seed:dither_pattern==1
+--hide@dither_seed:dither_pattern==2
+--hide@dither_seed:dither_pattern==3
+--hide@dither_seed:dither_pattern==4
+--hide@dither_seed:dither_pattern==7
+--hide@dither_seed:dither_pattern==8
+--hide@dither_seed:dither_pattern==9
+--hide@dither_seed:dither_pattern==10
+--track@dither_rate:ディザ強さ,0,100,100,0.01
+--hide@dither_rate:dither_pattern==0
+--track@dither_size:dither::ドットサイズ,100,6400,100,0.01,,0.0625
+--hide@dither_size:dither_pattern==0
+--track@dither_X:dither::移動X,-4000,4000,0,0.01,,0.25
+--hide@dither_X:dither_pattern==0
+--track@dither_Y:dither::移動Y,-4000,4000,0,0.01,,0.25
+--hide@dither_Y:dither_pattern==0
+--trackgroup@dither_X,dither_Y:DitherPos
+--track@dither_angle:dither::回転,-3600,3600,0,0.01,,0.1
+--hide@dither_angle:dither_pattern==0
+--group:矢じり設定,false
+--select@head_type:矢じり配置=1,なし=0,終点=1,両方=2,双方向=3
+--figure@head_fig:矢じり図形,三角形
+--hide@head_fig:head_type==0
+--track@head_width:矢じり幅,0,800,100,0.001,,0.25
+--hide@head_width:head_type==0
+--track@head_center:矢じり中心,-100,100,-50,0.001
+--hide@head_center:head_type==0
+--track@head_rot:矢じり角度,-3600,3600,0,0.01,,0.1
+--hide@head_rot:head_type==0
+--track@head_pos:矢じり位置,-100,100,0,0.001
+--hide@head_pos:head_type==0
+--group:ランダム変化,false
+--track@rand_period:ランダム周期,4,1024,32,0.001,,0.25
+--track@rand_amplify:ランダム振幅,0,1024,0,0.01,,0.125
+--checksection@rand_fix_end:ランダム固定端,true,false
+--track@rand_seed:ランダムシード,-65536,65535,10000,1
+--group:スナップ設定,false
+--select@snap_grid:snap::グリッド=0,なし=0,横のみ=1,縦のみ=2,縦横=3
+--track@snap_grid_X:snap::間隔X,1,1000,40,0.01,,0.1
+--hide@snap_grid_X:snap_grid==0
+--hide@snap_grid_X:snap_grid==2
+--track@snap_grid_Y:snap::間隔Y,1,1000,40,0.01,,0.1
+--hide@snap_grid_Y:snap_grid==0
+--hide@snap_grid_Y:snap_grid==1
+--check@snap_show_grid:snap::グリッド表示,false
+--hide@snap_show_grid:snap_grid==0
+--select@snap_angle_pos:snap::隣との角度=0,なし=0,90°=1,45°=2,30°=3,15°=4,5°=5
+--select@snap_angle_ctrl:snap::制御点の角度=0,なし=0,90°=1,45°=2,30°=3,15°=4,5°=5
+--hide@snap_angle_ctrl:path_type<2
+--select@snap_prev_ctrl:snap::隣の制御点=0,なし=0,角度=1,長さ=2,角度と長さ=3
+--hide@snap_prev_ctrl:path_type<2
+--track@snap_threshold:snap::スナップ距離,0,200,8,0.01,,0.1
+--group:その他,false
+--value@PI:PI,{}
+local path_s = require("Path_S");
+local obj, math, tonumber, type = obj, math, tonumber, type;
+
+-- process snapping.
+if (snap_grid ~= 0 or snap_angle_pos ~= 0 or snap_angle_ctrl ~= 0 or snap_prev_ctrl ~= 0) and snap_threshold > 0 then
+	path_s.snap_anchors(path_type,
+		points, num_points, false,
+		(snap_grid == 1 or snap_grid == 3) and snap_grid_X or 0,
+		(snap_grid == 2 or snap_grid == 3) and snap_grid_Y or 0,
+		snap_angle_pos, snap_angle_ctrl, snap_prev_ctrl, snap_threshold,
+		snap_show_grid and snap_grid ~= 0 and obj.getoption("gui"), 5);
+end
+
+-- set anchors.
+if obj.getoption("gui") then
+	num_points = math.max(math.floor(0.5 + (tonumber(num_points) or 4)), 2);
+	path_type = math.min(math.max(math.floor(0.5 + path_type), 0), 3);
+	local _, pts = path_s.anchor("points", path_type, points, num_points - 1, false);
+	points = pts;
+end
+
+--#region PI / normalize parameters.
+
+-- take parameters. (they don't affect to anchors.)
+line = tonumber(PI.line) or line;
+head_size = tonumber(PI.head_size) or head_size;
+color = tonumber(PI.color) or color;
+num_points = tonumber(PI.num_points) or num_points;
+path_type = path_s.PI.path_type(PI.path_type, path_type);
+points = type(PI.points) == "table" and PI.points or points;
+precision = tonumber(PI.precision) or precision;
+start_pos = tonumber(PI.start_pos) or start_pos;
+end_pos = tonumber(PI.end_pos) or end_pos;
+end_shape = path_s.PI.end_shape(PI.end_shape, end_shape);
+join_shape = path_s.PI.join_shape(PI.join_shape, join_shape);
+miter_limit = tonumber(PI.miter_limit) or miter_limit;
+dash_pat = type(PI.dash_pat) == "table" and PI.dash_pat or dash_pat;
+dash_pos = tonumber(PI.dash_pos) or dash_pos;
+dash_end_shape = path_s.PI.end_shape(PI.dash_end_shape, dash_end_shape);
+antialias = tonumber(PI.antialias) or antialias;
+dither_pattern = path_s.PI.dither_pattern(PI.dither_pattern, dither_pattern);
+dither_seed = tonumber(PI.dither_seed) or dither_seed;
+dither_rate = tonumber(PI.dither_rate) or dither_rate;
+dither_size = tonumber(PI.dither_size) or dither_size;
+dither_X = tonumber(PI.dither_X) or dither_X;
+dither_Y = tonumber(PI.dither_Y) or dither_Y;
+dither_angle = tonumber(PI.dither_angle) or dither_angle;
+if type(PI.head_type) == "string" then
+	local name2num = {
+		["なし"] = 0, ["終点"] = 1, ["両方"] = 2, ["双方向"] = 3,
+	};
+	head_type = name2num[PI.head_type] or head_type;
+end
+head_fig = type(PI.head_fig) == "string" and PI.head_fig or head_fig;
+head_width = tonumber(PI.head_width) or head_width;
+head_center = tonumber(PI.head_center) or head_center;
+head_rot = tonumber(PI.head_rot) or head_rot;
+head_pos = tonumber(PI.head_pos) or head_pos;
+rand_period = tonumber(PI.rand_period) or rand_period;
+rand_amplify = tonumber(PI.rand_amplify) or rand_amplify;
+rand_fix_end = path_s.PI.as_bool(PI.rand_fix_end, rand_fix_end);
+rand_seed = tonumber(PI.rand_seed) or rand_seed;
+
+-- normalize parameters.
+line = math.max(line, 0);
+head_size = math.max(math.floor(0.5 + head_size), 0);
+color = math.floor(0.5 + color) % 2 ^ 24;
+num_points = math.max(math.floor(0.5 + num_points), 2);
+precision = math.max(precision, 1);
+start_pos = math.min(math.max(start_pos / 100, 0), 1);
+end_pos = math.min(math.max(end_pos / 100, 0), 1);
+miter_limit = math.max(miter_limit / 100, 1);
+antialias = math.max(antialias, 0);
+dither_seed = math.floor(0.5 + dither_seed);
+if dither_seed >= 0 then
+	dither_seed = dither_seed + 2525 * (obj.id % 2 ^ 20);
+end
+dither_seed = dither_seed % 2 ^ 20;
+dither_rate = math.min(math.max(dither_rate / 100, 0), 1);
+dither_size = math.max(dither_size / 100, 1);
+dither_angle = 2 * math.pi * ((dither_angle / 360) % 1);
+head_type = math.min(math.max(math.floor(0.5 + head_type), 0), 3);
+head_width = math.max(head_width / 100, 0);
+head_center = head_center / 100;
+head_rot = math.pi / 180 * (head_rot % 360);
+head_pos = math.min(math.max(head_pos / 100, -1), 1);
+rand_period = math.max(rand_period, 4);
+rand_amplify = math.max(rand_amplify, 0);
+rand_seed = math.min(math.max(math.floor(0.5 + rand_seed), -2 ^ 16), 2 ^ 16 - 1);
+if start_pos > end_pos then return end
+
+--#endregion PI / normalize parameters.
+
+-- parse/measure the path.
+points, num_points = path_s.poll(path_type, points, num_points - 1, false, precision);
+if rand_amplify > 0 then
+	-- randomize the path.
+	if rand_fix_end then
+		-- append two extra points near the both ends, so the arrow heads don't shake (if at the ends).
+		local x1, y1, x2, y2, x3, y3, x4, y4 = points[1], points[2], points[3], points[4],
+			points[2 * num_points - 3], points[2 * num_points - 2],
+			points[2 * num_points - 1], points[2 * num_points];
+		local dx, dy = x2 - x1, y2 - y1; local l = (dx ^ 2 + dy ^ 2) ^ 0.5;
+		x2, y2 = x1 + dx / l, y1 + dy / l;
+		dx, dy = x3 - x4, y3 - y4; l = (dx ^ 2 + dy ^ 2) ^ 0.5;
+		x3, y3 = x4 + dx / l, y4 + dy / l;
+
+		points, num_points = path_s.randomize(points, num_points,
+			rand_period, rand_amplify, 1, rand_seed);
+
+		num_points = num_points + 2;
+		table.insert(points, 3, x2);
+		table.insert(points, 4, y2);
+		table.insert(points, 2 * num_points - 3, x3);
+		table.insert(points, 2 * num_points - 2, y3);
+	else
+		points, num_points = path_s.randomize(points, num_points,
+			rand_period, rand_amplify, 0, rand_seed);
+	end
+end
+local L, R, T, B = path_s.measure(points, num_points);
+local th = path_s.line_inflation(end_shape, dash_end_shape, join_shape,
+	line, antialias, miter_limit, dash_pat);
+if head_type ~= 0 then
+	-- take the arrow heads into account.
+	th = math.max(th, head_size / 2 * ((math.abs(head_center) + 1) ^ 2 + head_width ^ 2) ^ 0.5);
+end
+L, T = math.floor(L - th), math.floor(T - th);
+R, B = math.max(math.ceil(R + th), L + 1), math.max(math.ceil(B + th), T + 1);
+local W, H, cx, cy = R - L, B - T, -(L + R) / 2, -(T + B) / 2;
+
+-- calculate the head position.
+local head_vertices = nil;
+if head_type ~= 0 and head_size > 0 and head_width > 0 then
+	local function polygon(i, j, rot)
+		local X, Y =
+			(1 - j) * points[2 * i - 1] + j * points[2 * i + 1],
+			(1 - j) * points[2 * i - 0] + j * points[2 * i + 2];
+		local A = math.atan2(
+			points[2 * i + 2] - points[2 * i - 0],
+			points[2 * i + 1] - points[2 * i - 1]);
+
+		-- as to the angle, interpolate with the neighbor secant.
+		if j < 0.5 then i = i - 1;
+		else i, j = i + 1, 1 - j end
+		local dA = 0;
+		if 0 < i and i < num_points then
+			dA = math.atan2(
+				points[2 * i + 2] - points[2 * i - 0],
+				points[2 * i + 1] - points[2 * i - 1]);
+			dA = (dA - A) / (2 * math.pi);
+			dA = ((dA + 0.5) % 1) - 0.5;
+			dA = 2 * math.pi * (0.5 - j) * dA;
+		end
+		A = A + dA + rot;
+
+		local c, s = math.cos(A), math.sin(A);
+		X, Y =
+			X - head_center * head_size / 2 * s + cx,
+			Y + head_center * head_size / 2 * c + cy;
+		local w2x, w2y, h2x, h2y = head_size * head_width / 2, 0, 0, head_size / 2;
+		w2x, w2y = w2x * c, w2x * s;
+		h2x, h2y = h2y *-s, h2y * c;
+		return
+			{ X - w2x - h2x, Y - w2y - h2y, 0; 0, 0 },
+			{ X + w2x - h2x, Y + w2y - h2y, 0; 1, 0 },
+			{ X + w2x + h2x, Y + w2y + h2y, 0; 1, 1 },
+			{ X - w2x + h2x, Y - w2y + h2y, 0; 0, 1 };
+	end
+
+	-- first tip.
+	local pos = math.min(math.max(1 + head_pos, 0), 1);
+	pos = (1 - pos) * start_pos + pos * end_pos;
+	local i, j, l = path_s.find_index(-pos, points, num_points);
+	local vts = { polygon(i, j, head_rot + math.pi / 2) };
+
+	if head_type > 1 then
+		-- second tip.
+		local pos2 = math.min(math.max(head_pos, 0), 1);
+		pos2 = (1 - pos2) * start_pos + pos2 * end_pos;
+		if pos ~= pos2 then
+			i, j = path_s.find_index(-pos2, l);
+			vts[5], vts[6], vts[7], vts[8] = polygon(i, j, head_rot
+				+ math.pi / 2 * (head_type == 2 and 1 or -1));
+		end
+	end
+
+	head_vertices = vts;
+end
+
+-- draw the path.
+obj.clearbuffer(head_vertices and "tempbuffer" or "object", W, H, color);
+path_s.path_mask_line(
+	0, 1, line, {
+		width = antialias,
+		pattern = dither_pattern, seed = dither_seed,
+		rate = dither_rate,
+		cx = cx + obj.w / 2 + dither_X, cy = cy + obj.h / 2 + dither_Y,
+		size = dither_size, rot = dither_angle,
+	},
+	nil, points, num_points - 1, false, 1,
+	start_pos, end_pos, end_shape, join_shape, miter_limit,
+	dash_pat, dash_pos, false, dash_end_shape,
+	1, 0, cx, cy,
+	head_vertices and { name = "tempbuffer", w = W, h = H } or nil,
+	head_vertices and "object" or nil);
+
+-- draw the arrow heads.
+if head_vertices then
+	obj.setoption("drawtarget", "tempbuffer");
+	if obj.load("figure", head_fig, color, math.ceil(head_size * math.max(head_width, 1))) then
+		-- "alpha_max" does not seem to work well with obj.drawpoly().
+		-- obj.setoption("blend", "alpha_max");
+		obj.drawpoly(head_vertices);
+		-- obj.setoption("blend");
+	end
+	assert(obj.copybuffer("object", "tempbuffer"));
+end
+
+-- adjust the center.
+obj.cx, obj.cy = cx, cy;
+
+@スクウェアσ
+--information:スクウェアσ@Path_S v2.42 by σ軸
+--label:Path_S\図形
+--require:2011000
+--track@width:幅,0,4000,100,0.01,,0.25
+--track@height:高さ,0,4000,100,0.01,,0.25
+--track@line:ライン幅,0,1000,5,0.01,,0.2
+--color@color_line:ライン色,0x808080
+--color@color_fill:塗り色,0xffffff
+--track@radius:角半径,0,2000,40,0.01,,0.25
+--group:整列,false
+--track@align_x:水平揃え,-100,100,0,0.001
+--track@align_y:垂直揃え,-100,100,0,0.001
+--group:丸角設定,false
+--checksection@uniform:半径均一,true,false
+--track@r_RT:右上半径,0,2000,40,0.01,,0.25
+--hide@r_RT:uniform==1
+--track@r_RB:右下半径,0,2000,40,0.01,,0.25
+--hide@r_RB:uniform==1
+--track@r_LB:左下半径,0,2000,40,0.01,,0.25
+--hide@r_LB:uniform==1
+--track@aspect:丸角縦横比,-100,100,0,0.001
+--checksection@fixed_aspect:丸角縦横比固定,true,false
+--group:ライン設定,false
+--track@alpha_line:ライン透明度,0,100,0,0.01
+--track@start_pos:開始位置,-400,400,0,0.001,,0.25
+--track@end_pos:終了位置,-400,400,100,0.001,,0.25
+--select@end_shape:端の形状=0,円=0,四角=1,平坦=2,三角=3,リボン=4
+--select@join_shape:線結合の形状=0,ラウンド=0,ベベル=1,マイター=2,ブランク=3,ブランク+ラウンド=4,ブランク+ベベル=5
+--value@dash_pat:破線パターン,{100,0}
+--track@dash_pos:破線位置,-4000,4000,0,0.01,,0.25
+--select@dash_end_shape:dash::端の形状=0,円=0,四角=1,平坦=2,三角=3,リボン=4
+--group:ライン境界設定,false
+--track@antialias:ぼかし幅,0,1000,1,0.01,,0.2
+--select@dither_pattern:ディザリング=0,なし=0,Checker=1,Bayer 2x2=2,Bayer 4x4=3,Bayer 256x256=4,IGN=5,White Noise=6,Halftone=7,Halftone Honeycomb=8,Halftone Square=9,Stripe=10
+--track@dither_seed:dither::ノイズシード,-65536,65535,10000,1
+--hide@dither_seed:dither_pattern==0
+--hide@dither_seed:dither_pattern==1
+--hide@dither_seed:dither_pattern==2
+--hide@dither_seed:dither_pattern==3
+--hide@dither_seed:dither_pattern==4
+--hide@dither_seed:dither_pattern==7
+--hide@dither_seed:dither_pattern==8
+--hide@dither_seed:dither_pattern==9
+--hide@dither_seed:dither_pattern==10
+--track@dither_rate:ディザ強さ,0,100,100,0.01
+--hide@dither_rate:dither_pattern==0
+--track@dither_size:dither::ドットサイズ,100,6400,100,0.01,,0.0625
+--hide@dither_size:dither_pattern==0
+--track@dither_X:dither::移動X,-4000,4000,0,0.01,,0.25
+--hide@dither_X:dither_pattern==0
+--track@dither_Y:dither::移動Y,-4000,4000,0,0.01,,0.25
+--hide@dither_Y:dither_pattern==0
+--trackgroup@dither_X,dither_Y:DitherPos
+--track@dither_angle:dither::回転,-3600,3600,0,0.01,,0.1
+--hide@dither_angle:dither_pattern==0
+--group:塗り設定,false
+--track@inflation:塗り追加幅,0,1000,0,0.01,,0.2
+--track@alpha_fill:塗り透明度,0,100,0,0.01
+--group:塗り境界設定,false
+--track@fill_antialias:fill::ぼかし幅,0,1000,1,0.01,,0.2
+--select@fill_dither_pattern:fill::ディザリング=0,なし=0,Checker=1,Bayer 2x2=2,Bayer 4x4=3,Bayer 256x256=4,IGN=5,White Noise=6,Halftone=7,Halftone Honeycomb=8,Halftone Square=9,Stripe=10
+--track@fill_dither_seed:fill::dither::ノイズシード,-65536,65535,20000,1
+--hide@fill_dither_seed:fill_dither_pattern==0
+--hide@fill_dither_seed:fill_dither_pattern==1
+--hide@fill_dither_seed:fill_dither_pattern==2
+--hide@fill_dither_seed:fill_dither_pattern==3
+--hide@fill_dither_seed:fill_dither_pattern==4
+--hide@fill_dither_seed:fill_dither_pattern==7
+--hide@fill_dither_seed:fill_dither_pattern==8
+--hide@fill_dither_seed:fill_dither_pattern==9
+--hide@fill_dither_seed:fill_dither_pattern==10
+--track@fill_dither_rate:fill::ディザ強さ,0,100,100,0.01
+--hide@fill_dither_rate:fill_dither_pattern==0
+--track@fill_dither_size:fill::dither::ドットサイズ,100,6400,100,0.01,,0.0625
+--hide@fill_dither_size:fill_dither_pattern==0
+--track@fill_dither_X:fill::dither::移動X,-4000,4000,0,0.01,,0.25
+--hide@fill_dither_X:fill_dither_pattern==0
+--track@fill_dither_Y:fill::dither::移動Y,-4000,4000,0,0.01,,0.25
+--hide@fill_dither_Y:fill_dither_pattern==0
+--trackgroup@fill_dither_X,fill_dither_Y:FillDitherPos
+--track@fill_dither_angle:fill::dither::回転,-3600,3600,0,0.01,,0.1
+--hide@fill_dither_angle:fill_dither_pattern==0
+--group:ランダム変化,false
+--track@rand_period:ランダム周期,4,1024,32,0.001,,0.25
+--track@rand_amplify:ランダム振幅,0,1024,0,0.01,,0.125
+--track@rand_seed:ランダムシード,-65536,65535,10000,1
+--group:その他,false
+--value@PI:PI,{}
+local path_s = require("Path_S");
+local obj, math, tonumber, type = obj, math, tonumber, type;
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+local function apply_aspect(r, a)
+	return math.min(1 - a, 1) * r, math.min(1 + a, 1) * r;
+end
+radius = math.max(radius, 0);
+aspect = math.min(math.max(aspect / 100, -1), 1);
+local radii = {
+	{ apply_aspect(radius, aspect) },
+	{ apply_aspect(uniform and radius or math.max(r_RT, 0), aspect) },
+	{ apply_aspect(uniform and radius or math.max(r_RB, 0), aspect) },
+	{ apply_aspect(uniform and radius or math.max(r_LB, 0), aspect) },
+};
+
+local function as_pair(c)
+	if type(c) == "number" then return c, c;
+	elseif type(c) == "table" then
+		local x, y = tonumber(c[1]), tonumber(c[2]);
+		if x and y then return x, y end
+	end
+	return nil;
+end
+width = tonumber(PI.width) or width;
+height = tonumber(PI.height) or height;
+line = tonumber(PI.line) or line;
+color_line = tonumber(PI.color_line) or color_line;
+color_fill = tonumber(PI.color_fill) or color_fill;
+if type(PI.radii) == "number" then
+	local r = PI.radii;
+	radii = { { r, r }, { r, r }, { r, r }, { r, r } };
+elseif type(PI.radii) == "table" then
+	if PI.radii.uniform then
+		local x, y = as_pair(PI.radii.uniform);
+		if x then radii = { { x, y }, { x, y }, { x, y }, { x, y } } end
+	end
+	for i = 1, 4 do
+		local x, y = as_pair(PI.radii[i]);
+		if x then radii[i] = { x, y } end
+	end
+end
+fixed_aspect = path_s.PI.as_bool(PI.fixed_aspect, fixed_aspect);
+align_x = tonumber(PI.align_x) or align_x;
+align_y = tonumber(PI.align_y) or align_y;
+alpha_line = tonumber(PI.alpha_line) or alpha_line;
+start_pos = tonumber(PI.start_pos) or start_pos;
+end_pos = tonumber(PI.end_pos) or end_pos;
+end_shape = path_s.PI.end_shape(PI.end_shape, end_shape);
+join_shape = path_s.PI.join_shape(PI.join_shape, join_shape);
+if type(PI.dash_pat) == "table" then dash_pat = PI.dash_pat end
+dash_pos = tonumber(PI.dash_pos) or dash_pos;
+dash_end_shape = path_s.PI.end_shape(PI.dash_end_shape, dash_end_shape);
+antialias = tonumber(PI.antialias) or antialias;
+dither_pattern = path_s.PI.dither_pattern(PI.dither_pattern, dither_pattern);
+dither_seed = tonumber(PI.dither_seed) or dither_seed;
+dither_rate = tonumber(PI.dither_rate) or dither_rate;
+dither_size = tonumber(PI.dither_size) or dither_size;
+dither_X = tonumber(PI.dither_X) or dither_X;
+dither_Y = tonumber(PI.dither_Y) or dither_Y;
+dither_angle = tonumber(PI.dither_angle) or dither_angle;
+inflation = tonumber(PI.inflation) or inflation;
+alpha_fill = tonumber(PI.alpha_fill) or alpha_fill;
+fill_antialias = tonumber(PI.fill_antialias) or fill_antialias;
+fill_dither_pattern = path_s.PI.dither_pattern(PI.fill_dither_pattern, fill_dither_pattern);
+fill_dither_seed = tonumber(PI.fill_dither_seed) or fill_dither_seed;
+fill_dither_rate = tonumber(PI.fill_dither_rate) or fill_dither_rate;
+fill_dither_size = tonumber(PI.fill_dither_size) or fill_dither_size;
+fill_dither_X = tonumber(PI.fill_dither_X) or fill_dither_X;
+fill_dither_Y = tonumber(PI.fill_dither_Y) or fill_dither_Y;
+fill_dither_angle = tonumber(PI.fill_dither_angle) or fill_dither_angle;
+rand_period = tonumber(PI.rand_period) or rand_period;
+rand_amplify = tonumber(PI.rand_amplify) or rand_amplify;
+rand_seed = tonumber(PI.rand_seed) or rand_seed;
+
+-- normalize parameters.
+if width <= 0 or height <= 0 then return end -- early return if empty.
+line = math.max(line, 0);
+color_line = color_line % 2 ^ 24;
+color_fill = color_fill % 2 ^ 24;
+for i = 1, 4 do
+	radii[i][1], radii[i][2] = math.max(radii[i][1], 0), math.max(radii[i][2], 0);
+end
+align_x = math.min(math.max(align_x / 100, -1), 1);
+align_y = math.min(math.max(align_y / 100, -1), 1);
+alpha_line = math.min(math.max(1 - alpha_line / 100, 0), 1);
+start_pos = start_pos / 100;
+end_pos = end_pos / 100;
+antialias = math.max(antialias, 0);
+dither_seed = math.floor(0.5 + dither_seed);
+if dither_seed >= 0 then
+	dither_seed = dither_seed +  2525 * (obj.id % 2 ^ 20);
+end
+dither_seed = dither_seed % 2 ^ 20;
+dither_rate = math.min(math.max(dither_rate / 100, 0), 1);
+dither_size = math.max(dither_size / 100, 1);
+dither_angle = 2 * math.pi * ((dither_angle / 360) % 1);
+inflation = math.max(inflation, 0);
+alpha_fill = math.min(math.max(1 - alpha_fill / 100, 0), 1);
+fill_antialias = math.max(fill_antialias, 0);
+fill_dither_seed = math.floor(0.5 + fill_dither_seed);
+if fill_dither_seed >= 0 then
+	fill_dither_seed = fill_dither_seed +  2525 * (obj.id % 2 ^ 20);
+end
+fill_dither_seed = fill_dither_seed % 2 ^ 20;
+fill_dither_rate = math.min(math.max(fill_dither_rate / 100, 0), 1);
+fill_dither_size = math.max(fill_dither_size / 100, 1);
+fill_dither_angle = 2 * math.pi * ((fill_dither_angle / 360) % 1);
+rand_period = math.max(rand_period, 4);
+rand_amplify = math.max(rand_amplify, 0);
+rand_seed = math.min(math.max(math.floor(0.5 + rand_seed), -2 ^ 16), 2 ^ 16 - 1);
+
+--#endregion PI / normalize parameters.
+
+-- avoid corner sizes from being too large.
+do local prev = {
+		{ radii[1][1], radii[1][2] },
+		{ radii[2][1], radii[2][2] },
+		{ radii[3][1], radii[3][2] },
+		{ radii[4][1], radii[4][2] },
+	};
+	for i = 1, 4 do
+		local j, r1, r2, m = 2 - (i % 2),
+			radii[i], radii[(i % 4) + 1],
+			(i % 2) > 0 and width or height;
+		if r1[j] + r2[j] >= m then
+			local c1, c2 = r1[j], r2[j];
+			if c1 <= m / 2 then c2 = m - c1;
+			elseif c2 <= m / 2 then c1 = m - c2;
+			else c1, c2 = m / 2, m / 2 end
+			r1[j], r2[j] = c1, c2;
+		end
+	end
+	-- adjust aspect ratios if specified to be fixed.
+	if fixed_aspect then
+		for i = 1, 4 do
+			local r, r0 = radii[i], prev[i];
+			local u, v = r[1] * r0[2], r[2] * r0[1];
+			if u > v then r[1] = v / r0[2];
+			elseif u < v then r[2] = u / r0[1] end
+		end
+	end
+end
+
+-- further calculations.
+local has_fill, has_chrome = alpha_fill > 0,
+	line > 0 and alpha_line > 0 and start_pos <= end_pos;
+
+-- generate a path.
+local pts, n_pts = { (radii[1][1] - radii[2][1]) / 2, -height / 2 }, 1;
+for i = 1, 4 do
+	local r, precision = radii[(i % 4) + 1], 0.5; -- difference at most 0.5 pixels is allowed.
+	local rx, ry, a0 = r[1], r[2], (i / 2 - 1) * math.pi;
+	local N = math.ceil(2 ^ -2.5 * math.pi * ((math.max(rx, ry) + line / 2) / precision) ^ 0.5);
+	if math.min(rx, ry) <= 0 then rx, ry, N = 0, 0, 0 end
+
+	local cx, cy = width / 2 - rx, height / 2 - ry;
+	if i > 2 then cx = -cx end
+	if (i % 4) < 2 then cy = -cy end
+	for j = 0, N do
+		local a = a0 + (j / math.max(N, 1)) * math.pi / 2;
+		n_pts = n_pts + 1;
+		pts[2 * n_pts - 1], pts[2 * n_pts] =
+			cx + rx * math.cos(a), cy + ry * math.sin(a);
+	end
+end
+n_pts = n_pts + 1;
+pts[2 * n_pts - 1], pts[2 * n_pts] = pts[1], pts[2];
+
+if rand_amplify > 0 then
+	-- randomize the path.
+	pts, n_pts = path_s.randomize(pts, n_pts, rand_period, rand_amplify,
+		2, rand_seed);
+end
+
+-- measure the path.
+local L, R, T, B, len = path_s.measure(pts, n_pts);
+local th = math.max(path_s.line_inflation(end_shape, dash_end_shape, 0,
+	line, antialias, 1, dash_pat), fill_antialias);
+L, R, T, B = -- align to pixel at the specified center.
+	L + align_x * width / 2, R + align_x * width / 2,
+	T + align_y * height / 2, B + align_y * height / 2;
+L, T = math.floor(L - th), math.floor(T - th);
+R, B = math.max(math.ceil(R + th), L + 1), math.max(math.ceil(B + th), T + 1);
+
+-- prepare the canvas.
+obj.clearbuffer("object", R - L, B - T);
+obj.cx, obj.cy = -(L + R) / 2, -(T + B) / 2;
+
+-- draw the figures.
+if has_fill or has_chrome then
+	local cache_name = "tempbuffer";
+	if has_fill and has_chrome then
+		cache_name = "cache:path_s/coords";
+		obj.setoption("drawtarget", "tempbuffer", obj.w, obj.h);
+	end
+	path_s.send(pts, n_pts, align_x * width / 2 - L, align_y * height / 2 - T, cache_name);
+
+	-- draw the shape of the filling part.
+	if has_fill then
+		obj.clearbuffer(has_chrome and "tempbuffer" or "object", color_fill);
+		path_s.path_mask_area_buffered(
+			0, alpha_fill, 0, inflation, {
+				width = fill_antialias,
+				pattern = fill_dither_pattern, seed = fill_dither_seed,
+				rate = fill_dither_rate,
+				cx = obj.cx + obj.w / 2 + fill_dither_X, cy = obj.cy + obj.h / 2 + fill_dither_Y,
+				size = fill_dither_size, rot = fill_dither_angle,
+			},
+			cache_name, n_pts,
+			has_chrome and { name = "tempbuffer", w = obj.w, h = obj.h } or nil);
+	end
+
+	-- then the outline part.
+	if has_chrome then
+		obj.clearbuffer("object", color_line);
+		path_s.path_mask_line_buffered(
+			0, alpha_line, line, {
+				width = antialias,
+				pattern = dither_pattern, seed = dither_seed,
+				rate = dither_rate,
+				cx = obj.cx + obj.w / 2 + dither_X, cy = obj.cy + obj.h / 2 + dither_Y,
+				size = dither_size, rot = dither_angle,
+			},
+			cache_name, n_pts, len, true,
+			start_pos, end_pos, end_shape, join_shape, join_shape == 2 and 2 or 1.4,
+			dash_pat, dash_pos, true, dash_end_shape);
+		if has_fill then
+			obj.draw();
+			assert(obj.copybuffer("object", "tempbuffer"));
+		end
+	end
+end
+

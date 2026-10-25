@@ -1,0 +1,7 @@
+SeiSa by SLDC
+licence: MIT
+from: https://github.com/samuelladoco/aviutl2-script-seisa/releases/download/v1.0.2/SeiSa.au2pkg.zip (tag v1.0.2, commit 77c4f8ad4c03)
+page: https://github.com/samuelladoco/aviutl2-script-seisa
+licence/README from: https://github.com/samuelladoco/aviutl2-script-seisa at v1.0.2
+left out: 1 .pdf (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

@@ -1,0 +1,399 @@
+--require:${REQUIRE_AVIUTL2_VERSION}
+--filter
+--label:${LABEL}
+--information:${INFO} ${VERSION} by ${AUTHOR}
+---$track:強さ
+---min=0
+---max=100
+---step=0.01
+local intensity = 100
+
+---$track:中心X
+---min=-5000
+---max=5000
+---step=0.01
+local center_x = 0
+
+---$track:中心Y
+---min=-5000
+---max=5000
+---step=0.01
+local center_y = 0
+--trackgroup@center_x,center_y:Group
+---$track:角度
+---min=-360
+---max=360
+---step=0.1
+local angle = 0
+
+---$select:幅の単位
+---px=0
+---%=1
+local width_unit = 0
+
+---$track:幅
+---min=0
+---max=2000
+---step=1
+local width = 100
+
+---$track:背景透明度
+---min=0
+---max=100
+---step=0.01
+local bg_alpha = 0
+
+---$select:形状
+---線形=0
+---円形=1
+---矩形=2
+---凸形=3
+---円形ループ=4
+---矩形ループ=5
+---凸形ループ=6
+local gradient_type = 0
+
+---$track:シフト
+---min=-1000
+---max=1000
+---step=0.01
+local shift = 0
+
+---$select:境界モード
+---境界色=0
+---ループ=1
+---ミラー=2
+local edge_mode = 0
+
+---$select:合成モード
+---通常=0
+---加算=1
+---減算=2
+---乗算=3
+---スクリーン=4
+---オーバーレイ=5
+---比較(明)=6
+---比較(暗)=7
+---輝度=8
+---色差=9
+---陰影=10
+---明暗=11
+---差分=12
+local blend_mode = 0
+
+---$checksection:幅をオブジェクトに合わせる
+---multi_section=false
+local is_fit = false
+
+--group:グラデーションデータ,false
+--separator:色設定
+---$value:色
+local color_rgb_table = {0x000000,0xffffff}
+
+---$value:色の透明度
+local color_a_table = {0.00,0.00}
+
+---$value:位置
+local color_pos_table = {0.00,1.00}
+
+---$value:中間点
+local color_mid_table = {0.50}
+
+---$value:マーカー数
+local marker_num = 2
+
+---$track:ぼかし幅
+---min=0
+---max=100
+---step=1
+local blur_width = 100
+
+---$select:色空間
+---sRGB=0
+---Linear sRGB=1
+---HSV=2
+---HSL=3
+---L*a*b=4
+---LCh=5
+---Oklab=6
+---Oklch=7
+---Kubelka-Munk=8
+local color_space = 0
+
+---$select:補間経路
+---短経路=0
+---長経路=1
+local interp_dir = 0
+
+--separator:アルファ設定
+---$value:アルファ値
+local alpha_val_table = {1.00,1.00}
+
+---$value:アルファ位置
+local alpha_pos_table = {0.00,1.00}
+
+---$value:アルファ中間点
+local alpha_mid_table = {0.50}
+
+---$value:アルファマーカー数
+local alpha_marker_num = 2
+
+---$track:アルファぼかし幅
+---min=0
+---max=100
+---step=1
+local alpha_blur_width = 100
+
+--group
+
+--[[pixelshader@psmain:
+---$include "../src/shaders/spectral.hlsli"
+---$include "../src/shaders/color.hlsli"
+---$include "gradient.hlsli"
+---$include "multi_gradient.hlsl"
+]]
+
+--[[pixelshader@copy_opaque:
+Texture2D<float4> src : register(t0);
+float4 copy_opaque(float4 pos : SV_Position) : SV_Target {
+    float4 tex = src.Load(int3(pos.xy, 0));
+    float3 rgb = (tex.a > 0.0) ? tex.rgb / tex.a : float3(0, 0, 0);
+    return float4(rgb, 1.0);
+}
+]]
+
+--[[pixelshader@passthrough:
+Texture2D<float4> src : register(t0);
+float4 passthrough(float4 pos : SV_Position) : SV_Target {
+    return src.Load(int3(pos.xy, 0));
+}
+]]
+
+local function norm_color(color)
+    local r, g, b = RGB(color)
+    return {r / 255, g / 255, b / 255}
+end
+
+-- 非シーケンス、nil以外の値を渡された順番で1つのシーケンスにマージして返す
+local function merge(...)
+	local function flatten(v, res)
+	    res = res or {}
+	    if type(v) ~= "table" then
+            res[#res + 1] = v
+            return res
+        end
+	    for _, x in ipairs(v) do
+            flatten(x, res)
+        end
+	    return res
+	end
+	local t = {...}
+	return flatten(t)
+end
+
+-- テーブルの後ろ側に任意の長さだけ拡張する
+local function extend_back(t, n, v)
+	if type(v) == "nil" or type(v) == "table" then
+		return
+	end
+	for i = 1, n do
+		t[#t + 1] = v
+	end
+	return t
+end
+
+local function reorder(t, idx)
+    local r = {}
+    for i, j in ipairs(idx) do
+        r[i] = t[j]
+    end
+    return r
+end
+
+local function rotate(deg)
+    local rad = math.rad(deg)
+    return {math.cos(rad), -math.sin(rad),
+            math.sin(rad),  math.cos(rad)}
+end
+
+local function clamp(x, min, max)
+    if x < min then return min end
+    if x > max then return max end
+    return x
+end
+
+local function is_number_table(t)
+    if type(t) ~= "table" then return nil end
+    for _, v in pairs(t) do
+        if (tonumber(v) == nil) then
+            print("@warn", v.." is not number")
+            return nil
+        end
+    end
+    return t
+end
+
+local PAD = 0.0
+local MARKER_MIN_COUNT = 2
+local MARKER_MAX_COUNT = ${MARKER_MAX_COUNT}
+local GRADIENT_MAX_COUNT = MARKER_MAX_COUNT - 1
+
+local COLOR_RGB = 0xffffff
+local COLOR_A = 0
+local COLOR_POS = 0
+local COLOR_MID = 0.5
+local ALPHA_VAL = 1
+local ALPHA_POS = 0
+local ALPHA_MID = 0.5
+
+local COLOR_RGB_TABLE = {0x000000,0xffffff}
+local COLOR_A_TABLE = {0.00,0.00}
+local COLOR_POS_TABLE = {0.00,1.00}
+local COLOR_MID_TABLE = {0.50}
+local ALPHA_VAL_TABLE = {1.00,1.00}
+local ALPHA_POS_TABLE = {0.00,1.00}
+local ALPHA_MID_TABLE = {0.50}
+
+color_rgb_table = is_number_table(color_rgb_table) or COLOR_RGB_TABLE
+color_a_table = is_number_table(color_a_table) or COLOR_A_TABLE
+color_pos_table = is_number_table(color_pos_table) or COLOR_POS_TABLE
+color_mid_table = is_number_table(color_mid_table) or COLOR_MID_TABLE
+alpha_val_table = is_number_table(alpha_val_table) or ALPHA_VAL_TABLE
+alpha_pos_table = is_number_table(alpha_pos_table) or ALPHA_POS_TABLE
+alpha_mid_table = is_number_table(alpha_mid_table) or ALPHA_MID_TABLE
+marker_num  = tonumber(marker_num) or MARKER_MIN_COUNT
+alpha_marker_num = tonumber(alpha_marker_num) or MARKER_MIN_COUNT
+
+marker_num = clamp(marker_num, MARKER_MIN_COUNT, MARKER_MAX_COUNT)
+alpha_marker_num = clamp(alpha_marker_num, MARKER_MIN_COUNT, MARKER_MAX_COUNT)
+
+local idx = {}
+for i = 1, marker_num do idx[i] = i end
+
+-- 位置を基準にインデックスをソート
+table.sort(idx, function(a, b)
+    local pa, pb = color_pos_table[a], color_pos_table[b]
+    if pa ~= pb then return pa < pb end
+    return a < b
+end)
+
+-- 位置を基準に並び替え
+color_rgb_table = reorder(color_rgb_table, idx)
+color_a_table = reorder(color_a_table, idx)
+color_pos_table = reorder(color_pos_table, idx)
+color_mid_table = reorder(color_mid_table, idx)
+
+local alpha_idx = {}
+for i = 1, alpha_marker_num do alpha_idx[i] = i end
+
+table.sort(alpha_idx, function(a, b)
+    local pa, pb = alpha_pos_table[a], alpha_pos_table[b]
+    if pa ~= pb then
+        return pa < pb
+    end
+    return a < b
+end)
+
+alpha_val_table = reorder(alpha_val_table, alpha_idx)
+alpha_pos_table = reorder(alpha_pos_table, alpha_idx)
+
+color_rgb_table = extend_back(color_rgb_table, MARKER_MAX_COUNT - #color_rgb_table, COLOR_RGB)
+color_a_table = extend_back(color_a_table, MARKER_MAX_COUNT - #color_a_table, COLOR_A)
+color_pos_table = extend_back(color_pos_table, MARKER_MAX_COUNT - #color_pos_table, COLOR_POS)
+color_mid_table = extend_back(color_mid_table, MARKER_MAX_COUNT - #color_mid_table, COLOR_MID)
+alpha_val_table = extend_back(alpha_val_table, MARKER_MAX_COUNT - #alpha_val_table, ALPHA_VAL)
+alpha_pos_table = extend_back(alpha_pos_table, MARKER_MAX_COUNT - #alpha_pos_table, ALPHA_POS)
+alpha_mid_table = extend_back(alpha_mid_table, MARKER_MAX_COUNT - #alpha_mid_table, ALPHA_MID)
+
+local start_col = {}
+local stop_col = {}
+
+for i = 1, MARKER_MAX_COUNT do
+    local start_rgb = norm_color(color_rgb_table[i])
+    start_col[#start_col + 1] = start_rgb[1]
+    start_col[#start_col + 1] = start_rgb[2]
+    start_col[#start_col + 1] = start_rgb[3]
+    start_col[#start_col + 1] = 1 - color_a_table[i]
+
+    local next_i = i + 1
+    if next_i > MARKER_MAX_COUNT then next_i = i end
+    local stop_rgb = norm_color(color_rgb_table[next_i])
+    stop_col[#stop_col + 1] = stop_rgb[1]
+    stop_col[#stop_col + 1] = stop_rgb[2]
+    stop_col[#stop_col + 1] = stop_rgb[3]
+    stop_col[#stop_col + 1] = 1 - color_a_table[next_i]
+end
+
+local pos_and_mid = {}
+for i = 1, GRADIENT_MAX_COUNT do
+    pos_and_mid[#pos_and_mid + 1] = color_pos_table[i]
+    pos_and_mid[#pos_and_mid + 1] = color_pos_table[i + 1]
+    pos_and_mid[#pos_and_mid + 1] = color_mid_table[i]
+    pos_and_mid[#pos_and_mid + 1] = PAD
+end
+
+local alpha_pos_and_mid = {}
+for i = 1, GRADIENT_MAX_COUNT do
+    alpha_pos_and_mid[#alpha_pos_and_mid + 1] = alpha_pos_table[i]
+    alpha_pos_and_mid[#alpha_pos_and_mid + 1] = alpha_pos_table[i + 1]
+    alpha_pos_and_mid[#alpha_pos_and_mid + 1] = alpha_mid_table[i]
+    alpha_pos_and_mid[#alpha_pos_and_mid + 1] = PAD
+end
+
+local alpha_val = {}
+for i = 1, GRADIENT_MAX_COUNT do
+    alpha_val[#alpha_val + 1] = alpha_val_table[i]
+    alpha_val[#alpha_val + 1] = alpha_val_table[i + 1]
+    alpha_val[#alpha_val + 1] = PAD
+    alpha_val[#alpha_val + 1] = PAD
+end
+
+local constants = merge(
+    {color_space, interp_dir, blur_width / 100, marker_num - 1},
+    start_col,
+    stop_col,
+    pos_and_mid,
+    {alpha_marker_num - 1, alpha_blur_width / 100, PAD, PAD},
+    alpha_pos_and_mid,
+    alpha_val
+)
+
+-- packed は float4 単位で並ぶテーブル
+
+-- [0]=色空間 [1]=補間経路 [2]=ぼかし幅 [3]=色の区間数  : グラデーション情報（x1）
+-- [0]=r [1]=g [2]=b [3]=a                           : 開始色（xマーカー数）
+-- [0]=r [1]=g [2]=b [3]=a                           : 終了色（xマーカー数）
+-- [0]=開始位置 [1]=終了位置 [2]=中間点 [3]=パディング  : 区間情報（x区間数）
+-- [0]=アルファの区間数 [1]=ぼかし幅 [2-3]=パディング   : アルファマーカー情報（x1）
+-- [0]=開始位置 [1]=終了位置 [2]=中間点 [3]=パディング  : アルファマーカーの区間情報（x区間数）
+-- [0]=開始値 [1]=終了値 [2-3]=パディング              : アルファ値（x区間数）
+
+local n = obj.setanchor("center_x,center_y", 0, "line")
+local m00, m01, m10, m11 = unpack(rotate(angle))
+local cache_name = "orig_img_"..tostring(obj.id)
+
+_ = obj.copybuffer("cache:"..cache_name, "object")
+obj.setoption("drawtarget", "tempbuffer", obj.w, obj.h)
+
+obj.pixelshader("copy_opaque", "object", {"object"}, {}, "copy")
+obj.draw(0, 0, 0, 1, (100 - bg_alpha) / 100)
+
+obj.pixelshader("psmain", "object", {"object"},
+    {
+        obj.w, obj.h, center_x, center_y,
+        width, gradient_type, is_fit and 1 or 0, shift / 100,
+        edge_mode, width_unit, PAD, PAD,
+        m00, m01, PAD, PAD,
+        m10, m11, PAD, PAD,
+        unpack(constants),
+    },
+    "copy"
+)
+
+obj.setoption("blend", blend_mode)
+obj.draw(0, 0, 0, 1, intensity / 100.0)
+
+obj.setoption("blend", "none")
+obj.copybuffer("obj", "tmp")
+
+obj.pixelshader("passthrough", "object", {"cache:"..cache_name}, {}, "mask")

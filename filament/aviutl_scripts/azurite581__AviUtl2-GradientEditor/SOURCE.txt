@@ -1,0 +1,6 @@
+AviUtl2-GradientEditor by azurite581
+licence: MIT
+from: https://github.com/azurite581/AviUtl2-GradientEditor (branch main, commit 4830ffadaead) (commit 4830ffadaead)
+page: https://github.com/azurite581/AviUtl2-GradientEditor
+left out: 1 .yaml (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

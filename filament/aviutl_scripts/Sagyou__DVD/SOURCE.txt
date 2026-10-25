@@ -1,0 +1,6 @@
+DVD by サ行
+licence: MIT
+from: https://raw.githubusercontent.com/SagyouDarui900/AviUtl2_Script_SagyouDarui/refs/heads/main/DVD.anm2 (commit a4482ded8f65)
+page: https://github.com/SagyouDarui900/AviUtl2_Script_SagyouDarui
+licence/README from: https://github.com/SagyouDarui900/AviUtl2_Script_SagyouDarui at a4482ded8f6578483c11e8f6c85449381c64eebe
+Put here unchanged for Motolii (filament/aviutl_scripts).

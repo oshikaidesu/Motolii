@@ -1,0 +1,649 @@
+--information:波形ライン v1.1.0
+--label:波形
+--select@mode:モード,描く=0,描かない=1,波形にする=2
+--select@cmd:操作,なし=0,1つ戻す=1,戻すを戻す=2,全部消す=3,輪にする=4
+--track@thick:太さ,0.01,20,4,0.01
+--color@col:色,0xffffff
+--color@col2:色2(グラデ),nil
+--track@smooth:波形をならす,0,50,0,1
+--track@grow:描く割合,0,100,100,0.1
+--track@dash:破線の長さ,0,200,0,0.1
+--track@gap:破線のすき間,0,100,10,0.1
+--track@amp:波形の振幅,0,150,60,1
+--track@freq:波の回数,0.05,30,1,0.05
+--select@wshape:波形の形,なめらか=0,四角=1
+--track@jit:手描きのブレ,0,200,0,1
+--value@pos:座標,{}
+--data@line:16384
+
+-- このオブジェクトをプレビュー上でドラッグすると線が描かれる。
+-- 赤い十字がペン先。まわりの四角を掴んで動かす。
+-- 「描く」→「描かない」→「描く」と切り替えると、線は別々のひと筆になる。
+
+local floor, sqrt, max, min = math.floor, math.sqrt, math.max, math.min
+local sin, cos, abs, pi = math.sin, math.cos, math.abs, math.pi
+
+local PEN   = 60      -- ペン先の枠の大きさ
+local STEP  = 4       -- この長さごとに点を 1 つ打つ
+local HOLD  = 3       -- ブレを何フレームごとに変えるか
+local BREAK = 1e9     -- ひと筆の区切りを表す座標
+local SEP   = -32768  -- 保存領域でのひと筆の区切り
+local LIM   = 32000   -- 保存領域に入る座標の上限
+
+--------------------------------------------------------------------
+-- 保存領域。--value@ に代入してもプロジェクトには残らないので、
+-- 汎用データ領域(--data@)に自分で書き込む。ここは保存される。
+-- 中身は先頭に個数(int32)、続けて x,y を int16 で並べたもの。
+--------------------------------------------------------------------
+local has_ffi, ffi = pcall(require, "ffi")
+local blob, blob_n = nil, 0
+if has_ffi then
+	local ok, d, sz = pcall(obj.data, "line")
+	if ok and d and sz and sz >= 8 then
+		blob = { head = ffi.cast("int32_t*", d), body = ffi.cast("int16_t*", d), max = floor((sz - 4) / 2) }
+		blob_n = blob.head[0]
+		if blob_n < 0 or blob_n > blob.max then blob_n = 0 end
+	end
+end
+
+local function blob_read()
+	local sk, cur = {}, {}
+	for i = 0, blob_n - 1, 2 do
+		local x = blob.body[i + 2]
+		local y = blob.body[i + 3]
+		if x == SEP then
+			if #cur >= 2 then sk[#sk + 1] = cur end
+			cur = {}
+		else
+			cur[#cur + 1] = { x, y }
+		end
+	end
+	if #cur >= 2 then sk[#sk + 1] = cur end
+	return sk
+end
+
+local function blob_write(sk)
+	local n = 0
+	local function put(x, y)
+		if n + 2 > blob.max then return false end
+		blob.body[n + 2] = x
+		blob.body[n + 3] = y
+		n = n + 2
+		return true
+	end
+	for si = 1, #sk do
+		if si > 1 and not put(SEP, SEP) then break end
+		local p = sk[si]
+		local stop = false
+		for i = 1, #p do
+			local x = min(max(floor(p[i][1] + 0.5), -LIM), LIM)
+			local y = min(max(floor(p[i][2] + 0.5), -LIM), LIM)
+			if not put(x, y) then stop = true break end
+		end
+		if stop then break end
+	end
+	blob.head[0] = n
+	blob_n = n
+end
+
+smooth = min(max(floor(smooth), 0), 50)
+local editing = obj.getoption("gui")     -- 出力中はガイドを出さない
+local selfx, selfy = obj.getvalue("x"), obj.getvalue("y")
+
+-- 設定値がずれても描けなくならないよう、「知らない値」は「描く」として扱う。
+local m_draw  = (mode ~= 1 and mode ~= 2)
+local m_wave  = (mode == 2)
+local m_undo  = (cmd == 1)
+local m_redo  = (cmd == 2)
+local m_clear = (cmd == 3)
+local m_loop  = (cmd == 4)
+
+--------------------------------------------------------------------
+-- 線の状態。オブジェクトごとに分けて持つ。
+-- st.sk = ひと筆の配列。ひと筆は {x,y} の配列。
+--------------------------------------------------------------------
+if type(WLS) ~= "table" then WLS = {} end
+local id = obj.id or 0
+local st = WLS[id]
+if type(st) ~= "table" then
+	st = { sk = {}, cut = {}, drawing = false }
+	WLS[id] = st
+	if blob and blob_n > 0 then st.sk = blob_read() end
+	-- 古い版で座標欄に入っているものも読む（BREAK でひと筆に分かれる）
+	if #st.sk == 0 and type(pos) == "table" and #pos >= 4 then
+		local cur = {}
+		local i = 1
+		while i + 1 <= #pos do
+			local x, y = pos[i], pos[i + 1]
+			if x == nil or y == nil then break end
+			if x >= BREAK then
+				if #cur >= 2 then st.sk[#st.sk + 1] = cur end
+				cur = {}
+			else
+				cur[#cur + 1] = { x, y }
+			end
+			i = i + 2
+		end
+		if #cur >= 2 then st.sk[#st.sk + 1] = cur end
+	end
+end
+if type(st.cut) ~= "table" then st.cut = {} end
+
+--------------------------------------------------------------------
+-- 「操作」は選んだ瞬間に 1 回だけ効く
+--------------------------------------------------------------------
+if m_clear then
+	if not st.c1 then
+		st.c1 = true
+		if #st.sk > 0 then st.cut[#st.cut + 1] = { all = st.sk } end
+		st.sk, st.drawing = {}, false
+	end
+else
+	st.c1 = false
+end
+
+if m_undo then
+	if not st.u1 then
+		st.u1 = true
+		local last = st.sk[#st.sk]
+		if last then
+			st.cut[#st.cut + 1] = { one = last }
+			st.sk[#st.sk] = nil
+		end
+		st.drawing = false
+	end
+else
+	st.u1 = false
+end
+
+if m_redo then
+	if not st.r1 then
+		st.r1 = true
+		local c = st.cut[#st.cut]
+		if c then
+			if c.all then st.sk = c.all else st.sk[#st.sk + 1] = c.one end
+			st.cut[#st.cut] = nil
+		end
+		st.drawing = false
+	end
+else
+	st.r1 = false
+end
+
+--------------------------------------------------------------------
+-- 記録。「描く」に切り替えたところから新しいひと筆になる。
+-- 点は時間ではなく線の長さで打つので、速く動かしても間隔が揃う。
+--------------------------------------------------------------------
+if m_draw and editing and not (m_undo or m_redo or m_clear) then
+	if not st.drawing then
+		st.drawing = true
+		st.sk[#st.sk + 1] = {}
+	end
+	local cur = st.sk[#st.sk]
+	local p = cur[#cur]
+	if p == nil then
+		cur[#cur + 1] = { selfx, selfy }
+	else
+		local dx, dy = selfx - p[1], selfy - p[2]
+		local d = sqrt(dx * dx + dy * dy)
+		if d >= STEP then
+			-- 前の点から離れていたら、その間も STEP ごとに埋める
+			local n = min(floor(d / STEP), 300)
+			for i = 1, n do
+				local f = i * STEP / d
+				cur[#cur + 1] = { p[1] + dx * f, p[2] + dy * f }
+			end
+		end
+	end
+else
+	st.drawing = false
+end
+
+-- 点が 1 つしかないひと筆は捨てる
+for i = #st.sk, 1, -1 do
+	if #st.sk[i] < 2 and not (st.drawing and i == #st.sk) then
+		table.remove(st.sk, i)
+	end
+end
+
+--------------------------------------------------------------------
+-- 座標をプロジェクトに残す
+--------------------------------------------------------------------
+local k = 0
+for si = 1, #st.sk do
+	if si > 1 then
+		k = k + 1; pos[k] = BREAK
+		k = k + 1; pos[k] = BREAK
+	end
+	local s = st.sk[si]
+	for i = 1, #s do
+		k = k + 1; pos[k] = s[i][1]
+		k = k + 1; pos[k] = s[i][2]
+	end
+end
+for i = k + 1, #pos do pos[i] = nil end
+
+if blob then blob_write(st.sk) end
+
+--------------------------------------------------------------------
+-- 共通の描画部品
+--------------------------------------------------------------------
+local vt = {}
+
+-- 面を 1 つ足す。drawpoly は shoelace が正の向きだけを表として描くので、
+-- 逆向きになっていたらここで入れ替える。
+local function push4(a, b, c, d)
+	local sa = (a[1] * b[2] - b[1] * a[2]) + (b[1] * c[2] - c[1] * b[2])
+		+ (c[1] * d[2] - d[1] * c[2]) + (d[1] * a[2] - a[1] * d[2])
+	if sa < 0 then a, b, c, d = d, c, b, a end
+	vt[#vt + 1] = a; vt[#vt + 1] = b; vt[#vt + 1] = c; vt[#vt + 1] = d
+end
+
+local function seg(x0, y0, x1, y1, w, r, g, b, a)
+	local dx, dy = x1 - x0, y1 - y0
+	local d = sqrt(dx * dx + dy * dy)
+	if d < 1e-6 then return end
+	local nx, ny = -dy / d * w, dx / d * w
+	a = a or 1
+	local cr, cg, cb = r * a, g * a, b * a
+	push4({ x0 - nx, y0 - ny, 0, cr, cg, cb, a },
+	      { x1 - nx, y1 - ny, 0, cr, cg, cb, a },
+	      { x1 + nx, y1 + ny, 0, cr, cg, cb, a },
+	      { x0 + nx, y0 + ny, 0, cr, cg, cb, a })
+end
+
+-- ペン先。四角い枠がそのまま掴める範囲になる（画像の大きさ＝掴める範囲）。
+-- 拡大率をかけると掴みにくくなるので、これだけは常に同じ大きさで描く。
+local function pen(cx0, cy0)
+	local R = PEN / 2
+	seg(cx0 - R, cy0, cx0 + R, cy0, 1.2, 1, 0.25, 0.25)
+	seg(cx0, cy0 - R, cx0, cy0 + R, 1.2, 1, 0.25, 0.25)
+	seg(cx0 - R, cy0 - R, cx0 + R, cy0 - R, 1, 1, 0.25, 0.25, 0.5)
+	seg(cx0 + R, cy0 + R, cx0 - R, cy0 + R, 1, 1, 0.25, 0.25, 0.5)
+	seg(cx0 - R, cy0 + R, cx0 - R, cy0 - R, 1, 1, 0.25, 0.25, 0.5)
+	seg(cx0 + R, cy0 - R, cx0 + R, cy0 + R, 1, 1, 0.25, 0.25, 0.5)
+	push4({ cx0 - R, cy0 - R, 0, 0.02, 0.02, 0.02, 0.02 },
+	      { cx0 + R, cy0 - R, 0, 0.02, 0.02, 0.02, 0.02 },
+	      { cx0 + R, cy0 + R, 0, 0.02, 0.02, 0.02, 0.02 },
+	      { cx0 - R, cy0 + R, 0, 0.02, 0.02, 0.02, 0.02 })
+end
+
+--------------------------------------------------------------------
+-- 線が 1 本も無いときは、ペン先だけを出す
+--------------------------------------------------------------------
+local have = 0
+for i = 1, #st.sk do if #st.sk[i] >= 2 then have = have + 1 end end
+
+if have == 0 then
+	if not editing then return end
+	obj.zoom = 1
+	pen(0, 0)
+	local R = PEN + 8
+	obj.setoption("drawtarget", "tempbuffer", R, R)
+	obj.drawpoly(vt)
+	obj.load("tempbuffer")
+	obj.setoption("drawtarget", "framebuffer")
+	obj.draw()
+
+	local sw, sh = obj.screen_w, obj.screen_h
+	obj.setfont("MS UI Gothic", 18, 3, 0xffffff, 0x000000)
+	obj.load("text", "枠の中を掴んでドラッグしてください"
+		.. "\nx,y = " .. string.format("%.0f , %.0f", selfx, selfy)
+		.. "   モード " .. tostring(mode) .. "   操作 " .. tostring(cmd))
+	obj.draw(-sw / 2 + obj.w / 2 + 20 - selfx, -sh / 2 + obj.h / 2 + 20 - selfy, 0, 1)
+	return
+end
+
+--------------------------------------------------------------------
+-- 手描きのブレ。数コマごとにカクッと変わる（滑らかに動かさないのが手描きらしさ）
+--------------------------------------------------------------------
+-- 音が鳴っているときだけ動かす。無音ならブレも止める（下で決める）
+local jfr = 0
+local function jrand(i)
+	return obj.rand(0, 2000, i, jfr) / 1000 - 1        -- -1～1
+end
+
+local function catmull(p0, p1, p2, p3, t)
+	local t2 = t * t
+	local t3 = t2 * t
+	return 0.5 * ((2 * p1) + (-p0 + p2) * t
+		+ (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2
+		+ (-p0 + 3 * p1 - 3 * p2 + p3) * t3)
+end
+
+--------------------------------------------------------------------
+-- 音源。描いている間は揺らさない。
+-- 音量の大小は線に乗せず、形だけを使う（そのフレームの最大で正規化）。
+--------------------------------------------------------------------
+local wav = {}
+local nw = 0
+local wsc = 0
+if m_wave then
+	-- 短く取ると波形にならないので、はっきり見える長さを取る
+	local ok, cnt = pcall(obj.getaudio, wav, "audiobuffer", "pcm", 2048)
+	if ok and cnt then nw = cnt end
+	-- 波形をならす（前後 smooth サンプルの平均。細かい振動が減る）
+	if smooth > 0 and nw > 2 then
+		local tmp = {}
+		for i = 1, nw do
+			local a2, b2 = max(1, i - smooth), min(nw, i + smooth)
+			local sum = 0
+			for j = a2, b2 do sum = sum + (wav[j] or 0) end
+			tmp[i] = sum / (b2 - a2 + 1)
+		end
+		wav = tmp
+	end
+	local mx = 0
+	for i = 1, nw do mx = max(mx, abs(wav[i] or 0)) end
+	if mx > 100 then wsc = 1 / mx end     -- ほぼ無音なら揺らさない
+end
+
+-- 音が鳴っているときだけブレを動かす。止まっていれば形も固定される。
+if m_wave and wsc > 0 then
+	jfr = floor((obj.frame or 0) / HOLD)
+end
+
+-- 揺れは必ず音声波形から作る。音が無いときは揺らさない。
+local function level(u)
+	if not m_wave or nw < 2 or wsc == 0 then return 0 end
+	local q = (u * freq) % 1
+	local x = q * (nw - 1) + 1
+	local i = floor(x)
+	if wshape == 1 then
+		-- 四角: 等間隔に鋭い尖りを並べ、高さだけ音声から取る。
+		-- 斜めの直線だけでできるので、なめらかな波ではなく角が立つ。
+		local SEG = 12                                 -- 1 周期あたりの尖りの数
+		local t2 = q * SEG
+		local i2 = floor(t2)
+		local f2 = t2 - i2                             -- 尖りの中の位置(0～1)
+		local j = floor((i2 / SEG) * (nw - 1) + 1.5)
+		if j < 1 then j = 1 elseif j > nw then j = nw end
+		local h = (wav[j] or 0) * wsc
+		local tri = (f2 < 0.5) and (f2 * 2) or (2 - f2 * 2)
+		return h * tri
+	end
+	local f = x - i
+	local a = wav[i] or 0
+	local b = wav[i + 1] or a
+	return (a + (b - a) * f) * wsc          -- -1～1
+end
+
+--------------------------------------------------------------------
+-- 色
+--------------------------------------------------------------------
+local r1 = floor(col / 0x10000) % 0x100 / 255
+local g1 = floor(col / 0x100) % 0x100 / 255
+local b1 = col % 0x100 / 255
+local r2, g2, b2 = r1, g1, b1
+if col2 ~= nil and col2 ~= col then
+	r2 = floor(col2 / 0x10000) % 0x100 / 255
+	g2 = floor(col2 / 0x100) % 0x100 / 255
+	b2 = col2 % 0x100 / 255
+end
+local function rgb(t)
+	return r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t
+end
+
+--------------------------------------------------------------------
+-- 拡大率。線だけを線の中心を軸に拡大する（obj.zoom は 1 に戻す）
+--------------------------------------------------------------------
+local zm = obj.zoom or 1
+if zm <= 0 then zm = 1 end
+local zcx, zcy = 0, 0
+if zm ~= 1 then
+	local a1, a2, b1v, b2v = 1e9, -1e9, 1e9, -1e9
+	for si = 1, #st.sk do
+		local s = st.sk[si]
+		for i = 1, #s do
+			a1 = min(a1, s[i][1]); a2 = max(a2, s[i][1])
+			b1v = min(b1v, s[i][2]); b2v = max(b2v, s[i][2])
+		end
+	end
+	zcx, zcy = (a1 + a2) / 2, (b1v + b2v) / 2
+	obj.zoom = 1
+end
+
+--------------------------------------------------------------------
+-- ひと筆ぶんを描く
+--------------------------------------------------------------------
+local CAPSEG = 8
+local dashz, gapz = dash * zm, gap * zm
+local h0 = thick / 2 * zm
+local jseed = 0
+
+local function build(pts)
+	local n_pt = #pts
+	if n_pt < 2 then return end
+	jseed = jseed + 1000
+
+	local function ctrl(i)
+		if m_loop then
+			i = ((i - 1) % n_pt) + 1
+		else
+			i = max(1, min(n_pt, i))
+		end
+		local x, y = pts[i][1], pts[i][2]
+		if zm ~= 1 then
+			x = (x - zcx) * zm + zcx
+			y = (y - zcy) * zm + zcy
+		end
+		-- ブレは制御点ごとに乗せない。点が細かいので隣同士が交差して線が絡まる。
+		-- 下の「線に沿ったうねり」だけでブレを作る。
+		return x, y
+	end
+
+	local seg_n = m_loop and n_pt or (n_pt - 1)
+	-- 制御点ごとに 4 分割。点を飛ばさない量を自動で確保する
+	local M = min(seg_n * 4, 8192)
+	local px, py = {}, {}
+	for k2 = 0, M do
+		local u = k2 / M * seg_n
+		local i = floor(u) + 1
+		if i > seg_n then i = seg_n end
+		local f = u - (i - 1)
+		local x0, y0 = ctrl(i - 1)
+		local x1, y1 = ctrl(i)
+		local x2, y2 = ctrl(i + 1)
+		local x3, y3 = ctrl(i + 2)
+		px[k2 + 1] = catmull(x0, x1, x2, x3, f)
+		py[k2 + 1] = catmull(y0, y1, y2, y3, f)
+	end
+	local N = M + 1
+
+	-- 線に沿ったうねり（これが手描きのブレ）。
+	-- 縦横に独立して揺らすと線が前後に往復して絡むので、
+	-- 線に垂直な向きにだけずらす。
+	-- 描いている間はかけない。点を打つたびにうねりの節がずれて、
+	-- 線全体が歪み直してしまい描きづらいため。
+	if jit > 0 and m_wave then
+		local step = max(8, floor(M / 8))    -- 線を 8 節ぶんに分けた、ゆるいうねり
+		local nn = floor(M / step) + 2
+		local aw = {}
+		for i = 1, nn do aw[i] = jrand(jseed + 400 + i) * jit end
+		local ox2, oy2 = {}, {}
+		for k2 = 1, N do
+			local a = max(1, k2 - 1)
+			local b = min(N, k2 + 1)
+			local dx, dy = px[b] - px[a], py[b] - py[a]
+			local d = sqrt(dx * dx + dy * dy)
+			if d < 1e-6 then dx, dy, d = 1, 0, 1 end
+			local u = (k2 - 1) / step
+			local i = floor(u) + 1
+			local f = u - (i - 1)
+			local w = aw[i] + (aw[i + 1] - aw[i]) * f
+			ox2[k2] = (-dy / d) * w
+			oy2[k2] = (dx / d) * w
+		end
+		for k2 = 1, N do
+			px[k2] = px[k2] + ox2[k2]
+			py[k2] = py[k2] + oy2[k2]
+		end
+	end
+
+	-- 波形ぶんずらす
+	local cx, cy = {}, {}
+	for k2 = 1, N do
+		local a = max(1, k2 - 1)
+		local b = min(N, k2 + 1)
+		local dx, dy = px[b] - px[a], py[b] - py[a]
+		local d = sqrt(dx * dx + dy * dy)
+		if d < 1e-6 then dx, dy, d = 1, 0, 1 end
+		local u = (k2 - 1) / (N - 1)
+		local o = level(u)
+		if m_loop then
+			local e = min(u, 1 - u) * 8
+			if e < 1 then o = o * e + level(0) * (1 - e) end
+		end
+		cx[k2] = px[k2] + (-dy / d) * o * amp * zm
+		cy[k2] = py[k2] + (dx / d) * o * amp * zm
+	end
+
+	local mxn, myn, sl = {}, {}, {}
+	for k2 = 1, N do
+		local a = max(1, k2 - 1)
+		local b = min(N, k2 + 1)
+		local dx, dy = cx[b] - cx[a], cy[b] - cy[a]
+		local d = sqrt(dx * dx + dy * dy)
+		if d < 1e-6 then dx, dy, d = 1, 0, 1 end
+		mxn[k2], myn[k2] = -dy / d, dx / d
+	end
+	sl[1] = 0
+	for k2 = 2, N do
+		local dx, dy = cx[k2] - cx[k2 - 1], cy[k2] - cy[k2 - 1]
+		sl[k2] = sl[k2 - 1] + sqrt(dx * dx + dy * dy)
+	end
+	local total = sl[N]
+	local visend = total * min(max(grow, 0), 100) / 100
+
+	local function at(k2, f)
+		local j = k2 + 1
+		local x = cx[k2] + (cx[j] - cx[k2]) * f
+		local y = cy[k2] + (cy[j] - cy[k2]) * f
+		local nx = mxn[k2] + (mxn[j] - mxn[k2]) * f
+		local ny = myn[k2] + (myn[j] - myn[k2]) * f
+		local d = sqrt(nx * nx + ny * ny)
+		if d < 1e-6 then nx, ny, d = mxn[k2], myn[k2], 1 end
+		local t = (k2 - 1 + f) / (N - 1)
+		return x, y, nx / d, ny / d, h0, t
+	end
+
+	local function quad(x0, y0, nx0, ny0, w0, t0, x1, y1, nx1, ny1, w1, t1)
+		local ra, ga, ba = rgb(t0)
+		local rb, gb, bb = rgb(t1)
+		push4({ x0 - nx0 * w0, y0 - ny0 * w0, 0, ra, ga, ba, 1 },
+		      { x1 - nx1 * w1, y1 - ny1 * w1, 0, rb, gb, bb, 1 },
+		      { x1 + nx1 * w1, y1 + ny1 * w1, 0, rb, gb, bb, 1 },
+		      { x0 + nx0 * w0, y0 + ny0 * w0, 0, ra, ga, ba, 1 })
+	end
+
+	-- 線の端は丸める（破線の一つ一つの端にも効く）
+	local function round_cap(x, y, nx, ny, w, t, head)
+		if w < 0.3 then return end
+		local dx, dy = ny, -nx
+		if head then dx, dy = -dx, -dy end
+		local sx, sy = nx, ny
+		if head then sx, sy = -sx, -sy end
+		local cr, cg, cb = rgb(t)
+		for i = 0, CAPSEG - 1 do
+			local a0 = pi * i / CAPSEG
+			local a1 = pi * (i + 1) / CAPSEG
+			push4({ x, y, 0, cr, cg, cb, 1 },
+			      { x + w * (dx * cos(a0) + sx * sin(a0)),
+			        y + w * (dy * cos(a0) + sy * sin(a0)), 0, cr, cg, cb, 1 },
+			      { x + w * (dx * cos(a1) + sx * sin(a1)),
+			        y + w * (dy * cos(a1) + sy * sin(a1)), 0, cr, cg, cb, 1 },
+			      { x, y, 0, cr, cg, cb, 1 })
+		end
+	end
+
+	local dz, gz = dashz, gapz
+	local period = dz + gz
+	local dashed = (dz > 0) and (gz > 0) and (period > 0.01)
+	if dashed and total / period > 1000 then
+		local sc = total / period / 1000
+		dz, gz = dz * sc, gz * sc
+		period = dz + gz
+	end
+	local EPS = 1e-4
+
+	for k2 = 1, N - 1 do
+		local s0, s1 = sl[k2], sl[k2 + 1]
+		local len = s1 - s0
+		if len > 1e-9 and s0 < visend then
+			if not dashed then
+				local f1 = min(1, (visend - s0) / len)
+				local x0, y0, nx0, ny0, w0, t0 = at(k2, 0)
+				local x1, y1, nx1, ny1, w1, t1 = at(k2, f1)
+				quad(x0, y0, nx0, ny0, w0, t0, x1, y1, nx1, ny1, w1, t1)
+				if not m_loop then
+					if k2 == 1 then round_cap(x0, y0, nx0, ny0, w0, t0, true) end
+					if f1 < 1 or k2 == N - 1 then round_cap(x1, y1, nx1, ny1, w1, t1, false) end
+				end
+			else
+				local i0 = floor(s0 / period)
+				local i1 = floor(s1 / period)
+				for i = i0, i1 do
+					local ds = i * period
+					local de = ds + dz
+					local o0 = max(s0, ds)
+					local o1 = min(min(s1, de), visend)
+					if o1 - o0 > EPS then
+						local f0 = (o0 - s0) / len
+						local f1 = (o1 - s0) / len
+						local x0, y0, nx0, ny0, w0, t0 = at(k2, f0)
+						local x1, y1, nx1, ny1, w1, t1 = at(k2, f1)
+						quad(x0, y0, nx0, ny0, w0, t0, x1, y1, nx1, ny1, w1, t1)
+						if abs(o0 - ds) < EPS or k2 == 1 then
+							round_cap(x0, y0, nx0, ny0, w0, t0, true)
+						end
+						if abs(o1 - de) < EPS or (k2 == N - 1 and o1 >= s1 - EPS) then
+							round_cap(x1, y1, nx1, ny1, w1, t1, false)
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+for si = 1, #st.sk do build(st.sk[si]) end
+
+--------------------------------------------------------------------
+-- ペン先。どのモードでも出す（次にどこから描くかが分かるように）
+--------------------------------------------------------------------
+if editing then
+	pen(selfx, selfy)
+end
+
+--------------------------------------------------------------------
+-- 描画
+--------------------------------------------------------------------
+if #vt < 4 then return end
+
+local minx, maxx, miny, maxy = 1e9, -1e9, 1e9, -1e9
+for i = 1, #vt do
+	local v = vt[i]
+	minx = min(minx, v[1]); maxx = max(maxx, v[1])
+	miny = min(miny, v[2]); maxy = max(maxy, v[2])
+end
+local ox, oy = (minx + maxx) / 2, (miny + maxy) / 2
+local pad = 2
+local mw, mh = obj.getinfo("image_max")
+local bw = max(1, min(floor(maxx - minx) + pad * 2 + 1, mw))
+local bh = max(1, min(floor(maxy - miny) + pad * 2 + 1, mh))
+
+for i = 1, #vt do
+	local v = vt[i]
+	v[1] = v[1] - ox
+	v[2] = v[2] - oy
+end
+
+obj.setoption("drawtarget", "tempbuffer", bw, bh)
+obj.drawpoly(vt)
+obj.load("tempbuffer")
+obj.setoption("drawtarget", "framebuffer")
+
+-- 画像化で中心がずれた分を戻す。
+-- 表示位置は「基準座標 + obj.ox」なので基準座標のぶんも引く。
+obj.ox = obj.ox + ox - selfx
+obj.oy = obj.oy + oy - selfy

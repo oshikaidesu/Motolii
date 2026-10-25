@@ -1,0 +1,5 @@
+SmoothNoise by zopty
+licence: MIT
+from: https://github.com/zopty/SmoothNoise (branch main, commit f57b2033e395) (commit f57b2033e395)
+page: https://github.com/zopty/SmoothNoise
+Put here unchanged for Motolii (filament/aviutl_scripts).

@@ -1,0 +1,13 @@
+# Lens_S AviUtl ExEdit2 レンズ・アクリル効果スクリプト
+
+オブジェクトの背景をレンズのように歪めて透過させたり，一部分を磨りガラスのように背景をぼかして映したりできるスクリプトです．
+
+公開ページ:
+https://github.com/sigma-axis/aviutl2_script_Lens_S
+
+紹介動画:
+https://www.nicovideo.jp/watch/sm46811531
+
+お願い:
+ニコニコ動画での親作品登録をしていただけると励みになります．
+作品 ID: sm46811531

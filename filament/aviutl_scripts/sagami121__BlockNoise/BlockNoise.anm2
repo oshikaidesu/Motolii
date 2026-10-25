@@ -1,0 +1,116 @@
+--infomation:BlockNoise.anm2
+--label:加工
+
+--filter 
+--group:ブロックノイズ設定
+--track0:しきい値,0,100,80
+--track1:変化(ms),0,5000,100
+--track2:個別,0,1,0,1
+--track3:ずれ%指定,0,1,0,1
+
+--group:オプション
+--dialog:表示個数,kazu={5,15};Xサイズ,xsize={300,500};Yサイズ,ysize={10,100};Xずれ,xzure={-30,30};Yずれ,yzure={-30,30};背景描画/chk,draw0=1;範囲(W/H),xy={1920,1080};乱数固定/chk,seed0=0;
+
+local threshold = obj.track0
+local change_ms = obj.track1
+local mode      = obj.track2
+local percent   = obj.track3
+
+local kazu  = kazu  or {5, 15}
+local xsize = xsize or {300, 500}
+local ysize = ysize or {10, 100}
+local xzure = xzure or {-30, 30}
+local yzure = yzure or {-30, 30}
+local draw0 = draw0 or 0
+local xy    = xy    or {1920, 1080}
+local seed0 = seed0 or 0
+
+local a = 0
+if change_ms > 0 then
+    a = math.floor(obj.time / change_ms * 1000)
+end
+
+local rand = obj.rand(0,100,1,a)
+if seed0 == 1 then
+    rand = obj.rand(-100,-200,-1,a)
+end
+
+local hikaku = obj.rand(0,100,1+rand,a)
+local sikii = threshold
+
+local w,h = obj.w,obj.h
+local xy_w, xy_h = xy[1], xy[2]
+
+if (kazu[2]==nil)  then kazu[2]=kazu[1] end
+if (xsize[2]==nil) then xsize[2]=xsize[1] end
+if (ysize[2]==nil) then ysize[2]=ysize[1] end
+if (xzure[2]==nil) then xzure[2]=xzure[1] end
+if (yzure[2]==nil) then yzure[2]=yzure[1] end
+
+----------------------------------------------------
+
+if mode == 0 then
+    obj.setoption("drawtarget","tempbuffer",xy_w,xy_h)
+end
+
+if mode == 1 then
+    obj.effect()
+end
+
+obj.copybuffer("cache:MyBlock","obj")
+
+if draw0 == 1 then
+    obj.draw()
+end
+
+----------------------------------------------------
+
+if sikii < hikaku then
+    local count = obj.rand(kazu[1],kazu[2],2+rand,a)
+
+    for i = 1, count do
+        local xs = obj.rand(xsize[1],xsize[2],3+i+rand,a)
+        local ys = obj.rand(ysize[1],ysize[2],4+i+rand,a)
+
+        local x = obj.rand(-xy_w/2,xy_w/2,5+i+rand,a)
+        local y = obj.rand(-xy_h/2,xy_h/2,6+i+rand,a)
+
+        local ox, oy
+        if percent == 0 then
+            ox = x + obj.rand(xzure[1],xzure[2],7+i+rand,a)
+            oy = y + obj.rand(yzure[1],yzure[2],8+i+rand,a)
+        else
+            ox = x + xs * obj.rand(xzure[1],xzure[2],7+i+rand,a) / 100
+            oy = y + ys * obj.rand(yzure[1],yzure[2],8+i+rand,a) / 100
+        end
+
+        obj.copybuffer("obj","cache:MyBlock")
+
+        if mode == 1 then
+            obj.effect()
+        end
+
+        local x0 = ox - xs/2
+        local x1 = ox + xs/2
+        local y0 = oy - ys/2
+        local y1 = oy + ys/2
+
+        local srcx = x + w/2
+        local srcy = y + h/2
+
+        obj.drawpoly(
+            x0,y0,0, x1,y0,0, x1,y1,0, x0,y1,0,
+            srcx-xs/2, srcy-ys/2, srcx+xs/2, srcy-ys/2,
+            srcx+xs/2, srcy+ys/2, srcx-xs/2, srcy+ys/2
+        )
+    end
+end
+
+----------------------------------------------------
+
+if mode == 0 then
+    obj.load("tempbuffer")
+elseif sikii >= hikaku and mode == 1 then
+    obj.setoption("drawtarget","tempbuffer",xy_w,xy_h)
+    obj.load("tempbuffer")
+end

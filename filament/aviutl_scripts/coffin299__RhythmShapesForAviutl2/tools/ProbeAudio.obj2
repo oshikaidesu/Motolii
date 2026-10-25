@@ -1,0 +1,83 @@
+--information:RhythmShapes probe
+--label:RhythmShapes
+--track@hold:表示,0,1,1,1
+
+local function num(v)
+    if type(v) == "number" then return string.format("%.6g", v) end
+    return tostring(v)
+end
+
+local lines = {}
+local function add(text)
+    lines[#lines + 1] = text
+    print("RS_PROBE " .. text)
+end
+
+add("version=" .. num(obj.getinfo("version")))
+add("script_path=" .. tostring(obj.getinfo("script_path")))
+add("saving=" .. tostring(obj.getinfo("saving")))
+add("screen=" .. num(obj.screen_w) .. "x" .. num(obj.screen_h))
+add("frame_s=" .. num(obj.frame_s) .. " frame=" .. num(obj.frame) .. " fps=" .. num(obj.framerate) .. " time=" .. num(obj.time))
+add("scene_time=" .. num(((obj.frame_s or 0) + (obj.frame or 0)) / (obj.framerate or 60)))
+
+local tempo, beat, offset = obj.getinfo("bpm")
+add("bpm=" .. num(tempo) .. "," .. num(beat) .. "," .. num(offset))
+local list = obj.getinfo("bpm_list")
+if type(list) == "table" then
+    add("bpm_list_n=" .. tostring(#list))
+    for i = 1, math.min(#list, 8) do
+        local g = list[i]
+        add(string.format(
+            "bpm_list_%d tempo=%s beat=%s start=%s offset=%s",
+            i, num(g.tempo), num(g.beat), num(g.start), num(g.offset)
+        ))
+    end
+else
+    add("bpm_list_type=" .. type(list))
+end
+
+local function grab(kind, size)
+    local buf = {}
+    local ok, n, rate
+    if size then
+        ok, n, rate = pcall(obj.getaudio, buf, "audiobuffer", kind, size)
+    else
+        ok, n, rate = pcall(obj.getaudio, buf, "audiobuffer", kind)
+    end
+    if not ok then
+        add(kind .. " error=" .. tostring(n))
+        return
+    end
+    add(kind .. " n=" .. num(n) .. " rate=" .. num(rate))
+    if type(n) == "number" and n > 0 then
+        local mn, mx = buf[1] or 0, buf[1] or 0
+        local acc = 0
+        for i = 1, n do
+            local v = tonumber(buf[i]) or 0
+            if v < mn then mn = v end
+            if v > mx then mx = v end
+            acc = acc + v
+        end
+        add(kind .. " min=" .. num(mn) .. " max=" .. num(mx) .. " mean=" .. num(acc / n) .. " first=" .. num(buf[1]) .. " last=" .. num(buf[n]))
+    end
+end
+
+grab("pcm", 2048)
+grab("pcm.l", 256)
+grab("fourier")
+grab("spectrum", 32)
+
+obj.load("figure", "四角形", 0xffffff, 2)
+obj.setoption("drawtarget", "tempbuffer", 320, 180)
+local verts = {
+    { 0, -40, 0, 1, 1, 1, 1 },
+    { 40, 40, 0, 1, 1, 1, 1 },
+    { -40, 40, 0, 1, 1, 1, 1 },
+}
+local ok_draw, draw_err = pcall(obj.drawpoly, verts, 3)
+add("drawpoly=" .. tostring(ok_draw) .. " " .. tostring(draw_err))
+obj.setoption("drawtarget", "framebuffer")
+local ok_load = obj.load("tempbuffer")
+add("load_tempbuffer=" .. tostring(ok_load))
+add("script_time=" .. num(obj.getinfo("script_time")))
+add("image=" .. num(obj.w) .. "x" .. num(obj.h))

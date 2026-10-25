@@ -1,0 +1,41 @@
+[Language]
+Information=English Language for sevenc-nanashi/aviutl2-scripts / https://github.com/sevenc-nanashi/aviutl2-scripts
+[Tips.ドット絵変形]
+effect.name=Scales and rotates pixel art.\n\nUnlike the standard drawing behavior, this keeps pixel art looking pixelated while transforming it.\nWhen advanced interpolation is enabled, lines are interpolated more cleanly.\n(Advanced interpolation is still experimental. Its behavior may change in future versions.)\n
+発展補間=When enabled, pixel art lines are interpolated so they are drawn over fills, making lines less likely to disappear.\nIt also interpolates diagonal lines more cleanly when scaling up.\nThis feature is based on cleanEdge. See this page for details about cleanEdge: <https://torcado.com/cleanEdge/>\n
+基準色=The color used to determine line overwrite priority. For example, `#ffffff` prioritizes brighter colors. If the pixel art has an outline, setting the outline color can produce cleaner results.\nCorresponds to cleanEdge's Highest Color.\n
+線の太さ=Specifies the line width. This controls how many cells a pixel expands across. Use a value around 0.707 to clean up 45-degree lines.\nCorresponds to cleanEdge's Line Width.\n
+斜め補間=Specifies which slopes are interpolated when scaling up.\nCorresponds to cleanEdge's Slopes.\n\n- 1:1: Interpolates only 45-degree lines.\n- 1:1 + 1:2: Interpolates 45-degree and 26.565-degree (1:2 slope) lines.\n- 1:1 + 1:2 (Cleanup): Interpolates 45-degree and 26.565-degree (1:2 slope) lines, and further cleans up 1:2 lines.\n
+補間閾値=Specifies how similar colors must be to be treated as the same color during slope interpolation.\nHigher values make transitions between similar colors smoother, but too high a value can cause artifacts.\nSet this as low as possible.\nCorresponds to cleanEdge's Similar Threshold.\n
+ピクセル補正=When pixel art is transformed, the transformed image can become blurry if its position does not align to the pixel grid.\n(For example, when the top-left position of the image from the top-left of the scene is a decimal value such as (1.3, 2.7))\nEnabling pixel snap adjusts the transformed image so it aligns to the pixel grid and prevents blur.\n\n┌ 💡 Tips\n│ sigma-axis's aviutl2_script_PixelSnap_S performs similar behavior: <https://github.com/sigma-axis/aviutl2_script_PixelSnap_S>\n└─────\n\n# Modes\n\n- Move Center: Adjusts the center point so the top-left of the image aligns to the pixel grid.\n- Move Drawing: Adjusts the drawing position so the top-left of the image aligns to the pixel grid.\n- Sampler: Changes AviUtl2's pixel interpolation mode.\n  Adding another effect after this effect may disable pixel snap.\n- Off: Does not apply pixel snap.\n
+PI=- `scale`: Scale factor (1.0 = original size)\n- `scale_x`: X scale factor (1.0 = original size)\n- `scale_y`: Y scale factor (1.0 = original size)\n- `center_x`: Center X in pixels\n- `center_y`: Center Y in pixels\n- `angle_deg`: Rotation in degrees\n- `enable_cleanedge`: Advanced interpolation\n- `highest_color`: Highest color\n- `line_width`: Line width\n- `slopes`: Slope interpolation (0 = "1:1 only", 1 = "1:1 + 1:2", 2 = "1:1 + 1:2 (cleanup)")\n- `similar_threshold`: Similar threshold\n- `alpha_grid`: Alpha grid\n- `pixelsnap`: Pixel snap (1 = move center, 2 = move drawing, 3 = sampler, 0 = off)\n- `debug`: Debug mode\n
+
+[ドット絵変形]
+ドット絵変形=Pixel Art Transform
+中心移動=Move Center
+中心X=Center X
+中心Y=Center Y
+拡大縮小=Scale
+拡大率=Scale
+X拡大率=X Scale
+Y拡大率=Y Scale
+回転=Rotation
+回転（度）=Rotation (Degrees)
+発展補間設定=Advanced Interpolation
+発展補間=Advanced Interpolation
+線の太さ=Line Width
+斜め補間=Slope Interpolation
+1:1のみ=1:1 Only
+1:1 + 1:2=1:1 + 1:2
+1:1 + 1:2（補正）=1:1 + 1:2 (Cleanup)
+基準色=Highest Color
+補間閾値=Similar Threshold
+高度な設定=Advanced Settings
+透明グリッド=Alpha Grid
+ピクセル補正=Pixel Snap
+中心移動式=Move Center
+描画移動式=Move Drawing
+サンプラー式=Sampler
+オフ=Off
+デバッグモード=Debug Mode
+PI=PI

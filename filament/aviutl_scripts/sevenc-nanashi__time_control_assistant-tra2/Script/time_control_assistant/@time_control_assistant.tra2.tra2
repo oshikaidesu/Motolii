@@ -1,0 +1,334 @@
+@繰り返し（フレーム指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:周期[f],60
+--param:周期ずれ[f],0
+
+local obj_getpoint = obj.getpoint
+local core = require("time_control_assistant")
+local frames, frames_offset = obj_getpoint("param")
+local framerate = core.assert_positive("フレームレート", obj_getpoint("framerate"))
+
+core.assert_positive("周期[f]", frames)
+return core.do_repeat(obj_getpoint, frames / framerate, frames_offset / framerate)
+
+@繰り返し（秒数指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:周期[秒],1
+--param:周期ずれ[秒],0
+
+local obj_getpoint = obj.getpoint
+local core = require("time_control_assistant")
+local seconds, seconds_offset = obj_getpoint("param")
+
+core.assert_positive("周期[秒]", seconds)
+return core.do_repeat(obj_getpoint, seconds, seconds_offset)
+
+@繰り返し（BPM指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:BPM,120
+--param:拍数,1
+--param:拍ずれ,0
+
+local obj_getpoint = obj.getpoint
+local core = require("time_control_assistant")
+local bpm, beats, beats_offset = obj_getpoint("param")
+
+core.assert_positive("BPM", bpm)
+core.assert_positive("拍数", beats)
+return core.do_repeat(obj_getpoint, 60 / bpm * beats, 60 / bpm * beats_offset)
+
+@繰り返し（BPMグリッド指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:分割数,4
+--param:分割後の個数,1
+--param:分割ずれ,0
+--param:繰り返す位置を小節の先頭にする/check,0
+
+package.loaded["time_control_assistant"] = nil
+local core = require("time_control_assistant")
+local divisions, units_per_cycle, divisions_offset, repeat_from_measure_start = obj.getpoint("param")
+
+return core.do_repeat_by_bpm_grid(
+	obj.getpoint,
+	obj.getinfo,
+	divisions,
+	units_per_cycle,
+	divisions_offset,
+	repeat_from_measure_start == 1
+)
+
+@繰り返し（周波数指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:周波数[Hz],1
+--param:位相ずれ[°],0
+
+local obj_getpoint = obj.getpoint
+local core = require("time_control_assistant")
+local frequency, phase_offset = obj_getpoint("param")
+
+core.assert_positive("周波数[Hz]", frequency)
+local duration = 1 / frequency
+return core.do_repeat(obj_getpoint, duration, duration * phase_offset / 360)
+
+@繰り返し（回数）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:回数,1
+--param:周期ずれ,0
+
+local core = require("time_control_assistant")
+local count, count_offset = obj.getpoint("param")
+
+return core.do_repeat_by_count(obj.getpoint, count, count_offset)
+
+@反転折り返し（フレーム指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:周期[f],60
+--param:周期ずれ[f],0
+
+local obj_getpoint = obj.getpoint
+local core = require("time_control_assistant")
+local frames, frames_offset = obj_getpoint("param")
+local framerate = core.assert_positive("フレームレート", obj_getpoint("framerate"))
+
+core.assert_positive("周期[f]", frames)
+return core.do_reverse_forthback(obj_getpoint, frames / framerate, frames_offset / framerate)
+
+@反転折り返し（秒数指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:周期[秒],1
+--param:周期ずれ[秒],0
+
+local obj_getpoint = obj.getpoint
+local core = require("time_control_assistant")
+local seconds, seconds_offset = obj_getpoint("param")
+
+core.assert_positive("周期[秒]", seconds)
+return core.do_reverse_forthback(obj_getpoint, seconds, seconds_offset)
+
+@反転折り返し（BPM指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:BPM,120
+--param:拍数,1
+--param:拍ずれ,0
+
+local obj_getpoint = obj.getpoint
+local core = require("time_control_assistant")
+local bpm, beats, beats_offset = obj_getpoint("param")
+
+core.assert_positive("BPM", bpm)
+core.assert_positive("拍数", beats)
+return core.do_reverse_forthback(obj_getpoint, 60 / bpm * beats, 60 / bpm * beats_offset)
+
+@反転折り返し（BPMグリッド指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:分割数,4
+--param:分割後の個数,1
+--param:分割ずれ,0
+--param:繰り返す位置を小節の先頭にする/check,0
+
+local core = require("time_control_assistant")
+local divisions, units_per_cycle, divisions_offset, repeat_from_measure_start = obj.getpoint("param")
+
+return core.do_reverse_forthback_by_bpm_grid(
+	obj.getpoint,
+	obj.getinfo,
+	divisions,
+	units_per_cycle,
+	divisions_offset,
+	repeat_from_measure_start == 1
+)
+
+@反転折り返し（周波数指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:周波数[Hz],1
+--param:位相ずれ[°],0
+
+local obj_getpoint = obj.getpoint
+local core = require("time_control_assistant")
+local frequency, phase_offset = obj_getpoint("param")
+
+core.assert_positive("周波数[Hz]", frequency)
+local duration = 1 / frequency
+return core.do_reverse_forthback(obj_getpoint, duration, duration * phase_offset / 360)
+
+@反転折り返し（回数）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:回数,1
+--param:周期ずれ,0
+
+local core = require("time_control_assistant")
+local count, count_offset = obj.getpoint("param")
+
+return core.do_reverse_forthback_by_count(obj.getpoint, count, count_offset)
+
+@往復繰り返し（フレーム指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:周期[f],60
+--param:周期ずれ[f],0
+
+local obj_getpoint = obj.getpoint
+local core = require("time_control_assistant")
+local frames, frames_offset = obj_getpoint("param")
+local framerate = core.assert_positive("フレームレート", obj_getpoint("framerate"))
+
+core.assert_positive("周期[f]", frames)
+return core.do_repeat_forthback(obj_getpoint, frames / framerate, frames_offset / framerate)
+
+@往復繰り返し（秒数指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:周期[秒],1
+--param:周期ずれ[秒],0
+
+local obj_getpoint = obj.getpoint
+local core = require("time_control_assistant")
+local seconds, seconds_offset = obj_getpoint("param")
+
+core.assert_positive("周期[秒]", seconds)
+return core.do_repeat_forthback(obj_getpoint, seconds, seconds_offset)
+
+@往復繰り返し（BPM指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:BPM,120
+--param:拍数,1
+--param:拍ずれ,0
+
+local obj_getpoint = obj.getpoint
+local core = require("time_control_assistant")
+local bpm, beats, beats_offset = obj_getpoint("param")
+
+core.assert_positive("BPM", bpm)
+core.assert_positive("拍数", beats)
+return core.do_repeat_forthback(obj_getpoint, 60 / bpm * beats, 60 / bpm * beats_offset)
+
+@往復繰り返し（BPMグリッド指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:分割数,4
+--param:分割後の個数,1
+--param:分割ずれ,0
+--param:繰り返す位置を小節の先頭にする/check,0
+
+local core = require("time_control_assistant")
+local divisions, units_per_cycle, divisions_offset, repeat_from_measure_start = obj.getpoint("param")
+
+return core.do_repeat_forthback_by_bpm_grid(
+	obj.getpoint,
+	obj.getinfo,
+	divisions,
+	units_per_cycle,
+	divisions_offset,
+	repeat_from_measure_start == 1
+)
+
+@往復繰り返し（周波数指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:周波数[Hz],1
+--param:位相ずれ[°],0
+
+local obj_getpoint = obj.getpoint
+local core = require("time_control_assistant")
+local frequency, phase_offset = obj_getpoint("param")
+
+core.assert_positive("周波数[Hz]", frequency)
+local duration = 1 / frequency
+return core.do_repeat_forthback(obj_getpoint, duration, duration * phase_offset / 360)
+
+@往復繰り返し（回数）
+--label:@time_control_assistant.tra2
+--timecontrol
+--twopoint
+--param:回数,1
+--param:周期ずれ,0
+
+local core = require("time_control_assistant")
+local count, count_offset = obj.getpoint("param")
+
+return core.do_repeat_forthback_by_count(obj.getpoint, count, count_offset)
+
+@絶対時間指定（フレーム指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--param:開始位置[f],0
+--param:終了位置[f],60
+
+local obj_getpoint = obj.getpoint
+local core = require("time_control_assistant")
+local start_frame, end_frame = obj_getpoint("param")
+
+return core.do_absolute(obj_getpoint, start_frame - 1, end_frame - 1)
+
+@絶対時間指定（秒数指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--param:開始位置[秒],0
+--param:終了位置[秒],1
+
+local obj_getpoint = obj.getpoint
+local core = require("time_control_assistant")
+local start_time, end_time = obj_getpoint("param")
+
+return core.do_absolute(obj_getpoint, start_time * obj_getpoint("framerate"), end_time * obj_getpoint("framerate"))
+
+@相対時間指定（フレーム指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--param:開始位置シフト[f],0
+--param:終了位置シフト[f],0
+
+local obj_getpoint = obj.getpoint
+local core = require("time_control_assistant")
+local start_frame_shift, end_frame_shift = obj_getpoint("param")
+local obj_start_frame = obj_getpoint("frame_s")
+local obj_end_frame = obj_getpoint("frame_e")
+
+return core.do_absolute(obj_getpoint, obj_start_frame + start_frame_shift, obj_end_frame + end_frame_shift)
+
+@相対時間指定（秒数指定）
+--label:@time_control_assistant.tra2
+--timecontrol
+--param:開始位置シフト[秒],0
+--param:終了位置シフト[秒],1
+
+local obj_getpoint = obj.getpoint
+local core = require("time_control_assistant")
+local start_time_shift, end_time_shift = obj_getpoint("param")
+local obj_start_frame = obj_getpoint("frame_s")
+local obj_end_frame = obj_getpoint("frame_e")
+local framerate = obj_getpoint("framerate")
+
+return core.do_absolute(obj_getpoint, obj_start_frame + start_time_shift * framerate,
+  obj_end_frame + end_time_shift * framerate)
+

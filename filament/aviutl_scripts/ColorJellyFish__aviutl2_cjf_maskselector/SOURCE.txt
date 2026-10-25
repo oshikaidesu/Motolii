@@ -1,0 +1,6 @@
+aviutl2_cjf_maskselector by ColorJellyFish
+licence: MIT
+from: https://github.com/ColorJellyFish/aviutl2_cjf_maskselector (branch main, commit ebd1c8969096) (commit ebd1c8969096)
+page: https://github.com/ColorJellyFish/aviutl2_cjf_maskselector
+left out: 2 .cpp, 2 .h (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

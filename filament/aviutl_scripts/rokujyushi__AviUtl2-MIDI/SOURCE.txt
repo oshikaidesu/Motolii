@@ -1,0 +1,5 @@
+AviUtl2-MIDI by rokujyushi
+licence: MIT
+from: https://github.com/rokujyushi/AviUtl2-MIDI (branch master, commit 281500170d32) (commit 281500170d32)
+page: https://github.com/rokujyushi/AviUtl2-MIDI
+Put here unchanged for Motolii (filament/aviutl_scripts).

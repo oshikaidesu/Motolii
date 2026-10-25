@@ -1,0 +1,647 @@
+--information:Variable Font Object
+--label:テキスト(VF)
+--text@text:テキスト,
+--group:フォント設定,tune
+--file@font_file:フォントファイル
+--font@font_family:フォント,Yu Gothic UI
+--track@size:サイズ,1,1000,48,1
+--color@color:文字色,0xffffff
+--check@faux_bold:ボールド,false
+--check@faux_italic:イタリック,false
+--group:バリアブル軸,false
+--track@weight:Weight,100,900,400,1
+--track@width_axis:Width,50,200,100,1
+--track@slant:Slant,-15,15,0,0.1
+--track@opsz:Optical Size,6,72,12,0.1
+--track@ital_axis:Italic Axis,0,1,0,0.01
+--track@grad_axis:Grade (GRAD),-200,200,0,0.1
+--track@xtra_axis:XTRA,-1000,1000,0,1
+--track@xopq_axis:XOPQ,-1000,1000,0,1
+--track@yopq_axis:YOPQ,-1000,1000,0,1
+--track@ytlc_axis:YTLC,-1000,1000,0,1
+--track@ytuc_axis:YTUC,-1000,1000,0,1
+--track@ytas_axis:YTAS,-1000,1000,0,1
+--track@ytde_axis:YTDE,-1000,1000,0,1
+--track@ytfi_axis:YTFI,-1000,1000,0,1
+--group:レイアウト,tune
+--track@req_w:横幅,0,4096,0,1
+--track@req_h:縦幅,0,4096,0,1
+--separator:幅は0で自動設定
+--track@letter_spacing:字間,-50,200,0,1,px
+--track@line_spacing:行間,-50,300,0,1,px
+--select@line_align:行揃え=0,左=0,中央=1,右=2
+--check@per_char_object:個別オブジェクト化,true
+--separator:
+--value@glyph_tags:文字別制御タグ(配列),{}
+
+-- 制御文字（AviUtl2互換の主要書式）
+-- 文字列 text に直接埋め込み可能:
+--   <#ff0000> 文字色変更 / <#> 既定色へ
+--   <s64> サイズ変更 / <s+8> 相対変更 / <s> 既定サイズへ
+--   <@メイリオ,6BI> フォント/装飾変更 / <@+B> 太字追加 / <@-I> 斜体解除 / <@> 既定へ
+-- 軸拡張（本スクリプト独自）:
+--   <v700,100,0,12,0,0,0,0,0,0,0,0,0,0>
+--   <vweight=700,wd=110,sl=-5,op=14,ital=1,grad=20,xtra=200,xopq=30,yopq=10>
+--   <v> 既定軸へ戻す
+--
+-- 文字別上書き（配列）:
+--   glyph_tags = {
+--     "<#ff8080><v700,100,0,12>",
+--     "<#80ff80>",
+--     "<s+8><@+B>"
+--   }
+
+local vf = obj.module("VariableFontModule")
+
+local function utf8_next_char(s, i)
+    local c = s:byte(i)
+    if not c then
+        return nil, i
+    end
+    local len = 1
+    if c >= 0xF0 then
+        len = 4
+    elseif c >= 0xE0 then
+        len = 3
+    elseif c >= 0xC0 then
+        len = 2
+    end
+    return s:sub(i, i + len - 1), i + len
+end
+
+local function trim(s)
+    return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function split_csv(s)
+    local out = {}
+    local start_idx = 1
+    while true do
+        local p = s:find(",", start_idx, true)
+        if not p then
+            out[#out + 1] = s:sub(start_idx)
+            break
+        end
+        out[#out + 1] = s:sub(start_idx, p - 1)
+        start_idx = p + 1
+    end
+    return out
+end
+
+local function clone_style(st)
+    return {
+        font_family = st.font_family,
+        size = st.size,
+        color = st.color,
+        weight = st.weight,
+        width_axis = st.width_axis,
+        slant = st.slant,
+        opsz = st.opsz,
+        ital_axis = st.ital_axis,
+        grad_axis = st.grad_axis,
+        xtra_axis = st.xtra_axis,
+        xopq_axis = st.xopq_axis,
+        yopq_axis = st.yopq_axis,
+        ytlc_axis = st.ytlc_axis,
+        ytuc_axis = st.ytuc_axis,
+        ytas_axis = st.ytas_axis,
+        ytde_axis = st.ytde_axis,
+        ytfi_axis = st.ytfi_axis,
+        faux_bold = st.faux_bold,
+        faux_italic = st.faux_italic,
+    }
+end
+
+local function parse_color_token(token)
+    local t = trim(token or "")
+    if t == "" then
+        return nil
+    end
+    if t:sub(1, 1) == "#" then
+        t = t:sub(2)
+    end
+    if t:match("^[0-9a-fA-F]+$") then
+        if #t == 6 then
+            return tonumber(t, 16)
+        elseif #t == 3 then
+            local r = t:sub(1, 1)
+            local g = t:sub(2, 2)
+            local b = t:sub(3, 3)
+            return tonumber(r .. r .. g .. g .. b .. b, 16)
+        end
+    end
+    return nil
+end
+
+local function apply_size_token(style, token, base_style)
+    local t = trim(token or "")
+    if t == "" then
+        style.size = base_style.size
+        return
+    end
+
+    local head = t:sub(1, 1)
+    local num = tonumber(t:sub(2))
+    if head == "+" and num then
+        style.size = math.max(1, style.size + num)
+        return
+    elseif head == "-" and num then
+        style.size = math.max(1, style.size - num)
+        return
+    elseif head == "*" and num then
+        style.size = math.max(1, style.size * num)
+        return
+    end
+
+    local v = tonumber(t)
+    if v then
+        style.size = math.max(1, v)
+    end
+end
+
+local function apply_font_token(style, token, base_style)
+    local body = token:sub(2)
+    if body == "" then
+        style.font_family = base_style.font_family
+        style.faux_bold = base_style.faux_bold
+        style.faux_italic = base_style.faux_italic
+        return
+    end
+
+    local op = body:sub(1, 1)
+    if op == "+" or op == "-" then
+        local flags = body:sub(2):upper()
+        if flags:find("B", 1, true) then
+            style.faux_bold = (op == "+") and true or false
+        end
+        if flags:find("I", 1, true) then
+            style.faux_italic = (op == "+") and true or false
+        end
+        return
+    end
+
+    local parts = split_csv(body)
+    local family = trim(parts[1] or "")
+    if family ~= "" then
+        style.font_family = family
+    end
+
+    local deco = trim(parts[2] or ""):upper()
+    if deco ~= "" then
+        if deco:find("B", 1, true) then
+            style.faux_bold = true
+        end
+        if deco:find("I", 1, true) then
+            style.faux_italic = true
+        end
+    end
+end
+
+local function apply_axis_token(style, token, base_style)
+    local body = token:sub(2)
+    if body == "" then
+        style.weight = base_style.weight
+        style.width_axis = base_style.width_axis
+        style.slant = base_style.slant
+        style.opsz = base_style.opsz
+        style.ital_axis = base_style.ital_axis
+        style.grad_axis = base_style.grad_axis
+        style.xtra_axis = base_style.xtra_axis
+        style.xopq_axis = base_style.xopq_axis
+        style.yopq_axis = base_style.yopq_axis
+        style.ytlc_axis = base_style.ytlc_axis
+        style.ytuc_axis = base_style.ytuc_axis
+        style.ytas_axis = base_style.ytas_axis
+        style.ytde_axis = base_style.ytde_axis
+        style.ytfi_axis = base_style.ytfi_axis
+        return
+    end
+
+    local parts = split_csv(body)
+    local positional = {}
+    for _, p in ipairs(parts) do
+        local t = trim(p)
+        local k, v = t:match("^([%a_]+)%s*=?%s*([%+%-%.%d]+)$")
+        if k and v then
+            local key = k:lower()
+            local num = tonumber(v)
+            if num then
+                if key == "w" or key == "wt" or key == "weight" then
+                    style.weight = num
+                elseif key == "wd" or key == "width" then
+                    style.width_axis = num
+                elseif key == "sl" or key == "slant" then
+                    style.slant = num
+                elseif key == "op" or key == "opsz" or key == "optical" then
+                    style.opsz = num
+                elseif key == "ital" or key == "italic" then
+                    style.ital_axis = num
+                elseif key == "grad" then
+                    style.grad_axis = num
+                elseif key == "xtra" then
+                    style.xtra_axis = num
+                elseif key == "xopq" then
+                    style.xopq_axis = num
+                elseif key == "yopq" then
+                    style.yopq_axis = num
+                elseif key == "ytlc" then
+                    style.ytlc_axis = num
+                elseif key == "ytuc" then
+                    style.ytuc_axis = num
+                elseif key == "ytas" then
+                    style.ytas_axis = num
+                elseif key == "ytde" then
+                    style.ytde_axis = num
+                elseif key == "ytfi" then
+                    style.ytfi_axis = num
+                end
+            end
+        else
+            local num = tonumber(t)
+            if num then
+                positional[#positional + 1] = num
+            end
+        end
+    end
+
+    if positional[1] ~= nil then
+        style.weight = positional[1]
+    end
+    if positional[2] ~= nil then
+        style.width_axis = positional[2]
+    end
+    if positional[3] ~= nil then
+        style.slant = positional[3]
+    end
+    if positional[4] ~= nil then
+        style.opsz = positional[4]
+    end
+    if positional[5] ~= nil then
+        style.grad_axis = positional[5]
+    end
+    if positional[6] ~= nil then
+        style.xtra_axis = positional[6]
+    end
+    if positional[7] ~= nil then
+        style.xopq_axis = positional[7]
+    end
+    if positional[8] ~= nil then
+        style.yopq_axis = positional[8]
+    end
+    if positional[9] ~= nil then
+        style.ytlc_axis = positional[9]
+    end
+    if positional[10] ~= nil then
+        style.ytuc_axis = positional[10]
+    end
+    if positional[11] ~= nil then
+        style.ytas_axis = positional[11]
+    end
+    if positional[12] ~= nil then
+        style.ytde_axis = positional[12]
+    end
+    if positional[13] ~= nil then
+        style.ytfi_axis = positional[13]
+    end
+    if positional[14] ~= nil then
+        style.ital_axis = positional[14]
+    end
+end
+
+local function apply_control_tag(style, tag, base_style)
+    if tag == "" then
+        return
+    end
+
+    local head = tag:sub(1, 1)
+    if head == "#" then
+        local body = tag:sub(2)
+        if body == "" then
+            style.color = base_style.color
+            return
+        end
+        local first = split_csv(body)[1]
+        local parsed = parse_color_token(first)
+        if parsed then
+            style.color = parsed
+        end
+    elseif head == "s" then
+        local body = tag:sub(2)
+        local first = split_csv(body)[1] or ""
+        apply_size_token(style, first, base_style)
+    elseif head == "@" then
+        apply_font_token(style, tag, base_style)
+    elseif head == "v" then
+        -- 拡張: バリアブル軸用の制御文字。<v700,100,0,12> または <vweight=700,wd=100>
+        apply_axis_token(style, tag, base_style)
+    end
+end
+
+local function apply_control_sequence(style, sequence, base_style)
+    local i = 1
+    while i <= #sequence do
+        local ch = sequence:sub(i, i)
+        if ch == "<" then
+            local j = sequence:find(">", i + 1, true)
+            if j then
+                local tag = sequence:sub(i + 1, j - 1)
+                apply_control_tag(style, tag, base_style)
+                i = j + 1
+            else
+                break
+            end
+        else
+            i = i + 1
+        end
+    end
+end
+
+local function parse_line_to_glyph_entries(line, base_style)
+    local entries = {}
+    local state = clone_style(base_style)
+    local i = 1
+
+    while i <= #line do
+        local ch = line:sub(i, i)
+        if ch == "<" then
+            local j = line:find(">", i + 1, true)
+            if j then
+                local tag = line:sub(i + 1, j - 1)
+                apply_control_tag(state, tag, base_style)
+                i = j + 1
+            else
+                local c, ni = utf8_next_char(line, i)
+                entries[#entries + 1] = { ch = c, style = clone_style(state) }
+                i = ni
+            end
+        else
+            local c, ni = utf8_next_char(line, i)
+            entries[#entries + 1] = { ch = c, style = clone_style(state) }
+            i = ni
+        end
+    end
+
+    return entries
+end
+
+local function split_lines(s)
+    local out = {}
+    local normalized = s:gsub("\r\n", "\n"):gsub("\r", "\n")
+    local start_idx = 1
+
+    while true do
+        local nl = normalized:find("\n", start_idx, true)
+        if not nl then
+            out[#out + 1] = normalized:sub(start_idx)
+            break
+        end
+        out[#out + 1] = normalized:sub(start_idx, nl - 1)
+        start_idx = nl + 1
+    end
+
+    if #out == 0 then
+        out = {""}
+    end
+    return out
+end
+
+if not per_char_object then
+    local data, w, h = vf.render_to_buffer(
+        text,
+        font_file or "",
+        font_family or "",
+        size,
+        color,
+        weight,
+        width_axis,
+        slant,
+        opsz,
+        faux_bold,
+        faux_italic,
+        req_w,
+        req_h,
+        grad_axis,
+        xtra_axis,
+        xopq_axis,
+        yopq_axis,
+        ytlc_axis,
+        ytuc_axis,
+        ytas_axis,
+        ytde_axis,
+        ytfi_axis,
+        ital_axis
+    )
+
+    obj.putpixeldata("object", data, w, h, "rgba")
+    obj.ox = 0
+    obj.oy = 0
+    return
+end
+
+local glyphs = {}
+local positions = {}
+local line_infos = {}
+local base_style = {
+    font_family = font_family or "",
+    size = size,
+    color = color,
+    weight = weight,
+    width_axis = width_axis,
+    slant = slant,
+    opsz = opsz,
+    ital_axis = ital_axis,
+    grad_axis = grad_axis,
+    xtra_axis = xtra_axis,
+    xopq_axis = xopq_axis,
+    yopq_axis = yopq_axis,
+    ytlc_axis = ytlc_axis,
+    ytuc_axis = ytuc_axis,
+    ytas_axis = ytas_axis,
+    ytde_axis = ytde_axis,
+    ytfi_axis = ytfi_axis,
+    faux_bold = faux_bold,
+    faux_italic = faux_italic,
+}
+
+local function get_glyph_tag_override(index)
+    if type(glyph_tags) == "table" then
+        local v = glyph_tags[index]
+        if type(v) == "string" then
+            return v
+        end
+    end
+    return ""
+end
+
+local lines = split_lines(text)
+local pen_y = 0
+local visible_index = 0
+
+for _, line in ipairs(lines) do
+    local entries = parse_line_to_glyph_entries(line, base_style)
+    local pen_x = 0
+    local line_h = math.max(1, math.floor(size))
+    local line_start_idx = #glyphs + 1
+
+    for _, entry in ipairs(entries) do
+        visible_index = visible_index + 1
+        local style = clone_style(entry.style)
+        local override = get_glyph_tag_override(visible_index)
+        if override ~= "" then
+            apply_control_sequence(style, override, base_style)
+        end
+
+        local _, w, h = vf.render_to_buffer(
+            entry.ch,
+            font_file or "",
+            style.font_family,
+            style.size,
+            style.color,
+            style.weight,
+            style.width_axis,
+            style.slant,
+            style.opsz,
+            style.faux_bold,
+            style.faux_italic,
+            req_w,
+            req_h,
+            style.grad_axis,
+            style.xtra_axis,
+            style.xopq_axis,
+            style.yopq_axis,
+            style.ytlc_axis,
+            style.ytuc_axis,
+            style.ytas_axis,
+            style.ytde_axis,
+            style.ytfi_axis,
+            style.ital_axis
+        )
+
+        local idx = #glyphs + 1
+        glyphs[idx] = {
+            ch = entry.ch,
+            w = w,
+            h = h,
+            style = style,
+        }
+        positions[idx] = {
+            x = pen_x,
+            y = pen_y,
+        }
+        pen_x = pen_x + w + letter_spacing
+        line_h = math.max(line_h, h)
+    end
+
+    local line_width = 0
+    if #entries > 0 then
+        line_width = pen_x - letter_spacing
+    end
+    line_infos[#line_infos + 1] = {
+        start_idx = line_start_idx,
+        end_idx = #glyphs,
+        width = math.max(0, line_width),
+    }
+
+    pen_y = pen_y + line_h + line_spacing
+end
+
+local align_mode = math.floor(line_align or 0)
+if align_mode < 0 then
+    align_mode = 0
+elseif align_mode > 2 then
+    align_mode = 2
+end
+
+local max_line_width = 0
+for _, info in ipairs(line_infos) do
+    if info.width > max_line_width then
+        max_line_width = info.width
+    end
+end
+
+for _, info in ipairs(line_infos) do
+    local shift_x = 0
+    if align_mode == 1 then
+        shift_x = (max_line_width - info.width) * 0.5
+    elseif align_mode == 2 then
+        shift_x = max_line_width - info.width
+    end
+
+    if shift_x ~= 0 and info.start_idx <= info.end_idx then
+        for idx = info.start_idx, info.end_idx do
+            positions[idx].x = positions[idx].x + shift_x
+        end
+    end
+end
+
+if #glyphs == 0 then
+    local _, w, h = vf.render_to_buffer(
+        " ",
+        font_file or "",
+        base_style.font_family,
+        base_style.size,
+        base_style.color,
+        base_style.weight,
+        base_style.width_axis,
+        base_style.slant,
+        base_style.opsz,
+        base_style.faux_bold,
+        base_style.faux_italic,
+        req_w,
+        req_h,
+        base_style.grad_axis,
+        base_style.xtra_axis,
+        base_style.xopq_axis,
+        base_style.yopq_axis,
+        base_style.ytlc_axis,
+        base_style.ytuc_axis,
+        base_style.ytas_axis,
+        base_style.ytde_axis,
+        base_style.ytfi_axis,
+        base_style.ital_axis
+    )
+    glyphs[1] = { ch = " ", w = w, h = h, style = clone_style(base_style) }
+    positions[1] = { x = 0, y = 0 }
+end
+
+obj.multiobject(#glyphs, function()
+    local i = obj.index + 1
+    local g = glyphs[i]
+    local p = positions[i]
+    if g then
+        local st = g.style or base_style
+        -- dataポインタは呼び出しごとに更新されるため、描画直前に再生成する
+        local data, w, h = vf.render_to_buffer(
+            g.ch,
+            font_file or "",
+            st.font_family,
+            st.size,
+            st.color,
+            st.weight,
+            st.width_axis,
+            st.slant,
+            st.opsz,
+            st.faux_bold,
+            st.faux_italic,
+            req_w,
+            req_h,
+            st.grad_axis,
+            st.xtra_axis,
+            st.xopq_axis,
+            st.yopq_axis,
+            st.ytlc_axis,
+            st.ytuc_axis,
+            st.ytas_axis,
+            st.ytde_axis,
+            st.ytfi_axis,
+            st.ital_axis
+        )
+
+        obj.putpixeldata("object", data, w, h, "rgba")
+        obj.ox = p and p.x or 0
+        obj.oy = p and p.y or 0
+    end
+end)
+
+obj.ox = 0
+obj.oy = 0

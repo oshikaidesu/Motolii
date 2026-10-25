@@ -1,0 +1,10 @@
+RainOnPane 1.1.1
+
+AviUtl2 のプレビュー画面にこのパッケージをドラッグ＆ドロップしてインストールしてください。
+カスタムオブジェクトから「RainOnPane」を選択できます。
+
+将本安装包直接拖放到 AviUtl2 预览画面即可安装。
+安装后可在「自定义物件（カスタムオブジェクト）」中选择 RainOnPane。
+
+Drag and drop this package onto the AviUtl2 preview window to install it.
+After installation, select RainOnPane from Custom Object.

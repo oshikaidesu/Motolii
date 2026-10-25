@@ -1,0 +1,155 @@
+--information:VRM Toolkit Model
+--label:カスタムオブジェクト
+--group:モデル,true
+--file@file:VRMファイル
+--track@model_scale:モデル倍率,1,10000,100,1
+--track@triangles:素材毎最大三角形数,256,200000,50000,1
+--track@chunk:初回読込チャンク,16,4096,512,1
+--check@culling:裏面非表示,false
+--check@flip_x:X反転,false
+--check@flip_y:Y反転,false
+--check@flip_z:Z反転,false
+--group:アニメーション,true
+--file@animation_file:VRMAファイル
+--track@animation_speed:アニメ速度(%),0,400,100,1
+--text@expression_timeline_json:表情JSON,{"v":1}
+--select@timeline_blend_mode:VRMAとJSON,合成=0,上書き=1
+--group
+
+local bridge = obj.module("VRMToolkitBridge")
+
+cached_key = cached_key or ""
+cached_groups = cached_groups or nil
+cached_summary = cached_summary or ""
+cached_handle = cached_handle or 0
+cached_requires_time = cached_requires_time or false
+
+local function transform_vertex_position(x, y, z)
+	local sx = flip_x and -1 or 1
+	local sy = flip_y and -1 or 1
+	local sz = flip_z and -1 or 1
+	local scale = math.max(1, math.floor(model_scale))
+	return x * scale * sx, y * scale * sy, z * scale * sz
+end
+
+local function trim_ascii_whitespace(text)
+	if text == nil then
+		return ""
+	end
+	return (tostring(text):gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function selected_timeline_blend_mode()
+	if timeline_blend_mode == 1 then
+		return "override"
+	end
+	return "combine"
+end
+
+local function rebuild_cache()
+	cached_groups = {}
+	cached_handle = bridge.open_model(file, triangles, animation_file)
+	cached_summary = bridge.get_summary(cached_handle)
+	cached_requires_time = bridge.requires_time_update(cached_handle)
+	local animation_time = obj.time * (math.max(0, math.floor(animation_speed)) / 100.0)
+	local timeline_json = trim_ascii_whitespace(expression_timeline_json)
+	bridge.prepare_frame(cached_handle, animation_time, timeline_json, selected_timeline_blend_mode())
+
+	local group_count = bridge.get_group_count(cached_handle)
+	local chunk_size = math.max(1, math.floor(chunk))
+	for group_index = 0, group_count - 1 do
+		local mode = bridge.get_group_mode(cached_handle, group_index)
+		local triangle_count = bridge.get_group_triangle_count(cached_handle, group_index)
+		local group = {
+			mode = mode,
+			alpha = 1.0,
+			texture = "",
+			sampler = "clamp",
+			culling = true,
+			vertices = {},
+		}
+
+		if mode == "texture" then
+			group.texture = bridge.get_group_texture_path(cached_handle, group_index)
+			group.sampler = bridge.get_group_sampler_mode(cached_handle, group_index)
+			group.alpha = bridge.get_group_alpha(cached_handle, group_index)
+		end
+		group.culling = bridge.get_group_culling(cached_handle, group_index)
+
+		local start = 0
+		while start < triangle_count do
+			local request = math.min(chunk_size, triangle_count - start)
+			local flat
+			if mode == "texture" then
+				flat = bridge.get_group_texture_chunk(cached_handle, group_index, start, request)
+				local i = 1
+				while i <= #flat do
+					local x1, y1, z1 = transform_vertex_position(flat[i + 0], flat[i + 1], flat[i + 2])
+					local x2, y2, z2 = transform_vertex_position(flat[i + 5], flat[i + 6], flat[i + 7])
+					local x3, y3, z3 = transform_vertex_position(flat[i + 10], flat[i + 11], flat[i + 12])
+					group.vertices[#group.vertices + 1] = { x1, y1, z1, flat[i + 3], flat[i + 4] }
+					group.vertices[#group.vertices + 1] = { x2, y2, z2, flat[i + 8], flat[i + 9] }
+					group.vertices[#group.vertices + 1] = { x3, y3, z3, flat[i + 13], flat[i + 14] }
+					i = i + 15
+				end
+			else
+				flat = bridge.get_group_color_chunk(cached_handle, group_index, start, request)
+				local i = 1
+				while i <= #flat do
+					local x1, y1, z1 = transform_vertex_position(flat[i + 0], flat[i + 1], flat[i + 2])
+					local x2, y2, z2 = transform_vertex_position(flat[i + 7], flat[i + 8], flat[i + 9])
+					local x3, y3, z3 = transform_vertex_position(flat[i + 14], flat[i + 15], flat[i + 16])
+					group.vertices[#group.vertices + 1] = { x1, y1, z1, flat[i + 3], flat[i + 4], flat[i + 5], flat[i + 6] }
+					group.vertices[#group.vertices + 1] = { x2, y2, z2, flat[i + 10], flat[i + 11], flat[i + 12], flat[i + 13] }
+					group.vertices[#group.vertices + 1] = { x3, y3, z3, flat[i + 17], flat[i + 18], flat[i + 19], flat[i + 20] }
+					i = i + 21
+				end
+			end
+			start = start + request
+		end
+
+		if #group.vertices > 0 then
+			cached_groups[#cached_groups + 1] = group
+		end
+	end
+end
+
+if file == nil or file == "" then
+	obj.load("text", "VRMファイルを指定してください")
+	return
+end
+
+local timeline_json = trim_ascii_whitespace(expression_timeline_json)
+local timeline_requires_time = timeline_json ~= nil and timeline_json ~= "" and timeline_json ~= "{\"v\":1}"
+local current_time_key = (cached_requires_time or timeline_requires_time) and string.format("%.6f", obj.time * (math.max(0, math.floor(animation_speed)) / 100.0)) or "static"
+local cache_key =
+	file .. "|" ..
+	tostring(animation_file) .. "|" ..
+	tostring(triangles) .. "|" ..
+	tostring(model_scale) .. "|" ..
+	tostring(animation_speed) .. "|" ..
+	timeline_json .. "|" ..
+	selected_timeline_blend_mode() .. "|" ..
+	tostring(flip_x) .. "|" ..
+	tostring(flip_y) .. "|" ..
+	tostring(flip_z) .. "|" ..
+	current_time_key
+
+if cached_groups == nil or cached_key ~= cache_key then
+	rebuild_cache()
+	cached_key = cache_key
+end
+
+for i = 1, #cached_groups do
+	local group = cached_groups[i]
+	obj.setoption("culling", (culling and group.culling) and 1 or 0)
+	if group.mode == "texture" and group.texture ~= nil and group.texture ~= "" then
+		obj.setoption("sampler", group.sampler or "clamp")
+		obj.load("image", group.texture)
+		obj.drawpoly(group.vertices, 3, group.alpha)
+	else
+		obj.setoption("sampler")
+		obj.load("figure", "四角形", 0xffffff, 1)
+		obj.drawpoly(group.vertices, 3)
+	end
+end

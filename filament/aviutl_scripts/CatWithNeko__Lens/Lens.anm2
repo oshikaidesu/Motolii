@@ -1,0 +1,31 @@
+--track@d:Distortion,-10,10,0,0.01
+--track@cx:X,-4000, 4000, 0, 1
+--track@cy:Y,-4000, 4000, 0, 1
+--track@pow:Pow,0.1,10,2,0.01
+--track@lim:Limit,-10,0,-0.5,0.01
+--label:変形
+--[[pixelshader@psmain:
+Texture2D tex : register(t0);
+cbuffer constant0 : register(b0) {
+    float d;
+    float p;
+    float2 resolution;
+	float2 offset;
+    float2 _pad1;
+    float lim;
+};
+float4 psmain(float4 pos : SV_Position) : SV_Target {
+    float2 centered = pos.xy - (resolution/2) - offset; //中心変換
+	float r = length(centered/resolution);
+	float denom = 1-pow(r,p)*max(d,lim)*10;
+    denom = max(denom, 0.001); //でかすぎると画面外に変なのが発生
+	float zoom = (d < lim) ? 1.0 + pow(max(-d +lim, 0.0),1.4) : 1.0; //歪みを小さくしすぎると破綻するので拡大でごまかす 下限をどこに設定すればいいかわからないからトラックバーに置いた
+    float2 distorted = centered/denom/zoom;
+    float2 texcoord = distorted+(resolution/2)+offset;
+    return tex[int2(texcoord)];
+}
+]]
+local w,h=obj.getpixel()
+obj.pixelshader("psmain", "object", "object", {d,pow,w,h,cx,cy,0,0,lim})
+
+--縦横比とかつけたいけど領域拡張で済む問題だしまあええか……

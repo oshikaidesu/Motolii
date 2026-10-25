@@ -1,0 +1,10 @@
+﻿[Language]
+Information=FilmPrintLUT English
+SubLanguage=English
+
+[FilmPrintLUT]
+FilmPrintLUT=FilmPrintLUT
+色調整=Color adjustment
+CUBEファイル=CUBE file
+強度=Strength
+アルファを保持=Preserve Alpha

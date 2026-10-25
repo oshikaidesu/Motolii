@@ -1,0 +1,49 @@
+; Tooltip definitions
+;===============================================================
+; Target: Lens_S (https://github.com/sigma-axis/aviutl2_script_Lens_S)
+; Target Version: v1.10
+; Language: Default
+
+[Language]
+Information=Default tooltips for Lens_S v1.10 (日本語)
+
+;===============================================================
+
+[Tips.アクリルσ@Lens_S]
+effect.name=オブジェクトの半透明部分を，磨りガラスのように背景をぼかして透過しているような見た目にします．
+基準透明度=この透明度のピクセル ⇒ アクリル背景\nここより不透明 ⇒ アクリル上に描画\nここより透明 ⇒ 半透明 (アンチエイリアス)
+基準色=アクリル化する半透明部分が単色のとき指定．
+透過輝度=背景の輝度の反映率
+輝度補正=背景の輝度に加算
+透過彩度=背景の彩度の反映率
+着色=アクリル部分に色を付けます．
+着色輝度=指定色の輝度の反映率
+着色彩度=指定色の彩度の反映率
+noise::シード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+背景色=オブジェクトの背景に透明ピクセルがある場合に指定．加工されずに表示されてしまう背景を隠します．
+PI=PI = {\n  base_alpha: number?,\n  base_color: number?,\n  mul_luma: number?,\n  add_luma: number?,\n  mul_chroma: number?,\n  tint_color: number?,\n  tint_luma: number?,\n  tint_chroma: number?,\n  blur: number?,\n  blur_aspect: number?,\n  blur_luma_weight: number?,\n  noise_intensity: number?,\n  noise_seed: number?,\n  noise_size: number?,\n  move_x: number?,\n  move_y: number?,\n  scale: number?,\n  rotate: number?,\n  anchor_screen: boolean|number|nil,\n  back_color: number|false|nil,\n}
+
+[Tips.レンズσ@Lens_S]
+effect.name=オブジェクトの色や形状から曲面を生成し，ガラス塊がレンズ屈折しているように背景を合成します．
+透過輝度=背景の輝度の反映率
+輝度補正=背景の輝度に加算
+透過彩度=背景の彩度の反映率
+表面輝度=元画像の輝度の反映率
+表面彩度=元画像の彩度の反映率
+背景距離=オブジェクトに対する背景の奥行き
+起伏=全体的なレンズの凹凸の奥行きサイズ
+丸み=全体的なレンズの曲面の横幅サイズ
+輪郭起伏=オブジェクト輪郭部分の起伏
+輪郭丸み=オブジェクト輪郭部分の丸み
+輝度起伏=オブジェクトの輝度変化に応じた起伏
+輝度丸み=オブジェクトの輝度変化に応じた丸み
+色境界起伏=オブジェクトの色境界からの距離に応じた起伏
+色境界丸み=オブジェクトの色境界からの距離に応じた丸み
+色境界しきい値=オブジェクトの色境界を検出するしきい値
+平滑化=形状がギザギザしている場合に大きくしてください．
+色収差=負の値で色の順序が逆転します．
+光角度=0 で真上から，時計回りに正．
+noise::シード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+背景色=オブジェクトの背景に透明ピクセルがある場合に指定．加工されずに表示されてしまう背景を隠します．
+色収差順序=現実世界では RGB が正しい順序．
+PI=PI = {\n  mul_luma: number?,\n  add_luma: number?,\n  mul_chroma: number?,\n  face_luma: number?,\n  face_chroma: number?,\n  lift: number?,\n  lens_amplify: number?,\n  lens_round: number?,\n  edge_amplify: number?,\n  edge_round: number?,\n  luma_amplify: number?,\n  luma_round: number?,\n  col_amplify: number?,\n  col_round: number?,\n  col_thresh: number?,\n  smooth: number?,\n  refr_idx: number?,\n  chrm_abrr: number?,\n  light_angle: number?,\n  refl_power: number?,\n  refl_light: number?,\n  refl_shadow: number?,\n  light_screen: boolean|number|nil,\n  blur: number?,\n  blur_aspect: number?,\n  blur_luma_weight: number?,\n  noise_intensity: number?,\n  noise_seed: number?,\n  noise_size: number?,\n  move_x: number?,\n  move_y: number?,\n  scale: number?,\n  rotate: number?,\n  anchor_screen: boolean|number|nil,\n  back_color: number|false|nil,\n  chrm_abrr_order: string?,\n}

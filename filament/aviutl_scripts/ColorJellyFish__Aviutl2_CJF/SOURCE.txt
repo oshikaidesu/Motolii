@@ -1,0 +1,5 @@
+Aviutl2_CJF by ColorJellyFish
+licence: MIT
+from: https://github.com/ColorJellyFish/Aviutl2_CJF (branch main, commit ac2a0b457512) (commit ac2a0b457512)
+page: https://github.com/ColorJellyFish/Aviutl2_CJF
+Put here unchanged for Motolii (filament/aviutl_scripts).

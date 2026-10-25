@@ -1,0 +1,330 @@
+--information:カードダンス_H v1.10 by HexBrowns
+--label:HexScript
+
+--group:分割
+--track@cols:列数,1,100,10,1
+--track@rows:行数,1,100,6,1
+--track@gap:隙間,0,200,0,0.1
+--group
+
+--group:進行
+--track@progress:進行度,0,100,0,0.01
+--track@span:1枚の時間,1,100,30,0.01
+--select@ease:イージング=3,直線=0,加速=1,減速=2,加減速=3
+--select@grad:勾配=0,横=0,縦=1,斜め=2,放射=3,ランダム=4,レイヤー=5
+--track@grad_layer:勾配のレイヤー,1,1000,1,1
+--hide@grad_layer:grad<5
+--check@grad_inv:勾配を反転,0
+--track@jitter:ばらつき,0,100,0,0.1
+--track@seed:シード,0,10000,0,1
+--group
+
+--group:変化
+--track@rot_x:X軸回転,-3600,3600,0,0.01
+--track@rot_y:Y軸回転,-3600,3600,180,0.01
+--track@rot_z:Z軸回転,-3600,3600,0,0.01
+--track@pos_x:X,-4000,4000,0,0.1
+--track@pos_y:Y,-4000,4000,0,0.1
+--track@pos_z:Z,-4000,4000,0,0.1
+--track@lift:浮き上がり,-2000,2000,0,0.1
+--track@scale_end:拡大率,0,1000,100,0.01
+--track@fade_end:透明度,0,100,0,0.01
+--group
+
+--group:裏面の設定
+--select@back:裏面=0,色=0,同じ画像=1,レイヤー=2,なし=3
+--color@back_color:裏面の色,0x202020
+--hide@back_color:back>0
+--track@back_layer:裏面のレイヤー,1,1000,1,1
+--hide@back_layer:back<2
+--hide@back_layer:back>2
+--group
+
+--group:描き方
+--select@interp:補間=0,補間あり=0,補間なし=1
+--group
+
+--[[
+After Effects の「カードダンス」「カードワイプ」に当たる効果。オブジェクトを 列数 x 行数 のカードに分け、
+カードごとに 0 → 1 の進み具合で「変化」の値まで回転・移動・拡大縮小・透明化させる。
+
+- 各カードの勾配の値 v（0..1）を、横・縦・斜め・放射・ランダム・別レイヤーの明るさで決める
+- 進行度 P（0..1）と 1枚の時間 S（0..1）から、カードの進み具合 t = clamp((P - v * (1 - S)) / S, 0, 1)。
+  P = 0 で全部が始め、P = 1 で全部が終わり。S が小さいほど 1 枚ずつ順に、大きいほど一斉に動く
+- カードは obj.drawpoly で自分で描く（以降のフィルタ効果は掛からない。lua.txt の obj.drawpoly）。
+  表は時計回り、裏は反時計回りの頂点順で描き、裏面を表示しない（culling）で表と裏を分ける
+- 奥のカードから順に描く（カメラ制御の外では奥行きで隠れないため）。裏面の色は画像の下に足した色の帯で描き、
+  表と裏を同じ形式にして、透明度が同じカードが続く間は 1 回の drawpoly にまとめる
+- 補間（v1.10）: 補間あり（既定・v1.00 と同じ）は drawpoly の既定のサンプラー（"clamp"。拡大縮小で画素を補間する）。
+  補間なしは obj.setoption("sampler", "dot") で画素を補間せずに拾う（拡大・回転してもドットのまま）。
+  "dot" は画像の外を透明として読む（lua.txt の「サンプラーモード」）ので、画像の端を指す uv を端の画素の内側へ 1/32 px 寄せ、
+  丸めで外を読んで縁が透けるのを防ぐ。描き終えたらサンプラーを既定に戻す
+
+机上検証: AI/scripts/カードダンス_H/verify_card_dance.py
+]]
+
+local function num(v, d)
+  v = tonumber(v)
+  if v == nil or v ~= v then return d end
+  return v
+end
+
+local function clamp(x, a, b)
+  if x < a then return a elseif x > b then return b end
+  return x
+end
+
+local W, H = obj.w, obj.h
+if W <= 0 or H <= 0 then return end
+
+local P = clamp(num(progress, 0) / 100, 0, 1)
+local G = math.max(num(gap, 0), 0)
+-- 始まる前で隙間も無ければ元の絵と同じなので、何もしない（以降のフィルタ効果も掛かる）
+if P <= 0 and G <= 0 then return end
+
+local NC = clamp(math.floor(num(cols, 10) + 0.5), 1, 100)
+local NR = clamp(math.floor(num(rows, 6) + 0.5), 1, 100)
+local S = clamp(num(span, 30) / 100, 0.01, 1)
+local EASE = math.floor(num(ease, 3) + 0.5)
+local GRAD = math.floor(num(grad, 0) + 0.5)
+local JIT = clamp(num(jitter, 0) / 100, 0, 1)
+local SEED = math.floor(num(seed, 0) + 0.5)
+local BACK = math.floor(num(back, 0) + 0.5)
+local DOT = math.floor(num(interp, 0) + 0.5) == 1
+local EDGE = 1 / 32   -- 補間なしで、画像の端を指す uv を内側へ寄せる量（px）
+
+local function hash(i, j, k)
+  local s = math.sin(i * 127.1 + j * 311.7 + k * 74.7 + SEED * 0.618) * 43758.5453
+  return s - math.floor(s)
+end
+
+local CW, CH = W / NC, H / NR
+
+-- 読み込みで上書きされる画像と変数を退避する（別レイヤーの読み込み用）
+local SRC = "cache:cdh/src"
+local VARS = {"ox", "oy", "oz", "rx", "ry", "rz", "cx", "cy", "cz", "sx", "sy", "sz", "alpha", "zoom", "aspect"}
+local function save_vars()
+  local t = {}
+  for k, name in ipairs(VARS) do t[k] = obj[name] end
+  return t
+end
+local function restore_vars(t)
+  for k, name in ipairs(VARS) do obj[name] = t[k] end
+end
+
+-- 勾配のレイヤー。カードの中心に当たる位置の明るさ（レイヤーの画像をオブジェクトの大きさに引き伸ばして読む）
+local layer_lum = nil
+if GRAD == 5 then
+  local gl = math.floor(num(grad_layer, 1) + 0.5)
+  if gl ~= obj.layer then
+    obj.copybuffer(SRC, "object")
+    local saved = save_vars()
+    if obj.load("layer", gl, true) and obj.w > 0 and obj.h > 0 then
+      obj.pixeloption("get", "object")
+      local lw, lh = obj.w, obj.h
+      layer_lum = {}
+      for i = 0, NR - 1 do
+        for j = 0, NC - 1 do
+          local x = clamp(math.floor((j + 0.5) / NC * lw), 0, lw - 1)
+          local y = clamp(math.floor((i + 0.5) / NR * lh), 0, lh - 1)
+          local r, g, b, a = obj.getpixel(x, y, "rgb")
+          -- getpixel の "rgb" は R / G / B / A とも 0〜255（lua.txt の obj.getpixel）
+          layer_lum[i * NC + j + 1] = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 * a / 255
+        end
+      end
+    end
+    obj.copybuffer("object", SRC)
+    restore_vars(saved)
+  end
+end
+
+local function grad_value(i, j)
+  local u, w = (j + 0.5) / NC, (i + 0.5) / NR
+  local v
+  if GRAD == 1 then
+    v = w
+  elseif GRAD == 2 then
+    v = (u + w) * 0.5
+  elseif GRAD == 3 then
+    v = math.sqrt((2 * u - 1) ^ 2 + (2 * w - 1) ^ 2) / math.sqrt(2)
+  elseif GRAD == 4 then
+    v = hash(i, j, 1)
+  elseif GRAD == 5 then
+    v = layer_lum and layer_lum[i * NC + j + 1] or u
+  else
+    v = u
+  end
+  if grad_inv == 1 then v = 1 - v end
+  return v * (1 - JIT) + hash(i, j, 2) * JIT
+end
+
+local function eased(t)
+  if EASE == 1 then return t * t
+  elseif EASE == 2 then return 1 - (1 - t) * (1 - t)
+  elseif EASE == 3 then return t * t * (3 - 2 * t) end
+  return t
+end
+
+local RX, RY, RZ = math.rad(num(rot_x, 0)), math.rad(num(rot_y, 180)), math.rad(num(rot_z, 0))
+local PX, PY, PZ = num(pos_x, 0), num(pos_y, 0), num(pos_z, 0)
+local LIFT = num(lift, 0)
+local SCALE = math.max(num(scale_end, 100), 0) / 100
+local FADE = clamp(num(fade_end, 0) / 100, 0, 1)
+
+-- 回転は X → Y → Z の順。Y は下向き、Z は奥向き（AviUtl2 の座標）
+local function rotate(x, y, z, cx, sx, cy, sy, cz, sz)
+  y, z = y * cx - z * sx, y * sx + z * cx
+  x, z = x * cy + z * sy, -x * sy + z * cy
+  x, y = x * cz - y * sz, x * sz + y * cz
+  return x, y, z
+end
+
+local cards = {}
+local hw0 = math.max(CW - G, 0.5) * 0.5
+local hh0 = math.max(CH - G, 0.5) * 0.5
+for i = 0, NR - 1 do
+  for j = 0, NC - 1 do
+    local t = clamp((P - grad_value(i, j) * (1 - S)) / S, 0, 1)
+    local e = eased(t)
+    local cx0 = -W / 2 + (j + 0.5) * CW
+    local cy0 = -H / 2 + (i + 0.5) * CH
+    local s = 1 + (SCALE - 1) * e
+    local hw, hh = hw0 * s, hh0 * s
+    local crx, srx = math.cos(RX * e), math.sin(RX * e)
+    local cry, sry = math.cos(RY * e), math.sin(RY * e)
+    local crz, srz = math.cos(RZ * e), math.sin(RZ * e)
+    local ox = cx0 + PX * e
+    local oy = cy0 + PY * e
+    local oz = PZ * e - LIFT * math.sin(math.pi * e)
+    local v = {}
+    local corners = {{-hw, -hh}, {hw, -hh}, {hw, hh}, {-hw, hh}}   -- 左上・右上・右下・左下（時計回り）
+    for k = 1, 4 do
+      local x, y, z = rotate(corners[k][1], corners[k][2], 0, crx, srx, cry, sry, crz, srz)
+      v[k] = {x + ox, y + oy, z + oz}
+    end
+    local nx, ny, nz = rotate(0, 0, -1, crx, srx, cry, sry, crz, srz)
+    -- 画像の上の範囲（px）。隙間の分だけ内側
+    local u0, u1 = cx0 + W / 2 - hw0, cx0 + W / 2 + hw0
+    local v0, v1 = cy0 + H / 2 - hh0, cy0 + H / 2 + hh0
+    if DOT then
+      u0, u1 = clamp(u0, EDGE, W - EDGE), clamp(u1, EDGE, W - EDGE)
+      v0, v1 = clamp(v0, EDGE, H - EDGE), clamp(v1, EDGE, H - EDGE)
+    end
+    cards[#cards + 1] = {
+      v = v, n = {nx, ny, nz}, uv = {u0, v0, u1, v1}, z = oz, a = 1 - FADE * e, e = e, k = #cards,
+    }
+  end
+end
+
+local function front_quad(c)
+  local v, n, uv = c.v, c.n, c.uv
+  return {
+    v[1][1], v[1][2], v[1][3], v[2][1], v[2][2], v[2][3], v[3][1], v[3][2], v[3][3], v[4][1], v[4][2], v[4][3],
+    uv[1], uv[2], uv[3], uv[2], uv[3], uv[4], uv[1], uv[4],
+    n[1], n[2], n[3], n[1], n[2], n[3], n[1], n[2], n[3], n[1], n[2], n[3],
+  }
+end
+
+-- 裏は右上・左上・左下・右下の順（裏から見て時計回り）。Y 軸で裏返したときに正しい向きになるように、
+-- 右上の頂点に画像の左端を当てる。sx, sy は画像の座標の倍率（裏面のレイヤーの大きさに合わせる）
+local function back_quad_uv(c, sx, sy)
+  local v, n, uv = c.v, c.n, c.uv
+  local a0, b0, a1, b1 = uv[1] * sx, uv[2] * sy, uv[3] * sx, uv[4] * sy
+  if DOT then
+    a0, a1 = clamp(a0, EDGE, W * sx - EDGE), clamp(a1, EDGE, W * sx - EDGE)
+    b0, b1 = clamp(b0, EDGE, H * sy - EDGE), clamp(b1, EDGE, H * sy - EDGE)
+  end
+  return {
+    v[2][1], v[2][2], v[2][3], v[1][1], v[1][2], v[1][3], v[4][1], v[4][2], v[4][3], v[3][1], v[3][2], v[3][3],
+    a0, b0, a1, b0, a1, b1, a0, b1,
+    -n[1], -n[2], -n[3], -n[1], -n[2], -n[3], -n[1], -n[2], -n[3], -n[1], -n[2], -n[3],
+  }
+end
+
+-- 裏面の色: 画像の下に足した色の帯の 1 点を 4 頂点に当てる（表と同じ形式なので 1 回の drawpoly に混ぜられる）
+local function back_quad_strip(c, su, sv)
+  local v, n = c.v, c.n
+  return {
+    v[2][1], v[2][2], v[2][3], v[1][1], v[1][2], v[1][3], v[4][1], v[4][2], v[4][3], v[3][1], v[3][2], v[3][3],
+    su, sv, su, sv, su, sv, su, sv,
+    -n[1], -n[2], -n[3], -n[1], -n[2], -n[3], -n[1], -n[2], -n[3], -n[1], -n[2], -n[3],
+  }
+end
+
+-- 裏面の色: 描画用の画像を 画像（上 H 行）＋ 透明 2 行 ＋ 色 2 行 にする。仮想バッファに描いて読み込み直す
+local STRIP_U, STRIP_V = W / 2, H + 3
+if BACK == 0 then
+  local col = math.floor(num(back_color, 0x202020)) % 0x1000000
+  local r, g, b = math.floor(col / 0x10000) / 255, math.floor(col / 0x100) % 0x100 / 255, col % 0x100 / 255
+  local saved = save_vars()
+  obj.setoption("drawtarget", "tempbuffer", W, H + 4)
+  obj.draw(0, -2)
+  obj.drawpoly({{-W / 2, H / 2, 0, W / 2, H / 2, 0, W / 2, H / 2 + 2, 0, -W / 2, H / 2 + 2, 0,
+                 r, g, b, 1, r, g, b, 1, r, g, b, 1, r, g, b, 1}})
+  obj.load("tempbuffer")
+  obj.setoption("drawtarget", "framebuffer")
+  restore_vars(saved)
+end
+
+obj.setoption("culling", 1)
+-- 補間なし: 画素を補間せずに拾う（裏面の色の帯は上で既定のサンプラーのまま描いた）
+if DOT then obj.setoption("sampler", "dot") end
+
+-- 奥（Z が大きい）から描く。同じ奥行きは並びの順。動く前と動き終えたカードは Z 0 の平面に並ぶ。
+-- 表と裏を両方渡し、見えない側は裏面を表示しない設定（culling）に任せる
+table.sort(cards, function(a, b)
+  if a.z ~= b.z then return a.z > b.z end
+  return a.k < b.k
+end)
+
+-- 透明度が同じカードが続く間は 1 回の drawpoly にまとめる。phase == "back" は裏面のレイヤーの裏だけ
+local BW, BH = W, H
+local function draw_all(phase)
+  local run, run_alpha = {}, nil
+  local function flush()
+    if #run > 0 then obj.drawpoly(run, run_alpha) end
+    run = {}
+  end
+  for _, c in ipairs(cards) do
+    if c.a > 0 then
+      if c.a ~= run_alpha then
+        flush()
+        run_alpha = c.a
+      end
+      if phase == "back" then
+        if c.e > 0 then run[#run + 1] = back_quad_uv(c, BW / W, BH / H) end
+      else
+        run[#run + 1] = front_quad(c)
+        -- 動く前のカードは回っていないので、裏は向こうを向いている（渡さない）
+        if c.e > 0 then
+          if BACK == 0 then
+            run[#run + 1] = back_quad_strip(c, STRIP_U, STRIP_V)
+          elseif BACK == 1 then
+            run[#run + 1] = back_quad_uv(c, 1, 1)
+          end
+        end
+      end
+    end
+  end
+  flush()
+end
+
+draw_all("front")
+
+-- 裏面のレイヤー: 表を全部描いてから、レイヤーを読み込んで裏を全部描く（画像を差し替えるのでカードごとに交互にできない）
+if BACK == 2 then
+  local bl = math.floor(num(back_layer, 1) + 0.5)
+  if bl ~= obj.layer then
+    local saved = save_vars()
+    local ok = obj.load("layer", bl, true) and obj.w > 0 and obj.h > 0
+    BW, BH = obj.w, obj.h
+    restore_vars(saved)
+    if ok then
+      if DOT then obj.setoption("sampler", "dot") end   -- 読み込みの後も補間なしのまま描く
+      draw_all("back")
+    end
+  end
+end
+
+-- 描き終えたらサンプラーを既定に戻す
+if DOT then obj.setoption("sampler") end

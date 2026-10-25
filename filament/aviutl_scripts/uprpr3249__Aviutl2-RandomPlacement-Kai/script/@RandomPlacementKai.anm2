@@ -1,0 +1,164 @@
+@ランダム配置改
+--information:ランダム配置改 ver1.00
+--label:配置
+
+--track@num:個数,1,2000,50,1
+--track@seed:シード,0,10000,0,1
+
+--select@mode:配置モード=0,矩形=0,球形=1,円形(Z固定)=2
+
+--track@rangex:X幅,0,20000,800,0.1
+--track@rangey:Y幅,0,20000,800,0.1
+--track@rangez:Z幅,0,20000,0,0.1
+--trackgroup@rangex,rangey,rangez:XYZ幅
+
+--track@radius:半径,0,20000,800,0.1
+--track@radius_in:内側半径,0,20000,0,0.1
+
+--track@scalernd:拡大率ランダム,0,100,0,0.1
+
+--check@lookat:原点方向を向く,0
+--check@lookflip:向きを反転,0
+--check@randang:ランダム角度,0
+
+--hide@rangex:mode~=0
+--hide@rangey:mode~=0
+--hide@rangez:mode~=0
+--hide@radius:mode==0
+--hide@radius_in:mode==0
+--hide@lookflip:lookat==0
+--hide@randang:lookat==1
+
+-- ============================================================
+-- ランダム配置改
+--   1つのオブジェクトから N 個を複製し、矩形 / 球形 / 円形 の範囲へ
+--   一様ランダムに配置する。原点(0,0,0)を向く look-at 回転に対応。
+--   乱数はフレームを一切参照しない純関数ハッシュなので、再生位置を
+--   動かしても配置は完全に固定される。
+--
+--   座標系: +X=右 / +Y=下 / +Z=奥。無回転のオブジェクトの表の法線は -Z。
+-- ============================================================
+
+obj.effect()
+
+local N    = math.floor(num)
+local SEED = math.floor(seed)
+local DEG  = 180 / math.pi
+
+-- ---------- 決定論的ハッシュ乱数 ----------
+-- (index, channel, seed) の純関数。0.0 <= 戻り値 < 1.0
+--
+-- 単純な線形合同法を繰り返すだけだと、出力が index の一次式のままに
+-- なりチャンネル間が定数オフセットで相関する(= 点が直線・平面に整列
+-- してしまう)。そこで各ラウンドに二次写像 s^2 を挟んで非線形化する。
+-- 法 P は 2^26 未満の素数なので s*s < 2^53 に収まり、double でも
+-- 丸め誤差なしに厳密計算できる。
+local P = 67108859
+
+local function rnd(i, ch, sd)
+	local s = (i * 1103515 + ch * 12345701 + sd * 7654321 + 1) % P
+	for _ = 1, 4 do
+		s = (s * s + 3 * s + 1013904223) % P
+		s = (s * 48271) % P
+	end
+	return s / P
+end
+
+-- -1.0 <= 戻り値 < 1.0
+local function rnd11(i, ch, sd)
+	return rnd(i, ch, sd) * 2 - 1
+end
+
+-- ---------- 配置座標 ----------
+local hx, hy, hz = rangex / 2, rangey / 2, rangez / 2
+local rout, rin = radius, radius_in
+if rin > rout then rin, rout = rout, rin end
+
+local function place(i)
+	if mode == 0 then
+		-- 矩形: 各軸独立の一様分布。幅0の軸はその場で固定される。
+		return rnd11(i, 10, SEED) * hx,
+		       rnd11(i, 11, SEED) * hy,
+		       rnd11(i, 12, SEED) * hz
+
+	elseif mode == 1 then
+		-- 球形: 半径は r^3 の逆関数でとる(体積一様。単純に r を一様に
+		-- とると中心に密集してしまう)。方向はアルキメデスの定理により
+		-- cosθ を一様にとれば球面上で一様になる(極に偏らない)。
+		local u  = rnd(i, 10, SEED)
+		local r  = (rin ^ 3 + u * (rout ^ 3 - rin ^ 3)) ^ (1 / 3)
+		local cz = rnd11(i, 11, SEED)
+		local sz = math.sqrt(math.max(0, 1 - cz * cz))
+		local ph = rnd(i, 12, SEED) * 2 * math.pi
+		return r * sz * math.cos(ph), r * sz * math.sin(ph), r * cz
+
+	else
+		-- 円形(Z固定): 半径は r^2 の逆関数でとる(面積一様)。
+		local u  = rnd(i, 10, SEED)
+		local r  = math.sqrt(rin * rin + u * (rout * rout - rin * rin))
+		local th = rnd(i, 11, SEED) * 2 * math.pi
+		return r * math.cos(th), r * math.sin(th), 0
+	end
+end
+
+-- ---------- 原点を向く回転(look-at) ----------
+-- 位置 p にあるオブジェクトの表(-Z方向)を、原点への方向 d = -p/|p| に
+-- 一致させるオイラー角を求める。rz は視線軸まわりの回転なので 0 でよい。
+--
+-- AviUtl2 の回転合成順は仕様書に記載が無いが、実機で確認した結果
+-- Rx*Ry*Rz(= Rz,Ry,Rx の順に適用)であることが判明したのでその解を使う。
+--   Ry(ry) で -Z軸を水平に振り、Rx(rx) で上下に倒す
+local function lookat_calc(px, py, pz)
+	local L = math.sqrt(px * px + py * py + pz * pz)
+	if L == 0 then return 0, 0 end
+	return math.atan2(-py, pz) * DEG,
+	       math.asin(math.max(-1, math.min(1, px / L))) * DEG
+end
+
+-- ---------- 個別オブジェクト対応 ----------
+-- テキスト等で「個別オブジェクト」が有効だと同じスクリプトがオブジェクト
+-- 数ぶん呼ばれるので、自分の担当ぶんだけを間引いて描画する。
+local first, step = 1, 1
+if obj.getoption("multi_object") then
+	first = obj.index + 1
+	step  = obj.num
+	if first > N then
+		obj.setoption("draw_state", true)
+		return
+	end
+	obj.ox, obj.oy, obj.oz = 0, 0, 0
+end
+
+-- ---------- 描画 ----------
+for i = first, N, step do
+	local x, y, z = place(i)
+
+	local zoom = 1
+	if scalernd > 0 then
+		zoom = 1 + rnd11(i, 20, SEED) * scalernd / 100
+		if zoom < 0 then zoom = 0 end
+	end
+
+	local rx, ry, rz = 0, 0, 0
+	if lookat == 1 then
+		if lookflip == 1 then
+			-- 位置を反転させて look-at すると裏面が原点を向く。
+			-- ry に 180 を足す方法は rx~=0 のとき正しく反転しない。
+			rx, ry = lookat_calc(-x, -y, -z)
+		else
+			rx, ry = lookat_calc(x, y, z)
+		end
+	elseif randang == 1 then
+		if mode == 2 then
+			rz = rnd(i, 32, SEED) * 360
+		else
+			rx = rnd(i, 30, SEED) * 360
+			ry = rnd(i, 31, SEED) * 360
+			rz = rnd(i, 32, SEED) * 360
+		end
+	end
+
+	obj.draw(x, y, z, zoom, 1, rx, ry, rz)
+end
+
+obj.setoption("focus_mode", "fixed_size")

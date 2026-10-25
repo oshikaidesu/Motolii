@@ -1,0 +1,12 @@
+
+@BPM Interlock
+--information:BPM Interlock v0.1 by kusugawatsumiki
+--twopoint
+--param:BPM,120
+
+local time = obj.getpoint("time")
+local bpm = obj.getpoint("param")
+local min, max = obj.getpoint(0), obj.getpoint(1)
+local effectiveframe = math.floor(time * (bpm / 60))
+
+return rand(min, max, 1, effectiveframe)

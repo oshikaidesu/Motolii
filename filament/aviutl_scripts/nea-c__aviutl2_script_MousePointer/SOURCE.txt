@@ -1,0 +1,6 @@
+aviutl2_script_MousePointer by nea-c
+licence: MIT
+from: https://github.com/nea-c/aviutl2_script_MousePointer (branch master, commit 499e77bd2731) (commit 499e77bd2731)
+page: https://github.com/nea-c/aviutl2_script_MousePointer
+left out: 1 other (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

@@ -1,0 +1,838 @@
+--information:グランジ背景 v1.0.0
+--select@kind:種類=0,くしゃくしゃ紙=0,グランジ(ブロック)=1,グランジ(布)=2,汚れ(白黒)=3
+--track@sw:幅(0で画面),0,8000,0,1
+--track@sh:高さ(0で画面),0,8000,0,1
+--color@c1:地の色(なしで種類の色),nil
+--color@c2:汚れの色(なしで種類の色),nil
+--color@c3:差し色(なしで種類の色),nil
+--select@alpha:透過=0,しない=0,明るい所を透過=1,暗い所を透過=2
+--track@scale:模様の大きさ[%],10,500,100,0.1
+--track@amount:汚れ[%],0,200,100,0.1
+--track@relief:しわ・布目[%],0,200,100,0.1
+--track@splat:飛び散り[%],0,200,100,0.1
+--track@scratch:傷[%],0,200,100,0.1
+--track@grain:ざらつき[%],0,200,100,0.1
+--track@burn:ふちの暗さ[%],0,200,100,0.1
+--track@lang:光の向き,-180,180,135,0.1
+--track@fps:コマ打ち[fps],0,60,0,0.1
+--track@seed:シード,0,99999,0,1
+--hide@c3:kind==0
+--hide@c3:kind==3
+--hide@relief:kind==1
+--hide@relief:kind==3
+--hide@lang:kind==1
+--hide@lang:kind==2
+--hide@lang:kind==3
+
+--[[pixelshader@psPaper:
+cbuffer constant0 : register(b0) {
+    float W;   float H;     float Seed;  float Kind;
+    float S;   float Amount; float Relief; float Scratch;
+    float Splat; float Grain; float Burn; float AlphaMode;
+    float C1R; float C1G;   float C1B;   float LX;
+    float C2R; float C2G;   float C2B;   float LY;
+    float C3R; float C3G;   float C3B;   float Pad;
+};
+
+uint pcg(uint v) {
+    uint s = v * 747796405u + 2891336453u;
+    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+uint hc(int2 c, uint k) { return pcg(asuint(c.x) * 0x8da6b343u ^ asuint(c.y) * 0xd8163841u ^ k * 0xcb1ab31fu); }
+float u2f(uint h) { return float(h >> 8) * (1.0 / 16777216.0); }
+float rnd(int2 c, uint k) { return u2f(hc(c, k)); }
+float2 rnd2(int2 c, uint k) { uint h = hc(c, k); return float2(u2f(h), u2f(pcg(h))); }
+
+float2 grad(int2 c, uint k) {
+    float s, co;
+    sincos(rnd(c, k) * 6.2831853, s, co);
+    return float2(co, s);
+}
+// 勾配ノイズ。おおむね -1〜1
+float gnoise(float2 p, uint k) {
+    float2 fl = floor(p);
+    int2 i = int2(fl);
+    float2 f = p - fl;
+    float2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    float a = dot(grad(i, k), f);
+    float b = dot(grad(i + int2(1, 0), k), f - float2(1, 0));
+    float c = dot(grad(i + int2(0, 1), k), f - float2(0, 1));
+    float d = dot(grad(i + int2(1, 1), k), f - float2(1, 1));
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y) * 1.4;
+}
+float fbm(float2 p, uint k, int oct) {
+    float v = 0.0, a = 0.5, n = 0.0;
+    for (int o = 0; o < oct; o++) {
+        v += a * gnoise(p, k + uint(o) * 7919u);
+        n += a;
+        p = float2(p.x * 1.6 - p.y * 1.2, p.x * 1.2 + p.y * 1.6);
+        a *= 0.5;
+    }
+    return v / n;
+}
+float lum(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+// 0〜1 の値どうしの XOR（白黒を反転させて重ねる）
+float sxor(float a, float b) { return a + b - 2.0 * a * b; }
+
+// 折り目の集まりの傾き。セルごとに短い折り目を置き、折り目の両側を逆向きに傾ける。
+// 傾きは折り目から離れるほど弱まり、端も徐々に消える。影響は cs 以内なので周囲 3x3 セルだけ見る。
+float2 folds(float2 p, float cs, uint k, int per, float lam) {
+    float2 fl = floor(p / cs);
+    int2 i = int2(fl);
+    float2 g = 0.0;
+    [loop] for (int y = -1; y <= 1; y++) {
+        [loop] for (int x = -1; x <= 1; x++) {
+            int2 c = i + int2(x, y);
+            [loop] for (int m = 0; m < per; m++) {
+                uint h0 = hc(c, k + uint(m) * 977u), h1 = pcg(h0), h2 = pcg(h1), h3 = pcg(h2), h4 = pcg(h3), h5 = pcg(h4);
+                float2 ctr = (float2(c) + float2(u2f(h0), u2f(h1))) * cs;
+                float sa, ca;
+                sincos(u2f(h2) * 3.1415926, sa, ca);
+                float2 rel = p - ctr;
+                float t = dot(rel, float2(ca, sa));
+                float hl = cs * (0.2 + 0.45 * u2f(h3));
+                // 折り目を少し曲げる
+                float d = dot(rel, float2(-sa, ca)) + 0.08 * t * t / hl * (u2f(h5) - 0.5);
+                float win = (1.0 - smoothstep(0.1 * hl, hl, abs(t))) * exp(-abs(d) / (lam * cs));
+                float a = u2f(h4) * 2.0 - 1.0;
+                g += a * win * clamp(d * 0.8, -1.0, 1.0) * float2(-sa, ca);
+            }
+        }
+    }
+    return g;
+}
+
+// 線分の傷。セルごとに確率で置き、bundle 本の平行線の束にする。
+// angC/angR: 角度の中心と幅（ラジアン）。lmin/lmax: 半分の長さ（セル比、1 以下）
+float scratchLines(float2 p, float cs, float prob, uint k, float angC, float angR, float lmin, float lmax, int bundle) {
+    float2 fl = floor(p / cs);
+    int2 i = int2(fl);
+    float s = 0.0;
+    [loop] for (int y = -1; y <= 1; y++) {
+        [loop] for (int x = -1; x <= 1; x++) {
+            int2 c = i + int2(x, y);
+            uint h0 = hc(c, k);
+            if (u2f(h0) >= prob) continue;
+            uint h1 = pcg(h0), h2 = pcg(h1), h3 = pcg(h2), h4 = pcg(h3), h5 = pcg(h4);
+            float2 ctr = (float2(c) + float2(u2f(h1), u2f(h2))) * cs;
+            float sa, ca;
+            sincos(angC + (u2f(h3) - 0.5) * angR, sa, ca);
+            float2 rel = p - ctr;
+            float t = dot(rel, float2(ca, sa));
+            float d0 = dot(rel, float2(-sa, ca));
+            float hl = cs * lerp(lmin, lmax, u2f(h4));
+            float bend = 0.03 * t * t / hl * (u2f(h5) - 0.5);
+            uint hb = h5;
+            // 本数を定数ループにしない（1 本だと X3557 の警告になり、AviUtl2 ではエラー扱い）
+            [unroll] for (int b = 0; b < 4; b++) {
+                if (b >= bundle) break;
+                hb = pcg(hb);
+                float off = (b == 0) ? 0.0 : (u2f(hb) - 0.5) * 0.12 * cs;
+                hb = pcg(hb);
+                float wid = 0.5 + 1.1 * u2f(hb);
+                hb = pcg(hb);
+                float tl = hl * (0.4 + 0.6 * u2f(hb));
+                float d = d0 + bend - off;
+                float v = (1.0 - smoothstep(0.0, wid, abs(d))) * (1.0 - smoothstep(0.6 * tl, tl, abs(t)));
+                s = max(s, v * (0.5 + 0.5 * u2f(pcg(hb))));
+            }
+        }
+    }
+    return s;
+}
+
+// 飛び散った丸。rmin/rmax: 半径（セル比）
+float splats(float2 p, float cs, float prob, uint k, float rmin, float rmax) {
+    float2 d0 = p / cs;
+    float2 fl = floor(d0);
+    int2 i = int2(fl);
+    float2 f = d0 - fl;
+    float wob = gnoise(p / max(cs * 0.06, 1.5), k + 9u);
+    float aa = 0.8 / cs;
+    float v = 0.0;
+    [loop] for (int y = -1; y <= 1; y++) {
+        [loop] for (int x = -1; x <= 1; x++) {
+            int2 c = i + int2(x, y);
+            uint h0 = hc(c, k);
+            if (u2f(h0) >= prob) continue;
+            uint h1 = pcg(h0), h2 = pcg(h1), h3 = pcg(h2), h4 = pcg(h3);
+            float r = lerp(rmin, rmax, pow(u2f(h3), 3.0));
+            float2 rel = float2(x, y) + 0.15 + 0.7 * float2(u2f(h1), u2f(h2)) - f;
+            rel.y *= 1.0 + 0.5 * u2f(h4);
+            float d = length(rel) + wob * r * 0.18;
+            v = max(v, 1.0 - smoothstep(r - aa, r + aa, d));
+        }
+    }
+    return v;
+}
+
+float vignette(float2 p, uint k) {
+    float2 cc = (p - 0.5 * float2(W, H)) / (0.5 * float2(W, H));
+    float e = lerp(length(cc) * 0.7071, max(abs(cc.x), abs(cc.y)), 0.6);
+    e += 0.18 * fbm(p / (220.0 * S), k, 4);
+    return smoothstep(0.55, 1.25, e);
+}
+
+// くしゃくしゃ紙: 白い紙に細かい折り目。明暗は控えめ
+float3 paper(float2 p, uint K, float3 c1, float3 c2) {
+    float cs = 270.0 * S;
+    float2 g = folds(p, cs, K + 101u, 4, 0.16) + 0.6 * folds(p, cs * 0.5, K + 202u, 3, 0.12)
+             + 0.35 * folds(p, cs * 0.25, K + 303u, 3, 0.1) + 0.2 * folds(p, cs * 0.12, K + 404u, 2, 0.08);
+    // なだらかなうねり
+    float2 q = p / (520.0 * S);
+    float f0 = fbm(q, K + 505u, 3);
+    g += 0.3 * float2(fbm(q + float2(0.01, 0.0), K + 505u, 3) - f0, fbm(q + float2(0.0, 0.01), K + 505u, 3) - f0) / 0.01;
+    float3 n = normalize(float3(-g * 0.45 * Relief, 1.0));
+    float3 L = normalize(float3(LX, LY, 1.3));
+    float shade = lerp(1.0, dot(n, L) / L.z, 0.6);
+    // 明るい側は白飛びしないよう、地の色の余白に収める
+    float room = max(1.0 / max(max(c1.r, c1.g), max(c1.b, 0.01)) - 1.0, 0.001);
+    if (shade > 1.0) shade = 1.0 + room * (1.0 - exp(-(shade - 1.0) / room));
+
+    float3 col = c1 * (1.0 + 0.05 * fbm(p / (300.0 * S), K + 601u, 3));
+    // しみ（控えめ）
+    float sn = fbm(p / (450.0 * S) + 0.6 * fbm(p / (450.0 * S), K + 602u, 3), K + 603u, 5);
+    col = lerp(col, c2, saturate(Amount) * 0.25 * smoothstep(0.1 - 0.3 * (Amount - 1.0), 0.45, sn));
+    col = lerp(col, c2, 0.45 * splats(p, 110.0 * S, 0.03 * Splat, K + 604u, 0.03, 0.15));
+    col = lerp(col, c2, 0.25 * scratchLines(p, 200.0 * S, 0.12 * Scratch, K + 605u, 0.0, 6.2831853, 0.2, 0.8, 1));
+    col = lerp(col, c2, 0.5 * Burn * vignette(p, K + 606u) * 0.35);
+    float gr = (rnd(int2(p), K + 607u) - 0.5) * 0.04 + gnoise(float2(p.x / 9.0, p.y / 2.0), K + 608u) * 0.03;
+    return col * shade * (1.0 + gr * Grain);
+}
+
+float4 psPaper(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy;
+    uint K = uint(Seed) * 1013904223u + 12345u;
+    float3 c1 = float3(C1R, C1G, C1B), c2 = float3(C2R, C2G, C2B), c3 = float3(C3R, C3G, C3B);
+    float3 col = paper(p, K, c1, c2);
+    col = saturate(col);
+    // 透過: 明るさをそのまま不透明度にする（乗せる素材として使うとき用）
+    float a = 1.0;
+    if (AlphaMode > 1.5)      a = lum(col);
+    else if (AlphaMode > 0.5) a = 1.0 - lum(col);
+    return float4(col * a, a);
+}
+]]
+
+--[[pixelshader@psBlocks:
+cbuffer constant0 : register(b0) {
+    float W;   float H;     float Seed;  float Kind;
+    float S;   float Amount; float Relief; float Scratch;
+    float Splat; float Grain; float Burn; float AlphaMode;
+    float C1R; float C1G;   float C1B;   float LX;
+    float C2R; float C2G;   float C2B;   float LY;
+    float C3R; float C3G;   float C3B;   float Pad;
+};
+
+uint pcg(uint v) {
+    uint s = v * 747796405u + 2891336453u;
+    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+uint hc(int2 c, uint k) { return pcg(asuint(c.x) * 0x8da6b343u ^ asuint(c.y) * 0xd8163841u ^ k * 0xcb1ab31fu); }
+float u2f(uint h) { return float(h >> 8) * (1.0 / 16777216.0); }
+float rnd(int2 c, uint k) { return u2f(hc(c, k)); }
+float2 rnd2(int2 c, uint k) { uint h = hc(c, k); return float2(u2f(h), u2f(pcg(h))); }
+
+float2 grad(int2 c, uint k) {
+    float s, co;
+    sincos(rnd(c, k) * 6.2831853, s, co);
+    return float2(co, s);
+}
+// 勾配ノイズ。おおむね -1〜1
+float gnoise(float2 p, uint k) {
+    float2 fl = floor(p);
+    int2 i = int2(fl);
+    float2 f = p - fl;
+    float2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    float a = dot(grad(i, k), f);
+    float b = dot(grad(i + int2(1, 0), k), f - float2(1, 0));
+    float c = dot(grad(i + int2(0, 1), k), f - float2(0, 1));
+    float d = dot(grad(i + int2(1, 1), k), f - float2(1, 1));
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y) * 1.4;
+}
+float fbm(float2 p, uint k, int oct) {
+    float v = 0.0, a = 0.5, n = 0.0;
+    for (int o = 0; o < oct; o++) {
+        v += a * gnoise(p, k + uint(o) * 7919u);
+        n += a;
+        p = float2(p.x * 1.6 - p.y * 1.2, p.x * 1.2 + p.y * 1.6);
+        a *= 0.5;
+    }
+    return v / n;
+}
+float lum(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+// 0〜1 の値どうしの XOR（白黒を反転させて重ねる）
+float sxor(float a, float b) { return a + b - 2.0 * a * b; }
+
+// 折り目の集まりの傾き。セルごとに短い折り目を置き、折り目の両側を逆向きに傾ける。
+// 傾きは折り目から離れるほど弱まり、端も徐々に消える。影響は cs 以内なので周囲 3x3 セルだけ見る。
+float2 folds(float2 p, float cs, uint k, int per, float lam) {
+    float2 fl = floor(p / cs);
+    int2 i = int2(fl);
+    float2 g = 0.0;
+    [loop] for (int y = -1; y <= 1; y++) {
+        [loop] for (int x = -1; x <= 1; x++) {
+            int2 c = i + int2(x, y);
+            [loop] for (int m = 0; m < per; m++) {
+                uint h0 = hc(c, k + uint(m) * 977u), h1 = pcg(h0), h2 = pcg(h1), h3 = pcg(h2), h4 = pcg(h3), h5 = pcg(h4);
+                float2 ctr = (float2(c) + float2(u2f(h0), u2f(h1))) * cs;
+                float sa, ca;
+                sincos(u2f(h2) * 3.1415926, sa, ca);
+                float2 rel = p - ctr;
+                float t = dot(rel, float2(ca, sa));
+                float hl = cs * (0.2 + 0.45 * u2f(h3));
+                // 折り目を少し曲げる
+                float d = dot(rel, float2(-sa, ca)) + 0.08 * t * t / hl * (u2f(h5) - 0.5);
+                float win = (1.0 - smoothstep(0.1 * hl, hl, abs(t))) * exp(-abs(d) / (lam * cs));
+                float a = u2f(h4) * 2.0 - 1.0;
+                g += a * win * clamp(d * 0.8, -1.0, 1.0) * float2(-sa, ca);
+            }
+        }
+    }
+    return g;
+}
+
+// 線分の傷。セルごとに確率で置き、bundle 本の平行線の束にする。
+// angC/angR: 角度の中心と幅（ラジアン）。lmin/lmax: 半分の長さ（セル比、1 以下）
+float scratchLines(float2 p, float cs, float prob, uint k, float angC, float angR, float lmin, float lmax, int bundle) {
+    float2 fl = floor(p / cs);
+    int2 i = int2(fl);
+    float s = 0.0;
+    [loop] for (int y = -1; y <= 1; y++) {
+        [loop] for (int x = -1; x <= 1; x++) {
+            int2 c = i + int2(x, y);
+            uint h0 = hc(c, k);
+            if (u2f(h0) >= prob) continue;
+            uint h1 = pcg(h0), h2 = pcg(h1), h3 = pcg(h2), h4 = pcg(h3), h5 = pcg(h4);
+            float2 ctr = (float2(c) + float2(u2f(h1), u2f(h2))) * cs;
+            float sa, ca;
+            sincos(angC + (u2f(h3) - 0.5) * angR, sa, ca);
+            float2 rel = p - ctr;
+            float t = dot(rel, float2(ca, sa));
+            float d0 = dot(rel, float2(-sa, ca));
+            float hl = cs * lerp(lmin, lmax, u2f(h4));
+            float bend = 0.03 * t * t / hl * (u2f(h5) - 0.5);
+            uint hb = h5;
+            // 本数を定数ループにしない（1 本だと X3557 の警告になり、AviUtl2 ではエラー扱い）
+            [unroll] for (int b = 0; b < 4; b++) {
+                if (b >= bundle) break;
+                hb = pcg(hb);
+                float off = (b == 0) ? 0.0 : (u2f(hb) - 0.5) * 0.12 * cs;
+                hb = pcg(hb);
+                float wid = 0.5 + 1.1 * u2f(hb);
+                hb = pcg(hb);
+                float tl = hl * (0.4 + 0.6 * u2f(hb));
+                float d = d0 + bend - off;
+                float v = (1.0 - smoothstep(0.0, wid, abs(d))) * (1.0 - smoothstep(0.6 * tl, tl, abs(t)));
+                s = max(s, v * (0.5 + 0.5 * u2f(pcg(hb))));
+            }
+        }
+    }
+    return s;
+}
+
+// 飛び散った丸。rmin/rmax: 半径（セル比）
+float splats(float2 p, float cs, float prob, uint k, float rmin, float rmax) {
+    float2 d0 = p / cs;
+    float2 fl = floor(d0);
+    int2 i = int2(fl);
+    float2 f = d0 - fl;
+    float wob = gnoise(p / max(cs * 0.06, 1.5), k + 9u);
+    float aa = 0.8 / cs;
+    float v = 0.0;
+    [loop] for (int y = -1; y <= 1; y++) {
+        [loop] for (int x = -1; x <= 1; x++) {
+            int2 c = i + int2(x, y);
+            uint h0 = hc(c, k);
+            if (u2f(h0) >= prob) continue;
+            uint h1 = pcg(h0), h2 = pcg(h1), h3 = pcg(h2), h4 = pcg(h3);
+            float r = lerp(rmin, rmax, pow(u2f(h3), 3.0));
+            float2 rel = float2(x, y) + 0.15 + 0.7 * float2(u2f(h1), u2f(h2)) - f;
+            rel.y *= 1.0 + 0.5 * u2f(h4);
+            float d = length(rel) + wob * r * 0.18;
+            v = max(v, 1.0 - smoothstep(r - aa, r + aa, d));
+        }
+    }
+    return v;
+}
+
+float vignette(float2 p, uint k) {
+    float2 cc = (p - 0.5 * float2(W, H)) / (0.5 * float2(W, H));
+    float e = lerp(length(cc) * 0.7071, max(abs(cc.x), abs(cc.y)), 0.6);
+    e += 0.18 * fbm(p / (220.0 * S), k, 4);
+    return smoothstep(0.55, 1.25, e);
+}
+
+// グランジ(ブロック): 灰色の地に、ずらして積んだ長方形の黒い塊・煙・黒い飛沫・白い引っかき傷
+float blockLayer(float2 q, float2 sz, uint k, bool vertical) {
+    if (vertical) {
+        float cx = floor(q.x / sz.x);
+        float oy = rnd(int2(int(cx), 7), k) * sz.y;
+        return rnd(int2(int(cx), int(floor((q.y + oy) / sz.y))), k + 1u);
+    }
+    float cy = floor(q.y / sz.y);
+    float ox = rnd(int2(7, int(cy)), k) * sz.x;
+    return rnd(int2(int(floor((q.x + ox) / sz.x)), int(cy)), k + 1u);
+}
+float3 blocks(float2 p, uint K, float3 c1, float3 c2, float3 c3) {
+    float2 q = p / S;
+    float b = 0.5 * blockLayer(q, float2(110.0, 380.0), K + 101u, true)
+            + 0.3 * blockLayer(q + 40.0, float2(240.0, 80.0), K + 111u, false)
+            + 0.2 * blockLayer(q + 90.0, float2(45.0, 170.0), K + 121u, true);
+    // ふちを削るノイズ
+    float nz = 0.55 * fbm(q / 9.0, K + 201u, 4) + 0.45 * fbm(q / 45.0, K + 202u, 3);
+    float th = 0.62 - 0.18 * (Amount - 1.0);
+    float dark = smoothstep(th - 0.015, th + 0.015, b + 0.6 * nz);
+    // 塗りの薄い所（半透明の黒い塊）
+    float half = smoothstep(th - 0.2, th - 0.08, b + 0.25 * nz + 0.15 * fbm(q / 120.0, K + 203u, 3)) * (1.0 - dark);
+
+    float3 col = c1 * (1.0 + 0.3 * fbm(q / 5.0, K + 301u, 3) + 0.2 * fbm(q / 60.0, K + 302u, 3));
+    float smoke = smoothstep(-0.25, 0.45, fbm(q / 260.0 + 0.4 * fbm(q / 400.0, K + 303u, 2), K + 304u, 4));
+    col = lerp(col, c3, smoke * 0.85);
+    col = lerp(col, c2, half * 0.65 * saturate(Amount));
+    col = lerp(col, c2, dark * saturate(Amount * 2.0));
+    // 黒い飛沫（まとまって出る細かい斑点）
+    float cl = fbm(q / 140.0, K + 401u, 3);
+    float sp = smoothstep(0.62, 0.7, 0.6 * gnoise(q / 3.0, K + 402u) + 0.4 * fbm(q / 11.0, K + 403u, 2) + 0.7 * cl + 0.15 * (Splat - 1.0));
+    col = lerp(col, c2, sp * step(0.001, Splat));
+    col = lerp(col, c2, 0.9 * splats(p, 50.0 * S, 0.12 * Splat, K + 404u, 0.04, 0.22));
+    // 白っぽい細い傷
+    float sc = max(scratchLines(p, 160.0 * S, 0.55 * Scratch, K + 501u, 0.0, 6.2831853, 0.3, 1.0, 3),
+                   scratchLines(p, 70.0 * S, 0.35 * Scratch, K + 502u, 0.0, 6.2831853, 0.2, 0.9, 1));
+    col = lerp(col, c1 * 1.5 + 0.06, sc * 0.4);
+    col = lerp(col, c2, 0.7 * Burn * vignette(p, K + 601u));
+    float gr = (rnd(int2(p), K + 602u) - 0.5) * 0.18;
+    return col * (1.0 + gr * Grain);
+}
+
+float4 psBlocks(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy;
+    uint K = uint(Seed) * 1013904223u + 12345u;
+    float3 c1 = float3(C1R, C1G, C1B), c2 = float3(C2R, C2G, C2B), c3 = float3(C3R, C3G, C3B);
+    float3 col = blocks(p, K, c1, c2, c3);
+    col = saturate(col);
+    // 透過: 明るさをそのまま不透明度にする（乗せる素材として使うとき用）
+    float a = 1.0;
+    if (AlphaMode > 1.5)      a = lum(col);
+    else if (AlphaMode > 0.5) a = 1.0 - lum(col);
+    return float4(col * a, a);
+}
+]]
+
+--[[pixelshader@psCanvas:
+cbuffer constant0 : register(b0) {
+    float W;   float H;     float Seed;  float Kind;
+    float S;   float Amount; float Relief; float Scratch;
+    float Splat; float Grain; float Burn; float AlphaMode;
+    float C1R; float C1G;   float C1B;   float LX;
+    float C2R; float C2G;   float C2B;   float LY;
+    float C3R; float C3G;   float C3B;   float Pad;
+};
+
+uint pcg(uint v) {
+    uint s = v * 747796405u + 2891336453u;
+    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+uint hc(int2 c, uint k) { return pcg(asuint(c.x) * 0x8da6b343u ^ asuint(c.y) * 0xd8163841u ^ k * 0xcb1ab31fu); }
+float u2f(uint h) { return float(h >> 8) * (1.0 / 16777216.0); }
+float rnd(int2 c, uint k) { return u2f(hc(c, k)); }
+float2 rnd2(int2 c, uint k) { uint h = hc(c, k); return float2(u2f(h), u2f(pcg(h))); }
+
+float2 grad(int2 c, uint k) {
+    float s, co;
+    sincos(rnd(c, k) * 6.2831853, s, co);
+    return float2(co, s);
+}
+// 勾配ノイズ。おおむね -1〜1
+float gnoise(float2 p, uint k) {
+    float2 fl = floor(p);
+    int2 i = int2(fl);
+    float2 f = p - fl;
+    float2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    float a = dot(grad(i, k), f);
+    float b = dot(grad(i + int2(1, 0), k), f - float2(1, 0));
+    float c = dot(grad(i + int2(0, 1), k), f - float2(0, 1));
+    float d = dot(grad(i + int2(1, 1), k), f - float2(1, 1));
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y) * 1.4;
+}
+float fbm(float2 p, uint k, int oct) {
+    float v = 0.0, a = 0.5, n = 0.0;
+    for (int o = 0; o < oct; o++) {
+        v += a * gnoise(p, k + uint(o) * 7919u);
+        n += a;
+        p = float2(p.x * 1.6 - p.y * 1.2, p.x * 1.2 + p.y * 1.6);
+        a *= 0.5;
+    }
+    return v / n;
+}
+float lum(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+// 0〜1 の値どうしの XOR（白黒を反転させて重ねる）
+float sxor(float a, float b) { return a + b - 2.0 * a * b; }
+
+// 折り目の集まりの傾き。セルごとに短い折り目を置き、折り目の両側を逆向きに傾ける。
+// 傾きは折り目から離れるほど弱まり、端も徐々に消える。影響は cs 以内なので周囲 3x3 セルだけ見る。
+float2 folds(float2 p, float cs, uint k, int per, float lam) {
+    float2 fl = floor(p / cs);
+    int2 i = int2(fl);
+    float2 g = 0.0;
+    [loop] for (int y = -1; y <= 1; y++) {
+        [loop] for (int x = -1; x <= 1; x++) {
+            int2 c = i + int2(x, y);
+            [loop] for (int m = 0; m < per; m++) {
+                uint h0 = hc(c, k + uint(m) * 977u), h1 = pcg(h0), h2 = pcg(h1), h3 = pcg(h2), h4 = pcg(h3), h5 = pcg(h4);
+                float2 ctr = (float2(c) + float2(u2f(h0), u2f(h1))) * cs;
+                float sa, ca;
+                sincos(u2f(h2) * 3.1415926, sa, ca);
+                float2 rel = p - ctr;
+                float t = dot(rel, float2(ca, sa));
+                float hl = cs * (0.2 + 0.45 * u2f(h3));
+                // 折り目を少し曲げる
+                float d = dot(rel, float2(-sa, ca)) + 0.08 * t * t / hl * (u2f(h5) - 0.5);
+                float win = (1.0 - smoothstep(0.1 * hl, hl, abs(t))) * exp(-abs(d) / (lam * cs));
+                float a = u2f(h4) * 2.0 - 1.0;
+                g += a * win * clamp(d * 0.8, -1.0, 1.0) * float2(-sa, ca);
+            }
+        }
+    }
+    return g;
+}
+
+// 線分の傷。セルごとに確率で置き、bundle 本の平行線の束にする。
+// angC/angR: 角度の中心と幅（ラジアン）。lmin/lmax: 半分の長さ（セル比、1 以下）
+float scratchLines(float2 p, float cs, float prob, uint k, float angC, float angR, float lmin, float lmax, int bundle) {
+    float2 fl = floor(p / cs);
+    int2 i = int2(fl);
+    float s = 0.0;
+    [loop] for (int y = -1; y <= 1; y++) {
+        [loop] for (int x = -1; x <= 1; x++) {
+            int2 c = i + int2(x, y);
+            uint h0 = hc(c, k);
+            if (u2f(h0) >= prob) continue;
+            uint h1 = pcg(h0), h2 = pcg(h1), h3 = pcg(h2), h4 = pcg(h3), h5 = pcg(h4);
+            float2 ctr = (float2(c) + float2(u2f(h1), u2f(h2))) * cs;
+            float sa, ca;
+            sincos(angC + (u2f(h3) - 0.5) * angR, sa, ca);
+            float2 rel = p - ctr;
+            float t = dot(rel, float2(ca, sa));
+            float d0 = dot(rel, float2(-sa, ca));
+            float hl = cs * lerp(lmin, lmax, u2f(h4));
+            float bend = 0.03 * t * t / hl * (u2f(h5) - 0.5);
+            uint hb = h5;
+            // 本数を定数ループにしない（1 本だと X3557 の警告になり、AviUtl2 ではエラー扱い）
+            [unroll] for (int b = 0; b < 4; b++) {
+                if (b >= bundle) break;
+                hb = pcg(hb);
+                float off = (b == 0) ? 0.0 : (u2f(hb) - 0.5) * 0.12 * cs;
+                hb = pcg(hb);
+                float wid = 0.5 + 1.1 * u2f(hb);
+                hb = pcg(hb);
+                float tl = hl * (0.4 + 0.6 * u2f(hb));
+                float d = d0 + bend - off;
+                float v = (1.0 - smoothstep(0.0, wid, abs(d))) * (1.0 - smoothstep(0.6 * tl, tl, abs(t)));
+                s = max(s, v * (0.5 + 0.5 * u2f(pcg(hb))));
+            }
+        }
+    }
+    return s;
+}
+
+// 飛び散った丸。rmin/rmax: 半径（セル比）
+float splats(float2 p, float cs, float prob, uint k, float rmin, float rmax) {
+    float2 d0 = p / cs;
+    float2 fl = floor(d0);
+    int2 i = int2(fl);
+    float2 f = d0 - fl;
+    float wob = gnoise(p / max(cs * 0.06, 1.5), k + 9u);
+    float aa = 0.8 / cs;
+    float v = 0.0;
+    [loop] for (int y = -1; y <= 1; y++) {
+        [loop] for (int x = -1; x <= 1; x++) {
+            int2 c = i + int2(x, y);
+            uint h0 = hc(c, k);
+            if (u2f(h0) >= prob) continue;
+            uint h1 = pcg(h0), h2 = pcg(h1), h3 = pcg(h2), h4 = pcg(h3);
+            float r = lerp(rmin, rmax, pow(u2f(h3), 3.0));
+            float2 rel = float2(x, y) + 0.15 + 0.7 * float2(u2f(h1), u2f(h2)) - f;
+            rel.y *= 1.0 + 0.5 * u2f(h4);
+            float d = length(rel) + wob * r * 0.18;
+            v = max(v, 1.0 - smoothstep(r - aa, r + aa, d));
+        }
+    }
+    return v;
+}
+
+float vignette(float2 p, uint k) {
+    float2 cc = (p - 0.5 * float2(W, H)) / (0.5 * float2(W, H));
+    float e = lerp(length(cc) * 0.7071, max(abs(cc.x), abs(cc.y)), 0.6);
+    e += 0.18 * fbm(p / (220.0 * S), k, 4);
+    return smoothstep(0.55, 1.25, e);
+}
+
+// グランジ(布): 布目のある茶灰色の地に、横に擦れた紺の汚れ・さび色・下ほど暗い
+float3 canvas(float2 p, uint K, float3 c1, float3 c2, float3 c3) {
+    float2 q = p / S;
+    float weave = 0.6 * gnoise(float2(q.x / 45.0, q.y / 2.1), K + 101u) + 0.35 * gnoise(float2(q.x / 2.1, q.y / 45.0), K + 102u);
+    float3 base = c1 * (1.0 + 0.16 * Relief * weave + 0.14 * fbm(q / 35.0, K + 103u, 3));
+
+    float sn = fbm(float2(q.x / 420.0, q.y / 230.0), K + 201u, 5)
+             + 0.25 * fbm(float2(q.x / 60.0, q.y / 12.0), K + 202u, 3)
+             + 0.2 * fbm(q / 9.0, K + 203u, 3);
+    float th = 0.1 - 0.3 * (Amount - 1.0);
+    float m = smoothstep(th, th + 0.1, sn);
+    float m2 = smoothstep(th - 0.3, th, sn) * (1.0 - m);
+    float3 col = lerp(base, c2 * (1.0 + 0.25 * weave), m * 0.9);
+    col = lerp(col, lerp(base, c2, 0.6), m2 * 0.6);
+    // 全体に散る細かい紺のむら
+    float mt = fbm(q / 22.0 + 0.5 * fbm(q / 60.0, K + 204u, 2), K + 205u, 4) + 0.3 * fbm(q / 200.0, K + 206u, 3);
+    col = lerp(col, c2, 0.35 * saturate(Amount) * smoothstep(0.05, 0.45, mt) * (1.0 - m));
+
+    float rs = fbm(float2(q.x / 300.0, q.y / 55.0), K + 301u, 4) + 0.3 * fbm(float2(q.x / 40.0, q.y / 5.0), K + 302u, 2);
+    col = lerp(col, c3, smoothstep(0.3, 0.5, rs) * 0.4 * (1.0 - m));
+
+    float sc = max(scratchLines(p, 180.0 * S, 0.5 * Scratch, K + 401u, 0.0, 0.5, 0.4, 1.0, 2),
+                   scratchLines(p, 80.0 * S, 0.3 * Scratch, K + 402u, 0.0, 0.4, 0.3, 1.0, 1));
+    col = lerp(col, c2 * 0.6, sc * 0.45);
+    float sp = splats(p, 60.0 * S, 0.1 * Splat, K + 403u, 0.04, 0.2);
+    col = lerp(col, c2 * 0.7, sp * 0.8);
+
+    // 下ほど暗く、上の端も少し暗い
+    float vy = p.y / H + 0.22 * fbm(q / 320.0, K + 501u, 3);
+    float dk = 0.85 * smoothstep(0.35, 0.95, vy) + 0.45 * (1.0 - smoothstep(-0.05, 0.1, vy));
+    dk = max(dk, 0.6 * vignette(p, K + 502u));
+    col *= 1.0 - saturate(dk * Burn);
+    float gr = (rnd(int2(p), K + 601u) - 0.5) * 0.14;
+    return col * (1.0 + gr * Grain);
+}
+
+float4 psCanvas(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy;
+    uint K = uint(Seed) * 1013904223u + 12345u;
+    float3 c1 = float3(C1R, C1G, C1B), c2 = float3(C2R, C2G, C2B), c3 = float3(C3R, C3G, C3B);
+    float3 col = canvas(p, K, c1, c2, c3);
+    col = saturate(col);
+    // 透過: 明るさをそのまま不透明度にする（乗せる素材として使うとき用）
+    float a = 1.0;
+    if (AlphaMode > 1.5)      a = lum(col);
+    else if (AlphaMode > 0.5) a = 1.0 - lum(col);
+    return float4(col * a, a);
+}
+]]
+
+--[[pixelshader@psDistress:
+cbuffer constant0 : register(b0) {
+    float W;   float H;     float Seed;  float Kind;
+    float S;   float Amount; float Relief; float Scratch;
+    float Splat; float Grain; float Burn; float AlphaMode;
+    float C1R; float C1G;   float C1B;   float LX;
+    float C2R; float C2G;   float C2B;   float LY;
+    float C3R; float C3G;   float C3B;   float Pad;
+};
+
+uint pcg(uint v) {
+    uint s = v * 747796405u + 2891336453u;
+    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+uint hc(int2 c, uint k) { return pcg(asuint(c.x) * 0x8da6b343u ^ asuint(c.y) * 0xd8163841u ^ k * 0xcb1ab31fu); }
+float u2f(uint h) { return float(h >> 8) * (1.0 / 16777216.0); }
+float rnd(int2 c, uint k) { return u2f(hc(c, k)); }
+float2 rnd2(int2 c, uint k) { uint h = hc(c, k); return float2(u2f(h), u2f(pcg(h))); }
+
+float2 grad(int2 c, uint k) {
+    float s, co;
+    sincos(rnd(c, k) * 6.2831853, s, co);
+    return float2(co, s);
+}
+// 勾配ノイズ。おおむね -1〜1
+float gnoise(float2 p, uint k) {
+    float2 fl = floor(p);
+    int2 i = int2(fl);
+    float2 f = p - fl;
+    float2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    float a = dot(grad(i, k), f);
+    float b = dot(grad(i + int2(1, 0), k), f - float2(1, 0));
+    float c = dot(grad(i + int2(0, 1), k), f - float2(0, 1));
+    float d = dot(grad(i + int2(1, 1), k), f - float2(1, 1));
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y) * 1.4;
+}
+float fbm(float2 p, uint k, int oct) {
+    float v = 0.0, a = 0.5, n = 0.0;
+    for (int o = 0; o < oct; o++) {
+        v += a * gnoise(p, k + uint(o) * 7919u);
+        n += a;
+        p = float2(p.x * 1.6 - p.y * 1.2, p.x * 1.2 + p.y * 1.6);
+        a *= 0.5;
+    }
+    return v / n;
+}
+float lum(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+// 0〜1 の値どうしの XOR（白黒を反転させて重ねる）
+float sxor(float a, float b) { return a + b - 2.0 * a * b; }
+
+// 折り目の集まりの傾き。セルごとに短い折り目を置き、折り目の両側を逆向きに傾ける。
+// 傾きは折り目から離れるほど弱まり、端も徐々に消える。影響は cs 以内なので周囲 3x3 セルだけ見る。
+float2 folds(float2 p, float cs, uint k, int per, float lam) {
+    float2 fl = floor(p / cs);
+    int2 i = int2(fl);
+    float2 g = 0.0;
+    [loop] for (int y = -1; y <= 1; y++) {
+        [loop] for (int x = -1; x <= 1; x++) {
+            int2 c = i + int2(x, y);
+            [loop] for (int m = 0; m < per; m++) {
+                uint h0 = hc(c, k + uint(m) * 977u), h1 = pcg(h0), h2 = pcg(h1), h3 = pcg(h2), h4 = pcg(h3), h5 = pcg(h4);
+                float2 ctr = (float2(c) + float2(u2f(h0), u2f(h1))) * cs;
+                float sa, ca;
+                sincos(u2f(h2) * 3.1415926, sa, ca);
+                float2 rel = p - ctr;
+                float t = dot(rel, float2(ca, sa));
+                float hl = cs * (0.2 + 0.45 * u2f(h3));
+                // 折り目を少し曲げる
+                float d = dot(rel, float2(-sa, ca)) + 0.08 * t * t / hl * (u2f(h5) - 0.5);
+                float win = (1.0 - smoothstep(0.1 * hl, hl, abs(t))) * exp(-abs(d) / (lam * cs));
+                float a = u2f(h4) * 2.0 - 1.0;
+                g += a * win * clamp(d * 0.8, -1.0, 1.0) * float2(-sa, ca);
+            }
+        }
+    }
+    return g;
+}
+
+// 線分の傷。セルごとに確率で置き、bundle 本の平行線の束にする。
+// angC/angR: 角度の中心と幅（ラジアン）。lmin/lmax: 半分の長さ（セル比、1 以下）
+float scratchLines(float2 p, float cs, float prob, uint k, float angC, float angR, float lmin, float lmax, int bundle) {
+    float2 fl = floor(p / cs);
+    int2 i = int2(fl);
+    float s = 0.0;
+    [loop] for (int y = -1; y <= 1; y++) {
+        [loop] for (int x = -1; x <= 1; x++) {
+            int2 c = i + int2(x, y);
+            uint h0 = hc(c, k);
+            if (u2f(h0) >= prob) continue;
+            uint h1 = pcg(h0), h2 = pcg(h1), h3 = pcg(h2), h4 = pcg(h3), h5 = pcg(h4);
+            float2 ctr = (float2(c) + float2(u2f(h1), u2f(h2))) * cs;
+            float sa, ca;
+            sincos(angC + (u2f(h3) - 0.5) * angR, sa, ca);
+            float2 rel = p - ctr;
+            float t = dot(rel, float2(ca, sa));
+            float d0 = dot(rel, float2(-sa, ca));
+            float hl = cs * lerp(lmin, lmax, u2f(h4));
+            float bend = 0.03 * t * t / hl * (u2f(h5) - 0.5);
+            uint hb = h5;
+            // 本数を定数ループにしない（1 本だと X3557 の警告になり、AviUtl2 ではエラー扱い）
+            [unroll] for (int b = 0; b < 4; b++) {
+                if (b >= bundle) break;
+                hb = pcg(hb);
+                float off = (b == 0) ? 0.0 : (u2f(hb) - 0.5) * 0.12 * cs;
+                hb = pcg(hb);
+                float wid = 0.5 + 1.1 * u2f(hb);
+                hb = pcg(hb);
+                float tl = hl * (0.4 + 0.6 * u2f(hb));
+                float d = d0 + bend - off;
+                float v = (1.0 - smoothstep(0.0, wid, abs(d))) * (1.0 - smoothstep(0.6 * tl, tl, abs(t)));
+                s = max(s, v * (0.5 + 0.5 * u2f(pcg(hb))));
+            }
+        }
+    }
+    return s;
+}
+
+// 飛び散った丸。rmin/rmax: 半径（セル比）
+float splats(float2 p, float cs, float prob, uint k, float rmin, float rmax) {
+    float2 d0 = p / cs;
+    float2 fl = floor(d0);
+    int2 i = int2(fl);
+    float2 f = d0 - fl;
+    float wob = gnoise(p / max(cs * 0.06, 1.5), k + 9u);
+    float aa = 0.8 / cs;
+    float v = 0.0;
+    [loop] for (int y = -1; y <= 1; y++) {
+        [loop] for (int x = -1; x <= 1; x++) {
+            int2 c = i + int2(x, y);
+            uint h0 = hc(c, k);
+            if (u2f(h0) >= prob) continue;
+            uint h1 = pcg(h0), h2 = pcg(h1), h3 = pcg(h2), h4 = pcg(h3);
+            float r = lerp(rmin, rmax, pow(u2f(h3), 3.0));
+            float2 rel = float2(x, y) + 0.15 + 0.7 * float2(u2f(h1), u2f(h2)) - f;
+            rel.y *= 1.0 + 0.5 * u2f(h4);
+            float d = length(rel) + wob * r * 0.18;
+            v = max(v, 1.0 - smoothstep(r - aa, r + aa, d));
+        }
+    }
+    return v;
+}
+
+float vignette(float2 p, uint k) {
+    float2 cc = (p - 0.5 * float2(W, H)) / (0.5 * float2(W, H));
+    float e = lerp(length(cc) * 0.7071, max(abs(cc.x), abs(cc.y)), 0.6);
+    e += 0.18 * fbm(p / (220.0 * S), k, 4);
+    return smoothstep(0.55, 1.25, e);
+}
+
+// 汚れ(白黒): ぎざぎざの黒い地・反転した飛沫・束になった長い傷・そばかす
+float3 distress(float2 p, uint K, float3 c1, float3 c2) {
+    float2 q = p / S;
+    float r = fbm(q / 380.0, K + 101u, 5) + 0.3 * fbm(q / 28.0, K + 102u, 4)
+            + 0.12 * gnoise(q / 3.5, K + 103u) + 0.14 * fbm(float2(q.x / 260.0, q.y / 7.0), K + 104u, 3);
+    float th = 0.02 - 0.25 * (Amount - 1.0);
+    float v = smoothstep(th - 0.01, th + 0.01, r);
+    v = sxor(v, max(splats(p, 55.0 * S, 0.4 * Splat, K + 201u, 0.05, 0.4),
+                    splats(p, 16.0 * S, 0.3 * Splat, K + 202u, 0.08, 0.32)));
+    float sc = max(scratchLines(p, 280.0 * S, 0.75 * Scratch, K + 301u, 0.0, 6.2831853, 0.4, 1.0, 4),
+                   scratchLines(p, 110.0 * S, 0.5 * Scratch, K + 302u, 0.0, 6.2831853, 0.25, 1.0, 2));
+    v = sxor(v, saturate(sc * 1.5));
+    float fr = gnoise(q / 1.6, K + 401u) + 0.5 * fbm(q / 90.0, K + 402u, 2);
+    v = sxor(v, smoothstep(0.78, 0.86, fr + 0.25 * (Grain - 1.0)) * step(0.001, Grain));
+    v = max(v, 0.9 * Burn * vignette(p, K + 501u) * 0.4);
+    return lerp(c1, c2, v);
+}
+
+float4 psDistress(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy;
+    uint K = uint(Seed) * 1013904223u + 12345u;
+    float3 c1 = float3(C1R, C1G, C1B), c2 = float3(C2R, C2G, C2B), c3 = float3(C3R, C3G, C3B);
+    float3 col = distress(p, K, c1, c2);
+    col = saturate(col);
+    // 透過: 明るさをそのまま不透明度にする（乗せる素材として使うとき用）
+    float a = 1.0;
+    if (AlphaMode > 1.5)      a = lum(col);
+    else if (AlphaMode > 0.5) a = 1.0 - lum(col);
+    return float4(col * a, a);
+}
+]]
+
+-- 種類ごとの既定の色（地・汚れ・差し）
+local PALETTE = {
+	[0] = { 0xecebe8, 0x6b6258, 0x9a8f80 },
+	[1] = { 0x5e5e5e, 0x0a0a0a, 0x262626 },
+	[2] = { 0x6f685c, 0x17212d, 0x5e3222 },
+	[3] = { 0xffffff, 0x000000, 0x808080 },
+}
+local k = PALETTE[kind] and kind or 0
+local function rgb(c)
+	return math.floor(c / 65536) % 256 / 255, math.floor(c / 256) % 256 / 255, c % 256 / 255
+end
+local r1, g1, b1 = rgb(c1 or PALETTE[k][1])
+local r2, g2, b2 = rgb(c2 or PALETTE[k][2])
+local r3, g3, b3 = rgb(c3 or PALETTE[k][3])
+
+local W = sw > 0 and math.floor(sw) or obj.screen_w
+local H = sh > 0 and math.floor(sh) or obj.screen_h
+-- コマ打ち: fps ごとにシードを進めて、紙ごと描き替える
+local s = math.floor(seed)
+if fps > 0 then s = s + math.floor(obj.time * fps) end
+local a = math.rad(lang)
+
+obj.setoption("drawtarget", "tempbuffer", W, H)
+local SHADER = { [0] = "psPaper", "psBlocks", "psCanvas", "psDistress" }
+obj.pixelshader(SHADER[k], "tempbuffer", {}, {
+	W, H, s, k,
+	scale / 100, amount / 100, relief / 100, scratch / 100,
+	splat / 100, grain / 100, burn / 100, alpha,
+	r1, g1, b1, math.cos(a),
+	r2, g2, b2, -math.sin(a),
+	r3, g3, b3, 0,
+})
+obj.load("tempbuffer")

@@ -1,0 +1,22 @@
+[Language]
+Information=English language for PuniCollision 0.7.5
+SubLanguage=English
+
+[PuniCollision]
+グループID=GroupID
+剛体=Rigid Body
+変形範囲=Deformation
+押出量=Compression
+反発=Rebound
+剛体形状=RigidShape
+自動生成=Auto
+手動指定=Manual
+制御点の数=PointCount
+内部頂点=Internal Vertices
+変形=Deformation
+PuniCollision v0.7.5=PuniCollision v0.7.5
+
+軟体形状=SoftShape
+軟体の制御点の数=SoftPointCount
+軟体の内部頂点=Soft Vertices
+範囲表示=Show Range

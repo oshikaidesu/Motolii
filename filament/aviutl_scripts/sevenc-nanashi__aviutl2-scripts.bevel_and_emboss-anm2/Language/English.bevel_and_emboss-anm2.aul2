@@ -1,0 +1,43 @@
+[Language]
+Information=English Language for sevenc-nanashi/aviutl2-scripts / https://github.com/sevenc-nanashi/aviutl2-scripts
+[Tips.ベベルとエンボス]
+effect.name=Creates bevel and emboss shading using GPU contour distances.
+出力=Direct drawing applies subsequent effects separately to the original, highlight, and shadow.
+
+[ベベルとエンボス]
+ベベルとエンボス=Bevel and Emboss
+α閾値=Alpha Threshold
+幅=Width
+角度=Angle
+高度=Elevation
+形状=Shape
+ベベル（外側）=Outer Bevel
+ベベル（内側）=Inner Bevel
+エンボス=Emboss
+ピローエンボス=Pillow Emboss
+出力=Output
+通常合成=Composite
+直接描画=Direct Drawing
+ハイライトのみ=Highlight Only
+シャドウのみ=Shadow Only
+ぼかし=Blur
+参照輪郭ぼかし=Contour Blur
+ハイライト=Highlight
+シャドウ=Shadow
+色=Color
+合成モード=Blend Mode
+不透明度=Opacity
+背景色=Background Color
+通常=Normal
+加算=Add
+減算=Subtract
+乗算=Multiply
+スクリーン=Screen
+オーバーレイ=Overlay
+比較（明）=Lighten
+比較（暗）=Darken
+輝度=Luminance
+色差=Chroma
+陰影=Shade
+明暗=Light and Dark
+差分=Difference

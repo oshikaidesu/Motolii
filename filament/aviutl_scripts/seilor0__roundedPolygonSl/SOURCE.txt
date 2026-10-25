@@ -1,0 +1,5 @@
+角丸正多角形_sl by セイル
+licence: MIT
+from: https://github.com/seilor0/roundedPolygon_sl/releases/download/v1.2.1/roundedPolygon_sl.zip (tag v1.2.1, commit 25067b4aa113)
+page: https://github.com/seilor0/roundedPolygon_sl
+Put here unchanged for Motolii (filament/aviutl_scripts).

@@ -1,0 +1,56 @@
+
+@Pattern
+--information:Pattern v0.1 by kusugawatsumiki
+--label:RandomObject
+--separator:画像パターン
+--file@path1:画像パターン1
+--file@path2:画像パターン2
+--file@path3:画像パターン3
+--file@path4:画像パターン4
+--file@path5:画像パターン5
+--file@path6:画像パターン6
+--file@path7:画像パターン7
+--file@path8:画像パターン8
+--separator:位置
+--track@randomx:X座標ランダム幅,0,200,0,0.01
+--track@randomy:Y座標ランダム幅,0,200,0,0.01
+--separator:依存パラメータ
+--select@mode:モード,フレーム数=0,BPM=1
+--track@framecount:フレーム数,1,60,1,1
+--track@bpm:BPM,60,300,120,1
+
+local function getpattern()
+  local result = {}
+  local count = 0
+  if path1 ~= "" then count = count + 1 result[count] = path1 end
+  if path2 ~= "" then count = count + 1 result[count] = path2 end
+  if path3 ~= "" then count = count + 1 result[count] = path3 end
+  if path4 ~= "" then count = count + 1 result[count] = path4 end
+  if path5 ~= "" then count = count + 1 result[count] = path5 end
+  if path6 ~= "" then count = count + 1 result[count] = path6 end
+  if path7 ~= "" then count = count + 1 result[count] = path7 end
+  if path8 ~= "" then count = count + 1 result[count] = path8 end
+  return result
+end
+
+local function geteffectiveframe()
+  if mode == 0 then return math.floor(obj.frame / framecount) end
+  if mode == 1 then return math.floor(obj.frame / (obj.framerate * 60 / bpm)) end
+end
+
+local pattern = getpattern()
+local effectiveframe = geteffectiveframe()
+
+local target = obj.rand(1, #pattern, 1, effectiveframe)
+if pattern[target] ~= nil then
+  obj.load("image", pattern[target])
+end
+
+if randomx ~= 0 then
+  local x = obj.rand(-randomx, randomx, 1, effectiveframe)
+  obj.ox = x
+end
+if randomy ~= 0 then
+  local y = obj.rand(-randomy, randomy, 1, effectiveframe)
+  obj.oy = y
+end

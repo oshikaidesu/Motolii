@@ -1,0 +1,188 @@
+--information:sin揺れ_HB v1.10 by HexBrowns
+--label:HexScript
+--track@divisions:細かさ,1,120,5,1
+--track@amplitude:振幅,0,4096,50,1
+--track@heightRatio:高さ,0,4096,100,0.01
+--track@speed:速度,0,100,1,0.01
+--check@isVertical:縦⇔横,false
+--check@doSuppress:揺れ抑制,1
+--value@suppressPos:抑制位置[0-100],100
+--value@angleOffset:ｽﾞﾚ指定[Angle],0.00
+--check@doReverse:動き向き,0
+--check@doAlphaFade:透過,0
+--check@alphaDir:透過向き,0
+--value@alphaCorrect:透過補正[%],0.00
+
+--[[pixelshader@ps_sinyure:
+// sin揺れ ピクセルシェーダー
+// 分割ごとにsin波オフセットを適用して揺れを実現
+
+cbuffer Constants : register(b0)
+{
+    float divisions;     // 分割数
+    float amplitude;     // 振幅
+    float heightRatio;   // 高さ比率
+    float speed;         // 速度 (1秒間の振幅回数 = Hz)
+    float time;          // 時間
+    float angleOffset;   // ズレ指定
+    float direction;     // 動き向き (1.0 or -1.0)
+    float isVertical;    // 縦⇔横 (0.0=横, 1.0=縦)
+    float suppressPos;   // 抑制位置
+    float doSuppress;    // 揺れ抑制
+    float doAlphaFade;   // 透過
+    float alphaDir;      // 透過向き (0.0=正方向, 1.0=逆方向)
+    float alphaCorrect;  // 透過補正
+    float objWidth;      // オブジェクト幅
+    float objHeight;     // オブジェクト高さ
+    float PI;            // 円周率
+};
+
+Texture2D tex0 : register(t0);
+SamplerState samp0 : register(s0);
+
+float4 ps_sinyure(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
+{
+    // 進行方向の座標（0〜1）
+    float progress = isVertical > 0.5 ? uv.x : uv.y;
+
+    // 分割インデックス（0〜divisions-1）
+    float divIndex = floor(progress * divisions);
+    float divProgress = divIndex / max(divisions, 1.0);
+
+    // 角度計算
+    // speed = 1秒間の振幅回数（Hz）
+    // 1回の振幅 = 360度なので、time * speed * 360 で角度を算出
+    float angPerDiv = (360.0 * heightRatio) / divisions;
+    float ang = angPerDiv * divIndex + time * speed * 360.0 + angleOffset;
+    ang = ang * direction;
+    float rad = ang * PI / 180.0;
+    float yure = sin(rad);
+
+    // 距離（振幅）計算
+    float dist = amplitude;
+    if (doSuppress > 0.5)
+    {
+        dist = amplitude * (divProgress - suppressPos);
+    }
+
+    // 画像サイズに対するオフセット（ピクセル → 正規化座標）
+    float offset;
+    if (isVertical > 0.5)
+    {
+        // 横方向に揺れる → Y座標にオフセット
+        offset = dist * yure / objHeight;
+    }
+    else
+    {
+        // 縦方向に揺れる → X座標にオフセット
+        offset = dist * yure / objWidth;
+    }
+
+    // 新しいUV座標
+    float2 newUV = uv;
+    if (isVertical > 0.5)
+    {
+        newUV.y += offset;
+    }
+    else
+    {
+        newUV.x += offset;
+    }
+
+    // 範囲外チェック（透明として扱う）
+    if (newUV.x < 0.0 || newUV.x > 1.0 || newUV.y < 0.0 || newUV.y > 1.0)
+    {
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
+
+    // テクスチャサンプリング
+    float4 col = tex0.Sample(samp0, newUV);
+
+    // 透過処理（分割ごとのアルファ変化）
+    if (doAlphaFade > 0.5)
+    {
+        float alphaFactor;
+        if (alphaDir > 0.5)
+        {
+            alphaFactor = 1.0 - divProgress + alphaCorrect;
+        }
+        else
+        {
+            alphaFactor = divProgress + alphaCorrect;
+        }
+        alphaFactor = saturate(alphaFactor);
+        // 乗算済みアルファに対応
+        col *= alphaFactor;
+    }
+
+    return col;
+}
+]]
+
+-------------------------------------
+-- メイン処理
+-------------------------------------
+
+-- パラメータ取得
+local t0 = math.floor(divisions)
+local t1 = math.floor(amplitude)
+local t2 = heightRatio / 100
+local t3 = speed -- 1秒間の振幅回数（Hz）、小数対応
+
+-- 領域拡張
+if isVertical then
+    obj.effect("領域拡張", "上", t1, "下", t1)
+else
+    obj.effect("領域拡張", "左", t1, "右", t1)
+end
+
+-- オブジェクトサイズ取得
+local ow, oh = obj.getpixel()
+
+-- 分割数計算
+local len
+if isVertical then
+    len = math.floor(ow / t0)
+else
+    len = math.floor(oh / t0)
+end
+
+-- 分割数が0以下の場合は処理しない
+if len <= 0 then
+    return
+end
+
+-- 個別オブジェクト対応 (obj.num > 1の場合)
+local adjustedAngleOffset = angleOffset
+if obj.num > 1 then
+    adjustedAngleOffset = angleOffset * obj.index
+end
+
+-- 動き向きの符号
+local direction = 1.0
+if doReverse == 1 then
+    direction = -1.0
+end
+
+-- シェーダー定数準備
+local constants = {
+    len,                       -- divisions
+    t1,                        -- amplitude
+    t2,                        -- heightRatio
+    t3,                        -- speed (Hz)
+    obj.time,                  -- time
+    adjustedAngleOffset,       -- angleOffset
+    direction,                 -- direction
+    isVertical and 1.0 or 0.0, -- isVertical
+    suppressPos / 100,         -- suppressPos
+    doSuppress,                -- doSuppress
+    doAlphaFade,               -- doAlphaFade
+    alphaDir,                  -- alphaDir
+    alphaCorrect / 100,        -- alphaCorrect
+    ow,                        -- objWidth
+    oh,                        -- objHeight
+    math.pi                    -- PI
+}
+
+-- GPUシェーダー実行
+obj.pixelshader("ps_sinyure", "object", "object", constants, "copy", "clamp")

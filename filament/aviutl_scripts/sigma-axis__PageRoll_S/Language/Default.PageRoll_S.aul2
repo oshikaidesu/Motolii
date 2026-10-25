@@ -1,0 +1,24 @@
+; Tooltip definitions
+;===============================================================
+; Target: PageRoll_S (https://github.com/sigma-axis/aviutl2_script_PageRoll_S)
+; Target Version: v1.22
+; Language: Default
+
+[Language]
+Information=Default tooltips for PageRoll_S v1.22 (日本語)
+
+;===============================================================
+
+[Tips.PageRoll_S]
+effect.name=ページを丸めるように画像を変形します．
+角度=巻き取る角度を指定．0 で真上方向に，時計回りに正．
+領域外も描画=画像の元々のサイズ領域から巻き取った部分がはみ出した場合，領域を拡張します．
+裏地画像=未指定の場合は元画像．
+キャッシュ名="cache:---" の "---" 部分．「裏地種類」で「一時キャッシュ」指定時のみ有効．
+PI=PI = {\n  distance: number?,\n  angle: number?,\n  width: number?,\n  X: number?,\n  Y: number?,\n  fov: number?,\n  shadow: number?,\n  unbound: boolean|number|nil,\n  backface: number?,\n  file_image: string?,\n  cache_name: string?,\n  back_orient: number?,\n}
+
+[Tips.PageRoll_S(シーンチェンジ)]
+effect.name=ページを丸めるように画像を変形してシーンチェンジします．
+角度=巻き取る角度を指定．0 で真上方向に，時計回りに正．
+キャッシュ名="cache:---" の "---" 部分．「裏地」で「一時キャッシュ」指定時のみ有効．
+PI=PI = {\n  angle: number?,\n  width: number?,\n  X: number?,\n  Y: number?,\n  fov: number?,\n  shadow: number?,\n  backface: string?,\n  file_image: string?,\n  cache_name: string?,\n  back_orient: string?,\n  reverse: boolean|number|nil,\n  phase: number?,\n}

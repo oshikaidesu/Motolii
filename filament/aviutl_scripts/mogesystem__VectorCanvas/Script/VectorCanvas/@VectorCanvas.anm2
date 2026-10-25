@@ -1,0 +1,656 @@
+@キャンバス
+--information:VectorCanvas v0.1.0 by もげ
+
+if _vectorcanvas == nil then
+    _vectorcanvas = {
+        width = obj.w,
+        height = obj.h,
+        canvas = {},
+    }
+end
+
+global._vectorcanvas = _vectorcanvas
+
+@パス(直線)
+--information:VectorCanvas v0.1.0 by もげ
+
+--value@pos:座標,{-200,-200,200,200}
+
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+obj.setanchor("pos", 2, "line")
+local x1 = pos[1]
+local y1 = pos[2]
+local x2 = pos[3]
+local y2 = pos[4]
+table.insert(_vectorcanvas.canvas, string.format("path: M %f %f L %f %f", x1, y1, x2, y2))
+
+@パス(2点)
+--information:VectorCanvas v0.1.0 by もげ
+
+--track@x1:X1,-100000,100000,-100,0.01,,0.01
+--track@y1:Y1,-100000,100000,0,0.01,,0.01
+--track@x2:X2,-100000,100000,100,0.01,,0.01
+--track@y2:Y2,-100000,100000,0,0.01,,0.01
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+table.insert(_vectorcanvas.canvas, string.format("path: M %f %f L %f %f", x1, y1, x2, y2))
+
+@パス(折線)
+--information:VectorCanvas v0.1.0 by もげ
+
+--track@n:点数,2,50,2,1
+--check@close:閉じる,false
+--value@pos:座標,{-200,-200,-200,200,200,200,200,-200}
+
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+-- show anchor
+local mode = close and "loop" or "line"
+obj.setanchor("pos", n, mode)
+
+-- validation
+if #pos < n*2 then
+    for i = #pos+1, n*2 do
+        pos[i] = 0
+    end
+end
+
+-- create path data
+local d = "path: M"
+for i = 1, n*2 do
+    d = d .. " " .. pos[i]
+end
+if close then
+    d = d .. "Z"
+end
+table.insert(_vectorcanvas.canvas, d)
+
+@パス(テキスト)
+--information:VectorCanvas v0.1.0 by もげ
+
+--track@x:X,-100000,100000,0,0.01,,0.01
+--track@y:Y,-100000,100000,0,0.01,,0.01
+--track@size:サイズ,0,1000,64,0.1
+--track@letter_spacing:字間,-1000,1000,0,0.1
+--track@line_spacing:行間,-1000,1000,0,0.1
+--value@font:フォント,"Yu Gothic"
+--check@bold:太字,false
+--check@italic:斜体,false
+--check@separate_paths:文字ごとに個別パス,false
+--select@align:揃え位置=0,左寄せ[上]=0,中央揃え[上]=1,右寄せ[上]=2,左寄せ[中]=3,中央揃え[中]=4,右寄せ[中]=5,左寄せ[下]=6,中央揃え[下]=7,右寄せ[下]=8
+--text@text:テキスト,Text
+
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+local function escape_text(value)
+    value = tostring(value or "")
+    value = value:gsub("\\", "\\\\")
+    value = value:gsub("\t", "\\t")
+    value = value:gsub("\n", "\\n")
+    return value
+end
+
+local d = string.format(
+    "text_path: %f\t%f\t%f\t%f\t%f\t%s\t%d\t%d\t%d\t%d\t%s",
+    x,
+    y,
+    size,
+    letter_spacing,
+    line_spacing,
+    escape_text(font),
+    bold and 1 or 0,
+    italic and 1 or 0,
+    separate_paths and 1 or 0,
+    align,
+    escape_text(text)
+)
+table.insert(_vectorcanvas.canvas, d)
+
+@パス(四角)
+--information:VectorCanvas v0.1.0 by もげ
+
+--track@x:X,-100000,100000,0,0.01,,0.01
+--track@y:Y,-100000,100000,0,0.01,,0.01
+--track@width:幅,0,100000,200,0.01,,0.01
+--track@height:高さ,0,100000,200,0.01,,0.01
+--track@pivot_x:Xピボット,0,1,0.5,0.01
+--track@pivot_y:Yピボット,0,1,0.5,0.01
+--track@radius:角丸半径,0,100000,0,0.01,,0.01
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+if width <= 0 or height <= 0 then
+    return
+end
+
+local left = x - width * pivot_x
+local top = y - height * pivot_y
+local right = left + width
+local bottom = top + height
+local r = math.max(0, math.min(radius, width * 0.5, height * 0.5))
+
+local d
+if r <= 0 then
+    d = string.format(
+        "path: M %f %f L %f %f L %f %f L %f %f Z",
+        left, top,
+        right, top,
+        right, bottom,
+        left, bottom
+    )
+else
+    d = string.format(
+        "path: M %f %f L %f %f Q %f %f %f %f L %f %f Q %f %f %f %f L %f %f Q %f %f %f %f L %f %f Q %f %f %f %f Z",
+        left + r, top,
+        right - r, top,
+        right, top, right, top + r,
+        right, bottom - r,
+        right, bottom, right - r, bottom,
+        left + r, bottom,
+        left, bottom, left, bottom - r,
+        left, top + r,
+        left, top, left + r, top
+    )
+end
+
+table.insert(_vectorcanvas.canvas, d)
+
+@パス(多角形)
+--information:VectorCanvas v0.1.0 by もげ
+
+--track@x:X,-100000,100000,0,0.01,,0.01
+--track@y:Y,-100000,100000,0,0.01,,0.01
+--track@width:幅,0,100000,200,0.01,,0.01
+--track@height:高さ,0,100000,200,0.01,,0.01
+--track@rotation:回転,-3600,3600,0,0.01,,0.01
+--track@corners:角数,3,64,5,1
+--track@midpoint:辺の中点,0,1,0,0.01
+--track@noise:ノイズ量,0,1,0,0.01
+--track@seed:シード,0,100000,0,1
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+if width <= 0 or height <= 0 then
+    return
+end
+
+local function make_rng(value)
+    local state = math.floor(value) % 2147483647
+    if state <= 0 then
+        state = 1
+    end
+    return function()
+        state = (state * 48271) % 2147483647
+        return state / 2147483647
+    end
+end
+
+local rng = make_rng(seed)
+local n = math.max(3, math.floor(corners + 0.5))
+local inset = math.max(0, math.min(midpoint, 1))
+local noise_amount = math.max(0, math.min(noise, 1))
+local rx = width * 0.5
+local ry = height * 0.5
+local angle_offset = math.rad(rotation - 90)
+local vertices = {}
+
+for i = 1, n do
+    local angle = angle_offset + (i - 1) * math.pi * 2 / n
+    local px = x + math.cos(angle) * rx
+    local py = y + math.sin(angle) * ry
+    if noise_amount > 0 then
+        local noise_angle = rng() * math.pi * 2
+        local noise_length = rng() * math.min(width, height) * 0.25 * noise_amount
+        px = px + math.cos(noise_angle) * noise_length
+        py = py + math.sin(noise_angle) * noise_length
+    end
+    vertices[i] = { px, py }
+end
+
+local points = {}
+for i = 1, n do
+    local current = vertices[i]
+    local next_point = vertices[(i % n) + 1]
+    table.insert(points, current)
+    if inset > 0 then
+        local mx = (current[1] + next_point[1]) * 0.5
+        local my = (current[2] + next_point[2]) * 0.5
+        table.insert(points, {
+            mx + (x - mx) * inset,
+            my + (y - my) * inset,
+        })
+    end
+end
+
+local d = string.format("path: M %f %f", points[1][1], points[1][2])
+for i = 2, #points do
+    d = d .. string.format(" L %f %f", points[i][1], points[i][2])
+end
+d = d .. " Z"
+table.insert(_vectorcanvas.canvas, d)
+
+@パス(円)
+--information:VectorCanvas v0.1.0 by もげ
+
+--track@x:X,-100000,100000,0,0.01,,0.01
+--track@y:Y,-100000,100000,0,0.01,,0.01
+--track@width:幅,0,100000,200,0.01,,0.01
+--track@height:高さ,0,100000,200,0.01,,0.01
+--track@pivot_x:Xピボット,0,1,0.5,0.01
+--track@pivot_y:Yピボット,0,1,0.5,0.01
+--track@start_angle:開始角,-3600,3600,0,0.01,,0.01
+--track@stop_angle:終了角,-3600,3600,360,0.01,,0.01
+--check@close_to_center:中心に閉じる,false
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+if width <= 0 or height <= 0 then
+    return
+end
+
+local rx = width * 0.5
+local ry = height * 0.5
+local cx = x + width * (0.5 - pivot_x)
+local cy = y + height * (0.5 - pivot_y)
+local sweep = stop_angle - start_angle
+if math.abs(sweep) < 0.001 then
+    return
+end
+
+local function ellipse_point(degrees)
+    local radians = math.rad(degrees)
+    return cx + math.cos(radians) * rx, cy + math.sin(radians) * ry
+end
+
+local d
+if math.abs(sweep) >= 360 then
+    local sx, sy = ellipse_point(0)
+    local mx, my = ellipse_point(180)
+    d = string.format(
+        "path: M %f %f A %f %f 0 1 1 %f %f A %f %f 0 1 1 %f %f Z",
+        sx, sy,
+        rx, ry, mx, my,
+        rx, ry, sx, sy
+    )
+else
+    local sx, sy = ellipse_point(start_angle)
+    local ex, ey = ellipse_point(stop_angle)
+    local large_arc = math.abs(sweep) > 180 and 1 or 0
+    local sweep_flag = sweep >= 0 and 1 or 0
+    d = string.format(
+        "path: M %f %f A %f %f 0 %d %d %f %f",
+        sx, sy,
+        rx, ry,
+        large_arc, sweep_flag,
+        ex, ey
+    )
+    if close_to_center then
+        d = d .. string.format(" L %f %f Z", cx, cy)
+    end
+end
+
+table.insert(_vectorcanvas.canvas, d)
+
+@パス(グリッド)
+--information:VectorCanvas v0.1.0 by もげ
+
+--track@x:X,-100000,100000,0,0.01,,0.01
+--track@y:Y,-100000,100000,0,0.01,,0.01
+--track@width:幅,0,100000,400,0.01,,0.01
+--track@height:高さ,0,100000,400,0.01,,0.01
+--track@pivot_x:Xピボット,0,1,0.5,0.01
+--track@pivot_y:Yピボット,0,1,0.5,0.01
+--track@x_divisions:X分割数,1,100,6,1
+--track@y_divisions:Y分割数,1,100,6,1
+--check@hide_edges:端の線を消す,true
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+if width <= 0 or height <= 0 then
+    return
+end
+
+local left = x - width * pivot_x
+local top = y - height * pivot_y
+local right = left + width
+local bottom = top + height
+local x_count = math.max(1, math.floor(x_divisions + 0.5))
+local y_count = math.max(1, math.floor(y_divisions + 0.5))
+local d = "path:"
+
+local x_beg = hide_edges and 1 or 0
+local x_end = hide_edges and (x_count - 1) or x_count
+for i = x_beg, x_end do
+    local px = left + width * i / x_count
+    d = d .. string.format(" M %f %f L %f %f", px, top, px, bottom)
+end
+
+local y_beg = hide_edges and 1 or 0
+local y_end = hide_edges and (y_count - 1) or y_count
+for i = y_beg, y_end do
+    local py = top + height * i / y_count
+    d = d .. string.format(" M %f %f L %f %f", left, py, right, py)
+end
+
+if d ~= "path:" then
+    table.insert(_vectorcanvas.canvas, d)
+end
+
+@パス(コマンド)
+--information:VectorCanvas v0.1.0 by もげ
+
+--text@command:パスコマンド,M -100 -100 L 100 -100 L 100 100 L -100 100 Z
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+command = tostring(command or "")
+command = command:gsub("[\r\n]+", " ")
+
+if command:match("%S") then
+    table.insert(_vectorcanvas.canvas, "path: " .. command)
+end
+
+@キャンバス効果(トランスフォーム)
+--information:VectorCanvas v0.1.0 by もげ
+
+--track@dx:X,-100000,100000,0,0.01,,0.01
+--track@dy:Y,-100000,100000,0,0.01,,0.01
+--track@scale:拡大率,0,5000,100,0.01,,1
+--track@rotation:回転角,-3600,3600,0,0.01,,0.01
+--track@pivot_x:中心X,-100000,100000,0,0.01,,0.01
+--track@pivot_y:中心Y,-100000,100000,0,0.01,,0.01
+
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+table.insert(
+    _vectorcanvas.canvas,
+    string.format(
+        "transform: translate(%f, %f) rotate(%f, %f, %f) scale(%f)",
+        dx,
+        dy,
+        rotation,
+        pivot_x,
+        pivot_y,
+        scale / 100.0
+    )
+)
+
+@パス効果(トランスフォーム)
+--information:VectorCanvas v0.1.0 by もげ
+
+--track@dx:X,-100000,100000,0,0.01,,0.01
+--track@dy:Y,-100000,100000,0,0.01,,0.01
+--track@scale:拡大率,0,5000,100,0.01,,1
+--track@rotation:回転角,-3600,3600,0,0.01,,0.01
+--track@pivot_x:中心X,-100000,100000,0,0.01,,0.01
+--track@pivot_y:中心Y,-100000,100000,0,0.01,,0.01
+
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+table.insert(
+    _vectorcanvas.canvas,
+    string.format(
+        "path_transform: %f %f %f %f %f %f",
+        dx,
+        dy,
+        scale / 100.0,
+        rotation,
+        pivot_x,
+        pivot_y
+    )
+)
+
+@パス効果(ストロークをパスに)
+--information:VectorCanvas v0.1.0 by もげ
+
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+table.insert(_vectorcanvas.canvas, "stroke_to_path")
+
+@パス効果(丸め)
+--information:VectorCanvas v0.1.0 by もげ
+
+--track@radius:半径,0,400,20,0.1
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+table.insert(_vectorcanvas.canvas, string.format("round: %f", radius))
+
+@パス効果(簡略化)
+--information:VectorCanvas v0.1.0 by もげ
+
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+table.insert(_vectorcanvas.canvas, "simplify")
+
+@パス効果(ブーリアン)
+--information:VectorCanvas v0.1.0 by もげ
+
+--select@operation:結合方法=0,OR=0,AND=1,XOR=2
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+local operations = { "OR", "AND", "XOR" }
+table.insert(_vectorcanvas.canvas, string.format("boolean: %s", operations[operation + 1]))
+
+@パス効果(ノイズ)
+--information:VectorCanvas v0.1.0 by もげ
+
+--track@segment_length:間隔,0.1,200,8,0.1
+--track@deviation:強さ,0,100,2,0.1
+--track@seed:シード,0,100000,0,1
+--track@sketch_count:スケッチ本数,1,10,1,1
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+table.insert(
+    _vectorcanvas.canvas,
+    string.format("path_noise: %f %f %d %d", segment_length, deviation, seed, sketch_count)
+)
+
+@パス複製(配列)
+--information:VectorCanvas v0.1.0 by もげ
+
+--track@count:複製数,1,500,2,1
+--track@dx:X間隔,-100000,100000,100,0.01,,0.01
+--track@dy:Y間隔,-100000,100000,0,0.01,,0.01
+--track@rotation:回転間隔,-3600,3600,0,0.01,,0.01
+--track@pivot_x:回転軸X,-100000,100000,0,0.01,,0.01
+--track@pivot_y:回転軸Y,-100000,100000,0,0.01,,0.01
+--check@separate_copies:複製ごとに個別パス,true
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+table.insert(
+    _vectorcanvas.canvas,
+    string.format(
+        "path_duplicate_array: %d %f %f %f %f %f %d",
+        count,
+        dx,
+        dy,
+        rotation,
+        pivot_x,
+        pivot_y,
+        separate_copies and 1 or 0
+    )
+)
+
+@パス複製(グリッド)
+--information:VectorCanvas v0.1.0 by もげ
+
+--track@width:幅,-100000,100000,400,0.01,,0.01
+--track@height:高さ,-100000,100000,400,0.01,,0.01
+--track@x_count:X分割数,1,100,3,1
+--track@y_count:Y分割数,1,100,3,1
+--select@order:並び順=0,行方向=0,列方向=1
+--check@separate_copies:複製ごとに個別パス,true
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+table.insert(
+    _vectorcanvas.canvas,
+    string.format(
+        "path_duplicate_grid: %f %f %d %d %d %d",
+        width,
+        height,
+        x_count,
+        y_count,
+        order,
+        separate_copies and 1 or 0
+    )
+)
+
+@パス複製(ランダム)
+--information:VectorCanvas v0.1.0 by もげ
+
+--track@count:複製数,1,500,10,1
+--track@spread_x:X方向の広がり,0,100000,400,0.01,,0.01
+--track@spread_y:Y方向の広がり,0,100000,400,0.01,,0.01
+--track@seed:シード,0,100000,0,1
+--check@separate_copies:複製ごとに個別パス,true
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+table.insert(
+    _vectorcanvas.canvas,
+    string.format(
+        "path_duplicate_random: %d %f %f %d %d",
+        count,
+        spread_x,
+        spread_y,
+        seed,
+        separate_copies and 1 or 0
+    )
+)
+
+@ストローク
+--information:VectorCanvas v0.1.0 by もげ
+
+--color@stroke_color:色,0xffffff
+--track@opacity:透明度,0,100,100,0.1,,1
+--track@linewidth:太さ,0,400,5,0.1
+--group:破線
+
+--check@dashed:破線にする,false
+--value@dashed_intervals:破線パターン,{10, 10}
+--track@dashed_phase:破線のずれ,-1000,1000,0,0.1
+--group:形状制御
+
+--select@linecap:端の形状=0,切断=0,四角=1,丸める=2
+--select@linejoin:角の形状=0,尖らせる=0,丸める=1,ベベル=2
+--value@miterlimit:角比率,4
+--group:トリム
+
+--track@trim_beg:開始位置,0,100,0,0.01,,1
+--track@trim_end:終了位置,0,100,100,0.01,,1
+--track@trim_overlap:オーバーラップ,0,100,100,0.01,,1
+
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+local intervals = "{}"
+if dashed then
+    intervals = "{"
+    for i = 1, #dashed_intervals do
+        intervals = intervals .. " " .. dashed_intervals[i]
+    end
+    intervals = intervals .. " }"
+end
+
+local d = string.format(
+    "stroke: #%06X %f %d %s %f %d %d %f %f %f %f %f",
+    stroke_color,
+    linewidth,
+    dashed and 1 or 0,
+    intervals,
+    dashed_phase,
+    linecap,
+    linejoin,
+    miterlimit,
+    trim_beg / 100.0,
+    trim_end / 100.0,
+    trim_overlap / 100.0,
+    opacity / 100.0
+)
+table.insert(_vectorcanvas.canvas, d)
+
+@フィル
+--information:VectorCanvas v0.1.0 by もげ
+
+--color@fill_color:色,0xffffff
+
+--track@opacity:透明度,0,100,100,0.1,,1
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+table.insert(_vectorcanvas.canvas, string.format("fill: #%06X %f", fill_color, opacity / 100.0))
+
+@レンダー
+--information:VectorCanvas v0.1.0 by もげ
+
+if _vectorcanvas == nil then
+    print("@error", "ベクターキャンバスが作成されていません。「キャンバス@VectorCanvas」を追加してください。")
+    return
+end
+
+local w = _vectorcanvas.width
+local h = _vectorcanvas.height
+local canvas = table.concat(_vectorcanvas.canvas, "\n")
+
+local backend = obj.module("vectorcanvas")
+local data, owner = backend.render(w, h, canvas)
+obj.putpixeldata("object", data, w, h)
+
+_vectorcanvas = nil
+

@@ -1,0 +1,6 @@
+aviutl2_script_CircularArrangementMask by nea-c
+licence: MIT
+from: https://github.com/nea-c/aviutl2_script_CircularArrangementMask (branch master, commit 31a6f848fbd1) (commit 31a6f848fbd1)
+page: https://github.com/nea-c/aviutl2_script_CircularArrangementMask
+left out: 1 other (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

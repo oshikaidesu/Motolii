@@ -1,0 +1,16 @@
+; Tooltip definitions
+;===============================================================
+; Target: MovingMosaic_S (https://github.com/sigma-axis/aviutl2_script_MovingMosaic_S)
+; Target Version: v1.01
+; Language: Default
+
+[Language]
+Information=Default tooltips for MovingMosaic_S v1.01 (日本語)
+
+;===============================================================
+
+[Tips.MovingMosaic_S]
+effect.name=マス内のランダムな位置から色を拾うことで動いているように見えるモザイク．
+シード=0 以上だと同じシードでも別オブジェクトだと別の乱数．\n負だと同じシードなら別オブジェクトでも同じ乱数．
+縦横比=正で縦長 / 負で横長
+PI=PI = {\n  size: number?,\n  seed: number?,\n  convex: boolean|number|nil,\n  aspect: number?,\n  X: number?,\n  Y: number?,\n}

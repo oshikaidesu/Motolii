@@ -1,0 +1,35 @@
+--information:ブラウザ表示 v0.1.0 by HexBrowns
+--label:HexScript
+--group:ブラウザ表示
+--track@width:幅,1,4000,1920,1
+--track@height:高さ,1,4000,1080,1
+--file@content:コンテンツ
+--text@param:渡す文字列,
+--check@dev:DevTools,0
+--group
+
+-- 任意のコンテンツ（index.html を置いたフォルダか .abc）を表示する汎用オブジェクト。
+-- コンテンツの作り方は原作 aviutl_browser と同じ（AviUtlBrowser.registerRenderer）。
+-- 「コンテンツ」で index.html を選ぶとそのフォルダを、.abc を選ぶとその zip を読む。
+-- 「渡す文字列」は JavaScript の params.param に入る。
+
+if content == nil or content == "" then
+  return
+end
+
+local max_w, max_h = obj.getinfo("image_max")
+local w = math.min(max_w, width)
+local h = math.min(max_h, height)
+
+local opt = { tabid = "", param = param, dev = (dev == 1) }
+local lower = content:lower()
+if lower:sub(-4) == ".abc" or lower:sub(-4) == ".zip" then
+  opt.abc = content
+else
+  -- index.html（またはフォルダ内の任意のファイル）を選んだときは、そのフォルダを読む
+  opt.dir = content:match("^(.*)[/\\][^/\\]*$") or content
+end
+
+obj.setoption("drawtarget", "tempbuffer", w, h)
+obj.load("tempbuffer")
+require("browser").execute(opt)

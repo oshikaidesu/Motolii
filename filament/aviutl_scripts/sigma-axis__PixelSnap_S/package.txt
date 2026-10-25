@@ -1,0 +1,13 @@
+# PixelSnap_S AviUtl ExEdit2 ピクセル位置合わせスクリプト
+
+画像が半ピクセルだけズレるなどの影響でぼやけてしまうのを防ぐスクリプトです．小数点以下の座標調整をせずともピクセルパーフェクトな描画になってくれます．
+
+公開ページ:
+https://github.com/sigma-axis/aviutl2_script_PixelSnap_S
+
+紹介動画:
+https://www.nicovideo.jp/watch/sm45452975
+
+お願い:
+ニコニコ動画での親作品登録をしていただけると励みになります．
+作品 ID: sm45452975

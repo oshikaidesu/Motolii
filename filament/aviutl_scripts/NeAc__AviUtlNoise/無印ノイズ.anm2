@@ -1,0 +1,415 @@
+--label:加工
+--track@strength:強さ,0,200,100,0.1
+--track@vx:速度X,-800,800,0,0.1
+--track@vy:速度Y,-800,800,0,0.1
+--track@vz:変化速度,0,800,0,0.1
+--track@period_x:周期X,0,100,1,0.01
+--track@period_y:周期Y,0,100,1,0.01
+--track@threshold:しきい値,0,100,0,0.1
+--track@seed:シード,0,100,0,1
+--select@mode:合成モード=0,アルファ値と乗算=0,明るさと乗算=1
+--select@noise_type:ノイズの種類=1,Type1=1,Type2=2,Type3=3,Type4=4,Type5=5,Type6=6
+--check@virtual_buffer:仮想バッファ,false
+
+
+--[[pixelshader@aviutl_noise:
+Texture2D source_tex : register(t0);
+Texture2D table_tex  : register(t1);
+
+cbuffer Params : register(b0)
+{
+    float4 param0; // periodX_Q8, periodY_Q8, offsetX_Q8, offsetY_Q8
+    float4 param1; // offsetZ_Q8, threshold_Q12, strength_Q12, seed
+    float4 param2; // width, height, mode, noise_type
+    float4 param3; // threshold_scale, unused, unused, unused
+};
+
+int byte_from_alpha(float v)
+{
+    return (int)floor(v * 255.0 + 0.5);
+}
+
+int decode_u16(int2 p)
+{
+    int px = p.x * 2;
+    int lo = byte_from_alpha(table_tex.Load(int3(px,     p.y, 0)).a);
+    int hi = byte_from_alpha(table_tex.Load(int3(px + 1, p.y, 0)).a);
+    return lo | (hi << 8);
+}
+
+int aviutl_table_flat(int index)
+{
+    index &= 0xffff;
+    int2 p = int2(index & 255, (index >> 8) & 255);
+    return decode_u16(p) - 2048;
+}
+
+int aviutl_table_xy(int x, int y)
+{
+    return decode_u16(int2(x & 255, y & 255)) - 2048;
+}
+
+int aviutl_fade(int frac8)
+{
+    // Row 256: ExEdit 0.92 cosine interpolation table (Q12).
+    return decode_u16(int2(frac8 & 255, 256));
+}
+
+// Type1/2/3/5/6 use the old 256x256 signed value table.
+int aviutl_base_noise(int x, int y, int z)
+{
+    int fx = x & 255;
+    int fy = y & 255;
+    int fz = z & 255;
+
+    int ix = x >> 8;
+    int iy = y >> 8;
+    int iz = z >> 8;
+
+    int shift0 = iz * 79;
+    int shift1 = shift0 + 79;
+    int wx = aviutl_fade(fx);
+
+    int x00 = (ix + shift0) & 255;
+    int y00 = (iy + shift0) & 255;
+    int x01 = (x00 + 1) & 255;
+    int y01 = (y00 + 1) & 255;
+
+    int a0 = aviutl_table_xy(x00, y00);
+    int b0 = aviutl_table_xy(x01, y00);
+    int c0 = aviutl_table_xy(x00, y01);
+    int d0 = aviutl_table_xy(x01, y01);
+
+    int top0 = b0 + (((a0 - b0) * wx) >> 12);
+    int bot0 = d0 + (((c0 - d0) * wx) >> 12);
+    int n0 = top0 + (((bot0 - top0) * fy) >> 8);
+
+    int x10 = (ix + shift1) & 255;
+    int y10 = (iy + shift1) & 255;
+    int x11 = (x10 + 1) & 255;
+    int y11 = (y10 + 1) & 255;
+
+    int a1 = aviutl_table_xy(x10, y10);
+    int b1 = aviutl_table_xy(x11, y10);
+    int c1 = aviutl_table_xy(x10, y11);
+    int d1 = aviutl_table_xy(x11, y11);
+
+    int top1 = b1 + (((a1 - b1) * wx) >> 12);
+    int bot1 = d1 + (((c1 - d1) * wx) >> 12);
+    int n1 = top1 + (((bot1 - top1) * fy) >> 8);
+
+    int wz = aviutl_fade(fz);
+    return n1 + (((n0 - n1) * wz) >> 12);
+}
+
+int aviutl_fbm(int x, int y, int z)
+{
+    int value = 0;
+    [unroll]
+    for (int i = 0; i < 6; i++)
+    {
+        value = (value >> 1) + aviutl_base_noise(x, y, z);
+        x = (x >> 1) + 7;
+        y = (y >> 1) + 17;
+        z = (z >> 1) + 31;
+    }
+    return value;
+}
+
+int aviutl_turbulence(int x, int y, int z)
+{
+    int value = 0;
+    [unroll]
+    for (int i = 0; i < 6; i++)
+    {
+        int n = aviutl_base_noise(x, y, z);
+        if (n < 0) n = -n;
+        value = (value >> 1) + n;
+        x = (x >> 1) + 7;
+        y = (y >> 1) + 17;
+        z = (z >> 1) + 31;
+    }
+    return value;
+}
+
+int apply_threshold_scale(int v)
+{
+    if (v < 0) v = 0;
+    int threshold_scale = (int)param3.x;
+    v = (v * threshold_scale) >> 12;
+    if (v > 4096) v = 4096;
+    return v;
+}
+
+int aviutl_type1(int x, int y, int z, int threshold_q12)
+{
+    int value = aviutl_fbm(x, y, z);
+    int v = value + 2048 - threshold_q12;
+    return apply_threshold_scale(v);
+}
+
+int aviutl_type2(int x, int y, int z, int threshold_q12)
+{
+    int value = aviutl_turbulence(x, y, z);
+    int v = 4096 - value * 2 - threshold_q12;
+    return apply_threshold_scale(v);
+}
+
+int aviutl_type3(int x, int y, int z, int threshold_q12)
+{
+    int value = aviutl_turbulence(x, y, z);
+    int v = value * 2 - threshold_q12;
+    return apply_threshold_scale(v);
+}
+
+// Type4 uses a separate integer hash rather than the 256x256 signed table.
+// D3DCompile treats signed integer / and % as warnings, and AviUtl2
+// compiles shaders with warnings-as-errors. Do the signed semantics through
+// unsigned division so negative coordinates still match x86 IDIV (truncate to 0).
+uint aviutl_abs_u32(int v)
+{
+    uint bits = asuint(v);
+    return (v < 0) ? (~bits + 1u) : bits;
+}
+
+int aviutl_sdiv_const(int v, uint d)
+{
+    uint q = aviutl_abs_u32(v) / d;
+    int qi = (int)q;
+    return (v < 0) ? -qi : qi;
+}
+
+int aviutl_smod_const(int v, uint d)
+{
+    int q = aviutl_sdiv_const(v, d);
+    return v - q * (int)d;
+}
+
+int aviutl_hash12(int s)
+{
+    int h73 = s * 73;
+    int t = aviutl_smod_const(s, 7213u) + s + (h73 ^ 0x137bd137);
+    int h = t ^ ((t << 7) ^ (t >> 2));
+    return (h ^ aviutl_sdiv_const(h, 17u)) & 4095;
+}
+
+int aviutl_hash_plane(int ix, int iy, int shift, int fx, int fy)
+{
+    int base = ((iy + shift) << 8) + (ix + shift);
+
+    int a = aviutl_hash12(base);
+    int b = aviutl_hash12(base + 1);
+    int c = aviutl_hash12(base + 256);
+    int d = aviutl_hash12(base + 257);
+
+    int wx = aviutl_fade(fx);
+    int top = b + (((a - b) * wx) >> 12);
+    int bot = d + (((c - d) * wx) >> 12);
+    return top + (((bot - top) * fy) >> 8);
+}
+
+int aviutl_hash_noise(int x, int y, int z)
+{
+    int fx = x & 255;
+    int fy = y & 255;
+    int fz = z & 255;
+
+    int ix = x >> 8;
+    int iy = y >> 8;
+    int iz = z >> 8;
+
+    int shift0 = iz * 79;
+    int n0 = aviutl_hash_plane(ix, iy, shift0, fx, fy);
+    int n1 = aviutl_hash_plane(ix, iy, shift0 + 79, fx, fy);
+
+    int wz = aviutl_fade(fz);
+    return n1 + (((n0 - n1) * wz) >> 12);
+}
+
+int aviutl_type4(int x, int y, int z, int threshold_q12)
+{
+    int v = aviutl_hash_noise(x, y, z * 10) - threshold_q12;
+    if (v < 0) v = 0;
+    return v;
+}
+
+int aviutl_type5(int x, int y, int z, int threshold_q12)
+{
+    int value = aviutl_turbulence(x, y, z);
+
+    // ExEdit 0.92 uses x87 sin here. HLSL float reproduces the formula,
+    // though an extremely rare +/-1 integer difference may occur at a boundary.
+    const float PI_OVER_1024 = 0.0030679615757712823;
+    float phase = ((float)(2048 - value) + (float)x * 0.0625) * PI_OVER_1024;
+    int wave = (int)(sin(phase) * -2048.0);
+
+    int v = 2048 - wave - threshold_q12;
+    return apply_threshold_scale(v);
+}
+
+int aviutl_type6(int x, int y, int z, int threshold_q12)
+{
+    int value = aviutl_fbm(x, y, z);
+
+    const float TWO_PI = 6.283185307179586;
+    float s = sin((float)value * (1.0 / 1024.0) * TWO_PI);
+    int wave = (int)(sin(s * TWO_PI) * -2048.0);
+
+    int v = 2048 - wave - threshold_q12;
+    return apply_threshold_scale(v);
+}
+
+int aviutl_noise_value(int type, int x, int y, int z, int threshold_q12)
+{
+    int result = aviutl_type1(x, y, z, threshold_q12);
+    if (type == 2) result = aviutl_type2(x, y, z, threshold_q12);
+    else if (type == 3) result = aviutl_type3(x, y, z, threshold_q12);
+    else if (type == 4) result = aviutl_type4(x, y, z, threshold_q12);
+    else if (type == 5) result = aviutl_type5(x, y, z, threshold_q12);
+    else if (type == 6) result = aviutl_type6(x, y, z, threshold_q12);
+    return result;
+}
+
+float4 aviutl_noise(float4 pos : SV_Position) : SV_Target
+{
+    int period_x_q8 = (int)param0.x;
+    int period_y_q8 = (int)param0.y;
+    int offset_x_q8 = (int)param0.z;
+    int offset_y_q8 = (int)param0.w;
+
+    int offset_z_q8   = (int)param1.x;
+    int threshold_q12 = (int)param1.y;
+    int strength_q12  = (int)param1.z;
+    int seed           = (int)param1.w;
+
+    int width      = (int)param2.x;
+    int height     = (int)param2.y;
+    int mode       = (int)param2.z;
+    int noise_type = (int)param2.w;
+
+    int2 pixel = int2((int)floor(pos.x), (int)floor(pos.y));
+    float4 col = source_tex.Load(int3(pixel, 0));
+
+    int x = pixel.x * period_x_q8 - ((width  * period_x_q8) >> 1) + offset_x_q8;
+    int y = pixel.y * period_y_q8 - ((height * period_y_q8) >> 1) + offset_y_q8;
+    int z = offset_z_q8;
+
+    if (seed != 0)
+    {
+        x += aviutl_table_flat(seed    ) << 8;
+        y += aviutl_table_flat(seed + 1) << 8;
+        z += aviutl_table_flat(seed + 2) << 8;
+    }
+
+    int nq12 = aviutl_noise_value(noise_type, x, y, z, threshold_q12);
+
+    // Old ExEdit strength curve:
+    // 0..100%   original -> original*noise
+    // 100..200% original*noise -> 0
+    int factor_q12;
+    if (strength_q12 <= 4096)
+    {
+        factor_q12 = 4096 + (((nq12 - 4096) * strength_q12) >> 12);
+    }
+    else
+    {
+        factor_q12 = (nq12 * (8192 - strength_q12)) >> 12;
+    }
+
+    float factor = (float)factor_q12 / 4096.0;
+
+    if (mode == 0)
+    {
+        // AviUtl2 applies alpha masks through obj.pixelshader(..., "mask").
+        // In that blend mode RGB is ignored and the returned alpha is
+        // multiplied into the destination alpha.
+        return float4(0.0, 0.0, 0.0, saturate(factor));
+    }
+
+    // ExEdit 0.92 applies this to Y in YCA; AviUtl2 side is RGB multiplication.
+    col.rgb *= factor;
+    return col;
+}
+]]
+
+local function trunc0(v)
+    if v < 0 then
+        return math.ceil(v)
+    else
+        return math.floor(v)
+    end
+end
+
+local period_x_q8 = trunc0(period_x * 256.0)
+local period_y_q8 = trunc0(period_y * 256.0)
+
+-- Constant-speed compatibility path. ExEdit 0.92 internally integrates
+-- animated speed tracks per frame; that exact animated-track integration is
+-- separate from the noise formulas themselves.
+local offset_x_q8 = trunc0(vx * obj.frame * 256.0)
+local offset_y_q8 = trunc0(vy * obj.frame * 256.0)
+local offset_z_q8 = trunc0(vz * obj.frame * 25.6)
+
+local threshold_q12 = trunc0(threshold * 4096.0 / 100.0)
+if threshold_q12 >= 4096 then
+    threshold_q12 = 4095
+elseif threshold_q12 < 0 then
+    threshold_q12 = 0
+end
+
+-- ExEdit computes this once from the Q12 threshold. Keeping the division on
+-- the Lua side also avoids D3DCompile's signed-integer-division warning.
+local threshold_scale = math.floor(16777216 / (4096 - threshold_q12))
+
+local strength_q12 = trunc0(strength * 4096.0 / 100.0)
+if strength_q12 < 0 then
+    strength_q12 = 0
+elseif strength_q12 > 8192 then
+    strength_q12 = 8192
+end
+
+local seed_i = trunc0(seed)
+local type_i = trunc0(noise_type)
+if type_i < 1 then
+    type_i = 1
+elseif type_i > 6 then
+    type_i = 6
+end
+
+obj.copybuffer("cache:aviutl_noise_table", "image:aviutl_noise_table.png")
+
+local target = "object"
+if virtual_buffer then
+    -- Ensure tempbuffer exists with the same size as the current object.
+    -- The shader reads from object and writes the processed result only to
+    -- tempbuffer, leaving the current object itself untouched.
+    obj.copybuffer("tempbuffer", "object")
+    target = "tempbuffer"
+end
+
+local constants = {
+    period_x_q8, period_y_q8, offset_x_q8, offset_y_q8,
+    offset_z_q8, threshold_q12, strength_q12, seed_i,
+    obj.w, obj.h, mode, type_i,
+    threshold_scale, 0, 0, 0
+}
+
+if mode == 0 then
+    -- AviUtl2's documented alpha-only multiplication path.
+    -- RGB from the shader is ignored and the shader alpha is multiplied
+    -- into the current target alpha.
+    obj.pixelshader(
+        "aviutl_noise",
+        target,
+        {"object", "cache:aviutl_noise_table"},
+        constants,
+        "mask"
+    )
+else
+    obj.pixelshader(
+        "aviutl_noise",
+        target,
+        {"object", "cache:aviutl_noise_table"},
+        constants
+    )
+end

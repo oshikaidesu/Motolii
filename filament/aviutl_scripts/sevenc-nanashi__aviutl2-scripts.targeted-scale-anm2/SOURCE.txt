@@ -1,0 +1,6 @@
+目標指定拡大縮小.anm2 by Nanashi.
+licence: MIT
+from: https://aviutl2-scripts-download.sevenc7c.workers.dev/%E7%9B%AE%E6%A8%99%E6%8C%87%E5%AE%9A%E6%8B%A1%E5%A4%A7%E7%B8%AE%E5%B0%8F.anm2?type=au2pkg (commit 5b705635a3d1)
+page: https://github.com/sevenc-nanashi/aviutl2-scripts/blob/main/scripts/%E7%9B%AE%E6%A8%99%E6%8C%87%E5%AE%9A%E6%8B%A1%E5%A4%A7%E7%B8%AE%E5%B0%8F/README.md
+licence/README from: https://github.com/sevenc-nanashi/aviutl2-scripts at 5b705635a3d14263c9d3f0cb67572e7754c1f247
+Put here unchanged for Motolii (filament/aviutl_scripts).

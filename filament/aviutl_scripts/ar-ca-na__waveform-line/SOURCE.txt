@@ -1,0 +1,5 @@
+波形ライン by arcana
+licence: MIT
+from: https://github.com/ar-ca-na/aviutl2-waveform-line/releases/download/v1.1.0/aviutl2-waveform-line-v1.1.0.zip (tag v1.1.0, commit d3f55f3935b6)
+page: https://github.com/ar-ca-na/aviutl2-waveform-line
+Put here unchanged for Motolii (filament/aviutl_scripts).

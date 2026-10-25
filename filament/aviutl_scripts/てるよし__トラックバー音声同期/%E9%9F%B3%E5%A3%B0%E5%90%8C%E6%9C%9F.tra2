@@ -1,0 +1,11 @@
+--twopoint
+--param:5000
+--information:音声同期 v1.1 by teruyoshi | 音量に合わせてトラックバーの値を開始値から終了値の間で動かします
+-- paramは最大音量(この音量で終了値になる)。理論上の最大は32767だが、実際の音はそこまで届かないので初期値は5000
+local st = obj.getpoint(0)
+local ed = obj.getpoint(1)
+local maxLoudness = obj.getpoint("param")
+local loudness = {}
+obj.getaudio(loudness, "audiobuffer", "spectrum", 1)
+local ratio = math.max(math.min(loudness[1] / maxLoudness, 1), 0) -- 0～1に正規化
+return st + (ed - st) * ratio

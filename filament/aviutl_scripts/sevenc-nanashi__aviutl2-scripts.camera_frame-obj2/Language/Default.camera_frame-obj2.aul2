@@ -1,0 +1,5 @@
+[Language]
+Information=Default Language for sevenc-nanashi/aviutl2-scripts / https://github.com/sevenc-nanashi/aviutl2-scripts
+[Tips.カメラフレーム]
+effect.name=カメラフレームっぽい図形を描画するスクリプト。\n
+PI=- `width`：幅（ピクセル単位）\n- `height`：高さ（ピクセル単位）\n- `line_length`：線の長さ（ピクセル単位）\n- `line_thickness`：線の太さ（ピクセル単位）\n- `line_color`：線の色（`0xRRGGBB`）\n- `size_specifier`：サイズ指定（1=余白指定、2=絶対指定）\n- `debug`：デバッグモード\n

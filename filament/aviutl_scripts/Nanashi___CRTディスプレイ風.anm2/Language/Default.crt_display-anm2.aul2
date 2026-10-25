@@ -1,0 +1,5 @@
+[Language]
+Information=Default Language for sevenc-nanashi/aviutl2-scripts / https://github.com/sevenc-nanashi/aviutl2-scripts
+[Tips.CRTディスプレイ風]
+effect.name=CRTディスプレイ風のエフェクト。\n\n# 謝辞\n\nこのスクリプトは[CRTディスプレイの再現 - ideoaves](https://ideoaves.github.io/blog/2025-12-10.html)を参考にして作成されました。\nまた、hazuqu様から移植の許可をいただきました。ありがとうございます。\n
+PI=- `horizontal_blur`：水平ブラー\n- `rgb_percent`：RGB効果の強さ（%）\n- `pixel_size`：ピクセルサイズ\n- `decay`：減衰\n- `slowmotion`：スローモーション\n- `use_progressive`：プログレッシブ走査を使用するか\n

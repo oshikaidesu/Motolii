@@ -1,0 +1,6 @@
+twinkle_sl by セイル
+licence: MIT
+from: https://github.com/seilor0/twinkle_sl/releases/download/v1.2.1/%40twinkle_sl.obj2 (tag v1.2.1, commit 6c0b5e2f47b5)
+page: https://github.com/seilor0/twinkle_sl
+licence/README from: https://github.com/seilor0/twinkle_sl at v1.2.1
+Put here unchanged for Motolii (filament/aviutl_scripts).

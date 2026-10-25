@@ -1,0 +1,371 @@
+--information:タイムワープ_H v1.10 by HexBrowns
+--label:HexScript
+--object
+
+--file@file:動画ファイル
+
+--group:時間
+--select@timing:時間の決め方=0,速度=0,再生位置=1
+--track@speed:速度,-1000,1000,50,0.01
+--hide@speed:timing==1
+--track@start:開始位置,0,100000,0,0.001
+--hide@start:timing==1
+--track@position:再生位置,0,100000,0,0.001
+--hide@position:timing==0
+--check@loop:ループ,0
+--group
+
+--group:補間
+--select@method:補間の方法=2,フレームの繰り返し=0,フレームの混合=1,ピクセルモーション=2
+--select@flow_res:動きの解像度=1,等倍=0,1/2=1,1/4=2
+--hide@flow_res:method<2
+--track@flow_smooth:動きの滑らかさ,0,20,2,0.1
+--hide@flow_smooth:method<2
+--check@hide_break:破綻を混合で隠す,1
+--hide@hide_break:method<2
+--check@show_flow:動きを表示,0
+--hide@show_flow:method<2
+--group
+
+--[[
+After Effects の「タイムワープ」に当たるカスタムオブジェクト。動画ファイルを好きな速さ・好きな再生位置で再生し、
+フレームの間の時刻は 2 つのフレームから補間して作る（スローモーション）。
+
+- 時刻: 速度なら 開始位置 + オブジェクトの時間 x 速度、再生位置ならその値（移動方法で動かして時間を自由に変える）
+- フレームの繰り返し: 時刻の直前のフレームをそのまま出す
+- フレームの混合: 前後のフレームを時刻の割合で混ぜる
+- ピクセルモーション: 前後のフレームの動き（オプティカルフロー）を求め、前のフレームを 割合 x 動き だけ進め、
+  後のフレームを (1 - 割合) x 動き だけ戻して混ぜる。動きは明るさの縮小階層を粗い段から Lucas-Kanade 法で求める
+  （窓 5x5、各段 3 回）。動きの解像度で計算の細かさを落とせる（1/2 で 4 倍速い）。
+  前後で色が合わない所（隠れていた物が出てくる所など）は、破綻を混合で隠す で混合に切り替える
+- フレーム番号は 0 始まり（obj.load("movie.frame")）。前のフレームを最後に読み込むので、オブジェクトの大きさは動画の大きさ
+- v1.10: 前後のフレームと求めた動きをオブジェクトごとのキャッシュに残し、同じ組（スローで続く数枚、モーションブラーの
+  参照フレーム）では読み込みと動きの計算を飛ばす。順に再生して次の組に進んだときは、前の組の後のフレームを使い、読むのは 1 枚。
+  何を残したかは global に覚え、キャッシュが枠を超えて消えていたら（戻した大きさが違えば）求め直す。絵は v1.00 と同じ
+
+机上検証: AI/scripts/タイムワープ_H/verify_timewarp.py
+]]
+
+--[[pixelshader@ps_twp_mix:
+cbuffer P : register(b0) {
+    float2 size;    // 0-1 大きさ（px）
+    float alpha;    // 2   後のフレームの割合（0..1）
+};
+Texture2D fa : register(t0);
+Texture2D fb : register(t1);
+SamplerState smp : register(s0);
+
+float4 ps_twp_mix(float4 pos : SV_Position) : SV_Target {
+    float2 uv = pos.xy / size;
+    return lerp(fa.SampleLevel(smp, uv, 0), fb.SampleLevel(smp, uv, 0), alpha);
+}
+]]
+
+--[[pixelshader@ps_twp_lum:
+cbuffer P : register(b0) {
+    float2 size;    // 0-1 出力（動きの解像度）の大きさ
+    float2 src;     // 2-3 元の大きさ
+    float step;     // 4   縮める倍率（1 / 2 / 4）
+};
+Texture2D fa : register(t0);
+Texture2D fb : register(t1);
+SamplerState smp : register(s0);
+
+// 前のフレームの明るさを r、後のフレームの明るさを g に入れる。縮めるときは step x step の範囲の平均
+float4 ps_twp_lum(float4 pos : SV_Position) : SV_Target {
+    float2 c = pos.xy * step;
+    float2 o = float2(0.0, 0.0);
+    if (step > 3.0) o = float2(1.0, 1.0);
+    float3 w = float3(0.2126, 0.7152, 0.0722);
+    float la = 0.25 * (dot(fa.SampleLevel(smp, (c + float2(-o.x, -o.y)) / src, 0).rgb, w)
+                     + dot(fa.SampleLevel(smp, (c + float2( o.x, -o.y)) / src, 0).rgb, w)
+                     + dot(fa.SampleLevel(smp, (c + float2(-o.x,  o.y)) / src, 0).rgb, w)
+                     + dot(fa.SampleLevel(smp, (c + float2( o.x,  o.y)) / src, 0).rgb, w));
+    float lb = 0.25 * (dot(fb.SampleLevel(smp, (c + float2(-o.x, -o.y)) / src, 0).rgb, w)
+                     + dot(fb.SampleLevel(smp, (c + float2( o.x, -o.y)) / src, 0).rgb, w)
+                     + dot(fb.SampleLevel(smp, (c + float2(-o.x,  o.y)) / src, 0).rgb, w)
+                     + dot(fb.SampleLevel(smp, (c + float2( o.x,  o.y)) / src, 0).rgb, w));
+    return float4(la, lb, 0.0, 1.0);
+}
+]]
+
+--[[pixelshader@ps_twp_down:
+cbuffer P : register(b0) {
+    float2 size;    // 0-1 出力の大きさ
+    float2 src;     // 2-3 1 段細かい方の大きさ
+};
+Texture2D tex : register(t0);
+SamplerState smp : register(s0);
+
+// 半分に縮める（2x2 の境目をバイリニアで読むと 4 画素の平均になる）
+float4 ps_twp_down(float4 pos : SV_Position) : SV_Target {
+    return tex.SampleLevel(smp, (pos.xy * 2.0) / src, 0);
+}
+]]
+
+--[[pixelshader@ps_twp_up:
+cbuffer P : register(b0) {
+    float2 size;    // 0-1 出力（細かい段）の大きさ
+};
+Texture2D flow : register(t0);
+SamplerState smp : register(s0);
+
+// 1 段粗い段の動きを広げて 2 倍にする
+float4 ps_twp_up(float4 pos : SV_Position) : SV_Target {
+    float2 d = flow.SampleLevel(smp, pos.xy / size, 0).rg * 2.0;
+    return float4(d, 0.0, 1.0);
+}
+]]
+
+--[[pixelshader@ps_twp_lk:
+cbuffer P : register(b0) {
+    float2 size;    // 0-1 この段の大きさ
+};
+Texture2D lum : register(t0);    // r = 前のフレーム、g = 後のフレーム
+Texture2D flow : register(t1);   // rg = 今の動き（px）
+SamplerState smp : register(s0);
+
+// Lucas-Kanade 法の 1 回分。前のフレームの点 q が後のフレームの q + d にある、とした残差から d を直す
+float4 ps_twp_lk(float4 pos : SV_Position) : SV_Target {
+    float2 d = flow.SampleLevel(smp, pos.xy / size, 0).rg;
+    float gxx = 0.0;
+    float gxy = 0.0;
+    float gyy = 0.0;
+    float bx = 0.0;
+    float by = 0.0;
+    [loop] for (int y = -2; y <= 2; y++) {
+        [loop] for (int x = -2; x <= 2; x++) {
+            float2 q = pos.xy + float2(x, y);
+            float ix = 0.5 * (lum.SampleLevel(smp, (q + float2(1.0, 0.0)) / size, 0).r
+                            - lum.SampleLevel(smp, (q - float2(1.0, 0.0)) / size, 0).r);
+            float iy = 0.5 * (lum.SampleLevel(smp, (q + float2(0.0, 1.0)) / size, 0).r
+                            - lum.SampleLevel(smp, (q - float2(0.0, 1.0)) / size, 0).r);
+            float it = lum.SampleLevel(smp, (q + d) / size, 0).g - lum.SampleLevel(smp, q / size, 0).r;
+            gxx += ix * ix;
+            gxy += ix * iy;
+            gyy += iy * iy;
+            bx += ix * it;
+            by += iy * it;
+        }
+    }
+    // 平らな所で解が暴れないように、対角に小さな値を足す
+    gxx += 1e-4;
+    gyy += 1e-4;
+    float det = gxx * gyy - gxy * gxy;
+    float2 dd = -float2(gyy * bx - gxy * by, gxx * by - gxy * bx) / det;
+    float l = length(dd);
+    if (l > 2.0) dd *= 2.0 / l;   // 1 回で 2px より大きくは直さない
+    return float4(d + dd, 0.0, 1.0);
+}
+]]
+
+--[[pixelshader@ps_twp_gauss:
+cbuffer P : register(b0) {
+    float2 size;    // 0-1 大きさ
+    float2 dir;     // 2-3 (1, 0) で横、(0, 1) で縦
+    float sigma;    // 4   標準偏差（px）
+};
+Texture2D src : register(t0);
+SamplerState smp : register(s0);
+
+float4 ps_twp_gauss(float4 pos : SV_Position) : SV_Target {
+    float n = ceil(sigma * 3.0);
+    float4 acc = float4(0.0, 0.0, 0.0, 0.0);
+    float wsum = 0.0;
+    [loop] for (float i = -n; i <= n; i += 1.0) {
+        float w = exp(-0.5 * i * i / (sigma * sigma));
+        acc += w * src.SampleLevel(smp, (pos.xy + dir * i) / size, 0);
+        wsum += w;
+    }
+    return acc / wsum;
+}
+]]
+
+--[[pixelshader@ps_twp_warp:
+cbuffer P : register(b0) {
+    float2 size;       // 0-1 大きさ（動画）
+    float2 fsize;      // 2-3 動きの大きさ（動きの解像度）
+    float alpha;       // 4   後のフレームの割合（0..1）
+    float step;        // 5   動きの解像度の倍率（1 / 2 / 4）
+    float hide_break;  // 6   1 で、前後の色が合わない所を混合にする
+    float show_flow;   // 7   1 で動きを色で表示
+};
+Texture2D fa : register(t0);
+Texture2D fb : register(t1);
+Texture2D flow : register(t2);
+SamplerState smp : register(s0);
+
+float4 ps_twp_warp(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy;
+    float2 d = flow.SampleLevel(smp, (p / step) / fsize, 0).rg * step;
+    if (show_flow > 0.5) {
+        // 向きを色相、大きさ（20px で最大）を明るさにする
+        float h = atan2(d.y, d.x) / 6.2831853 + 0.5;
+        float3 k = frac(float3(h, h, h) + float3(1.0, 0.6666667, 0.3333333));
+        float3 rgb = saturate(abs(k * 6.0 - float3(3.0, 3.0, 3.0)) - float3(1.0, 1.0, 1.0));
+        float v = saturate(length(d) / 20.0);
+        return float4(rgb * v, 1.0);
+    }
+    float4 a = fa.SampleLevel(smp, (p - alpha * d) / size, 0);
+    float4 b = fb.SampleLevel(smp, (p + (1.0 - alpha) * d) / size, 0);
+    float4 warped = lerp(a, b, alpha);
+    float4 mixed = lerp(fa.SampleLevel(smp, p / size, 0), fb.SampleLevel(smp, p / size, 0), alpha);
+    float diff = length(a - b);
+    float w = saturate((diff - 0.15) * 5.0) * hide_break;
+    return lerp(warped, mixed, w);
+}
+]]
+
+local function num(v, d)
+  v = tonumber(v)
+  if v == nil or v ~= v then return d end
+  return v
+end
+
+if file == nil or file == "" then return end
+local nframes, rate, scale = obj.load("movie.info", file)
+nframes, rate, scale = num(nframes, 0), num(rate, 0), num(scale, 0)
+if nframes <= 0 or rate <= 0 or scale <= 0 then return end
+local fps = rate / scale
+
+-- 動画の中の時刻（秒）
+local T
+if math.floor(num(timing, 0) + 0.5) == 1 then
+  T = num(position, 0)
+else
+  T = num(start, 0) + obj.time * num(speed, 50) / 100
+end
+local f = T * fps
+local f0, a, f1
+if loop == 1 then
+  f = f % nframes
+  f0 = math.floor(f + 1e-6)
+  a = math.max(f - f0, 0)
+  f0 = f0 % nframes
+  f1 = (f0 + 1) % nframes
+else
+  f = math.min(math.max(f, 0), nframes - 1)
+  f0 = math.floor(f + 1e-6)
+  a = math.max(f - f0, 0)
+  f1 = math.min(f0 + 1, nframes - 1)
+end
+
+local METHOD = math.floor(num(method, 2) + 0.5)
+if METHOD == 0 or a < 1e-3 or f1 == f0 then
+  obj.load("movie.frame", file, f0)
+  return
+end
+
+-- 前後のフレームと求めた動きは、オブジェクトごとのキャッシュに残し、同じ組なら使い回す（v1.10）。
+-- 何を残したかは global に文字列で覚える。キャッシュは枠を超えると黙って消えるので、戻したときの大きさで確かめる
+local G = global
+local ID = tostring(obj.id) .. "_" .. tostring(obj.scene_id or 0)
+local PRE = "cache:twp/" .. ID .. "/"
+local A, B, FL = PRE .. "a", PRE .. "b", PRE .. "flow"
+local GK = "twp_" .. ID
+
+local function fields(s)
+  local t = {}
+  for v in string.gmatch(s or "", "[^\t]+") do t[#t + 1] = v end
+  return t
+end
+
+-- src をオブジェクトに戻し、覚えた大きさと同じなら true
+local function restore(src, w, h)
+  return obj.copybuffer("object", src) == true and obj.w == w and obj.h == h
+end
+
+local ab_ok = false
+local rec = G and fields(G[GK .. "_ab"]) or {}
+local rw, rh = tonumber(rec[4]), tonumber(rec[5])
+if rec[1] == file and rw and rh then
+  if tonumber(rec[2]) == f0 and tonumber(rec[3]) == f1 then
+    ab_ok = restore(B, rw, rh) and restore(A, rw, rh)
+  elseif tonumber(rec[3]) == f0 and restore(B, rw, rh) then
+    -- 順に再生しているとき: 前の組の後のフレームが、今の組の前のフレーム。読むのは 1 枚で済む
+    obj.copybuffer(A, "object")
+    obj.load("movie.frame", file, f1)
+    obj.copybuffer(B, "object")
+    ab_ok = restore(A, rw, rh)
+  end
+end
+if not ab_ok then
+  obj.load("movie.frame", file, f1)
+  obj.copybuffer(B, "object")
+  obj.load("movie.frame", file, f0)
+  obj.copybuffer(A, "object")
+end
+local W, H = obj.w, obj.h
+if W <= 0 or H <= 0 then return end
+if G then G[GK .. "_ab"] = table.concat({file, f0, f1, W, H}, "\t") end
+
+if METHOD == 1 then
+  obj.pixelshader("ps_twp_mix", "object", {A, B}, {W, H, a}, "copy", "clamp")
+  return
+end
+
+-- ---- ピクセルモーション
+
+local S = ({1, 2, 4})[math.min(math.max(math.floor(num(flow_res, 1) + 0.5), 0), 2) + 1]
+local levels = {{math.max(8, math.ceil(W / S)), math.max(8, math.ceil(H / S))}}
+while #levels < 6 do
+  local w, h = levels[#levels][1], levels[#levels][2]
+  if math.min(w, h) < 64 then break end
+  levels[#levels + 1] = {math.ceil(w / 2), math.ceil(h / 2)}
+end
+local sm = math.max(num(flow_smooth, 2), 0)
+local fw, fh = levels[1][1], levels[1][2]
+
+-- 動きは前後のフレームの組と、動きの解像度・滑らかさだけで決まる（割合 a には依存しない）
+local fkey = table.concat({"v110", file, f0, f1, W, H, S, sm}, "\t")
+local flow_ok = G ~= nil and G[GK .. "_flow"] == fkey and restore(FL, fw, fh) and restore(A, W, H)
+if not flow_ok then
+
+-- 明るさの縮小階層（r = 前、g = 後）
+local function lum_name(k) return "cache:twp/l" .. k end
+obj.clearbuffer(lum_name(1), levels[1][1], levels[1][2])
+obj.pixelshader("ps_twp_lum", lum_name(1), {A, B}, {levels[1][1], levels[1][2], W, H, S}, "copy", "clamp")
+for k = 2, #levels do
+  obj.clearbuffer(lum_name(k), levels[k][1], levels[k][2])
+  obj.pixelshader("ps_twp_down", lum_name(k), {lum_name(k - 1)}, {levels[k][1], levels[k][2], levels[k - 1][1], levels[k - 1][2]},
+                  "copy", "clamp")
+end
+
+-- 粗い段から動きを求める。cur が今の動き、other は書き込み先（2 枚を入れ替える）
+local cur, other = "cache:twp/fa", "cache:twp/fb"
+local ITER = 3
+for k = #levels, 1, -1 do
+  local w, h = levels[k][1], levels[k][2]
+  if k == #levels then
+    obj.clearbuffer(cur, w, h)
+  else
+    obj.clearbuffer(other, w, h)
+    obj.pixelshader("ps_twp_up", other, {cur}, {w, h}, "copy", "clamp")
+    cur, other = other, cur
+  end
+  for _ = 1, ITER do
+    obj.clearbuffer(other, w, h)
+    obj.pixelshader("ps_twp_lk", other, {lum_name(k), cur}, {w, h}, "copy", "clamp")
+    cur, other = other, cur
+  end
+end
+
+if sm > 0 then
+  obj.clearbuffer(other, fw, fh)
+  obj.pixelshader("ps_twp_gauss", other, {cur}, {fw, fh, 1, 0, sm}, "copy", "clamp")
+  cur, other = other, cur
+  obj.clearbuffer(other, fw, fh)
+  obj.pixelshader("ps_twp_gauss", other, {cur}, {fw, fh, 0, 1, sm}, "copy", "clamp")
+  cur, other = other, cur
+end
+obj.copybuffer(FL, cur)
+if G then G[GK .. "_flow"] = fkey end
+-- 確かめる途中で動きをオブジェクトに戻していることがあるので、前のフレームに戻す（出力の大きさ = 動画の大きさ）
+obj.copybuffer("object", A)
+
+end -- not flow_ok
+
+obj.pixelshader("ps_twp_warp", "object", {A, B, FL}, {
+  W, H, fw, fh,
+  a, S, (hide_break == 1) and 1 or 0, (show_flow == 1) and 1 or 0,
+}, "copy", "clamp")

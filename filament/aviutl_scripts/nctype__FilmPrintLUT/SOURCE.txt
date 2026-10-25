@@ -1,0 +1,7 @@
+FilmPrintLUT by nctype
+licence: MIT
+from: https://github.com/nctype/aviutl2_script_FilmPrintLUT/releases/download/v1.2.0/FilmPrintLUT_v1.2.0.au2pkg.zip (tag v1.2.0, commit 6aa2b8c8c414)
+page: https://github.com/nctype/aviutl2_script_FilmPrintLUT
+licence/README from: https://github.com/nctype/aviutl2_script_FilmPrintLUT at v1.2.0
+left out: 3 .cube, 1 .mod2 (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

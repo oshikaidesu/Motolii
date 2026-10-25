@@ -1,0 +1,1297 @@
+--[[
+図表_H v1.00 by HexBrowns
+
+  表         : 区切り記号で書いた行と列を、罫線・見出し・縞のある表の画像にする
+  関数グラフ : sin(x) のような式から、軸と目盛りのある関数のグラフを描く
+  ツリー図   : 字下げで親子を書いたテキストから、箱と線の階層図を描く
+
+どれも 1 枚の画像（object）として出すので、後ろにフィルタ効果（縁取り・影など）を掛けられる。
+仕様: AI/specifications/20261009_表_H_spec.md / 20261009_関数グラフ_H_spec.md / 20261009_ツリー図_H_spec.md
+
+※このファイルは名前が「@」で始まるので、コメントの中でも行頭に「@」を置かないこと
+  （セクションの区切りとして読まれる）。
+]]
+
+@表
+--information:表@図表_H v1.00 by HexBrowns
+--label:HexScript
+--object
+
+--group:内容
+--text@data:データ,項目,値,備考\nりんご,120,赤い\nみかん,80,冬
+--select@sep:区切り=0,カンマ=0,タブ=1,縦棒=2
+--check@head_row:見出し行,1
+--check@head_col:見出し列,0
+--group:大きさ
+--track@width:幅,0,8000,0,1,自動
+--track@height:高さ,0,8000,0,1,自動
+--select@col_mode:列の幅=0,文字に合わせる=0,均等=1
+--track@pad_x:余白X,0,200,16,1
+--track@pad_y:余白Y,0,200,8,1
+--string@col_align:列の揃え,
+--group:文字
+--font@font:フォント,Yu Gothic UI
+--track@size:サイズ,4,400,36,1
+--color@text_col:文字色,0xffffff
+--color@head_text_col:見出しの文字色,0xffffff
+--select@deco:文字装飾=0,標準文字=0,影付き文字=1,影付き文字(薄)=2,縁取り文字=3,縁取り文字(細)=4,縁取り文字(太)=5,縁取り文字(角)=6
+--color@edge_col:影・縁色,0x000000
+--check@head_bold:見出しを太字,1
+--group:線
+--select@rule:罫線=0,格子=0,横線のみ=1,外枠のみ=2,なし=3
+--track@rule_w:罫線の太さ,0,50,2,0.1
+--hide@rule_w:rule==2
+--hide@rule_w:rule==3
+--color@rule_col:罫線の色,0x808080
+--hide@rule_col:rule==2
+--hide@rule_col:rule==3
+--track@outer_w:外枠の太さ,0,50,2,0.1
+--color@outer_col:外枠の色,0x808080
+--group:背景
+--check@bg_on:背景を塗る,1
+--color@bg:背景色,0x202020
+--hide@bg:bg_on==0
+--check@head_bg_on:見出しの背景を塗る,1
+--color@head_bg:見出しの背景色,0x3a3a3a
+--hide@head_bg:head_bg_on==0
+--color@stripe:縞の色,nil
+--group:アニメーション
+--select@appear:出現=0,なし=0,行ごと=1,列ごと=2,セルごと=3
+--track@progress:出現の進み,0,100,100,0.1
+--hide@progress:appear==0
+--track@overlap:重なり,0,20,1,0.1
+--hide@overlap:appear==0
+--group
+
+local floor, max, min = math.floor, math.max, math.min
+
+local function is_on(v)
+  return v == 1 or v == true
+end
+
+local function clamp(v, lo, hi)
+  if v < lo then return lo end
+  if v > hi then return hi end
+  return v
+end
+
+local src = tostring(data or "")
+if src:gsub("%s", "") == "" then return end
+
+-- 1. 読む: 行に分け、区切りで列に分ける。カンマのときだけ "…" の囲みと "" を読む
+local SEPS = { ",", "\t", "|" }
+local sep_ch = SEPS[floor(sep) + 1] or ","
+
+local function split_row(line)
+  local cells = {}
+  if sep_ch ~= "," then
+    for f in (line .. sep_ch):gmatch("(.-)" .. (sep_ch == "|" and "%|" or sep_ch)) do
+      cells[#cells + 1] = f
+    end
+    return cells
+  end
+  local i, n = 1, #line
+  local buf, quoted = {}, false
+  while i <= n do
+    local c = line:sub(i, i)
+    if quoted then
+      if c == '"' then
+        if line:sub(i + 1, i + 1) == '"' then
+          buf[#buf + 1] = '"'
+          i = i + 1
+        else
+          quoted = false
+        end
+      else
+        buf[#buf + 1] = c
+      end
+    elseif c == '"' and #table.concat(buf):gsub("%s", "") == 0 then
+      buf, quoted = {}, true
+    elseif c == "," then
+      cells[#cells + 1] = table.concat(buf)
+      buf = {}
+    else
+      buf[#buf + 1] = c
+    end
+    i = i + 1
+  end
+  cells[#cells + 1] = table.concat(buf)
+  return cells
+end
+
+local rows = {}
+for line in (src:gsub("\r\n", "\n") .. "\n"):gmatch("([^\n]*)\n") do
+  rows[#rows + 1] = split_row(line)
+end
+-- 末尾の空行は捨てる
+while #rows > 0 and #rows[#rows] == 1 and rows[#rows][1]:gsub("%s", "") == "" do
+  rows[#rows] = nil
+end
+if #rows == 0 then return end
+local nrow, ncol = #rows, 0
+for _, r in ipairs(rows) do ncol = max(ncol, #r) end
+for _, r in ipairs(rows) do
+  for j = 1, ncol do
+    local s = r[j] or ""
+    -- セルの中の改行は <br> と書く（大文字・<br/> も読む）
+    s = s:gsub("<[bB][rR]%s*/?>", "\n")
+    r[j] = s
+  end
+end
+
+local hrow, hcol = is_on(head_row), is_on(head_col)
+local function is_head(i, j)
+  return (hrow and i == 1) or (hcol and j == 1)
+end
+
+-- 列の揃え: 1 文字 1 列（左 / 中 / 右。L / C / R でもよい）
+local aligns = {}
+do
+  local s = tostring(col_align or "")
+  local i, k = 1, 1
+  while i <= #s do
+    local b = s:byte(i)
+    local len = b < 0x80 and 1 or (b >= 0xF0 and 4 or (b >= 0xE0 and 3 or 2))
+    local ch = s:sub(i, i + len - 1)
+    if ch ~= " " and ch ~= "," then
+      local a = ({ ["左"] = 3, ["中"] = 4, ["右"] = 5, L = 3, C = 4, R = 5, l = 3, c = 4, r = 5 })[ch]
+      aligns[k] = a or 3
+      k = k + 1
+    end
+    i = i + len
+  end
+end
+local function align_of(j) return aligns[j] or 3 end
+
+local f_name = font or ""
+local f_size = max(1, floor(size + 0.5))
+local f_deco = floor(deco + 0.5)
+local h_bold = is_on(head_bold)
+
+local function set_font(head)
+  obj.setfont(f_name, f_size, f_deco, head and head_text_col or text_col, edge_col, head and h_bold or false)
+end
+
+-- 2. 測る。結果は入力の署名と一緒に global に残し、同じなら次のフレームで測り直さない
+--    （枠内自動フィット_H.obj2 と同じ方式。global は文字列しか持てない＝lua.txt の「変数」の global）
+local col_w, row_h = {}, {}
+local cache_key = obj.id and ("図表_H:表:" .. obj.id) or nil
+local sig = table.concat({ "v1.00", f_name, f_size, f_deco, tostring(h_bold), tostring(hrow), tostring(hcol),
+  floor(sep), table.concat(aligns, ","), ncol, src }, "\31")
+local hit = false
+if cache_key and global then
+  local v = global[cache_key]
+  if v and #v > #sig and v:sub(1, #sig) == sig then
+    local cw, rh = v:sub(#sig + 2):match("^([^;]*);(.*)$")
+    if cw then
+      for x in cw:gmatch("[^,]+") do col_w[#col_w + 1] = tonumber(x) end
+      for x in rh:gmatch("[^,]+") do row_h[#row_h + 1] = tonumber(x) end
+      hit = (#col_w == ncol and #row_h == nrow)
+    end
+  end
+end
+if not hit then
+  col_w, row_h = {}, {}
+  for j = 1, ncol do col_w[j] = 0 end
+  -- 空のセルだけの行でも潰れないよう、行の高さの下限は「あ」1 文字の高さ
+  set_font(false)
+  local _, min_h = obj.load("text.layout", "あ", 0, 0, 4)
+  min_h = min_h or f_size
+  for i = 1, nrow do
+    row_h[i] = min_h
+    for j = 1, ncol do
+      local s = rows[i][j]
+      if s ~= "" then
+        set_font(is_head(i, j))
+        local w, h = obj.load("text.layout", s, 0, 0, align_of(j))
+        col_w[j] = max(col_w[j], w or 0)
+        row_h[i] = max(row_h[i], h or 0)
+      end
+    end
+  end
+  if cache_key and global then
+    global[cache_key] = sig .. "\n" .. table.concat(col_w, ",") .. ";" .. table.concat(row_h, ",")
+  end
+end
+
+-- 列の幅・行の高さ（余白込み）。幅・高さを指定すれば伸縮する（文字は縮めない）
+local cw, rh = {}, {}
+local px, py = max(0, pad_x), max(0, pad_y)
+local widest = 0
+for j = 1, ncol do
+  cw[j] = col_w[j] + px * 2
+  widest = max(widest, cw[j])
+end
+if floor(col_mode) == 1 then
+  for j = 1, ncol do cw[j] = widest end
+end
+for i = 1, nrow do rh[i] = row_h[i] + py * 2 end
+local function total(t)
+  local s = 0
+  for _, v in ipairs(t) do s = s + v end
+  return s
+end
+if width > 0 then
+  if floor(col_mode) == 1 then
+    for j = 1, ncol do cw[j] = width / ncol end
+  else
+    local s = total(cw)
+    for j = 1, ncol do cw[j] = cw[j] * width / s end
+  end
+end
+if height > 0 then
+  for i = 1, nrow do rh[i] = height / nrow end
+end
+
+-- 境界は整数の画素に丸める（軸に平行な線の縁がにじまない）
+local bx, by = { [0] = 0 }, { [0] = 0 }
+do
+  local s = 0
+  for j = 1, ncol do s = s + cw[j]; bx[j] = floor(s + 0.5) end
+  s = 0
+  for i = 1, nrow do s = s + rh[i]; by[i] = floor(s + 0.5) end
+end
+local max_x, max_y = obj.getinfo("image_max")
+local W = clamp(bx[ncol], 1, max_x or 16384)
+local H = clamp(by[nrow], 1, max_y or 16384)
+
+-- 3. 出現: 単位（行・列・セル）ごとの不透明度
+local mode = floor(appear)
+local function unit_alpha(i, j)
+  if mode == 0 then return 1 end
+  local idx, n
+  if mode == 1 then idx, n = i - 1, nrow
+  elseif mode == 2 then idx, n = j - 1, ncol
+  else idx, n = (i - 1) * ncol + (j - 1), nrow * ncol end
+  local ov = max(0, overlap)
+  local p = clamp(progress, 0, 100) / 100 * (n - 1 + ov)
+  if ov <= 0 then return (p >= idx) and 1 or 0 end
+  return clamp((p - idx) / ov, 0, 1)
+end
+
+-- 色つきの四角（頂点リストの形 {x,y,z,r,g,b,a}）。座標は左上が原点の画素。
+-- 色は α を掛けないストレートで渡す。lua.txt の obj.drawpoly は「乗算済みα」と書くが、乗算済みで渡すと
+-- 本体がもう一度 α を掛けて、半透明の面が暗くなる（実機、本体 2.1.12、検証 TRE-03 の 1 周目）
+local quads = {}
+local function rect(x0, y0, x1, y1, col, a)
+  if a <= 0 or x1 <= x0 or y1 <= y0 or col == nil then return end
+  local r, g, b = RGB(col)
+  r, g, b = r / 255, g / 255, b / 255
+  local X0, Y0, X1, Y1 = x0 - W / 2, y0 - H / 2, x1 - W / 2, y1 - H / 2
+  quads[#quads + 1] = { X0, Y0, 0, r, g, b, a }
+  quads[#quads + 1] = { X1, Y0, 0, r, g, b, a }
+  quads[#quads + 1] = { X1, Y1, 0, r, g, b, a }
+  quads[#quads + 1] = { X0, Y1, 0, r, g, b, a }
+end
+local function flush()
+  if #quads > 0 then
+    obj.setoption("drawtarget", "tempbuffer")
+    obj.drawpoly(quads)
+    quads = {}
+  end
+end
+
+-- 4. 描く（tempbuffer に描いてから object に写す。後ろのフィルタ効果が効く）
+obj.load("figure", "四角形", 0xffffff, 4)
+obj.setoption("drawtarget", "tempbuffer", W, H)
+
+if is_on(bg_on) then rect(0, 0, W, H, bg, 1) end
+local body = 0
+for i = 1, nrow do
+  local striped = false
+  if not (hrow and i == 1) then
+    body = body + 1
+    striped = (stripe ~= nil) and (body % 2 == 0)
+  end
+  for j = 1, ncol do
+    local a = unit_alpha(i, j)
+    if is_head(i, j) then
+      if is_on(head_bg_on) then rect(bx[j - 1], by[i - 1], bx[j], by[i], head_bg, a) end
+    elseif striped then
+      rect(bx[j - 1], by[i - 1], bx[j], by[i], stripe, a)
+    end
+  end
+end
+flush()
+
+for i = 1, nrow do
+  for j = 1, ncol do
+    local s = rows[i][j]
+    local a = unit_alpha(i, j)
+    if s ~= "" and a > 0 then
+      set_font(is_head(i, j))
+      local al = align_of(j)
+      if obj.load("text", s, 0, 0, al) then
+        local tw = obj.w
+        obj.cx, obj.cy = 0, 0
+        local x
+        if al == 3 then x = bx[j - 1] + px + tw / 2
+        elseif al == 5 then x = bx[j] - px - tw / 2
+        else x = (bx[j - 1] + bx[j]) / 2 end
+        local y = (by[i - 1] + by[i]) / 2
+        obj.setoption("drawtarget", "tempbuffer")
+        obj.draw(x - W / 2, y - H / 2, 0, 1, a)
+      end
+    end
+  end
+end
+
+-- 罫線: 内側の境界をセルごとの区切りとして引く（そのセルの不透明度で）
+local rmode = floor(rule)
+local rw = (rule_w > 0) and max(1, floor(rule_w + 0.5)) or 0
+if rw > 0 and rmode <= 1 then
+  local half = floor(rw / 2)
+  for i = 1, nrow do
+    for j = 1, ncol do
+      local a = unit_alpha(i, j)
+      if i > 1 then rect(bx[j - 1], by[i - 1] - half, bx[j], by[i - 1] - half + rw, rule_col, a) end
+      if j > 1 and rmode == 0 then rect(bx[j - 1] - half, by[i - 1], bx[j - 1] - half + rw, by[i], rule_col, a) end
+    end
+  end
+end
+-- 外枠はキャンバスの内側に引く（出現は掛けない）
+local ow = (outer_w > 0) and max(1, floor(outer_w + 0.5)) or 0
+if ow > 0 and rmode ~= 3 then
+  rect(0, 0, W, ow, outer_col, 1)
+  rect(0, H - ow, W, H, outer_col, 1)
+  rect(0, ow, ow, H - ow, outer_col, 1)
+  rect(W - ow, ow, W, H - ow, outer_col, 1)
+end
+flush()
+
+obj.setoption("drawtarget", "framebuffer")
+obj.setoption("draw_state", false)
+obj.copybuffer("object", "tempbuffer")
+
+@関数グラフ
+--information:関数グラフ@図表_H v1.00 by HexBrowns
+--label:HexScript
+--object
+
+--group:関数
+--text@expr:式,sin(a*x + t)
+--color@col1:線の色1,0x4fc3f7
+--color@col2:線の色2,0xffb74d
+--color@col3:線の色3,0x81c784
+--group:変数
+--track@a:変数a,-1000,1000,1,0.01
+--track@b:変数b,-1000,1000,0,0.01
+--track@c:変数c,-1000,1000,0,0.01
+--track@d:変数d,-1000,1000,0,0.01
+--group:範囲
+--track@x_min:X最小,-100000,100000,-10,0.01
+--track@x_max:X最大,-100000,100000,10,0.01
+--track@y_min:Y最小,-100000,100000,-6,0.01
+--track@y_max:Y最大,-100000,100000,6,0.01
+--track@width:幅,16,8000,1200,1
+--track@height:高さ,16,8000,720,1
+--group:線
+--track@line_w:線の太さ,0.5,50,4,0.1
+--track@fill_a:塗りの不透明度,0,100,30,0.1
+--group:軸と目盛り
+--check@axis:軸,1
+--track@axis_w:軸の太さ,0.5,20,2,0.1
+--hide@axis_w:axis==0
+--color@axis_col:軸の色,0xffffff
+--hide@axis_col:axis==0
+--check@grid:目盛り線,1
+--track@tick_x:目盛りの間隔X,0,100000,0,0.01,自動
+--track@tick_y:目盛りの間隔Y,0,100000,0,0.01,自動
+--color@grid_col:目盛り線の色,0x505050
+--hide@grid_col:grid==0
+--check@labels:目盛りの数字,1
+--font@font:フォント,Yu Gothic UI
+--hide@font:labels==0
+--track@label_size:数字のサイズ,4,200,24,1
+--hide@label_size:labels==0
+--color@label_col:数字の色,0xcccccc
+--hide@label_col:labels==0
+--color@bg:背景色,nil
+--group:アニメーション
+--track@progress:描画の進み,0,100,100,0.1
+--group
+
+--[[pixelshader@ps_fgraph_h:
+// 関数のグラフを 1 パスで描く。出力は乗算済み。
+// ys[] は式ごとに N 個の標本（データの y）。式 e の k 番目は e*N+k 番目の float。切れ目は 1e30 以上。
+cbuffer P : register(b0) {
+    float4 area;    // W, H, N（式 1 本の標本数）, 式の本数
+    float4 range;   // X最小, X最大, Y最小, Y最大
+    float4 look;    // 線の太さの半分(px), 軸の太さの半分(px), 塗りの不透明度, 描画の進み(px)
+    float4 grid;    // 目盛りの間隔X, 目盛りの間隔Y, 目盛り線あり, 軸あり
+    float4 bgc;     // 背景（乗算済み）
+    float4 gridc;   // 目盛り線の色（rgb）, 0
+    float4 axisc;   // 軸の色（rgb）, 0
+    float4 c1;      // 線の色1（rgb）, 不等式の種類（0 なし / 1 < / 2 <= / 3 > / 4 >=）
+    float4 c2;
+    float4 c3;
+    float4 ys[512];
+};
+float4 ps_fgraph_h(float4 pos : SV_Position) : SV_Target {
+    float W = area.x;
+    float H = area.y;
+    int N = (int)area.z;
+    int ne = (int)area.w;
+    float xr = range.y - range.x;
+    float yr = range.w - range.z;
+    float2 p = pos.xy;
+    float dxs = W / max((float)(N - 1), 1.0);
+    float4 col = bgc;
+    // 目盛り線（1px）
+    if (grid.z > 0.5) {
+        float xd = range.x + p.x / W * xr;
+        float yd = range.w - p.y / H * yr;
+        float a = 0.0;
+        if (grid.x > 0.0) {
+            float u = xd / grid.x;
+            float dpx = abs(u - round(u)) * grid.x * W / xr;
+            a = max(a, saturate(1.0 - dpx));
+        }
+        if (grid.y > 0.0) {
+            float v = yd / grid.y;
+            float dpy = abs(v - round(v)) * grid.y * H / yr;
+            a = max(a, saturate(1.0 - dpy));
+        }
+        col = float4(gridc.rgb * a + col.rgb * (1.0 - a), a + col.a * (1.0 - a));
+    }
+    float s = p.x / W * (float)(N - 1);
+    int i0 = (int)floor(s);
+    float fr = s - (float)i0;
+    bool shown = p.x <= look.w;
+    // 塗り（不等式）
+    [loop]
+    for (int e = 0; e < 3; e++) {
+        if (e >= ne) break;
+        float4 ce = (e == 0) ? c1 : ((e == 1) ? c2 : c3);
+        if (ce.w < 0.5 || !shown) continue;
+        int ia = clamp(i0, 0, N - 1);
+        int ib = clamp(i0 + 1, 0, N - 1);
+        uint ga = (uint)(e * N + ia);
+        uint gb = (uint)(e * N + ib);
+        uint qa = ga >> 2;
+        uint qb = gb >> 2;
+        uint ra = ga & 3u;
+        uint rb = gb & 3u;
+        float4 va4 = ys[qa];
+        float4 vb4 = ys[qb];
+        float va = (ra == 0) ? va4.x : ((ra == 1) ? va4.y : ((ra == 2) ? va4.z : va4.w));
+        float vb = (rb == 0) ? vb4.x : ((rb == 1) ? vb4.y : ((rb == 2) ? vb4.z : vb4.w));
+        if (va > 1e29 || vb > 1e29) continue;
+        float f = lerp(va, vb, saturate(fr));
+        float yd = range.w - p.y / H * yr;
+        bool inside = (ce.w < 2.5) ? (yd < f) : (yd > f);
+        if (inside) {
+            float a = look.z;
+            col = float4(ce.rgb * a + col.rgb * (1.0 - a), a + col.a * (1.0 - a));
+        }
+    }
+    // 軸（x = 0 と y = 0）
+    if (grid.w > 0.5) {
+        float ax = (0.0 - range.x) / xr * W;
+        float ay = (range.w - 0.0) / yr * H;
+        float a = max(saturate(look.y + 0.5 - abs(p.x - ax)), saturate(look.y + 0.5 - abs(p.y - ay)));
+        col = float4(axisc.rgb * a + col.rgb * (1.0 - a), a + col.a * (1.0 - a));
+    }
+    // 線: 画素の x に近い標本の前後 K 本の線分だけを測る
+    int K = min((int)ceil(look.x / max(dxs, 1e-3)) + 1, 24);
+    [loop]
+    for (int e2 = 0; e2 < 3; e2++) {
+        if (e2 >= ne || !shown) break;
+        float4 ce = (e2 == 0) ? c1 : ((e2 == 1) ? c2 : c3);
+        float cov = 0.0;
+        [loop]
+        for (int j = -K; j <= K; j++) {
+            int ia = i0 + j;
+            if (ia < 0 || ia > N - 2) continue;
+            uint ga = (uint)(e2 * N + ia);
+            uint gb = ga + 1u;
+            uint qa = ga >> 2;
+            uint qb = gb >> 2;
+            uint ra = ga & 3u;
+            uint rb = gb & 3u;
+            float4 va4 = ys[qa];
+            float4 vb4 = ys[qb];
+            float va = (ra == 0) ? va4.x : ((ra == 1) ? va4.y : ((ra == 2) ? va4.z : va4.w));
+            float vb = (rb == 0) ? vb4.x : ((rb == 1) ? vb4.y : ((rb == 2) ? vb4.z : vb4.w));
+            if (va > 1e29 || vb > 1e29) continue;
+            float2 A = float2((float)ia * dxs, (range.w - va) / yr * H);
+            float2 B = float2((float)(ia + 1) * dxs, (range.w - vb) / yr * H);
+            // 表示範囲の上下の外どうしを結ぶ線分は漸近線とみなして切る（Lua 側で範囲の 1 倍外へ詰めてある）
+            if (abs(B.y - A.y) >= 2.9 * H) continue;
+            float2 ab = B - A;
+            float tt = saturate(dot(p - A, ab) / max(dot(ab, ab), 1e-6));
+            float dd = length(p - A - ab * tt);
+            cov = max(cov, saturate(look.x + 0.5 - dd));
+        }
+        col = float4(ce.rgb * cov + col.rgb * (1.0 - cov), cov + col.a * (1.0 - cov));
+    }
+    return col;
+}
+]]
+
+local floor, max, min, abs = math.floor, math.max, math.min, math.abs
+local MAX_SAMPLES = 2048
+local MAX_EXPR = 3
+local BIG = 1e30
+
+local function is_on(v)
+  return v == 1 or v == true
+end
+
+-- 式のエラーは、式が変わったときだけログに出す（毎フレーム出さない。au2-workflow「ログと print」）
+local function warn_changed(msg)
+  local key = "図表_H:関数グラフ:" .. tostring(obj.id)
+  if global and global[key] == msg then return end
+  if global then global[key] = msg end
+  -- 本体が行の頭に [関数グラフ@図表_H] を付けるので、こちらでは付けない（実機のログ、検証 FGR-06）
+  print("@warn", msg)
+end
+
+-- UTF-8 を 1 文字ずつ読み、全角の記号・英数字を半角に直す
+local function utf8_chars(s)
+  local out, i = {}, 1
+  while i <= #s do
+    local c = s:byte(i)
+    local len, cp
+    if c < 0x80 then len, cp = 1, c
+    elseif c >= 0xF0 then len, cp = 4, c - 0xF0
+    elseif c >= 0xE0 then len, cp = 3, c - 0xE0
+    elseif c >= 0xC0 then len, cp = 2, c - 0xC0
+    else len, cp = 1, c end
+    for k = 1, len - 1 do cp = cp * 64 + ((s:byte(i + k) or 0x80) - 0x80) end
+    out[#out + 1] = { s:sub(i, i + len - 1), cp }
+    i = i + len
+  end
+  return out
+end
+
+local FULL = { [0xD7] = "*", [0xF7] = "/", [0x2212] = "-", [0x2264] = "<=", [0x2266] = "<=", [0x2265] = ">=",
+  [0x2267] = ">=", [0x3C0] = " pi ", [0x3000] = " ", [0x30FC] = "-" }
+local function normalize(s)
+  local out = {}
+  for _, ch in ipairs(utf8_chars(s)) do
+    local cp = ch[2]
+    if cp >= 0xFF01 and cp <= 0xFF5E then
+      out[#out + 1] = string.char(cp - 0xFEE0)
+    elseif FULL[cp] then
+      out[#out + 1] = FULL[cp]
+    else
+      out[#out + 1] = ch[1]
+    end
+  end
+  return table.concat(out)
+end
+
+-- 式に書ける名前（関数・変数・定数）。これ以外の名前があれば式全体をエラーにする（安全のため。仕様の 5 章）
+local FUNCS = {
+  sin = math.sin, cos = math.cos, tan = math.tan, asin = math.asin, acos = math.acos, atan = math.atan,
+  atan2 = math.atan2, sinh = math.sinh, cosh = math.cosh, tanh = math.tanh, log = math.log, log10 = math.log10,
+  exp = math.exp, sqrt = math.sqrt, abs = math.abs, floor = math.floor, ceil = math.ceil,
+  round = function(v) return math.floor(v + 0.5) end,
+  sign = function(v) if v > 0 then return 1 elseif v < 0 then return -1 end return 0 end,
+  pow = function(p, q) return p ^ q end, min = math.min, max = math.max,
+}
+local VARS = { x = true, t = true, a = true, b = true, c = true, d = true, pi = true, e = true, tau = true }
+
+-- 字句に分ける。許していない文字・名前があれば nil, 理由
+local function tokenize(s)
+  local toks, i = {}, 1
+  while i <= #s do
+    local ch = s:sub(i, i)
+    if ch:match("%s") then
+      i = i + 1
+    elseif ch:match("[%d%.]") then
+      local num = s:match("^%d+%.%d*", i) or s:match("^%.%d+", i) or s:match("^%d+", i)
+      if not num then return nil, "数の書き方が正しくない: " .. s:sub(i, i + 5) end
+      local j = i + #num
+      local ex = s:match("^[eE][%+%-]?%d+", j)
+      if ex then num = num .. ex end
+      toks[#toks + 1] = { k = "num", v = num }
+      i = i + #num
+    elseif ch:match("[%a_]") then
+      local name = s:match("^[%a_][%w_]*", i)
+      if not (FUNCS[name] or VARS[name] or name == "y") then return nil, "使えない名前: " .. name end
+      toks[#toks + 1] = { k = FUNCS[name] and "func" or "name", v = name }
+      i = i + #name
+    elseif ch == "<" or ch == ">" then
+      local op = s:match("^[<>]=?", i)
+      toks[#toks + 1] = { k = "cmp", v = op }
+      i = i + #op
+    elseif ch == "=" then
+      toks[#toks + 1] = { k = "eq", v = "=" }
+      i = i + 1
+    elseif ("+-*/^%(),"):find(ch, 1, true) then
+      toks[#toks + 1] = { k = "op", v = ch }
+      i = i + 1
+    else
+      return nil, "使えない文字: " .. ch
+    end
+  end
+  return toks
+end
+
+-- 1 本の式を { src = Lua の式, kind = 不等式の種類 } にする。だめなら nil, 理由
+local KIND = { ["<"] = 1, ["<="] = 2, [">"] = 3, [">="] = 4 }
+local function parse(line)
+  local toks, err = tokenize(normalize(line))
+  if not toks then return nil, err end
+  -- 先頭の「y =」は外す
+  if #toks >= 2 and toks[1].k == "name" and toks[1].v == "y" and toks[2].k == "eq" then
+    table.remove(toks, 1)
+    table.remove(toks, 1)
+  end
+  -- 括弧の外の比較演算子で不等式に分ける（左辺は y だけ）
+  local kind, depth, cut = 0, 0, nil
+  for k, t in ipairs(toks) do
+    if t.k == "op" and t.v == "(" then depth = depth + 1
+    elseif t.k == "op" and t.v == ")" then depth = depth - 1
+    elseif t.k == "cmp" then
+      if depth ~= 0 or cut then return nil, "比較は括弧の外に 1 つだけ書ける" end
+      cut = k
+    elseif t.k == "eq" then
+      return nil, "「=」は先頭の「y =」にだけ書ける"
+    end
+  end
+  if cut then
+    if cut ~= 2 or toks[1].k ~= "name" or toks[1].v ~= "y" then return nil, "不等式は「y < 式」の形で書く" end
+    kind = KIND[toks[2].v]
+    table.remove(toks, 1)
+    table.remove(toks, 1)
+  end
+  if #toks == 0 then return nil, "式が空" end
+  -- 値の後ろに値が続くところには * を補う（2x → 2*x、2πx → 2*pi*x、x(x+1)、(x+1)(x-1)）。
+  -- 値の後ろ = 数・変数・定数・閉じ括弧、値の始まり = 数・変数・定数・関数・開き括弧。数と数は補わない（1..2 などの誤りを通さない）。
+  -- 文字どうしは字句の段階で 1 つの名前になる（xy は「使えない名前」）ので、ここで補うのは字句が分かれているときだけ
+  local out = {}
+  for k, t in ipairs(toks) do
+    if t.k == "name" and t.v == "y" then return nil, "右辺に y は書けない" end
+    local prev = out[#out]
+    if prev then
+      local after_value = prev.k == "num" or prev.k == "name" or (prev.k == "op" and prev.v == ")")
+      local starts_value = t.k == "num" or t.k == "name" or t.k == "func" or (t.k == "op" and t.v == "(")
+      if after_value and starts_value and not (prev.k == "num" and t.k == "num") then
+        out[#out + 1] = { k = "op", v = "*" }
+      end
+    end
+    out[#out + 1] = t
+  end
+  local parts = {}
+  for _, t in ipairs(out) do parts[#parts + 1] = t.v end
+  return { src = table.concat(parts, " "), kind = kind }
+end
+
+-- 許した名前だけを入れた環境で読む（_G は入れない。字句の許可リストが本体の防御で、これは二重の備え）
+local function compile(src, env)
+  local code = "return function(x) return " .. src .. " end"
+  local chunk, err = load(code, "=関数グラフ@図表_H", "t", env)
+  if not chunk and loadstring then
+    chunk, err = loadstring(code, "=関数グラフ@図表_H")
+    if chunk then setfenv(chunk, env) end
+  end
+  if not chunk then return nil, "式を読めない（" .. tostring(err) .. "）" end
+  local ok, f = pcall(chunk)
+  if not ok or type(f) ~= "function" then return nil, "式を読めない" end
+  return f
+end
+
+local W = max(16, floor(width + 0.5))
+local H = max(16, floor(height + 0.5))
+local max_x, max_y = obj.getinfo("image_max")
+W = min(W, max_x or 16384)
+H = min(H, max_y or 16384)
+local x0, x1, y0, y1 = x_min, x_max, y_min, y_max
+if x1 <= x0 then x1 = x0 + 1 end
+if y1 <= y0 then y1 = y0 + 1 end
+
+local env = { pi = math.pi, e = math.exp(1), tau = math.pi * 2, a = a, b = b, c = c, d = d, t = obj.time }
+for k, f in pairs(FUNCS) do env[k] = f end
+
+local exprs, errors = {}, {}
+for line in (tostring(expr or "") .. "\n"):gmatch("([^\n]*)\n") do
+  line = line:gsub("\r", "")
+  if line:gsub("%s", "") ~= "" then
+    if #exprs >= MAX_EXPR then
+      errors[#errors + 1] = "式は " .. MAX_EXPR .. " 本まで（4 本目から無視した）"
+      break
+    end
+    local p, err = parse(line)
+    local f
+    if p then f, err = compile(p.src, env) end
+    if f then
+      exprs[#exprs + 1] = { f = f, kind = p.kind }
+    else
+      errors[#errors + 1] = "「" .. line .. "」: " .. tostring(err)
+    end
+  end
+end
+if #errors > 0 then
+  warn_changed(table.concat(errors, " / "))
+elseif global then
+  global["図表_H:関数グラフ:" .. tostring(obj.id)] = nil
+end
+
+-- 標本化: 式ごとに N 点。非数・無限大は切れ目。表示範囲の外は範囲の 1 倍外まで詰める（シェーダーが漸近線を切る目印）
+local ne = #exprs
+local N = max(2, min(floor(W / 2), floor(MAX_SAMPLES / max(ne, 1))))
+local yr = y1 - y0
+local lo, hi = y0 - yr, y1 + yr
+local samples = {}
+for e = 1, ne do
+  local f = exprs[e].f
+  for k = 0, N - 1 do
+    local xv = x0 + (x1 - x0) * k / (N - 1)
+    local ok, v = pcall(f, xv)
+    if not ok or type(v) ~= "number" or v ~= v or v == math.huge or v == -math.huge then
+      v = BIG
+    else
+      v = min(max(v, lo), hi)
+    end
+    samples[(e - 1) * N + k + 1] = v
+  end
+end
+
+-- 目盛りの間隔: 指定が 0 なら、範囲 / 8 に近い 1・2・5 × 10^k
+local function nice_step(range)
+  local raw = range / 8
+  if raw <= 0 then return 1 end
+  local p = 10 ^ floor(math.log10(raw))
+  local m = raw / p
+  local s = (m < 1.5) and 1 or ((m < 3.5) and 2 or ((m < 7.5) and 5 or 10))
+  return s * p
+end
+local tx = (tick_x > 0) and tick_x or nice_step(x1 - x0)
+local ty = (tick_y > 0) and tick_y or nice_step(yr)
+
+local function rgb01(col)
+  local r, g, bb = RGB(col)
+  return r / 255, g / 255, bb / 255
+end
+local consts = { W, H, N, ne, x0, x1, y0, y1 }
+local hw = max(0.25, line_w / 2)
+local prog = math.max(0, math.min(100, progress)) / 100 * W
+consts[#consts + 1] = hw
+consts[#consts + 1] = max(0.25, axis_w / 2)
+consts[#consts + 1] = math.max(0, math.min(100, fill_a)) / 100
+consts[#consts + 1] = prog
+for _, v in ipairs({ tx, ty, is_on(grid) and 1 or 0, is_on(axis) and 1 or 0 }) do consts[#consts + 1] = v end
+if bg ~= nil then
+  local r, g, bb = rgb01(bg)
+  for _, v in ipairs({ r, g, bb, 1 }) do consts[#consts + 1] = v end
+else
+  for _ = 1, 4 do consts[#consts + 1] = 0 end
+end
+do
+  local r, g, bb = rgb01(grid_col)
+  for _, v in ipairs({ r, g, bb, 0 }) do consts[#consts + 1] = v end
+  r, g, bb = rgb01(axis_col)
+  for _, v in ipairs({ r, g, bb, 0 }) do consts[#consts + 1] = v end
+end
+local lcols = { col1, col2, col3 }
+for e = 1, 3 do
+  local r, g, bb = rgb01(lcols[e])
+  local kind = exprs[e] and exprs[e].kind or 0
+  for _, v in ipairs({ r, g, bb, kind }) do consts[#consts + 1] = v end
+end
+for k = 1, MAX_SAMPLES do consts[#consts + 1] = samples[k] or 0 end
+
+obj.clearbuffer("object", W, H)
+obj.pixelshader("ps_fgraph_h", "object", nil, consts)
+
+-- 目盛りの数字（軸の横に置く。画像の外へは出さない）
+if is_on(labels) then
+  -- 小数の桁数（間隔 2 → 0 桁、0.1 → 1 桁）。-floor は -0 になることがあるので整数にそろえる
+  local function decimals(step)
+    local d = -floor(math.log10(step) + 1e-9)
+    if d < 1 then return 0 end
+    return floor(d)
+  end
+  local function label_text(v, step)
+    local s = string.format("%." .. string.format("%d", decimals(step)) .. "f", v)
+    if s:match("^%-0%.?0*$") then s = s:sub(2) end
+    return s
+  end
+  local function to_px(xv) return (xv - x0) / (x1 - x0) * W end
+  local function to_py(yv) return (y1 - yv) / yr * H end
+  local lsize = max(1, floor(label_size + 0.5))
+  local items = {}
+  local ax_py = min(max(to_py(0), 0), H)
+  local ax_px = min(max(to_px(0), 0), W)
+  local k0, k1 = math.ceil(x0 / tx - 1e-9), floor(x1 / tx + 1e-9)
+  if k1 - k0 <= 60 then
+    for k = k0, k1 do
+      local v = k * tx
+      items[#items + 1] = { label_text(v, tx), to_px(v), ax_py, "x" }
+    end
+  end
+  k0, k1 = math.ceil(y0 / ty - 1e-9), floor(y1 / ty + 1e-9)
+  if k1 - k0 <= 60 then
+    for k = k0, k1 do
+      local v = k * ty
+      if k ~= 0 then items[#items + 1] = { label_text(v, ty), ax_px, to_py(v), "y" } end
+    end
+  end
+  obj.copybuffer("tempbuffer", "object")
+  for _, it in ipairs(items) do
+    obj.setfont(font or "", lsize, 0, label_col, 0x000000)
+    if obj.load("text", it[1], 0, 0, 4) then
+      local tw, th = obj.w, obj.h
+      obj.cx, obj.cy = 0, 0
+      local cx, cy
+      if it[4] == "x" then
+        cx = min(max(it[2], tw / 2), W - tw / 2)
+        cy = it[3] + th / 2 + 2
+        if cy + th / 2 > H then cy = it[3] - th / 2 - 2 end
+      else
+        cx = it[2] - tw / 2 - 6
+        if cx - tw / 2 < 0 then cx = it[2] + tw / 2 + 6 end
+        cy = min(max(it[3], th / 2), H - th / 2)
+      end
+      obj.setoption("drawtarget", "tempbuffer")
+      obj.draw(cx - W / 2, cy - H / 2, 0, 1, 1)
+    end
+  end
+  obj.setoption("drawtarget", "framebuffer")
+  obj.setoption("draw_state", false)
+  obj.copybuffer("object", "tempbuffer")
+end
+
+@ツリー図
+--information:ツリー図@図表_H v1.00 by HexBrowns
+--label:HexScript
+--object
+
+--group:内容
+--text@data:項目,社長\n  営業部\n    第一営業課\n    第二営業課\n  開発部\n    設計<br>チーム
+--group:配置
+--select@dir:向き=0,上から下=0,下から上=1,左から右=2,右から左=3,字下げ=4
+--track@gap_sib:兄弟の間隔,0,2000,40,0.1
+--hide@gap_sib:dir==4
+--track@gap_lv:階層の間隔,0,2000,80,0.1
+--track@gap_row:行の間隔,0,500,12,0.1
+--hide@gap_row:dir<4
+--group:箱の設定
+--select@box:箱=0,すべて=0,子を持つ項目だけ=1,子の無い項目だけ=2,なし=3
+--track@box_w:箱の幅,0,4000,0,1,文字に合わせる
+--hide@box_w:box==3
+--track@box_h:箱の高さ,0,4000,0,1,文字に合わせる
+--hide@box_h:box==3
+--track@pad:余白,0,200,14,1
+--hide@pad:box==3
+--color@box_col:箱の色,0x2d5f8a
+--hide@box_col:box==3
+--color@root_col:根の箱の色,0x8a2d4f
+--hide@root_col:box==3
+--track@frame_w:枠の太さ,0,50,2,0.1
+--hide@frame_w:box==3
+--color@frame_col:枠の色,0xffffff
+--hide@frame_col:box==3
+--group:線の設定
+--select@line:線=0,カギ線=0,直線=1,曲線=2,なし=3
+--track@line_w:線の太さ,0.5,50,3,0.1
+--hide@line_w:line==3
+--color@line_col:線の色,0xc0c0c0
+--hide@line_col:line==3
+--check@arrow:矢印,0
+--hide@arrow:line==3
+--track@arrow_size:矢印の大きさ,1,200,16,0.1
+--hide@arrow_size:line==3
+--hide@arrow_size:arrow==0
+--group:文字
+--font@font:フォント,Yu Gothic UI
+--track@size:サイズ,4,400,32,1
+--color@text_col:文字色,0xffffff
+--select@deco:文字装飾=0,標準文字=0,影付き文字=1,影付き文字(薄)=2,縁取り文字=3,縁取り文字(細)=4,縁取り文字(太)=5,縁取り文字(角)=6
+--color@edge_col:影・縁色,0x000000
+--select@t_align:文字揃え=1,左=0,中央=1
+--group:アニメーション
+--select@appear:出現=0,なし=0,階層ごと=1,項目ごと=2
+--track@progress:出現の進み,0,100,100,0.1
+--hide@progress:appear==0
+--track@overlap:重なり,0,20,1,0.1
+--hide@overlap:appear==0
+--group
+
+local floor, max, min, abs, sqrt = math.floor, math.max, math.min, math.abs, math.sqrt
+local MAX_ITEMS = 500
+
+local function clamp(v, lo, hi)
+  if v < lo then return lo end
+  if v > hi then return hi end
+  return v
+end
+
+local function is_on(v)
+  return v == 1 or v == true
+end
+
+local function warn_once(msg)
+  local key = "図表_H:ツリー図:" .. msg
+  if global and global[key] then return end
+  if global then global[key] = "1" end
+  print("@warn", msg)
+end
+
+-- 1. 読む: 字下げの深さで木を作る。タブは半角 4 個、全角空白は半角 2 個に数える。箇条書きの印は外す
+local nodes, roots = {}, {}
+do
+  local stack = {}
+  for line in (tostring(data or ""):gsub("\r\n", "\n") .. "\n"):gmatch("([^\n]*)\n") do
+    local i, ind = 1, 0
+    while i <= #line do
+      local ch = line:sub(i, i)
+      if ch == " " then ind, i = ind + 1, i + 1
+      elseif ch == "\t" then ind, i = ind + 4, i + 1
+      elseif line:sub(i, i + 2) == "\227\128\128" then ind, i = ind + 2, i + 3   -- 全角空白
+      else break end
+    end
+    local body = line:sub(i):gsub("%s+$", "")
+    body = body:gsub("^[%-%*]%s+", ""):gsub("^・", "")
+    if body ~= "" then
+      if #nodes >= MAX_ITEMS then
+        warn_once("項目は " .. MAX_ITEMS .. " 個まで（それより後は描かない）")
+        break
+      end
+      while #stack > 0 and stack[#stack].ind >= ind do stack[#stack] = nil end
+      local parent = stack[#stack] and stack[#stack].node or nil
+      local n = { text = body:gsub("<[bB][rR]%s*/?>", "\n"), parent = parent, kids = {},
+        depth = parent and parent.depth + 1 or 0, order = #nodes }
+      nodes[#nodes + 1] = n
+      if parent then parent.kids[#parent.kids + 1] = n else roots[#roots + 1] = n end
+      stack[#stack + 1] = { ind = ind, node = n }
+    end
+  end
+end
+if #nodes == 0 then return end
+
+local f_name = font or ""
+local f_size = max(1, floor(size + 0.5))
+local f_deco = floor(deco + 0.5)
+local al = (floor(t_align) == 0) and 3 or 4
+local box_mode = floor(box)
+local pd = max(0, pad)
+
+-- 2. 測る（同じ入力なら global に残した結果を使う）
+local cache_key = obj.id and ("図表_H:ツリー図:" .. obj.id) or nil
+local texts = {}
+for k, n in ipairs(nodes) do texts[k] = n.text end
+local sig = table.concat({ "v1.00", f_name, f_size, f_deco, al }, "\31") .. "\31" .. table.concat(texts, "\30")
+local measured = false
+if cache_key and global then
+  local v = global[cache_key]
+  if v and #v > #sig and v:sub(1, #sig) == sig then
+    local k = 0
+    for w, h in v:sub(#sig + 2):gmatch("([^,;]+),([^;]+)") do
+      k = k + 1
+      if nodes[k] then nodes[k].tw, nodes[k].th = tonumber(w), tonumber(h) end
+    end
+    measured = (k == #nodes)
+  end
+end
+if not measured then
+  obj.setfont(f_name, f_size, f_deco, text_col, edge_col)
+  local parts = {}
+  for k, n in ipairs(nodes) do
+    local w, h = obj.load("text.layout", n.text, 0, 0, al)
+    n.tw, n.th = w or 0, h or 0
+    parts[k] = n.tw .. "," .. n.th
+  end
+  if cache_key and global then global[cache_key] = sig .. "\n" .. table.concat(parts, ";") end
+end
+
+local function has_box(n)
+  if box_mode == 3 then return false end
+  if box_mode == 1 then return #n.kids > 0 end
+  if box_mode == 2 then return #n.kids == 0 end
+  return true
+end
+for _, n in ipairs(nodes) do
+  if box_mode == 3 then
+    n.w, n.h = n.tw, n.th
+  else
+    n.w = (box_w > 0) and box_w or (n.tw + pd * 2)
+    n.h = (box_h > 0) and box_h or (n.th + pd * 2)
+  end
+end
+
+-- 3. 配置。u = 兄弟の並ぶ向き、v = 階層の向き。「上から下」で計算し、他の向きは入れ替えと反転で作る
+local direction = floor(dir)
+local horizontal = (direction == 2 or direction == 3)
+for _, n in ipairs(nodes) do
+  n.su = horizontal and n.h or n.w     -- 兄弟の向きの大きさ
+  n.sv = horizontal and n.w or n.h     -- 階層の向きの大きさ
+end
+
+-- 階層の向きの座標 v を画面の (x, y) へ写す
+local function map(u, v)
+  if direction == 1 then return u, -v end
+  if direction == 2 then return v, u end
+  if direction == 3 then return -v, u end
+  return u, v
+end
+
+-- 階層ごとの帯（帯の幅 = その階層の箱の最大）と、帯の中心の位置
+local band, vpos = {}, {}
+if direction == 4 then
+  -- 字下げ: 1 項目 1 行。左上から書いた順に並べる
+  local y = 0
+  local function walk(n)
+    n.x = n.depth * gap_lv + n.w / 2
+    n.y = y + n.h / 2
+    y = y + n.h + gap_row
+    for _, k in ipairs(n.kids) do walk(k) end
+  end
+  for _, r in ipairs(roots) do walk(r) end
+else
+  for _, n in ipairs(nodes) do band[n.depth] = max(band[n.depth] or 0, n.sv) end
+  local acc, d = 0, 0
+  while band[d] do
+    vpos[d] = acc + band[d] / 2
+    acc = acc + band[d] + gap_lv
+    d = d + 1
+  end
+  -- 部分木を左から詰めて置く。子を持つ項目は最初と最後の子の中央。部分木の外接範囲どうしは重ねない
+  local function shift(n, du)
+    n.u = n.u + du
+    n.lo, n.hi = n.lo + du, n.hi + du
+    for _, k in ipairs(n.kids) do shift(k, du) end
+  end
+  local function place(n)
+    if #n.kids == 0 then
+      n.u = n.su / 2
+      n.lo, n.hi = 0, n.su
+      return
+    end
+    local cursor = 0
+    for idx, k in ipairs(n.kids) do
+      place(k)
+      shift(k, (idx == 1) and -k.lo or (cursor - k.lo))
+      cursor = k.hi + gap_sib
+    end
+    n.u = (n.kids[1].u + n.kids[#n.kids].u) / 2
+    n.lo = min(n.kids[1].lo, n.u - n.su / 2)
+    n.hi = max(n.kids[#n.kids].hi, n.u + n.su / 2)
+  end
+  local cursor = 0
+  for idx, r in ipairs(roots) do
+    place(r)
+    shift(r, (idx == 1) and -r.lo or (cursor - r.lo))
+    cursor = r.hi + gap_sib
+  end
+  for _, n in ipairs(nodes) do n.x, n.y = map(n.u, vpos[n.depth]) end
+end
+
+-- 4. 線（折れ線の点の列）。親の外側の辺 → 子の内側の辺
+local polylines = {}
+local line_mode = floor(line)
+if line_mode ~= 3 then
+  for _, n in ipairs(nodes) do
+    local p = n.parent
+    if p then
+      local pts
+      if direction == 4 then
+        local lx = p.x - p.w / 2 + min(gap_lv * 0.5, p.w / 2)
+        pts = { { lx, p.y + p.h / 2 }, { lx, n.y }, { n.x - n.w / 2, n.y } }
+      else
+        -- (u, v) で作ってから写す。横線（カギ線の渡り）は「親の帯の外側の端 + 階層の間隔の半分」で、
+        -- 同じ階層の兄弟どうしで共有する
+        local va = vpos[p.depth] + p.sv / 2
+        local vb = vpos[n.depth] - n.sv / 2
+        local vm = vpos[p.depth] + band[p.depth] / 2 + gap_lv / 2
+        local uv
+        if line_mode == 0 then
+          uv = { { p.u, va }, { p.u, vm }, { n.u, vm }, { n.u, vb } }
+        elseif line_mode == 1 then
+          uv = { { p.u, va }, { n.u, vb } }
+        else
+          uv = {}
+          for s = 0, 16 do
+            local t = s / 16
+            local w1 = 1 - t
+            local uu = w1 ^ 3 * p.u + 3 * w1 * w1 * t * p.u + 3 * w1 * t * t * n.u + t ^ 3 * n.u
+            local vv = w1 ^ 3 * va + 3 * w1 * w1 * t * vm + 3 * w1 * t * t * vm + t ^ 3 * vb
+            uv[#uv + 1] = { uu, vv }
+          end
+        end
+        pts = {}
+        for k, q in ipairs(uv) do
+          local x, y = map(q[1], q[2])
+          pts[k] = { x, y }
+        end
+      end
+      polylines[#polylines + 1] = { node = n, pts = pts }
+    end
+  end
+end
+
+-- 5. 出現
+local amode = floor(appear)
+local max_depth = 0
+for _, n in ipairs(nodes) do max_depth = max(max_depth, n.depth) end
+local function unit_alpha(n)
+  if amode == 0 then return 1 end
+  local idx, cnt
+  if amode == 1 then idx, cnt = n.depth, max_depth + 1 else idx, cnt = n.order, #nodes end
+  local ov = max(0, overlap)
+  local p = clamp(progress, 0, 100) / 100 * (cnt - 1 + ov)
+  if ov <= 0 then return (p >= idx) and 1 or 0 end
+  return clamp((p - idx) / ov, 0, 1)
+end
+
+-- 6. キャンバス: 全体の外接矩形（線の太さ・矢印の分を足す）。中心を画像の中心にする
+local lw = max(0.5, line_w)
+local asz = is_on(arrow) and max(1, arrow_size) or 0
+local margin = math.ceil(lw + asz + max(0, frame_w)) + 2
+local minx, miny, maxx, maxy = math.huge, math.huge, -math.huge, -math.huge
+for _, n in ipairs(nodes) do
+  minx, maxx = min(minx, n.x - n.w / 2), max(maxx, n.x + n.w / 2)
+  miny, maxy = min(miny, n.y - n.h / 2), max(maxy, n.y + n.h / 2)
+end
+for _, pl in ipairs(polylines) do
+  for _, q in ipairs(pl.pts) do
+    minx, maxx = min(minx, q[1]), max(maxx, q[1])
+    miny, maxy = min(miny, q[2]), max(maxy, q[2])
+  end
+end
+local max_x, max_y = obj.getinfo("image_max")
+local ox, oy = margin - floor(minx), margin - floor(miny)
+local W = clamp(math.ceil(maxx) + ox + margin, 1, max_x or 16384)
+local H = clamp(math.ceil(maxy) + oy + margin, 1, max_y or 16384)
+
+-- 色つきの面（頂点リスト {x,y,z,r,g,b,a}）。座標はレイアウトの座標。表を向く並び（時計回り）にそろえる。
+-- 色は α を掛けないストレートで渡す（表の rect と同じ。乗算済みで渡すと本体がもう一度 α を掛ける。検証 TRE-03）
+local quads, tris = {}, {}
+local function to_canvas(x, y) return x + ox - W / 2, y + oy - H / 2 end
+local function color_of(col)
+  local r, g, b = RGB(col)
+  return r / 255, g / 255, b / 255
+end
+local function poly(list, pts, col, a)
+  if a <= 0 or col == nil then return end
+  local area = 0
+  for k = 1, #pts do
+    local p, q = pts[k], pts[k % #pts + 1]
+    area = area + p[1] * q[2] - q[1] * p[2]
+  end
+  local r, g, b = color_of(col)
+  local from, to, step = 1, #pts, 1
+  if area < 0 then from, to, step = #pts, 1, -1 end
+  for k = from, to, step do
+    local X, Y = to_canvas(pts[k][1], pts[k][2])
+    list[#list + 1] = { X, Y, 0, r, g, b, a }
+  end
+end
+-- 軸に平行な四角は整数の画素に丸める（縁がにじまない）
+local function rect(x0, y0, x1, y1, col, a)
+  local function snap(v, o) return floor(v + o + 0.5) - o end
+  x0, x1 = snap(x0, ox), snap(x1, ox)
+  y0, y1 = snap(y0, oy), snap(y1, oy)
+  if x1 <= x0 or y1 <= y0 then return end
+  poly(quads, { { x0, y0 }, { x1, y0 }, { x1, y1 }, { x0, y1 } }, col, a)
+end
+-- 線分を太さ w の四角にする。軸に平行なら rect
+local function segment(p, q, w, col, a)
+  local dx, dy = q[1] - p[1], q[2] - p[2]
+  local len = sqrt(dx * dx + dy * dy)
+  if len < 1e-6 then return end
+  local half = w / 2
+  if abs(dy) < 1e-6 then
+    rect(min(p[1], q[1]) - half, p[2] - half, max(p[1], q[1]) + half, p[2] + half, col, a)
+  elseif abs(dx) < 1e-6 then
+    rect(p[1] - half, min(p[2], q[2]) - half, p[1] + half, max(p[2], q[2]) + half, col, a)
+  else
+    local nx, ny = -dy / len * half, dx / len * half
+    local ex, ey = dx / len * half, dy / len * half
+    poly(quads, { { p[1] + nx - ex, p[2] + ny - ey }, { q[1] + nx + ex, q[2] + ny + ey },
+      { q[1] - nx + ex, q[2] - ny + ey }, { p[1] - nx - ex, p[2] - ny - ey } }, col, a)
+  end
+end
+
+local function flush()
+  obj.setoption("drawtarget", "tempbuffer")
+  if #quads > 0 then obj.drawpoly(quads) end
+  if #tris > 0 then obj.drawpoly(tris, 3) end
+  quads, tris = {}, {}
+end
+
+obj.load("figure", "四角形", 0xffffff, 4)
+obj.setoption("drawtarget", "tempbuffer", W, H)
+
+-- 線（出現では親の側から伸ばす）と矢印
+for _, pl in ipairs(polylines) do
+  local frac = unit_alpha(pl.node)
+  if frac > 0 then
+    local pts = pl.pts
+    local total = 0
+    for k = 2, #pts do
+      total = total + sqrt((pts[k][1] - pts[k - 1][1]) ^ 2 + (pts[k][2] - pts[k - 1][2]) ^ 2)
+    end
+    -- 矢印の分だけ線を手前で止める
+    local stop = total * frac
+    local arrow_on = asz > 0 and frac >= 1
+    if arrow_on then stop = max(0, total - asz * 0.8) end
+    local walked = 0
+    for k = 2, #pts do
+      local p, q = pts[k - 1], pts[k]
+      local l = sqrt((q[1] - p[1]) ^ 2 + (q[2] - p[2]) ^ 2)
+      if walked >= stop then break end
+      if walked + l > stop then
+        local t = (stop - walked) / l
+        q = { p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t }
+      end
+      segment(p, q, lw, line_col, 1)
+      walked = walked + l
+    end
+    if arrow_on then
+      local tip = pts[#pts]
+      local prev = pts[#pts - 1]
+      local dx, dy = tip[1] - prev[1], tip[2] - prev[2]
+      local len = sqrt(dx * dx + dy * dy)
+      if len > 1e-6 then
+        dx, dy = dx / len, dy / len
+        local bxp, byp = tip[1] - dx * asz, tip[2] - dy * asz
+        local hx, hy = -dy * asz * 0.5, dx * asz * 0.5
+        poly(tris, { { tip[1], tip[2] }, { bxp + hx, byp + hy }, { bxp - hx, byp - hy } }, line_col, 1)
+      end
+    end
+  end
+end
+flush()
+
+-- 箱と枠
+local fw = (frame_w > 0) and max(1, floor(frame_w + 0.5)) or 0
+for _, n in ipairs(nodes) do
+  local a = unit_alpha(n)
+  if has_box(n) and a > 0 then
+    local x0, y0, x1, y1 = n.x - n.w / 2, n.y - n.h / 2, n.x + n.w / 2, n.y + n.h / 2
+    local col = (n.depth == 0 and root_col ~= nil) and root_col or box_col
+    rect(x0, y0, x1, y1, col, a)
+    if fw > 0 then
+      rect(x0, y0, x1, y0 + fw, frame_col, a)
+      rect(x0, y1 - fw, x1, y1, frame_col, a)
+      rect(x0, y0 + fw, x0 + fw, y1 - fw, frame_col, a)
+      rect(x1 - fw, y0 + fw, x1, y1 - fw, frame_col, a)
+    end
+  end
+end
+flush()
+
+-- 文字
+for _, n in ipairs(nodes) do
+  local a = unit_alpha(n)
+  if a > 0 then
+    obj.setfont(f_name, f_size, f_deco, text_col, edge_col)
+    if obj.load("text", n.text, 0, 0, al) then
+      local tw = obj.w
+      obj.cx, obj.cy = 0, 0
+      local x = n.x
+      if al == 3 then x = n.x - n.w / 2 + ((box_mode == 3) and 0 or pd) + tw / 2 end
+      local X, Y = to_canvas(x, n.y)
+      obj.setoption("drawtarget", "tempbuffer")
+      obj.draw(X, Y, 0, 1, a)
+    end
+  end
+end
+
+obj.setoption("drawtarget", "framebuffer")
+obj.setoption("draw_state", false)
+obj.copybuffer("object", "tempbuffer")

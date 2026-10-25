@@ -1,0 +1,264 @@
+--information:テキスト縦書き化 v1.10 by HexBrowns
+--label:HexScript
+--filter
+
+--group:縦組
+--select@direction:組方向=1,右縦書き=1,左縦書き=2
+--track@spacing:字間,-200.00,200.00,0.00,0.1
+--track@pivot_x:基準X,-4000,4000,0,0.1
+--track@pivot_y:基準Y,-4000,4000,0,0.1
+
+--group:微調整
+--track@shift_x:移動X,-4000,4000,0,0.1
+--track@shift_y:移動Y,-4000,4000,0,0.1
+--check@require_multi:個別オブジェクト必須,1
+
+--group:約物とピッチ
+--check@rotate_marks:長音と括弧を縦向きにする,1
+--select@pitch_mode:縦ピッチ=0,横の送り幅（従来）=0,文字サイズ固定=1
+--check@shift_marks:句読点と小書きを右上へ寄せる,0
+--group
+
+-- 横書きで描画した個別文字の座標を縦組へ組み替える（本体縦書きの descender 欠け回避用）。
+--
+-- v1.10（2026-09-16）
+--   1. 字間を「列（元の行）の中で何文字目か」で掛ける。v1.00 は全文の通し番号
+--      （obj.index）で掛けていて、2 列目以降が前の列の文字数 x 字間だけ縦にずれた。
+--      列の中の基点はテキストの文字揃えに従う（左寄せ=列の天 / 中央=列の中心 / 右寄せ=列の地）
+--   2. 長音・括弧などを 90 度回す（長音と括弧を縦向きにする。既定 ON）
+--   3. 縦ピッチを文字サイズ固定にできる（既定は従来）。句読点と小書きを右上へ寄せられる（既定 OFF）
+--   既定値のままなら、ROTATE の文字の向き以外は v1.00 と同じ配置になる
+--   issue:  AI/scripts/issues/20260915_vertical_text_spacing_and_punctuation.md
+--   検証器: AI/scripts/テキスト縦書き化/verify_vertical.py
+--
+-- 前提（実機未確認。issue の「未確認」と実装節）
+--   - 本文は obj.getvalue(レイヤー, "テキスト", "テキスト") でエイリアスと同じ書式
+--     （改行は \n、\ は \\）で取れる（lua.txt「obj.getvalue(layer,effect,item)」）。
+--     タグ <...> は文字として数えない
+--   - obj.index は本文の文字順に振られる。改行・空白を個別オブジェクトとして数えるかは
+--     分からないので、obj.num と 3 通りの数え方（改行を除く / 空白も除く / 改行も数える）の
+--     文字数を突き合わせ、一致したものを使う。obj.num が文字数の倍数なら 1 文字が
+--     複数オブジェクトに分かれているとみなす（FlowType_H の motion.lua と同じ扱い）。
+--     どれにも合わなければ v1.00 と同じ通し番号の字間に戻し、回転も寄せもしない
+--   - obj.rz を足すと各文字が自分の中心で回る
+--   - 文字サイズ固定では、横書きの文字揃えの基点が obj.ox の原点にある
+--     （左寄せなら行の左端、右寄せなら右端が ox = 0）とみなして列を置き直す
+
+local n = obj.num or 0
+local need_multi = (require_multi == 1 or require_multi == true)
+if need_multi and n < 2 then
+  return
+end
+
+-- 縦組で 90 度回す文字。全角の約物だけで、半角記号は入れない
+-- （欧文を 標準描画 の Z軸回転 90 でまとめて寝かせる使い方があり、そこで二重に回るため）
+local ROTATE = {}
+for _, ch in ipairs({
+  "ー", "ｰ", "〜", "～", "…", "‥", "―", "—", "－", "＝", "｜", "：", "；",
+  "（", "）", "「", "」", "『", "』", "［", "］", "【", "】", "〔", "〕",
+  "〈", "〉", "《", "》", "｛", "｝", "＜", "＞", "〖", "〗",
+}) do
+  ROTATE[ch] = true
+end
+
+-- 右上へ寄せる文字と量（文字サイズに対する割合。右が +X、上が -Y）。
+-- 横組の字形は句読点が字面の左下、小書きが下寄りにあるので、縦組の位置へ移す。量は目安（実機未確認）
+local SHIFT = {}
+for _, ch in ipairs({ "、", "。", "，", "．" }) do
+  SHIFT[ch] = { 0.5, -0.5 }
+end
+for _, ch in ipairs({
+  "ぁ", "ぃ", "ぅ", "ぇ", "ぉ", "っ", "ゃ", "ゅ", "ょ", "ゎ", "ゕ", "ゖ",
+  "ァ", "ィ", "ゥ", "ェ", "ォ", "ッ", "ャ", "ュ", "ョ", "ヮ", "ヵ", "ヶ",
+}) do
+  SHIFT[ch] = { 0.125, -0.125 }
+end
+
+-- UTF-8 の 1 文字の長さ
+local function char_len(s, i)
+  local c = s:byte(i)
+  if c >= 0xF0 then return 4 end
+  if c >= 0xE0 then return 3 end
+  if c >= 0xC0 then return 2 end
+  return 1
+end
+
+-- "nl"（改行）/ "ctrl"（制御文字）/ "space"（半角・全角空白）/ "char"
+local function char_kind(s, i, len)
+  local c = s:byte(i)
+  if len == 1 then
+    if c == 10 then return "nl" end
+    if c < 32 or c == 127 then return "ctrl" end
+    if c == 32 then return "space" end
+  elseif len == 2 then
+    if c == 0xC2 and (s:byte(i + 1) or 0xFF) <= 0x9F then return "ctrl" end
+  elseif len == 3 then
+    if s:sub(i, i + 2) == "\227\128\128" then return "space" end
+  end
+  return "char"
+end
+
+-- エイリアスの書式を解いてタグを除く。\\n は「\ と n」で改行ではない
+local function decode_text(raw)
+  local s = raw:gsub("\r\n", "\n")
+  s = s:gsub("\\(.)", function(c)
+    if c == "n" then return "\n" end
+    if c == "\\" then return "\\" end
+    return nil
+  end)
+  s = s:gsub("<%?.-%?>", "")
+  s = s:gsub("<[^<>\n]*>", "")
+  return s
+end
+
+-- obj.index が本文のどの文字かを返す: 文字, 列番号(1〜), 列の中の位置(0〜), 列の文字数。
+-- 列の中の位置と文字数は空白も 1 文字に数える（空白も横の送りを持つため）
+local function locate(raw, index, num)
+  local s = decode_text(raw)
+  local len_s = #s
+  local cols = { 0 }
+  local c_all, c_nospace, c_nl = 0, 0, 0
+  local i = 1
+  while i <= len_s do
+    local l = char_len(s, i)
+    local kind = char_kind(s, i, l)
+    if kind == "nl" then
+      c_nl = c_nl + 1
+      cols[#cols + 1] = 0
+    elseif kind ~= "ctrl" then
+      c_all = c_all + 1
+      cols[#cols] = cols[#cols] + 1
+      if kind ~= "space" then
+        c_nospace = c_nospace + 1
+      end
+    end
+    i = i + l
+  end
+
+  -- 数え方の仮説: 1 = 改行を除く / 2 = 空白も除く / 3 = 改行も数える
+  local hyp, per
+  if c_all == num then
+    hyp, per = 1, 1
+  elseif c_nospace == num then
+    hyp, per = 2, 1
+  elseif c_all + c_nl == num then
+    hyp, per = 3, 1
+  elseif c_all > 0 and num % c_all == 0 then
+    hyp, per = 1, num / c_all
+  elseif c_nospace > 0 and num % c_nospace == 0 then
+    hyp, per = 2, num / c_nospace
+  else
+    return nil
+  end
+
+  local target = math.floor(index / per)
+  local col, k, ord = 1, 0, 0
+  i = 1
+  while i <= len_s do
+    local l = char_len(s, i)
+    local kind = char_kind(s, i, l)
+    if kind == "nl" then
+      if hyp == 3 then
+        if ord == target then
+          return "\n", col, k, cols[col]
+        end
+        ord = ord + 1
+      end
+      col = col + 1
+      k = 0
+    elseif kind ~= "ctrl" then
+      if hyp ~= 2 or kind ~= "space" then
+        if ord == target then
+          return s:sub(i, i + l - 1), col, k, cols[col]
+        end
+        ord = ord + 1
+      end
+      k = k + 1
+    end
+    i = i + l
+  end
+  return nil
+end
+
+-- 文字揃えのラベルから、列の中の基点の位置（0 = 天 / 0.5 = 中心 / 1 = 地）を返す。
+-- 本体の縦書き（「縦書 …」）と読めないラベルは中心（v1.00 と同じ扱い）
+local function align_factor(label)
+  if type(label) ~= "string" or label:find("縦", 1, true) then
+    return 0.5
+  end
+  local head = label:sub(1, 3)
+  if head == "左" then return 0 end
+  if head == "右" then return 1 end
+  return 0.5
+end
+
+local px = tonumber(pivot_x) or 0
+local py = tonumber(pivot_y) or 0
+local dx = (obj.ox or 0) - px
+local dy = (obj.oy or 0) - py
+
+local sp = tonumber(spacing) or 0
+local mode = tonumber(pitch_mode) or 0
+local rotate_on = (rotate_marks == 1 or rotate_marks == true)
+local shift_on = (shift_marks == 1 or shift_marks == true)
+
+local ch, col, k, col_len
+if (sp ~= 0 and n >= 2) or mode == 1 or rotate_on or shift_on then
+  local raw = obj.getvalue(obj.layer, "テキスト", "テキスト")
+  if type(raw) == "string" then
+    ch, col, k, col_len = locate(raw, obj.index or 0, n)
+  end
+end
+
+local a = 0.5
+if ch ~= nil and ((sp ~= 0 and n >= 2) or mode == 1) then
+  a = align_factor(obj.getvalue(obj.layer, "テキスト", "文字揃え"))
+end
+local size = nil
+if ch ~= nil and (mode == 1 or shift_on) then
+  size = tonumber(obj.getvalue(obj.layer, "テキスト", "サイズ"))
+end
+
+-- 列の中の位置（縦方向）。従来は横書きの X をそのまま使う
+local along = dx
+if ch ~= nil and mode == 1 and size ~= nil then
+  -- 文字サイズ固定: 1 文字の送りを サイズ（＋テキストの字間）にして列を置き直す
+  local track = tonumber(obj.getvalue(obj.layer, "テキスト", "字間")) or 0
+  along = (k + 0.5 - a * col_len) * size + (k - a * (col_len - 1)) * track - px
+end
+
+if sp ~= 0 and n >= 2 then
+  if ch ~= nil then
+    along = along + (k - a * (col_len - 1)) * sp
+  else
+    -- 本文と対応が取れないときは v1.00 と同じ（全文の通し番号）
+    along = along + ((obj.index or 0) - (n - 1) * 0.5) * sp
+  end
+end
+
+local dir = tonumber(direction) or 1
+local nx
+if dir == 2 then
+  -- 左縦書き: 上→下、次行は右
+  nx = px + dy
+else
+  -- 右縦書き: 上→下、次行は左（日本語の縦組）
+  nx = px - dy
+end
+local ny = py + along
+
+if shift_on and ch ~= nil and size ~= nil then
+  local off = SHIFT[ch]
+  if off ~= nil then
+    nx = nx + off[1] * size
+    ny = ny + off[2] * size
+  end
+end
+
+if rotate_on and ch ~= nil and ROTATE[ch] then
+  -- 左縦書きでも同じ向き（文字は上から下へ並ぶ）
+  obj.rz = (obj.rz or 0) + 90
+end
+
+obj.ox = nx + (tonumber(shift_x) or 0)
+obj.oy = ny + (tonumber(shift_y) or 0)

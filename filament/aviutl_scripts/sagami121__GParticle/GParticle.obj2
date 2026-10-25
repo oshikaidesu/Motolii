@@ -1,0 +1,283 @@
+--[[computeshader@cs_physics:
+RWTexture2D<float4> rw_data : register(u0);
+
+cbuffer CB0 : register(b0) {
+    float c_time;
+    float c_life;
+    float c_count;
+    float c_vel;
+
+    float c_vel_var;
+    float c_spread;
+    float c_gvx;
+    float c_gvy;
+
+    float c_gvz;
+    float c_resistance;
+    float c_anim_type;
+    float c_emit_x;
+
+    float c_emit_y;
+    float c_emit_z;
+    float c_rad_x;
+    float c_rad_y;
+
+    float c_rad_z;
+    float c_birth_size;
+    float c_death_size;
+    float c_size_var;
+
+    float c_alpha_s;
+    float c_alpha_e;
+    float c_col1_r;
+    float c_col1_g;
+
+    float c_col1_b;
+    float c_col2_r;
+    float c_col2_g;
+    float c_col2_b;
+
+    float c_birth_r;
+    float c_scale;
+    float c_pad1;
+    float c_pad2;
+};
+
+uint pcg_hash(uint s) {
+    uint state = s * 747796405u + 2891336453u;
+    uint word  = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+float rand01(uint seed) {
+    return (float)(pcg_hash(seed)) / 4294967296.0f;
+}
+
+static const float PI  = 3.14159265f;
+static const float PI2 = 6.28318530f;
+
+[numthreads(64, 1, 1)]
+void cs_physics(uint3 id : SV_DispatchThreadID) {
+    uint i = id.x;
+    if (i >= (uint)c_count) return;
+
+    float safe_life = max(c_life, 0.0001f);
+    float phase_offset = safe_life * ((float)i / max(c_count, 1.0f));
+    
+    float total_time = c_time - phase_offset;
+    if (total_time < 0.0f) {
+        rw_data[uint2(i, 0)] = float4(0, 0, 0, 0.0f);
+        rw_data[uint2(i, 1)] = float4(0, 0, 0, 0.0f);
+        rw_data[uint2(i, 2)] = float4(0, 0, 0, 0.0f);
+        return;
+    }
+
+    uint cycle = (uint)(total_time / safe_life);
+    float t = fmod(total_time, safe_life);
+
+    uint seed_base = i * 7919u + cycle * 104729u;
+    bool alive = (rand01(seed_base + 99u) < c_birth_r);
+
+    if (!alive) {
+        rw_data[uint2(i, 0)] = float4(0, 0, 0, 0.0f);
+        rw_data[uint2(i, 1)] = float4(0, 0, 0, 0.0f);
+        rw_data[uint2(i, 2)] = float4(0, 0, 0, 0.0f);
+        return;
+    }
+
+    float ratio = saturate(t / safe_life);
+
+    // Producer Radius
+    float rx = (rand01(seed_base + 10u) * 2.0f - 1.0f) * c_rad_x;
+    float ry = (rand01(seed_base + 11u) * 2.0f - 1.0f) * c_rad_y;
+    float rz = (rand01(seed_base + 12u) * 2.0f - 1.0f) * c_rad_z;
+
+    float speed = c_vel * (1.0f - c_vel_var * rand01(seed_base + 3u));
+    float3 v0 = float3(0, 0, 0);
+
+    int anim = (int)c_anim_type;
+
+    if (anim == 0) {
+        float theta = acos(1.0f - 2.0f * rand01(seed_base + 1u));
+        float phi   = rand01(seed_base + 2u) * PI2;
+        v0 = float3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)) * speed;
+    } 
+    else if (anim == 1) {
+        float theta = rand01(seed_base + 1u) * c_spread;
+        float phi   = rand01(seed_base + 2u) * PI2;
+        v0 = float3(sin(phi) * sin(theta), -cos(theta), cos(phi) * sin(theta)) * speed;
+    } 
+    else if (anim == 2) {
+        float theta = rand01(seed_base + 1u) * c_spread;
+        float phi   = rand01(seed_base + 2u) * PI2;
+        v0 = float3(sin(phi) * sin(theta), cos(theta), cos(phi) * sin(theta)) * speed;
+    } 
+    else if (anim == 3) {
+        float angle = rand01(seed_base + 2u) * PI2 + t * 5.0f;
+        float dist = (1.0f + t * 0.5f) * speed;
+        v0 = float3(cos(angle) * dist, -speed * 0.5f, sin(angle) * dist);
+    } 
+    else {
+        float theta = rand01(seed_base + 1u) * c_spread;
+        float phi   = rand01(seed_base + 2u) * PI2;
+        v0 = float3(sin(phi) * sin(theta), -cos(theta), cos(phi) * sin(theta)) * speed;
+    }
+
+    float drag = exp(-max(c_resistance, 0.0f) * t);
+    float int_t = (c_resistance > 0.001f) ? (1.0f - drag) / c_resistance : t;
+    float px = (c_emit_x + rx) + v0.x * int_t + 0.5f * c_gvx * t * t;
+    float py = (c_emit_y + ry) + v0.y * int_t + 0.5f * c_gvy * t * t;
+    float pz = (c_emit_z + rz) + v0.z * int_t + 0.5f * c_gvz * t * t;
+
+    // サイズに拡大率を適用
+    float base_size = lerp(c_birth_size, c_death_size, ratio);
+    float cur_size  = base_size * (1.0f - c_size_var * rand01(seed_base + 4u));
+    cur_size = max(cur_size * c_scale, 0.1f);
+
+    rw_data[uint2(i, 0)] = float4(px, py, pz, 1.0f);
+    rw_data[uint2(i, 1)] = float4(
+        lerp(c_col1_r, c_col2_r, ratio),
+        lerp(c_col1_g, c_col2_g, ratio),
+        lerp(c_col1_b, c_col2_b, ratio),
+        lerp(c_alpha_s, c_alpha_e, ratio)
+    );
+    rw_data[uint2(i, 2)] = float4(cur_size, 0, 0, 0);
+}
+]]
+
+--[[computeshader@cs_sprite:
+RWTexture2D<float4> rw_obj : register(u0);
+Texture2D<float4>   t_data : register(t0);
+
+cbuffer CB0 : register(b0) {
+    float c_count;
+    float c_sw;
+    float c_sh;
+    float c_intensity;
+};
+
+[numthreads(64, 1, 1)]
+void cs_sprite(uint3 id : SV_DispatchThreadID) {
+    uint i = id.x;
+    if (i >= (uint)c_count) return;
+
+    float4 row0 = t_data[uint2(i, 0)];
+    if (row0.w < 0.5f) return;
+
+    float4 row1 = t_data[uint2(i, 1)];
+    float4 row2 = t_data[uint2(i, 2)];
+
+    // XY座標のみ使用（Z値はスクリーン座標変換不要な2Dエフェクトのため無視）
+    float px = row0.x;
+    float py = row0.y;
+
+    // スクリーン中心へのマッピング（浮動小数点精度を保持）
+    float scx = px + c_sw * 0.5f;
+    float scy = py + c_sh * 0.5f;
+
+    // スクリーン範囲外チェック（ブロックノイズ防止）
+    float fradius = row2.x;
+    if (scx + fradius < 0.0f || scx - fradius >= c_sw) return;
+    if (scy + fradius < 0.0f || scy - fradius >= c_sh) return;
+
+    int cx = (int)round(scx);
+    int cy = (int)round(scy);
+    int radius = max((int)round(fradius), 1);
+
+    int x0 = max(cx - radius, 0);
+    int x1 = min(cx + radius, (int)c_sw - 1);
+    int y0 = max(cy - radius, 0);
+    int y1 = min(cy + radius, (int)c_sh - 1);
+    float r2 = fradius * fradius;
+
+    for (int y = y0; y <= y1; y++) {
+        for (int x = x0; x <= x1; x++) {
+            float dx = (float)(x - cx);
+            float dy = (float)(y - cy);
+            float d2 = dx * dx + dy * dy;
+            if (d2 > r2) continue;
+            float falloff = saturate(1.0f - sqrt(d2) / fradius);
+            falloff *= falloff;
+            float a = row1.a * falloff;
+            float4 dst = rw_obj[uint2(x, y)];
+            rw_obj[uint2(x, y)] = saturate(dst + float4(row1.rgb * a * c_intensity, a));
+        }
+    }
+}
+]]
+
+--information:GParticle
+
+--group:発生量・寿命
+--track@count:発生量,1,5000,300,1
+--track@life:寿命(秒),0.1,20.0,3.0,0.1
+--track@birth_r:発生割合%,1,100,100,1
+--group
+
+--group:発生源
+--track@emit_x:位置X,-2000,2000,0,1
+--track@emit_y:位置Y,-2000,2000,0,1
+--track@emit_z:位置Z,-10000,10000,0,1
+--track@rad_x:範囲X,0,1000,0,1
+--track@rad_y:範囲Y,0,1000,0,1
+--track@rad_z:範囲Z,0,1000,0,1
+--group
+
+--group:物理運動
+--select@anim_type:アニメーション方式,全方向爆発=0,方向指定=1,コーン状=2,渦巻き/回転=3
+--track@vel:初速,0,1000,150,1
+--track@vel_var:速度分散%,0,100,20,1
+--track@spread:拡散角度,0,180,60,1
+--track@gvy:重力Y,-1000,1000,150,1
+--track@gvx:重力X,-500,500,0,1
+--track@gvz:重力Z,-500,500,0,1
+--track@resistance:空気抵抗,0,100,0,0.1
+--group
+
+--group:外観
+--track@birth_size:生成時サイズ,1,200,20,1
+--track@death_size:消滅時サイズ,0,200,2,1
+--track@size_var:サイズ分散%,0,100,50,1
+--track@scale:拡大率,0.1,10.0,1.0,0.1
+--track@intensity:光の強さ,0.0,5.0,1.0,0.1
+--color@col_birth:生成時カラー,0xffffff
+--color@col_death:消滅時カラー,0xff8800
+--track@alpha_s:生成時不透明度,0,100,100,1
+--track@alpha_e:消滅時不透明度,0,100,0,1
+--group
+
+--select@blend_mode:合成モード,通常=0,加算=1,スクリーン=2,乗算=3
+
+local SW     = obj.screen_w
+local SH     = obj.screen_h
+local groups = math.ceil(count / 64)
+
+obj.clearbuffer("object", SW, SH)
+obj.clearbuffer("cache:pw_data", count, 3)
+
+local r1, g1, b1 = RGB(col_birth)  r1, g1, b1 = r1/255, g1/255, b1/255
+local r2, g2, b2 = RGB(col_death)  r2, g2, b2 = r2/255, g2/255, b2/255
+
+-- cbuffer CB0 (float4 × 8 = 32要素)
+obj.computeshader("cs_physics", "cache:pw_data", "random", {
+    obj.time, life, count, vel,
+    vel_var/100, math.rad(spread), gvx, gvy,
+    gvz, resistance/10, anim_type or 0, emit_x,
+    emit_y, emit_z, rad_x, rad_y,
+    rad_z, birth_size, death_size, size_var/100,
+    alpha_s/100, alpha_e/100, r1, g1,
+    b1, r2, g2, b2,
+    birth_r/100, scale, 0, 0,
+}, groups, 1, 1)
+
+-- cbuffer CB0 (float4 × 1 = 4要素)
+obj.computeshader("cs_sprite", "object", "cache:pw_data", {
+    count, SW, SH, intensity,
+}, groups, 1, 1)
+
+local bm_list = { nil, "add", "screen", "mul" }
+local bm = bm_list[(blend_mode or 0) + 1]
+
+if bm then
+    obj.setoption("blend", bm)
+end
+obj.draw(0, 0, 0, 1, 1)

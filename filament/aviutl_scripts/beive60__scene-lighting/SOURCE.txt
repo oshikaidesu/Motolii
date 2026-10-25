@@ -1,0 +1,5 @@
+scene-lighting by Beive60
+licence: MIT
+from: https://github.com/beive60/aviutl2-scene-lighting/releases/download/v0.1.0/aviutl2-scene-lighting-v0.1.0.au2pkg.zip (tag v0.1.0, commit d511ec67a6c5)
+page: https://github.com/beive60/aviutl2-scene-lighting
+Put here unchanged for Motolii (filament/aviutl_scripts).

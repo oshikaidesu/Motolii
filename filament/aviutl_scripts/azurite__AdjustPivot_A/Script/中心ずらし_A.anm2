@@ -1,0 +1,41 @@
+--information:中心ずらし_A v0.5.0 by azurite
+--label:配置
+--select@coord:位置=5,左上=1,上=2,右上=3,左=4,中心=5,右=6,左下=7,下=8,右下=9
+--track@offset_x:オフセットX,-4000,4000,0,0.01
+--track@offset_y:オフセットY,-4000,4000,0,0.01
+--trackgroup@offset_x,offset_y:Group
+--check@obj_move:オブジェクトを移動,false
+--group:その他,false
+--value@PI:PI,{}
+--group
+
+coord = math.min(math.max(tonumber(PI[1]) or coord, 1), 9)
+offset_x = tonumber(PI[2]) or offset_x
+offset_y = tonumber(PI[3]) or offset_y
+if type(PI[4]) == "boolean" then obj_move = PI[4]
+elseif type(PI[4]) == "number" then obj_move = (PI[4] ~= 0)
+end
+
+local sx, sy = obj.getvalue("scale")
+local hw, hh = obj.w / 2, obj.h / 2
+local cx, cy = hw, hh
+local ox, oy = (obj_move and 0 or hw) * sx, (obj_move and 0 or hh) * sy
+
+local offset = {
+    { -cx, -cy, -ox, -oy },
+    {   0, -cy,   0, -oy },
+    {  cx, -cy,  ox, -oy },
+    { -cx,   0, -ox,   0 },
+    {   0,   0,   0,   0 },
+    {  cx,   0,  ox,   0 },
+    { -cx,  cy, -ox,  oy },
+    {   0,  cy,   0,  oy },
+    {  cx,  cy,  ox,  oy },
+}
+
+cx, cy, ox, oy = unpack(offset[coord] or {0, 0, 0, 0})
+obj.cx = cx + offset_x
+obj.cy = cy + offset_y
+obj.ox = ox + (obj_move and 0 or offset_x * sx)
+obj.oy = oy + (obj_move and 0 or offset_y * sy)
+

@@ -1,0 +1,239 @@
+--label:CJF
+--information:固定縁取り（拡大率非連動・画面px） for AviUtl ExEdit2 / AviUtl2 only
+--track@dist:距離,0,200,0,0.1
+--track@stroke:太さ,0.5,200,3,0.1
+--track@blur:ぼかし,0,100,0,0.1
+--track@opacity:不透明度,0,100,100,0.1
+--color@col:色,0xffffff
+--check@keep:元画像を残す,true
+--[[pixelshader@sanitize_premul:
+Texture2D tex0 : register(t0);
+float4 sanitize_premul(float4 pos : SV_Position) : SV_Target {
+	float4 c = tex0.Load(int3(pos.xy, 0));
+	if (c.a < 0.001) return float4(0, 0, 0, 0);
+	c.rgb = min(c.rgb, c.aaa);
+	return c;
+}
+]]
+--[[pixelshader@binarize:
+Texture2D tex0 : register(t0);
+cbuffer constant0 : register(b0) { float4 p0; };
+float4 binarize(float4 pos : SV_Position) : SV_Target {
+	float a = tex0.Load(int3(pos.xy, 0)).a;
+	float v = a >= p0.x ? 1.0 : 0.0;
+	return float4(v, v, v, v);
+}
+]]
+--[[pixelshader@jfa_init_alpha:
+Texture2D tex0 : register(t0);
+float4 jfa_init_alpha(float4 pos : SV_Position) : SV_Target {
+	int2 id = int2(pos.xy);
+	float a = tex0.Load(int3(id, 0)).a;
+	if (a > 0.5) return float4((float)id.x, (float)id.y, 0.0, 1.0);
+	return float4(-1.0, -1.0, 0.0, 0.0);
+}
+]]
+--[[pixelshader@jfa_step:
+Texture2D tex0 : register(t0);
+cbuffer constant0 : register(b0) { float4 p0; };
+float4 jfa_step(float4 pos : SV_Position) : SV_Target {
+	int stepSize = (int)p0.x;
+	int w = (int)p0.y;
+	int h = (int)p0.z;
+	int2 base = int2(pos.xy);
+	float4 best = float4(-1.0, -1.0, 0.0, 0.0);
+	float bestDist = 1e20;
+	[unroll] for (int oy = -1; oy <= 1; oy++) {
+		[unroll] for (int ox = -1; ox <= 1; ox++) {
+			int2 np = base + int2(ox, oy) * stepSize;
+			if (np.x < 0 || np.y < 0 || np.x >= w || np.y >= h) continue;
+			float4 s = tex0.Load(int3(np, 0));
+			if (s.a < 0.5) continue;
+			float2 seed = s.xy;
+			float d = dot(float2(base) - seed, float2(base) - seed);
+			if (d < bestDist) {
+				bestDist = d;
+				best = float4(seed, s.z, 1.0);
+			}
+		}
+	}
+	return best;
+}
+]]
+--[[pixelshader@pack_dist:
+Texture2D seedTex : register(t0);
+float4 pack_dist(float4 pos : SV_Position) : SV_Target {
+	int2 ip = int2(pos.xy);
+	float4 seed = seedTex.Load(int3(ip, 0));
+	float dist = 1e6;
+	if (seed.a > 0.5) dist = length(float2(ip) - seed.xy);
+	return float4(dist, 0.0, 0.0, 1.0);
+}
+]]
+--[[pixelshader@composite_ring:
+Texture2D srcTex : register(t0);
+Texture2D distTex : register(t1);
+cbuffer constant0 : register(b0) {
+	float4 p0; // rgb, alpha
+	float4 p1; // gap, stroke, aa, keep
+};
+float4 composite_ring(float4 pos : SV_Position) : SV_Target {
+	int2 ip = int2(pos.xy);
+	float4 src = srcTex.Load(int3(ip, 0));
+	if (src.a < 0.001) src = float4(0, 0, 0, 0);
+	else src.rgb = min(src.rgb, src.aaa);
+
+	float d = distTex.Load(int3(ip, 0)).r;
+	float gap = max(p1.x, 0.0);
+	float stroke = max(p1.y, 0.0);
+	float aa = max(p1.z, 0.5);
+	float lo = gap;
+	float hi = gap + max(stroke, 1e-3);
+	float sd = abs(d - 0.5 * (lo + hi)) - 0.5 * (hi - lo);
+	float m = saturate(0.5 - sd / aa);
+
+	float outA = m * saturate(p0.w);
+	float4 outline = float4(p0.rgb * outA, outA);
+	if (p1.w < 0.5) return outline;
+	return src + outline * (1.0 - src.a);
+}
+]]
+
+-- Screen-constant outline at native object resolution.
+
+local function eff_axis(base, rel)
+	base = math.abs(tonumber(base) or 1.0)
+	rel = math.abs(tonumber(rel) or 1.0)
+	local v = (math.abs(rel - base) < 1e-5) and rel or (base * rel)
+	if v < 1e-6 then return 1e-6 end
+	return v
+end
+
+local function run_jfa_ps(initName, initResource, maxStep, bw2, bh2)
+	obj.pixelshader(initName, "object", initResource, nil, "copy", "clamp")
+	local onObject = true
+	local step = 1
+	local limit = math.max(1, math.floor(maxStep))
+	while step * 2 <= limit do
+		step = step * 2
+	end
+	while step >= 1 do
+		if onObject then
+			obj.pixelshader("jfa_step", "tempbuffer", "object", { step, bw2, bh2, 0 }, "copy", "clamp")
+			onObject = false
+		else
+			obj.pixelshader("jfa_step", "object", "tempbuffer", { step, bw2, bh2, 0 }, "copy", "clamp")
+			onObject = true
+		end
+		step = math.floor(step / 2)
+	end
+	return onObject and "object" or "tempbuffer"
+end
+
+local function outline_ring(gap_px, stroke_px, aa_px)
+	obj.pixelshader("sanitize_premul", "object", "object", nil, "copy", "clamp")
+	local w, h = obj.getpixel()
+	if w < 1 or h < 1 then
+		return
+	end
+	local uid = tostring(obj.id or 0)
+	local c_src = "cache:fxo_src_" .. uid
+	obj.copybuffer(c_src, "object")
+	obj.copybuffer("tempbuffer", "object")
+	obj.pixelshader("binarize", "tempbuffer", "tempbuffer", { 0.5, 0, 0, 0 }, "copy", "clamp")
+
+	local need = math.ceil(gap_px + stroke_px + aa_px) + 8
+	local jfaLimit = math.min(math.max(w, h), math.max(need, 1))
+	local distSeedBuf = run_jfa_ps("jfa_init_alpha", "tempbuffer", jfaLimit, w, h)
+	local distPackBuf
+	if distSeedBuf == "object" then
+		obj.pixelshader("pack_dist", "tempbuffer", "object", nil, "copy", "clamp")
+		distPackBuf = "tempbuffer"
+	else
+		obj.pixelshader("pack_dist", "object", "tempbuffer", nil, "copy", "clamp")
+		distPackBuf = "object"
+	end
+
+	local r, g, b = RGB(col)
+	local a = (tonumber(opacity) or 100) / 100
+	obj.pixelshader(
+		"composite_ring",
+		"object",
+		{ c_src, distPackBuf },
+		{
+			r / 255, g / 255, b / 255, a,
+			gap_px, stroke_px, aa_px, keep and 1 or 0
+		},
+		"copy",
+		"clamp"
+	)
+end
+
+local function scale_object_to(dw, dh)
+	local sw, sh = obj.getpixel()
+	if sw < 1 or sh < 1 or dw < 1 or dh < 1 then
+		return false
+	end
+	local uid = tostring(obj.id or 0)
+	local c_tmp = "cache:fxo_scale_" .. uid
+	obj.copybuffer(c_tmp, "object")
+	obj.setoption("drawtarget", "tempbuffer", dw, dh)
+	obj.copybuffer("object", c_tmp)
+	local zoom = math.min(dw / sw, dh / sh)
+	obj.draw(0, 0, 0, zoom)
+	obj.copybuffer("object", "tempbuffer")
+	obj.setoption("drawtarget", "framebuffer")
+	return true
+end
+
+-- Cap huge sources to keep the outline work buffer bounded.
+local LIGHT_MAX = 1024
+
+local function outline_light(gap_px, stroke_px, aa_px)
+	local w, h = obj.getpixel()
+	if w < 1 or h < 1 then
+		return
+	end
+	local side = math.max(w, h)
+	if side > LIGHT_MAX then
+		local k = LIGHT_MAX / side
+		local ww = math.max(1, math.floor(w * k + 0.5))
+		local hh = math.max(1, math.floor(h * k + 0.5))
+		if not scale_object_to(ww, hh) then
+			return
+		end
+		outline_ring(gap_px * k, stroke_px * k, math.max(aa_px * k, 0.5))
+		scale_object_to(w, h)
+		return
+	end
+	outline_ring(gap_px, stroke_px, aa_px)
+end
+
+local sx = eff_axis(obj.getvalue("sx"), obj.sx)
+local sy = eff_axis(obj.getvalue("sy"), obj.sy)
+local s = math.sqrt(sx * sy)
+if s < 1e-6 then s = 1e-6 end
+
+local gap = math.max(0, tonumber(dist) or 0)
+local stroke_w = math.max(0, tonumber(stroke) or 3)
+local blur_w = math.max(0, tonumber(blur) or 0)
+local aa = math.max(blur_w, 0.75)
+
+-- Fixed pad from screen px (stable size while scrubbing). Widths use 1/s.
+local max_pad = 256
+local pad = math.min(max_pad, math.ceil(gap + stroke_w + aa) + 2)
+local gap_b = gap / s
+local stroke_b = stroke_w / s
+local aa_b = math.max(aa / s, 0.5)
+local need = gap_b + stroke_b + aa_b
+if need > pad - 2 and need > 0 then
+	local k = (pad - 2) / need
+	gap_b, stroke_b, aa_b = gap_b * k, stroke_b * k, aa_b * k
+end
+aa_b = math.min(aa_b, 1.25)
+
+if pad > 0 then
+	obj.effect("領域拡張", "上", pad, "下", pad, "左", pad, "右", pad)
+end
+
+outline_light(gap_b, stroke_b, aa_b)

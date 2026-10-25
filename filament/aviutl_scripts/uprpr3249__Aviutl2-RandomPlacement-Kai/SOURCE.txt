@@ -1,0 +1,5 @@
+Aviutl2-RandomPlacement-Kai by uprpr3249
+licence: MIT
+from: https://github.com/uprpr3249/Aviutl2-RandomPlacement-Kai (branch main, commit ad53c08f8044) (commit ad53c08f8044)
+page: https://github.com/uprpr3249/Aviutl2-RandomPlacement-Kai
+Put here unchanged for Motolii (filament/aviutl_scripts).

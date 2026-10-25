@@ -1,0 +1,6 @@
+SoftAnchorBone by なたのこ
+licence: MIT
+from: https://github.com/Natadecoco2539/AviUtl2-SoftAnchorBone/releases/download/v1.0/SoftAnchorBone.anm2 (tag v1.0, commit 70511e2ef455)
+page: https://github.com/Natadecoco2539/AviUtl2-SoftAnchorBone
+licence/README from: https://github.com/Natadecoco2539/AviUtl2-SoftAnchorBone at v1.0
+Put here unchanged for Motolii (filament/aviutl_scripts).

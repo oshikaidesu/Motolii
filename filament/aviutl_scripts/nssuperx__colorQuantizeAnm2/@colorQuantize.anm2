@@ -1,0 +1,124 @@
+@通常
+--label:色調整
+--track@color_num:色数,2,255,2,1
+--track@threshold_shift:しきい値ずれ量,-0.5,0.5,0.0,0.01
+--track@curve:しきい値曲線,-1.0,1.0,0.0,0.01
+--color@startColor:開始色,0xffffff
+--color@endColor:終了色,0x000000
+--[[pixelshader@colorQuantize:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+    float color_num;
+    float threshold_shift;
+    float curve;
+    float startColorR;
+    float startColorG;
+    float startColorB;
+    float endColorR;
+    float endColorG;
+    float endColorB;
+}
+
+float4 colorQuantize(float4 pos : SV_Position) : SV_TARGET
+{
+    float3 startColor = float3(startColorR, startColorG, startColorB) / 255.0;
+    float3 endColor = float3(endColorR, endColorG, endColorB) / 255.0;
+    float4 color = src[uint2(floor(pos.xy))];
+    float adjust_color_num = max(1.0, color_num - 1.0);
+    float curve_exp = (curve >= 0.0) ? (1.0-curve) : (1.0 / (1.0+curve)) + 0.0001;
+    float3 curved = pow(saturate(color.rgb), curve_exp);
+    float3 axis = endColor - startColor;
+    float t = dot(curved - startColor, axis) / dot(axis, axis);
+    t = saturate(t);
+    t = round(t * adjust_color_num + threshold_shift) / adjust_color_num;
+    float3 quantized = startColor + axis * t;
+    color.rgb = saturate(quantized);
+    return color;
+}
+
+]]
+
+sr, sg, sb = RGB(startColor)
+er, eg, eb = RGB(endColor)
+
+obj.pixelshader("colorQuantize", "object", {"object"}, {color_num, threshold_shift, curve, sr, sg, sb, er, eg, eb}, "copy")
+
+@グレースケール
+--label:色調整
+--track@color_num:色数,2,255,2,1
+--track@threshold_shift:しきい値ずれ量,-0.5,0.5,0.0,0.01
+--track@curve:しきい値曲線,-1.0,1.0,0.0,0.01
+--[[pixelshader@grayScaleQuantize:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+    float color_num;
+    float threshold_shift;
+    float curve;
+}
+
+float4 grayScaleQuantize(float4 pos : SV_Position) : SV_TARGET
+{
+    float4 color = src[uint2(floor(pos.xy))];
+    float adjust_color_num = max(1.0, color_num - 1.0);
+    float curve_exp = (curve >= 0.0) ? (1.0-curve) : (1.0 / (1.0+curve)) + 0.0001;
+    float3 curved = pow(saturate(color.rgb), curve_exp);
+    float t = dot(curved, float3(1.0, 1.0, 1.0)) / 3.0;
+    t = saturate(t);
+    t = round(t * adjust_color_num + threshold_shift) / adjust_color_num;
+    color.rgb = saturate(float3(t, t, t));
+    return color;
+}
+
+]]
+
+obj.pixelshader("grayScaleQuantize", "object", {"object"}, {color_num, threshold_shift, curve}, "copy")
+
+@bit数
+--label:色調整
+--track@color_bits:bit数,1,8,4,1
+--[[pixelshader@bitQuantize:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+    float color_bits;
+}
+
+float4 bitQuantize(float4 pos : SV_Position) : SV_TARGET
+{
+    float4 color = src[uint2(floor(pos.xy))];
+    int levels = 1 << uint1(color_bits);
+    color.rgb = saturate(floor(color.rgb * levels) / (levels - 1));
+    return color;
+}
+
+]]
+
+obj.pixelshader("bitQuantize", "object", {"object"}, {color_bits}, "copy")
+
+@bit数（RGB別）
+--label:色調整
+--track@color_bits_r:赤bit数,1,8,4,1
+--track@color_bits_g:緑bit数,1,8,4,1
+--track@color_bits_b:青bit数,1,8,4,1
+--[[pixelshader@bitRGBQuantize:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+    float color_bits_r;
+    float color_bits_g;
+    float color_bits_b;
+}
+
+float4 bitRGBQuantize(float4 pos : SV_Position) : SV_TARGET
+{
+    float4 color = src[uint2(floor(pos.xy))];
+    int levels_r = 1 << uint1(color_bits_r);
+    int levels_g = 1 << uint1(color_bits_g);
+    int levels_b = 1 << uint1(color_bits_b);
+    float3 levels = float3(levels_r, levels_g, levels_b);
+    color.rgb = floor(color.rgb * levels) / (levels - 1);
+    color.rgb = saturate(color.rgb);
+    return color;
+}
+
+]]
+
+obj.pixelshader("bitRGBQuantize", "object", {"object"}, {color_bits_r, color_bits_g, color_bits_b}, "copy")

@@ -1,0 +1,228 @@
+--[[
+MIT No Attribution (MIT-0)
+Copyright (c) 2026 HexBrowns
+
+AviUtl2 Scene Transitions - Unified multi-section script
+Scene transitions (.scn2) for AviUtl2
+
+v1.10 (2026-09-27)
+  lua.txt の「シーンチェンジスクリプトの例」の書き方に直した。
+    - 進み具合は obj.getvalue("scenechange")（0 = 切り替え前 / 1 = 切り替え後）
+    - 切り替え前はオブジェクト（"object"）、切り替え後はフレームバッファ（"framebuffer"）。
+      シェーダーでその 2 枚を合成し、結果をフレームバッファへ書く（PageRoll_S と同じ形）
+    - lua.txt に無い --sceneedit と obj.sound を外した。「効果音付き」は保存キーを残して常に隠す
+  式の直しと根拠: AI/scripts/issues/20260926_scene_transitions_undocumented_api.md
+  検証器: AI/scripts/SceneTransitions/verify_scene.py
+
+※このファイルは名前が @ で始まるので、このコメント内でも行頭に @ を置かないこと
+  （セクションの区切りとして読まれる。ルール au2-multisection）。
+]]
+
+@スマッシュカット
+--information:スマッシュカット@SceneTransitions v1.10 by HexBrowns
+--label:HexScript
+--require:2010800
+--check@with_sound:効果音付き,true
+--hide@with_sound
+--track@flash_duration:フラッシュ時間,0,100,30,0.1
+--track@flash_brightness:フラッシュ明度,0,100,80,0.1
+--select@transition_style:スタイル=0,標準=0,ハード=1,ソフト=2
+--[[pixelshader@ps_smash:
+Texture2D img_prev : register(t0);
+Texture2D img_next : register(t1);
+SamplerState smp : register(s0);
+cbuffer constant0 : register(b0) {
+    float mix_next;
+    float flash;
+};
+float4 ps_smash(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float4 c_prev = img_prev.Sample(smp, uv);
+    float4 c_next = img_next.Sample(smp, uv);
+    float4 base = lerp(c_prev, c_next, mix_next);
+    return lerp(base, float4(1.0, 1.0, 1.0, 1.0), flash);
+}
+]]
+
+-- 効果音付き（with_sound）は v1.10 で外した。lua.txt に音を鳴らす関数が無い。
+-- 保存済みの値を失わないよう項目は残し、--hide@ で常に隠している。
+
+local function clamp01(v)
+  if v ~= v then return 0 end
+  if v < 0 then return 0 end
+  if v > 1 then return 1 end
+  return v
+end
+
+local p = clamp01(tonumber(obj.getvalue("scenechange")) or 0)
+local width = clamp01(flash_duration / 100)
+local bright = clamp01(flash_brightness / 100)
+local style = tonumber(transition_style) or 0
+
+-- フラッシュは [start, start + width] の区間。最初の 2 割で白くなり（ピークで切り替わる）、残りの 8 割で消える。
+-- 開始は 0.45。フラッシュが長くても 1 までに消えきるよう、1 - width より後ろには置かない。
+local start = math.min(0.45, 1 - width)
+local rise = width * 0.2
+local peak = start + rise
+local stop = start + width
+
+local flash = 0
+if width > 0 and p >= start and p < stop then
+  if p < peak then
+    flash = bright * (p - start) / rise
+  else
+    local d = (p - peak) / (stop - peak)
+    local k = d * d * (3 - 2 * d)       -- 標準・ソフト: なめらかに消える
+    if style == 1 then k = d end        -- ハード: 一定の速さで消える
+    flash = bright * (1 - k)
+  end
+end
+
+local mix_next
+if style == 2 and width > 0 then
+  -- ソフト: フラッシュの区間いっぱいを使って切り替え前から後へクロスフェードする
+  local t = clamp01((p - start) / width)
+  mix_next = t * t * (3 - 2 * t)
+else
+  -- 標準・ハード: フラッシュのピークで切り替える
+  mix_next = (p >= peak) and 1 or 0
+end
+
+obj.pixelshader("ps_smash", "framebuffer", {"object", "framebuffer"}, {
+  mix_next, flash,
+}, "copy", "clamp")
+
+@ズームトランジション
+--information:ズームトランジション@SceneTransitions v1.10 by HexBrowns
+--label:HexScript
+--require:2010800
+--track@zoom_amount:ズーム量,0,200,100,0.1
+--track@zoom_center_x:中心X,-100,100,0,0.1
+--track@zoom_center_y:中心Y,-100,100,0,0.1
+--select@direction:方向=0,イン=0,アウト=1
+--[[pixelshader@ps_zoom:
+Texture2D img_prev : register(t0);
+Texture2D img_next : register(t1);
+SamplerState smp : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 center;
+    float inv_prev;
+    float inv_next;
+    float progress;
+};
+float4 ps_zoom(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float2 uv_prev = center + (uv - center) * inv_prev;
+    float2 uv_next = center + (uv - center) * inv_next;
+    float in_prev = (uv_prev.x >= 0.0 && uv_prev.x <= 1.0 && uv_prev.y >= 0.0 && uv_prev.y <= 1.0) ? 1.0 : 0.0;
+    float in_next = (uv_next.x >= 0.0 && uv_next.x <= 1.0 && uv_next.y >= 0.0 && uv_next.y <= 1.0) ? 1.0 : 0.0;
+    float4 c_prev = img_prev.Sample(smp, uv_prev);
+    float4 c_next = img_next.Sample(smp, uv_next);
+    float w_prev = (1.0 - progress) * in_prev;
+    float w_next = progress * in_next;
+    float w_sum = w_prev + w_next;
+    float4 result = float4(0.0, 0.0, 0.0, 0.0);
+    if (w_sum > 0.0) {
+        result = (c_prev * w_prev + c_next * w_next) / w_sum;
+    }
+    return result;
+}
+]]
+
+-- ズーム量は「足す倍率」（%）。倍率 z = 1 + ズーム量 / 100。0 で等倍（ただのクロスフェード）、初期値 100 で 2 倍。
+-- イン : 切り替え前は 1 → z 倍、切り替え後は 1/z → 1 倍（どちらも拡大し続ける）
+-- アウト: 切り替え前は 1 → 1/z 倍、切り替え後は z → 1 倍（どちらも縮小し続ける）
+-- 倍率は z の指数で動かす（見た目の速さが一定になる）。始まりは切り替え前が等倍、終わりは切り替え後が等倍。
+-- 画像の外に出た部分は、もう一方の画像だけで埋める（重みを被覆で割り直す）。
+
+local function clamp01(v)
+  if v ~= v then return 0 end
+  if v < 0 then return 0 end
+  if v > 1 then return 1 end
+  return v
+end
+
+local p = clamp01(tonumber(obj.getvalue("scenechange")) or 0)
+local z = 1 + math.max(zoom_amount, 0) / 100
+local s_prev, s_next
+if direction == 1 then
+  s_prev = z ^ (-p)
+  s_next = z ^ (1 - p)
+else
+  s_prev = z ^ p
+  s_next = z ^ (p - 1)
+end
+
+-- 中心X / Y は画面の中央からのずれ（px）。プラスで右 / 下
+local sw = math.max(obj.screen_w or 1, 1)
+local sh = math.max(obj.screen_h or 1, 1)
+local cu = 0.5 + zoom_center_x / sw
+local cv = 0.5 + zoom_center_y / sh
+
+obj.pixelshader("ps_zoom", "framebuffer", {"object", "framebuffer"}, {
+  cu, cv, 1 / s_prev, 1 / s_next, p,
+}, "copy", "clamp")
+
+@パララックス
+--information:パララックス@SceneTransitions v1.10 by HexBrowns
+--label:HexScript
+--require:2010800
+--track@parallax_depth:視差深度,0,100,50,0.1
+--select@direction:方向=0,右=0,左=1,上=2,下=3
+--[[pixelshader@ps_parallax:
+Texture2D img_prev : register(t0);
+Texture2D img_next : register(t1);
+SamplerState smp : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 off_prev;
+    float2 off_next;
+    float progress;
+};
+float4 ps_parallax(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float2 uv_prev = uv - off_prev;
+    float2 uv_next = uv - off_next;
+    float in_prev = (uv_prev.x >= 0.0 && uv_prev.x <= 1.0 && uv_prev.y >= 0.0 && uv_prev.y <= 1.0) ? 1.0 : 0.0;
+    float in_next = (uv_next.x >= 0.0 && uv_next.x <= 1.0 && uv_next.y >= 0.0 && uv_next.y <= 1.0) ? 1.0 : 0.0;
+    float4 c_prev = img_prev.Sample(smp, uv_prev);
+    float4 c_next = img_next.Sample(smp, uv_next);
+    float w_prev = (1.0 - progress) * in_prev;
+    float w_next = progress * in_next;
+    float w_sum = w_prev + w_next;
+    float4 result = float4(0.0, 0.0, 0.0, 0.0);
+    if (w_sum > 0.0) {
+        result = (c_prev * w_prev + c_next * w_next) / w_sum;
+    }
+    return result;
+}
+]]
+
+-- 視差深度は、切り替え前の画像が動く量（画面の幅、上下なら高さに対する %）。
+-- 切り替え前は元の位置から「方向」へ抜けていき、切り替え後はその半分の速さで反対側から入ってきて元の位置に止まる
+-- （奥にある画像ほど遅く動く）。その間をクロスフェードする。画像の外に出た部分はもう一方の画像だけで埋める。
+
+local NEXT_RATIO = 0.5
+
+local function clamp01(v)
+  if v ~= v then return 0 end
+  if v < 0 then return 0 end
+  if v > 1 then return 1 end
+  return v
+end
+
+local p = clamp01(tonumber(obj.getvalue("scenechange")) or 0)
+local depth = math.max(parallax_depth, 0) / 100
+
+-- 画像が動く向き（画面の座標。y は下向きが正）
+local dx, dy = 1, 0
+if direction == 1 then
+  dx, dy = -1, 0
+elseif direction == 2 then
+  dx, dy = 0, -1
+elseif direction == 3 then
+  dx, dy = 0, 1
+end
+
+local a_prev = p * depth
+local a_next = -(1 - p) * depth * NEXT_RATIO
+
+obj.pixelshader("ps_parallax", "framebuffer", {"object", "framebuffer"}, {
+  dx * a_prev, dy * a_prev, dx * a_next, dy * a_next, p,
+}, "copy", "clamp")

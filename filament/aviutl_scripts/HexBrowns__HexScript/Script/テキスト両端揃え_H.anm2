@@ -1,0 +1,621 @@
+--information:テキスト両端揃え_H v1.10 by HexBrowns
+--label:HexScript
+--group:両端揃えの設定
+--track@line_len:行の長さ,0,5000,0,1,最長の行
+--track@rate:変化率,0,100,100,0.1
+--select@distribute:字間の配り方=0,両端揃え=0,均等割付=1
+--select@last_line:最終行=0,揃える=0,最後の行を揃えない=1,段落の最後の行を揃えない=2
+--check@allow_shrink:文字の縮小を許可,1
+--check@allow_expand:文字の拡大を許可,0
+--check@split_space:半角スペースで区切る,0
+--select@draw_mode:描き方=0,1 文字ずつ=0,1 行ずつ=1
+--group
+
+--[[
+テキスト両端揃え_H v1.10
+
+テキストの各行を「行の長さ」に合わせて両端揃えで並べ直す。テキストオブジェクトに掛ける。
+横書き・縦書きはテキストの「文字揃え」から自動で決まる（縦書きは各列を縦方向に揃える）。
+
+  行の長さ      0（最長の行）なら、いちばん長い行の長さに全行を揃える
+  変化率        0 で元のテキストの位置、100 で両端揃えの位置。間は直線で補間する
+  字間の配り方  両端揃え = 行頭と行末に文字を付ける / 均等割付 = 行の両端にも字間の半分を空ける
+  最終行        揃えない行は元の字間のまま、テキストの文字揃えに従って置く。
+                「段落の最後の行」は、次の行が空行の行と最後の行
+  縮小・拡大    行が長さを超える（足りない）とき、字間ではなく文字の大きさで合わせる。
+                縮小は揃えない行にも効く（はみ出さないように）
+
+表示速度: テキストの「表示速度」で 1 単位ずつ現れる。k 文字目（改行と制御文字は数えない）は
+表示速度から求めた時刻に現れ、後段の効果の時間もそこから数える（obj.multiobject の戻り値）。
+制御文字の <r > <w > <c > は無視する
+
+原作: 微熱「テキスト両端揃え(横書き).anm」「テキスト両端揃え(縦書き).anm」
+      （AviUtl（無印）用、rikky_module 使用。https://www.nicovideo.jp/watch/sm43100896）
+
+原作からの変更
+  - rikky_module を使わない。テキストの設定は obj.getvalue("テキスト", 項目名) で読む
+  - 後段の効果を 1 文字ずつ掛ける仕組み（原作の rikky_module.effect）は obj.multiobject で置き換えた。
+    テキストの「文字毎に個別オブジェクト」は OFF で使う（原作は ON が前提だった）
+  - 横書きと縦書きを 1 本にまとめた。縦書きは本体の縦組をそのまま使う
+    （原作は @ フォントの横倒しの字形を 90 度回していた）
+  - 元の位置（変化率 0 の位置）は、本体の組版を text.layout で測って求める
+    （原作は 1 文字の幅を足し合わせ、縁取りのぶんを経験則で補正していた）
+  - 制御文字: 見た目を変えるもの（<# > <s > <@ > <$ > <gw > <gh > <tw > <th > <tr >）は
+    その後の文字へ持ち越す。表示の時間と位置を変えるもの（<r > <w > <c > <p >）と
+    コメント・スクリプト（<// //> <? ?>）は無視する。絵文字 <& > とルビのブロックは 1 文字として扱う
+  - 1 文字だけの行は、文字揃え（左・中央・右）に従って行の中に置く（原作は常に行頭）
+  - 追加: 行の長さ 0 = 最長の行 / 字間の配り方 / 最終行 / 表示速度
+
+v1.01（2026-09-25）
+  組版の結果をキャッシュする（長文で重かったため。v1.00 は 200 字で 1 フレーム 25〜30ms）。
+  キーはテキストと組版に効く設定だけ。変化率・色・表示速度を動かしても測り直さない。
+  テキストのサイズ・字間・行間を移動させるとフレームごとに測り直すのは v1.00 と同じ
+
+v1.10（2026-09-25）
+  描き方 = 1 行ずつ を足した。1 文字ずつではなく 1 行を 1 つの個別オブジェクトとして読み込む
+  （400 字で 1 文字ずつだと 1 フレーム約 33ms。重さの大半は 1 文字ずつの読み込みと描画だった）。
+  行ごとに字間 <gw > を 1 つ付けて両端揃えの字間にし、縮小・拡大は 1 文字ずつと同じく画像の拡大率で行う
+  （字間は拡大率のぶんを割り戻して書く）。行の画像は、行の字の範囲の中心に置く。
+  単語で区切るときは、単語の後ろの空白の前後で <gw > を切り替える。後段の効果は 1 行ずつに掛かる。
+  本文中の <gw > は、1 行ずつ描くときは無視する（行ごとの字間と衝突するため）。
+  はじめはテキスト全体を 1 回で読み込む形（行ごとに <tw > で字幅、<p+ > で行頭をずらす）で作ったが、
+  実機（JST 4 周目）で <tw > は字形だけを字の中心で伸縮して字の送りを変えず、右寄せの行頭の <p- > は
+  2 倍ずれた。確かめていない制御文字の効き方に頼らない形に作り直した
+
+前提（実機未確認。検証は AI/tools/debug_items/jst.py）
+  - obj.load("text.layout", 本文, 0, 0, 文字揃え) が返す中心座標 cx, cy は、
+    obj.load("text") が設定する obj.cx / obj.cy と同じもので、画像の中心は原点から (-cx, -cy) にある
+  - 文字揃えを中央（4 / 13）にして読み込んだ 1 文字の画像は、中心が (obj.ox, obj.oy) に来る
+  - 縁取りで画像が広がっても、字面の位置は標準文字と同じ（広がりは上下左右に均等）
+  - 表示速度を付けて読み込んでも画像の大きさは変わらず、まだ出ていない文字が空くだけ
+  - 表示速度で出る文字数は「経過時間 x 表示速度」の切り捨て。改行と制御文字は数えない
+]]
+
+-- 文字揃えのラベル → obj.load("text") の文字揃え種別（lua.txt:400-401）。
+-- 本体の綴りは「左寄せ[上]」「縦書 上寄[右]」。版で綴りが揺れても読めるよう、語で判定する
+local function align_code(label)
+  if type(label) ~= "string" then
+    return 4
+  end
+  local function has(s)
+    return label:find(s, 1, true) ~= nil
+  end
+  if has("縦") then
+    local side = has("[右]") and 0 or (has("[左]") and 2 or 1)
+    local pos = has("上") and 0 or (has("下") and 2 or 1)
+    return 9 + side * 3 + pos
+  end
+  local row = has("[上]") and 0 or (has("[下]") and 2 or 1)
+  local col = has("左") and 0 or (has("右") and 2 or 1)
+  return row * 3 + col
+end
+
+local DECO = {
+  ["標準文字"] = 0,
+  ["影付き文字"] = 1,
+  ["影付き文字(薄)"] = 2,
+  ["縁取り文字"] = 3,
+  ["縁取り文字(細)"] = 4,
+  ["縁取り文字(太)"] = 5,
+  ["縁取り文字(角)"] = 6,
+}
+
+local function truthy(v)
+  return v == 1 or v == true or v == "1"
+end
+
+-- エイリアスの書式を解く（改行は \n、\ は \\、" は \"）
+local function decode_text(raw)
+  local s = raw:gsub("\r\n", "\n")
+  s = s:gsub("\\(.)", function(c)
+    if c == "n" then return "\n" end
+    if c == "\\" then return "\\" end
+    if c == '"' then return '"' end
+    return nil
+  end)
+  return s
+end
+
+-- UTF-8 の 1 文字の長さ
+local function char_len(s, i)
+  local c = s:byte(i)
+  if c >= 0xF0 then return 4 end
+  if c >= 0xE0 then return 3 end
+  if c >= 0xC0 then return 2 end
+  return 1
+end
+
+-- 本文を字句に分ける。種類は
+--   "nl"    改行
+--   "state" 見た目を変える制御文字（後の文字へ持ち越す）
+--   "char"  1 文字
+--   "unit"  1 文字として扱う塊（絵文字、ルビのブロック）
+-- 捨てる制御文字は字句にしない（aviutl2.txt「○テキスト」）。
+-- drop_spacing なら字間の制御文字（<gw >）も捨てる（1 行ずつ描くときは行ごとに付け替えるため）
+local function tokenize(s, drop_spacing)
+  local tokens = {}
+  local n = #s
+  local i = 1
+  local function push(kind, text)
+    tokens[#tokens + 1] = { kind = kind, s = text }
+  end
+  while i <= n do
+    local c = s:sub(i, i)
+    local consumed = false
+    if c == "\n" then
+      push("nl", "\n")
+      i = i + 1
+      consumed = true
+    elseif c == "<" then
+      if s:sub(i, i + 2) == "<//" then
+        local e = s:find("//>", i + 3, true)
+        if e then
+          i = e + 3
+          consumed = true
+        end
+      elseif s:sub(i, i + 1) == "<?" then
+        local e = s:find("?>", i + 2, true)
+        if e then
+          i = e + 2
+          consumed = true
+        end
+      elseif s:sub(i, i + 2) == "</>" then
+        -- ルビのブロック（</>親文字<!…>ふりがな</>）なら丸ごと 1 文字。そうでなければ区切りなので捨てる
+        local e = s:find("</>", i + 3, true)
+        local body = e and s:sub(i + 3, e - 1) or nil
+        if body and body:find("<!", 1, true) and not body:find("\n", 1, true) then
+          push("unit", s:sub(i, e + 2))
+          i = e + 3
+        else
+          i = i + 3
+        end
+        consumed = true
+      else
+        local e = s:find(">", i + 1, true)
+        local nl = s:find("\n", i + 1, true)
+        if e and (not nl or e < nl) then
+          local tag = s:sub(i, e)
+          local h1 = tag:sub(2, 2)
+          local h2 = tag:sub(2, 3)
+          if drop_spacing and h2 == "gw" then
+            i = e + 1
+            consumed = true
+          elseif h1 == "#" or h1 == "s" or h1 == "@" or h1 == "$"
+              or h2 == "gw" or h2 == "gh" or h2 == "tw" or h2 == "th" or h2 == "tr" then
+            push("state", tag)
+            i = e + 1
+            consumed = true
+          elseif h1 == "&" then
+            push("unit", tag)
+            i = e + 1
+            consumed = true
+          elseif h1 == "r" or h1 == "w" or h1 == "c" or h1 == "p" then
+            i = e + 1
+            consumed = true
+          end
+        end
+      end
+    end
+    if not consumed then
+      local l = char_len(s, i)
+      push("char", s:sub(i, i + l - 1))
+      i = i + l
+    end
+  end
+  return tokens
+end
+
+-- 行ごとに並べる単位（1 文字、または「半角スペースで区切る」なら単語）を組み立てる。
+--   line.src   行頭までに出た制御文字 + 行の本文（行頭からの長さを測るのに使う）
+--   unit.str   単体で読み込む文字列（そこまでに出た制御文字 + 本文）
+--   unit.src_end  line.src のうち、この単位の末尾までの長さ
+--   unit.k     この単位の先頭が本文の何文字目か（0 から。改行と制御文字は数えない。表示速度用）
+-- clean は、捨てる制御文字を除いた本文全体（本体の組版を測るのに使う）
+local function build_lines(tokens, split_words)
+  local lines = {}
+  local clean = {}
+  local state = ""
+  local count = 0
+  local line, word
+
+  local function new_line()
+    -- prefix_len: line.src の頭にある「前の行までの制御文字」の長さ（1 行ずつ描くときは行の頭に付け直す）
+    -- nglyph: 行の字の数（絵文字・ルビは 1 字）
+    line = { src = state, units = {}, clean_end = 0, prefix_len = #state, nglyph = 0 }
+    lines[#lines + 1] = line
+    word = nil
+  end
+
+  local function close_word()
+    if word then
+      word.src_end = #line.src
+      line.units[#line.units + 1] = word
+      word = nil
+    end
+  end
+
+  new_line()
+  for _, t in ipairs(tokens) do
+    if t.kind == "nl" then
+      close_word()
+      line.clean_end = #table.concat(clean)
+      clean[#clean + 1] = "\n"
+      new_line()
+    elseif t.kind == "state" then
+      state = state .. t.s
+      line.src = line.src .. t.s
+      clean[#clean + 1] = t.s
+      if word then
+        word.str = word.str .. t.s
+      end
+    else
+      line.src = line.src .. t.s
+      clean[#clean + 1] = t.s
+      if split_words then
+        if not word then
+          -- 単語の頭では、そこまでの制御文字を全部持つ
+          word = { str = state, k = count }
+        end
+        word.str = word.str .. t.s
+        if t.s == " " then
+          close_word()
+        end
+      else
+        line.units[#line.units + 1] = { str = state .. t.s, src_end = #line.src, k = count }
+      end
+      count = count + 1
+      line.nglyph = line.nglyph + 1
+    end
+  end
+  close_word()
+  line.clean_end = #table.concat(clean)
+  return lines, table.concat(clean)
+end
+
+------------------------------------------------------------------------
+-- テキストの設定を読む
+
+local raw = obj.getvalue("テキスト", "テキスト")
+if type(raw) ~= "string" then
+  -- テキストオブジェクト以外に掛けられた
+  return
+end
+
+if obj.getoption("multi_object") then
+  -- 1 文字ずつに分けるのはこのスクリプト側で行う。本体側でも分けると二重になる
+  obj.alpha = 0
+  if obj.index == 0 then
+    obj.load("text", "テキスト両端揃え_H: テキストの「文字毎に個別オブジェクト」を OFF にしてください")
+    obj.alpha = 1
+  end
+  return
+end
+
+local GV = obj.getvalue
+local font_name = tostring(GV("テキスト", "フォント") or "")
+local font_size = tonumber(GV("テキスト", "サイズ")) or 34
+local deco = DECO[GV("テキスト", "文字装飾")] or 0
+local color1 = tonumber(GV("テキスト", "文字色") or "", 16) or 0xffffff
+local color2 = tonumber(GV("テキスト", "影・縁色") or "", 16) or 0x000000
+local bold = truthy(GV("テキスト", "B"))
+local italic = truthy(GV("テキスト", "I"))
+local char_gap = tonumber(GV("テキスト", "字間")) or 0
+local line_gap = tonumber(GV("テキスト", "行間")) or 0
+local speed = tonumber(GV("テキスト", "表示速度")) or 0
+local align = align_code(GV("テキスト", "文字揃え"))
+
+local vertical = align >= 9
+-- 行の中の揃え（0 = 行頭 / 1 = 中央 / 2 = 行末）
+local pos_in_line = vertical and ((align - 9) % 3) or (align % 3)
+-- 1 文字の画像を読み込むときの文字揃え（中央）
+local unit_align = vertical and 13 or 4
+
+local function set_font(type_)
+  obj.setfont(font_name, font_size, type_, color1, color2, bold, italic, char_gap, line_gap)
+end
+
+-- 読み込んだときの大きさを (行方向, 行と直交する方向) で返す
+local function measure(s)
+  if s == "" then
+    return 0, 0
+  end
+  local w, h = obj.load("text.layout", s, 0, 0, unit_align)
+  w, h = w or 0, h or 0
+  if vertical then
+    return h, w
+  end
+  return w, h
+end
+
+local r = (tonumber(rate) or 100) / 100
+local split_words = (split_space == 1 or split_space == true)
+local shrink = (allow_shrink == 1 or allow_shrink == true)
+local expand = (allow_expand == 1 or allow_expand == true)
+local even = (tonumber(distribute) == 1)
+local last_mode = tonumber(last_line) or 0
+local line_len_v = tonumber(line_len) or 0
+local batch = (tonumber(draw_mode) == 1)
+
+------------------------------------------------------------------------
+-- 組版（各単位の変化率 0 と 100 の位置・大きさ）を求める。
+-- 行頭からの長さを 1 単位ずつ text.layout で測るので、1 行の字数の 2 乗で重くなる。
+-- 結果はテキストと設定だけで決まる（変化率・色・表示速度・時刻によらない）ので、下でキャッシュする
+
+local function compute_layout()
+  local body = decode_text(raw)
+  local lines, clean = build_lines(tokenize(body, batch), split_words)
+
+  -- 字面の枠（装飾の広がりを除く）の左上。原点は文字揃えの基準点
+  set_font(0)
+  local plain_w, plain_h = obj.load("text.layout", clean, 0, 0, align)
+  plain_w, plain_h = plain_w or 0, plain_h or 0
+  set_font(deco)
+  local _, _, deco_cx, deco_cy = obj.load("text.layout", clean, 0, 0, align)
+  local box_x = -(deco_cx or 0) - plain_w / 2
+  local box_y = -(deco_cy or 0) - plain_h / 2
+
+  set_font(0)
+  local box_along = vertical and plain_h or plain_w
+  local box_origin_along = vertical and box_y or box_x
+
+  -- 1 周目: 行ごとに測る
+  local natural_max = 0
+  local last_filled = 0
+  for li, line in ipairs(lines) do
+    if #line.units > 0 then
+      -- 行と直交する方向の位置: 1 行目からこの行までを組んだ長さ（行間・文字サイズの変化を含む）
+      local _, upto = measure(clean:sub(1, line.clean_end))
+      local line_along, thick = measure(line.src)
+      if vertical then
+        -- 縦書きは右の列から左へ並ぶ
+        line.cross = box_x + plain_w - upto + thick / 2
+      else
+        line.cross = box_y + upto - thick / 2
+      end
+      line.along = line_along
+      line.sizes = {}
+      line.total = 0
+      for k, u in ipairs(line.units) do
+        line.sizes[k] = measure(u.str)
+        line.total = line.total + line.sizes[k]
+      end
+      if line_along > natural_max then
+        natural_max = line_along
+      end
+      last_filled = li
+    end
+  end
+
+  local target_len = line_len_v
+  if target_len <= 0 then
+    target_len = natural_max
+  end
+
+  -- 揃えない行か（最終行の設定）
+  local function is_loose(li)
+    if last_mode == 1 then
+      return li == last_filled
+    elseif last_mode == 2 then
+      local next_line = lines[li + 1]
+      return li == last_filled or (next_line ~= nil and #next_line.units == 0)
+    end
+    return false
+  end
+
+  -- 2 周目: 並べる。out は 1 文字ずつ描くときの単位、blines は 1 行ずつ描くときの行
+  local out, blines = {}, {}
+  for li, line in ipairs(lines) do
+    local n = #line.units
+    if n > 0 then
+      local total = line.total
+      local start0 = box_origin_along + pos_in_line * (box_along - line.along) / 2
+      local start1 = box_origin_along + pos_in_line * (box_along - target_len) / 2
+      local loose = is_loose(li)
+
+      -- scale: 文字の大きさ / gap: 単位の間 / offset: 行頭の空き。natural は元の位置のまま
+      local scale, gap, offset, natural = 1, 0, 0, false
+      if total > 0 and shrink and total > target_len then
+        scale = target_len / total
+      elseif loose then
+        natural = true
+      elseif total > 0 and expand and total < target_len then
+        scale = target_len / total
+      elseif even then
+        gap = (target_len - total) / n
+        offset = gap / 2
+      elseif n > 1 then
+        gap = (target_len - total) / (n - 1)
+      else
+        offset = pos_in_line * (target_len - total) / 2
+      end
+
+      local pen = start1 + offset
+      local first, last
+      for k, u in ipairs(line.units) do
+        local size = line.sizes[k]
+        -- 変化率 0: 本体の組版での位置（行頭からこの単位の末尾までの長さで測る）
+        local edge = measure(line.src:sub(1, u.src_end))
+        local c0 = start0 + edge - size / 2
+        -- 変化率 100: 両端揃えの位置
+        local c1 = pen + size * scale / 2
+        pen = pen + size * scale + gap
+        if natural then
+          c1 = c0
+        end
+        local e = { str = u.str, k = u.k, cross = line.cross, c0 = c0, c1 = c1, scale = scale, size = size }
+        out[#out + 1] = e
+        first = first or e
+        last = e
+      end
+
+      -- 1 行ずつ描くときの行。単語で区切るなら、単語の後ろの空白の前後で字間を切り替える
+      local parts, prev = {}, line.prefix_len
+      if split_words then
+        for k, u in ipairs(line.units) do
+          local piece = line.src:sub(prev + 1, u.src_end)
+          prev = u.src_end
+          local sp = (k < n) and piece:sub(-1) == " "
+          if sp then
+            piece = piece:sub(1, -2)
+          end
+          parts[k] = { text = piece, sp = sp }
+        end
+      else
+        parts[1] = { text = line.src:sub(prev + 1, line.units[n].src_end), sp = false }
+        prev = line.units[n].src_end
+      end
+      blines[#blines + 1] = {
+        prefix = line.src:sub(1, line.prefix_len),   -- 前の行までの制御文字（行を単体で読み込むので持ち越す）
+        parts = parts,
+        tail = line.src:sub(prev + 1),
+        gap = natural and char_gap or gap,            -- 変化率 100 の単位の間（揃えない行は元の字間）
+        scale = scale,
+        k = first.k,
+        cross = line.cross,
+        -- 行の字の範囲の両端（変化率 0 と 100）
+        head0 = first.c0 - first.size / 2,
+        head1 = first.c1 - first.size * scale / 2,
+        tail0 = last.c0 + last.size / 2,
+        tail1 = last.c1 + last.size * scale / 2,
+        -- 字間 0 で組んだ行の長さを本体で測る。text.layout は 1 字ずつだと整数に丸めた幅を返すので、
+        -- 1 字ずつの幅の合計は本当の字の送りより長い（400 字の JST-74 で 33px）。1 行ずつ描くときは
+        -- この長さから字間（縮小・拡大の行は拡大率）を決め直し、行がちょうど両端に届くようにする
+        w0 = measure(line.src:sub(1, line.prefix_len) .. "<gw0>" .. line.src:sub(line.prefix_len + 1)),
+        inner_n = line.nglyph - n,   -- 単語の中の字の間の数（1 文字ずつなら 0）
+        gaps_n = n - 1,              -- 単位の間の数
+      }
+    end
+  end
+  return { units = out, lines = blines }
+end
+
+local function fmt4(v)
+  return string.format("%.4f", v)
+end
+
+-- 1 行ずつ描くときの行の文字列。between は単位の間、inner は単語の中の字の間に入れる字間
+-- （どちらも行の画像を拡大率で伸縮する前の値）
+local function line_text(L, between, inner)
+  local s = { L.prefix, "<gw", fmt4(split_words and inner or between), ">" }
+  for _, part in ipairs(L.parts) do
+    s[#s + 1] = part.text
+    if part.sp then
+      s[#s + 1] = "<gw" .. fmt4(between) .. "> <gw" .. fmt4(inner) .. ">"
+    end
+  end
+  s[#s + 1] = L.tail
+  return table.concat(s)
+end
+
+-- キャッシュ。Lua の状態はフレームをまたいで残る（@tim.anm2 の point_cache などと同じ使い方）。
+-- 残らない環境でも毎回 compute_layout するだけで、結果は変わらない。
+-- 表の名前に版を入れて、スクリプトを差し替えたときに前の版の結果を使わないようにする
+local CACHE_NAME = "TextJustifyH_layout_v110b"
+local CACHE_MAX = 64
+local cache = rawget(_G, CACHE_NAME)
+if type(cache) ~= "table" then
+  cache = { n = 0, map = {} }
+  rawset(_G, CACHE_NAME, cache)
+end
+
+-- 組版に効く値をすべて入れる（変化率・色・表示速度は入れない）
+local SEP = string.char(1)
+local key = table.concat({
+  raw, font_name, string.format("%.17g", font_size), tostring(deco), tostring(bold), tostring(italic),
+  string.format("%.17g", char_gap), string.format("%.17g", line_gap), tostring(align),
+  string.format("%.17g", line_len_v), tostring(even), tostring(last_mode),
+  tostring(shrink), tostring(expand), tostring(split_words), tostring(batch),
+}, SEP)
+
+local layout = cache.map[key]
+if layout == nil then
+  layout = compute_layout()
+  if cache.n >= CACHE_MAX then
+    -- サイズなどを動かすとフレームごとに別のキーになる。溜め込まないよう丸ごと捨てる
+    cache.map, cache.n = {}, 0
+  end
+  cache.map[key] = layout
+  cache.n = cache.n + 1
+end
+
+local KEYS = { "ox", "oy", "oz", "rx", "ry", "rz", "cx", "cy", "cz", "sx", "sy", "sz", "alpha" }
+local outer = {}
+for _, k in ipairs(KEYS) do
+  outer[k] = obj[k]
+end
+
+local now = obj.time
+
+-- 変化率を当てる（ここだけは毎フレーム）。1 行ずつなら行の画像を、行の字の範囲の中心に置く
+local placed = {}
+if batch then
+  for i, L in ipairs(layout.lines) do
+    local head = L.head0 + (L.head1 - L.head0) * r
+    local tail = L.tail0 + (L.tail1 - L.tail0) * r
+    local span = tail - head
+    local along = (head + tail) / 2
+    -- 本体の行の長さ = S x (w0 + inner_n x 単語の中の字間 + gaps_n x 単位の間)。これが span になるように決める
+    local S, between
+    if L.scale ~= 1 then
+      -- 縮小・拡大の行: 単位の間は元の字間から 0 へ（1 文字ずつと同じ）。拡大率で残りを合わせる
+      local sp = char_gap * (1 - r)
+      local base = L.w0 + L.inner_n * char_gap
+      S = (base > 0) and ((span - L.gaps_n * sp) / base) or 1
+      between = sp / S
+    else
+      S = 1
+      if L.gaps_n > 0 then
+        between = (span - L.w0 - L.inner_n * char_gap) / L.gaps_n
+      else
+        between = char_gap
+      end
+    end
+    local p = { str = line_text(L, between, char_gap), k = L.k }
+    if vertical then
+      p.x, p.y, p.sx, p.sy = L.cross, along, 1, S
+    else
+      p.x, p.y, p.sx, p.sy = along, L.cross, S, 1
+    end
+    placed[i] = p
+  end
+else
+  for i, u in ipairs(layout.units) do
+    local along = u.c0 + (u.c1 - u.c0) * r
+    local s = 1 + (u.scale - 1) * r
+    local p = { str = u.str, k = u.k }
+    if vertical then
+      p.x, p.y, p.sx, p.sy = u.cross, along, 1, s
+    else
+      p.x, p.y, p.sx, p.sy = along, u.cross, s, 1
+    end
+    placed[i] = p
+  end
+end
+
+------------------------------------------------------------------------
+-- 1 単位（1 文字・単語・1 行）ずつ個別オブジェクトとして描く
+
+obj.multiobject(#placed, function()
+  local p = placed[obj.index + 1]
+  set_font(deco)
+  -- 表示速度: k 文字目から始まる単位を、時刻を k / 表示速度 だけ戻して読み込む。
+  -- 単位の中で出る文字数が「全体で出る文字数 - k」になる（単語の途中まで出る）
+  local delay = (speed > 0) and (p.k / speed) or 0
+  obj.load("text", p.str, speed, now - delay, unit_align)
+  for _, k in ipairs(KEYS) do
+    obj[k] = outer[k]
+  end
+  obj.ox = outer.ox + p.x
+  obj.oy = outer.oy + p.y
+  obj.cx, obj.cy = 0, 0
+  obj.sx = outer.sx * p.sx
+  obj.sy = outer.sy * p.sy
+  if delay > 0 then
+    -- 後段の効果の時間を、この単位が現れた時刻から数える
+    return -delay
+  end
+end)
+
+for _, k in ipairs(KEYS) do
+  obj[k] = outer[k]
+end

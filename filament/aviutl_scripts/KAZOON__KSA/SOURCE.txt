@@ -1,0 +1,7 @@
+KSA by KAZOON
+licence: MIT
+from: https://github.com/cycloawaodorin/ksa/releases/download/v2.1.10/ksa.2.1.10.au2pkg.zip (tag v2.1.10, commit 7aa93c15bf99)
+page: https://github.com/cycloawaodorin/ksa
+licence/README from: https://github.com/cycloawaodorin/ksa at v2.1.10
+left out: 1 .mod2 (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

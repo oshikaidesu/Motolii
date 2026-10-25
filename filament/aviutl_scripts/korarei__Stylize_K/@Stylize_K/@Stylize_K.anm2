@@ -1,0 +1,2198 @@
+@Saturate
+--infomation:Saturate@Stylize_K v1.2.1
+--label:Stylize
+--track0:R Gain,0,1000,100,0.01
+--track1:G Gain,0,1000,100,0.01
+--track2:B Gain,0,1000,100,0.01
+--track3:A Gain,0,1000,100,0.01
+--select@_1:Color Space=1,Linear=0,sRGB=1
+--track@_2:Mix,0,100,100,0.01
+--value@_0:PI,{}
+--[[pixelshader@saturate:
+float EPSILON = 1.0e-5;
+
+inline bool is_zero(float val) {
+    return abs(val) < EPSILON;
+}
+
+inline bool are_equal(float a, float b) {
+    return abs(a - b) < EPSILON;
+}
+
+inline float4 unpremul_col(float4 col) {
+    if (is_zero(col.a)) discard;
+    return float4(saturate(col.rgb * rcp(col.a)), col.a);
+}
+
+inline float4 premul_col(float4 col) {
+    return float4(col.rgb * col.a, col.a);
+}
+
+float4 decode_col(float code, float a) {
+    uint col = (uint)code;
+    float3 rgb = float3(
+        (col >> 16) & 0xFF,
+        (col >> 8) & 0xFF,
+        col & 0xFF
+    ) * rcp(255.0);
+    return float4(rgb, a);
+}
+
+float calc_luma(float3 col, int mode) {
+    float3 luma_weights = float3(0.2126, 0.7152, 0.0722); // Default to BT.709
+    switch (mode) {
+        case 0: // Luminance BT.601
+            luma_weights = float3(0.299, 0.587, 0.114);
+            break;
+        case 2: // Luminance BT.2020
+            luma_weights = float3(0.2627, 0.6780, 0.0593);
+            break;
+    }
+    return dot(col, luma_weights);
+}
+
+float3 rgb2hsv(float3 rgb) {
+    float4 k = float4(0.0, -rcp(3.0), 2.0 * rcp(3.0), -1.0);
+    float4 p = lerp(float4(rgb.bg, k.wz), float4(rgb.gb, k.xy), step(rgb.b, rgb.g));
+    float4 q = lerp(float4(p.xyw, rgb.r), float4(rgb.r, p.yzx), step(p.x, rgb.r));
+    
+    float d = q.x - min(q.w, q.y);
+    return float3(abs(q.z + (q.w - q.y) * rcp(6.0 * d + EPSILON)), d * rcp(q.x + EPSILON), q.x);
+}
+
+float3 hsv2rgb(float3 hsv) {
+    float4 k = float4(1.0, 2.0 * rcp(3.0), rcp(3.0), 3.0);
+    float3 p = abs(frac(hsv.xxx + k.xyz) * 6.0 - k.www);
+    return hsv.z * lerp(k.xxx, clamp(p - k.xxx, 0.0, 1.0), hsv.y);
+}
+
+float4 to_linear(float4 col, int mode) {
+    switch (mode) {
+        case 0:
+            return col;
+        case 1:
+            float3 t = step(col.rgb, 0.04045);
+            float3 low = col.rgb * rcp(12.92);
+            float3 high = pow(abs((col.rgb + 0.055) * rcp(1.055)), 2.4);
+            return float4(lerp(high, low, t), col.a);
+        default:
+            return col;
+    }
+}
+
+float4 to_gamma(float4 col, int mode) {
+    switch (mode) {
+        case 0:
+            return saturate(col);
+        case 1:
+            float3 t = step(col.rgb, 0.0031308);
+            float3 low = 12.92 * col.rgb;
+            float3 high = 1.055 * pow(abs(col.rgb), rcp(2.4)) - 0.055;
+            return saturate(float4(lerp(high, low, t), col.a));
+        default:
+            return saturate(col);
+    }
+}
+
+Texture2D src : register(t0);
+cbuffer params : register(b0) {
+    float4 gain;
+    float col_space;
+    float mix;
+};
+
+struct PS_INPUT {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+float4 saturate(PS_INPUT input) : SV_Target {
+    float4 tex = src.Load(int3(input.pos.xy, 0));
+    float4 col = unpremul_col(tex);
+
+    float4 lin_col = to_linear(col, col_space);
+    float4 amp_col = lin_col * gain;
+    float4 out_col = to_gamma(amp_col, col_space);
+    float4 out_tex = premul_col(out_col);
+
+    return lerp(tex, out_tex, mix);
+}
+
+]]
+
+_0 = _0 or {}
+local r_gain = math.max(tonumber(_0.r_gain) or obj.track0, 0.0) * 0.01
+local g_gain = math.max(tonumber(_0.g_gain) or obj.track1, 0.0) * 0.01
+local b_gain = math.max(tonumber(_0.b_gain) or obj.track2, 0.0) * 0.01
+local a_gain = math.max(tonumber(_0.a_gain) or obj.track3, 0.0) * 0.01
+local col_space = tonumber(_0.col_space) or _1 _1 = nil
+local mix = math.max(math.min(tonumber(_0.mix) or _2, 100.0), 0.0) * 0.01 _2 = nil
+_0 = nil
+
+obj.pixelshader("saturate", "object", "object", {
+    r_gain, g_gain, b_gain, a_gain,
+    col_space,
+    mix
+})
+
+
+@Mosaic
+--infomation:Mosaic@Stylize_K v1.2.1
+--label:Stylize
+--track0:X Blocks,1,16384,32,1
+--track1:Y Blocks,1,16384,32,1
+--check0:Sharp Colors,0
+--value@_0:PI,{}
+--[[computeshader@mosaic_ave:
+RWTexture2D<half4> dst : register(u0);
+Texture2D src : register(t0);
+cbuffer params : register(b0) {
+    float2 blocks;
+    float2 res;
+    float total_groups;
+    float total_blocks;
+};
+
+struct CS_INPUT {
+    uint3 gid : SV_GroupID;
+    uint3 gtid : SV_GroupThreadID;
+    uint gidx : SV_GroupIndex;
+};
+
+groupshared float4 col_buf[64];
+groupshared uint cnt_buf[64];
+
+[numthreads(8, 8, 1)]
+void mosaic_ave(CS_INPUT input) {
+    for (uint i = input.gid.x; i < uint(total_blocks); i += uint(total_groups)) {
+        uint map_w = uint(blocks.x);
+        uint2 block_idx = uint2(i % map_w, i / map_w);
+        float2 block_size = res * rcp(blocks);
+        uint2 st = uint2(block_idx * block_size);
+        uint2 ed = min(uint2((block_idx + 1) * block_size), uint2(res));
+
+        float4 l_col = float4(0.0, 0.0, 0.0, 0.0);
+        uint l_cnt = 0;
+        for (uint y = st.y + input.gtid.y; y < ed.y; y += 8) {
+            for (uint x = st.x + input.gtid.x; x < ed.x; x += 8) {
+                l_col += src[uint2(x, y)];
+                l_cnt++;
+            }
+        }
+        col_buf[input.gidx] = l_col;
+        cnt_buf[input.gidx] = l_cnt;
+
+        GroupMemoryBarrierWithGroupSync();
+        for (uint s = 32; s > 0; s >>= 1) {
+            if (input.gidx < s) {
+                col_buf[input.gidx] += col_buf[input.gidx + s];
+                cnt_buf[input.gidx] += cnt_buf[input.gidx + s];
+            }
+            GroupMemoryBarrierWithGroupSync();
+        }
+
+        if (input.gidx == 0) {
+            float4 col = col_buf[0];
+            uint cnt = cnt_buf[0];
+            dst[block_idx] = col * rcp(max(cnt, 1));
+        }
+    }
+}
+
+]]
+--[[pixelshader@mosaic_draw:
+Texture2D map : register(t0);
+cbuffer params : register(b0) {
+    float2 blocks;
+    float2 res;
+};
+
+struct PS_INPUT {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+float4 mosaic_draw(PS_INPUT input) : SV_Target {
+    int2 block_idx = int2(input.pos.xy * blocks * rcp(res));
+    return map.Load(int3(block_idx, 0));
+}
+
+]]
+--[[pixelshader@mosaic_point:
+Texture2D src : register(t0);
+cbuffer params : register(b0) {
+    float2 blocks;
+    float2 res;
+};
+
+struct PS_INPUT {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+float4 mosaic_point(PS_INPUT input) : SV_Target {
+    float2 block_size = res * rcp(blocks);
+    int2 block_idx = int2(input.pos.xy * rcp(block_size));
+    int2 pos = int2((block_idx + 0.5) * block_size);
+    return src.Load(int3(clamp(pos, 0, int2(res) - 1), 0));
+}
+
+]]
+
+_0 = _0 or {}
+local bx = math.floor(tonumber(_0.bx) or obj.track0)
+local by = math.floor(tonumber(_0.by) or obj.track1)
+local sharp_col = obj.check0
+if (type(_0.sharp_col) == "boolean") then
+    sharp_col = _0.sharp_col
+elseif (type(_0.sharp_col) == "number") then
+    sharp_col = _0.sharp_col ~= 0
+end
+_0 = nil
+
+local function err_handler(e)
+    local hint = "Hint: Try increasing TemporaryImageCacheSize in system.conf."
+    debug_print(string.format("%s. %s", e, hint))
+end
+
+local function clamp(v, min, max)
+    return math.max(math.min(v, max), min)
+end
+
+local ok, e = pcall(function()
+local w, h = obj.getpixel()
+bx = clamp(bx, 1, w)
+by = clamp(by, 1, h)
+
+if (sharp_col) then
+    obj.pixelshader("mosaic_point", "object", "object", {
+        bx, by,
+        w, h
+    })
+else
+    local n = 256
+    obj.setoption("drawtarget", "tempbuffer", bx, by)
+    obj.computeshader("mosaic_ave", "tempbuffer", "object", {
+        bx, by,
+        w, h,
+        n,
+        bx * by
+    },
+    n, 1, 1)
+
+    obj.pixelshader("mosaic_draw", "object", "tempbuffer", {
+        bx, by,
+        w, h
+    })
+
+    obj.clearbuffer("tempbuffer")
+end
+end)
+if (not ok) then
+    err_handler(e)
+end
+
+
+@Threshold
+--infomation:Threshold@Stylize_K v1.2.1
+--label:Stylize
+--track0:Threshold,0,255,128
+--select@_1:Channel=1,Luminance (BT.601)=0,Luminance (BT.709)=1,Luminance (BT.2020)=2,Value=3,Saturation=4,Hue=5,Alpha=6
+--check0:Invert,0
+--color@_2:Light Color,0xffffff
+--track2:Light Alpha,0,100,100,0.01
+--color@_3:Dark Color,0x000000
+--track3:Dark Alpha,0,100,100,0.01
+--select@_4:Color Space=1,Linear=0,sRGB=1
+--track1:Mix,0,100,100,0.01
+--value@_0:PI,{}
+--[[pixelshader@thresholding:
+float EPSILON = 1.0e-5;
+
+inline bool is_zero(float val) {
+    return abs(val) < EPSILON;
+}
+
+inline bool are_equal(float a, float b) {
+    return abs(a - b) < EPSILON;
+}
+
+inline float4 unpremul_col(float4 col) {
+    if (is_zero(col.a)) discard;
+    return float4(saturate(col.rgb * rcp(col.a)), col.a);
+}
+
+inline float4 premul_col(float4 col) {
+    return float4(col.rgb * col.a, col.a);
+}
+
+float4 decode_col(float code, float a) {
+    uint col = (uint)code;
+    float3 rgb = float3(
+        (col >> 16) & 0xFF,
+        (col >> 8) & 0xFF,
+        col & 0xFF
+    ) * rcp(255.0);
+    return float4(rgb, a);
+}
+
+float calc_luma(float3 col, int mode) {
+    float3 luma_weights = float3(0.2126, 0.7152, 0.0722); // Default to BT.709
+    switch (mode) {
+        case 0: // Luminance BT.601
+            luma_weights = float3(0.299, 0.587, 0.114);
+            break;
+        case 2: // Luminance BT.2020
+            luma_weights = float3(0.2627, 0.6780, 0.0593);
+            break;
+    }
+    return dot(col, luma_weights);
+}
+
+float3 rgb2hsv(float3 rgb) {
+    float4 k = float4(0.0, -rcp(3.0), 2.0 * rcp(3.0), -1.0);
+    float4 p = lerp(float4(rgb.bg, k.wz), float4(rgb.gb, k.xy), step(rgb.b, rgb.g));
+    float4 q = lerp(float4(p.xyw, rgb.r), float4(rgb.r, p.yzx), step(p.x, rgb.r));
+    
+    float d = q.x - min(q.w, q.y);
+    return float3(abs(q.z + (q.w - q.y) * rcp(6.0 * d + EPSILON)), d * rcp(q.x + EPSILON), q.x);
+}
+
+float3 hsv2rgb(float3 hsv) {
+    float4 k = float4(1.0, 2.0 * rcp(3.0), rcp(3.0), 3.0);
+    float3 p = abs(frac(hsv.xxx + k.xyz) * 6.0 - k.www);
+    return hsv.z * lerp(k.xxx, clamp(p - k.xxx, 0.0, 1.0), hsv.y);
+}
+
+float4 to_linear(float4 col, int mode) {
+    switch (mode) {
+        case 0:
+            return col;
+        case 1:
+            float3 t = step(col.rgb, 0.04045);
+            float3 low = col.rgb * rcp(12.92);
+            float3 high = pow(abs((col.rgb + 0.055) * rcp(1.055)), 2.4);
+            return float4(lerp(high, low, t), col.a);
+        default:
+            return col;
+    }
+}
+
+float4 to_gamma(float4 col, int mode) {
+    switch (mode) {
+        case 0:
+            return saturate(col);
+        case 1:
+            float3 t = step(col.rgb, 0.0031308);
+            float3 low = 12.92 * col.rgb;
+            float3 high = 1.055 * pow(abs(col.rgb), rcp(2.4)) - 0.055;
+            return saturate(float4(lerp(high, low, t), col.a));
+        default:
+            return saturate(col);
+    }
+}
+
+Texture2D src : register(t0);
+cbuffer params : register(b0) {
+    float threshold;
+    float channel;
+    float inv;
+    float light_col;
+    float light_a;
+    float dark_col;
+    float dark_a;
+    float col_space;
+    float mix;
+};
+
+struct PS_INPUT {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+float4 luminance_thresholding(float4 col) {
+    float val = calc_luma(col.rgb, channel);
+    val = lerp(val, saturate(1.0 - val), inv);
+    float mask = step(threshold, val);
+    float4 dark = decode_col(dark_col, dark_a * col.a);
+    float4 light = decode_col(light_col, light_a * col.a);
+    return lerp(dark, light, mask);
+}
+
+float4 hsv_thresholding(float4 col) {
+    float3 rgb = saturate(col.rgb);
+    float3 hsv = rgb2hsv(rgb);
+    float val = 0.0;
+    switch (int(channel)) {
+        case 3: // Value
+            val = hsv.z;
+            break;
+        case 4: // Saturation
+            val = hsv.y;
+            break;
+        case 5: // Hue
+            val = hsv.x;
+            break;
+    }
+
+    val = lerp(val, saturate(1.0 - val), inv);
+    float mask = step(threshold, val);
+    float4 dark = decode_col(dark_col, dark_a * col.a);
+    float4 light = decode_col(light_col, light_a * col.a);
+    return lerp(dark, light, mask);
+}
+
+float4 alpha_thresholding(float4 col) {
+    float val = lerp(col.a, saturate(1.0 - col.a), inv);
+    float mask = step(threshold, val);
+    return lerp(float4(0.0, 0.0, 0.0, 0.0), float4(col.rgb, 1.0), mask);
+}
+
+float4 thresholding(PS_INPUT input) : SV_Target {
+    float4 tex = src.Load(int3(input.pos.xy, 0));
+    float4 col = unpremul_col(tex);
+
+    float4 lin_col = to_linear(col, col_space);
+    float4 b_col = lin_col;
+
+    switch (int(channel)) {
+        case 0: // Luminance BT.601
+        case 1: // Luminance BT.709
+        case 2: // Luminance BT.2020
+            b_col = luminance_thresholding(lin_col);
+            break;
+        case 3: // Value
+        case 4: // Saturation
+        case 5: // Hue
+            b_col = hsv_thresholding(lin_col);
+            break;
+        case 6: // Alpha
+            b_col = alpha_thresholding(lin_col);
+            break;
+    }
+
+    float4 out_col = to_gamma(b_col, col_space);
+    float4 out_tex = premul_col(out_col);
+
+    return lerp(tex, out_tex, mix);
+}
+
+]]
+
+local function clamp(v, min, max)
+    return math.max(math.min(v, max), min)
+end
+
+_0 = _0 or {}
+local threshold = clamp(tonumber(_0.threshold) or obj.track0, 0.0, 255.0) / 255.0
+local channel = tonumber(_0.channel) or _1 _1 = nil
+local inv = obj.check0 and 1 or 0
+if (type(_0.inv) == "boolean") then
+    inv = _0.inv and 1 or 0
+elseif (type(_0.inv) == "boolean") then
+    inv = _0.inv ~= 0 and 1 or 0
+end
+local light_col = clamp(tonumber(_0.light_col) or _2, 0x000000, 0xffffff) _2 = nil
+local light_a = clamp(tonumber(_0.light_a) or obj.track2, 0.0, 100.0) * 0.01
+local dark_col = clamp(tonumber(_0.dark_col) or _3, 0x000000, 0xffffff) _3 = nil
+local dark_a = clamp(tonumber(_0.dark_a) or obj.track3, 0.0, 100.0) * 0.01
+local col_space = tonumber(_0.col_space) or _4 _4 = nil
+local mix = clamp(tonumber(_0.mix) or obj.track1, 0.0, 100.0) * 0.01
+_0 = nil
+
+obj.pixelshader("thresholding", "object", "object", {
+    threshold,
+    channel,
+    inv,
+    light_col,
+    light_a,
+    dark_col,
+    dark_a,
+    col_space,
+    mix
+})
+
+
+@Threshold(RGBA)
+--infomation:Threshold(RGBA)@Stylize_K v1.2.1
+--label:Stylize
+--track0:R Threshold,0,255,128
+--track1:G Threshold,0,255,128
+--track2:B Threshold,0,255,128
+--track3:A Threshold,0,255,128
+--check@_1:Invert R,0
+--check@_2:Invert G,0
+--check@_3:Invert B,0
+--check@_4:Invert A,0
+--check0:Disable A Threshold,0
+--select@_5:Color Space=1,Linear=0,sRGB=1
+--track@_6:Mix,0,100,100,0.01
+--value@_0:PI,{}
+--[[pixelshader@thresholding_rgba:
+float EPSILON = 1.0e-5;
+
+inline bool is_zero(float val) {
+    return abs(val) < EPSILON;
+}
+
+inline bool are_equal(float a, float b) {
+    return abs(a - b) < EPSILON;
+}
+
+inline float4 unpremul_col(float4 col) {
+    if (is_zero(col.a)) discard;
+    return float4(saturate(col.rgb * rcp(col.a)), col.a);
+}
+
+inline float4 premul_col(float4 col) {
+    return float4(col.rgb * col.a, col.a);
+}
+
+float4 decode_col(float code, float a) {
+    uint col = (uint)code;
+    float3 rgb = float3(
+        (col >> 16) & 0xFF,
+        (col >> 8) & 0xFF,
+        col & 0xFF
+    ) * rcp(255.0);
+    return float4(rgb, a);
+}
+
+float calc_luma(float3 col, int mode) {
+    float3 luma_weights = float3(0.2126, 0.7152, 0.0722); // Default to BT.709
+    switch (mode) {
+        case 0: // Luminance BT.601
+            luma_weights = float3(0.299, 0.587, 0.114);
+            break;
+        case 2: // Luminance BT.2020
+            luma_weights = float3(0.2627, 0.6780, 0.0593);
+            break;
+    }
+    return dot(col, luma_weights);
+}
+
+float3 rgb2hsv(float3 rgb) {
+    float4 k = float4(0.0, -rcp(3.0), 2.0 * rcp(3.0), -1.0);
+    float4 p = lerp(float4(rgb.bg, k.wz), float4(rgb.gb, k.xy), step(rgb.b, rgb.g));
+    float4 q = lerp(float4(p.xyw, rgb.r), float4(rgb.r, p.yzx), step(p.x, rgb.r));
+    
+    float d = q.x - min(q.w, q.y);
+    return float3(abs(q.z + (q.w - q.y) * rcp(6.0 * d + EPSILON)), d * rcp(q.x + EPSILON), q.x);
+}
+
+float3 hsv2rgb(float3 hsv) {
+    float4 k = float4(1.0, 2.0 * rcp(3.0), rcp(3.0), 3.0);
+    float3 p = abs(frac(hsv.xxx + k.xyz) * 6.0 - k.www);
+    return hsv.z * lerp(k.xxx, clamp(p - k.xxx, 0.0, 1.0), hsv.y);
+}
+
+float4 to_linear(float4 col, int mode) {
+    switch (mode) {
+        case 0:
+            return col;
+        case 1:
+            float3 t = step(col.rgb, 0.04045);
+            float3 low = col.rgb * rcp(12.92);
+            float3 high = pow(abs((col.rgb + 0.055) * rcp(1.055)), 2.4);
+            return float4(lerp(high, low, t), col.a);
+        default:
+            return col;
+    }
+}
+
+float4 to_gamma(float4 col, int mode) {
+    switch (mode) {
+        case 0:
+            return saturate(col);
+        case 1:
+            float3 t = step(col.rgb, 0.0031308);
+            float3 low = 12.92 * col.rgb;
+            float3 high = 1.055 * pow(abs(col.rgb), rcp(2.4)) - 0.055;
+            return saturate(float4(lerp(high, low, t), col.a));
+        default:
+            return saturate(col);
+    }
+}
+
+Texture2D src : register(t0);
+cbuffer params : register(b0) {
+    float4 threshold;
+    float4 inv;
+    float disable_a;
+    float col_space;
+    float mix;
+};
+
+struct PS_INPUT {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+float4 thresholding_rgba(PS_INPUT input) : SV_Target {
+    float4 tex = src.Load(int3(input.pos.xy, 0));
+    float4 col = unpremul_col(tex);
+
+    float4 lin_col = to_linear(col, col_space);
+    float4 val = lerp(lin_col, saturate(1.0 - lin_col), inv);
+    float4 b_col = step(threshold, val);
+    b_col.a = lerp(b_col.a, lin_col.a, disable_a);
+    float4 out_col = to_gamma(b_col, col_space);
+    float4 out_tex = premul_col(out_col);
+
+    return lerp(tex, out_tex, mix);
+}
+
+]]
+
+local function clamp(v, min, max)
+    return math.max(math.min(v, max), min)
+end
+
+_0 = _0 or {}
+local r_threshold = clamp(tonumber(_0.r_threshold) or obj.track0, 0.0, 255.0) / 255.0
+local g_threshold = clamp(tonumber(_0.g_threshold) or obj.track1, 0.0, 255.0) / 255.0
+local b_threshold = clamp(tonumber(_0.b_threshold) or obj.track2, 0.0, 255.0) / 255.0
+local a_threshold = clamp(tonumber(_0.a_threshold) or obj.track3, 0.0, 255.0) / 255.0
+local inv_r = _1 _1 = nil
+if (type(_0.inv_r) == "boolean") then
+    inv_r = _0.inv_r and 1 or 0
+elseif (type(_0.inv_r) == "number") then
+    inv_r = _0.inv_r ~= 0 and 1 or 0
+end
+local inv_g = _2 _2 = nil
+if (type(_0.inv_g) == "boolean") then
+    inv_g = _0.inv_g and 1 or 0
+elseif (type(_0.inv_g) == "number") then
+    inv_g = _0.inv_g ~= 0 and 1 or 0
+end
+local inv_b = _3 _3 = nil
+if (type(_0.inv_b) == "boolean") then
+    inv_b = _0.inv_b and 1 or 0
+elseif (type(_0.inv_b) == "number") then
+    inv_b = _0.inv_b ~= 0 and 1 or 0
+end
+local inv_a = _4 _4 = nil
+if (type(_0.inv_a) == "boolean") then
+    inv_a = _0.inv_a and 1 or 0
+elseif (type(_0.inv_a) == "number") then
+    inv_a = _0.inv_a ~= 0 and 1 or 0
+end
+local disable_a = obj.check0 and 1 or 0
+if (type(_0.disable_a) == "boolean") then
+    disable_a = _0.disable_a and 1 or 0
+elseif (type(_0.disable_a) == "number") then
+    disable_a = disable_a ~= 0 and 1 or 0
+end
+local col_space = tonumber(_0.col_space) or _5 _5 = nil
+local mix = clamp(tonumber(_0.mix) or _6, 0.0, 100.0) * 0.01 _6 = nil
+_0 = nil
+
+obj.pixelshader("thresholding_rgba", "object", "object", {
+    r_threshold, g_threshold, b_threshold, a_threshold,
+    inv_r, inv_g, inv_b, inv_a,
+    disable_a,
+    col_space,
+    mix
+})
+
+
+@Posterize
+--infomation:Posterize@Stylize_K v1.2.1
+--label:Stylize
+--track0:Level,1,256,8,1
+--select@_1:Channel,RGB=0,RGBA=1,Value=2,Value A=3
+--track@_2:Size,1,2000,1,1
+--check@_5:Sharp Colors,0
+--select@_3:Color Space=1,Linear=0,sRGB=1
+--track@_4:Mix,0,100,100,0.01
+--value@_0:PI,{}
+--[[pixelshader@posterize:
+float EPSILON = 1.0e-5;
+
+inline bool is_zero(float val) {
+    return abs(val) < EPSILON;
+}
+
+inline bool are_equal(float a, float b) {
+    return abs(a - b) < EPSILON;
+}
+
+inline float4 unpremul_col(float4 col) {
+    if (is_zero(col.a)) discard;
+    return float4(saturate(col.rgb * rcp(col.a)), col.a);
+}
+
+inline float4 premul_col(float4 col) {
+    return float4(col.rgb * col.a, col.a);
+}
+
+float4 decode_col(float code, float a) {
+    uint col = (uint)code;
+    float3 rgb = float3(
+        (col >> 16) & 0xFF,
+        (col >> 8) & 0xFF,
+        col & 0xFF
+    ) * rcp(255.0);
+    return float4(rgb, a);
+}
+
+float calc_luma(float3 col, int mode) {
+    float3 luma_weights = float3(0.2126, 0.7152, 0.0722); // Default to BT.709
+    switch (mode) {
+        case 0: // Luminance BT.601
+            luma_weights = float3(0.299, 0.587, 0.114);
+            break;
+        case 2: // Luminance BT.2020
+            luma_weights = float3(0.2627, 0.6780, 0.0593);
+            break;
+    }
+    return dot(col, luma_weights);
+}
+
+float3 rgb2hsv(float3 rgb) {
+    float4 k = float4(0.0, -rcp(3.0), 2.0 * rcp(3.0), -1.0);
+    float4 p = lerp(float4(rgb.bg, k.wz), float4(rgb.gb, k.xy), step(rgb.b, rgb.g));
+    float4 q = lerp(float4(p.xyw, rgb.r), float4(rgb.r, p.yzx), step(p.x, rgb.r));
+    
+    float d = q.x - min(q.w, q.y);
+    return float3(abs(q.z + (q.w - q.y) * rcp(6.0 * d + EPSILON)), d * rcp(q.x + EPSILON), q.x);
+}
+
+float3 hsv2rgb(float3 hsv) {
+    float4 k = float4(1.0, 2.0 * rcp(3.0), rcp(3.0), 3.0);
+    float3 p = abs(frac(hsv.xxx + k.xyz) * 6.0 - k.www);
+    return hsv.z * lerp(k.xxx, clamp(p - k.xxx, 0.0, 1.0), hsv.y);
+}
+
+float4 to_linear(float4 col, int mode) {
+    switch (mode) {
+        case 0:
+            return col;
+        case 1:
+            float3 t = step(col.rgb, 0.04045);
+            float3 low = col.rgb * rcp(12.92);
+            float3 high = pow(abs((col.rgb + 0.055) * rcp(1.055)), 2.4);
+            return float4(lerp(high, low, t), col.a);
+        default:
+            return col;
+    }
+}
+
+float4 to_gamma(float4 col, int mode) {
+    switch (mode) {
+        case 0:
+            return saturate(col);
+        case 1:
+            float3 t = step(col.rgb, 0.0031308);
+            float3 low = 12.92 * col.rgb;
+            float3 high = 1.055 * pow(abs(col.rgb), rcp(2.4)) - 0.055;
+            return saturate(float4(lerp(high, low, t), col.a));
+        default:
+            return saturate(col);
+    }
+}
+
+Texture2D src : register(t0);
+cbuffer params : register(b0) {
+    float level;
+    float channel;
+    float col_space;
+    float mix;
+};
+
+struct PS_INPUT {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+float4 quantize_col(float4 col) {
+    const float adj = 255.0 * rcp(256.0);
+
+    uint mode = uint(channel);
+    float flag = float(mode % 2);
+    switch (mode / 2) {
+        case 0: {
+            float4 q = floor(col * level * adj) * rcp(max(level - 1.0, 1.0));
+            return lerp(float4(q.rgb, col.a), q, flag);
+        }
+        case 1: {
+            float3 rgb = saturate(col.rgb);
+            float4 hsva = float4(rgb2hsv(rgb), col.a);
+            hsva.zw = saturate(floor(hsva.zw * level * adj) * rcp(max(level - 1.0, 1.0)));
+            float4 q = float4(hsv2rgb(hsva.xyz), hsva.a);
+            return lerp(float4(q.rgb, col.a), q, flag);
+        }
+        default:
+            return col;
+    }
+}
+
+float4 posterize(PS_INPUT input) : SV_Target {
+    float4 tex = src.Load(int3(input.pos.xy, 0));
+    float4 col = unpremul_col(tex);
+
+    float4 lin_col = to_linear(col, col_space);
+    float4 q_col = quantize_col(lin_col);
+    float4 out_col = to_gamma(q_col, col_space);
+    float4 out_tex = premul_col(out_col);
+
+    return lerp(tex, out_tex, mix);
+}
+
+]]
+
+local function clamp(v, min, max)
+    return math.max(math.min(v, max), min)
+end
+
+_0 = _0 or {}
+local level = clamp(math.floor(tonumber(_0.level) or obj.track0), 1, 256)
+local channel = tonumber(_0.channel) or _1 _1 = nil
+local size = math.max(math.floor(tonumber(_0.size) or _2), 1) _2 = nil
+local sharp_col = _5 _5 = nil
+if (type(_0.sharp_col) == "boolean") then
+    sharp_col = _0.sharp_col and 1 or 0
+elseif (type(_0.sharp_col) == "number") then
+    sharp_col = _0.sharp_col ~= 0 and 1 or 0
+end
+local col_space = tonumber(_0.col_space) or _3 _3 = nil
+local mix = clamp(tonumber(_0.mix) or _4, 0.0, 100.0) * 0.01 _4 = nil
+_0 = nil
+
+if (size > 1) then
+    local w, h = obj.getpixel()
+    local mosaic_params = string.format("bx = %d, by = %d, sharp_col = %d", w / size, h / size, sharp_col)
+    obj.effect("Mosaic@Stylize_K", "PI", mosaic_params)
+end
+
+obj.pixelshader("posterize", "object", "object", {
+    level,
+    channel,
+    col_space,
+    mix
+})
+
+
+@Posterize(RGBA)
+--infomation:Posterize(RGBA)@Stylize_K v1.2.1
+--label:Stylize
+--track0:R Level,1,256,8,1
+--track1:G Level,1,256,8,1
+--track2:B Level,1,256,8,1
+--track3:A Level,1,256,8,1
+--check0:Disable A Level,0
+--track@_1:Size,1,2000,1,1
+--check@_2:Sharp Colors,0
+--select@_3:Color Space=1,Linear=0,sRGB=1
+--track@_4:Mix,0,100,100,0.01
+--value@_0:PI,{}
+--[[pixelshader@posterize_rgba:
+float EPSILON = 1.0e-5;
+
+inline bool is_zero(float val) {
+    return abs(val) < EPSILON;
+}
+
+inline bool are_equal(float a, float b) {
+    return abs(a - b) < EPSILON;
+}
+
+inline float4 unpremul_col(float4 col) {
+    if (is_zero(col.a)) discard;
+    return float4(saturate(col.rgb * rcp(col.a)), col.a);
+}
+
+inline float4 premul_col(float4 col) {
+    return float4(col.rgb * col.a, col.a);
+}
+
+float4 decode_col(float code, float a) {
+    uint col = (uint)code;
+    float3 rgb = float3(
+        (col >> 16) & 0xFF,
+        (col >> 8) & 0xFF,
+        col & 0xFF
+    ) * rcp(255.0);
+    return float4(rgb, a);
+}
+
+float calc_luma(float3 col, int mode) {
+    float3 luma_weights = float3(0.2126, 0.7152, 0.0722); // Default to BT.709
+    switch (mode) {
+        case 0: // Luminance BT.601
+            luma_weights = float3(0.299, 0.587, 0.114);
+            break;
+        case 2: // Luminance BT.2020
+            luma_weights = float3(0.2627, 0.6780, 0.0593);
+            break;
+    }
+    return dot(col, luma_weights);
+}
+
+float3 rgb2hsv(float3 rgb) {
+    float4 k = float4(0.0, -rcp(3.0), 2.0 * rcp(3.0), -1.0);
+    float4 p = lerp(float4(rgb.bg, k.wz), float4(rgb.gb, k.xy), step(rgb.b, rgb.g));
+    float4 q = lerp(float4(p.xyw, rgb.r), float4(rgb.r, p.yzx), step(p.x, rgb.r));
+    
+    float d = q.x - min(q.w, q.y);
+    return float3(abs(q.z + (q.w - q.y) * rcp(6.0 * d + EPSILON)), d * rcp(q.x + EPSILON), q.x);
+}
+
+float3 hsv2rgb(float3 hsv) {
+    float4 k = float4(1.0, 2.0 * rcp(3.0), rcp(3.0), 3.0);
+    float3 p = abs(frac(hsv.xxx + k.xyz) * 6.0 - k.www);
+    return hsv.z * lerp(k.xxx, clamp(p - k.xxx, 0.0, 1.0), hsv.y);
+}
+
+float4 to_linear(float4 col, int mode) {
+    switch (mode) {
+        case 0:
+            return col;
+        case 1:
+            float3 t = step(col.rgb, 0.04045);
+            float3 low = col.rgb * rcp(12.92);
+            float3 high = pow(abs((col.rgb + 0.055) * rcp(1.055)), 2.4);
+            return float4(lerp(high, low, t), col.a);
+        default:
+            return col;
+    }
+}
+
+float4 to_gamma(float4 col, int mode) {
+    switch (mode) {
+        case 0:
+            return saturate(col);
+        case 1:
+            float3 t = step(col.rgb, 0.0031308);
+            float3 low = 12.92 * col.rgb;
+            float3 high = 1.055 * pow(abs(col.rgb), rcp(2.4)) - 0.055;
+            return saturate(float4(lerp(high, low, t), col.a));
+        default:
+            return saturate(col);
+    }
+}
+
+Texture2D src : register(t0);
+cbuffer params : register(b0) {
+    float4 levels;
+    float disable_a;
+    float col_space;
+    float mix;
+};
+
+struct PS_INPUT {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+float4 posterize_rgba(PS_INPUT input) : SV_Target {
+    const float adj = 255.0 * rcp(256.0);
+
+    float4 tex = src.Load(int3(input.pos.xy, 0));
+    float4 col = unpremul_col(tex);
+
+    float4 lin_col = to_linear(col, col_space);
+    float4 q_col = floor(lin_col * levels * adj) * rcp(max(levels - 1.0, 1.0));
+    q_col.a = lerp(q_col.a, lin_col.a, disable_a);
+    float4 out_col = to_gamma(q_col, col_space);
+    float4 out_tex = premul_col(out_col);
+
+    return lerp(tex, out_tex, mix);
+}
+
+]]
+
+local function clamp(v, min, max)
+    return math.max(math.min(v, max), min)
+end
+
+_0 = _0 or {}
+local r_level = clamp(math.floor(tonumber(_0.r_level) or obj.track0), 1, 256)
+local g_level = clamp(math.floor(tonumber(_0.g_level) or obj.track1), 1, 256)
+local b_level = clamp(math.floor(tonumber(_0.b_level) or obj.track2), 1, 256)
+local a_level = clamp(math.floor(tonumber(_0.a_level) or obj.track3), 1, 256)
+local disable_a = obj.check0 and 1 or 0
+if (type(_0.disable_a) == "boolean") then
+    disable_a = _0.disable_a and 1 or 0
+elseif (type(_0.disable_a) == "number") then
+    disable_a = disable_a ~= 0 and 1 or 0
+end
+local size = math.max(math.floor(tonumber(_0.size) or _1), 1) _1 = nil
+local sharp_col = _2 _2 = nil
+if (type(_0.sharp_col) == "boolean") then
+    sharp_col = _0.sharp_col and 1 or 0
+elseif (type(_0.sharp_col) == "number") then
+    sharp_col = _0.sharp_col ~= 0 and 1 or 0
+end
+local col_space = tonumber(_0.col_space) or _3 _3 = nil
+local mix = clamp(tonumber(_0.mix) or _4, 0.0, 100.0) * 0.01 _4 = nil
+_0 = nil
+
+if (size > 1) then
+    local w, h = obj.getpixel()
+    local mosaic_params = string.format("bx = %d, by = %d, sharp_col = %d", w / size, h / size, sharp_col)
+    obj.effect("Mosaic@Stylize_K", "PI", mosaic_params)
+end
+
+obj.pixelshader("posterize_rgba", "object", "object", {
+    r_level, g_level, b_level, a_level,
+    disable_a,
+    col_space,
+    mix
+})
+
+
+@ASCII
+--infomation:ASCII@Stylize_K v1.2.1
+--label:Stylize
+--value@_1:Glyphs,"@#%*+=-:. "
+--font@_2:Font,Yu Gothic UI
+--track@_3:Padding,-100,100,0,1
+--track0:X Blocks,1,16384,80,1
+--track1:Y Blocks,1,16384,45,1
+--check0:Sharp Colors,0
+--track@_4:Luma Gain,0,1000,100,0.01
+--track2:Min Luma,0,100,0,0.01
+--track3:Max Luma,0,100,100,0.01
+--select@_5:Luma Mode=1,BT.601=0,BT.709=1,BT.2020=2
+--check@_6:Invert Luma,1
+--select@_7:Glyph Type=0,Solid=0,Original=1,Mosaic=2
+--color@_8:Glyph Color,0xffffff
+--select@_9:Canvas Type,Transparent=0,Solid=1,Original=2,Mosaic=3
+--color@_10:Canvas Color,0x000000
+--select@_11:Color Space=1,Linear=0,sRGB=1
+--select@_12:Alpha,None=0,Premultiplied=1
+--select@_13:Blend Mode,Normal=0,Add=1,Subtract=2,Multiply=3,Screen=4,Overlay=5,Lighten=6,Darken=7,Luminosity=8,Chroma=9,Linear Burn=10,Linear Light=11,Difference=12
+--track@_14:Mix,0,100,100,0.01
+--check@_15:Shuffle Glyphs,0
+--value@_16:Excluded Glyphs,""
+--track@_17:Interval,0,100,0,1
+--track@_18:Seed,-1000,1000,-1,1
+--value@_0:PI,{}
+--[[pixelshader@ascii:
+float EPSILON = 1.0e-5;
+
+inline bool is_zero(float val) {
+    return abs(val) < EPSILON;
+}
+
+inline bool are_equal(float a, float b) {
+    return abs(a - b) < EPSILON;
+}
+
+inline float4 unpremul_col(float4 col) {
+    if (is_zero(col.a)) discard;
+    return float4(saturate(col.rgb * rcp(col.a)), col.a);
+}
+
+inline float4 premul_col(float4 col) {
+    return float4(col.rgb * col.a, col.a);
+}
+
+float4 decode_col(float code, float a) {
+    uint col = (uint)code;
+    float3 rgb = float3(
+        (col >> 16) & 0xFF,
+        (col >> 8) & 0xFF,
+        col & 0xFF
+    ) * rcp(255.0);
+    return float4(rgb, a);
+}
+
+float calc_luma(float3 col, int mode) {
+    float3 luma_weights = float3(0.2126, 0.7152, 0.0722); // Default to BT.709
+    switch (mode) {
+        case 0: // Luminance BT.601
+            luma_weights = float3(0.299, 0.587, 0.114);
+            break;
+        case 2: // Luminance BT.2020
+            luma_weights = float3(0.2627, 0.6780, 0.0593);
+            break;
+    }
+    return dot(col, luma_weights);
+}
+
+float3 rgb2hsv(float3 rgb) {
+    float4 k = float4(0.0, -rcp(3.0), 2.0 * rcp(3.0), -1.0);
+    float4 p = lerp(float4(rgb.bg, k.wz), float4(rgb.gb, k.xy), step(rgb.b, rgb.g));
+    float4 q = lerp(float4(p.xyw, rgb.r), float4(rgb.r, p.yzx), step(p.x, rgb.r));
+    
+    float d = q.x - min(q.w, q.y);
+    return float3(abs(q.z + (q.w - q.y) * rcp(6.0 * d + EPSILON)), d * rcp(q.x + EPSILON), q.x);
+}
+
+float3 hsv2rgb(float3 hsv) {
+    float4 k = float4(1.0, 2.0 * rcp(3.0), rcp(3.0), 3.0);
+    float3 p = abs(frac(hsv.xxx + k.xyz) * 6.0 - k.www);
+    return hsv.z * lerp(k.xxx, clamp(p - k.xxx, 0.0, 1.0), hsv.y);
+}
+
+float4 to_linear(float4 col, int mode) {
+    switch (mode) {
+        case 0:
+            return col;
+        case 1:
+            float3 t = step(col.rgb, 0.04045);
+            float3 low = col.rgb * rcp(12.92);
+            float3 high = pow(abs((col.rgb + 0.055) * rcp(1.055)), 2.4);
+            return float4(lerp(high, low, t), col.a);
+        default:
+            return col;
+    }
+}
+
+float4 to_gamma(float4 col, int mode) {
+    switch (mode) {
+        case 0:
+            return saturate(col);
+        case 1:
+            float3 t = step(col.rgb, 0.0031308);
+            float3 low = 12.92 * col.rgb;
+            float3 high = 1.055 * pow(abs(col.rgb), rcp(2.4)) - 0.055;
+            return saturate(float4(lerp(high, low, t), col.a));
+        default:
+            return saturate(col);
+    }
+}
+
+Texture2D mosaic : register(t0);
+Texture2D glyph_map : register(t1);
+cbuffer params : register(b0) {
+    float2 blocks;
+    float2 res;
+    float2 map_size;
+    float2 luma_range;
+    float glyph_len;
+    float luma_gain;
+    float luma_mode;
+    float inv_luma;
+    float glyph_type;
+    float glyph_col;
+    float col_space;
+    float alpha;
+};
+
+struct PS_INPUT {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+float get_glyph_shape(uint2 pos, uint glyph_idx, float block_w) {
+    uint map_idx = glyph_idx % 3;
+    uint2 st = uint2(uint(block_w * (glyph_idx / 3)), 0);
+    uint2 map_pos = min(st + pos, uint2(map_size) - 1);
+    float4 glyphs = glyph_map.Load(int3(map_pos, 0));
+    return glyphs[map_idx];
+}
+
+float4 ascii(PS_INPUT input) : SV_Target {
+    const float adj = 255.0 * rcp(256.0);
+
+    float4 tex = mosaic.Load(int3(input.pos.xy, 0));
+    float4 col = lerp(float4(tex.rgb, 1.0), unpremul_col(tex), step(0.5, alpha));
+    float4 lin_col = to_linear(col, col_space);
+    float luma = saturate(calc_luma(lin_col.rgb, luma_mode) * luma_gain);
+    float mask = step(luma_range.x, luma) * step(luma, luma_range.y);
+    luma = lerp(luma, 1.0 - luma, inv_luma);
+
+    float2 block_size = res * rcp(blocks);
+    uint2 block_idx = uint2(input.pos.xy * rcp(block_size));
+    uint2 pos = input.pos.xy - uint2(block_idx * block_size);
+    uint glyph_idx = uint(luma * glyph_len * adj);
+    float alpha = floor(col.a * (glyph_len + 1.0) * adj) * rcp(glyph_len);
+    float shape = get_glyph_shape(pos, glyph_idx, block_size.x) * alpha;
+
+    float flag = step(2.0, glyph_type);
+    float4 glyph = lerp(decode_col(glyph_col, shape), float4(col.rgb, shape), flag);
+    return lerp(float4(0.0, 0.0, 0.0, 0.0), premul_col(glyph), mask);
+}
+
+]]
+
+local function clamp(v, min, max)
+    return math.max(math.min(v, max), min)
+end
+
+_0 = _0 or {}
+local glyphs_str = _0.glyphs and tostring(_0.glyphs) or _1 _1 = nil
+local font = _0.font and tostring(_0.font) or _2 _2 = nil
+local padding = math.floor(tonumber(_0.padding) or _3) _3 = nil
+local bx = clamp(math.floor(tonumber(_0.bx) or obj.track0), 1, 16384)
+local by = clamp(math.floor(tonumber(_0.by) or obj.track1), 1, 16384)
+local sharp_col = obj.check0 and 1 or 0
+if (type(_0.sharp_col) == "boolean") then
+    sharp_col = _0.sharp_col and 1 or 0
+elseif (type(_0.sharp_col) == "number") then
+    sharp_col = _0.sharp_col ~= 0 and 1 or 0
+end
+local luma_gain = math.max(tonumber(_0.luma_gain) or _4, 0.0) * 0.01 _4 = nil
+local min_luma = clamp(tonumber(_0.min_luma) or obj.track2, 0.0, 100.0) * 0.01
+local max_luma = clamp(tonumber(_0.max_luma) or obj.track3, 0.0, 100.0) * 0.01
+local luma_mode = tonumber(_0.luma_mode) or _5 _5 = nil
+local inv_luma = _6 _6 = nil
+if (type(_0.inv_luma) == "boolean") then
+    inv_luma = _0.inv_luma and 1 or 0
+elseif (type(_0.inv_luma) == "number") then
+    inv_luma = _0.inv_luma ~= 0 and 1 or 0
+end
+local glyph_type = tonumber(_0.glyph_type) or _7 _7 = nil
+local glyph_col = clamp(tonumber(_0.glyph_col) or _8, 0x000000, 0xffffff) _8 = nil
+local canvas_type = tonumber(_0.canvas_type) or _9 _9 = nil
+local canvas_col = clamp(tonumber(_0.canvas_col) or _10, 0x000000, 0xffffff) _10 = nil
+local col_space = tonumber(_0.col_space) or _11 _11 = nil
+local alpha = tonumber(_0.alpha) or _12 _12 = nil
+local blend_mode = tonumber(_0.blend_mode) or _13 _13= nil
+local mix = clamp(tonumber(_0.mix) or _14, 0.0, 100.0) * 0.01 _14 = nil
+local shuf_glyphs = _15 ~= 0 _15 = nil
+if (type(_0.shuf_glyphs) == "boolean") then
+    shuf_glyphs = _0.shuf_glyphs
+elseif (type(_0.shuf_glyphs) == "number") then
+    shuf_glyphs = _0.inv_luma ~= 0
+end
+local exclude_str = _0.excluded_glyphs and tonumber(_0.excluded_glyphs) or _16 _16 = nil
+local interval = math.max(tonumber(_0.interval) or _17, 0) _17 = nil
+local seed = tonumber(_0.seed) or _18 _18 = nil
+_0 = nil
+
+if (glyphs_str == "") then
+    debug_print("The text cannot be empty.")
+    return
+end
+
+local function err_handler(e)
+    local hint = "Hint: Try increasing TemporaryImageCacheSize in system.conf."
+    debug_print(string.format("%s. %s", e, hint))
+end
+
+local function copy_geo(dst, src)
+    for k in ("ox, oy, oz, cx, cy, cz, rx, ry, rz, zoom, aspect, alpha"):gmatch("%a+") do
+        dst[k] = src[k]
+    end
+end
+
+local function split_utf8(str)
+    local t = {}
+    local i = 1
+    while i <= #str do
+        local byte = string.byte(str, i)
+        local len
+
+        if (byte < 0x80) then
+            len = 1
+        elseif (byte < 0xE0) then
+            len = 2
+        elseif (byte < 0xF0) then
+            len = 3
+        else
+            len = 4
+        end
+
+        table.insert(t, string.sub(str, i, i + len - 1))
+        i = i + len
+    end
+    return t
+end
+
+local function shuffle(t, exclude)
+    local set = {}
+    for _, v in ipairs(exclude or {}) do
+        set[v] = true
+    end
+
+    local indices = {}
+    local len = 0
+    for i = 1, #t do
+        if not set[t[i]] then
+            len = len + 1
+            indices[len] = i
+        end
+    end
+
+    local f = interval > 0 and math.floor(obj.frame / interval) or 0
+    for i = len, 2, -1 do
+        local j = obj.rand(1, i, seed, f)
+        local m, n = indices[i], indices[j]
+        t[m], t[n] = t[n], t[m]
+    end
+end
+
+local ok, e = pcall(function()
+    local geo = {}
+    local blend = glyph_type == 1 and "mask" or "copy"
+    local col_list = {0xff0000, 0x00ff00, 0x0000ff}
+    local w, h = obj.getpixel()
+    local max_w, max_h = obj.getinfo("image_max")
+    local bw, bh = math.floor(w / bx), math.floor(h / by)
+    local mosaic_params = string.format("bx = %d, by = %d, sharp_col = %d", bx, by, sharp_col)
+    local size = math.max(math.min(bw, bh) - padding * 2, 0)
+    local glyphs = split_utf8(glyphs_str)
+    local exclude = split_utf8(exclude_str)
+    local len = #glyphs
+    local map_w, map_h = bw * math.ceil(len / 3.0), bh
+    if (map_w > max_w or map_h > max_h) then
+        debug_print("The font size is too large or the text is too long.")
+        return
+    end
+
+    copy_geo(geo, obj)
+    obj.copybuffer("cache:img", "object")
+    obj.effect("Mosaic@Stylize_K", "PI", mosaic_params)
+    obj.copybuffer("cache:mosaic", "object")
+
+    obj.setoption("drawtarget", "tempbuffer", map_w, map_h)
+    obj.setoption("blend", 1)
+    if (shuf_glyphs) then
+        shuffle(glyphs, exclude)
+    end
+
+    local a = -0.5 * (map_w - bw)
+    for i = 1, len do
+        local idx = i - 1
+        obj.setfont(font, size, 0, col_list[(idx % 3) + 1])
+        obj.load("text", glyphs[i])
+        obj.draw(a + bw * (math.floor(idx / 3)))
+    end
+
+    obj.copybuffer("object", "cache:img")
+    obj.pixelshader("ascii", "object", {
+        "cache:mosaic",
+        "tempbuffer"
+    }, {
+        bx, by,
+        w, h,
+        map_w, map_h,
+        min_luma, max_luma,
+        len,
+        luma_gain,
+        luma_mode,
+        inv_luma,
+        glyph_type,
+        glyph_col,
+        col_space,
+        alpha
+    }, blend)
+
+    if (canvas_type == 1) then
+        obj.setoption("drawtarget", "tempbuffer", w, h)
+        obj.clearbuffer("cache:img")
+        obj.clearbuffer("cache:mosaic")
+
+        obj.copybuffer("cache:ascii", "object")
+        obj.load("figure", "四角形", canvas_col, 1)
+        local half_w, half_h = w * 0.5, h * 0.5
+        obj.drawpoly(
+            -half_w, -half_h, 0,
+            half_w,  -half_h, 0,
+            half_w,  half_h,  0,
+            -half_w, half_h,  0
+        )
+        obj.copybuffer("object", "cache:ascii")
+    elseif (canvas_type == 2) then
+        obj.copybuffer("tempbuffer", "cache:img")
+        obj.clearbuffer("cache:img")
+        obj.clearbuffer("cache:mosaic")
+    elseif (canvas_type == 3) then
+        obj.copybuffer("tempbuffer", "cache:mosaic")
+        obj.clearbuffer("cache:img")
+        obj.clearbuffer("cache:mosaic")
+    else
+        obj.setoption("drawtarget", "tempbuffer", w, h)
+        obj.clearbuffer("cache:img")
+        obj.clearbuffer("cache:mosaic")
+    end
+
+    obj.setoption("blend", blend_mode)
+    obj.draw(0, 0, 0, 1, mix)
+    obj.setoption("blend", 0)
+
+    obj.load("tempbuffer")
+    obj.clearbuffer("tempbuffer")
+    copy_geo(obj, geo)
+end)
+if (not ok) then
+    err_handler(e)
+end
+
+
+@MotionTile
+--infomation:MotionTile@Stylize_K v1.2.1
+--label:Stylize
+--track0:X Center,-4000,4000,0,0.01
+--track1:Y Center,-4000,4000,0,0.01
+--track2:Output W,0,1000,100,0.01
+--track3:Output H,0,1000,100,0.01
+--track@_1:Tile W,0,1000,100,0.01
+--track@_2:Tile H,0,1000,100,0.01
+--check@_3:Mirror Horizontal Edge,0
+--check@_4:Mirror Vertical Edge,0
+--track@_5:Phase,-3600,3600,0,0.01
+--check0:Horizontal Shift,0
+--value@_0:PI,{}
+--[[pixelshader@motion_tile:
+Texture2D src : register(t0);
+SamplerState src_smp : register(s0);
+cbuffer params : register(b0) {
+    float2 tex_size;
+    float2 center;
+    float2 output_gain;
+    float2 tile_gain;
+    float2 mirror;
+    float phase;
+    float h_shift;
+};
+
+struct PS_INPUT {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+float4 tiler(float2 pos) {
+    int2 idx = int2(floor(pos));
+    float2 parity = float2(idx & 1);
+    float2 uv = pos - idx;
+    float2 coord = lerp(uv, 1.0 - uv, mirror * parity);
+
+    float2 e = 0.5 * rcp(tex_size);
+    return src.Sample(src_smp, clamp(coord, e, 1.0 - e));
+}
+
+float4 motion_tile(PS_INPUT input) : SV_Target {
+    float2 pos = input.uv * output_gain;
+    pos -= 0.5 * output_gain + center;
+    pos /= max(tile_gain, 1.0e-5);
+    pos += 0.5;
+
+    float2 parity = float2(int2(floor(pos)) & 1);
+    float2 shift_dir = parity.yx * float2(h_shift, 1.0 - h_shift);
+    pos -= shift_dir * phase;
+
+    return tiler(pos);
+}
+
+]]
+
+obj.setanchor("track", 0, "line")
+
+local w, h = obj.getpixel()
+
+_0 = _0 or {}
+local cx = (tonumber(_0.cx) or obj.track0) / w
+local cy = (tonumber(_0.cy) or obj.track1) / h
+local out_w = math.max(tonumber(_0.out_w) or obj.track2, 0.0) * 0.01
+local out_h = math.max(tonumber(_0.out_h) or obj.track3, 0.0) * 0.01
+local tile_w = math.max(tonumber(_0.tile_w) or _1, 0.0) * 0.01 _1 = nil
+local tile_h = math.max(tonumber(_0.tile_h) or _2, 0.0) * 0.01 _2 = nil
+local mirror_h = _3 _3 = nil
+if (type(_0.mirror_h) == "boolean") then
+    mirror_h = _0.mirror_h and 1 or 0
+elseif (type(_0.mirror_h) == "number") then
+    mirror_h = _0.mirror_h ~= 0 and 1 or 0
+end
+local mirror_v = _4 _4 = nil
+if (type(_0.mirror_v) == "boolean") then
+    mirror_v = _0.mirror_v and 1 or 0
+elseif (type(_0.mirror_v) == "number") then
+    mirror_v = _0.mirror_v ~= 0 and 1 or 0
+end
+local phase = (tonumber(_0.phase) or _5) / 360.0 _5 = nil
+local h_shift = obj.check0 and 1 or 0
+if (type(_0.h_shift) == "boolean") then
+    h_shift = _0.h_shift and 1 or 0
+elseif (type(_0.h_shift) == "number") then
+    h_shift = _0.h_shift ~= 0 and 1 or 0
+end
+_0 = nil
+
+local geo = {}
+local max_w, max_h = obj.getinfo("image_max")
+local out_res_w = math.min(math.floor(w * out_w), max_w)
+local out_res_h = math.min(math.floor(h * out_h), max_h)
+
+
+local function err_handler(e)
+    local hint = "Hint: Try increasing TemporaryImageCacheSize in system.conf."
+    debug_print(string.format("%s. %s", e, hint))
+end
+
+local function copy_geo(dst, src)
+    for k in ("ox, oy, oz, cx, cy, cz, rx, ry, rz, zoom, aspect, alpha"):gmatch("%a+") do
+        dst[k] = src[k]
+    end
+end
+
+
+if (out_res_w * out_res_h < 1) then
+    obj.effect("リサイズ", "拡大率", 0)
+    return
+end
+
+out_w = out_res_w / w
+out_h = out_res_h / h
+
+local ok, e = pcall(function()
+copy_geo(geo, obj)
+obj.setoption("drawtarget", "tempbuffer", out_res_w, out_res_h)
+
+obj.pixelshader("motion_tile", "tempbuffer", "object", {
+    w, h,
+    cx, cy,
+    out_w, out_h,
+    tile_w, tile_h,
+    mirror_h, mirror_v,
+    phase,
+    h_shift
+})
+
+obj.load("tempbuffer")
+obj.clearbuffer("tempbuffer")
+copy_geo(obj, geo)
+end)
+if (not ok) then
+    err_handler(e)
+end
+
+
+@Tile
+--infomation:Tile@Stylize_K v1.2.1
+--label:Stylize
+--track0:X Count,1,100,3,1
+--track1:Y Count,1,100,3,1
+--track@_1:Z Count,1,100,1,1
+--track2:X Gap,-1000,1000,100,0.01
+--track3:Y Gap,-1000,1000,100,0.01
+--track@_2:Z Gap,-1000,1000,100,0.01
+--track@_4:X Offset,-1000,1000,0,0.01
+--track@_5:Y Offset,-1000,1000,0,0.01
+--check@_6:Center Align,1
+--check0:Use Group Pivot,1
+--value@_3:Z Size,math.max(obj.getpixel())
+--value@_0:PI,{}
+
+_0 = _0 or {}
+local c_align = _6 ~= 0 _6 = nil
+if (type(_0.center_align) == "boolean") then
+    c_align = _0.center_align
+elseif (type(_0.center_align) == "number") then
+    c_align = _0.center_align ~= 0
+end
+local use_group_pivot = obj.check0
+if (type(_0.use_group_pivot) == "boolean") then
+    use_group_pivot = _0.use_group_pivot
+elseif (type(_0.use_group_pivot) == "number") then
+    use_group_pivot = _0.use_group_pivot ~= 0
+end
+
+local count = {
+    x = math.max(math.floor(tonumber(_0.x_count) or obj.track0), 1) - 1,
+    y = math.max(math.floor(tonumber(_0.y_count) or obj.track1), 1) - 1,
+    z = math.max(math.floor(tonumber(_0.z_count) or _1), 1) - 1
+}
+_1 = nil
+
+local gap = {
+    x = tonumber(_0.x_gap) or obj.track2 * 0.01,
+    y = tonumber(_0.y_gap) or obj.track3 * 0.01,
+    z = tonumber(_0.z_gap) or _2 * 0.01
+}
+_2 = nil
+
+local offset = {
+    x = (tonumber(_0.x_offset) or _4) * 0.01,
+    y = (tonumber(_0.y_offset) or _5) * 0.01
+}
+_4 = nil
+_5 = nil
+
+local w, h = obj.getpixel()
+local res = {
+    x = w,
+    y = h,
+    z = math.max(tonumber(_3) or math.max(w, h), 0.0)
+}
+_3 = nil
+_0 = nil
+
+local half_res = {
+    x = res.x * 0.5,
+    y = res.y * 0.5
+}
+
+-- Arithmetic Progression
+-- Offset
+local o = {
+    x = offset.x * res.x / math.max(count.y, 1),
+    y = offset.y * res.y / math.max(count.x, 1)
+}
+
+-- Common Difference
+local d = {
+    x = res.x * gap.x,
+    y = res.y * gap.y,
+    z = res.z * gap.z
+}
+
+-- First Term
+local a = {x = 0.0, y = 0.0, z = 0.0}
+if (c_align) then
+    a = {
+        x = -0.5 * (d.x * count.x + offset.x * res.x),
+        y = -0.5 * (d.y * count.y + offset.y * res.y),
+        z = -0.5 * d.z * count.z
+    }
+end
+
+obj.effect()
+if (use_group_pivot) then
+    local polys = {}
+    local idx = 1
+    for l = 0, count.z do
+        local z = a.z + d.z * l
+        for m = 0, count.x do
+            local x = a.x + d.x * m
+            for n = 0, count.y do
+                local y = a.y + d.y * n
+
+                local ox = x + o.x * n
+                local oy = y + o.y * m
+
+                local left = ox - half_res.x
+                local right = ox + half_res.x
+                local top = oy - half_res.y
+                local bottom = oy + half_res.y
+                polys[idx] = {
+                    left,  top,    z,
+                    right, top,    z,
+                    right, bottom, z,
+                    left,  bottom, z,
+                    0,     0,
+                    res.x, 0,
+                    res.x, res.y,
+                    0,     res.y
+                }
+
+                idx = idx + 1
+            end
+        end
+    end
+
+    obj.drawpoly(polys)
+else
+    for l = 0, count.z do
+        local z = a.z + d.z * l
+        for m = 0, count.x do
+            local x = a.x + d.x * m
+            for n = 0, count.y do
+                local y = a.y + d.y * n
+
+                local ox = x + o.x * n
+                local oy = y + o.y * m
+
+                obj.draw(ox, oy, z)
+            end
+        end
+    end
+end
+
+
+@Repeat
+--infomation:Repeat@Stylize_K v1.2.1
+--label:Stylize
+--track@count:Count,1,1000,3,1
+--track@_1:Offset,-1000,1000,0,1
+--select@_2:Composite,Below=0,Above=1
+--check0:Sync with Output Effect,1
+--track@_3:X,-100000,100000,100,0.01
+--track@_4:Y,-100000,100000,0,0.01
+--track@_5:Z,-100000,100000,0,0.01
+--track@_6:X Rotation,-3600,3600,0,0.01
+--track@_7:Y Rotation,-3600,3600,0,0.01
+--track@_8:Z Rotation,-3600,3600,0,0.01
+--track@_9:Zoom,0,10000,100,0.001
+--track@_10:Start Alpha,0,100,100,0.01
+--track@_11:End Alpha,0,100,100,0.01
+--value@_0:PI,{}
+
+_0 = _0 or {}
+local n = math.max(math.floor(tonumber(_0.count) or count), 1) count = nil -- for user
+local offset = math.floor(tonumber(_0.offset) or _1) _1 = nil
+local composite = tonumber(_0.composite) or _2 _2 = nil
+local sync = obj.check0
+if (type(_0.sync) == "boolean") then
+    sync = _0.sync
+elseif (type(_0.sync) == "number") then
+    sync = _0.sync ~= 0
+end
+local x = tonumber(_0.x) or _3 _3 = nil
+local y = tonumber(_0.y) or _4 _4 = nil
+local z = tonumber(_0.z) or _5 _5 = nil
+local rx = tonumber(_0.rx) or _6 _6 = nil
+local ry = tonumber(_0.ry) or _7 _7 = nil
+local rz = tonumber(_0.rz) or _8 _8 = nil
+local scale = math.max(tonumber(_0.zoom) or _9, 0.0) * 0.01 _9 = nil
+local a_st = math.max(tonumber(_0.st_a) or _10, 0.0) * 0.01 _10 = nil
+local a_ed = math.max(tonumber(_0.ed_a) or _11, 0.0) * 0.01 _11 = nil
+_0 = nil
+
+local range = n - 1
+local st, ed, step = 0, range, 1
+if (composite == 0) then
+    st, ed, step = ed, st, -1
+end
+
+local a_grad = a_ed - a_st
+local a_scale = math.max(range, 1)
+
+if (sync) then
+    local s = obj.zoom * obj.getvalue("zoom") * 0.01
+    local a, oa = obj.getvalue("aspect"), obj.aspect
+    local a_abs, oa_abs = math.abs(a), math.abs(oa)
+
+    local ax = (1 - (a + a_abs) * 0.5) * (1 - (oa + oa_abs) * 0.5)
+    local ay = (1 + (a - a_abs) * 0.5) * (1 + (oa - oa_abs) * 0.5)
+
+    x = x * s * ax
+    y = y * s * ay
+    z = z * s
+end
+
+obj.effect()
+for i = st, ed, step do
+    local t = i / a_scale
+    local alpha = a_st + a_grad * t
+    i = i + offset
+    obj.draw(x * i, y * i, z * i, math.pow(scale, i), alpha, rx * i, ry * i, rz * i)
+end
+
+
+@GradientMap
+--infomation:GradientMap@Stylize_K v1.2.1
+--label:Stylize
+--file@_1:Map File
+--track0:Map Layer,-256,256,0,1
+--check@_9:Use Relative Layer,0
+--check0:View Map,0
+--track@_2:Map Hue,-3600,3600,0,0.01
+--track1:Map Slice,0,100,50,0.01
+--track2:Map Scale,0,1000,100,0.01
+--track3:Map Shift,-1000,1000,0,0.01
+--select@_3:Map Edges,Clamp=0,Repeat=1,Mirror=2
+--check@_4:Invert Luma,0
+--select@_5:Luma Mode=1,BT.601=0,BT.709=1,BT.2020=2
+--select@_6:Color Space=1,Linear=0,sRGB=1
+--select@_7:Blend Mode,Normal=0,Add=1,Subtract=2,Multiply=3,Screen=4,Overlay=5,Lighten=6,Darken=7,Luminosity=8,Chroma=9,Linear Burn=10,Linear Light=11,Difference=12
+--track@_8:Mix,0,100,100,0.01
+--value@_0:PI,{}
+--[[pixelshader@gradient_map:
+float EPSILON = 1.0e-5;
+
+inline bool is_zero(float val) {
+    return abs(val) < EPSILON;
+}
+
+inline bool are_equal(float a, float b) {
+    return abs(a - b) < EPSILON;
+}
+
+inline float4 unpremul_col(float4 col) {
+    if (is_zero(col.a)) discard;
+    return float4(saturate(col.rgb * rcp(col.a)), col.a);
+}
+
+inline float4 premul_col(float4 col) {
+    return float4(col.rgb * col.a, col.a);
+}
+
+float4 decode_col(float code, float a) {
+    uint col = (uint)code;
+    float3 rgb = float3(
+        (col >> 16) & 0xFF,
+        (col >> 8) & 0xFF,
+        col & 0xFF
+    ) * rcp(255.0);
+    return float4(rgb, a);
+}
+
+float calc_luma(float3 col, int mode) {
+    float3 luma_weights = float3(0.2126, 0.7152, 0.0722); // Default to BT.709
+    switch (mode) {
+        case 0: // Luminance BT.601
+            luma_weights = float3(0.299, 0.587, 0.114);
+            break;
+        case 2: // Luminance BT.2020
+            luma_weights = float3(0.2627, 0.6780, 0.0593);
+            break;
+    }
+    return dot(col, luma_weights);
+}
+
+float3 rgb2hsv(float3 rgb) {
+    float4 k = float4(0.0, -rcp(3.0), 2.0 * rcp(3.0), -1.0);
+    float4 p = lerp(float4(rgb.bg, k.wz), float4(rgb.gb, k.xy), step(rgb.b, rgb.g));
+    float4 q = lerp(float4(p.xyw, rgb.r), float4(rgb.r, p.yzx), step(p.x, rgb.r));
+    
+    float d = q.x - min(q.w, q.y);
+    return float3(abs(q.z + (q.w - q.y) * rcp(6.0 * d + EPSILON)), d * rcp(q.x + EPSILON), q.x);
+}
+
+float3 hsv2rgb(float3 hsv) {
+    float4 k = float4(1.0, 2.0 * rcp(3.0), rcp(3.0), 3.0);
+    float3 p = abs(frac(hsv.xxx + k.xyz) * 6.0 - k.www);
+    return hsv.z * lerp(k.xxx, clamp(p - k.xxx, 0.0, 1.0), hsv.y);
+}
+
+float4 to_linear(float4 col, int mode) {
+    switch (mode) {
+        case 0:
+            return col;
+        case 1:
+            float3 t = step(col.rgb, 0.04045);
+            float3 low = col.rgb * rcp(12.92);
+            float3 high = pow(abs((col.rgb + 0.055) * rcp(1.055)), 2.4);
+            return float4(lerp(high, low, t), col.a);
+        default:
+            return col;
+    }
+}
+
+float4 to_gamma(float4 col, int mode) {
+    switch (mode) {
+        case 0:
+            return saturate(col);
+        case 1:
+            float3 t = step(col.rgb, 0.0031308);
+            float3 low = 12.92 * col.rgb;
+            float3 high = 1.055 * pow(abs(col.rgb), rcp(2.4)) - 0.055;
+            return saturate(float4(lerp(high, low, t), col.a));
+        default:
+            return saturate(col);
+    }
+}
+
+float2 edit_map(float luma, float slice, float scale, float shift, float edges) {
+    float map_u = (luma - shift) * rcp(max(scale, EPSILON));
+
+    switch (int(edges)) {
+        case 0:
+            map_u = saturate(map_u);
+            break;
+        case 1:
+        case 2:
+            int idx = int(floor(map_u));
+            float parity = float(idx & 1);
+            float u = map_u - idx;
+            map_u = lerp(u, 1.0 - u, step(2.0, edges) * parity);
+            break;
+    }
+
+    return float2(map_u, slice);
+}
+
+Texture2D src : register(t0);
+Texture2D map : register(t1);
+SamplerState map_smp : register(s1);
+cbuffer params : register(b0) {
+    float2 map_size;
+    float map_slice;
+    float map_scale;
+    float map_shift;
+    float map_edges;
+    float inv_luma;
+    float luma_mode;
+    float col_space;
+};
+
+struct PS_INPUT {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+float4 gradient_map(PS_INPUT input) : SV_Target {
+    float4 tex = src.Load(int3(input.pos.xy, 0));
+    float4 col = unpremul_col(tex);
+
+    float4 lin_col = to_linear(col, col_space);
+    float luma = saturate(calc_luma(lin_col.rgb, luma_mode));
+    luma = lerp(luma, 1.0 - luma, inv_luma);
+    float2 map_uv = edit_map(luma, map_slice, map_scale, map_shift, map_edges);
+
+    float2 e = 0.5 * rcp(map_size);
+    float4 out_col = map.Sample(map_smp, clamp(map_uv, e, 1.0 - e));
+    return float4(out_col.rgb * tex.a, tex.a);
+}
+
+]]
+--[[pixelshader@map_viewer:
+float EPSILON = 1.0e-5;
+
+inline bool is_zero(float val) {
+    return abs(val) < EPSILON;
+}
+
+inline bool are_equal(float a, float b) {
+    return abs(a - b) < EPSILON;
+}
+
+inline float4 unpremul_col(float4 col) {
+    if (is_zero(col.a)) discard;
+    return float4(saturate(col.rgb * rcp(col.a)), col.a);
+}
+
+inline float4 premul_col(float4 col) {
+    return float4(col.rgb * col.a, col.a);
+}
+
+float4 decode_col(float code, float a) {
+    uint col = (uint)code;
+    float3 rgb = float3(
+        (col >> 16) & 0xFF,
+        (col >> 8) & 0xFF,
+        col & 0xFF
+    ) * rcp(255.0);
+    return float4(rgb, a);
+}
+
+float calc_luma(float3 col, int mode) {
+    float3 luma_weights = float3(0.2126, 0.7152, 0.0722); // Default to BT.709
+    switch (mode) {
+        case 0: // Luminance BT.601
+            luma_weights = float3(0.299, 0.587, 0.114);
+            break;
+        case 2: // Luminance BT.2020
+            luma_weights = float3(0.2627, 0.6780, 0.0593);
+            break;
+    }
+    return dot(col, luma_weights);
+}
+
+float3 rgb2hsv(float3 rgb) {
+    float4 k = float4(0.0, -rcp(3.0), 2.0 * rcp(3.0), -1.0);
+    float4 p = lerp(float4(rgb.bg, k.wz), float4(rgb.gb, k.xy), step(rgb.b, rgb.g));
+    float4 q = lerp(float4(p.xyw, rgb.r), float4(rgb.r, p.yzx), step(p.x, rgb.r));
+    
+    float d = q.x - min(q.w, q.y);
+    return float3(abs(q.z + (q.w - q.y) * rcp(6.0 * d + EPSILON)), d * rcp(q.x + EPSILON), q.x);
+}
+
+float3 hsv2rgb(float3 hsv) {
+    float4 k = float4(1.0, 2.0 * rcp(3.0), rcp(3.0), 3.0);
+    float3 p = abs(frac(hsv.xxx + k.xyz) * 6.0 - k.www);
+    return hsv.z * lerp(k.xxx, clamp(p - k.xxx, 0.0, 1.0), hsv.y);
+}
+
+float4 to_linear(float4 col, int mode) {
+    switch (mode) {
+        case 0:
+            return col;
+        case 1:
+            float3 t = step(col.rgb, 0.04045);
+            float3 low = col.rgb * rcp(12.92);
+            float3 high = pow(abs((col.rgb + 0.055) * rcp(1.055)), 2.4);
+            return float4(lerp(high, low, t), col.a);
+        default:
+            return col;
+    }
+}
+
+float4 to_gamma(float4 col, int mode) {
+    switch (mode) {
+        case 0:
+            return saturate(col);
+        case 1:
+            float3 t = step(col.rgb, 0.0031308);
+            float3 low = 12.92 * col.rgb;
+            float3 high = 1.055 * pow(abs(col.rgb), rcp(2.4)) - 0.055;
+            return saturate(float4(lerp(high, low, t), col.a));
+        default:
+            return saturate(col);
+    }
+}
+
+float2 edit_map(float luma, float slice, float scale, float shift, float edges) {
+    float map_u = (luma - shift) * rcp(max(scale, EPSILON));
+
+    switch (int(edges)) {
+        case 0:
+            map_u = saturate(map_u);
+            break;
+        case 1:
+        case 2:
+            int idx = int(floor(map_u));
+            float parity = float(idx & 1);
+            float u = map_u - idx;
+            map_u = lerp(u, 1.0 - u, step(2.0, edges) * parity);
+            break;
+    }
+
+    return float2(map_u, slice);
+}
+
+Texture2D src : register(t0);
+SamplerState src_smp : register(s0);
+cbuffer params : register(b0) {
+    float2 map_size;
+    float map_slice;
+    float map_scale;
+    float map_shift;
+    float map_edges;
+};
+
+struct PS_INPUT {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+float4 map_viewer(PS_INPUT input) : SV_Target {
+    float2 map_uv = edit_map(input.uv.x, map_slice, map_scale, map_shift, map_edges);
+    float2 e = 0.5 * rcp(map_size);
+    return src.Sample(src_smp, clamp(map_uv, e, 1.0 - e));
+}
+
+]]
+
+local function clamp(v, min, max)
+    return math.max(math.min(v, max), min)
+end
+
+_0 = _0 or {}
+local map_path = _0.map_path and tostring(_0.map_path) or _1 _1 = nil
+local map_layer = math.floor(tonumber(_0.map_layer) or obj.track0)
+local use_rel_layer = _9 ~= 0 _9 = nil
+if (type(_0.use_rel_layer) == "boolean") then
+    use_rel_layer = _0.use_rel_layer
+elseif (type(_0.use_rel_layer) == "number") then
+    use_rel_layer = _0.use_rel_layer ~= 0
+end
+local view_map = obj.check0
+if (type(_0.view_map) == "boolean") then
+    view_map = _0.view_map
+elseif (type(_0.view_map) == "number") then
+    view_map = _0.view_map ~= 0
+end
+local map_hue = tonumber(_0.map_hue) or _2 _2 = nil
+local map_slice = clamp(tonumber(_0.map_slice) or obj.track1, 0.0, 100.0) * 0.01
+local map_scale = math.max(tonumber(_0.map_scale) or obj.track2, 0.0) * 0.01
+local map_shift = tonumber(_0.map_shift) or obj.track3 * 0.01
+local map_edges = tonumber(_0.map_edges) or _3 _3 = nil
+local inv_luma = _4 _4 = nil
+if (type(_0.inv_luma) == "boolean") then
+    inv_luma = _0.inv_luma and 1 or 0
+elseif (type(_0.inv_luma) == "number") then
+    inv_luma = _0.inv_luma ~= 0 and 1 or 0
+end
+local luma_mode = tonumber(_0.luma_mode) or _5 _5 = nil
+local col_space = tonumber(_0.col_space) or _6 _6 = nil
+local blend_mode = tonumber(_0.blend_mode) or _7 _7 = nil
+local mix = clamp(tonumber(_0.mix) or _8, 0.0, 100.0) * 0.01 _8= nil
+_0 = nil
+
+local function err_handler(e)
+    local hint = "Hint: Try increasing TemporaryImageCacheSize in system.conf."
+    debug_print(string.format("%s. %s", e, hint))
+end
+
+local function copy_geo(dst, src)
+    for k in ("ox, oy, oz, cx, cy, cz, rx, ry, rz, zoom, aspect, alpha"):gmatch("%a+") do
+        dst[k] = src[k]
+    end
+end
+
+local ok, e = pcall(function()
+local geo = {}
+local map_w, map_h
+local layer = use_rel_layer and math.max(obj.layer + map_layer, 1) or math.max(map_layer, 0)
+if (map_path == "" and (layer == 0 or layer == obj.layer)) then
+    debug_print("The map not found.")
+    return
+end
+
+copy_geo(geo, obj)
+obj.copybuffer("tempbuffer", "object")
+obj.copybuffer("cache:img", "object")
+
+if (layer == 0 or layer == obj.layer) then
+    obj.load("image", map_path)
+else
+    obj.load("layer", layer, true)
+end
+
+map_w, map_h = obj.getpixel()
+if (map_w * map_h < 1) then
+    debug_print("The map size is invalid.")
+    obj.load("tempbuffer")
+    copy_geo(obj, geo)
+    return
+end
+
+obj.effect("色調補正", "色相", map_hue)
+
+if (view_map) then
+    obj.pixelshader("map_viewer", "object", "object", {
+        map_w, map_h,
+        map_slice,
+        map_scale,
+        map_shift,
+        map_edges,
+    })
+    copy_geo(obj, geo)
+    return
+end
+
+obj.pixelshader("gradient_map", "cache:img", {"cache:img", "object"}, {
+    map_w, map_h,
+    map_slice,
+    map_scale,
+    map_shift,
+    map_edges,
+    inv_luma,
+    luma_mode,
+    col_space
+})
+
+obj.copybuffer("object", "cache:img")
+obj.clearbuffer("cache:img")
+
+obj.setoption("drawtarget", "tempbuffer")
+obj.setoption("blend", blend_mode)
+obj.draw(0, 0, 0, 1, mix)
+obj.setoption("blend", 0)
+
+obj.load("tempbuffer")
+obj.clearbuffer("tempbuffer")
+copy_geo(obj, geo)
+end)
+if (not ok) then
+    err_handler(e)
+end
+
+
+@Unpremultiply
+--infomation:Unpremultiply@Stylize_K v1.2.1
+--label:Stylize
+--track0:Gain,0,1000,100,0.01
+--value@_0:PI,{}
+--[[pixelshader@unpremult:
+Texture2D src : register(t0);
+cbuffer params : register(b0) {
+    float gain;
+};
+
+struct PS_INPUT {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+float4 unpremult(PS_INPUT input) : SV_Target {
+    float4 tex = src.Load(int3(input.pos.xy, 0));
+    float alpha = max(max(tex.r, tex.g), tex.b);
+    return float4(tex.rgb * saturate(gain), saturate(alpha * gain));
+}
+
+]]
+
+_0 = _0 or {}
+local gain = math.max(tonumber(_0.gain) or obj.track0, 0.0) * 0.01
+_0 = nil
+
+obj.pixelshader("unpremult", "object", "object", {
+    gain
+})

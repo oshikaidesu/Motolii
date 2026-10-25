@@ -1,0 +1,5 @@
+無印ノイズ by 猫愛
+licence: MIT
+from: https://github.com/nea-c/aviutl2_script_AviUtlNoise/releases/download/r1/AviUtlNoise.zip (tag r1, commit 86dedbe47fdf)
+page: https://github.com/nea-c/aviutl2_script_AviUtlNoise
+Put here unchanged for Motolii (filament/aviutl_scripts).

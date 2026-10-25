@@ -1,0 +1,213 @@
+--label:カスタムオブジェクト
+--require:2003801
+--information:https://github.com/sevenc-nanashi/budoux.obj2
+
+--group:レイアウト
+
+--track@width:横幅,1,4000,400,1
+--select@segmentation_mode:自動分割=1,なし=0,日本語=1,簡体字中国語=2,繁体字中国語=3,タイ語=4
+--select@justify:両端揃え=0,なし=0,指定幅=1,最長行=2
+--select@align:揃え=0,左揃え[上]=0,中央揃え[上]=1,右揃え[上]=2,強制両端揃え[上]=3,左揃え[中]=4,中央揃え[中]=5,右揃え[中]=6,強制両端揃え[中]=7,左揃え[下]=8,中央揃え[下]=9,右揃え[下]=10,強制両端揃え[下]=11
+--track@char_spacing:字間,-500,500,0,0.01
+--track@line_spacing:行間,-500,500,0,0.01
+--track@speed:表示速度,0,100,0,0.01,瞬時
+
+--group:フォント
+
+--track@size:サイズ,1,1000,40,0.01
+--font@font:フォント,Yu Gothic UI
+--color@color:文字色,0xffffff
+--color@secondary_color:影・縁色,0x000000
+--select@decoration:装飾タイプ=0,標準文字=0,影付き文字=1,影付き文字（薄）=2,縁取り文字=3,縁取り文字（細）=4,縁取り文字（太）=5,縁取り文字（角）=6
+--check@bold:太字,false
+--check@italic:斜体,false
+--group:
+
+--text@text:テキスト,Hello, World!
+--group:高度な設定,false
+
+--check@debug:デバッグモード,false
+--value@PI:PI,{}
+-- PIからパラメータを取得
+if type(PI.width) == "number" then width = PI.width end
+if type(PI.detection) == "string" then
+  local detection_modes = {
+    none = 0,
+    ja = 1,
+    ["zh-hans"] = 2,
+    ["zh-hant"] = 3,
+    th = 4,
+  }
+  segmentation_mode = assert(detection_modes[PI.detection], "Unknown detection mode: " .. PI.detection)
+end
+if type(PI.justify) == "number" then justify = PI.justify end
+if type(PI.align) == "number" then align = PI.align end
+if type(PI.char_spacing) == "number" then char_spacing = PI.char_spacing end
+if type(PI.line_spacing) == "number" then line_spacing = PI.line_spacing end
+if type(PI.speed) == "number" then speed = PI.speed end
+if type(PI.size) == "number" then size = PI.size end
+if type(PI.font) == "string" then font = PI.font end
+if type(PI.color) == "number" then color = PI.color end
+if type(PI.secondary_color) == "number" then secondary_color = PI.secondary_color end
+if type(PI.decoration) == "number" then decoration = PI.decoration end
+if type(PI.bold) == "boolean" then bold = PI.bold end
+if type(PI.italic) == "boolean" then italic = PI.italic end
+if type(PI.text) == "string" then text = PI.text end
+if type(PI.debug) == "boolean" then debug = PI.debug end
+
+-- obj.setanchor("width,size", 1)
+
+local ffi = require("ffi")
+local buffer = require("string.buffer")
+local mod = obj.module("budoux")
+
+local function lua_callback(str_ptr, str_len)
+  local request = buffer.decode(ffi.string(str_ptr, str_len))
+  if debug then
+    print("@verbose", "Received callback:", request)
+  end
+  if request.type == "text_layout" then
+    obj.setfont("", 0, request.data.decoration, 0, 0, false, false, request.data.char_spacing)
+    local text_width, text_height, negative_center_x_delta, negative_center_y_delta = obj.load("text.layout",
+      request.data.text, 0, 0, 0)
+    local response = buffer.encode({
+      width = text_width,
+      height = text_height,
+      negative_center_x_delta = negative_center_x_delta + text_width / 2,
+      negative_center_y_delta = negative_center_y_delta + text_height / 2,
+    })
+    local response_address = tostring(ffi.cast("intptr_t", ffi.cast("const uint8_t*", response)))
+    mod.push_stack(response_address, #response)
+  elseif request.type == "evaluate_inline_script" then
+    local messages = ""
+
+    local inner_obj = {
+      mes = function(msg)
+        if type(msg) ~= "string" and type(msg) ~= "number" then
+          mod.push_stack_error("mes function expects a string or number argument")
+          return
+        end
+        messages = messages .. tostring(msg)
+      end,
+    }
+    setmetatable(inner_obj, { __index = obj })
+    local inner_G = { obj = inner_obj, mes = inner_obj.mes }
+    setmetatable(inner_G, { __index = _G })
+
+    local func, err = loadstring(request.data.script)
+    if not func then
+      mod.push_stack_error("Error loading script: " .. tostring(err))
+      return
+    end
+
+    setfenv(func, inner_G)
+    local success, result = pcall(func)
+    if not success then
+      mod.push_stack_error("Error executing script: " .. tostring(result))
+      return
+    end
+
+    local response = buffer.encode(messages)
+    local response_address = tostring(ffi.cast("intptr_t", ffi.cast("const uint8_t*", response)))
+    mod.push_stack(response_address, #response)
+  else
+    print("@warn", "Unknown request type:", request.type)
+    mod.push_stack_error("Unknown request type")
+  end
+end
+
+local function lua_callback_wrapper(str_ptr, str_len)
+  local success, err = pcall(lua_callback, str_ptr, str_len)
+  if not success then
+    print("@warn", "Lua callback error:", err)
+    mod.push_stack_error(err)
+  end
+end
+
+local outline_size = 0
+if decoration == 3 then
+  outline_size = size * 0.15
+elseif decoration == 4 then
+  outline_size = size * 0.075
+elseif decoration == 5 then
+  outline_size = size * 0.225
+elseif decoration == 6 then
+  outline_size = size * 0.075
+end
+
+local callback = ffi.cast("void (*)(const uint8_t*, size_t)", lua_callback_wrapper)
+local callback_address = tostring(ffi.cast("intptr_t", callback))
+local layout_success, layout_buffer_ptr_or_err, layout_buffer_length, layout_width, layout_height = pcall(function()
+  return mod.layout(
+    {
+      lua_callback = callback_address,
+      width = width,
+      segmentation_mode = segmentation_mode,
+      align = align % 4,
+      justify = justify,
+      text = text,
+      size = size,
+      char_spacing = char_spacing,
+      line_spacing = line_spacing,
+      show_speed = speed,
+      font = font,
+      color = color,
+      secondary_color = secondary_color,
+      decoration = decoration,
+      outline_size = outline_size,
+      bold = bold,
+      italic = italic,
+      time = obj.time
+    }
+  )
+end)
+
+callback:free()
+if not layout_success then
+  error("Layout error: " .. tostring(layout_buffer_ptr_or_err))
+end
+local layout_buffer = ffi.string(layout_buffer_ptr_or_err, layout_buffer_length)
+mod.free_buffer(layout_buffer_ptr_or_err)
+local layout = buffer.decode(layout_buffer)
+
+local horizontal_align = align % 4
+local vertical_align = math.floor(align / 4)
+local buffer_left = 0
+local buffer_top = 0
+local buffer_right = layout_width
+local buffer_bottom = layout_height
+for _, item in ipairs(layout) do
+  buffer_left = math.min(buffer_left, math.floor(item.position[1] - item.size[1] / 2))
+  buffer_top = math.min(buffer_top, math.floor(item.position[2] - item.size[2] / 2))
+  buffer_right = math.max(buffer_right, math.ceil(item.position[1] + item.size[1] / 2))
+  buffer_bottom = math.max(buffer_bottom, math.ceil(item.position[2] + item.size[2] / 2))
+end
+local buffer_width = math.min(buffer_right - buffer_left, layout_width)
+local buffer_height = buffer_bottom - buffer_top
+
+obj.setoption("drawtarget", "tempbuffer", buffer_width, buffer_height)
+obj.setfont("", 0, decoration, 0, 0, false, false, char_spacing)
+for _, item in ipairs(layout) do
+  obj.load("text", item.content)
+  obj.draw(
+    item.position[1] - buffer_left - buffer_width / 2,
+    item.position[2] - buffer_top - buffer_height / 2
+  )
+end
+obj.setoption("drawtarget", "framebuffer")
+obj.load("tempbuffer")
+if vertical_align == 0 then
+  obj.cy = -buffer_top - buffer_height / 2
+elseif vertical_align == 1 then
+  obj.cy = layout_height / 2 - buffer_top - buffer_height / 2
+elseif vertical_align == 2 then
+  obj.cy = layout_height - buffer_top - buffer_height / 2
+end
+if horizontal_align == 0 then
+  obj.cx = -buffer_left - buffer_width / 2
+elseif horizontal_align == 1 or horizontal_align == 3 then
+  obj.cx = layout_width / 2 - buffer_left - buffer_width / 2
+elseif horizontal_align == 2 then
+  obj.cx = layout_width - buffer_left - buffer_width / 2
+end
+

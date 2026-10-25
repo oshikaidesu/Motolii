@@ -1,0 +1,7 @@
+ReflectionOnPane v.1.0.1
+
+Glass-reflection animation effect for AviUtl2.
+Includes English and Simplified Chinese language files.
+
+AviUtl2 用玻璃反射动画效果。
+内含英语和简体中文语言文件。

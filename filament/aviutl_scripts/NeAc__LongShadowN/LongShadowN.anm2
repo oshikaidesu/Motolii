@@ -1,0 +1,2352 @@
+--require:2011000
+--label:加工
+--information:LongShadowN r14
+
+--select@shadow_type:Type=0,Directional=0,Radial=1,Inverse Radial=2
+--select@quality:Quality=1,Draft=0,Standard=1,High=2,Ultra=3
+--select@output_quality:Output Quality=2,Draft=0,Standard=1,High=2,Ultra=3
+
+--separator:Shadow
+--track@angle:Direction,-3600,3600,45,0.01
+--track@directional_length:Directional::Length,0,4000,200,0.01
+--track@blur_shadow:Softness,0,500,0,0.1
+--hide@angle:shadow_type>0
+--hide@directional_length:shadow_type>0
+--hide@blur_shadow:shadow_type>0
+
+--select@source_type:Source=0,Anchor=0,Layer=1
+--track@source_x:X,-100000,100000,0,0.01
+--track@source_y:Y,-100000,100000,0,0.01
+--track@source_layer:Layer,1,1000,1,1
+--track@radial_length:Radial::Length,0,4000,200,0.01
+--hide@source_type:shadow_type<1
+--hide@source_x:shadow_type<1
+--hide@source_x:source_type==1
+--hide@source_y:shadow_type<1
+--hide@source_y:source_type==1
+--hide@source_layer:shadow_type<1
+--hide@source_layer:source_type==0
+--hide@radial_length:shadow_type<1
+
+
+--group:Fade
+--track@fade_in:Fade In,0,100,0,0.01
+--track@fade_out:Fade Out,0,100,50,0.01
+--group
+
+--group:Shadow Color
+--color@shadow_color:Shadow::Color,0x000000
+--track@shadow_mix:Shadow::Mix,0,100,50,0.01
+--track@shadow_opacity:Shadow::Opacity,0,100,100,0.01
+--group
+
+--group:Object Color,false
+--color@object_color:Object::Color,0x000000
+--track@object_mix:Object::Mix,0,100,0,0.01
+--track@object_opacity:Object::Opacity,0,100,100,0.01
+--group
+
+--group:Texture,false
+--select@texture_type:Texture::Mode=0,None=0,1D=1,2D=2
+--track@texture_layer:Texture::Layer,1,1000,1,1
+--track@texture_x:Texture::Offset X,-100000,100000,0,0.01
+--track@texture_y:Texture::Offset Y,-100000,100000,0,0.01
+--select@texture_mapping:Texture::Mapping=0,Stretch=0,Fit=1,Fill=2,Original=3
+--track@texture_1d_scale:Texture::Scale,1,4000,100,0.001
+--check@texture_2d_scale_link:Link Scale,false
+--track@texture_2d_scale_x:Texture::Scale X,1,4000,100,0.001
+--track@texture_2d_scale_y:Texture::Scale Y,1,4000,100,0.001
+--check@texture_repeat:Texture::Repeat,false
+--track@texture_color_mix:Texture::Mix,0,100,100,0.01
+--hide@texture_layer:texture_type==0
+--hide@texture_x:texture_type<2
+--hide@texture_y:texture_type<2
+--hide@texture_mapping:texture_type<2
+--hide@texture_1d_scale:texture_type~=1
+--hide@texture_2d_scale_link:texture_type<2
+--hide@texture_2d_scale_x:texture_type<2
+--hide@texture_2d_scale_y:texture_type<2
+--hide@texture_2d_scale_y:texture_2d_scale_link==1
+--hide@texture_repeat:texture_type==0
+--hide@texture_color_mix:texture_type==0
+--group
+
+--group:Following Effects,false
+--select@post_effect_target:Apply To=0,Whole=0,Shadow Only=1
+--group
+
+--[[pixelshader@direct_raymarch_shadow:
+Texture2D source_texture : register(t0);
+Texture2D blurred_source_one : register(t1);
+Texture2D blurred_source_two : register(t2);
+Texture2D blurred_source_three : register(t3);
+SamplerState linear_sampler : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 buffer_size;
+    float2 source_offset;
+    float2 source_size;
+    float2 projection_origin;
+    float2 direction;
+    float total_length;
+    float target_scale;
+    float shadow_type;
+    float quality_step;
+    float fade_in;
+    float fade_out;
+    float layer_selector;
+    float blur_radius;
+};
+float sample_source_alpha_direct(float2 pixel) {
+    float2 local = pixel - source_offset;
+    if (any(local < 0) || any(local >= source_size)) return 0;
+    return saturate(source_texture.SampleLevel(linear_sampler,
+        local / source_size, 0).a);
+}
+float sample_preblurred_alpha(float2 pixel, float distance) {
+    float2 uv = pixel / buffer_size;
+    if (any(uv < 0) || any(uv >= 1)) return 0;
+    float wanted_radius = saturate(distance) * blur_radius;
+    float first_radius = blur_radius < 1 ? blur_radius
+        : pow(max(blur_radius, 1), 1.0 / 3.0);
+    float second_radius = blur_radius < 1 ? blur_radius
+        : pow(max(blur_radius, 1), 2.0 / 3.0);
+    if (wanted_radius <= first_radius) {
+        float original = sample_source_alpha_direct(pixel);
+        float first = blurred_source_one.SampleLevel(linear_sampler, uv, 0).a;
+        return lerp(original, first,
+            wanted_radius / max(first_radius, 1e-6));
+    }
+    if (wanted_radius <= second_radius) {
+        float first = blurred_source_one.SampleLevel(linear_sampler, uv, 0).a;
+        float second = blurred_source_two.SampleLevel(linear_sampler, uv, 0).a;
+        return lerp(first, second,
+            (wanted_radius - first_radius)
+                / max(second_radius - first_radius, 1e-6));
+    }
+    float second = blurred_source_two.SampleLevel(linear_sampler, uv, 0).a;
+    float third = blurred_source_three.SampleLevel(linear_sampler, uv, 0).a;
+    return lerp(second, third,
+        (wanted_radius - second_radius)
+            / max(blur_radius - second_radius, 1e-6));
+}
+float union_coverage(float coverage, float sample_alpha) {
+    return max(coverage, saturate(sample_alpha));
+}
+float shadow_only_coverage(float extension_coverage,
+    float root_coverage) {
+    return saturate(extension_coverage - saturate(root_coverage));
+}
+float conditional_shadow_coverage(float extension_coverage,
+    float root_coverage) {
+    float root = saturate(root_coverage);
+    float uncovered = 1 - root;
+    if (uncovered <= 1e-6) return 0;
+    return shadow_only_coverage(extension_coverage, root)
+        / max(uncovered, 1e-6);
+}
+float fade_weight_sample(float distance) {
+    float root = 1;
+    if (fade_in > 0.0001) {
+        root = smoothstep(0, max(fade_in, 1e-6), distance);
+    }
+    float tip = 1;
+    if (fade_out > 0.0001) {
+        tip = smoothstep(0, fade_out, 1 - distance);
+    }
+    return root * tip;
+}
+bool accumulate_faded_shadow_sample(float sample_alpha, float root_alpha,
+    float distance, inout float coverage, inout float weighted_distance) {
+    float candidate = conditional_shadow_coverage(
+        sample_alpha, root_alpha) * fade_weight_sample(distance);
+    float combined = union_coverage(coverage, candidate);
+    if (combined <= coverage + 1e-7) return false;
+    weighted_distance += distance * (combined - coverage);
+    coverage = combined;
+    return true;
+}
+bool faded_ray_done(float coverage, float distance) {
+    if (coverage >= 0.9999) return true;
+    return fade_out > 0.0001
+        && coverage >= smoothstep(0, fade_out, 1 - distance);
+}
+struct LayeredSampleState {
+    float front_coverage, front_distance;
+    float rear_coverage, rear_distance;
+    float2 front_source, rear_source;
+    bool front_started, front_open;
+};
+void accumulate_layered_sample(float sample_alpha, float root_alpha,
+    float distance, float fade_weight, float2 source_coordinate,
+    inout LayeredSampleState state) {
+    // Preserve raw root support until resolve, as in the r9 blur path.
+    float support = sample_alpha;
+    if (support <= 1.0 / 255.0) {
+        if (state.front_started) state.front_open = false;
+        return;
+    }
+    if (!state.front_started) {
+        state.front_started = true;
+        state.front_open = true;
+    }
+    float candidate = support;
+    bool front = state.front_open;
+    float previous = front ? state.front_coverage : state.rear_coverage;
+    float combined = previous + (1 - previous) * candidate;
+    float gain = combined - previous;
+    if (front) {
+        state.front_coverage = combined;
+        state.front_distance += distance * gain;
+        if (gain > 1e-7) state.front_source = source_coordinate;
+    } else {
+        state.rear_coverage = combined;
+        state.rear_distance += distance * gain;
+        if (gain > 1e-7) state.rear_source = source_coordinate;
+    }
+}
+float4 pack_layered_shadow(LayeredSampleState state, float selector) {
+    bool front = selector < 0.5;
+    float coverage = front ? state.front_coverage : state.rear_coverage;
+    if (coverage <= 0) return 0;
+    float2 source = front ? state.front_source : state.rear_source;
+    float distance = front ? state.front_distance : state.rear_distance;
+    return float4(source.x, distance, source.y, coverage);
+}
+bool clip_parameter_axis(float origin, float delta, float bounds_min,
+    float bounds_max, inout float interval_min, inout float interval_max) {
+    if (abs(delta) < 1e-6)
+        return origin >= bounds_min && origin < bounds_max;
+    float first = (bounds_min - origin) / delta;
+    float last = (bounds_max - origin) / delta;
+    interval_min = max(interval_min, min(first, last));
+    interval_max = min(interval_max, max(first, last));
+    return interval_max > interval_min;
+}
+bool point_inside_bounds(float2 sample_position, float2 bounds_min, float2 bounds_max) {
+    return all(sample_position >= bounds_min) && all(sample_position < bounds_max);
+}
+float next_parameter_toward(float boundary, float inside_parameter) {
+    if (boundary == inside_parameter) return boundary;
+    float span = inside_parameter - boundary;
+    float minimum_step = max(abs(boundary), 1) * 1e-6;
+    float step = min(abs(span), max(abs(span) / 8192, minimum_step));
+    float candidate = boundary + (span > 0 ? step : -step);
+    return candidate == boundary ? inside_parameter : candidate;
+}
+bool finish_clipped_interval(float2 origin, float2 delta,
+    float2 bounds_min, float2 bounds_max,
+    inout float interval_min, inout float interval_max) {
+    if (interval_max <= interval_min) return false;
+    float midpoint = (interval_min + interval_max) * 0.5;
+    if (!point_inside_bounds(origin + delta * midpoint,
+            bounds_min, bounds_max)) return false;
+    if (!point_inside_bounds(origin + delta * interval_min,
+            bounds_min, bounds_max)) {
+        interval_min = next_parameter_toward(interval_min, midpoint);
+    }
+    if (!point_inside_bounds(origin + delta * interval_max,
+            bounds_min, bounds_max)) {
+        interval_max = next_parameter_toward(interval_max, midpoint);
+    }
+    return interval_max > interval_min
+        && point_inside_bounds(origin + delta * interval_min,
+            bounds_min, bounds_max)
+        && point_inside_bounds(origin + delta * interval_max,
+            bounds_min, bounds_max);
+}
+bool directional_ray_interval(float2 pixel, float2 ray_direction,
+    float ray_length, float2 bounds_min, float2 bounds_max,
+    out float start_parameter, out float end_parameter,
+    out float source_span) {
+    float2 delta = -ray_direction * ray_length;
+    float interval_min = 0;
+    float interval_max = 1;
+    bool hit = clip_parameter_axis(pixel.x, delta.x,
+            bounds_min.x, bounds_max.x, interval_min, interval_max)
+        && clip_parameter_axis(pixel.y, delta.y,
+            bounds_min.y, bounds_max.y, interval_min, interval_max)
+        && finish_clipped_interval(pixel, delta, bounds_min, bounds_max,
+            interval_min, interval_max);
+    start_parameter = interval_min;
+    end_parameter = interval_max;
+    source_span = length(delta) * max(interval_max - interval_min, 0);
+    return hit;
+}
+bool projection_ray_interval(float2 pixel, float2 origin,
+    float projection_target_scale, float2 bounds_min, float2 bounds_max,
+    out float start_parameter, out float end_parameter,
+    out float source_span) {
+    float safe_scale = max(projection_target_scale, 1e-6);
+    float target_u = 1 / safe_scale;
+    float interval_min = min(1, target_u);
+    float interval_max = max(1, target_u);
+    float2 delta = pixel - origin;
+    bool hit = clip_parameter_axis(origin.x, delta.x,
+            bounds_min.x, bounds_max.x, interval_min, interval_max)
+        && clip_parameter_axis(origin.y, delta.y,
+            bounds_min.y, bounds_max.y, interval_min, interval_max)
+        && finish_clipped_interval(origin, delta, bounds_min, bounds_max,
+            interval_min, interval_max);
+    if (target_u >= 1) {
+        start_parameter = interval_min;
+        end_parameter = interval_max;
+    } else {
+        start_parameter = interval_max;
+        end_parameter = interval_min;
+    }
+    source_span = length(delta) * abs(end_parameter - start_parameter);
+    return hit;
+}
+float projection_distance_from_u(float projection_target_scale, float u) {
+    float safe_scale = max(projection_target_scale, 1e-6);
+    float logarithmic_range = -log(safe_scale);
+    if (abs(logarithmic_range) < 1e-6) {
+        float linear_range = 1 / safe_scale - 1;
+        if (abs(linear_range) < 1e-7) return 0;
+        return saturate((u - 1) / linear_range);
+    }
+    return saturate(log(max(u, 1e-6)) / logarithmic_range);
+}
+float direct_sample_parameter(float start_parameter, float end_parameter,
+    int sample, int active_samples) {
+    if (sample == active_samples - 1) return end_parameter;
+    return lerp(start_parameter, end_parameter,
+        sample / max(active_samples - 1.0, 1.0));
+}
+float4 direct_raymarch_shadow(float4 pos : SV_Position) : SV_Target {
+    float2 pixel = pos.xy;
+    float start_parameter, end_parameter, source_span;
+    bool hit;
+    if (shadow_type < 0.5) {
+        float extent = layer_selector > 1.5 ? blur_radius : 0;
+        hit = directional_ray_interval(pixel, direction, total_length,
+            source_offset - extent, source_offset + source_size + extent,
+            start_parameter, end_parameter, source_span);
+    } else {
+        hit = projection_ray_interval(pixel, projection_origin, target_scale,
+            source_offset, source_offset + source_size,
+            start_parameter, end_parameter, source_span);
+    }
+    if (!hit) return 0;
+
+    int active_samples = min(8001,
+        max(2, (int)ceil(source_span / quality_step) + 1));
+    float root_alpha = sample_source_alpha_direct(pixel);
+    if ((layer_selector < -0.5 || layer_selector > 2.5)
+            && 1 - root_alpha <= 1e-6) return 0;
+    float coverage = 0;
+    float weighted_distance = 0;
+    float selected_distance = 0;
+    float2 selected_source_coordinate = 0;
+    LayeredSampleState layer_state = (LayeredSampleState)0;
+    // The first front sample already includes the root. Rear needs the same
+    // baseline for r9-style conditional reconstruction after ray traversal.
+    layer_state.rear_coverage = root_alpha;
+    [loop]
+    for (int sample = 0; sample < 8001; ++sample) {
+        if (sample >= active_samples) break;
+        float parameter = direct_sample_parameter(start_parameter,
+            end_parameter, sample, active_samples);
+        float distance;
+        float2 source_pixel;
+        if (shadow_type < 0.5) {
+            distance = parameter;
+            source_pixel = pixel - direction * (distance * total_length);
+        } else {
+            source_pixel = projection_origin
+                + (pixel - projection_origin) * parameter;
+            distance = projection_distance_from_u(target_scale, parameter);
+        }
+        float sample_alpha = layer_selector > 1.5
+            ? sample_preblurred_alpha(source_pixel, distance)
+            : sample_source_alpha_direct(source_pixel);
+        float2 source_local = clamp(floor(source_pixel - source_offset),
+            0, source_size - 1);
+        float2 source_coordinate = layer_selector > 2.5
+            ? 0.125 + 0.75 * source_pixel / buffer_size
+            : 0.125 + 0.75 * (source_local + 0.5) / source_size;
+        if (layer_selector > 2.5) {
+            if (accumulate_faded_shadow_sample(sample_alpha, root_alpha,
+                    distance, coverage, weighted_distance)) {
+                selected_source_coordinate = source_coordinate;
+                selected_distance = distance;
+            }
+            if (coverage >= 0.9999) break;
+        } else if (layer_selector > 1.5) {
+            float combined = max(coverage, sample_alpha);
+            float gain = combined - coverage;
+            weighted_distance += distance * gain;
+            coverage = combined;
+            if (gain > 1e-7) selected_source_coordinate = source_coordinate;
+            if (coverage >= 0.9999) break;
+        } else if (layer_selector < -0.5) {
+            if (accumulate_faded_shadow_sample(sample_alpha, root_alpha, distance,
+                    coverage, weighted_distance)) {
+                selected_source_coordinate = source_coordinate;
+            }
+            if (faded_ray_done(coverage, distance)) break;
+        } else {
+            accumulate_layered_sample(sample_alpha, root_alpha, distance,
+                fade_weight_sample(distance), source_coordinate, layer_state);
+        }
+    }
+    if (layer_selector >= -0.5 && layer_selector < 1.5)
+        return pack_layered_shadow(layer_state, layer_selector);
+    return float4(selected_source_coordinate.x,
+        layer_selector > 2.5 ? selected_distance * coverage : weighted_distance,
+        selected_source_coordinate.y, coverage);
+}
+]]
+
+--[[pixelshader@edge_antialias:
+Texture2D shadow_texture : register(t0);
+Texture2D source_texture : register(t1);
+SamplerState linear_sampler : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 buffer_size;
+    float2 source_offset;
+    float2 source_size;
+    float2 projection_origin;
+    float2 direction;
+    float total_length;
+    float target_scale;
+    float shadow_type;
+    float sample_count;
+    float refine_samples;
+    float fade_in;
+    float fade_out;
+    float dense_refine;
+    float direct_quality_step;
+    float layer_selector;
+};
+float2 refine_offset(int index) {
+    int pair_index = index >> 1;
+    float2 pair_offset;
+    if (pair_index == 0) pair_offset = float2(0.25, 0.25);
+    else if (pair_index == 1) pair_offset = float2(0.25, -0.25);
+    else if (pair_index == 2) pair_offset = float2(0.375, 0.125);
+    else if (pair_index == 3) pair_offset = float2(0.125, -0.375);
+    else if (pair_index == 4) pair_offset = float2(0.4375, 0.3125);
+    else if (pair_index == 5) pair_offset = float2(0.3125, -0.4375);
+    else if (pair_index == 6) pair_offset = float2(0.1875, 0.0625);
+    else pair_offset = float2(0.0625, -0.1875);
+    return (index & 1) == 0 ? pair_offset : -pair_offset;
+}
+float sample_source_alpha(float2 pixel) {
+    float2 local = pixel - source_offset;
+    if (any(local < 0) || any(local >= source_size)) return 0;
+    return saturate(source_texture.SampleLevel(linear_sampler,
+        local / source_size, 0).a);
+}
+float union_coverage(float coverage, float sample_alpha) {
+    return max(coverage, saturate(sample_alpha));
+}
+float shadow_only_coverage(float extension_coverage,
+    float root_coverage) {
+    return saturate(extension_coverage - saturate(root_coverage));
+}
+float conditional_shadow_coverage(float extension_coverage,
+    float root_coverage) {
+    float root = saturate(root_coverage);
+    float uncovered = 1 - root;
+    if (uncovered <= 1e-6) return 0;
+    return shadow_only_coverage(extension_coverage, root)
+        / max(uncovered, 1e-6);
+}
+float fade_weight_sample(float distance) {
+    float root = 1;
+    if (fade_in > 0.0001) {
+        root = smoothstep(0, max(fade_in, 1e-6), distance);
+    }
+    float tip = 1;
+    if (fade_out > 0.0001) {
+        tip = smoothstep(0, fade_out, 1 - distance);
+    }
+    return root * tip;
+}
+bool accumulate_faded_shadow_sample(float sample_alpha, float root_alpha,
+    float distance, inout float coverage, inout float weighted_distance) {
+    float candidate = conditional_shadow_coverage(
+        sample_alpha, root_alpha) * fade_weight_sample(distance);
+    float combined = union_coverage(coverage, candidate);
+    if (combined <= coverage + 1e-7) return false;
+    weighted_distance += distance * (combined - coverage);
+    coverage = combined;
+    return true;
+}
+bool faded_ray_done(float coverage, float distance) {
+    if (coverage >= 0.9999) return true;
+    return fade_out > 0.0001
+        && coverage >= smoothstep(0, fade_out, 1 - distance);
+}
+bool clip_parameter_axis(float origin, float delta, float bounds_min,
+    float bounds_max, inout float interval_min, inout float interval_max) {
+    if (abs(delta) < 1e-6)
+        return origin >= bounds_min && origin < bounds_max;
+    float first = (bounds_min - origin) / delta;
+    float last = (bounds_max - origin) / delta;
+    interval_min = max(interval_min, min(first, last));
+    interval_max = min(interval_max, max(first, last));
+    return interval_max > interval_min;
+}
+bool point_inside_bounds(float2 sample_position, float2 bounds_min, float2 bounds_max) {
+    return all(sample_position >= bounds_min) && all(sample_position < bounds_max);
+}
+float next_parameter_toward(float boundary, float inside_parameter) {
+    if (boundary == inside_parameter) return boundary;
+    float span = inside_parameter - boundary;
+    float minimum_step = max(abs(boundary), 1) * 1e-6;
+    float step = min(abs(span), max(abs(span) / 8192, minimum_step));
+    float candidate = boundary + (span > 0 ? step : -step);
+    return candidate == boundary ? inside_parameter : candidate;
+}
+bool finish_clipped_interval(float2 origin, float2 delta,
+    float2 bounds_min, float2 bounds_max,
+    inout float interval_min, inout float interval_max) {
+    if (interval_max <= interval_min) return false;
+    float midpoint = (interval_min + interval_max) * 0.5;
+    if (!point_inside_bounds(origin + delta * midpoint,
+            bounds_min, bounds_max)) return false;
+    if (!point_inside_bounds(origin + delta * interval_min,
+            bounds_min, bounds_max)) {
+        interval_min = next_parameter_toward(interval_min, midpoint);
+    }
+    if (!point_inside_bounds(origin + delta * interval_max,
+            bounds_min, bounds_max)) {
+        interval_max = next_parameter_toward(interval_max, midpoint);
+    }
+    return interval_max > interval_min
+        && point_inside_bounds(origin + delta * interval_min,
+            bounds_min, bounds_max)
+        && point_inside_bounds(origin + delta * interval_max,
+            bounds_min, bounds_max);
+}
+bool directional_ray_interval(float2 pixel, float2 ray_direction,
+    float ray_length, float2 bounds_min, float2 bounds_max,
+    out float start_parameter, out float end_parameter,
+    out float source_span) {
+    float2 delta = -ray_direction * ray_length;
+    float interval_min = 0;
+    float interval_max = 1;
+    bool hit = clip_parameter_axis(pixel.x, delta.x,
+            bounds_min.x, bounds_max.x, interval_min, interval_max)
+        && clip_parameter_axis(pixel.y, delta.y,
+            bounds_min.y, bounds_max.y, interval_min, interval_max)
+        && finish_clipped_interval(pixel, delta, bounds_min, bounds_max,
+            interval_min, interval_max);
+    start_parameter = interval_min;
+    end_parameter = interval_max;
+    source_span = length(delta) * max(interval_max - interval_min, 0);
+    return hit;
+}
+bool projection_ray_interval(float2 pixel, float2 origin,
+    float projection_target_scale, float2 bounds_min, float2 bounds_max,
+    out float start_parameter, out float end_parameter,
+    out float source_span) {
+    float safe_scale = max(projection_target_scale, 1e-6);
+    float target_u = 1 / safe_scale;
+    float interval_min = min(1, target_u);
+    float interval_max = max(1, target_u);
+    float2 delta = pixel - origin;
+    bool hit = clip_parameter_axis(origin.x, delta.x,
+            bounds_min.x, bounds_max.x, interval_min, interval_max)
+        && clip_parameter_axis(origin.y, delta.y,
+            bounds_min.y, bounds_max.y, interval_min, interval_max)
+        && finish_clipped_interval(origin, delta, bounds_min, bounds_max,
+            interval_min, interval_max);
+    if (target_u >= 1) {
+        start_parameter = interval_min;
+        end_parameter = interval_max;
+    } else {
+        start_parameter = interval_max;
+        end_parameter = interval_min;
+    }
+    source_span = length(delta) * abs(end_parameter - start_parameter);
+    return hit;
+}
+float projection_distance_from_u(float projection_target_scale, float u) {
+    float safe_scale = max(projection_target_scale, 1e-6);
+    float logarithmic_range = -log(safe_scale);
+    if (abs(logarithmic_range) < 1e-6) {
+        float linear_range = 1 / safe_scale - 1;
+        if (abs(linear_range) < 1e-7) return 0;
+        return saturate((u - 1) / linear_range);
+    }
+    return saturate(log(max(u, 1e-6)) / logarithmic_range);
+}
+float direct_sample_parameter(float start_parameter, float end_parameter,
+    int sample, int active_samples) {
+    if (sample == active_samples - 1) return end_parameter;
+    return lerp(start_parameter, end_parameter,
+        sample / max(active_samples - 1.0, 1.0));
+}
+struct LayeredSampleState {
+    float front_coverage, front_distance;
+    float rear_coverage, rear_distance;
+    float2 front_source, rear_source;
+    bool front_started, front_open;
+};
+void accumulate_layered_sample(float sample_alpha, float root_alpha,
+    float distance, float fade_weight, float2 source_coordinate,
+    inout LayeredSampleState state) {
+    float support = conditional_shadow_coverage(sample_alpha, root_alpha);
+    if (support <= 1.0 / 255.0) {
+        if (state.front_started) state.front_open = false;
+        return;
+    }
+    if (!state.front_started) {
+        state.front_started = true;
+        state.front_open = true;
+    }
+    float candidate = support * fade_weight;
+    bool front = state.front_open;
+    float previous = front ? state.front_coverage : state.rear_coverage;
+    float combined = max(previous, candidate);
+    float gain = combined - previous;
+    if (front) {
+        state.front_coverage = combined;
+        state.front_distance += distance * gain;
+        if (gain > 1e-7) state.front_source = source_coordinate;
+    } else {
+        state.rear_coverage = combined;
+        state.rear_distance += distance * gain;
+        if (gain > 1e-7) state.rear_source = source_coordinate;
+    }
+}
+float4 pack_layered_shadow(LayeredSampleState state, float selector) {
+    bool front = selector < 0.5;
+    float coverage = front ? state.front_coverage : state.rear_coverage;
+    if (coverage <= 0) return 0;
+    float2 source = front ? state.front_source : state.rear_source;
+    float distance = front ? state.front_distance : state.rear_distance;
+    return float4(source.x, distance, source.y, coverage);
+}
+float4 edge_antialias(float4 pos : SV_Position) : SV_Target {
+    float4 center = shadow_texture[int2(pos.xy)];
+    float min_geometry = center.b;
+    float max_geometry = center.b;
+    float center_distance = saturate(center.g / max(center.a, 1e-6));
+    float min_distance = center_distance;
+    float max_distance = center_distance;
+    [unroll]
+    for (int scan_y = -1; scan_y <= 1; ++scan_y) {
+        [unroll]
+        for (int scan_x = -1; scan_x <= 1; ++scan_x) {
+            int2 sample_position = clamp(int2(pos.xy) + int2(scan_x, scan_y),
+                int2(0, 0), int2(buffer_size) - 1);
+            float4 neighbor = shadow_texture[sample_position];
+            float geometry = neighbor.b;
+            min_geometry = min(min_geometry, geometry);
+            max_geometry = max(max_geometry, geometry);
+            if (neighbor.b > 0.0001 && neighbor.a > 0.0001) {
+                float distance = saturate(neighbor.g / neighbor.a);
+                min_distance = min(min_distance, distance);
+                max_distance = max(max_distance, distance);
+            }
+        }
+    }
+    bool geometry_edge = max_geometry - min_geometry > 0.0001;
+    bool fade_edge = dense_refine >= 0.5
+        && (fade_in > 0.0001 || fade_out > 0.0001)
+        && max_distance - min_distance > 0.5 / max(sample_count - 1, 1);
+    if (!geometry_edge && !fade_edge) return center;
+
+    // The fast compositor only locates the boundary. Re-evaluate boundary
+    // subpixels from the original source so intermediate resampling cannot
+    // blur them and partial coverage is never normalized back to opaque.
+    float4 refined = 0;
+    [loop]
+    for (int i = 0; i < 16; ++i) {
+        if (i >= refine_samples) break;
+        float2 pixel = pos.xy + refine_offset(i);
+        float root_alpha = sample_source_alpha(pixel);
+        if (layer_selector < -0.5 && 1 - root_alpha <= 1e-6) continue;
+        float coverage = 0;
+        float weighted_distance = 0;
+        bool found_shadow = false;
+        LayeredSampleState layer_state = (LayeredSampleState)0;
+        float active_sample_count = sample_count;
+        int active_samples = 2;
+        float start_parameter = 0;
+        float end_parameter = 1;
+        float source_span = 0;
+        if (direct_quality_step > 0) {
+            bool hit;
+            if (shadow_type < 0.5) {
+                hit = directional_ray_interval(pixel, direction, total_length,
+                    source_offset, source_offset + source_size,
+                    start_parameter, end_parameter, source_span);
+            } else {
+                hit = projection_ray_interval(pixel, projection_origin,
+                    target_scale, source_offset, source_offset + source_size,
+                    start_parameter, end_parameter, source_span);
+            }
+            if (!hit) continue;
+            active_samples = min(8001,
+                max(2, (int)ceil(source_span / direct_quality_step) + 1));
+        }
+        [loop]
+        for (int sample = 0; sample < 8001; ++sample) {
+            float distance = 1;
+            float2 source_pixel = 0;
+            if (direct_quality_step > 0) {
+                if (sample >= active_samples) break;
+                float sample_parameter = direct_sample_parameter(
+                    start_parameter, end_parameter, sample, active_samples);
+                if (shadow_type < 0.5) {
+                    distance = sample_parameter;
+                    source_pixel = pixel
+                        - direction * (distance * total_length);
+                } else {
+                    source_pixel = projection_origin
+                        + (pixel - projection_origin) * sample_parameter;
+                    distance = projection_distance_from_u(
+                        target_scale, sample_parameter);
+                }
+            } else {
+                if (sample >= active_sample_count) break;
+                distance = sample == active_sample_count - 1
+                    ? 1 : sample / max(active_sample_count - 1, 1);
+                source_pixel = pixel
+                    - direction * (distance * total_length);
+            }
+            float sample_alpha = sample_source_alpha(source_pixel);
+            if (layer_selector < -0.5) {
+                if (accumulate_faded_shadow_sample(sample_alpha, root_alpha,
+                        distance, coverage, weighted_distance)) {
+                    found_shadow = true;
+                }
+                if (faded_ray_done(coverage, distance)) break;
+            } else {
+                accumulate_layered_sample(sample_alpha, root_alpha, distance,
+                    fade_weight_sample(distance), 0, layer_state);
+            }
+        }
+        float4 contribution = float4(coverage, weighted_distance,
+            found_shadow ? 1 : 0, coverage);
+        if (layer_selector >= -0.5) {
+            float4 selected = pack_layered_shadow(layer_state, layer_selector);
+            contribution = float4(selected.a, selected.g,
+                selected.a > 0 ? 1 : 0, selected.a);
+        }
+        refined += contribution;
+    }
+    return refined / refine_samples;
+}
+]]
+
+--[[pixelshader@resolve_source_color:
+Texture2D shadow_texture : register(t0);
+Texture2D source_texture : register(t1);
+cbuffer constant0 : register(b0) {
+    float2 source_size;
+};
+float4 decode_source_color(float2 source_coordinate) {
+    if (any(source_coordinate < 0.01)) return 0;
+    float2 normalized_coordinate = saturate(
+        (source_coordinate - 0.125) / 0.75);
+    int2 source_position = int2(round(
+        normalized_coordinate * source_size - 0.5));
+    source_position = clamp(source_position, int2(0, 0), int2(source_size) - 1);
+    float4 source = source_texture[source_position];
+    if (source.a <= 0.0001) {
+        float best_alpha = 0;
+        [unroll]
+        for (int y = -1; y <= 1; ++y) {
+            [unroll]
+            for (int x = -1; x <= 1; ++x) {
+                int2 candidate_position = clamp(source_position + int2(x, y),
+                    int2(0, 0), int2(source_size) - 1);
+                float4 candidate = source_texture[candidate_position];
+                if (candidate.a > best_alpha) {
+                    source = candidate;
+                    best_alpha = candidate.a;
+                }
+            }
+        }
+    }
+    return source.a > 0.0001 ? float4(source.rgb / source.a, 1) : 0;
+}
+float4 resolve_source_color(float4 pos : SV_Position) : SV_Target {
+    return decode_source_color(shadow_texture[int2(pos.xy)].rb);
+}
+]]
+
+--[[pixelshader@resolve_progressive_source_color:
+Texture2D shadow_texture : register(t0);
+Texture2D source_texture : register(t1);
+Texture2D blurred_source_one : register(t2);
+Texture2D blurred_source_two : register(t3);
+Texture2D blurred_source_three : register(t4);
+SamplerState linear_sampler : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 buffer_size;
+    float2 source_offset;
+    float2 source_size;
+    float blur_radius;
+};
+float4 sample_progressive_source_color(float2 uv, float distance) {
+    float2 pixel = uv * buffer_size;
+    float2 local = pixel - source_offset;
+    float4 original = 0;
+    if (all(local >= 0) && all(local < source_size))
+        original = source_texture.SampleLevel(linear_sampler,
+            local / source_size, 0);
+    float wanted_radius = saturate(distance) * blur_radius;
+    float first_radius = blur_radius < 1 ? blur_radius
+        : pow(max(blur_radius, 1), 1.0 / 3.0);
+    float second_radius = blur_radius < 1 ? blur_radius
+        : pow(max(blur_radius, 1), 2.0 / 3.0);
+    float4 first = blurred_source_one.SampleLevel(linear_sampler, uv, 0);
+    float4 second = blurred_source_two.SampleLevel(linear_sampler, uv, 0);
+    float4 third = blurred_source_three.SampleLevel(linear_sampler, uv, 0);
+    float4 source;
+    if (wanted_radius <= first_radius)
+        source = lerp(original, first,
+            wanted_radius / max(first_radius, 1e-6));
+    else if (wanted_radius <= second_radius)
+        source = lerp(first, second,
+            (wanted_radius - first_radius)
+                / max(second_radius - first_radius, 1e-6));
+    else
+        source = lerp(second, third,
+            (wanted_radius - second_radius)
+                / max(blur_radius - second_radius, 1e-6));
+    // A faint blurred alpha can still carry a usable color. The broadest
+    // source level is a stable fallback for neighboring transparent texels.
+    if (source.a <= 0.0001) source = third;
+    return source.a > 0.0001 ? float4(source.rgb / source.a, 1) : 0;
+}
+float4 resolve_progressive_source_color(float4 pos : SV_Position) : SV_Target {
+    float4 shadow = shadow_texture[int2(pos.xy)];
+    if (shadow.a <= 1e-7 || any(shadow.rb < 0.01)) return 0;
+    float2 uv = saturate((shadow.rb - 0.125) / 0.75);
+    float distance = saturate(shadow.g / max(shadow.a, 1e-6));
+    return sample_progressive_source_color(uv, distance);
+}
+]]
+
+--[[pixelshader@style_shadow:
+Texture2D shadow_texture : register(t0);
+Texture2D texture_texture : register(t1);
+Texture2D source_color_texture : register(t2);
+SamplerState texture_sampler : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 buffer_size;
+    float2 texture_offset;
+    float3 shadow_rgb;
+    float shadow_opacity;
+    float texture_type;
+    float texture_repeat;
+    float texture_scale_x;
+    float texture_scale_y;
+    float texture_mapping;
+    float2 texture_size;
+    float has_texture;
+    float texture_color_mix;
+    float shadow_mix;
+    float shadow_type;
+    float target_scale;
+    float2 texture_mapping_center;
+    float2 texture_mapping_size;
+    float texture_edge_extension;
+};
+float select_shadow_coverage(float4 shadow_info) {
+    return shadow_info.r;
+}
+float3 mix_shadow_color(float4 source) {
+    float3 source_rgb = source.a > 1e-6
+        ? source.rgb : shadow_rgb;
+    return lerp(source_rgb, shadow_rgb, shadow_mix);
+}
+float2 texture_display_size() {
+    float texture_width = max(texture_size.x, 1);
+    float texture_height = max(texture_size.y, 1);
+    float display_width = texture_mapping_size.x;
+    float display_height = texture_mapping_size.y;
+    if (texture_mapping >= 0.5) {
+        float mapping_scale = min(texture_mapping_size.x / texture_width,
+            texture_mapping_size.y / texture_height);
+        if (texture_mapping >= 1.5) {
+            mapping_scale = max(texture_mapping_size.x / texture_width,
+                texture_mapping_size.y / texture_height);
+        }
+        if (texture_mapping >= 2.5) mapping_scale = 1;
+        display_width = texture_width * mapping_scale;
+        display_height = texture_height * mapping_scale;
+    }
+    return float2(max(display_width, 1), max(display_height, 1));
+}
+float remap_texture_distance(float distance) {
+    if (shadow_type < 0.5 || abs(target_scale - 1) < 1e-6) return distance;
+    float current_scale = pow(max(target_scale, 1e-6), distance);
+    return saturate((current_scale - 1) / (target_scale - 1));
+}
+float4 nearest_source_color(int2 position) {
+    float4 source = source_color_texture[position];
+    if (source.a > 0.0001) return source;
+    int2 maximum_position = int2(buffer_size) - 1;
+    float4 sum = 0;
+    [unroll]
+    for (int y = -1; y <= 1; ++y) {
+        [unroll]
+        for (int x = -1; x <= 1; ++x) {
+            sum += source_color_texture[clamp(position + int2(x, y),
+                int2(0, 0), maximum_position)];
+        }
+    }
+    return sum.a > 0.0001 ? float4(sum.rgb / sum.a, 1) : 0;
+}
+float4 style_shadow(float4 pos : SV_Position) : SV_Target {
+    float4 shadow_info = shadow_texture[int2(pos.xy)];
+    float shadow_distance = saturate(shadow_info.g / max(shadow_info.a, 1e-6));
+    float4 source = nearest_source_color(int2(pos.xy));
+    float3 mixed_shadow_rgb = mix_shadow_color(source);
+    float solid_alpha = select_shadow_coverage(shadow_info) * shadow_opacity;
+    if (has_texture == 0) return float4(mixed_shadow_rgb * solid_alpha, solid_alpha);
+    float2 texture_uv;
+    bool outside = false;
+    if (texture_type == 1) {
+        float u = remap_texture_distance(shadow_distance)
+            * texture_scale_x / 100;
+        u = texture_repeat != 0 ? frac(u) : saturate(u);
+        texture_uv = float2(u, 0.5);
+    } else {
+        float2 display_size = texture_display_size();
+        float2 scaled_size = max(display_size
+            * float2(texture_scale_x, texture_scale_y) / 100, 0.01);
+        // Positive offsets move the centered texture right/down.
+        texture_uv = (pos.xy - texture_offset - texture_mapping_center)
+            / scaled_size + 0.5;
+        if (texture_repeat != 0) texture_uv = frac(texture_uv);
+        else if (texture_edge_extension > 0.5)
+            texture_uv = saturate(texture_uv);
+        else outside = any(texture_uv < 0) || any(texture_uv > 1);
+    }
+    float4 texel = outside ? float4(0, 0, 0, 0)
+                          : texture_texture.SampleLevel(texture_sampler, texture_uv, 0);
+    // AviUtl buffers carry premultiplied RGB. Separate RGB from texture alpha
+    // so color-only influence does not dim partially transparent texels twice.
+    float3 texture_rgb = texel.rgb / max(texel.a, 1e-6);
+    float3 final_rgb = lerp(mixed_shadow_rgb, texture_rgb, texture_color_mix);
+    float final_alpha = solid_alpha * texel.a;
+    return float4(final_rgb * final_alpha, final_alpha);
+}
+]]
+
+--[[pixelshader@resolve_shadow:
+Texture2D shadow_texture : register(t0);
+Texture2D source_texture : register(t1);
+SamplerState linear_sampler : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 buffer_size;
+    float fade_in;
+    float fade_out;
+    float2 source_offset;
+    float2 source_size;
+};
+float4 resolve_faded_shadow_info(float4 shadow_info) {
+    float geometry = shadow_info.r > 0.01 && shadow_info.b > 0.01 ? 1 : 0;
+    return float4(shadow_info.a, shadow_info.g, geometry, shadow_info.a);
+}
+float4 resolve_shadow(float4 pos : SV_Position) : SV_Target {
+    return resolve_faded_shadow_info(shadow_texture[int2(pos.xy)]);
+}
+]]
+
+--[[pixelshader@resolve_layered_r9:
+Texture2D shadow_texture : register(t0);
+Texture2D source_texture : register(t1);
+SamplerState linear_sampler : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 buffer_size;
+    float fade_in;
+    float fade_out;
+    float2 source_offset;
+    float2 source_size;
+};
+float sample_root_alpha(float2 pixel) {
+    float2 local = pixel - source_offset;
+    if (any(local < 0) || any(local >= source_size)) return 0;
+    return saturate(source_texture.SampleLevel(linear_sampler,
+        local / source_size, 0).a);
+}
+float fade_weight_sample(float distance) {
+    float root = fade_in <= 0.0001 ? 1
+        : smoothstep(0, max(fade_in, 1e-6), distance);
+    float tip = fade_out <= 0.0001 ? 1
+        : smoothstep(0, fade_out, 1 - distance);
+    return root * tip;
+}
+float4 resolve_layer_sample(float4 raw, float2 pixel) {
+    float root = sample_root_alpha(pixel);
+    float gain = max(raw.a - root, 0);
+    float uncovered = max(1 - root, 1e-6);
+    float distance = gain > 1e-6 ? saturate(raw.g / gain) : 0;
+    float coverage = saturate(gain / uncovered)
+        * fade_weight_sample(distance);
+    float geometry = gain > 0.0001 && raw.r > 0.01 && raw.b > 0.01 ? 1 : 0;
+    return float4(coverage, coverage * distance, geometry, coverage);
+}
+float4 resolve_layered_r9(float4 pos : SV_Position) : SV_Target {
+    return resolve_layer_sample(shadow_texture[int2(pos.xy)], pos.xy);
+}
+]]
+
+--[[pixelshader@blur_shadow:
+Texture2D styled_texture : register(t0);
+Texture2D distance_texture : register(t1);
+SamplerState linear_sampler : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 buffer_size;
+    float2 blur_direction;
+    float blur_radius;
+};
+float distance_blur_radius(float distance, float maximum_radius) {
+    return maximum_radius * saturate(distance);
+}
+float distance_blur_weight(float offset, float local_radius, float spacing) {
+    return max(0, local_radius + spacing - offset);
+}
+int blur_half_samples(float radius) {
+    int original_samples = min(16, max(1, (int)ceil(radius)));
+    int density_samples = (int)ceil(radius / 3.125);
+    return min(64, max(original_samples, density_samples));
+}
+float4 blur_shadow(float4 pos : SV_Position) : SV_Target {
+    int half_samples = blur_half_samples(blur_radius);
+    float spacing = blur_radius / half_samples;
+    float2 center_uv = pos.xy / buffer_size;
+    float4 distance_info = distance_texture.SampleLevel(linear_sampler, center_uv, 0);
+    float distance = distance_info.a > 0.0001
+        ? saturate(distance_info.g / distance_info.a) : 0;
+    float local_radius = distance_blur_radius(distance, blur_radius);
+    if (local_radius <= 0.0001) {
+        return styled_texture.SampleLevel(linear_sampler, center_uv, 0);
+    }
+    float4 sum = 0;
+    float weight_sum = 0;
+    [loop]
+    for (int i = -64; i <= 64; ++i) {
+        if (abs(i) > half_samples) continue;
+        float offset = abs(i * spacing);
+        float2 uv = (pos.xy + blur_direction * (i * spacing)) / buffer_size;
+        float weight = distance_blur_weight(offset, local_radius, spacing);
+        if (weight <= 0) continue;
+        sum += styled_texture.SampleLevel(linear_sampler, uv, 0) * weight;
+        weight_sum += weight;
+    }
+    return weight_sum > 0 ? sum / weight_sum : 0;
+}
+]]
+
+--[[pixelshader@spread_blur_distance:
+Texture2D distance_texture : register(t0);
+SamplerState linear_sampler : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 buffer_size;
+    float2 blur_direction;
+    float blur_radius;
+};
+float distance_blur_radius(float distance, float maximum_radius) {
+    return maximum_radius * saturate(distance);
+}
+int blur_half_samples(float radius) {
+    int original_samples = min(16, max(1, (int)ceil(radius)));
+    int density_samples = (int)ceil(radius / 3.125);
+    return min(64, max(original_samples, density_samples));
+}
+float spread_distance_candidate(float distance, float offset,
+    float maximum_radius, float spacing) {
+    float local_radius = distance_blur_radius(distance, maximum_radius);
+    float edge_coverage = saturate(
+        (local_radius + spacing - offset) / max(spacing, 1e-6));
+    return distance * edge_coverage;
+}
+float4 spread_blur_distance(float4 pos : SV_Position) : SV_Target {
+    int half_samples = blur_half_samples(blur_radius);
+    float spacing = blur_radius / half_samples;
+    float spread_distance = 0;
+    [loop]
+    for (int i = -64; i <= 64; ++i) {
+        if (abs(i) > half_samples) continue;
+        float offset = abs(i * spacing);
+        float2 uv = (pos.xy + blur_direction * (i * spacing)) / buffer_size;
+        float4 distance_info = distance_texture.SampleLevel(linear_sampler, uv, 0);
+        float distance = distance_info.a > 0.0001
+            ? saturate(distance_info.g / distance_info.a) : 0;
+        spread_distance = max(spread_distance,
+            spread_distance_candidate(distance, offset, blur_radius, spacing));
+    }
+    return spread_distance > 0 ? float4(0, spread_distance, 1, 1) : 0;
+}
+]]
+
+
+
+--[[pixelshader@combine_shadow_layers:
+Texture2D front_texture : register(t0);
+Texture2D rear_texture : register(t1);
+cbuffer constant0 : register(b0) {
+    float shadow_opacity;
+};
+float4 combine_layer_colors(float4 front, float4 rear, float opacity) {
+    return (front + rear * (1 - saturate(front.a))) * opacity;
+}
+float4 combine_shadow_layers(float4 pos : SV_Position) : SV_Target {
+    return combine_layer_colors(front_texture[int2(pos.xy)],
+        rear_texture[int2(pos.xy)], shadow_opacity);
+}
+]]
+
+--[[pixelshader@expand_source_for_blur:
+Texture2D source_texture : register(t0);
+cbuffer constant0 : register(b0) {
+    float2 source_offset;
+    float2 source_size;
+};
+float4 expand_source_for_blur(float4 pos : SV_Position) : SV_Target {
+    float2 local = pos.xy - source_offset;
+    if (any(local < 0) || any(local >= source_size)) return 0;
+    return source_texture.Load(int3(int2(local), 0));
+}
+]]
+
+--[[pixelshader@fixed_source_blur:
+Texture2D input_texture : register(t0);
+SamplerState linear_sampler : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 buffer_size;
+    float2 blur_direction;
+    float blur_radius;
+};
+float4 fixed_source_blur(float4 pos : SV_Position) : SV_Target {
+    if (blur_radius <= 0.0001)
+        return input_texture[int2(pos.xy)];
+    int half_samples = min(64, max(1, (int)ceil(blur_radius)));
+    float spacing = blur_radius / half_samples;
+    float4 sum = 0;
+    float total_weight = 0;
+    [loop]
+    for (int i = -64; i <= 64; ++i) {
+        if (abs(i) > half_samples) continue;
+        float offset = abs(i * spacing);
+        float weight = max(0, blur_radius + spacing - offset);
+        float2 uv = (pos.xy + blur_direction * (i * spacing)) / buffer_size;
+        if (all(uv >= 0) && all(uv < 1))
+            sum += input_texture.SampleLevel(linear_sampler, uv, 0) * weight;
+        total_weight += weight;
+    }
+    return total_weight > 0 ? sum / total_weight : 0;
+}
+]]
+
+--[[pixelshader@downsample_source_2x:
+Texture2D source_texture : register(t0);
+cbuffer constant0 : register(b0) {
+    float2 source_size;
+};
+float4 source_pixel(int2 pixel) {
+    return source_texture.Load(int3(clamp(pixel, int2(0, 0),
+        int2(source_size) - 1), 0));
+}
+float4 downsample_source_2x(float4 pos : SV_Position) : SV_Target {
+    int2 pixel = int2(pos.xy) * 2;
+    return 0.25 * (source_pixel(pixel)
+        + source_pixel(pixel + int2(1, 0))
+        + source_pixel(pixel + int2(0, 1))
+        + source_pixel(pixel + int2(1, 1)));
+}
+]]
+
+--[[pixelshader@blend_shadow_blur_levels:
+Texture2D sharp_shadow : register(t0);
+Texture2D blurred_one : register(t1);
+Texture2D blurred_two : register(t2);
+Texture2D blurred_three : register(t3);
+Texture2D distance_texture : register(t4);
+SamplerState linear_sampler : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 buffer_size;
+    float blur_radius;
+};
+float4 select_shadow_blur_level(float4 sharp, float4 one, float4 two,
+    float4 three, float wanted, float first_radius,
+    float second_radius, float maximum_radius) {
+    if (wanted <= first_radius)
+        return lerp(sharp, one, wanted / max(first_radius, 1e-6));
+    if (wanted <= second_radius)
+        return lerp(one, two, (wanted - first_radius)
+            / max(second_radius - first_radius, 1e-6));
+    return lerp(two, three, (wanted - second_radius)
+        / max(maximum_radius - second_radius, 1e-6));
+}
+float4 blend_shadow_blur_levels(float4 pos : SV_Position) : SV_Target {
+    float2 uv = pos.xy / buffer_size;
+    float4 distance_info = distance_texture.SampleLevel(linear_sampler, uv, 0);
+    float distance = distance_info.a > 1e-6
+        ? saturate(distance_info.g / distance_info.a) : 0;
+    float first_radius = blur_radius < 1 ? blur_radius
+        : pow(max(blur_radius, 1), 1.0 / 3.0);
+    float second_radius = blur_radius < 1 ? blur_radius
+        : pow(max(blur_radius, 1), 2.0 / 3.0);
+    return select_shadow_blur_level(sharp_shadow[int2(pos.xy)],
+        blurred_one.SampleLevel(linear_sampler, uv, 0),
+        blurred_two.SampleLevel(linear_sampler, uv, 0),
+        blurred_three.SampleLevel(linear_sampler, uv, 0),
+        distance * blur_radius, first_radius, second_radius, blur_radius);
+}
+]]
+
+--[[pixelshader@style_2d_texture_field:
+Texture2D texture_texture : register(t0);
+SamplerState texture_sampler : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 buffer_size;
+    float2 texture_offset;
+    float2 texture_size;
+    float2 texture_mapping_center;
+    float2 texture_mapping_size;
+    float2 texture_scale;
+    float texture_mapping;
+    float texture_repeat;
+    float texture_edge_extension;
+};
+float2 texture_display_size() {
+    float2 image_size = max(texture_size, 1);
+    if (texture_mapping < 0.5) return max(texture_mapping_size, 1);
+    float mapping_scale = texture_mapping < 1.5
+        ? min(texture_mapping_size.x / image_size.x,
+              texture_mapping_size.y / image_size.y)
+        : max(texture_mapping_size.x / image_size.x,
+              texture_mapping_size.y / image_size.y);
+    if (texture_mapping >= 2.5) mapping_scale = 1;
+    return max(image_size * mapping_scale, 1);
+}
+float4 style_2d_texture_field(float4 pos : SV_Position) : SV_Target {
+    float2 scaled_size = max(texture_display_size() * texture_scale / 100, 0.01);
+    float2 uv = (pos.xy - texture_offset - texture_mapping_center)
+        / scaled_size + 0.5;
+    if (texture_repeat != 0) uv = frac(uv);
+    else if (texture_edge_extension > 0.5) uv = saturate(uv);
+    else if (any(uv < 0) || any(uv > 1)) return 0;
+    return texture_texture.SampleLevel(texture_sampler, uv, 0);
+}
+]]
+
+--[[pixelshader@apply_blurred_texture:
+Texture2D shadow_texture : register(t0);
+Texture2D texture_field : register(t1);
+cbuffer constant0 : register(b0) {
+    float texture_color_mix;
+};
+float4 apply_blurred_texture(float4 pos : SV_Position) : SV_Target {
+    float4 shadow = shadow_texture[int2(pos.xy)];
+    float4 texel = texture_field[int2(pos.xy)];
+    if (shadow.a <= 1e-6 || texel.a <= 1e-6) return 0;
+    float3 shadow_rgb = shadow.rgb / shadow.a;
+    float3 texture_rgb = texel.rgb / texel.a;
+    float alpha = shadow.a * texel.a;
+    float3 rgb = lerp(shadow_rgb, texture_rgb, texture_color_mix);
+    return float4(rgb * alpha, alpha);
+}
+]]
+
+--[[pixelshader@composite_shadow:
+Texture2D shadow_texture : register(t0);
+Texture2D source_texture : register(t1);
+cbuffer constant0 : register(b0) {
+    float2 source_offset;
+    float2 source_size;
+    float3 object_rgb;
+    float object_mix;
+    float object_opacity;
+    float output_mode;
+};
+float4 color_object(float4 source) {
+    float3 straight_rgb = source.rgb / max(source.a, 1e-6);
+    float alpha = source.a * object_opacity;
+    float3 rgb = lerp(straight_rgb, object_rgb, object_mix);
+    return float4(rgb * alpha, alpha);
+}
+float4 prepare_shadow_for_object(float4 shadow, float4 source) {
+    float root_coverage = saturate(source.a);
+    float visible_source_alpha = root_coverage * object_opacity;
+    float source_over_weight = 1 - visible_source_alpha;
+    if (source_over_weight <= 1e-6) return 0;
+    return shadow * ((1 - root_coverage) / source_over_weight);
+}
+float4 composite_shadow(float4 pos : SV_Position) : SV_Target {
+    float4 shadow = shadow_texture[int2(pos.xy)];
+    int2 source_pos = int2(floor(pos.xy - source_offset));
+    float4 source_sample = 0;
+    if (all(source_pos >= 0) && all(source_pos < int2(source_size))) {
+        source_sample = source_texture[source_pos];
+    }
+    shadow = prepare_shadow_for_object(shadow, source_sample);
+    float4 source = color_object(source_sample);
+    if (output_mode < 0.5)
+        return shadow * (1 - source.a);
+    if (output_mode < 1.5)
+        return source;
+    return source + shadow * (1 - source.a);
+}
+]]
+
+--[[pixelshader@legacy_direct_raymarch_shadow:
+Texture2D source_texture : register(t0);
+SamplerState linear_sampler : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 buffer_size;
+    float2 source_offset;
+    float2 source_size;
+    float2 projection_origin;
+    float2 direction;
+    float total_length;
+    float target_scale;
+    float shadow_type;
+    float quality_step;
+};
+float sample_source_alpha_direct(float2 pixel) {
+    float2 local = pixel - source_offset;
+    if (any(local < 0) || any(local >= source_size)) return 0;
+    return saturate(source_texture.SampleLevel(linear_sampler,
+        local / source_size, 0).a);
+}
+bool clip_parameter_axis(float origin, float delta, float bounds_min,
+    float bounds_max, inout float interval_min, inout float interval_max) {
+    if (abs(delta) < 1e-6)
+        return origin >= bounds_min && origin < bounds_max;
+    float first = (bounds_min - origin) / delta;
+    float last = (bounds_max - origin) / delta;
+    interval_min = max(interval_min, min(first, last));
+    interval_max = min(interval_max, max(first, last));
+    return interval_max > interval_min;
+}
+bool point_inside_bounds(float2 sample_position, float2 bounds_min, float2 bounds_max) {
+    return all(sample_position >= bounds_min) && all(sample_position < bounds_max);
+}
+float next_parameter_toward(float boundary, float inside_parameter) {
+    if (boundary == inside_parameter) return boundary;
+    float span = inside_parameter - boundary;
+    float minimum_step = max(abs(boundary), 1) * 1e-6;
+    float step = min(abs(span), max(abs(span) / 8192, minimum_step));
+    float candidate = boundary + (span > 0 ? step : -step);
+    return candidate == boundary ? inside_parameter : candidate;
+}
+bool finish_clipped_interval(float2 origin, float2 delta,
+    float2 bounds_min, float2 bounds_max,
+    inout float interval_min, inout float interval_max) {
+    if (interval_max <= interval_min) return false;
+    float midpoint = (interval_min + interval_max) * 0.5;
+    if (!point_inside_bounds(origin + delta * midpoint,
+            bounds_min, bounds_max)) return false;
+    if (!point_inside_bounds(origin + delta * interval_min,
+            bounds_min, bounds_max)) {
+        interval_min = next_parameter_toward(interval_min, midpoint);
+    }
+    if (!point_inside_bounds(origin + delta * interval_max,
+            bounds_min, bounds_max)) {
+        interval_max = next_parameter_toward(interval_max, midpoint);
+    }
+    return interval_max > interval_min
+        && point_inside_bounds(origin + delta * interval_min,
+            bounds_min, bounds_max)
+        && point_inside_bounds(origin + delta * interval_max,
+            bounds_min, bounds_max);
+}
+bool directional_ray_interval(float2 pixel, float2 ray_direction,
+    float ray_length, float2 bounds_min, float2 bounds_max,
+    out float start_parameter, out float end_parameter,
+    out float source_span) {
+    float2 delta = -ray_direction * ray_length;
+    float interval_min = 0;
+    float interval_max = 1;
+    bool hit = clip_parameter_axis(pixel.x, delta.x,
+            bounds_min.x, bounds_max.x, interval_min, interval_max)
+        && clip_parameter_axis(pixel.y, delta.y,
+            bounds_min.y, bounds_max.y, interval_min, interval_max)
+        && finish_clipped_interval(pixel, delta, bounds_min, bounds_max,
+            interval_min, interval_max);
+    start_parameter = interval_min;
+    end_parameter = interval_max;
+    source_span = length(delta) * max(interval_max - interval_min, 0);
+    return hit;
+}
+bool projection_ray_interval(float2 pixel, float2 origin,
+    float projection_target_scale, float2 bounds_min, float2 bounds_max,
+    out float start_parameter, out float end_parameter,
+    out float source_span) {
+    float safe_scale = max(projection_target_scale, 1e-6);
+    float target_u = 1 / safe_scale;
+    float interval_min = min(1, target_u);
+    float interval_max = max(1, target_u);
+    float2 delta = pixel - origin;
+    bool hit = clip_parameter_axis(origin.x, delta.x,
+            bounds_min.x, bounds_max.x, interval_min, interval_max)
+        && clip_parameter_axis(origin.y, delta.y,
+            bounds_min.y, bounds_max.y, interval_min, interval_max)
+        && finish_clipped_interval(origin, delta, bounds_min, bounds_max,
+            interval_min, interval_max);
+    if (target_u >= 1) {
+        start_parameter = interval_min;
+        end_parameter = interval_max;
+    } else {
+        start_parameter = interval_max;
+        end_parameter = interval_min;
+    }
+    source_span = length(delta) * abs(end_parameter - start_parameter);
+    return hit;
+}
+float projection_distance_from_u(float projection_target_scale, float u) {
+    float safe_scale = max(projection_target_scale, 1e-6);
+    float logarithmic_range = -log(safe_scale);
+    if (abs(logarithmic_range) < 1e-6) {
+        float linear_range = 1 / safe_scale - 1;
+        if (abs(linear_range) < 1e-7) return 0;
+        return saturate((u - 1) / linear_range);
+    }
+    return saturate(log(max(u, 1e-6)) / logarithmic_range);
+}
+float direct_sample_parameter(float start_parameter, float end_parameter,
+    int sample, int active_samples) {
+    if (sample == active_samples - 1) return end_parameter;
+    return lerp(start_parameter, end_parameter,
+        sample / max(active_samples - 1.0, 1.0));
+}
+float4 legacy_direct_raymarch_shadow(float4 pos : SV_Position) : SV_Target {
+    float2 pixel = pos.xy;
+    float start_parameter, end_parameter, source_span;
+    bool hit;
+    if (shadow_type < 0.5) {
+        hit = directional_ray_interval(pixel, direction, total_length,
+            source_offset, source_offset + source_size,
+            start_parameter, end_parameter, source_span);
+    } else {
+        hit = projection_ray_interval(pixel, projection_origin, target_scale,
+            source_offset, source_offset + source_size,
+            start_parameter, end_parameter, source_span);
+    }
+    if (!hit) return 0;
+
+    int active_samples = min(8001,
+        max(2, (int)ceil(source_span / quality_step) + 1));
+    float coverage = 0;
+    float first_distance = 1;
+    float2 first_source_coordinate = 0;
+    bool found_source = false;
+    [loop]
+    for (int sample = 0; sample < 8001; ++sample) {
+        if (sample >= active_samples) break;
+        float parameter = direct_sample_parameter(start_parameter,
+            end_parameter, sample, active_samples);
+        float distance;
+        float2 source_pixel;
+        if (shadow_type < 0.5) {
+            distance = parameter;
+            source_pixel = pixel - direction * (distance * total_length);
+        } else {
+            source_pixel = projection_origin
+                + (pixel - projection_origin) * parameter;
+            distance = projection_distance_from_u(target_scale, parameter);
+        }
+        float sample_alpha = sample_source_alpha_direct(source_pixel);
+        if (sample_alpha > 0.0001 && !found_source) {
+            found_source = true;
+            first_distance = distance;
+            float2 source_local = clamp(floor(source_pixel - source_offset),
+                0, source_size - 1);
+            first_source_coordinate = 0.125
+                + 0.75 * (source_local + 0.5) / source_size;
+        }
+        coverage += (1 - coverage) * sample_alpha;
+        if (coverage >= 0.9999) break;
+    }
+    return float4(first_source_coordinate.x, first_distance * coverage,
+        first_source_coordinate.y, coverage);
+}
+]]
+
+--[[pixelshader@legacy_edge_antialias:
+Texture2D shadow_texture : register(t0);
+Texture2D source_texture : register(t1);
+SamplerState linear_sampler : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 buffer_size;
+    float2 source_offset;
+    float2 source_size;
+    float2 projection_origin;
+    float2 direction;
+    float total_length;
+    float target_scale;
+    float shadow_type;
+    float sample_count;
+    float refine_samples;
+    float fade_in;
+    float fade_out;
+    float dense_refine;
+    float direct_quality_step;
+};
+float2 refine_offset(int index) {
+    int pair_index = index >> 1;
+    float2 pair_offset;
+    if (pair_index == 0) pair_offset = float2(0.25, 0.25);
+    else if (pair_index == 1) pair_offset = float2(0.25, -0.25);
+    else if (pair_index == 2) pair_offset = float2(0.375, 0.125);
+    else if (pair_index == 3) pair_offset = float2(0.125, -0.375);
+    else if (pair_index == 4) pair_offset = float2(0.4375, 0.3125);
+    else if (pair_index == 5) pair_offset = float2(0.3125, -0.4375);
+    else if (pair_index == 6) pair_offset = float2(0.1875, 0.0625);
+    else pair_offset = float2(0.0625, -0.1875);
+    return (index & 1) == 0 ? pair_offset : -pair_offset;
+}
+float sample_source_alpha(float2 pixel) {
+    float2 local = pixel - source_offset;
+    if (any(local < 0) || any(local >= source_size)) return 0;
+    return saturate(source_texture.SampleLevel(linear_sampler,
+        local / source_size, 0).a);
+}
+float extension_sample_alpha(float sample_alpha, float sample_travel,
+    float quality_step) {
+    if (sample_travel <= 1e-6) return 0;
+    float minimum_travel = quality_step > 0 && quality_step < 0.75
+        ? 0.75 : 0;
+    return sample_travel >= minimum_travel ? sample_alpha : 0;
+}
+void accumulate_shadow_coverages(float sample_alpha, float sample_travel,
+    float quality_step,
+    inout float total_coverage, inout float extension_coverage) {
+    total_coverage += (1 - total_coverage) * sample_alpha;
+    float extension_alpha = extension_sample_alpha(sample_alpha,
+        sample_travel, quality_step);
+    extension_coverage += (1 - extension_coverage) * extension_alpha;
+}
+float fade_weight_aa(float distance) {
+    float root = fade_in >= 0.9999 ? 1
+        : smoothstep(0, max(1 - fade_in, 1e-6), distance);
+    float tip = fade_out <= 0.0001 ? 1
+        : smoothstep(0, fade_out, 1 - distance);
+    return root * tip;
+}
+bool clip_parameter_axis(float origin, float delta, float bounds_min,
+    float bounds_max, inout float interval_min, inout float interval_max) {
+    if (abs(delta) < 1e-6)
+        return origin >= bounds_min && origin < bounds_max;
+    float first = (bounds_min - origin) / delta;
+    float last = (bounds_max - origin) / delta;
+    interval_min = max(interval_min, min(first, last));
+    interval_max = min(interval_max, max(first, last));
+    return interval_max > interval_min;
+}
+bool point_inside_bounds(float2 sample_position, float2 bounds_min, float2 bounds_max) {
+    return all(sample_position >= bounds_min) && all(sample_position < bounds_max);
+}
+float next_parameter_toward(float boundary, float inside_parameter) {
+    if (boundary == inside_parameter) return boundary;
+    float span = inside_parameter - boundary;
+    float minimum_step = max(abs(boundary), 1) * 1e-6;
+    float step = min(abs(span), max(abs(span) / 8192, minimum_step));
+    float candidate = boundary + (span > 0 ? step : -step);
+    return candidate == boundary ? inside_parameter : candidate;
+}
+bool finish_clipped_interval(float2 origin, float2 delta,
+    float2 bounds_min, float2 bounds_max,
+    inout float interval_min, inout float interval_max) {
+    if (interval_max <= interval_min) return false;
+    float midpoint = (interval_min + interval_max) * 0.5;
+    if (!point_inside_bounds(origin + delta * midpoint,
+            bounds_min, bounds_max)) return false;
+    if (!point_inside_bounds(origin + delta * interval_min,
+            bounds_min, bounds_max)) {
+        interval_min = next_parameter_toward(interval_min, midpoint);
+    }
+    if (!point_inside_bounds(origin + delta * interval_max,
+            bounds_min, bounds_max)) {
+        interval_max = next_parameter_toward(interval_max, midpoint);
+    }
+    return interval_max > interval_min
+        && point_inside_bounds(origin + delta * interval_min,
+            bounds_min, bounds_max)
+        && point_inside_bounds(origin + delta * interval_max,
+            bounds_min, bounds_max);
+}
+bool directional_ray_interval(float2 pixel, float2 ray_direction,
+    float ray_length, float2 bounds_min, float2 bounds_max,
+    out float start_parameter, out float end_parameter,
+    out float source_span) {
+    float2 delta = -ray_direction * ray_length;
+    float interval_min = 0;
+    float interval_max = 1;
+    bool hit = clip_parameter_axis(pixel.x, delta.x,
+            bounds_min.x, bounds_max.x, interval_min, interval_max)
+        && clip_parameter_axis(pixel.y, delta.y,
+            bounds_min.y, bounds_max.y, interval_min, interval_max)
+        && finish_clipped_interval(pixel, delta, bounds_min, bounds_max,
+            interval_min, interval_max);
+    start_parameter = interval_min;
+    end_parameter = interval_max;
+    source_span = length(delta) * max(interval_max - interval_min, 0);
+    return hit;
+}
+bool projection_ray_interval(float2 pixel, float2 origin,
+    float projection_target_scale, float2 bounds_min, float2 bounds_max,
+    out float start_parameter, out float end_parameter,
+    out float source_span) {
+    float safe_scale = max(projection_target_scale, 1e-6);
+    float target_u = 1 / safe_scale;
+    float interval_min = min(1, target_u);
+    float interval_max = max(1, target_u);
+    float2 delta = pixel - origin;
+    bool hit = clip_parameter_axis(origin.x, delta.x,
+            bounds_min.x, bounds_max.x, interval_min, interval_max)
+        && clip_parameter_axis(origin.y, delta.y,
+            bounds_min.y, bounds_max.y, interval_min, interval_max)
+        && finish_clipped_interval(origin, delta, bounds_min, bounds_max,
+            interval_min, interval_max);
+    if (target_u >= 1) {
+        start_parameter = interval_min;
+        end_parameter = interval_max;
+    } else {
+        start_parameter = interval_max;
+        end_parameter = interval_min;
+    }
+    source_span = length(delta) * abs(end_parameter - start_parameter);
+    return hit;
+}
+float projection_distance_from_u(float projection_target_scale, float u) {
+    float safe_scale = max(projection_target_scale, 1e-6);
+    float logarithmic_range = -log(safe_scale);
+    if (abs(logarithmic_range) < 1e-6) {
+        float linear_range = 1 / safe_scale - 1;
+        if (abs(linear_range) < 1e-7) return 0;
+        return saturate((u - 1) / linear_range);
+    }
+    return saturate(log(max(u, 1e-6)) / logarithmic_range);
+}
+float direct_sample_parameter(float start_parameter, float end_parameter,
+    int sample, int active_samples) {
+    if (sample == active_samples - 1) return end_parameter;
+    return lerp(start_parameter, end_parameter,
+        sample / max(active_samples - 1.0, 1.0));
+}
+float4 legacy_edge_antialias(float4 pos : SV_Position) : SV_Target {
+    float4 center = shadow_texture[int2(pos.xy)];
+    float min_geometry = center.b;
+    float max_geometry = center.b;
+    float center_distance = saturate(center.g / max(center.a, 1e-6));
+    float min_distance = center_distance;
+    float max_distance = center_distance;
+    [unroll]
+    for (int scan_y = -1; scan_y <= 1; ++scan_y) {
+        [unroll]
+        for (int scan_x = -1; scan_x <= 1; ++scan_x) {
+            int2 sample_position = clamp(int2(pos.xy) + int2(scan_x, scan_y),
+                int2(0, 0), int2(buffer_size) - 1);
+            float4 neighbor = shadow_texture[sample_position];
+            float geometry = neighbor.b;
+            min_geometry = min(min_geometry, geometry);
+            max_geometry = max(max_geometry, geometry);
+            if (neighbor.b > 0.0001 && neighbor.a > 0.0001) {
+                float distance = saturate(neighbor.g / neighbor.a);
+                min_distance = min(min_distance, distance);
+                max_distance = max(max_distance, distance);
+            }
+        }
+    }
+    bool geometry_edge = max_geometry - min_geometry > 0.0001;
+    bool fade_edge = dense_refine >= 0.5
+        && (fade_in < 0.9999 || fade_out > 0.0001)
+        && max_distance - min_distance > 0.5 / max(sample_count - 1, 1);
+    // Total coverage cannot reveal extension hidden beneath a fully opaque
+    // distance-zero sample. Re-raymarch those pixels so Object Opacity and
+    // blur retain the genuine positive-distance shadow.
+    bool opaque_root_requires_refine = sample_source_alpha(pos.xy) >= 0.9999
+        && center.a > 0.0001;
+    if (!geometry_edge && !fade_edge && !opaque_root_requires_refine) return center;
+
+    // The fast compositor only locates the boundary. Re-evaluate boundary
+    // subpixels from the original source so intermediate resampling cannot
+    // blur them and partial coverage is never normalized back to opaque.
+    float4 refined = 0;
+    [loop]
+    for (int i = 0; i < 16; ++i) {
+        if (i >= refine_samples) break;
+        float2 pixel = pos.xy + refine_offset(i);
+        float coverage = 0;
+        float extension_coverage = 0;
+        float first_distance = 1;
+        float first_alpha = 0;
+        bool found_source = false;
+        float active_sample_count = sample_count;
+        int active_samples = 2;
+        float start_parameter = 0;
+        float end_parameter = 1;
+        float source_span = 0;
+        if (direct_quality_step > 0) {
+            bool hit;
+            if (shadow_type < 0.5) {
+                hit = directional_ray_interval(pixel, direction, total_length,
+                    source_offset, source_offset + source_size,
+                    start_parameter, end_parameter, source_span);
+            } else {
+                hit = projection_ray_interval(pixel, projection_origin,
+                    target_scale, source_offset, source_offset + source_size,
+                    start_parameter, end_parameter, source_span);
+            }
+            if (!hit) continue;
+            active_samples = min(8001,
+                max(2, (int)ceil(source_span / direct_quality_step) + 1));
+        }
+        [loop]
+        for (int sample = 0; sample < 8001; ++sample) {
+            float distance = 1;
+            float2 source_pixel = 0;
+            if (direct_quality_step > 0) {
+                if (sample >= active_samples) break;
+                float sample_parameter = direct_sample_parameter(
+                    start_parameter, end_parameter, sample, active_samples);
+                if (shadow_type < 0.5) {
+                    distance = sample_parameter;
+                    source_pixel = pixel
+                        - direction * (distance * total_length);
+                } else {
+                    source_pixel = projection_origin
+                        + (pixel - projection_origin) * sample_parameter;
+                    distance = projection_distance_from_u(
+                        target_scale, sample_parameter);
+                }
+            } else {
+                if (sample >= active_sample_count) break;
+                distance = sample == active_sample_count - 1
+                    ? 1 : sample / max(active_sample_count - 1, 1);
+                source_pixel = pixel
+                    - direction * (distance * total_length);
+            }
+            float sample_alpha = sample_source_alpha(source_pixel);
+            if (sample_alpha > 0.0001 && !found_source) {
+                first_distance = distance;
+                first_alpha = sample_alpha;
+                found_source = true;
+            }
+            accumulate_shadow_coverages(sample_alpha,
+                length(source_pixel - pixel), direct_quality_step,
+                coverage, extension_coverage);
+            if (coverage >= 0.9999 && extension_coverage >= 0.9999) break;
+        }
+        float weight = fade_weight_aa(first_distance);
+        float weighted_coverage = coverage * weight;
+        float4 contribution = float4(extension_coverage * weight,
+            first_distance * weighted_coverage,
+            found_source ? 1 : 0, weighted_coverage);
+        refined += contribution;
+    }
+    return refined / refine_samples;
+}
+]]
+
+--[[pixelshader@legacy_resolve_shadow:
+Texture2D shadow_texture : register(t0);
+Texture2D source_texture : register(t1);
+SamplerState linear_sampler : register(s0);
+cbuffer constant0 : register(b0) {
+    float2 buffer_size;
+    float fade_in;
+    float fade_out;
+    float2 source_offset;
+    float2 source_size;
+};
+float sample_root_alpha(float2 pixel) {
+    float2 local = pixel - source_offset;
+    if (any(local < 0) || any(local >= source_size)) return 0;
+    return saturate(source_texture.SampleLevel(linear_sampler,
+        local / source_size, 0).a);
+}
+float reconstruct_extension_coverage(float total_coverage,
+    float root_coverage) {
+    float uncovered_root = 1 - saturate(root_coverage);
+    if (uncovered_root <= 1e-6) return 0;
+    return saturate((total_coverage - root_coverage) / uncovered_root);
+}
+float fade_weight(float distance) {
+    float root = fade_in >= 0.9999 ? 1
+        : smoothstep(0, max(1 - fade_in, 1e-6), distance);
+    float tip = fade_out <= 0.0001 ? 1
+        : smoothstep(0, fade_out, 1 - distance);
+    return root * tip;
+}
+float4 legacy_resolve_shadow(float4 pos : SV_Position) : SV_Target {
+    float4 shadow_info = shadow_texture[int2(pos.xy)];
+    float root_alpha = sample_root_alpha(pos.xy);
+    float extension_coverage = reconstruct_extension_coverage(
+        shadow_info.a, root_alpha);
+    float distance = saturate(shadow_info.g / max(shadow_info.a, 1e-6));
+    float weight = fade_weight(distance);
+    float geometry = shadow_info.r > 0.01 && shadow_info.b > 0.01 ? 1 : 0;
+    return float4(extension_coverage * weight, shadow_info.g * weight,
+        geometry, shadow_info.a * weight);
+}
+]]
+
+if (texture_2d_scale_link) then texture_2d_scale_y = texture_2d_scale_x end
+local blur_shadow = shadow_type == 0 and math.min(blur_shadow, 500) or 0
+local shadow_length = shadow_type == 0 and directional_length or radial_length
+local effective_quality = obj.getinfo("saving")
+    and math.max(quality, output_quality) or quality
+
+if shadow_type >= 1 and source_type == 0 then
+    obj.setanchor("source_x,source_y", 0, "screen")
+end
+
+local MAX_SAMPLES = 2048
+local MAX_DIRECT_SAMPLES = 8001
+
+local function get_quality_config(level)
+    local configs = {
+        [0] = { sample_step = 4.0, refine_samples = 4 },
+        [1] = { sample_step = 2.0, refine_samples = 8 },
+        [2] = { sample_step = 1.0, refine_samples = 12 },
+        [3] = { sample_step = 0.5, refine_samples = 16 },
+    }
+    local config = configs[level] or configs[1]
+    return config.sample_step, config.refine_samples
+end
+
+local function resolve_source_position()
+    if source_type == 0 then
+        return source_x, source_y, true
+    end
+    local key = "layer" .. source_layer
+    if not obj.getvalue(key) then return 0, 0, false end
+    local x = obj.getvalue("layer" .. source_layer .. ".x")
+    local y = obj.getvalue("layer" .. source_layer .. ".y")
+    return x or 0, y or 0, x ~= nil and y ~= nil
+end
+
+local function screen_to_local(screen_x, screen_y)
+    -- lua.txt: getvalue is standard drawing; obj.* is the current effect state.
+    -- Modern axis scales already include zoom/aspect. Compatibility values
+    -- are only a fallback when axis scales are unavailable, never extra factors.
+    local function axis_scales(sx, sy, zoom, aspect)
+        zoom, aspect = zoom or 1, aspect or 0
+        return sx or zoom * (1 - math.max(aspect, 0)),
+               sy or zoom * (1 + math.min(aspect, 0))
+    end
+    local base_sx, base_sy = axis_scales(obj.getvalue("sx"), obj.getvalue("sy"),
+        (obj.getvalue("zoom") or 100) / 100, obj.getvalue("aspect"))
+    local effect_sx, effect_sy = axis_scales(obj.sx, obj.sy, obj.zoom, obj.aspect)
+    local dx = screen_x - (obj.getvalue("x") or obj.x) - (obj.ox or 0)
+    local dy = screen_y - (obj.getvalue("y") or obj.y) - (obj.oy or 0)
+    local r = math.rad(-((obj.getvalue("rz") or 0) + obj.rz))
+    local rx = dx * math.cos(r) - dy * math.sin(r)
+    local ry = dx * math.sin(r) + dy * math.cos(r)
+    local scale_x = math.max(math.abs(base_sx * effect_sx), 1e-6)
+    local scale_y = math.max(math.abs(base_sy * effect_sy), 1e-6)
+    -- Invert T(base + offset) * R(base + effect) * S(base * effect)
+    -- * T(-(base center + effect center)), before buffer-center/padding offsets.
+    return rx / scale_x + (obj.getvalue("cx") or 0) + obj.cx,
+           ry / scale_y + (obj.getvalue("cy") or 0) + obj.cy
+end
+
+local function get_radial_projection(mode, length, width, height)
+    local half_w, half_h = width / 2, height / 2
+    local reference_radius = math.max(math.sqrt(half_w * half_w + half_h * half_h), 1e-6)
+    local target_scale
+    if mode == 1 then
+        target_scale = 1 + length / reference_radius
+    else
+        -- A projected radius of 0.5 px is one rasterized endpoint. Clamping
+        -- continuously here keeps every quality tier on the same exponential
+        -- path instead of switching formulas at mathematical scale zero.
+        local point_scale = math.min(1, 0.5 / reference_radius)
+        target_scale = math.max(point_scale, 1 - length / reference_radius)
+    end
+    return target_scale, reference_radius * math.abs(target_scale - 1)
+end
+
+local function compute_padding(mode, length, angle_deg, source_x, source_y, width, height, margin)
+    if mode == 0 then
+        local r = math.rad(angle_deg)
+        local dx, dy = math.cos(r) * length, math.sin(r) * length
+        return math.ceil(math.max(0, -dx) + margin),
+               math.ceil(math.max(0, -dy) + margin),
+               math.ceil(math.max(0,  dx) + margin),
+               math.ceil(math.max(0,  dy) + margin)
+    end
+    local target_scale = get_radial_projection(mode, length, width, height)
+    local half_w, half_h = width / 2, height / 2
+    local projected_left = source_x + (-half_w - source_x) * target_scale
+    local projected_right = source_x + (half_w - source_x) * target_scale
+    local projected_top = source_y + (-half_h - source_y) * target_scale
+    local projected_bottom = source_y + (half_h - source_y) * target_scale
+    return math.ceil(math.max(0, -half_w - math.min(-half_w, projected_left)) + margin),
+           math.ceil(math.max(0, -half_h - math.min(-half_h, projected_top)) + margin),
+           math.ceil(math.max(0, math.max(half_w, projected_right) - half_w) + margin),
+           math.ceil(math.max(0, math.max(half_h, projected_bottom) - half_h) + margin)
+end
+
+local function load_shadow_texture(enabled)
+    local has_texture = 0
+    local loaded_width, loaded_height = 1, 1
+    if not enabled then
+        obj.clearbuffer("cache:longshadown_texture", 1, 1)
+        return 0, loaded_width, loaded_height
+    end
+    -- Shared globals are stored as strings by AviUtl. Stop indirect cycles
+    -- before another load can overwrite a still-active object's backup.
+    if global.longshadown_texture_loading == "1" then
+        debug_print("[LongShadowN] solid fallback: nested texture reference")
+        obj.clearbuffer("cache:longshadown_texture", 1, 1)
+        return 0, loaded_width, loaded_height
+    end
+    -- Evaluate external effects before creating any shared source/shadow caches.
+    -- The backup is object-qualified so another LongShadowN cannot overwrite it.
+    if texture_type ~= 0 and texture_layer ~= obj.layer and obj.getvalue("layer" .. texture_layer) then
+        local backup = "cache:longshadown_texture_backup_" .. obj.id
+        local saved_cx, saved_cy = obj.cx, obj.cy
+        obj.copybuffer(backup, "object")
+        local previous_loading = global.longshadown_texture_loading
+        global.longshadown_texture_loading = "1"
+        local ok, loaded = pcall(function()
+            return obj.load("layer", texture_layer, true)
+        end)
+        global.longshadown_texture_loading = previous_loading or ""
+        if ok and loaded and obj.w > 0 and obj.h > 0 then
+            loaded_width, loaded_height = obj.w, obj.h
+            obj.copybuffer("cache:longshadown_texture", "object")
+            has_texture = 1
+        else
+            debug_print("[LongShadowN] solid fallback: texture load failed or empty", texture_layer)
+        end
+        obj.copybuffer("object", backup)
+        obj.cx, obj.cy = saved_cx, saved_cy
+    elseif texture_type ~= 0 then
+        debug_print("[LongShadowN] solid fallback: missing or self-referenced texture", texture_layer)
+    end
+    if has_texture == 0 then
+        -- Bind a valid resource even when the shader takes the solid branch.
+        obj.clearbuffer("cache:longshadown_texture", 1, 1)
+    end
+    return has_texture, loaded_width, loaded_height
+end
+
+local source_w, source_h = obj.w, obj.h
+local should_render_shadow = shadow_length > 0
+local source_pos_x, source_pos_y = 0, 0
+if shadow_type >= 1 then
+    local sx, sy, valid = resolve_source_position()
+    should_render_shadow = should_render_shadow and valid
+    if valid then
+        source_pos_x, source_pos_y = screen_to_local(sx, sy)
+        -- Keep both coordinates and their squared HLSL lengths representable.
+        local finite_position = source_pos_x == source_pos_x and source_pos_y == source_pos_y
+            and math.abs(source_pos_x) < 1e15 and math.abs(source_pos_y) < 1e15
+        if not finite_position then
+            should_render_shadow = false
+            source_pos_x, source_pos_y = 0, 0
+            debug_print("[LongShadowN] shadow skipped: nonfinite or excessive source position")
+        end
+    else
+        debug_print("[LongShadowN] shadow skipped: missing source position layer", source_layer)
+    end
+end
+
+if source_w <= 0 or source_h <= 0 then
+    debug_print("[LongShadowN] shadow skipped: empty input", source_w, source_h)
+    return
+end
+local texture_margin = 2
+local texture_left, texture_top, texture_right, texture_bottom = compute_padding(
+    shadow_type, shadow_length, angle, source_pos_x, source_pos_y,
+    source_w, source_h, texture_margin)
+local left, top, right, bottom = compute_padding(shadow_type, shadow_length, angle,
+    source_pos_x, source_pos_y, source_w, source_h,
+    math.ceil(blur_shadow + texture_margin))
+if not should_render_shadow then
+    left, top, right, bottom = 0, 0, 0, 0
+    texture_left, texture_top, texture_right, texture_bottom = 0, 0, 0, 0
+end
+local source_offset_x, source_offset_y = left, top
+local texture_mapping_width = source_w + texture_left + texture_right
+local texture_mapping_height = source_h + texture_top + texture_bottom
+local texture_mapping_center_x = left - texture_left + texture_mapping_width / 2
+local texture_mapping_center_y = top - texture_top + texture_mapping_height / 2
+source_pos_x = source_pos_x + source_offset_x + source_w / 2
+source_pos_y = source_pos_y + source_offset_y + source_h / 2
+
+local has_texture, texture_w, texture_h = load_shadow_texture(should_render_shadow)
+-- External effects may use the same names. Reset scratch resources after their
+-- evaluation, then overwrite every source/resource before any subsequent read.
+for _, name in ipairs({ "shadow_a", "shadow_b", "shadow_c", "resolved", "source_color", "final", "filtered", "source", "layer_front", "distance_field" }) do
+    obj.clearbuffer("cache:longshadown_" .. name, 1, 1)
+end
+for level = 1, 3 do
+    obj.clearbuffer("cache:longshadown_source_blur_" .. level, 1, 1)
+end
+
+local function render_direct_shadow(buffer_w, buffer_h,
+    source_pos_x, source_pos_y, layer_selector)
+    local target_scale, effective_length = 1, shadow_length
+    if shadow_type >= 1 then
+        target_scale, effective_length = get_radial_projection(
+            shadow_type, shadow_length, source_w, source_h)
+    end
+    local quality_step = get_quality_config(effective_quality)
+    local refine_sample_count = math.min(MAX_DIRECT_SAMPLES,
+        math.max(2, math.ceil(effective_length / quality_step) + 1))
+    obj.clearbuffer("cache:longshadown_shadow_a", buffer_w, buffer_h)
+    local legacy_blur = layer_selector < -1.5
+    local direct_params = { buffer_w, buffer_h, source_offset_x, source_offset_y,
+        source_w, source_h, source_pos_x, source_pos_y,
+        math.cos(math.rad(angle)), math.sin(math.rad(angle)),
+        shadow_length, target_scale, shadow_type, quality_step }
+    if not legacy_blur then
+        direct_params[#direct_params + 1] = fade_in / 100
+        direct_params[#direct_params + 1] = fade_out / 100
+        direct_params[#direct_params + 1] = layer_selector
+        direct_params[#direct_params + 1] = blur_shadow
+    end
+    local direct_inputs = legacy_blur and "cache:longshadown_source" or {
+        "cache:longshadown_source",
+        "cache:longshadown_source_blur_1",
+        "cache:longshadown_source_blur_2",
+        "cache:longshadown_source_blur_3" }
+    obj.pixelshader(legacy_blur and "legacy_direct_raymarch_shadow"
+        or "direct_raymarch_shadow", "cache:longshadown_shadow_a",
+        direct_inputs, direct_params, "copy", "clamp")
+    return target_scale, refine_sample_count, quality_step
+end
+
+local function style_and_filter_shadow(buffer_w, buffer_h,
+    target_scale, refine_sample_count, refine_samples, direct_quality_step,
+    opacity_value, layer_selector, skip_blur)
+    direct_quality_step = direct_quality_step or 0
+    local legacy_blur = layer_selector < -1.5
+    local fade_in_value = legacy_blur and (1 - fade_in / 100) or fade_in / 100
+    local red = math.floor(shadow_color / 65536) % 256 / 255
+    local green = math.floor(shadow_color / 256) % 256 / 255
+    local blue = shadow_color % 256 / 255
+    local repeat_flag = texture_repeat and 1 or 0
+    local style_has_texture = layer_selector >= 0
+        and texture_type == 2
+        and has_texture ~= 0 and 0 or has_texture
+    obj.clearbuffer("cache:longshadown_source_color", buffer_w, buffer_h)
+    if layer_selector > 2.5 then
+        obj.pixelshader("resolve_progressive_source_color",
+            "cache:longshadown_source_color",
+            { "cache:longshadown_shadow_a", "cache:longshadown_source",
+              "cache:longshadown_source_blur_1",
+              "cache:longshadown_source_blur_2",
+              "cache:longshadown_source_blur_3" },
+            { buffer_w, buffer_h, source_offset_x, source_offset_y,
+              source_w, source_h, blur_shadow }, "copy", "clamp")
+    else
+        obj.pixelshader("resolve_source_color", "cache:longshadown_source_color",
+            { "cache:longshadown_shadow_a", "cache:longshadown_source" },
+            { source_w, source_h }, "copy", "clamp")
+    end
+    obj.clearbuffer("cache:longshadown_resolved", buffer_w, buffer_h)
+    local resolve_shader = layer_selector >= 0 and layer_selector < 2.5
+        and "resolve_layered_r9"
+        or (legacy_blur and "legacy_resolve_shadow" or "resolve_shadow")
+    obj.pixelshader(resolve_shader, "cache:longshadown_resolved",
+        { "cache:longshadown_shadow_a", "cache:longshadown_source" },
+        { buffer_w, buffer_h, fade_in_value, fade_out / 100,
+          source_offset_x, source_offset_y, source_w, source_h }, "copy", "clamp")
+    if layer_selector < 0 then
+    obj.clearbuffer("cache:longshadown_shadow_b", buffer_w, buffer_h)
+    local edge_params = { buffer_w, buffer_h, source_offset_x, source_offset_y,
+        source_w, source_h, source_pos_x, source_pos_y,
+        math.cos(math.rad(angle)), math.sin(math.rad(angle)),
+        shadow_length, target_scale, shadow_type, refine_sample_count,
+        refine_samples, fade_in_value, fade_out / 100,
+        effective_quality >= 2 and 1 or 0, direct_quality_step }
+    if not legacy_blur then edge_params[#edge_params + 1] = layer_selector end
+    obj.pixelshader(legacy_blur and "legacy_edge_antialias"
+        or "edge_antialias", "cache:longshadown_shadow_b",
+        { "cache:longshadown_resolved", "cache:longshadown_source" },
+        edge_params, "copy", "clamp")
+    obj.copybuffer("cache:longshadown_resolved", "cache:longshadown_shadow_b")
+    obj.clearbuffer("cache:longshadown_shadow_b", 1, 1)
+    end
+    obj.clearbuffer("cache:longshadown_shadow_a", 1, 1)
+    obj.clearbuffer("cache:longshadown_final", buffer_w, buffer_h)
+    -- Clamp preserves the 1D endpoints; wrapped UVs and the loop sampler give
+    -- repeating textures continuous interpolation across their seam.
+    if texture_repeat then
+        obj.pixelshader("style_shadow", "cache:longshadown_final",
+            { "cache:longshadown_resolved", "cache:longshadown_texture", "cache:longshadown_source_color" },
+            { buffer_w, buffer_h, texture_x, texture_y, red, green, blue, opacity_value,
+              texture_type, repeat_flag,
+              texture_type == 1 and texture_1d_scale or texture_2d_scale_x,
+              texture_type == 2 and texture_2d_scale_y or 100,
+              texture_mapping, texture_w, texture_h, style_has_texture,
+              texture_color_mix / 100,
+              shadow_mix / 100, shadow_type, target_scale,
+              texture_mapping_center_x, texture_mapping_center_y,
+              texture_mapping_width, texture_mapping_height,
+              layer_selector > 1.5 and 1 or 0 }, "copy", "loop")
+    else
+        obj.pixelshader("style_shadow", "cache:longshadown_final",
+            { "cache:longshadown_resolved", "cache:longshadown_texture", "cache:longshadown_source_color" },
+            { buffer_w, buffer_h, texture_x, texture_y, red, green, blue, opacity_value,
+              texture_type, repeat_flag,
+              texture_type == 1 and texture_1d_scale or texture_2d_scale_x,
+              texture_type == 2 and texture_2d_scale_y or 100,
+              texture_mapping, texture_w, texture_h, style_has_texture,
+              texture_color_mix / 100,
+              shadow_mix / 100, shadow_type, target_scale,
+              texture_mapping_center_x, texture_mapping_center_y,
+              texture_mapping_width, texture_mapping_height,
+              layer_selector > 1.5 and 1 or 0 }, "copy", "clamp")
+    end
+    obj.clearbuffer("cache:longshadown_source_color", 1, 1)
+    if blur_shadow > 0 and layer_selector < 1.5 and not skip_blur then
+        obj.clearbuffer("cache:longshadown_blur_distance_a", buffer_w, buffer_h)
+        obj.pixelshader("spread_blur_distance", "cache:longshadown_blur_distance_a",
+            "cache:longshadown_resolved",
+            { buffer_w, buffer_h, 1, 0, blur_shadow }, "copy", "clip")
+        obj.clearbuffer("cache:longshadown_blur_distance_b", buffer_w, buffer_h)
+        obj.pixelshader("spread_blur_distance", "cache:longshadown_blur_distance_b",
+            "cache:longshadown_blur_distance_a",
+            { buffer_w, buffer_h, 0, 1, blur_shadow }, "copy", "clip")
+        obj.clearbuffer("cache:longshadown_blur_distance_a", 1, 1)
+        obj.clearbuffer("cache:longshadown_filtered", buffer_w, buffer_h)
+        obj.pixelshader("blur_shadow", "cache:longshadown_filtered",
+            { "cache:longshadown_final", "cache:longshadown_blur_distance_b" },
+            { buffer_w, buffer_h, 1, 0, blur_shadow }, "copy", "clip")
+        obj.pixelshader("blur_shadow", "cache:longshadown_final",
+            { "cache:longshadown_filtered", "cache:longshadown_blur_distance_b" },
+            { buffer_w, buffer_h, 0, 1, blur_shadow }, "copy", "clip")
+        obj.clearbuffer("cache:longshadown_blur_distance_b", 1, 1)
+        obj.clearbuffer("cache:longshadown_filtered", 1, 1)
+    end
+end
+
+-- Preserve the unexpanded source for Direct sampling and final compositing.
+obj.copybuffer("cache:longshadown_source", "object")
+local original_cx, original_cy = obj.cx, obj.cy
+obj.cx = obj.cx - (right - left) / 2
+obj.cy = obj.cy - (bottom - top) / 2
+obj.effect("領域拡張", "上", top, "下", bottom, "左", left, "右", right, "塗りつぶし", 1)
+
+local function apply_integrated_blurred_2d_texture()
+    -- The Direct path already blurs shadow coverage by distance. Render the
+    -- 2D texture in fixed output coordinates, blur it using the same resolved
+    -- distance, then combine the two premultiplied images once.
+    obj.clearbuffer("cache:longshadown_blur_distance_a", obj.w, obj.h)
+    obj.pixelshader("spread_blur_distance",
+        "cache:longshadown_blur_distance_a",
+        "cache:longshadown_resolved",
+        { obj.w, obj.h, 1, 0, blur_shadow }, "copy", "clip")
+    obj.clearbuffer("cache:longshadown_blur_distance_b", obj.w, obj.h)
+    obj.pixelshader("spread_blur_distance",
+        "cache:longshadown_blur_distance_b",
+        "cache:longshadown_blur_distance_a",
+        { obj.w, obj.h, 0, 1, blur_shadow }, "copy", "clip")
+    obj.clearbuffer("cache:longshadown_blur_distance_a", 1, 1)
+    obj.clearbuffer("cache:longshadown_resolved", 1, 1)
+    obj.clearbuffer("cache:longshadown_texture_field", obj.w, obj.h)
+    obj.pixelshader("style_2d_texture_field",
+        "cache:longshadown_texture_field",
+        "cache:longshadown_texture",
+        { obj.w, obj.h, texture_x, texture_y,
+          texture_w, texture_h,
+          texture_mapping_center_x, texture_mapping_center_y,
+          texture_mapping_width, texture_mapping_height,
+          texture_2d_scale_x, texture_2d_scale_y,
+          texture_mapping, texture_repeat and 1 or 0, 1 },
+        "copy", texture_repeat and "loop" or "clamp")
+    obj.clearbuffer("cache:longshadown_texture", 1, 1)
+    obj.clearbuffer("cache:longshadown_texture_blur_a", obj.w, obj.h)
+    obj.pixelshader("blur_shadow",
+        "cache:longshadown_texture_blur_a",
+        { "cache:longshadown_texture_field",
+          "cache:longshadown_blur_distance_b" },
+        { obj.w, obj.h, 1, 0, blur_shadow }, "copy", "clip")
+    obj.clearbuffer("cache:longshadown_texture_field", 1, 1)
+    obj.clearbuffer("cache:longshadown_texture_blur_b", obj.w, obj.h)
+    obj.pixelshader("blur_shadow",
+        "cache:longshadown_texture_blur_b",
+        { "cache:longshadown_texture_blur_a",
+          "cache:longshadown_blur_distance_b" },
+        { obj.w, obj.h, 0, 1, blur_shadow }, "copy", "clip")
+    obj.clearbuffer("cache:longshadown_texture_blur_a", 1, 1)
+    obj.clearbuffer("cache:longshadown_blur_distance_b", 1, 1)
+    obj.clearbuffer("cache:longshadown_filtered", obj.w, obj.h)
+    obj.pixelshader("apply_blurred_texture",
+        "cache:longshadown_filtered",
+        { "cache:longshadown_final",
+          "cache:longshadown_texture_blur_b" },
+        { texture_color_mix / 100 }, "copy", "clamp")
+    obj.clearbuffer("cache:longshadown_texture_blur_b", 1, 1)
+    obj.copybuffer("cache:longshadown_final", "cache:longshadown_filtered")
+    obj.clearbuffer("cache:longshadown_filtered", 1, 1)
+end
+
+local function prepare_integrated_source_blur(fast)
+    obj.clearbuffer("cache:longshadown_expanded_source", obj.w, obj.h)
+    obj.pixelshader("expand_source_for_blur",
+        "cache:longshadown_expanded_source", "cache:longshadown_source",
+        { source_offset_x, source_offset_y, source_w, source_h },
+        "copy", "clamp")
+    local maximum_downsample = 1
+    if fast then
+        while blur_shadow / maximum_downsample > 10
+            and maximum_downsample < 16 do
+            maximum_downsample = maximum_downsample * 2
+        end
+    end
+    local mip_downsample = 1
+    local mip_source = "cache:longshadown_expanded_source"
+    while mip_downsample < maximum_downsample do
+        local next_downsample = mip_downsample * 2
+        local destination = "cache:longshadown_source_mip_" .. next_downsample
+        obj.clearbuffer(destination,
+            math.max(1, math.ceil(obj.w / next_downsample)),
+            math.max(1, math.ceil(obj.h / next_downsample)))
+        obj.pixelshader("downsample_source_2x", destination, mip_source,
+            { math.max(1, math.ceil(obj.w / mip_downsample)),
+              math.max(1, math.ceil(obj.h / mip_downsample)) },
+            "copy", "clamp")
+        mip_downsample = next_downsample
+        mip_source = destination
+    end
+    for level = 1, 3 do
+        local radius = blur_shadow < 1 and blur_shadow
+            or blur_shadow ^ (level / 3)
+        local destination = "cache:longshadown_source_blur_" .. level
+        local downsample = 1
+        if fast then
+            while radius / downsample > 10 and downsample < 16 do
+                downsample = downsample * 2
+            end
+        end
+        local blur_w = math.max(1, math.ceil(obj.w / downsample))
+        local blur_h = math.max(1, math.ceil(obj.h / downsample))
+        local blur_source = downsample == 1
+            and "cache:longshadown_expanded_source"
+            or "cache:longshadown_source_mip_" .. downsample
+        obj.clearbuffer("cache:longshadown_source_blur_work", blur_w, blur_h)
+        obj.pixelshader("fixed_source_blur",
+            "cache:longshadown_source_blur_work",
+            blur_source,
+            { blur_w, blur_h, 1, 0, radius * blur_w / obj.w }, "copy", "clamp")
+        obj.clearbuffer(destination, blur_w, blur_h)
+        obj.pixelshader("fixed_source_blur", destination,
+            "cache:longshadown_source_blur_work",
+            { blur_w, blur_h, 0, 1, radius * blur_h / obj.h }, "copy", "clamp")
+    end
+    obj.clearbuffer("cache:longshadown_expanded_source", 1, 1)
+    obj.clearbuffer("cache:longshadown_source_blur_work", 1, 1)
+    mip_downsample = 2
+    while mip_downsample <= maximum_downsample do
+        obj.clearbuffer("cache:longshadown_source_mip_" .. mip_downsample, 1, 1)
+        mip_downsample = mip_downsample * 2
+    end
+end
+
+local function release_integrated_source_blur()
+    obj.clearbuffer("cache:longshadown_source_blur_1", 1, 1)
+    obj.clearbuffer("cache:longshadown_source_blur_2", 1, 1)
+    obj.clearbuffer("cache:longshadown_source_blur_3", 1, 1)
+end
+
+if should_render_shadow then
+    local _, refine_samples = get_quality_config(effective_quality)
+    local integrated_texture = texture_type == 2 and has_texture ~= 0
+    if shadow_type == 0 and blur_shadow > 0 and has_texture == 0 then
+        if blur_shadow <= 1 then
+            local target_scale, count, step = render_direct_shadow(
+                obj.w, obj.h, source_pos_x, source_pos_y, -1)
+            style_and_filter_shadow(obj.w, obj.h,
+                target_scale, count, refine_samples, step,
+                shadow_opacity / 100, -1, true)
+        else
+            prepare_integrated_source_blur(true)
+            local target_scale, count, step = render_direct_shadow(
+                obj.w, obj.h, source_pos_x, source_pos_y, 3)
+            style_and_filter_shadow(obj.w, obj.h,
+                target_scale, count, refine_samples, step,
+                shadow_opacity / 100, 3)
+            release_integrated_source_blur()
+        end
+        obj.clearbuffer("cache:longshadown_resolved", 1, 1)
+    elseif shadow_type == 0 and blur_shadow > 0
+        and (integrated_texture or texture_type == 1) then
+        prepare_integrated_source_blur(not integrated_texture)
+        local target_scale, count, step = render_direct_shadow(
+            obj.w, obj.h, source_pos_x, source_pos_y, 2)
+        release_integrated_source_blur()
+        style_and_filter_shadow(obj.w, obj.h,
+            target_scale, count, refine_samples, step,
+            shadow_opacity / 100, 2)
+        if integrated_texture then
+            apply_integrated_blurred_2d_texture()
+        else
+            obj.clearbuffer("cache:longshadown_resolved", 1, 1)
+        end
+    elseif shadow_type == 0 and blur_shadow > 0 and has_texture ~= 0 then
+        for layer = 0, 1 do
+            local target_scale, count, step = render_direct_shadow(
+                obj.w, obj.h, source_pos_x, source_pos_y, layer)
+            style_and_filter_shadow(obj.w, obj.h,
+                target_scale, count, refine_samples, step, 1, layer)
+            if layer == 0 then
+                obj.copybuffer("cache:longshadown_layer_front", "cache:longshadown_final")
+            end
+        end
+        obj.clearbuffer("cache:longshadown_filtered", obj.w, obj.h)
+        obj.pixelshader("combine_shadow_layers", "cache:longshadown_filtered",
+            { "cache:longshadown_layer_front", "cache:longshadown_final" },
+            { shadow_opacity / 100 }, "copy", "clamp")
+        obj.copybuffer("cache:longshadown_final", "cache:longshadown_filtered")
+        obj.clearbuffer("cache:longshadown_layer_front", 1, 1)
+        obj.clearbuffer("cache:longshadown_resolved", 1, 1)
+        obj.clearbuffer("cache:longshadown_filtered", 1, 1)
+    else
+        local selector = -1
+        local target_scale, count, step = render_direct_shadow(
+            obj.w, obj.h, source_pos_x, source_pos_y, selector)
+        style_and_filter_shadow(obj.w, obj.h,
+            target_scale, count, refine_samples, step,
+            shadow_opacity / 100, selector)
+        obj.clearbuffer("cache:longshadown_resolved", 1, 1)
+    end
+else
+    -- Both caches are current-frame transparency, never previous-frame results.
+    obj.clearbuffer("cache:longshadown_shadow_a", obj.w, obj.h)
+    obj.clearbuffer("cache:longshadown_resolved", obj.w, obj.h)
+    obj.clearbuffer("cache:longshadown_final", obj.w, obj.h)
+    debug_print("[LongShadowN] shadow skipped: zero length or invalid source position")
+end
+
+local object_red = math.floor(object_color / 65536) % 256 / 255
+local object_green = math.floor(object_color / 256) % 256 / 255
+local object_blue = object_color % 256 / 255
+if post_effect_target == 0 then
+    -- Leave the combined image in the object for ordinary downstream effects.
+    obj.pixelshader("composite_shadow", "object",
+        { "cache:longshadown_final", "cache:longshadown_source" },
+        { source_offset_x, source_offset_y, source_w, source_h,
+          object_red, object_green, object_blue, object_mix / 100, object_opacity / 100, 2 }, "copy")
+else
+    obj.pixelshader("composite_shadow", "object",
+        { "cache:longshadown_final", "cache:longshadown_source" },
+        { source_offset_x, source_offset_y, source_w, source_h,
+          object_red, object_green, object_blue, object_mix / 100, object_opacity / 100, 0 }, "copy")
+    -- Finish the remaining effects with the shadow as their only input.
+    obj.effect()
+    obj.draw()
+
+    -- Draw the unmodified source above the processed shadow.
+    obj.copybuffer("object", "cache:longshadown_source")
+    obj.cx, obj.cy = original_cx, original_cy
+    obj.pixelshader("composite_shadow", "object",
+        { "cache:longshadown_final", "cache:longshadown_source" },
+        { 0, 0, source_w, source_h,
+          object_red, object_green, object_blue, object_mix / 100, object_opacity / 100, 1 }, "copy")
+    obj.draw()
+end
+obj.clearbuffer("cache:longshadown_final", 1, 1)
+obj.clearbuffer("cache:longshadown_source", 1, 1)
+obj.clearbuffer("cache:longshadown_texture", 1, 1)

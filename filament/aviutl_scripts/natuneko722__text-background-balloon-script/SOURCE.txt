@@ -1,0 +1,5 @@
+吹き出し背景@テキスト by 夏猫
+licence: MIT
+from: https://github.com/natuneko722/TextBackgroundBalloonScript/releases/download/v1.2.1/TextBackgroundBalloonScript_v1.2.1.au2pkg.zip (tag v1.2.1, commit 60ed33a4dba1)
+page: https://github.com/natuneko722/TextBackgroundBalloonScript
+Put here unchanged for Motolii (filament/aviutl_scripts).

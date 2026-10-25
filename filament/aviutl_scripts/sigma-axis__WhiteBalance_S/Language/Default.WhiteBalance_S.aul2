@@ -1,0 +1,25 @@
+; Tooltip definitions
+;===============================================================
+; Target: WhiteBalance_S (https://github.com/sigma-axis/aviutl2_script_WhiteBalance_S)
+; Target Version: v1.10
+; Language: Default
+
+[Language]
+Information=Default tooltips for WhiteBalance_S v1.10 (日本語)
+
+;===============================================================
+
+[Tips.ホワイトバランスσ@WhiteBalance_S]
+effect.name=2色を指定して，一方の色をもう一方に変化させるようホワイトバランスを調整します．色成分の倍率を個別に指定することもできます．
+正規化=変換元と変換先が同じ輝度を持つように正規化します．
+色空間=色変換の計算を行う座標系
+PI=PI = {\n  rate: number?,\n  col_base: number?,\n  col_dest: number|table|nil,\n  normalize: boolean|number|nil,\n  space: string?,\n}
+
+[Tips.色温度σ@WhiteBalance_S]
+effect.name=画像の色温度を指定してホワイトバランスを調整します．
+単位=色温度の単位をケルビン単位とミレッド単位の2つから選びます．
+色空間=色変換の計算を行う座標系
+PI=PI = {\n  temp_base: number?,\n  temp_dest: number?,\n  mired_base: number?,\n  mired_dest: number?,\n  unit: string?\n  space: string?,\n}
+
+[Tips.色温度σ(Mired)@WhiteBalance_S]
+PI=PI = {\n  mired_base: number?,\n  mired_dest: number?,\n  space: string?,\n}

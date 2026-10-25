@@ -1,0 +1,7 @@
+ベクターキャンバス by もげ
+licence: MIT
+from: https://github.com/Mg32/aviutl2-vectorcanvas/releases/download/v0.1.0/VectorCanvas-v0.1.0.au2pkg.zip (tag v0.1.0, commit 2df5744e4045)
+page: https://github.com/Mg32/aviutl2-vectorcanvas
+licence/README from: https://github.com/Mg32/aviutl2-vectorcanvas at v0.1.0
+left out: 1 .mod2 (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

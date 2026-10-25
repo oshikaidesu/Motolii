@@ -1,0 +1,5 @@
+SubObjRelativeMotionEX by natuneko722
+licence: MIT
+from: https://github.com/natuneko722/SubObjRelativeMotionEX (branch main, commit bd42bfd1d888) (commit bd42bfd1d888)
+page: https://github.com/natuneko722/SubObjRelativeMotionEX
+Put here unchanged for Motolii (filament/aviutl_scripts).

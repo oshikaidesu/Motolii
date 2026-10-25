@@ -1,0 +1,5 @@
+Aviutl2-ImageLoop-Kai by uprpr3249
+licence: MIT
+from: https://github.com/uprpr3249/Aviutl2-ImageLoop-Kai (branch main, commit ab0004af4989) (commit ab0004af4989)
+page: https://github.com/uprpr3249/Aviutl2-ImageLoop-Kai
+Put here unchanged for Motolii (filament/aviutl_scripts).

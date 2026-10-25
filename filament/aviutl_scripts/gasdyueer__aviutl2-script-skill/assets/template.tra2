@@ -1,0 +1,13 @@
+--information:トラックバー移動 ver1.00
+-- 轨迹移动模板 (.tra2)
+-- 仅 obj.getpoint() / obj.getoption() / obj.getinfo() / obj.rand() 可用
+-- 可选项：--twopoint（忽略中间点）
+-- 可选项：--speed:加速,減速（加减速初始值0/1）
+-- 可选项：--param:参数名,默认值（可多行）
+-- 可选项：--timecontrol（启用时间制御）
+
+-- 等速移动
+index, ratio = math.modf(obj.getpoint("index"))
+st = obj.getpoint(index)
+ed = obj.getpoint(index + 1)
+return st + (ed - st) * ratio

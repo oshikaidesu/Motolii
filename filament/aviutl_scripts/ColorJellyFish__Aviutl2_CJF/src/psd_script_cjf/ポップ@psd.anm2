@@ -1,0 +1,111 @@
+--label:CJF
+--information:ポップ@psd: パーツ上書き連動・スケールポップ / AviUtl2 only
+--track@refLayer:参照レイヤー,1,100,1,1
+--value@charId:キャラクターID,""
+--value@watchParts:監視パーツ,""
+--value@overwriteEffect:上書き効果名,""
+--track@popDur:ポップ時間(秒),0.05,2,0.35,0.01
+--track@minZoom:最小倍率,0.2,1,0.75,0.01
+--track@overshoot:跳ね越し,0,0.5,0.08,0.01
+--check@debugLog:debugLog,false
+
+-- ポップ@psd
+-- watchParts empty/all: pop on every clip start/end (clock only).
+-- watchParts "4,5": pop only when those parts change
+--   open  = changed or bank prev-clip; close = part_bank next (peek on miss).
+-- Basic ops: gapless overwrite on 参照レイヤー; prefer キャラクターID.
+-- Motion: shrink on close, expand + overshoot on open (scale only).
+
+local pop_dur = tonumber(popDur) or 0.35
+if pop_dur < 0.05 then pop_dur = 0.05 end
+local half = pop_dur * 0.5
+
+local Core = require("ptk_overwrite_react_core")
+local react = Core.update({
+	ref_layer = refLayer,
+	char_id = charId,
+	watch_parts = watchParts,
+	overwrite_effect = overwriteEffect,
+	pre_roll = 0,
+})
+
+local function clamp01(x)
+	if x < 0 then return 0 end
+	if x > 1 then return 1 end
+	return x
+end
+
+local function ease(p)
+	p = clamp01(p)
+	return 0.5 - 0.5 * math.cos(math.pi * p)
+end
+
+if not react.found then
+	return
+end
+
+local t, tt, remain, src = Core.read_sub_clock(react.ref_layer, react.char_id)
+if t == nil or remain == nil then
+	return
+end
+
+local gates = Core.clip_flip_gates({
+	react = react,
+	watch_parts = watchParts,
+	peek_layer = refLayer,
+	time = t,
+	remain = remain,
+	totaltime = tt,
+	open_half = half,
+	close_half = half,
+})
+
+if debugLog == true or debugLog == 1 then
+	local st = require("ptk_overwrite_react_state")
+	if type(st.last_log_frame) ~= "table" then st.last_log_frame = {} end
+	if type(st.last_gate_why) ~= "table" then st.last_gate_why = {} end
+	local in_win = (t <= half + 1e-6) or (remain <= half + 1e-6)
+	local why = tostring(gates.reason)
+	local why_changed = st.last_gate_why[react.key] ~= why
+	st.last_gate_why[react.key] = why
+	local lf = st.last_log_frame[react.key] or -999
+	local hb = math.max(1, math.floor((obj.framerate or 30) / 2))
+	if in_win or why_changed or gates.open or gates.close or (obj.frame - lf) >= hb then
+		st.last_log_frame[react.key] = obj.frame
+		print(string.format(
+			"[ポップ@psd] t=%.3f remain=%.3f half=%.3f (%s) id=%s L=%s watch=%s ch=%s open=%s close=%s why=%s diff=%s found=%s src=%s",
+			t, remain, half, tostring(src),
+			tostring(react.char_id), tostring(react.ref_layer),
+			tostring(react.watch_label), tostring(react.changed),
+			tostring(gates.open), tostring(gates.close), why,
+			tostring(react.diff or ""),
+			tostring(react.found), tostring(react.source)
+		))
+	end
+end
+
+local min_zoom = tonumber(minZoom) or 0.75
+if min_zoom < 0.2 then min_zoom = 0.2 elseif min_zoom > 1 then min_zoom = 1 end
+local over = tonumber(overshoot) or 0.08
+if over < 0 then over = 0 elseif over > 0.5 then over = 0.5 end
+
+local mode, p = nil, nil
+if gates.open then
+	mode = "open"
+	p = (half > 0) and (t / half) or 1
+elseif gates.close then
+	mode = "close"
+	p = (half > 0) and (1 - remain / half) or 1
+end
+
+if mode ~= nil then
+	p = clamp01(p)
+	local e = ease(p)
+	local factor
+	if mode == "close" then
+		factor = 1 + (min_zoom - 1) * e
+	else
+		factor = min_zoom + (1 - min_zoom) * e + over * math.sin(math.pi * p)
+	end
+	obj.zoom = obj.zoom * factor
+end

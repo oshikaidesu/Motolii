@@ -1,0 +1,6 @@
+Mathy_Su by Suzukeh
+licence: MIT
+from: https://github.com/Suzukeh/Mathy_Su (branch main, commit 0a5cb7595128) (commit 0a5cb7595128)
+page: https://github.com/Suzukeh/Mathy_Su
+left out: 1 other (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

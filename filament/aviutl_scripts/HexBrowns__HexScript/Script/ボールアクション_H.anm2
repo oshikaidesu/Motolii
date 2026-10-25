@@ -1,0 +1,279 @@
+--information:ボールアクション_H v1.10 by HexBrowns
+--label:HexScript
+
+--group:ボール
+--track@spacing:間隔,2,200,10,0.1
+--track@ball_size:大きさ,0,400,100,0.1
+--select@pick:色の取り方=0,中心=0,平均=1
+--group
+
+--group:散らばりと揺れ
+--track@scatter:散らばり,0,4000,0,0.1
+--track@scatter_z:奥行きの散らばり,0,4000,0,0.1
+--track@wobble:揺れ,0,1000,0,0.1
+--track@wobble_speed:揺れの速さ,0,20,1,0.01
+--track@seed:シード,0,10000,0,1
+--group
+
+--group:ねじれと回転
+--select@twist_axis:ねじれの軸=1,X軸=0,Y軸=1,Z軸=2
+--select@twist_prop:ねじれの基準=0,横位置=0,縦位置=1,中心からの距離=2,ランダム=3
+--track@twist:ねじれの角度,-3600,3600,0,0.01
+--track@rot_x:X軸回転,-3600,3600,0,0.01
+--track@rot_y:Y軸回転,-3600,3600,0,0.01
+--track@rot_z:Z軸回転,-3600,3600,0,0.01
+--group
+
+--group:光
+--track@light_dir:光の向き,-360,360,135,0.01
+--track@light_elev:光の高さ,0,90,45,0.01
+--track@ambient:環境光,0,100,25,0.1
+--track@spec:ハイライト,0,100,60,0.1
+--group
+
+--group:描き方
+--select@interp:補間=0,補間あり=0,補間なし=1
+--group
+
+--[[
+After Effects の「CC Ball Action」に当たる効果。オブジェクトを 間隔 ごとの格子で区切り、各点の色を拾った球（ボール）に置き換える。
+ボールは散らばり・ねじれ・回転で 3D に動かせる。
+
+1. シェーダーで「ボール 1 個ずつの陰影付きの絵」をタイル状に並べた画像（アトラス）を作る。タイル (i, j) は格子点 (i, j) の色の球
+2. オブジェクトの画像をアトラスに差し替え、ボール 1 個を四角形 1 枚（カメラの方を向いた板）として obj.drawpoly でまとめて描く。
+   奥行きがあるときは奥（Z が大きい）から描く（Z を 4096 段に分けて数える並べ替え）
+- 以降のフィルタ効果は掛からない（lua.txt の obj.drawpoly）
+- ボールの位置: 格子点 → 散らばり → ねじれ（オブジェクトの中心を通る軸のまわりに、基準の値 x 角度だけ回す）→ 回転 → 揺れ
+- 補間（v1.10）: 補間あり（既定・v1.01 と同じ）は drawpoly の既定のサンプラー（"clamp"）。補間なしは obj.setoption("sampler", "dot") で
+  アトラスの画素を補間せずに拾う（拡大したボールの縁がドットの階段になる）。"dot" は画像の外を透明として読む（lua.txt の
+  「サンプラーモード」）が、タイルの外周 1px はもともと透明なので、四角形の縁で外を読んでも見た目は変わらない。描き終えたら既定に戻す
+
+机上検証: AI/scripts/ボールアクション_H/verify_ball_action.py
+]]
+
+--[[pixelshader@ps_ball_atlas_h:
+cbuffer P : register(b0) {
+    float2 src_size;   // 0-1  元の画像の大きさ（px）
+    float2 grid0;      // 2-3  格子点 (0, 0) の位置（元の画像の px）
+    float3 light;      // 4-6  光の向き（面から光へ。Z は奥向きなので手前は負）
+    float spacing;     // 7    格子の間隔（px）
+    float tile;        // 8    タイル 1 枚の大きさ（px）。球の半径は (tile - 2) / 2
+    float avg;         // 9    1 でマスの平均の色、0 で格子点の色
+    float ambient;     // 10   環境光（0..1）
+    float spec;        // 11   ハイライトの強さ（0..1）
+};
+Texture2D src : register(t0);
+SamplerState smp : register(s0);
+
+float4 ps_ball_atlas_h(float4 pos : SV_Position) : SV_Target {
+    float2 ij = floor(pos.xy / tile);
+    float2 local = pos.xy - (ij * tile + tile * 0.5);   // タイルの中心からの位置（px）
+    float r = (tile - 2.0) * 0.5;
+    float d = length(local) / max(r, 1e-3);
+    // 縁は 1px でぼかす（px で測った距離）
+    float cover = saturate((r - length(local)) + 0.5);
+    if (cover <= 0.0) return float4(0.0, 0.0, 0.0, 0.0);
+
+    float2 p = grid0 + ij * spacing;
+    float4 base = src.SampleLevel(smp, p / src_size, 0);
+    if (avg > 0.5) {
+        // マスの中を 4 x 4 点で平均する
+        float4 acc = float4(0.0, 0.0, 0.0, 0.0);
+        [unroll] for (int y = 0; y < 4; y++) {
+            [unroll] for (int x = 0; x < 4; x++) {
+                float2 o = (float2(x, y) - 1.5) * (spacing * 0.25);
+                acc += src.SampleLevel(smp, (p + o) / src_size, 0);
+            }
+        }
+        base = acc / 16.0;
+    }
+
+    // 球の法線（手前が Z 負）。拡散光と、正面から見たハイライト
+    float dd = saturate(d);
+    float3 n = float3(local / max(r, 1e-3), -sqrt(saturate(1.0 - dd * dd)));
+    if (d > 1.0) n = float3(local / length(local), 0.0);
+    float diffuse = saturate(dot(n, light));
+    float shade = ambient + (1.0 - ambient) * diffuse;
+    float3 refl = 2.0 * dot(n, light) * n - light;
+    float hl = pow(saturate(-refl.z), 24.0) * spec;
+    float3 rgb = base.rgb * shade + base.a * hl;
+    return float4(rgb, base.a) * cover;
+}
+]]
+
+local function num(v, d)
+  v = tonumber(v)
+  if v == nil or v ~= v then return d end
+  return v
+end
+
+local function clamp(x, a, b)
+  if x < a then return a elseif x > b then return b end
+  return x
+end
+
+local W, H = obj.w, obj.h
+local SP = math.max(num(spacing, 10), 2)
+local D = math.max(num(ball_size, 100), 0) / 100 * SP     -- ボールの直径（px）
+if W <= 0 or H <= 0 or D <= 0 then return end
+
+local NC = math.max(1, math.floor(W / SP + 0.5))
+local NR = math.max(1, math.floor(H / SP + 0.5))
+-- ボールが多すぎると描くデータが膨らむので、15 万個を超えるときは間隔（と直径）を広げて収める
+local MAX_BALLS = 150000
+if NC * NR > MAX_BALLS then
+  local f = math.sqrt(NC * NR / MAX_BALLS)
+  SP, D = SP * f, D * f
+  NC = math.max(1, math.floor(W / SP))
+  NR = math.max(1, math.floor(H / SP))
+end
+
+-- タイルの大きさ。球の直径 + 縁の 2px。アトラスが大きくなりすぎるときは解像度を落とす（描く大きさは変わらない）
+local ATLAS_MAX = 6000000
+local T = math.ceil(D) + 2
+if NC * NR * T * T > ATLAS_MAX then T = math.max(4, math.floor(math.sqrt(ATLAS_MAX / (NC * NR)))) end
+local max_x, max_y = obj.getinfo("image_max")
+T = math.max(4, math.min(T, math.floor(max_x / NC), math.floor(max_y / NR)))
+local AW, AH = NC * T, NR * T
+
+-- 光の向き: 画面上の角度（0 度で右、反時計回り）と高さ
+local az, el = math.rad(num(light_dir, 135)), math.rad(clamp(num(light_elev, 45), 0, 90))
+local lx, ly, lz = math.cos(el) * math.cos(az), -math.cos(el) * math.sin(az), -math.sin(el)
+
+-- 格子点 (0, 0) の位置（元の画像の px）。格子はオブジェクトの中心に合わせる
+local gx0 = W / 2 - (NC - 1) / 2 * SP
+local gy0 = H / 2 - (NR - 1) / 2 * SP
+
+-- v1.01: 元の画像は cache に退避せず object のまま読む（横長の巨大素材で cache と tempbuffer の枠を超えて消えていた。
+-- AI/scripts/issues/20261013_cache_budget_4k_wide_materials.md）。アトラスが枠に収まらなければ効果を掛けない
+local ATLAS = "cache:bah/atlas"
+if not require("EffectUtils_Budget").check("ボールアクション_H", W, H, AW * AH) then return end
+obj.clearbuffer(ATLAS, AW, AH)
+obj.pixelshader("ps_ball_atlas_h", ATLAS, {"object"}, {
+  W, H, gx0, gy0,
+  lx, ly, lz, SP,
+  T, math.floor(num(pick, 0) + 0.5), clamp(num(ambient, 25) / 100, 0, 1), clamp(num(spec, 60) / 100, 0, 1),
+}, "copy", "clamp")
+
+-- ---- ボールの位置
+
+local SEED = math.floor(num(seed, 0) + 0.5)
+local function hash(i, j, k)
+  local s = math.sin(i * 127.1 + j * 311.7 + k * 74.7 + SEED * 0.618) * 43758.5453
+  return s - math.floor(s)
+end
+
+local SC, SCZ = math.max(num(scatter, 0), 0), math.max(num(scatter_z, 0), 0)
+local WB, WS = math.max(num(wobble, 0), 0), math.max(num(wobble_speed, 1), 0)
+local TW = math.rad(num(twist, 0))
+local TAXIS = math.floor(num(twist_axis, 1) + 0.5)
+local TPROP = math.floor(num(twist_prop, 0) + 0.5)
+local RX, RY, RZ = math.rad(num(rot_x, 0)), math.rad(num(rot_y, 0)), math.rad(num(rot_z, 0))
+local crx, srx = math.cos(RX), math.sin(RX)
+local cry, sry = math.cos(RY), math.sin(RY)
+local crz, srz = math.cos(RZ), math.sin(RZ)
+local t = obj.time
+local half_diag = math.sqrt((W / 2) ^ 2 + (H / 2) ^ 2)
+
+local function rot_axis(x, y, z, axis, a)
+  local c, s = math.cos(a), math.sin(a)
+  if axis == 0 then
+    return x, y * c - z * s, y * s + z * c
+  elseif axis == 1 then
+    return x * c + z * s, y, -x * s + z * c
+  end
+  return x * c - y * s, x * s + y * c, z
+end
+
+local r_draw = D / 2                       -- 画面での球の半径
+local r_tile = (T - 2) / 2                 -- タイルの中の球の半径
+local q = (T / 2) * r_draw / r_tile        -- 四角形の半分の大きさ（タイルの縁の 1px を含む）
+
+local balls = {}
+local has_depth = false
+for i = 0, NR - 1 do
+  for j = 0, NC - 1 do
+    local x = -W / 2 + gx0 + j * SP
+    local y = -H / 2 + gy0 + i * SP
+    local z = 0
+    if SC > 0 then
+      local a, rr = hash(i, j, 1) * 2 * math.pi, math.sqrt(hash(i, j, 2))
+      x = x + math.cos(a) * rr * SC
+      y = y + math.sin(a) * rr * SC
+    end
+    if SCZ > 0 then z = z + (hash(i, j, 3) * 2 - 1) * SCZ end
+    if TW ~= 0 then
+      local p
+      if TPROP == 1 then
+        p = (gy0 + i * SP - H / 2) / (H / 2)
+      elseif TPROP == 2 then
+        p = math.sqrt((gx0 + j * SP - W / 2) ^ 2 + (gy0 + i * SP - H / 2) ^ 2) / half_diag
+      elseif TPROP == 3 then
+        p = hash(i, j, 4) * 2 - 1
+      else
+        p = (gx0 + j * SP - W / 2) / (W / 2)
+      end
+      x, y, z = rot_axis(x, y, z, TAXIS, TW * p)
+    end
+    -- 回転（X → Y → Z）
+    y, z = y * crx - z * srx, y * srx + z * crx
+    x, z = x * cry + z * sry, -x * sry + z * cry
+    x, y = x * crz - y * srz, x * srz + y * crz
+    if WB > 0 then
+      local ph = hash(i, j, 5) * 2 * math.pi
+      local w = 2 * math.pi * WS * t
+      x = x + math.sin(w + ph) * WB * hash(i, j, 6)
+      y = y + math.sin(w * 1.3 + ph * 2) * WB * hash(i, j, 7)
+      z = z + math.sin(w * 0.7 + ph * 3) * WB * hash(i, j, 8)
+    end
+    if z ~= 0 then has_depth = true end
+    balls[#balls + 1] = {x, y, z, j * T, i * T, #balls}
+  end
+end
+
+-- 奥行きがあるときは奥（Z が大きい）から描く。比較関数付きの table.sort は数万個で数十 ms かかるので、
+-- Z を 4096 段に分けて数える並べ替え（同じ段の中は並びの順）にする。1 段の幅は Z の範囲 / 4096
+local order = nil
+if has_depth then
+  local zmin, zmax = math.huge, -math.huge
+  for k = 1, #balls do
+    local z = balls[k][3]
+    if z < zmin then zmin = z end
+    if z > zmax then zmax = z end
+  end
+  if zmax > zmin then
+    local NB = 4096
+    local scale = (NB - 1) / (zmax - zmin)
+    local key, start = {}, {}
+    for b = 0, NB do start[b] = 0 end
+    for k = 1, #balls do
+      local bk = math.floor((zmax - balls[k][3]) * scale)
+      key[k] = bk
+      start[bk + 1] = start[bk + 1] + 1
+    end
+    for b = 1, NB do start[b] = start[b] + start[b - 1] end
+    order = {}
+    for k = 1, #balls do
+      local bk = key[k]
+      start[bk] = start[bk] + 1
+      order[start[bk]] = k
+    end
+  end
+end
+
+local list = {}
+for k = 1, #balls do
+  local b = balls[order and order[k] or k]
+  local x, y, z, u, v = b[1], b[2], b[3], b[4], b[5]
+  list[k] = {
+    x - q, y - q, z, x + q, y - q, z, x + q, y + q, z, x - q, y + q, z,
+    u, v, u + T, v, u + T, v + T, u, v + T,
+  }
+end
+
+-- 画像をアトラスに差し替えて描く（以降のフィルタ効果は掛からない）
+obj.copybuffer("object", ATLAS)
+local DOT = math.floor(num(interp, 0) + 0.5) == 1
+if DOT then obj.setoption("sampler", "dot") end
+obj.drawpoly(list)
+if DOT then obj.setoption("sampler") end   -- サンプラーを既定に戻す

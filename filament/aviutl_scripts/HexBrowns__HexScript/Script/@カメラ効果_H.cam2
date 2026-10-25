@@ -1,0 +1,272 @@
+--[[
+カメラ効果_H v1.00
+
+原作: @Camera.cam2（作者・版・ライセンス不明）を直したフォーク。原作の式を流用している。
+原作の部分の権利は原作者にある。原作者の方は、問題があれば HexBrowns まで連絡をください。
+issue: AI/scripts/issues/20260915_camera_cam2_rotate_target_and_fov.md
+数値検証: AI/scripts/カメラ効果_H/verify_camera.py
+
+原作からの変更
+  回転      カメラ基準（空分岐だった）を実装した。視点回転で元の目標座標を二重に足していたのを直した。
+            視点回転の X・Y の回る向きを目標中心回転に揃えた（原作の視点回転とは逆向き）。
+            項目名を変えた（原作の 回転 は実制作での使用 0 件）
+  座標      項目名も挙動も原作と同じ。effect.name の置換だけで乗り換えられる。
+            Vec3.lua への依存をファイル内に展開した（読み込み時のログも出なくなる）
+  目標座標  原作と同じ（項目名も同じ）
+  傾き      原作と同じ（項目名も同じ）
+  ズーム    原作の 視野角 の置き換え。視野角は既定値 0 で cam.d に 120 を足していたので、
+            cam.d の倍率（既定 100% で無変化）にした。cam.d と画角の換算式は lua.txt に無く、
+            実機で確かめるまで角度では指定しない
+
+座標系（AviUtl2）: X 右 / Y 下 / Z 奥。既定のカメラは (0, 0, -1024) から原点を見る。
+
+※このコメント内で行頭に @ を置かないこと。ファイル名が @ 始まりなので、
+  ホストはブロックコメントの中の行頭 @ もセクション区切りとして扱い、
+  偽のスクリプトがエフェクト一覧に並ぶ。
+]]
+
+@回転
+--information:回転@カメラ効果_H v1.00 by HexBrowns
+--label:HexScript
+--track@rot_x:X軸回転,-3600,3600,0,0.01
+--track@rot_y:Y軸回転,-3600,3600,0,0.01
+--track@rot_z:Z軸回転,-3600,3600,0,0.01
+--select@pivot:回転の中心=0,カメラ位置=0,目標座標=1
+--check@relative:カメラ基準,0
+
+--[[
+回転の定義
+
+  基底  右 r / 下 u / 前 f。f は カメラ位置 から 目標座標 への向き。
+        u は画面の下向き（Y 下の座標系に合わせてある）。
+    絶対        r = (1,0,0)、u = (0,1,0)、f = (0,0,1)。角度 0 は +Z を向く（原作と同じ）
+    カメラ基準  今のカメラの r・u・f。作り方は 座標 のカメラ基準と同じで、
+                h = (sin 傾き, cos 傾き, 0)、r = h × f（正規化）、u = f × r。
+                角度 0 は今の向きのまま（位置も目標も 1 ビットも変えない）
+
+  回転後の前方向  F = cos(X) sin(Y) r - sin(X) u + cos(X) cos(Y) f
+    前方向を r まわりに X、続けて u まわりに Y だけ回したもの（どちらも右手系の正の向き）。
+  向き  Y を正にすると視線が右（r の側）へ、X を正にすると視線が上（-u の側）へ振れる。
+        4 通りのどれでも、同じ角度なら回転後の視線の向き F は同じになる。
+        原作の目標中心回転と同じ向きで、原作の視点回転とは X・Y とも逆。
+
+  回転の中心
+    カメラ位置  目標座標 = カメラ位置 + 距離 × F（パン・ティルト。カメラは動かない）
+    目標座標    カメラ位置 = 目標座標 - 距離 × F（回り込み。目標は動かず距離が保たれる）
+  Z軸回転  傾き（cam.rz）に足す（原作と同じ）
+
+傾きの 180 度反転
+  描画側は右方向を 傾き と前方向から作り直す（座標 の基底と同じ前提。未確認）。
+  X が 90 度を越えて前方向が極を回り込むと、そのままでは画面が 180 度裏返るので、
+  原作と同じく傾きに 180 を足して連続にする。
+    絶対        cos(X) < 0 のとき（原作の条件そのまま）
+    カメラ基準  作り直される右 h × F が、回した右 r' = cos(Y) r - sin(Y) f と逆向きのとき
+  水平なカメラ（前方向が h と直交）なら、描画側が作り直す基底は回した基底と一致し、
+  X・Y をどう動かしても画面は裏返らない。
+  上下を向いたカメラをカメラ基準で回すと、描画側が水平を作り直すので傾きは揃わない。
+  このとき、前方向が極（真上・真下）から始点の傾き以内に近づいたところで
+  画面が 180 度反転することがある。反転しない規則にすると水平なカメラが X = ±90 で
+  裏返るため、水平なカメラの正しさを優先した（verify_camera.py の検査 10）。
+
+縮退
+  カメラ位置と目標座標が一致  前方向が無いので X・Y は何もしない（Z軸回転だけ効く）
+  前方向が h と平行（真上・真下）  r を (cos 傾き, -sin 傾き, 0) にする。
+                                   f と直交し、f = +Z のときの r と同じ
+
+未確認（実機で見ること）
+  - 描画側が本当に 傾き から右方向を作っているか。前方向が水平でないカメラを
+    カメラ基準で回したとき、画面の傾きの揃い方はこの前提に依存する
+  - cam.ux / uy / uz は読みも書きもしない（座標 と同じ）。上方向ベクトルを
+    書き換える効果（オートターゲット系）の後ろに置いたときの見え方
+]]
+
+local cam = obj.getoption("camera_param")
+
+local around_target = (pivot == 1)
+local is_relative = (relative == 1)
+
+local fx, fy, fz = cam.tx - cam.x, cam.ty - cam.y, cam.tz - cam.z
+local dist = math.sqrt(fx * fx + fy * fy + fz * fz)
+
+local ax, ay = math.rad(rot_x), math.rad(rot_y)
+local sx, cx = math.sin(ax), math.cos(ax)
+local sy, cy = math.sin(ay), math.cos(ay)
+-- 回転後の前方向 F の、基底 r・u・f に対する成分
+local kr, ku, kf = cx * sy, -sx, cx * cy
+
+local rz = cam.rz
+
+if not is_relative then
+  -- 絶対: r = (1,0,0)、u = (0,1,0)、f = (0,0,1) なので F = (kr, ku, kf)
+  if around_target then
+    cam.x = cam.tx - dist * kr
+    cam.y = cam.ty - dist * ku
+    cam.z = cam.tz - dist * kf
+  else
+    cam.tx = cam.x + dist * kr
+    cam.ty = cam.y + dist * ku
+    cam.tz = cam.z + dist * kf
+  end
+  if (rot_x + 90) % 360 > 180 then
+    rz = rz + 180
+  end
+elseif dist > 0 and (rot_x ~= 0 or rot_y ~= 0) then
+  fx, fy, fz = fx / dist, fy / dist, fz / dist
+  local a = math.rad(cam.rz)
+  local hx, hy = math.sin(a), math.cos(a)
+  -- r = h × f（h の z 成分は 0）
+  local rx, ry, rzv = hy * fz, -hx * fz, hx * fy - hy * fx
+  local rlen = math.sqrt(rx * rx + ry * ry + rzv * rzv)
+  if rlen > 1e-9 then
+    rx, ry, rzv = rx / rlen, ry / rlen, rzv / rlen
+  else
+    -- 前方向が h と平行。f と直交する (cos 傾き, -sin 傾き, 0) を右にする
+    rx, ry, rzv = hy, -hx, 0
+  end
+  -- u = f × r
+  local ux = fy * rzv - fz * ry
+  local uy = fz * rx - fx * rzv
+  local uz = fx * ry - fy * rx
+  -- F = kr r + ku u + kf f
+  local nx = kr * rx + ku * ux + kf * fx
+  local ny = kr * ry + ku * uy + kf * fy
+  local nz = kr * rzv + ku * uz + kf * fz
+  if around_target then
+    cam.x = cam.tx - dist * nx
+    cam.y = cam.ty - dist * ny
+    cam.z = cam.tz - dist * nz
+  else
+    cam.tx = cam.x + dist * nx
+    cam.ty = cam.y + dist * ny
+    cam.tz = cam.z + dist * nz
+  end
+  -- 回した右 r' = cos(Y) r - sin(Y) f と、描画側が作り直す右 h × F の向きを比べる
+  local qx, qy, qz = cy * rx - sy * fx, cy * ry - sy * fy, cy * rzv - sy * fz
+  local side = (hy * nz) * qx + (-hx * nz) * qy + (hx * ny - hy * nx) * qz
+  if side < 0 then
+    rz = rz + 180
+  end
+end
+
+cam.rz = rz + rot_z
+
+obj.setoption("camera_param", cam)
+
+
+@座標
+--information:座標@カメラ効果_H v1.00 by HexBrowns
+--label:HexScript
+--track@tr_x:X,-10000,10000,0,.01
+--track@tr_y:Y,-10000,10000,0,.01
+--track@tr_z:Z,-10000,10000,0,.01
+--check@parallel:平行移動,0
+--check@relative:カメラ基準,0
+
+--[[
+原作 座標@Camera と項目名・挙動とも同じ（ヘッダーは原作の行をそのまま使っている）。
+実制作の 60 個は effect.name を 座標@カメラ効果_H に置き換えるだけで同じ絵になる。
+
+原作は require("Vec3") で基底を作っていた。ここでは同じ演算を同じ順序で展開してあり、
+倍精度の値まで原作と一致する（verify_camera.py で確認）。
+
+原作の癖（直していない。挙動を揃えるため）
+  - カメラ基準の右 vr を正規化しない。|vr| は 傾き の向き h と前方向のなす角の sin なので、
+    カメラが上下を向くほど X・Y の移動量が縮む（Z は縮まない）
+  - カメラ基準で カメラ位置 と 目標座標 が一致していると、前方向の正規化が 0 除算になり
+    座標が NaN になる
+  - vu は名前に反して画面の下向き（Y 下の座標系）
+]]
+
+local parallel = parallel == 1
+local relative = relative == 1
+
+local cam = obj.getoption("camera_param")
+
+local dx, dy, dz
+
+if relative then
+  -- vf = norm(目標座標 - カメラ位置)
+  local fx, fy, fz = cam.tx - cam.x, cam.ty - cam.y, cam.tz - cam.z
+  local inv = 1 / math.sqrt(fx * fx + fy * fy + fz * fz)
+  fx, fy, fz = fx * inv, fy * inv, fz * inv
+
+  -- vr = (sin rz, cos rz, 0) × vf（正規化しない）
+  local a = math.rad(cam.rz)
+  local hx, hy, hz = math.sin(a), math.cos(a), 0
+  local rx = hy * fz - hz * fy
+  local ry = hz * fx - hx * fz
+  local rzv = hx * fy - hy * fx
+
+  -- vu = vf × vr
+  local ux = fy * rzv - fz * ry
+  local uy = fz * rx - fx * rzv
+  local uz = fx * ry - fy * rx
+
+  -- vd = vr * X + vu * Y + vf * Z
+  dx = rx * tr_x + ux * tr_y + fx * tr_z
+  dy = ry * tr_x + uy * tr_y + fy * tr_z
+  dz = rzv * tr_x + uz * tr_y + fz * tr_z
+  cam.x = cam.x + dx
+  cam.y = cam.y + dy
+  cam.z = cam.z + dz
+else
+  cam.x, cam.y, cam.z = cam.x + tr_x, cam.y + tr_y, cam.z + tr_z
+  dx, dy, dz = tr_x, tr_y, tr_z
+end
+
+if parallel then
+  cam.tx = cam.tx + dx
+  cam.ty = cam.ty + dy
+  cam.tz = cam.tz + dz
+end
+
+obj.setoption("camera_param", cam)
+
+
+@目標座標
+--information:目標座標@カメラ効果_H v1.00 by HexBrowns
+--label:HexScript
+--track@target_x:X,-10000,10000,0,.01
+--track@target_y:Y,-10000,10000,0,.01
+--track@target_z:Z,-10000,10000,0,.01
+
+-- 原作 目標座標@Camera と項目名・挙動とも同じ。目標座標にそのまま足す
+
+local cam = obj.getoption("camera_param")
+cam.tx = cam.tx + target_x
+cam.ty = cam.ty + target_y
+cam.tz = cam.tz + target_z
+obj.setoption("camera_param", cam)
+
+
+@傾き
+--information:傾き@カメラ効果_H v1.00 by HexBrowns
+--label:HexScript
+--track@tilt:傾き,-10000,10000,0,.01
+
+-- 原作 傾き@Camera と項目名・挙動とも同じ。cam.rz にそのまま足す
+
+local cam = obj.getoption("camera_param")
+cam.rz = cam.rz + tilt
+obj.setoption("camera_param", cam)
+
+
+@ズーム
+--information:ズーム@カメラ効果_H v1.00 by HexBrowns
+--label:HexScript
+--track@zoom:ズーム率,1,1000,100,0.01
+
+--[[
+原作の 視野角 の置き換え。cam.d（カメラからスクリーンまでの距離、lua.txt）に
+ズーム率 / 100 を掛ける。100% で無変化、200% で cam.d が 2 倍。
+
+cam.d を大きくすると拡大方向になることは、手持ちカメラ_H の実機出力で確認済み
+（CAM-11: cam.d を 1.0449 倍して素材の高さが 1.0441 倍）。
+画角（度）との換算式は lua.txt に無いので、角度での指定はしない。
+]]
+
+if zoom == 100 then return end
+
+local cam = obj.getoption("camera_param")
+cam.d = cam.d * (zoom / 100)
+obj.setoption("camera_param", cam)

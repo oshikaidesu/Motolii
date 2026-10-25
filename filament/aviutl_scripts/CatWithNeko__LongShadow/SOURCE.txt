@@ -1,0 +1,6 @@
+LongShadow by こんにゃくねこ
+licence: CC0-1.0
+from: https://raw.githubusercontent.com/CatWithNeko/aviutl2-scripts/refs/heads/main/script/LongShadow.anm2 (commit 7e0a07c2dbb4)
+page: https://github.com/CatWithNeko/aviutl2-scripts
+licence/README from: https://github.com/CatWithNeko/aviutl2-scripts at 7e0a07c2dbb401e7a2c501152ffabf2fe07a546d
+Put here unchanged for Motolii (filament/aviutl_scripts).

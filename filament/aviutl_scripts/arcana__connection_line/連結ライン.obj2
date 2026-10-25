@@ -1,0 +1,174 @@
+--information:二つのオブジェクトをラインで繋ぎます。
+--track@layer1:対象レイヤー1,1,100,1,1
+--track@layer2:対象レイヤー2,1,100,2,1
+--track@width:太さ,1,500,10,1
+--color@line_color:ラインの色,0xFFFFFF
+--select@line_style:ラインの種類,実線=0,点線=1
+--track@dash_length:点線の長さ,1,200,20,1
+--track@gap_length:点線の間隔,1,200,10,1
+--track@offset_x1:始点オフセットX,-1000,1000,0,1
+--track@offset_y1:始点オフセットY,-1000,1000,0,1
+--track@offset_x2:終点オフセットX,-1000,1000,0,1
+--track@offset_y2:終点オフセットY,-1000,1000,0,1
+--select@cap_style:端の形,平ら=0,丸=1
+--track@trim1:始点の空き,0,1000,0,1
+--track@trim2:終点の空き,0,1000,0,1
+--track@progress:表示割合,0,100,100,0.1
+--track@flow:点線の流れ,-1000,1000,0,1
+--select@depth_mode:奥行き=1,そのまま=0,手前に揃える=1,奥に揃える=2
+--hide@dash_length:line_style==0
+--hide@gap_length:line_style==0
+--hide@flow:line_style==0
+
+-- 項目名は保存データのキーなので変えない。項目を足すときは末尾に足す。
+
+local function layer_pos(l)
+    local x = obj.getvalue("layer"..l..".x")
+    local y = obj.getvalue("layer"..l..".y")
+    if x == nil or y == nil then return nil end
+    return x, y, obj.getvalue("layer"..l..".z") or 0
+end
+
+local x1, y1, z1 = layer_pos(math.floor(layer1))
+local x2, y2, z2 = layer_pos(math.floor(layer2))
+
+-- 端点を、視点から対象が見える向きの線（視線）の上に置き直す。画面上の位置は対象に合ったまま、
+-- 深度だけを選べる（0=対象それぞれの深度 1=手前の深度に揃える 2=奥の深度に揃える）。
+-- 深度を揃えると線の太さ・点線の長さが画面上で一定になる。
+-- カメラ制御の対象外では、オブジェクトは X,Y の位置のまま Z で拡大縮小されるだけだが、
+-- drawpoly の頂点は自分の位置を中心に透視投影される（視点は Z=-d）ので、それに合わせて置く。
+local function place(sx, sy, x1, y1, z1, x2, y2, z2, mode)
+    local cam = obj.getoption("camera_param")
+    if type(cam) ~= "table" or cam.x == nil then return x1, y1, z1, x2, y2, z2 end
+    local ex, ey, ez, fx, fy, fz
+    local q1x, q1y, q1z, q2x, q2y, q2z    -- 視線が通る点
+    if (obj.getoption("camera_mode") or 0) ~= 0 then
+        ex, ey, ez = cam.x, cam.y, cam.z
+        fx, fy, fz = cam.tx - ex, cam.ty - ey, cam.tz - ez
+        q1x, q1y, q1z, q2x, q2y, q2z = x1, y1, z1, x2, y2, z2
+    else
+        local d = cam.d or 1024
+        ex, ey, ez = sx, sy, -d
+        fx, fy, fz = 0, 0, 1
+        q1x, q1y, q1z, q2x, q2y, q2z = x1, y1, 0, x2, y2, 0
+    end
+    local fl = math.sqrt(fx*fx + fy*fy + fz*fz)
+    if fl < 1e-6 then return x1, y1, z1, x2, y2, z2 end
+    fx, fy, fz = fx / fl, fy / fl, fz / fl
+    local function depth(x, y, z) return (x - ex)*fx + (y - ey)*fy + (z - ez)*fz end
+    local d1, d2 = depth(x1, y1, z1), depth(x2, y2, z2)    -- 対象の深度
+    local e1, e2 = depth(q1x, q1y, q1z), depth(q2x, q2y, q2z)
+    -- 視点の後ろにある点は射影できないので触らない
+    if d1 <= 1e-6 or d2 <= 1e-6 or e1 <= 1e-6 or e2 <= 1e-6 then return x1, y1, z1, x2, y2, z2 end
+    if mode == 1 then d1 = math.min(d1, d2); d2 = d1
+    elseif mode == 2 then d1 = math.max(d1, d2); d2 = d1 end
+    local k1, k2 = d1 / e1, d2 / e2
+    return ex + (q1x - ex)*k1, ey + (q1y - ey)*k1, ez + (q1z - ez)*k1,
+           ex + (q2x - ex)*k2, ey + (q2y - ey)*k2, ez + (q2z - ez)*k2
+end
+
+if x1 and x2 then
+    -- drawpoly の原点はこのオブジェクト自身の位置なので、最後に自分の座標を引く
+    local sx, sy, sz = obj.getvalue("x") or 0, obj.getvalue("y") or 0, obj.getvalue("z") or 0
+    x1, y1 = x1 + offset_x1, y1 + offset_y1
+    x2, y2 = x2 + offset_x2, y2 + offset_y2
+    x1, y1, z1, x2, y2, z2 = place(sx, sy, x1, y1, z1, x2, y2, z2, depth_mode)
+    x1, y1, z1 = x1 - sx, y1 - sy, z1 - sz
+    x2, y2, z2 = x2 - sx, y2 - sy, z2 - sz
+
+    local dx, dy, dz = x2 - x1, y2 - y1, z2 - z1
+    local distance = math.sqrt(dx*dx + dy*dy + dz*dz)
+    local dxy = math.sqrt(dx*dx + dy*dy)
+
+    -- 表示する範囲（始点からの距離）
+    local s_end = distance - trim2
+    local s_start = trim1
+    s_end = s_start + (s_end - s_start) * math.max(0, math.min(progress, 100)) / 100
+
+    if distance > 0 and s_end > s_start then
+        local r, g, b = RGB(line_color)
+        local a = obj.alpha
+        local pr, pg, pb = (r / 255) * a, (g / 255) * a, (b / 255) * a
+        local half_width = width / 2
+        local ux, uy, uz = dx / distance, dy / distance, dz / distance
+        -- 太さの向き。画面の奥へ真っすぐ向かう線だけは XY で決まらないので X にとる
+        local px, py = 1, 0
+        if dxy > 1e-6 then px, py = -dy / dxy, dx / dxy end
+        local polys = {}
+
+        local function point(t, w)
+            return x1 + ux * t + px * w, y1 + uy * t + py * w, z1 + uz * t
+        end
+
+        -- 面はすべてここを通す。XY の shoelace が負なら順を入れ替えて表面にする
+        local function quad(ax, ay, az, bx, by, bz, cx, cy, cz, ex, ey, ez)
+            local area = (ax*by - bx*ay) + (bx*cy - cx*by) + (cx*ey - ex*cy) + (ex*ay - ax*ey)
+            if area < 0 then
+                ax, ay, az, cx, cy, cz = cx, cy, cz, ax, ay, az
+            end
+            polys[#polys + 1] = {
+                ax, ay, az,  bx, by, bz,  cx, cy, cz,  ex, ey, ez,
+                pr,pg,pb,a,  pr,pg,pb,a,  pr,pg,pb,a,  pr,pg,pb,a
+            }
+        end
+
+        -- 半円。t の位置を中心に、dir=1 なら終点側、-1 なら始点側へ膨らむ
+        local function cap(t, radius, dir)
+            local n = 2 * math.min(16, math.max(4, math.ceil(radius / 4)))
+            local cx, cy, cz = point(t, 0)
+            local pts = {}
+            for i = 0, n do
+                if i == 0 then
+                    pts[i] = {point(t, -radius)}
+                elseif i == n then
+                    pts[i] = {point(t, radius)}
+                else
+                    local th = math.pi * (i / n - 0.5)
+                    pts[i] = {point(t + dir * math.cos(th) * radius, math.sin(th) * radius)}
+                end
+            end
+            for i = 0, n - 2, 2 do
+                local p0, p1, p2 = pts[i], pts[i + 1], pts[i + 2]
+                quad(cx, cy, cz, p0[1], p0[2], p0[3], p1[1], p1[2], p1[3], p2[1], p2[2], p2[3])
+            end
+        end
+
+        -- t0〜t1 の区間を 1 本描く。丸端でも見える長さは t1-t0 のまま
+        local function segment(t0, t1)
+            if t1 <= t0 then return end
+            local radius = 0
+            if cap_style == 1 then radius = math.min(half_width, (t1 - t0) / 2) end
+            local c0, c1 = t0 + radius, t1 - radius
+            if c1 > c0 then
+                local ax, ay, az = point(c0, -half_width)
+                local bx, by, bz = point(c1, -half_width)
+                local cx, cy, cz = point(c1, half_width)
+                local ex, ey, ez = point(c0, half_width)
+                quad(ax, ay, az, bx, by, bz, cx, cy, cz, ex, ey, ez)
+            end
+            if radius > 0 then
+                cap(c0, radius, -1)
+                cap(c1, radius, 1)
+            end
+        end
+
+        if line_style == 0 then
+            segment(s_start, s_end)
+        elseif line_style == 1 then
+            local period = dash_length + gap_length
+            local phase = (flow * obj.time) % period
+            local t = s_start + phase - period
+            local count = 0
+            while t < s_end and count < 100000 do
+                segment(math.max(t, s_start), math.min(t + dash_length, s_end))
+                t = t + period
+                count = count + 1
+            end
+        end
+
+        if #polys > 0 then
+            obj.drawpoly(polys)
+        end
+    end
+end
+obj.alpha = 0

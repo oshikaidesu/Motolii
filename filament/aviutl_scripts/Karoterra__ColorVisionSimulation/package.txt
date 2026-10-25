@@ -1,0 +1,12 @@
+# 色覚シミュレーションKR
+
+自分と違う色覚を持つ人はどのように色が見えているのかシミュレーションするスクリプト
+
+以下のフィルタが追加されます。
+- 色調整\色覚シミュレーションKR
+
+公開ページ
+https://github.com/karoterra/aviutl2-ColorVisionSimulation
+
+紹介動画
+https://www.nicovideo.jp/watch/sm44847041

@@ -1,0 +1,150 @@
+--label:CJF
+--information:くるっと@psd: パーツ上書き連動・フリップ＋跳ね / AviUtl2 only
+--track@refLayer:参照レイヤー,1,100,1,1
+--value@charId:キャラクターID,""
+--value@watchParts:監視パーツ,""
+--value@overwriteEffect:上書き効果名,""
+--track@rotDur:回転時間(秒),0.05,2,0.4,0.01
+--track@bounceDur:跳ね時間(秒),0.05,2,0.35,0.01
+--track@rotY:Y軸フリップ,-720,720,360,1
+--track@bounceH:跳ね高さ,0,200,24,0.1
+--track@bounceAng:跳ね角度,-90,90,0,0.1
+--check@debugLog:debugLog,false
+
+-- くるっと@psd
+-- watchParts empty/all: flip on every clip start/end (clock only).
+-- watchParts "4,5": flip only when those parts change
+--   open  = changed or bank prev-clip; close = part_bank next (peek on miss).
+-- Basic ops: gapless overwrite on 参照レイヤー; prefer キャラクターID.
+--
+-- Flip uses obj.sx (cos of card angle), not obj.ry.
+-- X-axis flip removed: sx card-flip cannot express intended X rotation.
+-- Under group control, child Y-rotation often fails to reach a clean edge-on 90
+-- (looks ~45 at window end) and the 90->270 jump shows the back.
+-- 2D scale stays centered and hits sx=0 at p=1 regardless of group.
+
+local rot_dur = tonumber(rotDur) or 0.4
+if rot_dur < 0.05 then rot_dur = 0.05 end
+local bounce_dur = tonumber(bounceDur) or 0.35
+if bounce_dur < 0.05 then bounce_dur = 0.05 end
+local half = rot_dur * 0.5
+
+local Core = require("ptk_overwrite_react_core")
+local react = Core.update({
+	ref_layer = refLayer,
+	char_id = charId,
+	watch_parts = watchParts,
+	overwrite_effect = overwriteEffect,
+	pre_roll = 0,
+})
+
+local function clamp01(t)
+	if t < 0 then return 0 end
+	if t > 1 then return 1 end
+	return t
+end
+
+local function flip_deg(progress, amount, mode)
+	if amount == 0 then
+		return 0
+	end
+	local p = clamp01(progress)
+	return (mode == "close") and (90.0 * p) or (270.0 + 90.0 * p)
+end
+
+local function flip_sx_scale(deg, amount)
+	if amount == 0 then
+		return 1
+	end
+	local strength = math.abs(amount) / 360.0
+	if strength > 1 then strength = 1 end
+	local c = math.cos(math.rad(deg))
+	if c < 0 then c = 0 end
+	local s = 1.0 - strength + strength * c
+	if amount < 0 then
+		return -s
+	end
+	return s
+end
+
+if not react.found then
+	return
+end
+
+local t, tt, remain, src = Core.read_sub_clock(react.ref_layer, react.char_id)
+if t == nil or remain == nil then
+	return
+end
+
+local gates = Core.clip_flip_gates({
+	react = react,
+	watch_parts = watchParts,
+	peek_layer = refLayer,
+	time = t,
+	remain = remain,
+	totaltime = tt,
+	open_half = half,
+	close_half = half,
+})
+
+local ry_amt = tonumber(rotY) or 360
+local bounce_h = tonumber(bounceH) or 24
+local bounce_ang = tonumber(bounceAng) or 0
+
+local mode, p = nil, nil
+if gates.open then
+	mode = "open"
+	p = (half > 0) and (t / half) or 1
+elseif gates.close then
+	mode = "close"
+	p = (half > 0) and (1 - remain / half) or 1
+end
+
+local deg_y = 0
+if mode ~= nil then
+	p = clamp01(p)
+	deg_y = flip_deg(p, ry_amt, mode)
+	obj.sx = obj.sx * flip_sx_scale(deg_y, ry_amt)
+end
+
+if debugLog == true or debugLog == 1 then
+	local st = require("ptk_overwrite_react_state")
+	if type(st.last_log_frame) ~= "table" then st.last_log_frame = {} end
+	if type(st.last_gate_why) ~= "table" then st.last_gate_why = {} end
+	local in_win = (t <= half + 1e-6) or (remain <= half + 1e-6)
+	local why = tostring(gates.reason)
+	local why_changed = st.last_gate_why[react.key] ~= why
+	st.last_gate_why[react.key] = why
+	local lf = st.last_log_frame[react.key] or -999
+	local hb = math.max(1, math.floor((obj.framerate or 30) / 2))
+	if in_win or why_changed or gates.open or gates.close or (obj.frame - lf) >= hb then
+		st.last_log_frame[react.key] = obj.frame
+		print(string.format(
+			"[くるっと@psd] t=%.3f remain=%.3f half=%.3f p=%.3f degY=%.1f sx*=%.3f (%s) id=%s L=%s watch=%s ch=%s open=%s close=%s why=%s diff=%s found=%s src=%s",
+			t, remain, half,
+			(p or -1), deg_y, flip_sx_scale(deg_y, ry_amt),
+			tostring(src),
+			tostring(react.char_id), tostring(react.ref_layer),
+			tostring(react.watch_label), tostring(react.changed),
+			tostring(gates.open), tostring(gates.close), why,
+			tostring(react.diff or ""),
+			tostring(react.found), tostring(react.source)
+		))
+	end
+end
+
+local bhalf = bounce_dur * 0.5
+local w = nil
+if bhalf > 0 and bounce_h ~= 0 then
+	if gates.open and t <= bhalf then
+		w = math.cos(math.pi * 0.5 * clamp01(t / bhalf))
+	elseif gates.close and remain <= bhalf then
+		w = math.sin(math.pi * 0.5 * clamp01(1 - remain / bhalf))
+	end
+end
+if w ~= nil then
+	local ang_rad = math.rad(bounce_ang)
+	obj.oy = obj.oy - bounce_h * w * math.cos(ang_rad)
+	obj.ox = obj.ox + bounce_h * w * math.sin(ang_rad)
+	obj.rz = obj.rz + bounce_ang * w
+end

@@ -1,0 +1,5 @@
+[Language]
+Information=Default Language for sevenc-nanashi/aviutl2-scripts / https://github.com/sevenc-nanashi/aviutl2-scripts
+[Tips.ドカベン]
+effect.name=ドカベン風に起き上がって倒れるアニメーション。
+PI=- `speed`：再生速度（%、0で固定）\n- `auto_fall`：自動で倒れる（true / false）\n- `upright`：直立時間（0以上のフレーム数、再生速度の影響を受けます）\n- `y_offset`：Yオフセット\n- `drop_frame`：コマ落ち（true / false）\n- `divisions_override`：横方向の分割数（1以上の整数、省略時は幅に応じて1～32分割）\n

@@ -1,0 +1,6 @@
+# 最背面に配置 AviUtl ExEdit2 スクリプト
+
+下のレイヤーにあるオブジェクトでも，フレームの最背面に配置する AviUtl ExEdit2 スクリプトです．
+
+公開ページ:
+https://github.com/sigma-axis/aviutl2_script_Layback

@@ -1,0 +1,17 @@
+; Tooltip definitions
+;===============================================================
+; Target: ColoredCollar_S (https://github.com/sigma-axis/aviutl2_script_ColoredCollar_S)
+; Target Version: v2.11
+; Language: Default
+
+[Language]
+Information=Default tooltips for ColoredCollar_S v2.11 (日本語)
+
+;===============================================================
+
+[Tips.ColoredCollar_S]
+effect.name=オブジェクトの境界部分の色を引き延ばしたり，距離に応じた色グラデーションで縁取りします．
+色拡散=元画像の境界部分の色を引き延ばす際，距離に応じてぼかします．
+縁色外側=別の色や色の濃さを指定すると距離に応じたグラデーションになります．
+錯視軽減=「ぼかし」や「縁色外側」での距離グラデーションで，錯視的な模様を軽減します．
+PI=PI = {\n  thick: number?,\n  blur: number?,\n  col_blur: number?,\n  threshold: number?,\n  fixed_size: boolean|number|nil,\n  color: number?,\n  col_alpha: number?,\n  color_outer: number|false|nil,\n  col_alpha_outer: number?,\n  alpha: number?,\n  front_alpha: number?,\n  mollify: number?,\n}

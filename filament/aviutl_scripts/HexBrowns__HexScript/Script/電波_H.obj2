@@ -1,0 +1,186 @@
+--information:電波_H v1.00 by HexBrowns
+--label:HexScript
+--object
+
+--group:波
+--track@freq:周波数,0.01,30,2,0.01
+--track@speed:拡張速度,0,4000,200,0.1
+--track@life:寿命,0.01,60,3,0.01
+--track@emit_end:発生時間,0,600,0,0.01,無制限
+--track@preroll:先行時間,0,60,0,0.01
+--group
+
+--group:波の形
+--select@shape:形状=0,円=0,多角形=1,星=2
+--track@sides:角数,3,32,6,1
+--hide@sides:shape==0
+--track@star_depth:へこみ,0,100,50,0.1
+--hide@star_depth:shape<2
+--track@shape_rot:回転,-3600,3600,0,0.01
+--hide@shape_rot:shape==0
+--group
+
+--group:線
+--color@color:色,0xffffff
+--select@profile:プロファイル=0,四角=0,サイン=1,ノコギリ（内）=2,ノコギリ（外）=3
+--track@w_start:開始時の幅,0,500,4,0.1
+--track@w_end:終了時の幅,0,500,4,0.1
+--track@fade_in:フェードイン,0,60,0,0.01
+--track@fade_out:フェードアウト,0,60,0.5,0.01
+--group
+
+--group:描画範囲,false
+--track@width:幅,0,16384,0,1,自動
+--track@height:高さ,0,16384,0,1,自動
+--group
+
+--[[
+After Effects の「電波」に当たるカスタムオブジェクト。オブジェクトの中心から、同じ形の波が
+一定の間隔で生まれて広がり、寿命が来ると消える。
+
+- 波 k は時刻 k / 周波数 に生まれ、年齢 a のとき外接半径 拡張速度 * a で描かれる
+- 多角形・星は「外接半径 1 の図形を拡大したもの」を等値線にとる。ρ = |p| / s(θ)
+  （s(θ) は角度 θ の方向で外接半径 1 の図形の輪郭までの距離）。線の幅は ρ の勾配で割って画素に直す
+- 波の間隔が一定なので、画素ごとに年齢 ρ / 拡張速度 に近い波だけを調べる（全部の波を回さない）
+- 描画範囲が自動のときは、今いちばん外の波が収まる大きさにする。ただし片側は画面の幅・高さまで
+  （中心が画面の端にあっても画面全体を覆える大きさ）
+
+机上検証: AI/scripts/電波_H/verify_radio.py
+]]
+
+--[[pixelshader@ps_radio_waves_h:
+cbuffer P : register(b0) {
+    float3 col;        // 0-2 線の色（0..1）
+    float profile;     // 3   0 四角 / 1 サイン / 2 ノコギリ（内）/ 3 ノコギリ（外）
+    float2 center;     // 4-5 バッファの中心（px）
+    float tnow;        // 6   今の時刻（先行時間を足した秒）
+    float freq;        // 7   1 秒あたりの波の数
+    float speed;       // 8   拡張速度（px/秒）
+    float life;        // 9   寿命（秒）
+    float w0;          // 10  開始時の幅（px）
+    float w1;          // 11  終了時の幅（px）
+    float fade_in;     // 12  秒
+    float fade_out;    // 13  秒
+    float emit_end;    // 14  これより後は波を出さない（秒）。0 以下で無制限
+    float sides;       // 15  角数。0 で円
+    float ri;          // 16  内側の頂点の半径（外接半径 1 に対して）
+    float rot;         // 17  図形の回転（ラジアン、時計回り）
+};
+
+static const float PI = 3.14159265;
+
+float4 ps_radio_waves_h(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy - center;
+    float len_p = length(p);
+
+    // s: 角度 θ の方向で、外接半径 1 の図形の輪郭までの距離（円なら 1）
+    float s = 1.0;
+    if (sides > 2.5 && len_p > 1e-4) {
+        float wedge = PI / sides;
+        // 頂点 0 を真上に置く（Y は下向きなので真上は atan2 で -PI/2）
+        float th = atan2(p.y, p.x) - rot + PI * 0.5;
+        th = th - floor(th / (2.0 * PI)) * (2.0 * PI);
+        float k = floor(th / wedge);
+        float phi = th - k * wedge;
+        bool outer_first = fmod(k, 2.0) < 0.5;
+        float ra = outer_first ? 1.0 : ri;
+        float rb = outer_first ? ri : 1.0;
+        float2 a = float2(ra, 0.0);
+        float2 e = rb * float2(cos(wedge), sin(wedge)) - a;
+        float2 u = float2(cos(phi), sin(phi));
+        float den = u.x * e.y - u.y * e.x;
+        float num = a.x * e.y - a.y * e.x;
+        s = (abs(den) > 1e-6) ? max(num / den, 1e-3) : 1.0;
+    }
+    float rho = len_p / s;
+    // ρ が 1 画素あたりに変わる量。線の幅とアンチエイリアスを画素で測るのに使う
+    float g = max(length(float2(ddx(rho), ddy(rho))), 1e-4);
+
+    float tlast = (emit_end > 0.0) ? min(tnow, emit_end) : tnow;
+    float kmax = floor(tlast * freq + 1e-4);    // 最後に生まれた波の番号
+    if (speed <= 1e-4 || kmax < 0.0) return float4(0.0, 0.0, 0.0, 0.0);
+
+    float spacing = speed / freq;               // ρ で測った波の間隔
+    float reach = (max(w0, w1) * 0.5 + 1.0) * g;
+    float kc = round((tnow - rho / speed) * freq);
+    float m = min(ceil(reach / spacing) + 1.0, 64.0);
+
+    float keep = 1.0;                           // どの波にも覆われない割合
+    [loop] for (float j = -m; j <= m; j += 1.0) {
+        float kk = kc + j;
+        if (kk < 0.0 || kk > kmax) continue;
+        float age = tnow - kk / freq;
+        if (age < 0.0 || age > life) continue;
+        float w = max(lerp(w0, w1, age / life), 0.0);
+        float hw = w * 0.5;
+        float d = (rho - speed * age) / g;      // 波の中心線からの距離（px、外側が正）
+        float cov = saturate(min(hw - abs(d) + 0.5, w));
+        if (cov <= 0.0) continue;
+        float sn = clamp(d / max(hw, 1e-3), -1.0, 1.0);
+        float prof = 1.0;
+        if (profile > 2.5) prof = 0.5 + 0.5 * sn;
+        else if (profile > 1.5) prof = 0.5 - 0.5 * sn;
+        else if (profile > 0.5) prof = cos(sn * PI * 0.5);
+        float fade = 1.0;
+        if (fade_in > 0.0) fade *= saturate(age / fade_in);
+        if (fade_out > 0.0) fade *= saturate((life - age) / fade_out);
+        keep *= 1.0 - saturate(cov * prof * fade);
+    }
+    float alpha = 1.0 - keep;
+    return float4(col * alpha, alpha);
+}
+]]
+
+local function num(v, d)
+  v = tonumber(v)
+  if v == nil or v ~= v then return d end
+  return v
+end
+
+local function rgb_of(c)
+  c = math.floor(num(c, 0xffffff)) % 0x1000000
+  return math.floor(c / 0x10000) / 255, math.floor(c / 0x100) % 0x100 / 255, c % 0x100 / 255
+end
+
+local f = math.max(num(freq, 2), 0.01)
+local v = math.max(num(speed, 200), 0)
+local lf = math.max(num(life, 3), 0.01)
+local w0 = math.max(num(w_start, 4), 0)
+local w1 = math.max(num(w_end, 4), 0)
+local t = obj.time + math.max(num(preroll, 0), 0)
+
+local kind = math.floor(num(shape, 0) + 0.5)
+local n = 0
+local ri = 1
+if kind >= 1 then
+  n = math.min(math.max(math.floor(num(sides, 6) + 0.5), 3), 32)
+  if kind == 1 then
+    -- 頂点 2n 個のうち辺の中点を内側の頂点にとると、ちょうど正 n 角形になる
+    ri = math.cos(math.pi / n)
+  else
+    ri = math.min(math.max(1 - num(star_depth, 50) / 100, 0.05), 1)
+  end
+end
+
+-- 描画範囲。自動なら今いちばん外の波（外接半径 v * min(t, 寿命)）と線の幅が収まる大きさ
+local max_x, max_y = obj.getinfo("image_max")
+local half = v * math.min(math.max(t, 0), lf) + math.max(w0, w1) * 0.5 + 2
+local W = num(width, 0)
+local H = num(height, 0)
+if W <= 0 then W = 2 * math.min(half, obj.screen_w) end
+if H <= 0 then H = 2 * math.min(half, obj.screen_h) end
+-- 偶数に揃えて中心を画素の境目に置く
+W = math.min(math.max(2 * math.ceil(W / 2), 2), max_x)
+H = math.min(math.max(2 * math.ceil(H / 2), 2), max_y)
+
+local r, g, b = rgb_of(color)
+local consts = {
+  r, g, b, math.floor(num(profile, 0) + 0.5),
+  W / 2, H / 2, t, f,
+  v, lf, w0, w1,
+  math.max(num(fade_in, 0), 0), math.max(num(fade_out, 0.5), 0), math.max(num(emit_end, 0), 0), n,
+  ri, math.rad(num(shape_rot, 0)),
+}
+
+obj.clearbuffer("object", W, H)
+obj.pixelshader("ps_radio_waves_h", "object", nil, consts)

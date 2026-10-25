@@ -1,0 +1,262 @@
+@直線
+--information:twinkle_sl(line) v1.2.1 by seilor0
+--label:カスタムオブジェクト
+
+--track@size:サイズ,0,4000,500,1
+--track@xRatio:幅[%],0,100,70
+--track@depth:深さ[%],0,100,75
+--track@cRatio:角丸[%],0,100,0
+
+--color@fillColor:塗り,0xffffff
+--track@fillAlpha:塗りα[%],0,100,100
+
+--group:線,false
+--track@lineW:ライン幅[%],0,200,0,0.1
+--check@useLinewAsIs:ライン幅を絶対値として設定する,0
+--select@linePos:ライン位置=1,内側=0,中央=1,外側=2
+--select@cornerType:角の形状=1, マイター=0, ラウンド=1
+
+--color@lineColor:ライン,0xff0000
+--track@lineAlpha:ラインα[%],0,100,100
+
+--[[pixelshader@psmain:
+
+  #define PI 3.1415927
+
+  cbuffer constant0: register(b0) {
+    float4 fillColor;
+    float4 lineColor;
+
+    float2 halfImSize;
+    float2 halfSize;
+    float a;
+    float cRatio;
+    float lineW;
+    float linePos;
+    float cornerType;
+  }
+
+  // a:始点, angle:角度(rad)
+  float sdRay (float2 p, float2 a, float angle) {
+    float2 dirVec = float2(cos(angle), sin(angle));
+    float2 ap = p-a;
+    float t = max(0, dot(dirVec,ap));
+    float sign1 = sign(dirVec.x * (dirVec.x*ap.y - dirVec.y*ap.x));
+    return sign1 * length(ap - dirVec*t);
+  }
+
+  // a,b:通過点
+  float sdLine (float2 p, float2 a, float2 b) {
+    float2 ab = b-a;
+    float2 ap = p-a;
+    float t = dot(ab,ap)/dot(ab,ab);
+    float sign1 = sign(ab.x * (ab.x*ap.y - ab.y*ap.x));
+    return sign1 * length(ap - ab*t);
+  }
+
+  float sdTwinkle (float2 p, float2 halfSize, float a) {
+    p = abs(p);
+    if (cornerType==0 && cRatio==0) {
+      return min(
+        sdLine(p, float2(a,a), float2(halfSize.x, 0)),
+        sdLine(p, float2(a,a), float2(0, halfSize.y))
+      );
+    } else {
+      float2 angle = atan2(a, halfSize-a);
+      float2 radius = cRatio * a/cos(angle);
+      float2 delta = cRatio * 2*a/sin(2*angle);
+
+      float2 vecX = float2(halfSize.x-a, -a);
+      float2 vecY = float2(-a, halfSize.y-a);
+      float aRatio = a * (halfSize.x+halfSize.y) / (halfSize.x*halfSize.y);
+      float2 bisector = 1-aRatio<1e-6 ? float2(halfSize.y, halfSize.x) : vecX/length(vecX) + vecY/length(vecY);
+      float sign1 = sign(bisector.x * (p-a).y - bisector.y * (p-a).x);
+      
+      if (sign1<0.0) return sdRay(p, float2(halfSize.x - delta.x, 0), PI-angle.x) - radius.x;
+      else return sdRay(p, float2(0, halfSize.y - delta.y), angle.y-0.5*PI) - radius.y;
+    }
+  }
+
+  // src: 前景色, dst: 背景色
+  float4 blend(float4 src, float4 dst) {
+    float4 color = src + dst * (1.0-src.a);
+    return color.a<1e-6 ? float4(0.0,0.0,0.0,0.0) : color;
+  }
+
+  float4 psmain(float4 pos: SV_Position) : SV_Target {
+    float2 p = pos.xy - halfImSize;
+    float d = sdTwinkle(p, halfSize, a);
+
+    // fill
+    float alpha1 = saturate((linePos==0&&lineW>1.0 ? 0.0 : 0.5) - d);
+    // line
+    float offset = (linePos-1) * lineW/2;
+    float alpha2 = saturate((lineW+1)/2-abs(d-offset));
+    alpha2 *= (lineW>0.0) ? 1.0 : 0.0;
+
+    return blend(lineColor*alpha2, fillColor*alpha1);
+  }
+]]
+
+
+local sy = size/2
+local sx = sy * xRatio/100
+local a  = sy * xRatio/(100+xRatio) * (100-depth)/100 -- 交差部分の1辺の長さ
+
+if sx<1 then return end
+if useLinewAsIs==0 then lineW = size*lineW/200 end
+
+-- color
+local function color2rgba(col, alpha)
+  local r,g,b = RGB(col)
+  r,g,b = r/255*alpha, g/255*alpha, b/255*alpha
+  return r,g,b,alpha
+end
+local fillColVec = {color2rgba(fillColor, fillAlpha/100)}
+local lineColVec = {color2rgba(lineColor, lineAlpha/100)}
+
+-- image size
+local imageX,imageY = sx, sy
+if (cornerType==0) then
+  local radX, radY = math.atan2(a, sx-a), math.atan2(a, sy-a)
+  local dx, dy = lineW/math.sin(radX), lineW/math.sin(radY)
+  imageX, imageY = imageX+dx*0.5*linePos, imageY+dy*0.5*linePos
+elseif (cornerType==1) then
+  imageX, imageY = imageX+lineW*0.5*linePos, imageY+lineW*0.5*linePos
+end
+
+
+obj.setoption("drawtarget", "tempbuffer", imageX*2, imageY*2)
+obj.pixelshader("psmain","tempbuffer", {}, {
+  fillColVec[1], fillColVec[2], fillColVec[3], fillColVec[4], -- fill color
+  lineColVec[1], lineColVec[2], lineColVec[3], lineColVec[4], -- line color
+  imageX, imageY, -- image size
+  sx, sy, -- half size
+  a,
+  cRatio/100,
+  lineW,
+  linePos,
+  cornerType
+})
+obj.load("tempbuffer")
+
+
+
+@カーブ
+--information:twinkle_sl(curve) v1.2.1 by seilor0
+--label:カスタムオブジェクト
+
+--track@size:サイズ,0,4000,500,1
+--track@xRatio:幅[%],0,100,70
+--track@depth:深さ[%],0,100,50,0.1
+
+--color@fillColor:塗り,0xffffff
+--track@fillAlpha:塗りα,0,100,100
+
+--group:線,false
+--track@lineW:ライン幅[%],0,200,0,0.1
+--check@useLinewAsIs:ライン幅を絶対値として設定する,0
+--select@linePos:ライン位置=1,内側=0,中央=1,外側=2
+--check@remainLine:ラインを最低1px残す,1
+
+--color@lineColor:ライン,0xff0000
+--track@lineAlpha:ラインα,0,100,100
+
+--[[pixelshader@psmain:
+
+  #define PI 3.14159265
+
+  cbuffer constant0: register(b0) {
+    float4 fillColor;
+    float4 lineColor;
+
+    float2 halfImSize;
+    float2 halfSize;
+    float n;
+
+    float lineW;
+    float linePos;
+    float remainLine;
+  }
+
+  float biSearch(float2 p, float2 halfSize, float n, float xa, float xb) {
+    // θを二分探索して、パラメトリック曲線上の最近点を見つける
+    for (int i=0; i<6; i++) {
+      float x = 0.5*(xa+xb);
+      float c = cos(x);
+      float s = sin(x);
+      float cn = halfSize.x * pow(c,n);
+      float sn = halfSize.y * pow(s,n);
+      // 法線ベクトル(sn*c*c,cn*s*s)とベクトルの外積
+      float y = (p.x-cn)*cn*s*s - (p.y-sn)*sn*c*c;
+
+      if (y<0.0) xa = x;
+      else xb = x;
+    }
+    // 距離
+    float2 qa = halfSize * pow(abs(float2(cos(xa),sin(xa))), float2(n,n));
+    float2 qb = halfSize * pow(abs(float2(cos(xb),sin(xb))), float2(n,n));
+    float2 pa = p-qa, ba = qb-qa;
+    float h = saturate(dot(pa,ba)/dot(ba,ba));
+    return length(pa - ba*h) * sign(pa.x*ba.y-pa.y*ba.x);
+  }
+
+  float sdSquircle(float2 p, float2 halfSize, float n) {
+    p = abs(p);
+    halfSize = abs(halfSize);
+    n = 2.0/n;
+    float d1 = biSearch(p, halfSize, n, 0.0,    0.25*PI);
+    float d2 = biSearch(p, halfSize, n, 0.25*PI, 0.5*PI);
+    return abs(d1)<abs(d2) ? d1 : d2;
+  }
+
+  // src: 前景色, dst: 背景色
+  float4 blend(float4 src, float4 dst) {
+    float4 color = src + dst * (1.0-src.a);
+    return color.a<1e-6 ? float4(0.0,0.0,0.0,0.0) : color;
+  }
+
+  float4 psmain(float4 pos:SV_Position): SV_Target {
+    float2 p = pos.xy - halfImSize;
+    float d = sdSquircle(p, halfSize, n);
+    // fill
+    float alpha1 = saturate((remainLine+(linePos==0&&lineW>0.0 ? 0.0 : 1.0))/2 - d);
+    // line
+    float offset = ((linePos-1)*lineW + remainLine) / 2;
+    float alpha2 = saturate((lineW+1)/2-abs(d-offset));
+    alpha2 *= (lineW>0.0) ? 1.0 : 0.0;
+    return blend(lineColor*alpha2, fillColor*alpha1);
+  }
+]]
+
+local n = -3*depth/100
+n = (3+n)/(3-n)
+if size<2 or n<0.002 then return end
+
+if useLinewAsIs==0 then lineW = size*lineW/200 end
+
+-- color
+local function color2rgba(col, alpha)
+  local r,g,b = RGB(col)
+  r,g,b = r/255*alpha, g/255*alpha, b/255*alpha
+  return r,g,b,alpha
+end
+local fillColorVec = {color2rgba(fillColor, fillAlpha/100)}
+local lineColorVec = {color2rgba(lineColor, lineAlpha/100)}
+
+local sy = size*0.5
+local sx = sy*xRatio/100
+local offset = lineW*0.5*linePos
+
+obj.setoption("drawtarget", "tempbuffer",(sx+offset)*2,(sy+offset)*2)
+obj.pixelshader("psmain", "tempbuffer", {}, {
+  fillColorVec[1], fillColorVec[2], fillColorVec[3], fillColorVec[4], -- fillColor
+  lineColorVec[1], lineColorVec[2], lineColorVec[3], lineColorVec[4], -- liineColor
+  sx+offset, sy+offset, -- half im size
+  sx, sy, -- half size
+  n,
+  lineW,
+  linePos,
+  remainLine
+})
+obj.load("tempbuffer")

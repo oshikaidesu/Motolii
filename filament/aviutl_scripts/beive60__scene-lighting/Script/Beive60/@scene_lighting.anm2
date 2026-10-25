@@ -1,0 +1,266 @@
+@scene_lighting
+--track@bg_layer:背景レイヤー,-20,-1,-1,1
+--track@blend_mode:ブレンドモード,0,3,1,1
+--track@intensity:強度,0,100,50,1
+--track@blur_radius:ブラー半径,1,100,15,1
+--track@edge_width:エッジ幅,1,50,10,1
+--track@edge_threshold:エッジ閾値,1,255,16,1
+--check@enable_wrap:ライトラップ,true
+--check@enable_rim:リムライト,true
+--track@rim_angle:リムライト角度,-180,180,45,1
+--color@tint_color:ベースカラー,0xffffff
+--track@sampling_method:サンプリング,0,1,0,1
+--separator:ブレンドモード: 0=乗算 1=スクリーン 2=オーバーレイ 3=加算
+--separator:サンプリング: 0=平均 1=中央点
+
+-- 開発メモ:
+-- `--track@...` の 5 番目は移動単位、7 番目は操作倍率。
+-- このスクリプトの整数パラメータは、値の意味上の最小単位に合わせて 1 を使う。
+-- 刻みを粗くしたい場合だけ 5 番目を変更し、ドラッグ量を抑えたい場合だけ 7 番目を使う。
+-- 操作倍率は 1.0 以下のみ指定できるため、既定より大きく動かす用途には使えない。
+
+-- scene_lighting.anm2  v2
+-- シーンライティング: 背景の環境光を前景オブジェクトに適応させるコンポジット効果
+--
+-- Lua : 前景/背景キャッシュ生成 + 環境色サンプリング + パラメータ渡し
+-- HLSL: エッジ検出 + 環境色ブレンド + ライトラップ + リムライト (1 パス)
+
+--[[pixelshader@scene_lighting_main:
+Texture2D src : register(t0);
+
+cbuffer constant0 : register(b0)
+{
+    float amb_r;        // 0-1
+    float amb_g;
+    float amb_b;
+    float intensity;
+    float edge_w;
+    float edge_thr;     // 0-1
+    float blend_mode;
+    float enable_wrap;
+    float enable_rim;
+    float light_dx;
+    float light_dy;
+    float _pad;
+};
+
+float blendCh(float f, float b, float mode) {
+    if (mode < 0.5) return f * b;
+    if (mode < 1.5) return 1.0 - (1.0 - f) * (1.0 - b);
+    if (mode < 2.5) return (f < 0.5) ? (2.0*f*b) : (1.0 - 2.0*(1.0-f)*(1.0-b));
+    return min(f + b, 1.0);
+}
+
+float4 scene_lighting_main(float4 pos : SV_Position) : SV_Target {
+    int ix = int(pos.x);
+    int iy = int(pos.y);
+    uint sw, sh;
+    src.GetDimensions(sw, sh);
+
+    float4 c = src.Load(int3(ix, iy, 0));
+    float  a = c.a;
+    if (a < edge_thr) return c;
+
+    float3 amb = float3(amb_r, amb_g, amb_b);
+
+    // 環境色ブレンド
+    float3 blended;
+    blended.r = blendCh(c.r, amb.r, blend_mode);
+    blended.g = blendCh(c.g, amb.g, blend_mode);
+    blended.b = blendCh(c.b, amb.b, blend_mode);
+    float3 rgb = lerp(c.rgb, blended, intensity);
+
+    // エッジ検出: edge_w 画素分外側にサンプリングし、
+    // 最近傍透明画素の距離 k から em = 1 - (k-1)/edge_w のグラデーションを算出
+    static const int MAX_EDGE_W = 50;
+    float em = 0.0;
+    float nx = 0.0;
+    float ny = 0.0;
+    int   iEdgeW = int(edge_w);
+    [loop]
+    for (int k = 1; k <= MAX_EDGE_W; k++) {
+        if (k > iEdgeW) break;
+        float a_l = src.Load(int3(max(ix-k, 0),          iy,                   0)).a;
+        float a_r = src.Load(int3(min(ix+k, int(sw)-1),  iy,                   0)).a;
+        float a_u = src.Load(int3(ix,                    max(iy-k, 0),          0)).a;
+        float a_d = src.Load(int3(ix,                    min(iy+k, int(sh)-1),  0)).a;
+        if (min(min(a_l, a_r), min(a_u, a_d)) < edge_thr) {
+            em = 1.0 - ((float)k - 1.0) / edge_w;
+            nx = step(edge_thr, a_r) - step(edge_thr, a_l);
+            ny = step(edge_thr, a_d) - step(edge_thr, a_u);
+            break;
+        }
+    }
+
+    if (em > 0.0) {
+        // ライトラップ
+        if (enable_wrap > 0.5) {
+            float ws = em * intensity * 0.5;
+            rgb = saturate(rgb + amb * ws);
+        }
+
+        // リムライト (勾配から疑似法線)
+        if (enable_rim > 0.5) {
+            float gl = length(float2(nx, ny));
+            if (gl > 0.001) {
+                float2 nrm = float2(nx, ny) / gl;
+                float  rim = max(0.0, dot(nrm, float2(light_dx, light_dy)));
+                rim = rim * em * intensity * 0.6;
+                rgb = saturate(rgb + amb * rim);
+            }
+        }
+    }
+
+    return float4(rgb, a);
+}
+]]
+
+-- ----------------------------------------------------------------
+-- パラメータ前処理
+-- ----------------------------------------------------------------
+local ffi = require("ffi")
+local edge_thr = math.max(1, math.floor(edge_threshold)) / 255.0
+local blend_mode_i = math.floor(blend_mode)
+local sampling_i = math.max(0, math.min(1, math.floor(sampling_method)))
+local intensity_f = intensity / 100.0
+local rim_angle_rad = math.rad(rim_angle)
+local light_dx = math.cos(rim_angle_rad)
+local light_dy = -math.sin(rim_angle_rad)
+
+local function clamp255(v)
+    if v < 0 then
+        return 0
+    elseif v > 255 then
+        return 255
+    end
+
+    return math.floor(v + 0.5)
+end
+
+-- ティントカラー分解 (0xRRGGBB → r, g, b)
+local tint_r = math.floor(tint_color / 0x10000) % 0x100
+local tint_g = math.floor(tint_color / 0x100) % 0x100
+local tint_b = tint_color % 0x100
+
+-- ================================================================
+-- 前景キャッシュ
+-- ================================================================
+local fg_w, fg_h = obj.w, obj.h
+if fg_w == 0 or fg_h == 0 then
+    error("[scene_lighting] fg size is zero. w=" .. tostring(fg_w) .. " h=" .. tostring(fg_h))
+end
+obj.copybuffer("cache:scene_lighting/fg", "object")
+
+-- ================================================================
+-- パス 2: 背景レイヤーデータ取得
+-- ================================================================
+-- bg_layer トラックバー値（例: -1 = 1 つ下のレイヤー）を絶対レイヤー番号に換算し、
+-- obj.copybuffer でそのレイヤーの描画結果を一時バッファにコピーする。
+-- AviUtl2 のバージョンや設定によっては取得できない場合があるため pcall で保護する。
+local bg_ptr
+local bg_w, bg_h = fg_w, fg_h
+local has_bg = false
+
+-- obj.load("layer", N) で目的レイヤーを object に読み込み、
+-- 復元前に専用キャッシュへ退避してから getpixeldata() で参照する。
+do
+    local target_layer = math.max(1, (obj.layer or 1) + math.floor(bg_layer))
+
+    pcall(function()
+        if not obj.load("layer", target_layer, true) then
+            return
+        end
+        if not obj.copybuffer("cache:scene_lighting/bg", "object") then
+            return
+        end
+        local ud, sampled_w, sampled_h = obj.getpixeldata("cache:scene_lighting/bg", "bgra")
+        if ud and sampled_w > 0 and sampled_h > 0 then
+            bg_ptr = ffi.cast("uint8_t*", ud)
+            bg_w = sampled_w
+            bg_h = sampled_h
+            has_bg = true
+        end
+    end)
+
+    -- obj.load で変更された "object" を FG キャッシュから必ず復元する
+    obj.copybuffer("object", "cache:scene_lighting/fg")
+end
+
+-- ================================================================
+-- パス 3: 環境色サンプリング
+-- ================================================================
+-- 背景バッファを低密度でサンプリングして代表色（環境光色）を算出する。
+local amb_r, amb_g, amb_b = 128, 128, 128
+
+if has_bg then
+    if sampling_i == 1 then
+        -- 中央点サンプリング: 均等配置の 5 点を平均
+        local pts = {
+            { math.floor(bg_w * 0.25), math.floor(bg_h * 0.25) },
+            { math.floor(bg_w * 0.75), math.floor(bg_h * 0.25) },
+            { math.floor(bg_w * 0.5), math.floor(bg_h * 0.5) },
+            { math.floor(bg_w * 0.25), math.floor(bg_h * 0.75) },
+            { math.floor(bg_w * 0.75), math.floor(bg_h * 0.75) },
+        }
+        local sr, sg, sb = 0, 0, 0
+        for _, pt in ipairs(pts) do
+            local pbase = (pt[2] * bg_w + pt[1]) * 4
+            sb = sb + bg_ptr[pbase]
+            sg = sg + bg_ptr[pbase + 1]
+            sr = sr + bg_ptr[pbase + 2]
+        end
+        amb_r = math.floor(sr / #pts)
+        amb_g = math.floor(sg / #pts)
+        amb_b = math.floor(sb / #pts)
+    else
+        -- 平均サンプリング: blur_radius をステップとして格子状にサンプリング
+        local step = math.max(1, math.floor(blur_radius))
+        local sr, sg, sb, cnt = 0, 0, 0, 0
+        for y = 0, bg_h - 1, step do
+            for x = 0, bg_w - 1, step do
+                local pbase = (y * bg_w + x) * 4
+                sb = sb + bg_ptr[pbase]
+                sg = sg + bg_ptr[pbase + 1]
+                sr = sr + bg_ptr[pbase + 2]
+                cnt = cnt + 1
+            end
+        end
+        if cnt > 0 then
+            amb_r = math.floor(sr / cnt)
+            amb_g = math.floor(sg / cnt)
+            amb_b = math.floor(sb / cnt)
+        end
+    end
+end
+
+-- ベースカラー（ティント）を乗算合成
+amb_r = clamp255(amb_r * tint_r / 255)
+amb_g = clamp255(amb_g * tint_g / 255)
+amb_b = clamp255(amb_b * tint_b / 255)
+
+-- ================================================================
+-- パス 4/5: ピクセルシェーダーでエッジ検出 + コンポジット
+-- ================================================================
+-- cb0 レイアウト (float × 12, 4 要素ずつ float4[3] にパック):
+--   [0..3]  amb_r/255, amb_g/255, amb_b/255, intensity_f
+--   [4..7]  edge_w,    edge_thr(0–1), blend_mode_i, enable_wrap(0/1)
+--   [8..11] enable_rim(0/1), light_dx, light_dy, 0
+obj.pixelshader(
+    "scene_lighting_main",
+    "object",
+    "cache:scene_lighting/fg",
+    {
+        amb_r / 255.0,
+        amb_g / 255.0,
+        amb_b / 255.0,
+        intensity_f,
+        math.max(1, math.floor(edge_width)),
+        edge_thr,
+        blend_mode_i,
+        enable_wrap and 1.0 or 0.0,
+        enable_rim and 1.0 or 0.0,
+        light_dx,
+        light_dy,
+        0.0,
+    }
+)

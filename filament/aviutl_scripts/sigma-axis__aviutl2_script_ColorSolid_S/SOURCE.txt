@@ -1,0 +1,6 @@
+aviutl2_script_ColorSolid_S by sigma-axis
+licence: MIT
+from: https://github.com/sigma-axis/aviutl2_script_ColorSolid_S (branch main, commit fcf1fcf7c815) (commit fcf1fcf7c815)
+page: https://github.com/sigma-axis/aviutl2_script_ColorSolid_S
+left out: 2 other (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

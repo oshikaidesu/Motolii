@@ -1,0 +1,452 @@
+--information:Liquid Glass ver3.1.2
+--label:アニメーション効果
+
+--group:屈折
+--track@bezel:ベゼル幅,0,100,70,0.01
+--track@thickness:厚み,0,50,20,0.01
+--track@distort:歪み,0,500,350,0.01
+--track@aberr:色収差,0,100,100,0.01
+--group:ガラス
+--color@tint:色,0xffffff
+--track@density:濃度,0,100,0,0.01
+--group:ハイライト
+--track@specangle:角度,-180,180,123,0.1
+--track@spec:強さ,0,200,100,0.01
+--group:すりガラス
+--check@frost:有効,0
+--track@frostblur:ぼかし量,0,100,30,0.01
+--track@froststart:ぼかし開始,0,100,0,0.01
+--track@frostedge:ぼかし遷移,0,100,50,0.01
+--group:品質
+--track@workres:計算解像度,64,3840,1920,1
+--group:デバッグ,false
+--check@showmask:距離場を確認,0
+
+-- Liquid Glass for AviUtl2
+-- Copyright (c) 2026 Tettu0530 / MIT License
+-- https://github.com/Tettu0530/Liquid-Glass
+
+--[[pixelshader@psbox:
+
+// ボックスぼかし(分離型)
+// 一様カーネルなので、輪郭付近で値が距離に対して線形に変化する。
+// これを符号付き距離場の代わりに使う。
+cbuffer constant0 : register(b0) {
+    float cb_radius;    // ぼかし半径(px)
+    float cb_dirX;
+    float cb_dirY;
+    float cb_w;
+    float cb_h;
+    float cb_gauss;     // 0=一様(距離場用) / 1=ガウス(すりガラス用)
+};
+
+Texture2D tex0 : register(t0);
+
+float4 psbox(float4 pos : SV_Position) : SV_Target {
+    float2 p    = pos.xy - 0.5;
+    float2 maxp = float2(cb_w - 1.0, cb_h - 1.0);
+
+    if (cb_radius < 1.0) {
+        return tex0.Load(int3(int(p.x), int(p.y), 0));
+    }
+
+    float2 dir = float2(cb_dirX, cb_dirY);
+    const int N = 48;
+    float stp   = cb_radius / (float)N;
+    float sigma = max(cb_radius * 0.4, 0.5);
+
+    float4 sum  = float4(0.0, 0.0, 0.0, 0.0);
+    float  wsum = 0.0;
+    [loop] for (int i = -N; i <= N; i++) {
+        float d = (float)i * stp;
+        float w = (cb_gauss > 0.5) ? exp(-(d * d) / (2.0 * sigma * sigma)) : 1.0;
+        float2 q = clamp(p + dir * d, float2(0.0, 0.0), maxp);
+        sum  += tex0.Load(int3(int(q.x), int(q.y), 0)) * w;
+        wsum += w;
+    }
+    return sum / wsum;
+}
+
+]]
+
+--[[pixelshader@psresize:
+
+// UVベースのリサンプル。拡大にも縮小にも使う汎用コピー。
+// (出力先と入力のサイズが異なっていて良い。Sample()はUV座標なので
+//  テクスチャの実ピクセル数に依存しない)
+cbuffer constant0 : register(b0) {
+    float cb_dummy0;
+    float cb_dummy1;
+    float cb_dstW;
+    float cb_dstH;
+};
+
+Texture2D    tex0  : register(t0);
+SamplerState samp0 : register(s0);
+
+float4 psresize(float4 pos : SV_Position) : SV_Target {
+    float2 uv = (pos.xy - 0.5) / float2(cb_dstW, cb_dstH);
+    return tex0.Sample(samp0, saturate(uv));
+}
+
+]]
+
+--[[pixelshader@psmain:
+
+// 定数バッファ: Luaから渡されるパラメータ
+// 距離の単位は「画面の高さ=1.0」に正規化した値
+cbuffer constant0 : register(b0) {
+    float cb_bezelWidth;
+    float cb_baseThickness;
+    float cb_distortion;
+    float cb_aberration;
+    float cb_specular;
+    float cb_specAngle;   // 光源の向き(ラジアン)
+    float cb_aspect;
+    float cb_w;           // 出力(framebuffer)の幅
+    float cb_h;           // 出力(framebuffer)の高さ
+    float cb_workH;       // 距離場/マスクの作業解像度の高さ(勾配の刻み幅用)
+    float cb_alpha;
+    float cb_frost;     // 0=すりガラス無効 / 1=有効
+    float cb_frostStart; // すりガラスの開始位置 (0=輪郭 / 1=ベゼル内端)
+    float cb_frostEdge;  // すりガラスの遷移幅 (0=くっきり / 1=ベゼル全体)
+    float cb_tintR;      // ガラスの色
+    float cb_tintG;
+    float cb_tintB;
+    float cb_density;    // 濃度 (0=透明)
+};
+
+Texture2D    tex0  : register(t0);   // 背景(退避したフレームバッファ、フル解像度)
+Texture2D    tex1  : register(t1);   // 距離場(ぼかしたマスク、作業解像度)
+Texture2D    tex2  : register(t2);   // マスク原本(輪郭のアンチエイリアス用、作業解像度)
+Texture2D    tex3  : register(t3);   // ぼかした背景(すりガラス用、作業解像度)
+SamplerState samp0 : register(s0);
+
+// 高さ関数: 凸 (circular arc)
+float convex(float x) {
+    return sqrt(saturate(1.0 - pow(1.0 - x, 2.0)));
+}
+
+// 凹曲線 (squircle)
+float convex_squircle(float x) {
+    return 1.0 - convex(x);
+}
+
+// 液体らしいS字曲線
+float i_func(float x) {
+    return convex_squircle(x);
+}
+
+// 距離場の値。0.5=輪郭 / 0.5より上=内側 / 下=外側
+// マスク/距離場は作業解像度のバッファだが、出力と同じUV空間(0..1)を
+// 共有しているので、出力側のuvをそのままSample()できる。
+float fieldAt(float2 uv) {
+    return tex1.Sample(samp0, saturate(uv)).a;
+}
+
+float4 psmain(float4 pos : SV_Position) : SV_Target {
+    float2 uv = pos.xy / float2(cb_w, cb_h);
+
+    // 形の外は完全に透明。輪郭のアンチエイリアスは図形のαをそのまま使う
+    float  maskA = tex2.Sample(samp0, saturate(uv)).a;
+    if (maskA <= 0.0) return float4(0.0, 0.0, 0.0, 0.0);
+
+    // 輪郭からの距離を正規化 (ぼかし半径=ベゼル幅なので、そのまま0..1になる)
+    float bezelW = max(cb_bezelWidth, 1e-5);
+    float m = fieldAt(uv);
+    float x = saturate((m - 0.5) * 2.0);
+    float distFromEdge = x * bezelW;
+
+    // 高さと勾配の計算
+    float height = i_func(x);
+    float delta  = 0.002;
+    float h2     = i_func(saturate((distFromEdge + delta) / bezelW));
+    float slope  = (h2 - height) / delta;
+
+    // 面の向き: 距離場の勾配。内側へ増えるので反転して外向きにする
+    // (円の場合は中心からの放射方向と一致する)
+    // eはUV空間での刻み幅。作業解像度バッファの1texel分を下限にする。
+    float  e  = max(bezelW * 0.08, 1.0 / max(cb_workH, 1.0));
+    float  gx = fieldAt(uv + float2(e, 0.0)) - fieldAt(uv - float2(e, 0.0));
+    float  gy = fieldAt(uv + float2(0.0, e)) - fieldAt(uv - float2(0.0, e));
+    float2 g  = float2(gx, gy);
+    float  gl = length(g);
+    float2 offsetDir = (gl > 1e-6) ? (-g / gl) : float2(0.0, 0.0);
+
+    // 勾配の大きさを正規化する。
+    // 輪郭がひとつだけなら距離場は 2*ぼかし半径 で 0→1 に変化するので、
+    // 中心差分の理論値は e/半径 になる。
+    // 形が細くて上下(左右)のベゼルが重なる中心線では勾配が打ち消し合って
+    // 小さくなるので、これを掛けると面の傾きに比例した自然な減衰になり、
+    // 中心線での変位の不連続が消える。
+    float gref  = e / max(bezelW, 1e-6);
+    float gnorm = saturate(gl / max(gref, 1e-6));
+
+    // 物理ベースの屈折量
+    // 輪郭の極近傍で発散するので、画面半分ぶんで頭打ちにする
+    float totalDisp = height * slope * cb_baseThickness * cb_distortion * gnorm;
+    totalDisp = clamp(totalDisp, -0.5, 0.5);
+
+    // 画面高さ基準の変位をUV変位へ変換 (横方向はアスペクト比で割る)
+    float2 toUV = float2(1.0 / cb_aspect, 1.0);
+    float2 disp = offsetDir * totalDisp * toUV;
+
+    // 三原色の色収差サンプリング
+    float2 uv_r = saturate(uv + disp * (1.0 - cb_aberration));
+    float2 uv_g = saturate(uv + disp);
+    float2 uv_b = saturate(uv + disp * (1.0 + cb_aberration));
+
+    float4 col_r = tex0.Sample(samp0, uv_r);
+    float4 col_g = tex0.Sample(samp0, uv_g);
+    float4 col_b = tex0.Sample(samp0, uv_b);
+
+    float3 color = float3(col_r.r, col_g.g, col_b.b);
+
+    // すりガラス
+    // 一様にぼかすと縁の屈折と色収差が潰れてしまうので、距離場で混ぜ具合を
+    // 変える。傾斜のある縁は鮮明なまま、平らな内側だけがすりガラスになる。
+    // 開始位置からぼかし始め、遷移幅ぶんかけて全量に達する。
+    if (cb_frost > 0.5) {
+        float3 blurred  = tex3.Sample(samp0, uv_g).rgb;
+        float  fs       = cb_frostStart;
+        float  frostMix = smoothstep(fs, fs + max(cb_frostEdge, 0.02), x);
+        color = lerp(color, blurred, frostMix);
+    }
+
+    float4 orig = tex0.Sample(samp0, uv);
+
+    // ガラスの吸収 (ベール・ランベルトの法則)
+    //
+    // 透過光は exp(-吸収係数 × 光路長) で減衰する。
+    // 吸収係数は「色を白から引いた残り」= 補色成分。灰色を選べば全チャンネルが
+    // 等しく吸収されて減光ガラスに、色を選べばその補色が吸収されて色調ガラスに
+    // なる。暗い色を選べば両方が同時に起きる。
+    // 光路長はガラスの厚み convex(x) に比例する。中央は厚く、縁ほど薄いので、
+    // 縁に向かって色が浅くなる。本物の色ガラスと同じ振る舞い。
+    if (cb_density > 0.0) {
+        float3 absorb = float3(1.0 - cb_tintR, 1.0 - cb_tintG, 1.0 - cb_tintB)
+                      * (cb_density * 3.5);
+        float  path   = 1.0 - height;          // = convex(x) ガラスの厚み
+        color *= exp(-absorb * path);
+    }
+
+    // スペキュラーハイライト (フレネル反射)
+    //
+    // 光るのは一番外側の輪郭線。ガラス面の高さ convex(x) は輪郭で勾配が
+    // 発散する、つまり最外周は切り立った壁になっていて、そこを視線が
+    // かすめるので反射率が1に近づく。これを Schlick の近似で求める。
+    //   N.z = 1 (平らな内側) → 反射0
+    //   N.z → 0 (切り立った外周) → 反射1
+    // 5乗なので減衰が速く、輪郭に沿った細い線になる。
+    float  u    = 1.0 - x;
+    float  dZdx = min(u / sqrt(max(1.0 - u * u, 1e-4)), 8.0);
+    float3 N    = normalize(float3(dZdx * offsetDir, 1.0));
+    float  fres = pow(1.0 - saturate(N.z), 5.0);
+
+    // どの向きの縁が光るかは、外向き法線と光源方向の一致度で決める。
+    // (0度=右 / 90度=上)
+    // 逆向きにも半分の強さで回り込ませ、向かい側の縁にも弱い光を出す。
+    float2 ldir = float2(cos(cb_specAngle), -sin(cb_specAngle));
+    float  nl   = dot(offsetDir, ldir);
+    float  lobe = pow(saturate(nl), 2.0) + pow(saturate(-nl), 2.0) * 0.5;
+
+    color = color + fres * lobe * cb_specular;
+
+    // 元画像のαと形のαを合成 (乗算済みαで出力)
+    float a = maskA * cb_alpha * orig.a;
+    return float4(color * a, a);
+}
+
+]]
+
+-- ------------------------------------------------------------------
+-- Lua処理
+--
+--  1. 背景を退避してフレームバッファを空にし、オブジェクトをそのまま描いて
+--     形(α)を取得する。変形を自前で再現せずAviUtl2に描かせるので、座標・
+--     拡大率・縦横比・回転・中心・カメラ制御・手前のフィルタ効果まで完全に
+--     一致した形が得られる。
+--  2. マスクを縮小した「作業解像度」へ落とし、そこでベゼル幅ぶんの距離場を作る
+--  3. すりガラスが有効なら、背景も作業解像度に縮小してガウスぼかしする
+--  4. 退避した背景(フル解像度)を屈折させ、フレームバッファへ直接合成する
+--
+-- 4K(3840x2160)等の高解像度シーンで発生していた不具合の調査結果、以下を
+-- 徹底している。
+--  ・tempbufferは使わない。framebufferから直接cache:バッファへコピーする
+--    方式は安定しているが、tempbufferは2回目以降の読み出しが不安定になる。
+--  ・framebufferへの書き込みはobj.copybuffer()を使わず、pixelshaderの
+--    コピー機能(copy_to_framebuffer)を使う。copybuffer(dst="framebuffer")
+--    は不安定だが、pixelshaderでの書き込みは安定している。
+--  ・pixelshaderの出力先は必ず事前にcopybuffer等で作成しておく。
+--  ・pixelshaderが同時に参照する複数のcache:バッファの「合計サイズ」に
+--    上限がある(実測で4K・2枚63MBは失敗、44MBは成功)。上限を超えると、
+--    例外は出ないまま古いバッファから無効(内容が読めない状態)になる。
+--    このため、同時に参照するバッファは背景(フル解像度)以外は全て
+--    大幅に縮小した「作業解像度」で扱い、合計サイズを抑える。
+-- ------------------------------------------------------------------
+
+-- obj.screen_w/hは「スクリーンサイズ」であり、キャンバスと出力解像度が
+-- 異なるプロジェクト(例: 4Kキャンバス→1080p出力)では、実際にframebufferが
+-- 使っているピクセルサイズと一致しない場合がある。念のためobj.screen_w/hを
+-- 信用せず、framebufferの実寸を直接問い合わせる。
+obj.pixeloption("get", "framebuffer")
+local sw, sh = obj.getpixel()
+local aspect = (sw and sh and sh ~= 0) and (sw / sh) or 1
+
+-- 距離場・マスク・すりガラス用ぼかしを処理する作業解像度。
+-- 「背景(フル解像度) + 作業用4枚(mask,tmp,sdf,frost)」の合計サイズが
+-- SAFE_BUDGET_MBに収まるように動的に決める。1080p程度なら合計が十分
+-- 小さいのでほぼ等倍のまま(=以前と同じ精度)になり、4K等の大きい解像度
+-- でだけ縮小がかかる。実測ではおおよそ50MBを超えたあたりから同時参照する
+-- バッファが壊れ始めたので、余裕を持って35MBを目標にしている。
+-- これらは元々「ぼかし」前提の低周波な情報なので、縮小しても見た目への
+-- 影響は小さい。背景(bg)だけはフル解像度のまま扱い、屈折後の鮮明さを保つ。
+local SAFE_BUDGET_MB = 35
+local bytes_per_px = 4
+local mb = 1024 * 1024
+local bg_mb = (sw * sh * bytes_per_px) / mb
+local per_buf_mb = math.max((SAFE_BUDGET_MB - bg_mb) / 4, 0.25)
+local native_per_buf_mb = (sw * sh * bytes_per_px) / mb
+local wscale_auto = math.min(1, math.sqrt(per_buf_mb / native_per_buf_mb))
+if wscale_auto > 0.95 then wscale_auto = 1 end -- 誤差レベルの縮小はしない
+
+-- 「計算解像度」はユーザーが下げる方向にのみ使える上限。安全計算(wscale_auto)
+-- を上回ることはできない(上げすぎて同時参照バッファが壊れるのを防ぐため)。
+local wscale_user = math.min(1, workres / math.max(sw, sh))
+local wscale = math.min(wscale_auto, wscale_user)
+
+local ww = math.max(2, math.floor(sw * wscale + 0.5))
+local wh = math.max(2, math.floor(sh * wscale + 0.5))
+
+-- パラメータをスケーリング
+-- ベゼル幅・厚み・歪み・色収差は /1000 で正規化 (距離は画面の高さ=1.0 基準)
+-- ハイライトのみ /200 で、200 = 白を全量加算
+local p_bezel     = bezel / 1000.0
+local p_thickness = thickness / 1000.0
+local p_distort   = distort / 1000.0
+local p_aberr     = aberr / 1000.0
+local p_spec      = spec / 100.0
+local p_specang   = specangle * math.pi / 180.0
+local p_frost     = frostblur / 1000.0
+local p_froststart = froststart / 100.0
+local p_frostedge  = frostedge / 100.0
+local p_density    = density / 100.0
+local t_r, t_g, t_b = RGB(tint)
+
+-- Luaでは 0 も真になるので、チェックボックスは明示的に判定する
+local function is_on(v)
+    return (v ~= nil) and (v ~= false) and (v ~= 0)
+end
+
+-- obj.copybuffer(dst="framebuffer", ...)は不安定なため、
+-- 代わりにpsboxをコピー用途で流用する。
+-- psboxは半径0だと単純なコピー(tex0.Load()をそのまま返す)になる分岐を持つ。
+-- src,dstが同じサイズであることが前提(異なるサイズの拡大縮小はresizeを使う)。
+local function copy_to_framebuffer(src)
+    obj.pixelshader("psbox", "framebuffer", src, { 0, 0, 0, sw, sh, 0 }, "copy")
+end
+
+-- 任意サイズの、確実に「事前に存在する」cache:バッファを用意する。
+-- pixelshaderは出力先を自動生成しないため、この関数で先にサイズだけ
+-- 確保しておく必要がある。tempbufferのサイズ指定機能を、作成のためだけに
+-- 一時的に使う(描画は一切行わない。中身がどうであれ直後に上書きされる)。
+-- tempbufferは「作成直後の1回目の読み出し」だけは安定して成功することが
+-- 実測で確認できている(2回目以降が不安定)。ここではその1回しか読まない
+-- ので問題ない。
+local function make_sized_cache(name, w, h)
+    obj.setoption("drawtarget", "tempbuffer", w, h)
+    local ok = obj.copybuffer(name, "tempbuffer")
+    obj.setoption("drawtarget", "framebuffer")
+    return ok
+end
+
+-- srcを、事前にmake_sized_cacheで用意したdst(サイズdstW×dstH)へ
+-- リサンプルする(拡大・縮小どちらにも使える)。
+local function resize(dst, src, dstW, dstH)
+    obj.pixelshader("psresize", dst, src, { 0, 0, dstW, dstH }, "copy")
+end
+
+if obj.w > 0 and obj.h > 0 then
+
+    local o_alpha = obj.alpha
+
+    -- 1) 背景を退避し、空のフレームバッファへオブジェクトを描いて形を取得する
+    -- obj.copybuffer()は失敗するとfalseを返す仕様(lua.txt記載)。
+    -- 失敗した場合は無理に処理を続けず、このフレームは通常描画にフォールバックする。
+    local bg_saved = obj.copybuffer("cache:lg_bg", "framebuffer")
+    local ok = bg_saved
+
+    if ok then
+        obj.clearbuffer("framebuffer")
+
+        obj.alpha = 1                      -- 不透明度は最後に掛けるので形は不透明で取る
+        obj.setoption("blend", "none")     -- 合成モードがマスクを壊さないようにする
+        obj.draw()
+        obj.alpha = o_alpha
+
+        -- マスクは framebuffer(フル解像度) から直接、作業解像度へ縮小して取る。
+        -- 等倍のマスク用バッファを別途作らない(合計サイズを増やさないため)。
+        ok = make_sized_cache("cache:lg_mask", ww, wh)
+        if ok then
+            resize("cache:lg_mask", "framebuffer", ww, wh)
+        end
+
+        -- 背景を戻す (copybufferではなくpsbox経由のコピーを使う。理由は上記)
+        copy_to_framebuffer("cache:lg_bg")
+
+        -- lg_tmp/lg_sdfはこの後pixelshaderの出力先(レンダーターゲット)として使う。
+        -- 既に用意してあるcacheバッファ(lg_mask、作業解像度)経由でサイズだけ
+        -- 合わせて作る。中身はどうせ直後に上書きされる。
+        if ok then ok = obj.copybuffer("cache:lg_tmp", "cache:lg_mask") end
+        if ok then ok = obj.copybuffer("cache:lg_sdf", "cache:lg_mask") end
+    end
+
+    if ok then
+        -- 2) ベゼル幅と同じ半径でぼかして距離場にする(作業解像度で処理)
+        --    重みは一様(cb_gauss=0)。距離に対して線形になるのが必要なため。
+        local rpx = p_bezel * wh
+        obj.pixelshader("psbox", "cache:lg_tmp", "cache:lg_mask", { rpx, 1, 0, ww, wh, 0 }, "copy")
+        obj.pixelshader("psbox", "cache:lg_sdf", "cache:lg_tmp",  { rpx, 0, 1, ww, wh, 0 }, "copy")
+
+        -- 3) すりガラス用に背景を作業解像度へ縮小し、ぼかしておく
+        --    (ぼかす前提の情報なので解像度を落としても違和感が出にくい)
+        --    重みはガウス(cb_gauss=1)
+        local use_frost = is_on(frost) and p_frost > 0.0
+        local frost_ok = make_sized_cache("cache:lg_frost", ww, wh)
+        if frost_ok then
+            resize("cache:lg_frost", "cache:lg_bg", ww, wh)
+            if use_frost then
+                local fpx = p_frost * wh
+                obj.pixelshader("psbox", "cache:lg_tmp",   "cache:lg_frost", { fpx, 1, 0, ww, wh, 1 }, "copy")
+                obj.pixelshader("psbox", "cache:lg_frost", "cache:lg_tmp",   { fpx, 0, 1, ww, wh, 1 }, "copy")
+            end
+
+            -- 4) 屈折させてフレームバッファへ合成する
+            if is_on(showmask) then
+                -- 距離場(作業解像度)を確認用に拡大して表示する
+                copy_to_framebuffer("cache:lg_bg") -- 一旦背景を出しておく(念のため)
+                obj.pixelshader("psresize", "framebuffer", "cache:lg_sdf", { 0, 0, sw, sh }, "copy")
+            else
+                obj.pixelshader("psmain", "framebuffer",
+                    { "cache:lg_bg", "cache:lg_sdf", "cache:lg_mask", "cache:lg_frost" },
+                    { p_bezel, p_thickness, p_distort, p_aberr, p_spec, p_specang,
+                      aspect, sw, sh, wh, o_alpha,
+                      use_frost and 1 or 0, p_froststart, p_frostedge,
+                      t_r / 255.0, t_g / 255.0, t_b / 255.0, p_density }, "draw")
+            end
+
+            -- 自前で描画済みなので、通常の描画は行わせない
+            obj.setoption("draw_state", true)
+        else
+            ok = false
+        end
+    end
+
+    if not ok and bg_saved then
+        -- マスク抽出のためframebufferを書き換えた後に失敗した場合は、
+        -- 元の背景に戻す。draw_stateは立てていないので、この後の通常の
+        -- (自動)描画にフォールバックする。
+        copy_to_framebuffer("cache:lg_bg")
+    end
+    -- bg_savedがfalseの場合はframebufferに一切触れていないので何もしない
+end

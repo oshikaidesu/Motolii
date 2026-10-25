@@ -1,0 +1,161 @@
+--information:LyricMotioN r5 by 猫愛
+--label:アニメーション効果
+
+--track@motion:動き,0,1,0,0.001
+--select@anim_type:タイプ=0,In=0,Out=1
+--select@order:順序=0,先頭から=0,末尾から=1,中央から=2,外側から=3,ランダム=4
+--track@seed_order4:順序用シード,0,9000,0,1
+--track@delay:ズレ,0,100,10,0.01
+--track@seed:シード,0,9000,0,1
+--track@vector:移動距離,-10000,10000,100,0.01
+--check@in_out_disable:In/Out非表示,true
+--group:有効方向指定
+--check@enable_direction_x:X,true
+--check@enable_direction_mx:-X,true
+--check@enable_direction_y:Y,true
+--check@enable_direction_my:-Y,true
+--check@enable_direction_z:Z,false
+--check@enable_direction_mz:-Z,false
+--group:その他
+--check@allow_same_direction:被りあり,false
+--check@fade:フェード,false
+--track@zoom:拡大率,0,1000,100,0.01
+
+
+
+
+
+
+delay = delay * 0.01
+
+local enableDirection = {}
+if enable_direction_x then table.insert(enableDirection,"x") end
+if enable_direction_mx then table.insert(enableDirection,"-x") end
+if enable_direction_y then table.insert(enableDirection,"y") end
+if enable_direction_my then table.insert(enableDirection,"-y") end
+if enable_direction_z then table.insert(enableDirection,"z") end
+if enable_direction_mz then table.insert(enableDirection,"-z") end
+
+
+
+local function get_direction(directions, rand, i, plus)
+  return directions[(rand + plus) % #directions + 1]
+end
+
+local function generate_directions(directions, seed, n, allow_same_direction)
+  local a = {}
+  local rand = 0
+  math.randomseed(seed or 0)
+  for i=0, n do
+    rand = math.random(1, math.max(#directions,1))
+    a[i] = get_direction(directions, rand, i, 0)
+    if (i > 0) and (a[i-1] == a[i]) and not allow_same_direction then
+      a[i] = get_direction(directions, rand, i, 1)
+    end
+  end
+  return a
+end
+
+
+if NeAcLyricMotion == nil then NeAcLyricMotion = {} end
+if NeAcLyricMotion[obj.effect_id] == nil then NeAcLyricMotion[obj.effect_id] = {} end
+if (obj.index == 0) then
+  NeAcLyricMotion[obj.effect_id].directions = generate_directions(enableDirection, seed, obj.num, allow_same_direction)
+  local numbers = {}
+  for i = 0, obj.num - 1 do
+    numbers[i] = i
+  end
+  local j
+  math.randomseed(seed_order4 or 0)
+  for i = #numbers-1, 0, -1 do
+    j = math.random(i)
+    numbers[i], numbers[j] = numbers[j], numbers[i]
+  end
+  NeAcLyricMotion[obj.effect_id].order = numbers
+end
+local direction = NeAcLyricMotion[obj.effect_id].directions[obj.index]
+
+
+
+
+
+local function clamp(x)
+  return (x <= 0 and 0) or (x >= 1 and 1) or x
+end
+local function sequence(t, delay, index, num)
+  if (t < 0) then
+    t, index = -t, num - index
+  end
+  return clamp(t * (1 + delay * num) - delay * index)
+end
+
+
+local Order = {
+  [0] = function()
+    return obj.index
+  end,
+  function()
+    return (obj.num - 1) - obj.index
+  end,
+  function()
+    return math.abs((obj.num) - obj.index * 2 - 1)
+  end,
+  function()
+    return obj.num - math.abs((obj.num) - obj.index * 2 - 1)
+  end,
+  function()
+    return NeAcLyricMotion[obj.effect_id].order[obj.index]
+  end
+}
+
+
+
+
+local function Ease(t, delay, index, num, mode)
+  if ( not (mode == "in") and not (mode == "out") ) then
+    return t
+  end
+
+
+  local seq = clamp(t * (1 + delay * num) - delay * index)
+
+
+  if (obj.getvalue("track.motion", 0) == obj.getvalue("track.motion", 0, -1)) then
+    return (seq * obj.totaltime)
+  end
+
+  local motion = obj.getvalue("track.motion", (seq * obj.totaltime))
+
+  if (mode == "in") then
+    motion = 1 - motion
+  end
+
+  return motion
+end
+
+
+
+
+
+
+local vector_in, vector_out = 0, 0
+local anim = obj.frame / (obj.totalframe - 1)
+if anim_type == 0 then
+  vector_in = Ease(anim, delay, Order[order % 5](), obj.num - 1, "in")
+elseif anim_type == 1 then
+  vector_out = Ease(anim, delay, Order[order % 5](), obj.num - 1, "out")
+end
+
+
+
+
+local pos = {(direction=="x" and 1 or direction=="-x" and -1 or 0) * vector, (direction=="y" and 1 or direction=="-y" and -1 or 0) * vector, (direction=="z" and 1 or direction=="-z" and -1 or 0) * vector}
+
+local va = 1 - (1 - vector_in) * (1 - vector_out)
+obj.ox = obj.ox + pos[1] * vector_in + pos[1] * vector_out
+obj.oy = obj.oy + pos[2] * vector_in + pos[2] * vector_out
+obj.oz = obj.oz + pos[3] * vector_in + pos[3] * vector_out
+zoom = zoom - 100
+obj.zoom = obj.zoom + zoom * 0.01 * va * vector_in + zoom * 0.01 * vector_out
+obj.alpha = obj.alpha * (fade and (1 - math.abs(va)) or (in_out_disable and (1 - ((math.ceil(math.abs(va)*1000)/1000 < 1) and 0 or 1) ) or 1))
+

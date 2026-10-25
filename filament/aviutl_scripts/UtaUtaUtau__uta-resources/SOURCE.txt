@@ -1,0 +1,5 @@
+uta-resources by UtaUtaUtau
+licence: MIT
+from: https://github.com/UtaUtaUtau/uta-resources (branch main, commit cf3311cdd493) (commit cf3311cdd493)
+page: https://github.com/UtaUtaUtau/uta-resources
+Put here unchanged for Motolii (filament/aviutl_scripts).

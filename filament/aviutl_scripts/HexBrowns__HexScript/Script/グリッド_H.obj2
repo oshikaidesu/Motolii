@@ -1,0 +1,835 @@
+--information:グリッド_H v1.00 by HexBrowns
+--label:HexScript
+--object
+
+--group:形の設定
+--select@kind:種類=5,方眼=5,横線=0,縦線=1,斜め格子=2,三角格子=3,六角格子=4,円=6,四角=7,ひし形=8,多角形=9,星=10,十字=11,バツ=12
+--track@width:幅,0,8000,0,1,画面
+--track@height:高さ,0,8000,0,1,画面
+--track@pitch_x:間隔X,2,2000,100,0.1
+--hide@pitch_x:kind==0
+--track@pitch_y:間隔Y,2,2000,100,0.1
+--hide@pitch_y:kind==1
+--track@size_x:大きさX,0,4000,40,0.1
+--hide@size_x:kind<6
+--track@size_y:大きさY,0,4000,40,0.1
+--hide@size_y:kind<6
+--group
+
+--group:線と図形の設定
+--track@line_w:線の太さ,0.1,500,2,0.1
+--hide@line_w:kind==6
+--hide@line_w:kind==7
+--hide@line_w:kind==8
+--hide@line_w:kind==9
+--hide@line_w:kind==10
+--track@stroke_w:枠の太さ,0,500,0,0.1,塗りつぶし
+--hide@stroke_w:kind<6
+--hide@stroke_w:kind>10
+--track@corner:角の丸み,0,500,0,0.1
+--hide@corner:kind<7
+--hide@corner:kind>10
+--track@sides:角数,3,32,5,1
+--hide@sides:kind<9
+--hide@sides:kind>10
+--track@star_depth:へこみ,0,100,50,0.1
+--hide@star_depth:kind<10
+--hide@star_depth:kind>10
+--track@slant:角度,5,85,45,0.1
+--hide@slant:kind<2
+--hide@slant:kind>2
+--track@shape_rot:図形の回転,-3600,3600,0,0.01
+--hide@shape_rot:kind<6
+--track@grid_rot:格子の回転,-3600,3600,0,0.01
+--track@row_shift:行ずらし,0,100,0,0.1
+--hide@row_shift:kind<5
+--color@color:色,0xffffff
+--color@bg:背景色,nil
+--group
+
+--group:主線と線種の設定
+--check@major:主線を入れる,0
+--hide@major:kind==4
+--hide@major:kind>5
+--track@major_every:主線の間隔,2,100,5,1
+--hide@major_every:kind==4
+--hide@major_every:kind>5
+--hide@major_every:major==0
+--track@major_w:主線の太さ,0.1,500,4,0.1
+--hide@major_w:kind==4
+--hide@major_w:kind>5
+--hide@major_w:major==0
+--color@major_color:主線の色,0xffffff
+--hide@major_color:kind==4
+--hide@major_color:kind>5
+--hide@major_color:major==0
+--select@dash:線種=0,実線=0,破線=1,点線=2
+--hide@dash:kind>5
+--track@dash_count:1辺の個数,1,200,5,1
+--hide@dash_count:kind>5
+--hide@dash_count:dash==0
+--track@dash_ratio:実部の割合,1,99,60,0.1
+--hide@dash_ratio:kind>5
+--hide@dash_ratio:dash==0
+--hide@dash_ratio:dash==2
+--group
+
+--group:位置とスクロールの設定
+--track@ofs_x:位置X,-100000,100000,0,0.1
+--track@ofs_y:位置Y,-100000,100000,0,0.1
+--trackgroup@ofs_x,ofs_y:位置
+--track@spd_x:速度X,-10000,10000,0,0.1
+--track@spd_y:速度Y,-10000,10000,0,0.1
+--trackgroup@spd_x,spd_y:速度
+--group
+
+--group:出現の設定
+--select@appear:出現の順=0,なし=0,左から=1,右から=2,上から=3,下から=4,中心から=5,外側から=6,ランダム=7
+--select@appear_line:線の出方=0,マスごと=0,伸びる=1
+--hide@appear_line:kind>5
+--hide@appear_line:appear==0
+--track@appear_span:出現にかける時間,0,60,1,0.01
+--hide@appear_span:appear==0
+--track@appear_dur:1マスの時間,0.01,10,0.3,0.01
+--hide@appear_dur:appear==0
+--track@appear_ease:出現の緩急,0,100,100,0.01
+--hide@appear_ease:appear==0
+--check@appear_exit:終わりに消える,0
+--hide@appear_exit:appear==0
+--track@seed:乱数シード,0,99999,0,1
+--hide@seed:appear<7
+--group
+
+--group:端のフェードの設定
+--select@fade:端のフェード=0,なし=0,四角=1,楕円=2
+--track@fade_w:フェード幅,0,100,20,0.1
+--hide@fade_w:fade==0
+--group
+
+--[[
+グリッド_H v1.00
+
+  線の網目や、円・四角・ひし形・多角形・星・十字・バツを等間隔に並べた模様を出す
+  カスタムオブジェクト。1 パスのピクセルシェーダーで描く。
+  仕様: AI/specifications/20260925_グリッド_H_spec.md
+  検証: AI/scripts/グリッド_H/verify_grid.py
+
+  ※このコメント内で行頭に @ を置かないこと。
+
+  --- 描き方 ---
+
+  線の格子は「平行線の族」の重ね合わせで描く。族ごとの幾何（法線・線の間隔・
+  辺の長さ・位相）は Lua で作り、シェーダーは族を同じ処理で回すだけ。
+  縦に伸ばした三角格子・斜め格子でも、伸ばした後の実空間で距離を測るので
+  線の太さは画素で一定になる。六角格子だけは辺が 1 本の直線にならないので、
+  画素を含む六角形の 6 辺との距離で描く。
+
+  図形は格子点ごとの距離関数。多角形・星は Lua で頂点を並べ、シェーダーの
+  多角形の距離関数に通す（縦横比が違っても枠の太さが正確）。
+
+  --- 座標 ---
+
+    キャンバスの中心が原点、右が X+、下が Y+（画素）
+    模様の座標 p = 回転(-格子の回転)(画素 - 中心) - (位置 + 速度 * 時刻)
+    位置と速度は回転の後で引くので、回した格子はその向きに沿って流れる
+
+  --- 出現 ---
+
+  各マス（線の格子の「伸びる」では各辺）に 0〜1 の順位を付け、
+  開始時刻 = 順位 * 出現にかける時間、そこから 1マスの時間で 0 → 1。
+  0 → 1 の形は「出現の緩急」トラックに付けた移動方法の曲線を 64 点で写したもの
+  （トーンカーブ_H と同じ読み方）。移動が無ければ直線。
+  順位は速度を足す前の位置で決める（流しながら出しても順番が入れ替わらない）。
+  終わりに消える は、最後のフレームを中心に時間を折り返した同じ計算。
+]]
+
+--[[pixelshader@ps_grid_h:
+cbuffer grid_h_params : register(b0) {
+    float4 ease[16];      // 出現の緩急。64 点（0..1 の入力に対する 0..1 の出力）
+    float4 fam_n[3];      // 線の族: xy = 単位法線, z = 線の間隔, w = 隣の線へ移ったときの辺の位相のずれ
+    float4 fam_t[3];      // 線の族: xy = 線の向き, z = 辺の長さ, w = 段ごとのずれ（レンガの縦線だけ）
+    float4 verts[32];     // 多角形・星の頂点（局所座標, 最大 64）。六角格子では 6 頂点のずれ
+    float4 col;           // 色（straight）
+    float4 major_col;     // 主線の色（straight）
+    float4 bg;            // 背景色（straight, a = 0 で透明）
+    float4 lat;           // 格子点の基底 a1 = xy, a2 = zw（模様の座標）
+    float2 canvas;        // キャンバスの幅・高さ
+    float2 offset;        // 位置 + 速度 * 時刻（模様の座標）
+    float2 ofs_static;    // 位置（出現の順位に使う）
+    float2 grid_cs;       // 格子の回転の cos, sin
+    float2 shape_cs;      // 図形の回転の cos, sin
+    float2 shape_half;    // 図形の半径 X, Y（ひし形は角の丸みの分を縮めた値）
+    float2 hex_ak;        // 六角格子: 中心間の距離, 縦の倍率
+    float kind;
+    float fam_count;
+    float line_w;
+    float stroke_w;
+    float corner;
+    float nverts;
+    float reach;          // 1 なら隣の 3x3 マスまで見る
+    float bound_r;        // 図形の外接円の半径（早期の打ち切りに使う）
+    float major_on;
+    float major_every;
+    float major_w;
+    float dash;           // 0 実線 / 1 破線 / 2 点線
+    float dash_count;
+    float dash_ratio;
+    float appear;         // 0 なし / 1..7 出現の順
+    float appear_line;    // 0 マスごと / 1 伸びる
+    float t_in;
+    float t_out;
+    float span;
+    float dur;
+    float seed;
+    float fade;
+    float fade_px;
+};
+
+// ループはすべて [loop]。[unroll] で 3x3 のマスや線の族を展開すると、シェーダーが 164KB に膨らみ
+// 初回のコンパイルに 2.2 秒かかった（実機 2026-09-25、GRI 1 周目の最初のフレーム 2219ms。fxc でも 2.25 秒 → [loop] で 0.25 秒）
+static const float SQRT3 = 1.7320508;
+
+float2 rot2(float2 v, float2 cs) {
+    return float2(cs.x * v.x - cs.y * v.y, cs.y * v.x + cs.x * v.y);
+}
+
+float lut_at(uint i) {
+    float4 v = ease[i >> 2];
+    uint r = i & 3;
+    float res = v.w;
+    if (r == 0) res = v.x;
+    else if (r == 1) res = v.y;
+    else if (r == 2) res = v.z;
+    return res;
+}
+
+float ease_at(float x) {
+    float xc = saturate(x) * 63.0;
+    float i0 = min(floor(xc), 62.0);
+    float f = xc - i0;
+    uint ii = (uint)i0;
+    return lerp(lut_at(ii), lut_at(ii + 1), f);
+}
+
+// 位置の整数ハッシュ（出現の順 ランダム）。共有する辺の中点が両側で同じ値になるよう、座標を丸めてから混ぜる
+float hash_pos(float2 q) {
+    int2 iq = (int2)floor(q + 0.37);
+    uint h = (asuint(iq.x) * 73856093u) ^ (asuint(iq.y) * 19349663u) ^ (asuint((int)seed) * 83492791u);
+    h = h ^ (h >> 16);
+    h = h * 0x7feb352du;
+    h = h ^ (h >> 15);
+    h = h * 0x846ca68bu;
+    h = h ^ (h >> 16);
+    return (float)(h >> 8) * (1.0 / 16777216.0);
+}
+
+// 速度を足す前のキャンバス上の位置
+float2 still_pos(float2 P) {
+    return rot2(P + ofs_static, grid_cs);
+}
+
+float rank_of(float2 P) {
+    float2 q0 = still_pos(P);
+    float2 hc = canvas * 0.5;
+    float r = 0.0;
+    if (appear < 1.5) r = (q0.x + hc.x) / canvas.x;
+    else if (appear < 2.5) r = (hc.x - q0.x) / canvas.x;
+    else if (appear < 3.5) r = (q0.y + hc.y) / canvas.y;
+    else if (appear < 4.5) r = (hc.y - q0.y) / canvas.y;
+    else if (appear < 5.5) r = length(q0) / length(hc);
+    else if (appear < 6.5) r = 1.0 - length(q0) / length(hc);
+    else r = hash_pos(P);
+    return saturate(r);
+}
+
+float progress(float rank) {
+    float st = rank * span;
+    float a = saturate((t_in - st) / dur);
+    float b = saturate((t_out - st) / dur);
+    return ease_at(min(a, b));
+}
+
+// 伸びる線: A から伸びるなら true
+bool grow_from_a(float2 A, float2 B) {
+    float2 qa = still_pos(A);
+    float2 qb = still_pos(B);
+    float sa = 0.0;
+    float sb = 0.0;
+    if (appear < 1.5) { sa = qa.x; sb = qb.x; }
+    else if (appear < 2.5) { sa = -qa.x; sb = -qb.x; }
+    else if (appear < 3.5) { sa = qa.y; sb = qb.y; }
+    else if (appear < 4.5) { sa = -qa.y; sb = -qb.y; }
+    else if (appear < 5.5) { sa = length(qa); sb = length(qb); }
+    else if (appear < 6.5) { sa = -length(qa); sb = -length(qb); }
+    return sa <= sb + 1e-3;
+}
+
+// 線の被覆率（box フィルタの近似）。細い線は太さで頭打ち
+float line_cov(float dist, float w) {
+    return saturate(min(w * 0.5 + 0.5 - dist, w));
+}
+
+// 辺に沿った破線・点線と、伸びる出現を掛ける。
+// dist = 線からの距離, s = 辺の始点 A からの距離, L = 辺の長さ
+float edge_cov(float dist, float w, float s, float L, bool is_main, float2 A, float2 B) {
+    float cov = line_cov(dist, w);
+    if (!is_main && dash > 0.5) {
+        float per = L / max(dash_count, 1.0);
+        float wv = s / per;
+        float da = abs(wv - round(wv)) * per;
+        if (dash < 1.5) {
+            cov = cov * saturate(dash_ratio * per * 0.5 - da + 0.5);
+        } else {
+            cov = line_cov(length(float2(dist, da)), w);
+        }
+    }
+    if (appear > 0.5 && appear_line > 0.5) {
+        float g = progress(rank_of((A + B) * 0.5));
+        float sg = grow_from_a(A, B) ? s : (L - s);
+        cov = cov * saturate(g * L - sg + 0.5);
+    }
+    return cov;
+}
+
+bool is_major_line(float m) {
+    float mm = m - major_every * floor(m / major_every);
+    return major_on > 0.5 && (mm < 0.5 || mm > major_every - 0.5);
+}
+
+// 格子点のうち p に最も近いもの（模様の座標）
+float2 nearest_lattice(float2 p) {
+    float2 a1 = lat.xy;
+    float2 a2 = lat.zw;
+    float det = a1.x * a2.y - a1.y * a2.x;
+    float u0 = round((p.x * a2.y - p.y * a2.x) / det);
+    float v0 = round((a1.x * p.y - a1.y * p.x) / det);
+    float2 best = u0 * a1 + v0 * a2;
+    float bd = dot(p - best, p - best);
+    [loop] for (int dj = -1; dj <= 1; dj++) {
+        [loop] for (int di = -1; di <= 1; di++) {
+            float2 c = (u0 + di) * a1 + (v0 + dj) * a2;
+            float d2 = dot(p - c, p - c);
+            if (d2 < bd) { bd = d2; best = c; }
+        }
+    }
+    return best;
+}
+
+float2 vtx(int i) {
+    float4 q = verts[i >> 1];
+    return ((i & 1) == 0) ? q.xy : q.zw;
+}
+
+// 線の格子（六角格子以外）。a_sub / a_main に被覆率を重ねる
+void draw_families(float2 p, inout float a_sub, inout float a_main) {
+    int nf = (int)fam_count;
+    [loop] for (int f = 0; f < 3; f++) {
+        if (f < nf) {
+            float4 fn = fam_n[f];
+            float4 ft = fam_t[f];
+            float2 n = fn.xy;
+            float h = fn.z;
+            float2 t = ft.xy;
+            float L = ft.z;
+            float course = 0.0;
+            if (abs(ft.w) > 1e-6) course = floor(dot(fam_n[0].xy, p) / fam_n[0].z);
+            float pn = dot(n, p) - course * ft.w;
+            float m0 = round(pn / h);
+            [loop] for (int k = -1; k <= 1; k++) {
+                float m = m0 + k;
+                float dist = abs(pn - m * h);
+                bool mj = is_major_line(m);
+                float w = mj ? major_w : line_w;
+                if (dist < w * 0.5 + 1.0) {
+                    float u = (dot(t, p) - m * fn.w) / L;
+                    float fu = u - floor(u);
+                    float2 F = p - (pn - m * h) * n;
+                    float2 A = F - fu * L * t;
+                    float2 B = A + L * t;
+                    float cov = edge_cov(dist, w, fu * L, L, mj, A, B);
+                    if (mj) a_main = a_main + cov * (1.0 - a_main);
+                    else a_sub = a_sub + cov * (1.0 - a_sub);
+                }
+            }
+        }
+    }
+}
+
+// 六角格子。p を含む六角形の中心を探し、その 6 辺との距離で描く
+float2 hex_center(float2 p) {
+    float a = hex_ak.x;
+    float k = hex_ak.y;
+    float rowh = a * SQRT3 * 0.5;
+    float2 p0 = float2(p.x, p.y / k);
+    float j0 = round(p0.y / rowh);
+    float2 best = float2(0.0, 0.0);
+    float bd = 1e30;
+    [loop] for (int dj = -1; dj <= 1; dj++) {
+        float j = j0 + dj;
+        float x0 = j * a * 0.5;
+        float i = round((p0.x - x0) / a);
+        float2 c = float2(i * a + x0, j * rowh);
+        float d2 = dot(p0 - c, p0 - c);
+        if (d2 < bd) { bd = d2; best = c; }
+    }
+    return float2(best.x, best.y * k);
+}
+
+void draw_hex(float2 p, inout float a_sub) {
+    float2 C = hex_center(p);
+    [loop] for (int i = 0; i < 6; i++) {
+        float2 A = C + vtx(i);
+        float2 B = C + vtx(i == 5 ? 0 : i + 1);
+        // 隣の六角形と同じ向きで数えるため、端点の順を座標で決める
+        bool swp = (A.x - B.x > 1e-3) || (abs(A.x - B.x) <= 1e-3 && A.y > B.y);
+        float2 A2 = swp ? B : A;
+        float2 B2 = swp ? A : B;
+        float2 e = B2 - A2;
+        float L = length(e);
+        float2 w = p - A2;
+        float s = clamp(dot(w, e) / (L * L), 0.0, 1.0) * L;
+        float dist = length(w - e * (s / L));
+        if (dist < line_w * 0.5 + 1.0) {
+            float cov = edge_cov(dist, line_w, s, L, false, A2, B2);
+            a_sub = a_sub + cov * (1.0 - a_sub);
+        }
+    }
+}
+
+// ---- 図形の距離関数（負が内側, 画素）
+
+float sd_box(float2 p, float2 b) {
+    float2 q = abs(p) - b;
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+}
+
+float sd_round_box(float2 p, float2 b, float r) {
+    return sd_box(p, b - r) - r;
+}
+
+// sd_box / sd_ellipse / sd_rhombus / sd_polygon は Inigo Quilez の 2D 距離関数による
+// (MIT, Copyright (c) Inigo Quilez) https://iquilezles.org/articles/distfunctions2d/
+// 楕円: 媒介変数の角度をニュートン法で詰める（iq の反復版）
+float sd_ellipse(float2 p, float2 ab) {
+    float2 q = abs(p);
+    float2 g = ab * (q - ab);
+    float w = (g.x < g.y) ? 1.5707963 : 0.0;
+    [loop] for (int i = 0; i < 6; i++) {
+        float2 cs = float2(cos(w), sin(w));
+        float2 u = ab * cs;
+        float2 v = ab * float2(-cs.y, cs.x);
+        // 中心ちょうどでは分母が 0 になる（0 / 0 の NaN は saturate で 0 になり、中心の画素が抜ける）
+        float den = dot(q - u, u) + dot(v, v);
+        float stp = (abs(den) > 1e-6) ? dot(q - u, v) / den : 0.0;
+        w = clamp(w + stp, 0.0, 1.5707963);
+    }
+    float d = length(q - ab * float2(cos(w), sin(w)));
+    float2 qn = q / ab;
+    return (dot(qn, qn) > 1.0) ? d : -d;
+}
+
+float sd_rhombus(float2 p, float2 b) {
+    float2 q = abs(p);
+    float h = clamp(((b.x - 2.0 * q.x) * b.x - (b.y - 2.0 * q.y) * b.y) / dot(b, b), -1.0, 1.0);
+    float d = length(q - 0.5 * b * float2(1.0 - h, 1.0 + h));
+    return d * sign(q.x * b.y + q.y * b.x - b.x * b.y);
+}
+
+// 任意の多角形（iq の sdPolygon）。頂点は verts
+float sd_polygon(float2 p) {
+    int n = (int)nverts;
+    float2 v0 = vtx(0);
+    float d = dot(p - v0, p - v0);
+    float s = 1.0;
+    float2 vj = vtx(n - 1);
+    [loop] for (int i = 0; i < n; i++) {
+        float2 vi = vtx(i);
+        float2 e = vj - vi;
+        float2 w = p - vi;
+        float2 b = w - e * saturate(dot(w, e) / dot(e, e));
+        d = min(d, dot(b, b));
+        bool c1 = p.y >= vi.y;
+        bool c2 = p.y < vj.y;
+        bool c3 = e.x * w.y > e.y * w.x;
+        if ((c1 && c2 && c3) || (!c1 && !c2 && !c3)) s = -s;
+        vj = vi;
+    }
+    return s * sqrt(d);
+}
+
+// 図形 1 個の距離（枠の太さを掛けた後）。l は図形の局所座標
+float shape_sd(float2 l) {
+    float d = 0.0;
+    if (kind > 10.5) {
+        // 十字・バツ（バツは局所座標を 45 度回す）。太さは 線の太さ、塗りのみ
+        float2 q = l;
+        if (kind > 11.5) q = rot2(l, float2(0.70710678, 0.70710678));
+        float hw = line_w * 0.5;
+        d = min(sd_box(q, float2(shape_half.x, hw)), sd_box(q, float2(hw, shape_half.y)));
+    } else {
+        if (kind < 6.5) d = sd_ellipse(l, shape_half);
+        else if (kind < 7.5) d = sd_round_box(l, shape_half, corner);
+        else if (kind < 8.5) d = sd_rhombus(l, shape_half) - corner;
+        else d = sd_polygon(l) - corner;
+        // 枠は輪郭の内側に取る
+        if (stroke_w > 0.0) d = max(d, -d - stroke_w);
+    }
+    return d;
+}
+
+float draw_shapes(float2 p) {
+    float2 a1 = lat.xy;
+    float2 a2 = lat.zw;
+    float det = a1.x * a2.y - a1.y * a2.x;
+    float u0 = round((p.x * a2.y - p.y * a2.x) / det);
+    float v0 = round((a1.x * p.y - a1.y * p.x) / det);
+    float acc = 0.0;
+    float2 inv_cs = float2(shape_cs.x, -shape_cs.y);
+    [loop] for (int dj = -1; dj <= 1; dj++) {
+        [loop] for (int di = -1; di <= 1; di++) {
+            if (reach > 0.5 || (di == 0 && dj == 0)) {
+                float2 c = (u0 + di) * a1 + (v0 + dj) * a2;
+                float g = 1.0;
+                if (appear > 0.5) g = progress(rank_of(c));
+                float2 l = rot2(p - c, inv_cs);
+                if (g > 0.001 && length(l) < bound_r * max(g, 1.0) + 2.0) {
+                    // 出現中は中心から g 倍に拡大する。g で割った座標で測り、g を掛けて画素の距離に戻す
+                    float d = shape_sd(l / g) * g;
+                    float cov = saturate(0.5 - d) * saturate(g);
+                    acc = acc + cov * (1.0 - acc);
+                }
+            }
+        }
+    }
+    return acc;
+}
+
+float4 ps_grid_h(float4 pos : SV_Position) : SV_Target {
+    float2 q = pos.xy - canvas * 0.5;
+    float2 p = rot2(q, float2(grid_cs.x, -grid_cs.y)) - offset;
+
+    float a_sub = 0.0;
+    float a_main = 0.0;
+    if (kind > 5.5) {
+        a_sub = draw_shapes(p);
+    } else if (kind > 3.5 && kind < 4.5) {
+        draw_hex(p, a_sub);
+    } else {
+        draw_families(p, a_sub, a_main);
+    }
+
+    // 線の格子・マスごとの出現: 画素に最も近い格子点（六角格子は画素を含む六角形の中心）の進み
+    if (kind < 5.5 && appear > 0.5 && appear_line < 0.5) {
+        float2 cc = (kind > 3.5) ? hex_center(p) : nearest_lattice(p);
+        float g = saturate(progress(rank_of(cc)));
+        a_sub = a_sub * g;
+        a_main = a_main * g;
+    }
+
+    float3 rgb = col.rgb * a_sub * (1.0 - a_main) + major_col.rgb * a_main;
+    float a = a_main + a_sub * (1.0 - a_main);
+
+    // 端のフェード（模様にだけ掛ける）
+    if (fade > 0.5) {
+        float2 hc = canvas * 0.5;
+        float edge = 0.0;
+        if (fade < 1.5) {
+            edge = min(hc.x - abs(q.x), hc.y - abs(q.y));
+        } else {
+            edge = (1.0 - length(q / hc)) * min(hc.x, hc.y);
+        }
+        float fk = smoothstep(0.0, max(fade_px, 1e-3), edge);
+        rgb = rgb * fk;
+        a = a * fk;
+    }
+
+    // 背景を下に敷く（乗算済み）
+    float3 out_rgb = rgb + bg.rgb * bg.a * (1.0 - a);
+    float out_a = a + bg.a * (1.0 - a);
+    return float4(out_rgb, out_a);
+}
+]]
+
+local function rgb_of(c)
+  c = math.floor(tonumber(c) or 0) % 0x1000000
+  return math.floor(c / 0x10000) / 255, math.floor(c / 0x100) % 0x100 / 255, c % 0x100 / 255
+end
+
+local function num(v, d)
+  v = tonumber(v)
+  if v == nil or v ~= v then return d end
+  return v
+end
+
+local function on(v)
+  return v == 1 or v == true
+end
+
+local max_x, max_y = obj.getinfo("image_max")
+local W = num(width, 0)
+local H = num(height, 0)
+if W <= 0 then W = obj.screen_w end
+if H <= 0 then H = obj.screen_h end
+W = math.min(math.max(math.floor(W + 0.5), 1), max_x)
+H = math.min(math.max(math.floor(H + 0.5), 1), max_y)
+
+local k = math.floor(num(kind, 5) + 0.5)
+local is_shape = k >= 6
+local px = math.max(num(pitch_x, 100), 2)
+local py = math.max(num(pitch_y, 100), 2)
+local lw = math.max(num(line_w, 2), 0.1)
+local shift = 0
+if k == 5 or is_shape then shift = math.min(math.max(num(row_shift, 0), 0), 100) / 100 end
+
+-- ---- 格子の幾何（模様の座標。Y は下向き）
+
+local a1x, a1y, a2x, a2y = px, 0, shift * px, py
+local fams = {}   -- { dx, dy, gx, gy, cshift }（d = 辺のベクトル, g = 隣の線への格子ベクトル）
+
+local function fam(dx, dy, gx, gy, cshift)
+  fams[#fams + 1] = { dx, dy, gx, gy, cshift or 0 }
+end
+
+local hexv = nil
+local stretch = py / px    -- 三角・六角・斜め格子の縦の倍率（X = Y で正則）
+
+if k == 5 then
+  -- 方眼。縦線は段ごとに shift * px ずれる（レンガ積み）
+  fam(px, 0, a2x, a2y)
+  fam(0, py, px, 0, shift * px)
+elseif k == 0 then
+  -- 横線。交わる線が無いので辺の長さは自分の間隔
+  a1x, a1y, a2x, a2y = py, 0, 0, py
+  fam(py, 0, 0, py)
+elseif k == 1 then
+  a1x, a1y, a2x, a2y = px, 0, 0, px
+  fam(0, px, px, 0)
+elseif k == 2 then
+  -- 斜め格子。水平から ±角度 の 2 族、線の間隔 px。辺 = 交点の間 = px / sin(2 * 角度)
+  local s = math.rad(math.min(math.max(num(slant, 45), 5), 85))
+  local side = px / math.sin(2 * s)
+  a1x, a1y = side * math.cos(s), -side * math.sin(s) * stretch
+  a2x, a2y = side * math.cos(s), side * math.sin(s) * stretch
+  fam(a1x, a1y, a2x, a2y)
+  fam(a2x, a2y, a1x, a1y)
+elseif k == 3 then
+  -- 三角格子。1 辺 px の正三角形を縦に stretch 倍
+  a1x, a1y = px, 0
+  a2x, a2y = px * 0.5, px * math.sqrt(3) * 0.5 * stretch
+  fam(a1x, a1y, a2x, a2y)
+  fam(a2x, a2y, a1x, a1y)
+  fam(a2x - a1x, a2y - a1y, a1x, a1y)
+elseif k == 4 then
+  -- 六角格子。中心間 px、頂点は中心から px / sqrt(3) の 30 + 60i 度
+  a1x, a1y = px, 0
+  a2x, a2y = px * 0.5, px * math.sqrt(3) * 0.5 * stretch
+  hexv = {}
+  local r = px / math.sqrt(3)
+  for i = 0, 5 do
+    local ang = math.rad(30 + 60 * i)
+    hexv[#hexv + 1] = { r * math.cos(ang), r * math.sin(ang) * stretch }
+  end
+end
+
+-- 族を法線・間隔・位相に直す
+local fam_n, fam_t = {}, {}
+for f = 1, 3 do
+  local e = fams[f]
+  if e then
+    local L = math.sqrt(e[1] * e[1] + e[2] * e[2])
+    local tx, ty = e[1] / L, e[2] / L
+    local nx, ny = -ty, tx
+    local h = nx * e[3] + ny * e[4]
+    if h < 0 then nx, ny, h = -nx, -ny, -h end
+    local shear = tx * e[3] + ty * e[4]
+    -- 段ごとのずれ（横方向の量）を法線方向の量に直す
+    local cs = e[5] * nx
+    fam_n[#fam_n + 1] = { nx, ny, h, shear }
+    fam_t[#fam_t + 1] = { tx, ty, L, cs }
+  else
+    fam_n[#fam_n + 1] = { 0, 1, 1, 0 }
+    fam_t[#fam_t + 1] = { 1, 0, 1, 0 }
+  end
+end
+
+-- ---- 図形
+
+local sx = math.max(num(size_x, 40), 0)
+local sy = math.max(num(size_y, 40), 0)
+local corner_r = math.max(num(corner, 0), 0)
+local verts = {}
+local shape_hx, shape_hy = sx * 0.5, sy * 0.5
+local bound = 0
+local reach = 0
+
+if is_shape then
+  -- 近傍 3x3 で欠けない大きさに頭打ちする。画素から見て 2 マス先の格子点は、
+  -- 格子の行の間隔の最小値の 1.5 倍より遠い
+  local a2len = math.sqrt(a2x * a2x + a2y * a2y)
+  local hmin = math.min(py, px * py / a2len)
+  local ex, ey = sx, sy
+  if k >= 11 then ex, ey = math.max(sx, lw), math.max(sy, lw) end
+  local R = 0.5 * math.sqrt(ex * ex + ey * ey)
+  local rmax = 1.5 * hmin - 1
+  if R > rmax and R > 0 then
+    local f = rmax / R
+    sx, sy, R = sx * f, sy * f, rmax
+  end
+  shape_hx, shape_hy = sx * 0.5, sy * 0.5
+  bound = R
+  if R + 1 > 0.5 * hmin then reach = 1 end
+
+  local hmin_half = math.min(shape_hx, shape_hy)
+  if k == 7 then
+    corner_r = math.min(corner_r, hmin_half)
+  elseif k == 8 then
+    -- ひし形の角を丸めても外接矩形が 大きさX x 大きさY のままになるよう、各軸の半径から corner を引いた
+    -- ひし形を渡して距離から corner を引く（丸めた頂点の先端 = 内側の頂点 + corner）
+    corner_r = math.min(corner_r, math.max(hmin_half - 0.5, 0))
+    shape_hx = shape_hx - corner_r
+    shape_hy = shape_hy - corner_r
+  elseif k == 9 or k == 10 then
+    local n = math.min(math.max(math.floor(num(sides, 5) + 0.5), 3), 32)
+    local pts = {}
+    if k == 9 then
+      for i = 0, n - 1 do
+        local ang = -math.pi / 2 + 2 * math.pi * i / n
+        pts[#pts + 1] = { math.cos(ang), math.sin(ang) }
+      end
+    else
+      local ri = math.min(math.max(1 - num(star_depth, 50) / 100, 0.05), 1)
+      for i = 0, 2 * n - 1 do
+        local r = (i % 2 == 0) and 1 or ri
+        local ang = -math.pi / 2 + math.pi * i / n
+        pts[#pts + 1] = { r * math.cos(ang), r * math.sin(ang) }
+      end
+    end
+    local x0, x1, y0, y1 = 1e9, -1e9, 1e9, -1e9
+    for _, v in ipairs(pts) do
+      x0, x1 = math.min(x0, v[1]), math.max(x1, v[1])
+      y0, y1 = math.min(y0, v[2]), math.max(y1, v[2])
+    end
+    -- 外接矩形を 大きさX x 大きさY に合わせる。角を丸める分（corner）だけ内側に作って距離を引く
+    corner_r = math.min(corner_r, 0.45 * math.min(sx, sy))
+    local fx = math.max(sx - 2 * corner_r, 0.01) / math.max(x1 - x0, 1e-6)
+    local fy = math.max(sy - 2 * corner_r, 0.01) / math.max(y1 - y0, 1e-6)
+    local cx, cy = (x0 + x1) * 0.5, (y0 + y1) * 0.5
+    for _, v in ipairs(pts) do
+      verts[#verts + 1] = { (v[1] - cx) * fx, (v[2] - cy) * fy }
+    end
+  else
+    corner_r = 0
+  end
+  -- 大きさ 0 の図形は描かない（楕円の距離関数が 0 で割る）。十字・バツは太さだけで形が残る
+  if k <= 10 and (sx < 0.01 or sy < 0.01) then bound = -10 end
+elseif hexv then
+  verts = hexv
+end
+
+-- ---- 出現
+
+local appear_mode = math.floor(num(appear, 0) + 0.5)
+local lut = {}
+for i = 0, 63 do lut[i + 1] = i / 63 end
+if appear_mode > 0 then
+  -- 「出現の緩急」に付けた移動方法の曲線を 64 点で写す。移動無し・始点 = 終点なら直線
+  local ok, mode = pcall(obj.getoption, "track_mode", "appear_ease")
+  if ok and mode and mode ~= 0 then
+    local span_t = math.max(obj.totaltime - 1 / obj.framerate, 0)
+    local v0 = tonumber(obj.getvalue("track.appear_ease", 0))
+    local v1 = tonumber(obj.getvalue("track.appear_ease", span_t))
+    if v0 and v1 and math.abs(v1 - v0) > 1e-9 then
+      for i = 0, 63 do
+        local v = tonumber(obj.getvalue("track.appear_ease", span_t * i / 63)) or v0
+        lut[i + 1] = (v - v0) / (v1 - v0)
+      end
+      lut[1], lut[64] = 0, 1
+    end
+  end
+  -- 1 を超える曲線（バウンス・バック）は図形が大きくなるので隣のマスまで見る
+  for i = 1, 64 do
+    if lut[i] > 1 then reach = 1 end
+  end
+end
+
+local t_in = obj.time
+local t_out = 1e6
+if appear_mode > 0 and on(appear_exit) then
+  -- 最後のフレームを中心に時間を折り返す（最後のフレームで全部消える）
+  t_out = obj.totaltime - 1 / obj.framerate - obj.time
+end
+
+-- ---- 定数
+
+local gr = math.rad(num(grid_rot, 0))
+local sr = math.rad(num(shape_rot, 0))
+local tt = obj.time
+local ofx = num(ofs_x, 0)
+local ofy = num(ofs_y, 0)
+local offx = ofx + num(spd_x, 0) * tt
+local offy = ofy + num(spd_y, 0) * tt
+
+local cr, cg, cb = rgb_of(color)
+local mr, mg, mb = rgb_of(major_color)
+local br_, bg_, bb_, ba_ = 0, 0, 0, 0
+if bg ~= nil then
+  br_, bg_, bb_ = rgb_of(bg)
+  ba_ = 1
+end
+
+local fade_mode = math.floor(num(fade, 0) + 0.5)
+local fade_px = math.min(math.max(num(fade_w, 20), 0), 100) / 100 * math.min(W, H) * 0.5
+
+local c = {}
+local function push(...)
+  local args = { ... }
+  for i = 1, select("#", ...) do c[#c + 1] = args[i] end
+end
+
+for i = 1, 64 do push(lut[i]) end
+for f = 1, 3 do push(fam_n[f][1], fam_n[f][2], fam_n[f][3], fam_n[f][4]) end
+for f = 1, 3 do push(fam_t[f][1], fam_t[f][2], fam_t[f][3], fam_t[f][4]) end
+for i = 1, 64 do
+  local v = verts[i]
+  if v then push(v[1], v[2]) else push(0, 0) end
+end
+push(cr, cg, cb, 1)
+push(mr, mg, mb, 1)
+push(br_, bg_, bb_, ba_)
+push(a1x, a1y, a2x, a2y)
+push(W, H)
+push(offx, offy)
+push(ofx, ofy)
+push(math.cos(gr), math.sin(gr))
+push(math.cos(sr), math.sin(sr))
+push(shape_hx, shape_hy)
+push(px, stretch)
+push(
+  k,
+  #fams,
+  lw,
+  math.max(num(stroke_w, 0), 0),
+  corner_r,
+  #verts,
+  reach,
+  bound,
+  on(major) and 1 or 0,
+  math.max(math.floor(num(major_every, 5) + 0.5), 2),
+  math.max(num(major_w, 4), 0.1),
+  math.floor(num(dash, 0) + 0.5),
+  math.max(math.floor(num(dash_count, 5) + 0.5), 1),
+  math.min(math.max(num(dash_ratio, 60), 1), 99) / 100,
+  appear_mode,
+  math.floor(num(appear_line, 0) + 0.5),
+  t_in,
+  t_out,
+  math.max(num(appear_span, 1), 0),
+  math.max(num(appear_dur, 0.3), 0.001),
+  math.floor(num(seed, 0) + 0.5),
+  fade_mode,
+  fade_px
+)
+
+-- clearbuffer はサイズ変更とクリアを同時に行う
+obj.clearbuffer("object", W, H)
+obj.pixelshader("ps_grid_h", "object", nil, c)

@@ -1,0 +1,23 @@
+CC-CEDICT attribution and license
+=================================
+
+TypingEffect embeds Lindera's CC-CEDICT dictionary data for Chinese word
+segmentation and pinyin lookup.
+
+Source dictionary:
+  CC-CEDICT
+  https://www.mdbg.net/chinese/dictionary?page=cedict
+  https://cc-cedict.org/
+
+MeCab conversion used by Lindera:
+  CC-CEDICT-MeCab
+  https://github.com/lindera/CC-CEDICT-MeCab
+
+License:
+  Creative Commons Attribution-ShareAlike 4.0 International
+  https://creativecommons.org/licenses/by-sa/4.0/
+
+This work may be used commercially or non-commercially with attribution.
+Modified or improved dictionary data must be shared under the same license.
+TypingEffect does not modify the dictionary entries; it embeds the dictionary
+as distributed by the Lindera dependency.

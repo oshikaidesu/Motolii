@@ -1,0 +1,106 @@
+--information:円形配置プラス v1.01 by HexBrowns
+--label:HexScript
+--script:luaJIT
+--track0:円周,0,800,100,0.01
+--track1:X半径,-2400,2400,200,1
+--track2:Y半径,-2400,2400,200,1
+--track3:回転,-3600,3600,0
+--check0:水平配置(カメラ制御),0
+--dialog:数,num=8;向き反転/chk,dir=0;回転無し/chk,rot=0;
+--value@PI:PI,{}
+
+-- パラメタインジェクション適用
+-- チェック類は true / false でも 0 / 1 でも受け取れるようにそろえる。
+-- v1.00 は PI.check0 = 0 を「真」として扱い、OFF のつもりが ON になっていた
+-- （Lua では 0 も真）。向き反転・回転無しも true / false を渡すと逆に効いていた
+local function on(v)
+    if type(v) == "number" then return v ~= 0 end
+    return v == true
+end
+local track0 = PI.track0 or obj.track0
+local track1 = PI.track1 or obj.track1
+local track2 = PI.track2 or obj.track2
+local track3 = PI.track3 or obj.track3
+local check0 = PI.check0
+if check0 == nil then check0 = obj.check0 end
+check0 = on(check0)
+local num_val = PI.num or num
+local dir_val = PI.dir
+if dir_val == nil then dir_val = dir end
+dir_val = on(dir_val) and 1 or 0
+local rot_val = PI.rot
+if rot_val == nil then rot_val = rot end
+rot_val = on(rot_val) and 1 or 0
+
+if (obj.getoption("multi_object")) then
+    -- 個別オブジェクト
+    local w, x, y, r
+    if (obj.num > 0) then
+        w = obj.num * obj.screen_w / 20
+    else
+        w = obj.screen_w / 2
+    end
+    if (check0) then
+        x = obj.ox
+        y = 0
+    else
+        x = obj.ox
+        y = obj.oy
+        if (dir_val ~= 0) then
+            y = -y
+        end
+    end
+    r = (x * track0 / (w * 50) + track3 / 180) * math.pi
+    x = math.sin(r) * (-y + track1)
+    y = -math.cos(r) * (-y + track2)
+    if (dir_val == 0) then
+        r = r * 180 / math.pi
+    else
+        y = -y
+        r = -r * 180 / math.pi
+    end
+    obj.ox = x
+    if (check0) then
+        obj.oz = y
+        if (rot_val == 0) then
+            obj.ry = obj.ry - r
+        end
+    else
+        obj.oy = y
+        if (rot_val == 0) then
+            obj.rz = obj.rz + r
+        end
+    end
+    obj.setoption("focus_mode", "fixed_size")
+    return
+end
+
+-- 通常オブジェクト
+obj.effect()
+for i = 1, num_val do
+    local x, y, z, ry, rz, r
+    z = 0
+    ry = 0
+    rz = 0
+    r = ((i - (num_val + 1) / 2) * track0 / 50 / num_val + track3 / 180) * math.pi
+    x = math.sin(r) * track1
+    y = -math.cos(r) * track2
+    if (dir_val == 0) then
+        r = r * 180 / math.pi
+    else
+        y = -y
+        r = -r * 180 / math.pi
+    end
+    if (check0) then
+        z = y
+        if (rot_val == 0) then
+            ry = ry - r
+        end
+    else
+        if (rot_val == 0) then
+            rz = rz + r
+        end
+    end
+    obj.draw(x, y, z, 1, 1, 0, ry, rz)
+end
+obj.setoption("focus_mode", "fixed_size")

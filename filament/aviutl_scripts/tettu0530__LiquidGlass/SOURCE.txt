@@ -1,0 +1,6 @@
+Liquid Glass エフェクト by tettu0530
+licence: MIT
+from: https://github.com/Tettu0530/Liquid-Glass/releases/download/v3.1.2/LiquidGlass_v3.1.2.zip (tag v3.1.2, commit 369ceac0681e)
+page: https://github.com/Tettu0530/Liquid-Glass
+licence/README from: https://github.com/Tettu0530/Liquid-Glass at v3.1.2
+Put here unchanged for Motolii (filament/aviutl_scripts).

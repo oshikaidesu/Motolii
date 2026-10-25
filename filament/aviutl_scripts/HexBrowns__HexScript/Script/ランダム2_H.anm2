@@ -1,0 +1,108 @@
+--information:ランダム2_H v1.01 by HexBrowns
+--label:HexScript
+--track@rand_x:X,-10000,10000,0,0.1
+--track@rand_y:Y,-10000,10000,0,0.1
+--track@rand_z:Z,-10000,10000,0,0.1
+--track@rand_rx:RX,-1800,1800,0,0.1
+--track@rand_ry:RY,-1800,1800,0,0.1
+--track@rand_rz:RZ,-1800,1800,0,0.1
+--track@rand_zoom:Zoom,-1000,10000,0,0.1
+--track@rand_alpha:Alpha,-1000,1000,0,0.1
+--track@rand_angle:ランダム角度,-360,360,0,0.1
+--track@rand_seed:Seed,-16384,16384,0,1
+--check@sign_random:正負ランダム,1
+--select@seed_mode:乱数の基準=0,レイヤー（互換）=0,個別オブジェクト=1,レイヤーに依存しない=2
+
+--[[
+ランダム2_H v1.01
+
+原作: Script/ランダム2.anm2（--information: が無く、作者・版とも不明）。
+原作を直したフォーク。原作の部分の権利は原作者にある。原作者の方は、問題があれば HexBrowns まで連絡をください。
+issue: AI/scripts/issues/20260915_random2_seed_without_index.md
+
+原作からの変更
+  1. 乱数の種の作り方を 乱数の基準 で選べるようにした（既定の レイヤー（互換） は原作と同じ種）
+  2. Zoom は専用の乱数（7 番）を使い、正負ランダムの符号反転の後の値を使う。
+     原作は 9 番（ランダム角度の乱数）を符号反転の前に流用していて、係数が常に 0 以上だった。
+     互換モードでもこちらに直してある。Zoom が 0 でない過去作をそのまま再現したいなら原作を使う
+  3. グローバル変数（base / zoomBase / track9）を local にした
+  4. 旧形式の --track1: 〜 --check0: を --track@ / --check@ に書き換えた。
+     項目名（保存キー）・範囲・既定値は原作と同じ。移動単位は原作の保存値
+     （X=900.0 / Seed=0）と同じ書式になるよう 0.1 と 1 を明示した。
+     原作の Alpha は既定値が無いが、実制作の保存値 128 個がすべて 0.0 なので 0 にした。
+     --check@ の既定を 1 と書いたので sign_random は number 型（== 1 で判定する）
+
+乱数の基準（obj.rand1(種, フレーム) の種の作り方）
+  lua.txt: 種がプラスなら「種が同じでもオブジェクト毎に異なる」、
+           マイナスなら「種が同じならば全てのオブジェクトで同じ」
+  i は 1〜9（X Y Z RX RY RZ Zoom Alpha ランダム角度）。フレーム引数は原作と同じく
+  値が i、符号の判定が i*i（時間では変わらない）
+
+  レイヤー（互換）      値 (obj.layer + Seed) * i / 符号 (obj.layer + Seed) * i * 2
+                        原作と同じ。Seed <= -レイヤー番号 で種が 0 以下になるのも原作どおり
+  個別オブジェクト      互換の元 A = obj.layer + Seed に obj.index を詰めた整数
+                          (|A| * 1024 + index) * 20 + 番号   （値は番号 i、符号は 10 + i）
+                        符号は A と同じ（A = 0 はプラス）。0 にはならない。
+                        レイヤーを動かすと配置が変わるのは互換と同じ
+  レイヤーに依存しない  常にマイナスの種に Seed・obj.index・番号を詰める
+                          -(((Seed + 16384) * 1024 + index) * 20 + 番号)
+                        レイヤー番号を使わないので、レイヤーを動かしても配置が変わらない。
+                        そのかわり同じ Seed のオブジェクトどうしは同じずれになる（Seed を変えて散らす）
+
+  個別オブジェクト と レイヤーに依存しない は、Seed を -16384〜16384（項目の範囲）に収めてから使う。
+  範囲外の値を数値で入れると、レイヤーに依存しない の種がプラスになり（v1.00）、
+  オブジェクトごとに違うずれになっていた。互換 は原作と同じ式のまま（収めない）
+
+  obj.index は 1024 で折り返す（1024 文字を超えるテキストでは種が重なる）。
+  種の絶対値は最大で約 6.7 億（2^31 未満）。
+  同じオブジェクトに 2 つ重ねて Seed も同じだと、どのモードでも同じずれになる（Seed を変える）
+]]
+
+local INDEX_SPAN = 1024   -- 種に詰める obj.index の幅
+local DRAW_SPAN = 20      -- 1 オブジェクトあたりの乱数の番号の幅（値 1〜9 / 符号 11〜19）
+local SEED_MIN = -16384   -- Seed の最小値。レイヤーに依存しない で 0 以上へずらす
+local SEED_MAX = 16384    -- Seed の最大値（項目の範囲）
+
+local index = obj.index % INDEX_SPAN
+
+local function pack(head, no)
+  return (head * INDEX_SPAN + index) * DRAW_SPAN + no
+end
+
+-- 範囲外の Seed を項目の範囲に収める（互換 では使わない）
+local seed_in = math.max(SEED_MIN, math.min(SEED_MAX, math.floor(rand_seed)))
+
+local value_seed, sign_seed
+if seed_mode == 1 then
+  local head = obj.layer + seed_in
+  local sign = (head < 0) and -1 or 1
+  head = math.abs(head)
+  value_seed = function(i) return sign * pack(head, i) end
+  sign_seed = function(i) return sign * pack(head, 10 + i) end
+elseif seed_mode == 2 then
+  local head = seed_in - SEED_MIN
+  value_seed = function(i) return -pack(head, i) end
+  sign_seed = function(i) return -pack(head, 10 + i) end
+else
+  -- 原作と同じ式・同じ演算順（浮動小数の丸めまで一致させる）
+  value_seed = function(i) return (obj.layer + rand_seed) * i end
+  sign_seed = function(i) return (obj.layer + rand_seed) * i * 2 end
+end
+
+local base = {}
+for i = 1, 9 do
+  local v = obj.rand1(value_seed(i), i)
+  if sign_random == 1 and obj.rand1(sign_seed(i), i * i) < 0.5 then
+    v = -v
+  end
+  base[i] = v
+end
+
+obj.ox = obj.ox + rand_x * base[1]
+obj.oy = obj.oy + rand_y * base[2]
+obj.oz = obj.oz + rand_z * base[3]
+obj.rx = obj.rx + rand_rx * base[4]
+obj.ry = obj.ry + rand_ry * base[5]
+obj.rz = obj.rz + rand_angle * base[9] + rand_rz * base[6]
+obj.zoom = obj.zoom + rand_zoom / 100 * base[7]
+obj.alpha = obj.alpha + rand_alpha / 100 * base[8]

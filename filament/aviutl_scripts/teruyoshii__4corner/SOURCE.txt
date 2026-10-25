@@ -1,0 +1,6 @@
+四隅に配置 by てるよし
+licence: MIT
+from: https://raw.githubusercontent.com/teruyoshii/Teruyoshi_AviUtl2_Scripts/refs/heads/main/%E5%9B%9B%E9%9A%85%E3%81%AB%E9%85%8D%E7%BD%AE.anm2 (commit 130cc155ac7a)
+page: https://github.com/teruyoshii/Teruyoshi_AviUtl2_Scripts/blob/main/%E5%9B%9B%E9%9A%85%E3%81%AB%E9%85%8D%E7%BD%AE.anm2
+licence/README from: https://github.com/teruyoshii/Teruyoshi_AviUtl2_Scripts at 130cc155ac7a5182b79befd5413c818bd82a5915
+Put here unchanged for Motolii (filament/aviutl_scripts).

@@ -1,0 +1,174 @@
+--information:泡_H v1.00 by HexBrowns
+--label:HexScript
+
+--group:配置
+--track@width:幅,0,4000,1920,1
+--track@height:高さ,0,4000,1080,1
+--check@screen_size:画面サイズ,1
+--track@density:密度,1,100,12,0.1
+--track@scatter:散らばり,0,100,80,0.1
+--track@thinning:間引き,0,100,50,0.1
+--track@layers:奥行きの段数,1,3,2,1
+--track@seed:シード,0,9999,0,1
+--group
+
+--group:泡
+--color@col:色,0xe6f6ff
+--track@radius:半径,1,200,18,0.1
+--track@radius_var:半径のばらつき,0,100,50,0.1
+--track@line_w:ライン幅,0.5,50,2,0.1
+--track@fill:塗り,0,100,0,0.1
+--track@alpha:不透明度,0,100,100,0.1
+--group
+
+--group:動き
+--track@speed:上昇速度,-1000,1000,120,0.1
+--track@speed_var:速度のばらつき,0,100,40,0.1
+--track@sway:揺れ幅,0,200,6,0.1
+--track@sway_period:揺れ周期,0.1,20,3,0.01
+--track@fade_top:上端フェード,0,4000,0,1
+--group
+
+--[[
+泡を 1 パスのピクセルシェーダーで描く。粒ごとの Lua ループ・図形の読み込み・obj.draw を持たないので、
+泡の数を増やしても Lua 側の処理量は変わらない。
+
+  ・キャンバスを正方形のセルに切り、セルごとに泡を 0 か 1 個置く（有無・位置・半径はセル座標のハッシュ）
+  ・列ごとに上昇速度を変える。列ごとに y 方向のセル格子をずらすので、継ぎ目なく流れ続ける
+  ・線は半径からの距離で描くので、半径を変えてもライン幅は変わらない
+  ・奥行きの段は奥ほど 0.62 倍小さく・遅く・0.7 倍薄い。セルは sqrt(0.62) 倍で、奥ほど数が増える
+
+近傍は 3x3 セルだけを探す。泡がセルから 1.5 セル以上はみ出すと欠けるので、
+はみ出さない大きさまでセルを自動で広げる（Lua 側の cell の計算）。
+検証器: AI/scripts/泡_H/verify_bubbles.py
+]]
+
+--[[pixelshader@ps_bubbles:
+cbuffer constant0 : register(b0) {
+    float3 col;          // 0-2   色 (0.0-1.0)
+    float alpha;         // 3     不透明度 (0.0-1.0)
+    float cell;          // 4     手前の段のセル辺長 (px)
+    float scatter;       // 5     セル内のずれ幅 (0.0-1.0)
+    float thinning;      // 6     間引き率 (0.0-1.0)
+    float seed;          // 7     シード
+    float radius;        // 8     手前の段の半径 (px)
+    float radius_var;    // 9     半径のばらつき (0.0-1.0)
+    float line_w;        // 10    手前の段のライン幅 (px)
+    float fill;          // 11    内側の塗り (0.0-1.0)
+    float speed;         // 12    手前の段の上昇速度 (px/s)
+    float speed_var;     // 13    速度のばらつき (0.0-1.0)
+    float sway;          // 14    手前の段の揺れ幅 (px)
+    float sway_freq;     // 15    揺れの角速度 (rad/s)
+    float time;          // 16    経過時間 (s)
+    float fade_top;      // 17    上端から消えるまでの距離 (px)
+    float layers;        // 18    奥行きの段数 (1-3)
+};
+
+// 微粒子_H.obj2 と同じハッシュ。軸ごとに別の値を引くため seed をずらして呼ぶ。
+// 元の形: Dave Hoskins "Hash without Sine" (MIT, Copyright (c) 2014 David Hoskins) https://www.shadertoy.com/view/4djSRW
+float hash21(float2 p, float s) {
+    float3 p3 = frac(float3(p.x, p.y, p.x) * float3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, float3(p3.y + 33.33, p3.z + 33.33, p3.x + 33.33));
+    return frac((p3.x + p3.y) * p3.z + s * 0.7548777);
+}
+
+float4 ps_bubbles(float4 pos : SV_Position) : SV_Target {
+    float o = 0.0;
+
+    // 奥の段から手前へ重ねる（手前が上に乗る）
+    for (int li = 2; li >= 0; --li) {
+        if ((float)li >= layers) continue;
+
+        float lf = (float)li;
+        float sc = pow(0.62, lf);
+        float lc = cell * sqrt(sc);
+        float ls = seed + lf * 101.0;
+        float lw = max(line_w * sc, 0.75);
+        float la = pow(0.7, lf);
+        float gx = floor(pos.x / lc);
+        float acc = 0.0;
+
+        for (int dx = -1; dx <= 1; ++dx) {
+            float cx = gx + (float)dx;
+            float hv = hash21(float2(cx, 7.0), ls + 3.0);
+            float spd = speed * sc * (1.0 - speed_var * hv);
+
+            // 列の格子を spd * time だけ下へずらす = 泡は上へ動く
+            float qy = pos.y + spd * time;
+            float gy = floor(qy / lc);
+
+            for (int dy = -1; dy <= 1; ++dy) {
+                float2 id = float2(cx, gy + (float)dy);
+                if (hash21(id, ls) < thinning) continue;
+
+                float hx = hash21(id, ls + 17.0);
+                float hy = hash21(id, ls + 39.0);
+                float hs = hash21(id, ls + 71.0);
+                float hp = hash21(id, ls + 53.0);
+
+                float r = max(radius * sc * (1.0 - radius_var * hs), lw * 0.5);
+                float2 c = (id + 0.5 + (float2(hx, hy) - 0.5) * scatter) * lc;
+                c.x += sin(time * sway_freq + hp * 6.2831853) * sway * sc;
+
+                // 輪: 半径からの距離でライン幅を決める。遷移幅は 1px 固定
+                float d = length(float2(pos.x, qy) - c);
+                float ring = saturate(0.5 + min(d - (r - lw * 0.5), (r + lw * 0.5) - d));
+                float inner = saturate(0.5 + (r - lw * 0.5) - d) * fill;
+                float a = max(ring, inner);
+
+                // 画面上の中心 y が上端から fade_top 以内なら薄くする
+                float fade = (fade_top > 0.0) ? saturate((c.y - spd * time) / fade_top) : 1.0;
+                acc = max(acc, a * fade);
+            }
+        }
+
+        float lo = acc * la;
+        o = lo + o * (1.0 - lo);
+    }
+
+    o *= alpha;
+    return float4(col * o, o);   // Premultiplied Alpha
+}
+]]
+
+local w, h
+if screen_size == 1 then
+  w, h = obj.screen_w, obj.screen_h
+else
+  w = math.max(math.floor(width + 0.5), 1)
+  h = math.max(math.floor(height + 0.5), 1)
+end
+
+obj.setoption("drawtarget", "tempbuffer", w, h)
+obj.load("tempbuffer")
+
+-- 効果ゼロなら空のキャンバスのまま終える
+if alpha <= 0 or thinning >= 100 then return end
+
+local n_layers = math.min(math.max(math.floor(layers + 0.5), 1), 3)
+local s = scatter / 100
+
+-- 3x3 近傍で欠けない最小のセル辺長を段ごとに求め、密度から決まる辺長と大きい方を採る。
+-- セル j の泡の中心は、セル j+2 の画素から少なくとも (1.5 - s/2) * セル辺長 離れている。
+-- 泡の届く距離 reach がそれ未満なら、3x3 の外の泡は画素に触れない。
+-- reach の各項はシェーダーの r / lw / 輪の遷移 0.5px / 揺れ に対応する。
+local cell = w / math.max(density, 1)
+for li = 0, n_layers - 1 do
+  local sc = 0.62 ^ li
+  local lw = math.max(line_w * sc, 0.75)
+  local reach = math.max(radius * sc, lw * 0.5) + lw * 0.5 + 0.5 + sway * sc
+  local need = reach / (math.sqrt(sc) * (1.5 - s * 0.5)) * 1.001 + 0.01
+  if need > cell then cell = need end
+end
+
+local r = bit.band(bit.rshift(col, 16), 0xff) / 255
+local g = bit.band(bit.rshift(col, 8), 0xff) / 255
+local b = bit.band(col, 0xff) / 255
+
+obj.pixelshader("ps_bubbles", "object", {}, {
+  r, g, b, alpha / 100,
+  cell, s, thinning / 100, seed,
+  radius, radius_var / 100, line_w, fill / 100,
+  speed, speed_var / 100, sway, 2 * math.pi / math.max(sway_period, 0.1),
+  obj.time, fade_top, n_layers
+})

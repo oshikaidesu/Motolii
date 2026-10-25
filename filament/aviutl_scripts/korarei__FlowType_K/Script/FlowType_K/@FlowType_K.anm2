@@ -1,0 +1,2426 @@
+@Motion
+
+--require:2004900
+--information:Motion@FlowType_K v0.3.3 by Korarei
+--label:Text
+
+--select@timing:Timing,Automatic=0,Manual=1
+--track@duration:Duration,-1000,1000,24,0.001,---
+--track@offset:Offset,-1000,1000,0,0.001
+--group:Motion
+--select@motion_based_on:Motion::Based On,Whole=-2,Objects=-1,Characters=0,Characters Excluding Spaces=1,Words=2,Lines=3
+--select@motion_order:Motion::Order,Forward=0,Reverse=1,Random=2
+--track@motion_overlap:Motion::Overlap,0,100,100,0.01
+--track@motion_softness:Motion::Softness,0,100,100,0.01
+--track0:Motion::Curve,0,1,0,0.001
+--track@motion_cutoff:Motion::Cutoff,-10000,10000,0,0.001
+--checksection@motion_should_mask:Motion::Mask,false,false
+--group:Lyric,false
+--track@lyric_distance:Lyric::Distance,0,10000,0,0.01
+--track@lyric_stretch:Lyric::Stretch,-10,10,0,0.001
+--track@lyric_jitter:Lyric::Jitter,0,100,50,0.01
+--separator:Layout
+--select@lyric_shape:Lyric::Layout::Shape,Circle=0,Arc=1
+--track@lyric_angle:Lyric::Layout::Angle,-3600,3600,0,0.01
+--track@lyric_sweep:Lyric::Layout::Sweep,-3600,3600,270,0.01
+--track@lyric_divisions:Lyric::Layout::Divisions,1,36,4,1
+--select@lyric_selection:Lyric::Layout::Selection,Random=0,Clockwise=1,Counter-Clockwise=2
+--separator:Dynamics
+--track@lyric_peak:Lyric::Dynamics::Peak,0,100,1,0.001
+--checksection@lyric_should_overshoot:Lyric::Dynamics::Overshoot,false,false
+--group:Transform,false
+--separator:Pivot Point
+--track@xform_pivot_x:Transform::Pivot::X,-100000,100000,0,0.01
+--track@xform_pivot_y:Transform::Pivot::Y,-100000,100000,0,0.01
+--track@xform_pivot_z:Transform::Pivot::Z,-100000,100000,0,0.01
+--trackgroup@xform_pivot_x,xform_pivot_y,xform_pivot_z:Group::Transform::Pivot
+--separator:Position
+--track@xform_position_x:Transform::Position::X,-100000,100000,0,0.01
+--track@xform_position_y:Transform::Position::Y,-100000,100000,0,0.01
+--track@xform_position_z:Transform::Position::Z,-100000,100000,0,0.01
+--trackgroup@xform_position_x,xform_position_y,xform_position_z:Group::Transform::Position
+--separator:Rotation
+--track@xform_rotation_w:Transform::Rotation::W,-3600,3600,0,0.01
+--track@xform_rotation_x:Transform::Rotation::X,-3600,3600,0,0.01
+--track@xform_rotation_y:Transform::Rotation::Y,-3600,3600,0,0.01
+--track@xform_rotation_z:Transform::Rotation::Z,-3600,3600,0,0.01
+--select@xform_rotation_mode:Transform::Rotation::Mode=21,Quaternion=0,Axis Angle=1,XYZ Euler=5,XZY Euler=7,YXZ Euler=11,YZX Euler=15,ZXY Euler=19,ZYX Euler=21
+--trackgroup@xform_rotation_x,xform_rotation_y,xform_rotation_z:Group::Transform::Rotation
+--separator:Scale
+--track@xform_scale_x:Transform::Scale::X,0,10000,100,0.01
+--track@xform_scale_y:Transform::Scale::Y,0,10000,100,0.01
+--track@xform_scale_z:Transform::Scale::Z,0,10000,100,0.01
+--trackgroup@xform_scale_x,xform_scale_y,xform_scale_z:Group::Transform::Scale
+--separator:Compositing
+--track@xform_opacity:Transform::Compositing::Opacity,0,100,100,0.01
+--separator:Target
+--checksection@xform_target_local_space:Transform::Target::Local Space,true,false
+--checksection@xform_target_world_space:Transform::Target::World Space,false,false
+--group:Blink,false
+--track@blink_duration:Blink::Duration,0,10000,0,0.001,---
+--separator:Opacity
+--track@blink_opacity_steps:Blink::Opacity::Steps,2,128,2,1
+--track@blink_opacity_min:Blink::Opacity::Minimum,0,100,0,0.01
+--track@blink_opacity_max:Blink::Opacity::Maximum,0,100,100,0.01
+--separator:Scale
+--track@blink_scale_steps:Blink::Scale::Steps,2,128,2,1
+--track@blink_scale_min:Blink::Scale::Minimum,-10000,10000,100,0.01
+--track@blink_scale_max:Blink::Scale::Maximum,-10000,10000,100,0.01
+--separator:Edge Detection
+--track@blink_edge_intensity:Blink::Edge Detection::Intensity,0,1000,100,0.01
+--track@blink_edge_threshold:Blink::Edge Detection::Threshold,-100,100,-100,0.01
+--separator:Characters
+--string@blink_characters_pool:Blink::Characters::Pool,
+--font@blink_characters_font:Blink::Characters::Font,Noto Sans JP Black
+--track@blink_characters_scale:Blink::Characters::Scale,0,1000,100,0.01
+--group:Tint,false
+--select@tint_source:Tint::Source,Image=0,Layer=1
+--file@tint_image:Tint::Image,""
+--track@tint_layer:Tint::Layer,-100,100,0,1,---
+--group:Effect,false
+--text@effect_params:Effect::Parameters,
+--group:Echo,false
+--track@echo_count:Echo::Count,0,100,0,1,---
+--track@echo_interval:Echo::Interval,-100,100,-1,0.001
+--track@echo_decay:Echo::Decay,0,100,50,0.01
+--select@echo_composite:Echo::Composite=1,Above=0,Below=1
+--group:Additional Options,false
+--select@unit:Unit,Frames=0,Seconds=1
+--select@layer_reference:Layer Reference,Absolute=0,Relative=1
+--track@seed:Seed,-10000,10000,0,1
+--check@should_highlight:Highlight Overlap,false
+--[[pixelshader@tint:
+Texture2D tex : register(t0);
+cbuffer params : register(b0) {
+    float4 col;
+    float t;
+}
+
+float4
+tint(float4 pos : SV_Position) : SV_Target {
+    const float4 src = tex.Load(int3(pos.xy, 0));
+    return lerp(src, col * src.a, t);
+}
+]]
+--[[pixelshader@map:
+Texture2D tex[2] : register(t0);
+SamplerState smp : register(s0);
+cbuffer params : register(b0) {
+    float2 uv;
+}
+
+float4
+map(float4 pos : SV_Position) : SV_Target {
+    float2 size;
+    tex[1].GetDimensions(size.x, size.y);
+
+    const float4 base = tex[0].Load(int3(pos.xy, 0));
+    const float4 src = tex[1].Sample(smp, mad(uv, size - 1.0, 0.5) * rcp(size));
+    const float4 blended = mad(1.0 - src.a, base, src);
+    return float4(blended.rgb * rcp(blended.a) * base.a, base.a);
+}
+]]
+--[[pixelshader@alpha_mask:
+Texture2D tex : register(t0);
+cbuffer params : register(b0) {
+    float should_invert;
+}
+
+float4
+alpha_mask(float4 pos : SV_Position) : SV_Target {
+    float a = tex.Load(int3(pos.xy, 0)).a;
+    a = lerp(a, 1.0 - a, should_invert);
+    return a;
+}
+]]
+--[[pixelshader@mask:
+cbuffer params : register(b0) {
+    column_major float3x3 xform;
+    float2 pivot;
+    float aspect;
+}
+
+float4
+mask(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    uv -= 0.5;
+    uv.x *= aspect;
+    uv = mul(xform, float3(uv + pivot, 1.0)).xy;
+    uv.x *= rcp(aspect);
+    uv += 0.5;
+    const float2 aa = fwidth(uv);
+    const float2 mask = smoothstep(-aa, aa, uv) * smoothstep(1.0 + aa, 1.0 - aa, uv);
+    return mask.x * mask.y;
+}
+]]
+
+if obj.num < 1 or obj.framerate == 0 then
+    print("@error", "Framerate is zero or index is out of bounds")
+    return
+end
+
+do
+    local _ = obj.setanchor("xform_position_x,xform_position_y,xform_position_z", 0, "line", "xyz")
+
+    local lerp, clamp, copy_xform, stop
+
+    do
+        local max, min = math.max, math.min
+
+        lerp = function(a, b, t)
+            return a + (b - a) * t
+        end
+
+        clamp = function(v, lower, upper)
+            return max(lower, min(upper, v))
+        end
+
+        copy_xform = function(dst, src)
+            dst.ox, dst.oy, dst.oz = src.ox, src.oy, src.oz
+            dst.cx, dst.cy, dst.cz = src.cx, src.cy, src.cz
+            dst.rx, dst.ry, dst.rz = src.rx, src.ry, src.rz
+            dst.sx, dst.sy, dst.sz = src.sx, src.sy, src.sz
+            dst.alpha = src.alpha
+        end
+
+        stop = function(e)
+            print("@error", e)
+            obj.load("text", "")
+        end
+    end
+
+
+    local buffer
+
+    do
+        buffer = require("string.buffer").new()
+    end
+
+    local eps = 1.0e-4
+
+    local max, min, abs, rad, cos, sin, floor = math.max, math.min, math.abs, math.rad, math.cos, math.sin, math.floor
+    local random, randomseed = math.random, math.randomseed
+    local getvalue, getinfo, getoption, effect = obj.getvalue, obj.getinfo, obj.getoption, obj.effect
+    local copybuffer, pixelshader = obj.copybuffer, obj.pixelshader
+    local ID, INDEX, NUM, LAYER = obj.effect_id, obj.index, obj.num, obj.layer
+    local FPS, TIME, TOTALTIME = obj.framerate, obj.time, obj.totaltime
+    local spf = 1.0 / FPS
+
+    offset = duration < 0.0 and -offset or offset
+
+    motion_overlap = motion_overlap * 0.01
+    motion_softness = motion_softness * 0.01
+
+    lyric_jitter = lyric_jitter * 0.01
+    lyric_angle = rad(lyric_angle)
+    lyric_sweep = rad(lyric_sweep)
+
+    xform_scale_x = max(xform_scale_x * 0.01, eps)
+    xform_scale_y = max(xform_scale_y * 0.01, eps)
+    xform_scale_z = max(xform_scale_z * 0.01, eps)
+    xform_opacity = clamp(xform_opacity * 0.01, eps, 1.0)
+
+    blink_opacity_min = blink_opacity_min * 0.01
+    blink_opacity_max = blink_opacity_max * 0.01
+    blink_scale_min = blink_scale_min * 0.01
+    blink_scale_max = blink_scale_max * 0.01
+
+    tint_layer = layer_reference == 0 and max(tint_layer, 0) or max(LAYER + tint_layer, 0)
+
+    echo_count = echo_count + 1
+    echo_decay = echo_decay * 0.01
+
+    local should_load_lut = false
+    if tint_source == 0 then
+        should_load_lut = tint_image ~= ""
+    elseif tint_source == 1 then
+        if tint_layer > 0 and tint_layer ~= LAYER then
+            if not getvalue("layer" .. tint_layer) then
+                local frame = getvalue("frame_s") + obj.frame
+                print("@warn", "No object found in Layer " .. tint_layer .. " at Frame " .. frame)
+            else
+                should_load_lut = true
+            end
+        end
+    end
+
+    if seed >= 0 then
+        randomseed(seed)
+        seed = LAYER + random(2147483647) + 1
+    else
+        seed = -seed
+    end
+
+    if unit == 0 then
+        motion_cutoff = motion_cutoff * spf
+        blink_duration = blink_duration * spf
+        echo_interval = echo_interval * spf
+
+        if timing == 0 then
+            duration = duration * spf
+            offset = offset * spf
+        end
+    end
+
+    if abs(duration) < eps then
+        return
+    end
+
+    local motion, mask
+
+    do
+        local utf8 = obj.module("UTF8@FlowType_K")
+
+        local CACHE_LUT = "cache:a09d04ba-6a95-4940-b8f4-41f9d7483817-" .. ID
+
+        local text = getvalue(LAYER, "テキスト", "テキスト") --[[@as string | nil]]
+
+        if should_load_lut then
+            local ok, e = pcall(function()
+                if not copybuffer("cache:tmp", "object") then
+                    error("Failed to copy buffer")
+                end
+
+                local xform = {}
+                copy_xform(xform, obj)
+
+                if tint_source == 0 then
+                    if not obj.load("image", tint_image) then
+                        if not copybuffer("object", "cache:tmp") then
+                            error("Failed to copy buffer")
+                        end
+
+                        error("Failed to load image")
+                    end
+                elseif tint_source == 1 then
+                    if not obj.load("layer", tint_layer, true) then
+                        if not copybuffer("object", "cache:tmp") then
+                            error("Failed to copy buffer")
+                        end
+
+                        error("Failed to load layer data")
+                    end
+                end
+
+                if not copybuffer(CACHE_LUT, "object") then
+                    error("Failed to copy buffer")
+                end
+
+                if not copybuffer("object", "cache:tmp") then
+                    error("Failed to copy buffer")
+                end
+
+                copy_xform(obj, xform)
+            end)
+
+            if not ok then
+                stop(e)
+                return
+            end
+        end
+
+        local get_time
+
+        do
+            local modf = math.modf
+
+            local n = getoption("section_num")
+
+            get_time = function(index)
+                local i, f = modf(index)
+
+                if i < 0 then
+                    i = n + i
+                    f = 1.0 + f
+                end
+
+                return getvalue("time", (getvalue("time", 0.0, i + 1) - getvalue("time", 0.0, i)) * f, i)
+            end
+        end
+
+        local function interpolate(t)
+            t = clamp(t, 0.0, 1.0)
+
+            local st = getvalue(0, 0.0)
+            local range = getvalue(0, 0.0, -1) - st
+
+            return abs(range) > eps and (getvalue(0, TOTALTIME * t) - st) / range or t
+        end
+
+        local progress
+
+        if duration < 0.0 then
+            progress = function(t, i, n)
+                t = t - TOTALTIME - duration
+                local d = duration * (motion_overlap + (1.0 - motion_overlap) / n) * max(motion_softness, eps)
+
+                if timing == 1 then
+                    i = (get_time(i - n) - TOTALTIME - duration) * (d + duration) / duration
+                else
+                    i = -duration * i / n - min(d, 0.0)
+                end
+
+                local p = t / duration + (t - i) / d
+                local w = 1.0 - interpolate(p)
+
+                return (duration * i) / (duration + d) - t, -w
+            end
+        else
+            progress = function(t, i, n)
+                local d = duration * (motion_overlap + (1.0 - motion_overlap) / n) * max(motion_softness, eps)
+
+                if timing == 1 then
+                    i = get_time(i) * (d + duration) / duration
+                else
+                    i = duration * i / n - min(d, 0.0)
+                end
+
+                local p = t / duration + (t - i) / d
+                local w = 1.0 - interpolate(p)
+
+                return t - (duration * i) / (duration + d), w
+            end
+        end
+
+        local apply_xform
+
+        do
+            local vector = obj.module("Vector@FlowType_K")
+            local rotate = vector.rotate
+
+            apply_xform = function(w)
+                if xform_target_world_space then
+                    local v = {
+                        (obj.ox - xform_pivot_x * w) * (xform_scale_x ^ w),
+                        (obj.oy - xform_pivot_y * w) * (xform_scale_y ^ w),
+                        (obj.oz - xform_pivot_z * w) * (xform_scale_z ^ w),
+                    }
+
+                    v = rotate(
+                        w,
+                        xform_rotation_mode,
+                        xform_rotation_w,
+                        xform_rotation_x,
+                        xform_rotation_y,
+                        xform_rotation_z,
+                        v
+                    )
+
+                    obj.ox = v[1]
+                    obj.oy = v[2]
+                    obj.oz = v[3]
+                end
+
+                if xform_target_local_space then
+                    local rx, ry, rz = xform_rotation_x, xform_rotation_y, xform_rotation_z
+                    rx, ry, rz = rotate(w, xform_rotation_mode, xform_rotation_w, rx, ry, rz)
+
+                    obj.cx = obj.cx + xform_pivot_x * w
+                    obj.cy = obj.cy + xform_pivot_y * w
+                    obj.cz = obj.cz + xform_pivot_z * w
+                    obj.rx = obj.rx + rx
+                    obj.ry = obj.ry + ry
+                    obj.rz = obj.rz + rz
+                    obj.sx = obj.sx * (xform_scale_x ^ w)
+                    obj.sy = obj.sy * (xform_scale_y ^ w)
+                    obj.sz = obj.sz * (xform_scale_z ^ w)
+                end
+
+                if xform_target_local_space or xform_target_world_space then
+                    obj.ox = obj.ox + xform_position_x * w
+                    obj.oy = obj.oy + xform_position_y * w
+                    obj.oz = obj.oz + xform_position_z * w
+                end
+
+                obj.alpha = lerp(obj.alpha, obj.alpha * xform_opacity, abs(w))
+            end
+        end
+
+        local apply_lyric, apply_blink
+
+        do
+            local hash = obj.module("Hash@FlowType_K")
+            local hash4d = hash.hash4d
+
+            if lyric_distance > eps then
+                apply_lyric = function(i, n, t, w)
+                    local hx, hy, _, _ = hash4d(i, n, seed)
+
+                    local r = lerp(lyric_distance, lyric_distance * hx, lyric_jitter) * w
+                    local s = lerp(lyric_stretch, lyric_stretch * hx, lyric_jitter) * abs(w)
+
+                    local d = 0.0
+                    if lyric_shape == 0 then
+                        d = 2.0 * math.pi / lyric_divisions
+                    elseif lyric_divisions ~= 1 then
+                        d = lyric_sweep / (lyric_divisions - 1)
+                    end
+
+                    local angle = lyric_angle
+                    if lyric_selection == 0 then
+                        angle = angle + d * floor(hy * lyric_divisions)
+                    elseif lyric_selection == 1 then
+                        angle = angle + d * i
+                    elseif lyric_selection == 2 then
+                        angle = angle - d * i
+                    end
+
+                    local x, y = cos(angle), sin(angle)
+                    obj.ox = obj.ox + r * x
+                    obj.oy = obj.oy + r * y
+                    obj.sx = obj.sx * (2.0 ^ (s * abs(x)))
+                    obj.sy = obj.sy * (2.0 ^ (s * abs(y)))
+
+                    if t < spf then
+                        local p = 2.0 ^ lyric_peak
+                        obj.sx = obj.sx * p
+                        obj.sy = obj.sy * p
+                    elseif lyric_should_overshoot and t < 2.0 * spf then
+                        local p = 2.0 ^ (-lyric_peak * 0.5)
+                        obj.sx = obj.sx * p
+                        obj.sy = obj.sy * p
+                    end
+                end
+            end
+
+            if blink_duration > eps then
+                local should_blink_opacity = blink_opacity_max - blink_opacity_min > eps
+                local should_blink_scale = blink_scale_max - blink_scale_min > eps
+                local should_edge_detect = blink_edge_threshold > -100.0 + eps
+
+                local alignment, chars
+
+                if blink_characters_pool ~= "" then
+                    if text ~= nil then
+                        local styles = {
+                            ["標準文字"] = 0,
+                            ["影付き文字"] = 1,
+                            ["影付き文字(薄)"] = 2,
+                            ["縁取り文字"] = 3,
+                            ["縁取り文字(細)"] = 4,
+                            ["縁取り文字(太)"] = 5,
+                            ["縁取り文字(角)"] = 6,
+                        }
+
+                        local alignments = {
+                            ["左寄せ[上]"] = 0,
+                            ["中央揃え[上]"] = 1,
+                            ["右寄せ[上]"] = 2,
+                            ["左寄せ[中]"] = 3,
+                            ["中央揃え[中]"] = 4,
+                            ["右寄せ[中]"] = 5,
+                            ["左寄せ[下]"] = 6,
+                            ["中央揃え[下]"] = 7,
+                            ["右寄せ[下]"] = 8,
+                            ["縦書 上寄[右]"] = 9,
+                            ["縦書 中央[右]"] = 10,
+                            ["縦書 下寄[右]"] = 11,
+                            ["縦書 上寄[中]"] = 12,
+                            ["縦書 中央[中]"] = 13,
+                            ["縦書 下寄[中]"] = 14,
+                            ["縦書 上寄[左]"] = 15,
+                            ["縦書 中央[左]"] = 16,
+                            ["縦書 下寄[左]"] = 17,
+                        }
+
+                        obj.setfont(
+                            blink_characters_font,
+                            obj.getvalue(LAYER, "テキスト", "サイズ") * blink_characters_scale * 0.01,
+                            styles[obj.getvalue(LAYER, "テキスト", "文字装飾")],
+                            obj.getvalue(LAYER, "テキスト", "文字色") --[[@as number]],
+                            obj.getvalue(LAYER, "テキスト", "影・縁色") --[[@as number]],
+                            obj.getvalue(LAYER, "テキスト", "B") ~= "0",
+                            obj.getvalue(LAYER, "テキスト", "I") ~= "0",
+                            obj.getvalue(LAYER, "テキスト", "字間") --[[@as number]],
+                            obj.getvalue(LAYER, "テキスト", "行間") --[[@as number]]
+                        )
+
+                        alignment = alignments[obj.getvalue(LAYER, "テキスト", "文字揃え")]
+                    else
+                        obj.setfont(
+                            blink_characters_font,
+                            max(obj.w, obj.h) * blink_characters_scale * 0.01,
+                            0,
+                            0xffffff,
+                            0x000000,
+                            false,
+                            false,
+                            0,
+                            0
+                        )
+
+                        alignment = 4
+                    end
+
+                    chars = utf8.split(blink_characters_pool, true)
+                end
+
+                apply_blink = function(i, n, t)
+                    if blink_characters_pool ~= "" then
+                        local hx, _, _, _ = hash4d(i, n, seed + 1, t * FPS * 100.0, 1, #chars)
+
+                        local xform = {}
+                        copy_xform(xform, obj)
+
+                        obj.load("text", chars[hx], 0.0, 0.0, alignment)
+
+                        copy_xform(obj, xform)
+                    end
+
+                    local hx, hy, hz, _ = hash4d(i, n, seed + 2, t * FPS * 100.0)
+
+                    if should_blink_opacity then
+                        local r = floor(hx * blink_opacity_steps) / (blink_opacity_steps - 1)
+                        obj.alpha = lerp(blink_opacity_min, blink_opacity_max, r)
+                    end
+
+                    if should_blink_scale then
+                        local r = floor(hy * blink_scale_steps) / (blink_scale_steps - 1)
+                        local scale = lerp(blink_scale_min, blink_scale_max, r)
+                        obj.sx = scale
+                        obj.sy = scale
+                        obj.sz = scale
+                    end
+
+                    if should_edge_detect and hz < 0.5 then
+                        local ok, e = pcall(function()
+                            if not copybuffer("cache:tmp", "object") then
+                                error("Failed to copy buffer")
+                            end
+
+                            effect(
+                                "エッジ抽出",
+                                "強さ",
+                                blink_edge_intensity,
+                                "しきい値",
+                                blink_edge_threshold,
+                                "輝度エッジを抽出",
+                                0,
+                                "透明度エッジを抽出",
+                                1
+                            )
+
+                            pixelshader("alpha_mask", "cache:tmp", "object", { 0.0 }, "mask")
+
+                            if not copybuffer("object", "cache:tmp") then
+                                error("Failed to copy buffer")
+                            end
+                        end)
+
+                        if not ok then
+                            stop(e)
+                            return
+                        end
+                    end
+                end
+            end
+        end
+
+        local apply_fx
+
+        if effect_params ~= "" then
+            local KEY_FX = "99c01c07-d684-4b55-a6ca-7cd4bb9e390c-" .. ID
+
+            local data
+            if INDEX == 0 then
+                local toml = obj.module("Toml@FlowType_K")
+
+                data = { toml.parse("motion::effect", effect_params) }
+                global[KEY_FX] = buffer:reset():encode(data):get()
+            else
+                data = buffer:set(global[KEY_FX]):decode()
+            end
+
+            if INDEX == NUM - 1 then
+                global[KEY_FX] = nil
+            end
+
+            if type(data) == "table" then
+                local env = {
+                    _VERSION = _VERSION,
+                    ipairs = ipairs,
+                    pairs = pairs,
+                    next = next,
+                    select = select,
+                    unpack = unpack,
+                    type = type,
+                    tonumber = tonumber,
+                    tostring = tostring,
+                    pcall = pcall,
+                    xpcall = xpcall,
+                    print = print,
+                    math = math,
+                    string = string,
+                    table = table,
+                    bit = bit,
+                    setfont = setfont,
+                    rand = rand,
+                    rand1 = rand1,
+                    RGB = RGB,
+                    HSV = HSV,
+                    OR = OR,
+                    AND = AND,
+                    XOR = XOR,
+                    SHIFT = SHIFT,
+                    rotation = rotation,
+                    debug_print = debug_print,
+                    obj = obj,
+                    weight = nil,
+                }
+
+                apply_fx = function(w)
+                    env.weight = w
+
+                    local params
+                    for i, t in ipairs(data) do
+                        if i % 2 == 1 then
+                            params = {}
+                            params[#params + 1] = t
+                        else
+                            for k, v in pairs(t) do
+                                local p = k:match("^lua:(.*)$")
+                                if p ~= nil and p ~= "" then
+                                    local f, e = load(v, nil, "t", env)
+                                    if type(f) == "function" then
+                                        local ok, result = pcall(f)
+                                        if ok then
+                                            params[#params + 1] = p
+                                            params[#params + 1] = result
+                                        else
+                                            print("@warn", "Lua execution failed for the FX key '" .. p .. "'")
+                                            print(result)
+                                        end
+                                    else
+                                        print("@warn", "Lua syntax error detected in the FX key '" .. p .. "'")
+                                        print(e)
+                                    end
+                                else
+                                    params[#params + 1] = k
+                                    params[#params + 1] = tonumber(v) or v
+                                end
+                            end
+                            effect(unpack(params))
+                        end
+                    end
+                end
+            else
+                print("@warn", "Shared FX data table is missing or corrupted")
+            end
+        end
+
+        do
+            local i, n = INDEX, NUM
+
+            if NUM > 1 then
+                local content
+
+                if motion_based_on >= 0 then
+                    local KEY_COUNT = "58172aa6-e0d5-4503-aa68-984427e8f04f-" .. ID
+
+                    if text ~= nil then
+                        local c
+                        if INDEX == 0 then
+                            content = text:gsub("\\\\", "\\"):gsub("\\n", "\n"):gsub("<.->", "")
+
+                            c = utf8.count(content, true)
+                            global[KEY_COUNT] = tostring(c)
+                        else
+                            c = tonumber(global[KEY_COUNT])
+                        end
+
+                        if type(c) == "number" then
+                            if n % c == 0 then
+                                i = floor(i * c / n)
+                                n = c
+                            end
+                        else
+                            print("@warn", "Shared count value is missing or corrupted")
+                        end
+
+                        if INDEX == NUM - 1 then
+                            global[KEY_COUNT] = nil
+                        end
+                    end
+                end
+
+                if text ~= nil and motion_based_on > 0 then
+                    local KEY_GROUP = "a7d6bd98-24a1-480a-bf02-679a2c80c83d-" .. ID
+
+                    local t
+                    if INDEX == 0 then
+                        local regex = obj.module("Regex@FlowType_K")
+
+                        t = {}
+
+                        local j, id, pattern
+                        if motion_based_on == 1 then
+                            j = -1
+                            id = -1
+                            pattern = [=[[^\s\v\x85\pZ]]=]
+                        elseif motion_based_on == 2 then
+                            j = 0
+                            id = -2
+                            pattern = [=[[\s\v\x85\pZ]]=]
+                        else
+                            j = 0
+                            id = -3
+                            pattern = "\\n"
+                        end
+
+                        for _, m in ipairs({ regex.mark(id, content, pattern) }) do
+                            if m[1] then
+                                j = j + 1
+                            end
+
+                            if not m[2] then
+                                t[#t + 1] = max(j, 0)
+                            end
+                        end
+
+                        global[KEY_GROUP] = buffer:reset():encode(t):get()
+                    else
+                        t = buffer:set(global[KEY_GROUP]):decode()
+                    end
+
+                    if type(t) == "table" and #t == n then
+                        i = t[i + 1]
+                        n = t[n] + 1
+                    else
+                        print("@warn", "Shared motion group table is missing or corrupted")
+                    end
+
+                    if INDEX == NUM - 1 then
+                        global[KEY_GROUP] = nil
+                    end
+                elseif motion_based_on == -2 then
+                    i = 0
+                    n = 1
+                end
+            end
+
+            if motion_order == 1 then
+                i = n - 1 - i
+            elseif motion_order == 2 then
+                local KEY_ORDER = "66d63ef0-5c82-46b4-8989-12fa433c66e9-" .. ID
+
+                local t
+                if INDEX == 0 then
+                    randomseed(seed)
+
+                    t = {}
+
+                    for j = 1, n do
+                        t[j] = j - 1
+                    end
+
+                    for j = n, 1, -1 do
+                        local k = random(1, j)
+                        t[j], t[k] = t[k], t[j]
+                    end
+
+                    global[KEY_ORDER] = buffer:reset():encode(t):get()
+                else
+                    t = buffer:set(global[KEY_ORDER]):decode()
+                end
+
+                if type(t) == "table" and #t == n then
+                    i = t[i + 1]
+                else
+                    print("@warn", "Shared motion order table is missing or corrupted")
+                end
+
+                if INDEX == NUM - 1 then
+                    global[KEY_ORDER] = nil
+                end
+            end
+
+            if timing == 1 then
+                local sections = getoption("section_num")
+                if sections < n then
+                    print("@warn", (n - sections) .. " more sections are required to map all units")
+                end
+
+                if duration < 0.0 then
+                    duration = get_time(-n - 1) - TOTALTIME
+
+                    if -duration < eps then
+                        return
+                    end
+
+                    local amount = abs(offset)
+
+                    if amount >= eps then
+                        local base = -1 - i
+                        amount = get_time(base) - get_time(-amount + base)
+                        offset = offset < 0.0 and -amount or amount
+                    end
+                else
+                    duration = get_time(n)
+
+                    if duration < eps then
+                        return
+                    end
+
+                    local amount = abs(offset)
+
+                    if amount >= eps then
+                        amount = get_time(amount + i) - get_time(i)
+                        offset = offset < 0.0 and -amount or amount
+                    end
+                end
+            end
+
+            motion = function(dt, idx)
+                local t, w = progress(clamp(TIME + dt - offset, 0.0, TOTALTIME), i, n)
+
+                apply_xform(w)
+
+                if apply_lyric ~= nil then
+                    apply_lyric(i, n, t, w)
+                end
+
+                if apply_blink ~= nil and t >= 0.0 and t < blink_duration then
+                    apply_blink(i, n, t)
+                end
+
+                if should_load_lut then
+                    pixelshader(
+                        "map",
+                        "object",
+                        { "object", CACHE_LUT },
+                        { abs(w), idx / max((echo_count - 1), 1) },
+                        "copy",
+                        "clamp"
+                    )
+                end
+
+                if apply_fx ~= nil then
+                    apply_fx(w)
+                end
+
+                if t < motion_cutoff then
+                    obj.alpha = eps
+                end
+
+                if should_highlight and not getinfo("saving") then
+                    local x = 1.0 + (n - 1) * motion_overlap
+                    pixelshader("tint", "object", "object", {
+                        1.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        max(0.0, (x - i) / x),
+                    })
+                end
+            end
+        end
+
+        if motion_should_mask then
+            local W, H = obj.w, obj.h
+            local texel = 1.0 / H
+            local aspect = W * texel
+
+            mask = function(f)
+                local cx0, cy0, x0, y0, r0, sx0, sy0 = obj.cx, obj.cy, obj.ox, obj.oy, rad(obj.rz), obj.sx, obj.sy
+
+                f()
+
+                local cx1, cy1, x1, y1, r1, sx1, sy1 = obj.cx, obj.cy, obj.ox, obj.oy, rad(obj.rz), obj.sx, obj.sy
+
+                sx0 = sx0 < -eps and 1.0 / sx0 or 1.0 / max(sx0, eps)
+                sy0 = sy0 < -eps and 1.0 / sy0 or 1.0 / max(sy0, eps)
+
+                local dx, dy, dr = (x1 - x0) * texel, (y1 - y0) * texel, r1 - r0
+
+                local x, y = cos(dr), sin(dr)
+                local m00 = x * sx1 * sx0
+                local m01 = -y * sy1 * sx0
+                local m10 = y * sx1 * sy0
+                local m11 = x * sy1 * sy0
+
+                x, y = cos(r0), sin(r0)
+                local m02 = (x * dx + y * dy) * sx0
+                local m12 = (-y * dx + x * dy) * sy0
+
+                local px, py = (cx0 - cx1) * texel, (cy0 - cy1) * texel
+
+                pixelshader(
+                    "mask",
+                    "object",
+                    {},
+                    { m00, m10, 0.0, 0.0, m01, m11, 0.0, 0.0, m02, m12, 1.0, 0.0, px, py, aspect },
+                    "mask"
+                )
+            end
+        end
+    end
+
+    if echo_count > 1 then
+        local CACHE_IMAGE = "cache:cc2b9a9b-89d5-4481-b8f0-58ca17cd499f-" .. ID
+
+        if not copybuffer(CACHE_IMAGE, "object") then
+            stop("Failed to copy buffer")
+            return
+        end
+
+        local xform = {}
+        copy_xform(xform, obj)
+
+        local i = -1
+        obj.multiobject(echo_count, function()
+            i = i + 1
+
+            if not copybuffer("object", CACHE_IMAGE) then
+                stop("Failed to copy buffer")
+                return
+            end
+
+            copy_xform(obj, xform)
+
+            local j = echo_composite == 0 and i or echo_count - i - 1
+
+            local dt = echo_interval * j
+
+            if motion_should_mask then
+                mask(function()
+                    motion(dt, j)
+                end)
+            else
+                motion(dt, j)
+            end
+
+            obj.alpha = obj.alpha * (echo_decay ^ j)
+
+            return clamp(TIME + dt, 0.0, TOTALTIME) - TIME
+        end)
+    else
+        if motion_should_mask then
+            mask(function()
+                motion(0.0, 0.0)
+            end)
+        else
+            motion(0.0, 0.0)
+        end
+    end
+end
+
+@Island
+
+--require:2004900
+--information:Island@FlowType_K v0.3.3 by Korarei
+--label:Text
+
+--track@threshold:Threshold,0,100,0,0.01
+--track@index:Index,-1,100,-1,1
+--group:Anchor,true
+--select@anchor_target:Anchor::Target=1,Pivot Point=0,Position=1
+--checksection@anchor_should_overwrite:Anchor::Overwrite,false,false
+--group:Sort,false
+--separator:Order
+--select@sort_order_primary_axis:Sort::Order::Primary Axis=1,X=0,Y=1
+--select@sort_order_x:Sort::Order::X,Left to Right=0,Right to Left=1
+--select@sort_order_y:Sort::Order::Y,Top to Bottom=0,Bottom to Top=1
+--value@sort_order_custom_order:Sort::Order::Custom Order,{}
+--separator:Blocks
+--track@sort_blocks_x:Sort::Blocks::X,0,50,0,1,---
+--track@sort_blocks_y:Sort::Blocks::Y,0,50,0,1,---
+--group:Tint,false
+--select@tint_source:Tint::Source,Image=0,Layer=1
+--file@tint_image:Tint::Image,""
+--track@tint_layer:Tint::Layer,-100,100,0,1,---
+--select@tint_order:Tint::Order,Forward=0,Reverse=1,Random=2
+--group:Time Offset,false
+--track@time_offset_interval:Time Offset::Interval,-100,100,0,0.001
+--select@time_offset_order:Time Offset::Order,Forward=0,Reverse=1,Random=2
+--group:Additional Options,false
+--select@connectivity:Connectivity=1,4-Connected=0,8-Connected=1
+--select@unit:Unit,Frames=0,Seconds=1
+--select@layer_reference:Layer Reference,Absolute=0,Relative=1
+--track@seed:Seed,-10000,10000,0,1
+--check@should_highlight_order:Highlight Order,false
+--[[pixelshader@color_mask:
+Texture2D tex[2] : register(t0);
+cbuffer params : register(b0) {
+    float2 origin;
+    float idx;
+}
+
+float4
+color_mask(float4 pos : SV_Position) : SV_Target {
+    const int3 loc = int3(origin + pos.xy, 0);
+
+    const float3 color = tex[1].Load(loc).rgb * 63.75;
+    const float mask = color.r + color.g * 64.0 + color.b * 4096.0;
+
+    return tex[0].Load(loc) * step(abs(mask - idx), 0.5);
+}
+]]
+
+if obj.getoption("multi_object") then
+    print("@error", "Disable Multi Object to use this script")
+    return
+end
+
+do
+    local lerp, clamp, copy_xform, stop
+
+    do
+        local max, min = math.max, math.min
+
+        lerp = function(a, b, t)
+            return a + (b - a) * t
+        end
+
+        clamp = function(v, lower, upper)
+            return max(lower, min(upper, v))
+        end
+
+        copy_xform = function(dst, src)
+            dst.ox, dst.oy, dst.oz = src.ox, src.oy, src.oz
+            dst.cx, dst.cy, dst.cz = src.cx, src.cy, src.cz
+            dst.rx, dst.ry, dst.rz = src.rx, src.ry, src.rz
+            dst.sx, dst.sy, dst.sz = src.sx, src.sy, src.sz
+            dst.alpha = src.alpha
+        end
+
+        stop = function(e)
+            print("@error", e)
+            obj.load("text", "")
+        end
+    end
+
+
+    local island = obj.module("Island@FlowType_K")
+    local scan, fetch = island.scan, island.fetch
+
+    local ID = obj.effect_id
+    local CACHE_IMAGE = "cache:cf20d0bc-2ad4-4633-ab0f-2b349128aa13-" .. ID
+    local CACHE_COLOR_MASK = "cache:dbd9e2b5-861a-4647-9bd7-cf8137f60c54-" .. ID
+    local CACHE_ALPHA_MASK = "cache:9edded2f-c484-42b7-8bb8-032b0febed5e-" .. ID
+
+    local max, random, randomseed = math.max, math.random, math.randomseed
+    local getinfo, copybuffer, clearbuffer, pixelshader = obj.getinfo, obj.copybuffer, obj.clearbuffer, obj.pixelshader
+    local LAYER, TIME, TOTALTIME = obj.layer, obj.time, obj.totaltime
+
+    threshold = math.floor(threshold * 2.55)
+
+    tint_layer = layer_reference == 0 and max(tint_layer, 0) or max(LAYER + tint_layer, 0)
+    time_offset_interval = unit == 0 and time_offset_interval / obj.framerate or time_offset_interval
+
+    local should_use_custom_order = #sort_order_custom_order > 0
+
+    local should_load_lut = false
+    if tint_source == 0 then
+        should_load_lut = tint_image ~= ""
+    elseif tint_source == 1 then
+        if tint_layer > 0 and tint_layer ~= LAYER then
+            if not obj.getvalue("layer" .. tint_layer) then
+                local frame = obj.getvalue("frame_s") + obj.frame
+                print("@warn", "No object found in Layer " .. tint_layer .. " at Frame " .. frame)
+            else
+                should_load_lut = true
+            end
+        end
+    end
+
+    if seed >= 0 then
+        randomseed(seed)
+        seed = LAYER + random(2147483647) + 1
+    else
+        seed = -seed
+    end
+
+    local set_anchor
+
+    do
+        local x, y, sign
+        if anchor_target == 0 then
+            x, y, sign = "cx", "cy", -1.0
+        elseif anchor_target == 1 then
+            x, y, sign = "ox", "oy", 1.0
+        end
+
+        set_anchor = function(dx, dy)
+            obj[x] = obj[x] + dx * sign
+            obj[y] = obj[y] + dy * sign
+        end
+    end
+
+    local apply_tint
+
+    if should_load_lut then
+        local CACHE_LUT = "cache:007fc33f-4843-45ca-8ef0-84edcea977c9-" .. ID
+
+        local rand1 = obj.rand1
+
+        local ok, e = pcall(function()
+            if not copybuffer("cache:tmp", "object") then
+                error("Failed to copy buffer")
+            end
+
+            local xform = {}
+            copy_xform(xform, obj)
+
+            if tint_source == 0 then
+                if not obj.load("image", tint_image) then
+                    if not copybuffer("object", "cache:tmp") then
+                        error("Failed to copy buffer")
+                    end
+
+                    error("Failed to load image file")
+                end
+            elseif tint_source == 1 then
+                if not obj.load("layer", tint_layer, true) then
+                    if not copybuffer("object", "cache:tmp") then
+                        error("Failed to copy buffer")
+                    end
+
+                    error("Failed to load layer data")
+                end
+            end
+
+            if not copybuffer(CACHE_LUT, "object") then
+                error("Failed to copy buffer")
+            end
+
+            if not copybuffer("object", "cache:tmp") then
+                error("Failed to copy buffer")
+            end
+
+            copy_xform(obj, xform)
+        end)
+
+        if not ok then
+            stop(e)
+            return
+        end
+
+        apply_tint = function(i, n)
+            local t
+            if tint_order == 0 then
+                t = i / max(n - 1, 1)
+            elseif tint_order == 1 then
+                t = 1.0 - i / max(n - 1, 1)
+            else
+                t = rand1(-seed, i)
+            end
+
+            pixelshader("map@Motion@FlowType_K", "object", { "object", CACHE_LUT }, { t, 0.5 }, "copy", "clamp")
+        end
+    end
+
+    if not copybuffer(CACHE_COLOR_MASK, "object") then
+        stop("Failed to copy buffer")
+        return
+    end
+
+    if not copybuffer(CACHE_IMAGE, "object") then
+        stop("Failed to copy buffer")
+        return
+    end
+
+    local data, W, H = obj.getpixeldata(CACHE_COLOR_MASK)
+
+    local n = scan(
+        ID,
+        threshold,
+        connectivity,
+        sort_order_primary_axis,
+        sort_order_x,
+        sort_order_y,
+        sort_blocks_x,
+        sort_blocks_y,
+        data,
+        W,
+        H
+    )
+
+    if n == 0 then
+        return
+    end
+
+    obj.putpixeldata(CACHE_COLOR_MASK, data, W, H)
+
+    if index >= 0 and index < n then
+        local x, y, w, h, dx, dy = fetch(ID, index)
+        clearbuffer("object", w, h)
+        pixelshader("color_mask", "object", { CACHE_IMAGE, CACHE_COLOR_MASK }, { x, y, index })
+
+        if anchor_target == 0 then
+            if anchor_should_overwrite then
+                obj.cx = -dx
+                obj.cy = -dy
+            else
+                obj.cx = obj.cx - dx
+                obj.cy = obj.cy - dy
+            end
+        elseif anchor_target == 1 then
+            if anchor_should_overwrite then
+                obj.ox = dx
+                obj.oy = dy
+            else
+                obj.ox = obj.ox + dx
+                obj.oy = obj.oy + dy
+            end
+        end
+
+        if should_load_lut then
+            apply_tint(index, n)
+        end
+
+        return
+    end
+
+    local xform = {}
+    copy_xform(xform, obj)
+    if anchor_should_overwrite then
+        if anchor_target == 0 then
+            xform.cx, xform.cy = 0.0, 0.0
+        elseif anchor_target == 1 then
+            xform.ox, xform.oy = 0.0, 0.0
+        end
+    end
+
+    if should_use_custom_order then
+        n = math.min(n, #sort_order_custom_order + 1)
+        clearbuffer(CACHE_ALPHA_MASK, W, H)
+    end
+
+    local order
+    if time_offset_order == 2 then
+        randomseed(seed)
+
+        order = {}
+
+        for i = 1, n do
+            order[i] = i - 1
+        end
+
+        for i = n, 1, -1 do
+            local j = random(1, i)
+            order[i], order[j] = order[j], order[i]
+        end
+    end
+
+    local i = -1
+    obj.multiobject(n, function()
+        i = i + 1
+
+        local j
+        if time_offset_order == 0 then
+            j = i
+        elseif time_offset_order == 1 then
+            j = n - i - 1
+        elseif time_offset_order == 2 then
+            ---@cast order integer[]
+            j = order[i + 1]
+        end
+
+        if should_use_custom_order then
+            if i < n - 1 then
+                j = sort_order_custom_order[j + 1]
+                local x, y, w, h, dx, dy = fetch(ID, j)
+                clearbuffer("object", w, h)
+                pixelshader("color_mask", "object", { CACHE_IMAGE, CACHE_COLOR_MASK }, { x, y, j })
+                pixelshader("color_mask", CACHE_ALPHA_MASK, { CACHE_IMAGE, CACHE_COLOR_MASK }, { 0, 0, j }, "draw")
+                copy_xform(obj, xform)
+                set_anchor(dx, dy)
+            else
+                if not copybuffer("object", CACHE_IMAGE) then
+                    stop("Failed to copy buffer")
+                    return
+                end
+                pixelshader("alpha_mask@Motion@FlowType_K", "object", CACHE_ALPHA_MASK, { 1.0 }, "mask")
+                copy_xform(obj, xform)
+            end
+        else
+            local x, y, w, h, dx, dy = fetch(ID, j)
+            clearbuffer("object", w, h)
+            pixelshader("color_mask", "object", { CACHE_IMAGE, CACHE_COLOR_MASK }, { x, y, j })
+            copy_xform(obj, xform)
+            set_anchor(dx, dy)
+        end
+
+        if should_load_lut then
+            apply_tint(j, n)
+        end
+
+        if should_highlight_order and not getinfo("saving") then
+            pixelshader(
+                "tint@Motion@FlowType_K",
+                "object",
+                "object",
+                { 1.0, 0.0, 0.0, 1.0, 1.0 - i / max(n - 1, 1) }
+            )
+        end
+
+        return clamp(TIME + time_offset_interval * i, 0.0, TOTALTIME) - TIME
+    end)
+end
+
+@Kerning
+
+--require:2004900
+--information:Kerning@FlowType_K v0.3.3 by Korarei
+--label:Text
+
+--select@kerning_mode:Kerning Mode=1,None=0,Metrics=1
+--group:Filter,true
+--string@filter_regex_pattern:Filter::Regex Pattern,
+--track@filter_capture_group:Filter::Capture Group,0,20,0,1
+--checksection@should_limit_fx:Filter::Limit Effects Below,false,false
+--group:Transform,false
+--separator:Pivot Point
+--track@xform_pivot_x:Transform::Pivot::X,-100000,100000,0,0.01
+--track@xform_pivot_y:Transform::Pivot::Y,-100000,100000,0,0.01
+--track@xform_pivot_z:Transform::Pivot::Z,-100000,100000,0,0.01
+--trackgroup@xform_pivot_x,xform_pivot_y,xform_pivot_z:Group::Transform::Pivot
+--separator:Position
+--track@xform_position_x:Transform::Position::X,-100000,100000,0,0.01
+--track@xform_position_y:Transform::Position::Y,-100000,100000,0,0.01
+--track@xform_position_z:Transform::Position::Z,-100000,100000,0,0.01
+--trackgroup@xform_position_x,xform_position_y,xform_position_z:Group::Transform::Position
+--separator:Rotation
+--track@xform_rotation_w:Transform::Rotation::W,-3600,3600,0,0.01
+--track@xform_rotation_x:Transform::Rotation::X,-3600,3600,0,0.01
+--track@xform_rotation_y:Transform::Rotation::Y,-3600,3600,0,0.01
+--track@xform_rotation_z:Transform::Rotation::Z,-3600,3600,0,0.01
+--select@xform_rotation_mode:Transform::Rotation::Mode=21,Quaternion=0,Axis Angle=1,XYZ Euler=5,XZY Euler=7,YXZ Euler=11,YZX Euler=15,ZXY Euler=19,ZYX Euler=21
+--trackgroup@xform_rotation_x,xform_rotation_y,xform_rotation_z:Group::Transform::Rotation
+--separator:Scale
+--track@xform_scale_x:Transform::Scale::X,-10000,10000,100,0.01
+--track@xform_scale_y:Transform::Scale::Y,-10000,10000,100,0.01
+--track@xform_scale_z:Transform::Scale::Z,-10000,10000,100,0.01
+--trackgroup@xform_scale_x,xform_scale_y,xform_scale_z:Group::Transform::Scale
+--separator:Compositing
+--select@xform_blend_mode:Transform::Compositing::Blend Mode,Normal=0,Darken=7,Multiply=3,Linear Burn=10,Lighten=6,Screen=4,Linear Dodge (Add)=1,Overlay=5,Linear Light=11,Difference=12,Subtract=2,Color=9,Luminosity=8
+--track@xform_opacity:Transform::Compositing::Opacity,0,100,100,0.01
+--separator:Target
+--checksection@xform_target_local_space:Transform::Target::Local Space,true,false
+--checksection@xform_target_world_space:Transform::Target::World Space,false,false
+--group:Tint,false
+--color@tint_color:Tint::Color,nil
+--track@tint_opacity:Tint::Opacity,0,100,100,0.01
+--group:Additional Options,false
+--track@influence:Influence,0,100,100,0.01
+
+if obj.num < 2 then
+    print("@error", "Enable Multi Object to use this script")
+    return
+end
+
+do
+    local _ = obj.setanchor("xform_position_x,xform_position_y,xform_position_z", 0, "line", "xyz")
+
+    local lerp, clamp, copy_xform, stop
+
+    do
+        local max, min = math.max, math.min
+
+        lerp = function(a, b, t)
+            return a + (b - a) * t
+        end
+
+        clamp = function(v, lower, upper)
+            return max(lower, min(upper, v))
+        end
+
+        copy_xform = function(dst, src)
+            dst.ox, dst.oy, dst.oz = src.ox, src.oy, src.oz
+            dst.cx, dst.cy, dst.cz = src.cx, src.cy, src.cz
+            dst.rx, dst.ry, dst.rz = src.rx, src.ry, src.rz
+            dst.sx, dst.sy, dst.sz = src.sx, src.sy, src.sz
+            dst.alpha = src.alpha
+        end
+
+        stop = function(e)
+            print("@error", e)
+            obj.load("text", "")
+        end
+    end
+
+
+    local buffer
+
+    do
+        buffer = require("string.buffer").new()
+    end
+
+    local ID = obj.effect_id
+    local KEY_COUNT = "8973f111-5db5-4890-907d-52539fe55570-" .. ID
+
+    local getvalue = obj.getvalue
+    local INDEX, NUM, LAYER, FPS, TIME = obj.index, obj.num, obj.layer, obj.framerate, obj.time
+
+    xform_scale_x = xform_scale_x * 0.01
+    xform_scale_y = xform_scale_y * 0.01
+    xform_scale_z = xform_scale_z * 0.01
+    xform_opacity = xform_opacity * 0.01
+
+    tint_opacity = tint_opacity * 0.01
+
+    influence = influence * 0.01
+
+    local text = getvalue(LAYER, "テキスト", "テキスト") --[[@as string | nil]]
+    if text == nil then
+        print("@error", "'テキスト' effect was not found in the source")
+        return
+    end
+
+    local content = INDEX == 0 and text:gsub("\\\\", "\\"):gsub("\\n", "\n"):gsub("<.->", "") or nil
+
+    local i, n = INDEX, NUM
+
+    local c
+    if INDEX == 0 then
+        local utf8 = obj.module("UTF8@FlowType_K")
+
+        c = utf8.count(content, true)
+        global[KEY_COUNT] = tostring(c)
+    else
+        c = tonumber(global[KEY_COUNT])
+    end
+
+    if type(c) == "number" then
+        if n % c == 0 then
+            i = math.floor(i * c / n)
+            n = c
+        end
+    else
+        print("@warn", "Shared count value is missing or corrupted")
+    end
+
+    if INDEX == NUM - 1 then
+        global[KEY_COUNT] = nil
+    end
+
+    local offset = { 0.0, 0.0 }
+    if kerning_mode == 1 then
+        local KEY_KERNING = "308494ea-bd57-4fbf-9573-458df515646c-" .. ID
+
+        local t
+        if INDEX == 0 then
+            local kerning = obj.module("Kerning@FlowType_K")
+
+            local alignments = {
+                ["左寄せ[上]"] = 0,
+                ["中央揃え[上]"] = 1,
+                ["右寄せ[上]"] = 2,
+                ["左寄せ[中]"] = 3,
+                ["中央揃え[中]"] = 4,
+                ["右寄せ[中]"] = 5,
+                ["左寄せ[下]"] = 6,
+                ["中央揃え[下]"] = 7,
+                ["右寄せ[下]"] = 8,
+                ["縦書 上寄[右]"] = 9,
+                ["縦書 中央[右]"] = 10,
+                ["縦書 下寄[右]"] = 11,
+                ["縦書 上寄[中]"] = 12,
+                ["縦書 中央[中]"] = 13,
+                ["縦書 下寄[中]"] = 14,
+                ["縦書 上寄[左]"] = 15,
+                ["縦書 中央[左]"] = 16,
+                ["縦書 下寄[左]"] = 17,
+            }
+
+            t = {
+                kerning.shift(
+                    obj.id,
+                    content,
+                    getvalue(LAYER, "テキスト", "サイズ"),
+                    getvalue(LAYER, "テキスト", "フォント"),
+                    alignments[getvalue(LAYER, "テキスト", "文字揃え")],
+                    getvalue(LAYER, "テキスト", "B") ~= "0",
+                    getvalue(LAYER, "テキスト", "I") ~= "0"
+                ),
+            }
+            global[KEY_KERNING] = buffer:reset():encode(t):get()
+        else
+            t = buffer:set(global[KEY_KERNING]):decode()
+        end
+
+        if type(t) == "table" and #t == n then
+            offset = t[i + 1]
+        else
+            print("@warn", "Shared kerning offset table is missing or corrupted")
+        end
+
+        if INDEX == NUM - 1 then
+            global[KEY_KERNING] = nil
+        end
+    end
+
+    local is_matched = true
+    if filter_regex_pattern ~= "" then
+        local KEY_REGEX = "db5638b7-59ab-4c53-8471-772fc3b03366-" .. ID
+
+        local t = {}
+        if INDEX == 0 then
+            local regex = obj.module("Regex@FlowType_K")
+
+            for _, m in ipairs({ regex.mark(ID, content, filter_regex_pattern, filter_capture_group) }) do
+                if not m[2] then
+                    t[#t + 1] = m[1]
+                end
+            end
+            global[KEY_REGEX] = buffer:reset():encode(t):get()
+        else
+            t = buffer:set(global[KEY_REGEX]):decode()
+        end
+
+        if type(t) == "table" and #t == n then
+            is_matched = t[i + 1]
+        else
+            print("@warn", "Shared regex filter table is missing or corrupted")
+        end
+
+        if INDEX == NUM - 1 then
+            global[KEY_REGEX] = nil
+        end
+    end
+
+    if is_matched then
+        local vector = obj.module("Vector@FlowType_K")
+        local rotate = vector.rotate
+
+        if xform_target_world_space then
+            local v = {
+                (obj.ox - xform_pivot_x * influence) * (1.0 + (xform_scale_x - 1.0) * influence),
+                (obj.oy - xform_pivot_y * influence) * (1.0 + (xform_scale_y - 1.0) * influence),
+                (obj.oz - xform_pivot_z * influence) * (1.0 + (xform_scale_z - 1.0) * influence),
+            }
+
+            v = rotate(
+                influence,
+                xform_rotation_mode,
+                xform_rotation_w,
+                xform_rotation_x,
+                xform_rotation_y,
+                xform_rotation_z,
+                v
+            )
+
+            obj.ox = v[1]
+            obj.oy = v[2]
+            obj.oz = v[3]
+        end
+
+        if xform_target_local_space then
+            local rx, ry, rz = rotate(
+                influence,
+                xform_rotation_mode,
+                xform_rotation_w,
+                xform_rotation_x,
+                xform_rotation_y,
+                xform_rotation_z
+            )
+
+            obj.cx = obj.cx + xform_pivot_x * influence
+            obj.cy = obj.cy + xform_pivot_y * influence
+            obj.cz = obj.cz + xform_pivot_z * influence
+            obj.rx = obj.rx + rx
+            obj.ry = obj.ry + ry
+            obj.rz = obj.rz + rz
+            obj.sx = lerp(obj.sx, obj.sx * xform_scale_x, influence)
+            obj.sy = lerp(obj.sy, obj.sy * xform_scale_y, influence)
+            obj.sz = lerp(obj.sz, obj.sz * xform_scale_z, influence)
+        end
+
+        if xform_target_local_space or xform_target_world_space then
+            obj.ox = obj.ox + (xform_position_x + offset[1]) * influence
+            obj.oy = obj.oy + (xform_position_y + offset[2]) * influence
+            obj.oz = obj.oz + xform_position_z * influence
+        end
+
+        obj.alpha = lerp(obj.alpha, obj.alpha * xform_opacity, influence)
+
+        ---@diagnostic disable-next-line: param-type-mismatch
+        obj.setoption("blend", xform_blend_mode)
+
+        if tint_color ~= nil then
+            local r, g, b = RGB(tint_color)
+            obj.pixelshader(
+                "tint@Motion@FlowType_K",
+                "object",
+                "object",
+                { r / 255.0, g / 255.0, b / 255.0, 1.0, tint_opacity * influence }
+            )
+        end
+    elseif should_limit_fx then
+        obj.draw()
+    end
+end
+
+@Repeat
+
+--require:2004900
+--information:Repeat@FlowType_K v0.3.3 by Korarei
+--label:Text
+
+--group:Layout,true
+--separator:Count
+--track@layout_count_x:Layout::Count::X,1,100,1,1
+--track@layout_count_y:Layout::Count::Y,1,100,1,1
+--trackgroup@layout_count_x,layout_count_y:Group::Layout::Count
+--separator:Padding
+--track@layout_padding_x:Layout::Padding::X,-10000,10000,0,0.01
+--track@layout_padding_y:Layout::Padding::Y,-10000,10000,0,0.01
+--trackgroup@layout_padding_x,layout_padding_y:Group::Layout::Padding
+--group:Position Offset,false
+--track@position_offset_angle:Position Offset::Angle,-89,89,0,0.01
+--track@position_offset_axis:Position Offset::Axis,-3600,3600,0,0.01
+--group:Time Offset,false
+--track@time_offset_interval:Time Offset::Interval,-100,100,0,0.001
+--select@time_offset_orientation:Time Offset::Orientation,Column=0,Row=1
+--select@time_offset_order:Time Offset::Order,Forward=0,Reverse=1,Random=2
+--group:Additional Options,false
+--select@unit:Unit,Frames=0,Seconds=1
+--track@seed:Seed,-10000,10000,0,1
+--check@should_highlight_order:Highlight Order,false
+
+do
+    local lerp, clamp, copy_xform, stop
+
+    do
+        local max, min = math.max, math.min
+
+        lerp = function(a, b, t)
+            return a + (b - a) * t
+        end
+
+        clamp = function(v, lower, upper)
+            return max(lower, min(upper, v))
+        end
+
+        copy_xform = function(dst, src)
+            dst.ox, dst.oy, dst.oz = src.ox, src.oy, src.oz
+            dst.cx, dst.cy, dst.cz = src.cx, src.cy, src.cz
+            dst.rx, dst.ry, dst.rz = src.rx, src.ry, src.rz
+            dst.sx, dst.sy, dst.sz = src.sx, src.sy, src.sz
+            dst.alpha = src.alpha
+        end
+
+        stop = function(e)
+            print("@error", e)
+            obj.load("text", "")
+        end
+    end
+
+
+    local buffer
+
+    do
+        buffer = require("string.buffer").new()
+    end
+
+    local ID = obj.effect_id
+    local CACHE_IMAGE = "cache:24a8ba19-70d6-4ceb-ad75-b793c122a10b-" .. ID
+
+    local max, floor, rad, random, randomseed = math.max, math.floor, math.rad, math.random, math.randomseed
+    local getvalue, getinfo, copybuffer, pixelshader = obj.getvalue, obj.getinfo, obj.copybuffer, obj.pixelshader
+    local INDEX, NUM, LAYER = obj.index, obj.num, obj.layer
+    local FPS, TIME, TOTALTIME = obj.framerate, obj.time, obj.totaltime
+
+    layout_count_x = floor(layout_count_x)
+    layout_count_y = floor(layout_count_y)
+
+    position_offset_angle = rad(position_offset_angle)
+    position_offset_axis = rad(position_offset_axis)
+
+    time_offset_interval = unit == 0 and time_offset_interval / obj.framerate or time_offset_interval
+
+    if seed >= 0 then
+        randomseed(seed)
+        seed = obj.layer + random(2147483647) + 1
+    else
+        seed = -seed
+    end
+
+    local count = layout_count_x * layout_count_y
+
+    if count <= 1 then
+        return
+    end
+
+    local w, h = obj.w, obj.h
+
+    if NUM > 1 then
+        local text = getvalue(LAYER, "テキスト", "テキスト") --[[@as string | nil]]
+        if text ~= nil then
+            local KEY_SIZE = "0a5312f4-0ec0-430b-bbf8-2316b0fd3e20-" .. ID
+
+            local size
+            if INDEX == 0 then
+                local styles = {
+                    ["標準文字"] = 0,
+                    ["影付き文字"] = 1,
+                    ["影付き文字(薄)"] = 2,
+                    ["縁取り文字"] = 3,
+                    ["縁取り文字(細)"] = 4,
+                    ["縁取り文字(太)"] = 5,
+                    ["縁取り文字(角)"] = 6,
+                }
+
+                obj.setfont(
+                    getvalue(LAYER, "テキスト", "フォント") --[[@as string]],
+                    getvalue(LAYER, "テキスト", "サイズ") --[[@as number]],
+                    styles[getvalue(LAYER, "テキスト", "文字装飾")],
+                    0,
+                    0,
+                    getvalue(LAYER, "テキスト", "B") ~= "0",
+                    getvalue(LAYER, "テキスト", "I") ~= "0",
+                    getvalue(LAYER, "テキスト", "字間") --[[@as number]],
+                    getvalue(LAYER, "テキスト", "行間") --[[@as number]]
+                )
+
+                size = { obj.load("text.layout", text:gsub("\\\\", "\\"):gsub("\\n", "\n")) }
+                global[KEY_SIZE] = buffer:reset():encode(size):get()
+            else
+                size = buffer:set(global[KEY_SIZE]):decode()
+            end
+
+            if type(size) == "table" and #size == 2 then
+                ---@cast size number[]
+                w, h = size[1], size[2]
+            else
+                print("@warn", "Shared size table is missing or corrupted")
+            end
+
+            if INDEX == NUM - 1 then
+                global[KEY_SIZE] = nil
+            end
+        end
+    end
+
+    local x, y = math.cos(position_offset_axis), math.sin(position_offset_axis)
+    local s = math.tan(position_offset_angle)
+    local c = s * x * y
+
+    local dx, dy = w + layout_padding_x, h + layout_padding_y
+
+    local ex, ey = dx * (1 - c), dx * s * x * x
+    local fx, fy = -dy * s * y * y, dy * (1 + c)
+
+    local ox = -0.5 * ((layout_count_x - 1) * ex + (layout_count_y - 1) * fx)
+    local oy = -0.5 * ((layout_count_x - 1) * ey + (layout_count_y - 1) * fy)
+
+    if not copybuffer(CACHE_IMAGE, "object") then
+        stop("Failed to copy buffer")
+        return
+    end
+
+    local xform = {}
+    copy_xform(xform, obj)
+
+    local order
+    if time_offset_order == 2 then
+        randomseed(seed)
+
+        order = {}
+
+        for i = 1, count do
+            order[i] = i - 1
+        end
+
+        for i = count, 1, -1 do
+            local j = random(1, i)
+            order[i], order[j] = order[j], order[i]
+        end
+    end
+
+    local i = -1
+    obj.multiobject(count, function()
+        i = i + 1
+
+        local j
+        if time_offset_order == 0 then
+            j = i
+        elseif time_offset_order == 1 then
+            j = count - i - 1
+        elseif time_offset_order == 2 then
+            ---@cast order integer[]
+            j = order[i + 1]
+        end
+
+        if not copybuffer("object", CACHE_IMAGE) then
+            stop("Failed to copy buffer")
+            return
+        end
+
+        copy_xform(obj, xform)
+
+        local row, col
+        if time_offset_orientation == 0 then
+            row = floor(j / layout_count_x)
+            col = j - row * layout_count_x
+        else
+            col = floor(j / layout_count_y)
+            row = j - col * layout_count_y
+        end
+
+        obj.ox = obj.ox + ox + ex * col + fx * row
+        obj.oy = obj.oy + oy + ey * col + fy * row
+
+        if should_highlight_order and not getinfo("saving") then
+            pixelshader(
+                "tint@Motion@FlowType_K",
+                "object",
+                "object",
+                { 1.0, 0.0, 0.0, 1.0, 1.0 - i / max(count - 1, 1) }
+            )
+        end
+
+        return clamp(TIME + time_offset_interval * i, 0.0, TOTALTIME) - TIME
+    end)
+end
+
+@Blink
+
+--require:2004900
+--information:Blink@FlowType_K v0.3.3 by Korarei
+--label:Text
+
+--select@based_on:Based On,Whole=-2,Objects=-1,Characters=0,Characters Excluding Spaces=1,Words=2,Lines=3
+--track@duration:Duration,-10000,10000,8,0.001,---
+--group:Opacity,true
+--track@opacity_steps:Opacity::Steps,2,128,2,1
+--track@opacity_min:Opacity::Minimum,0,100,0,0.01
+--track@opacity_max:Opacity::Maximum,0,100,100,0.01
+--group:Scale,false
+--track@scale_steps:Scale::Steps,2,128,2,1
+--track@scale_min:Scale::Minimum,-10000,10000,100,0.01
+--track@scale_max:Scale::Maximum,-10000,10000,100,0.01
+--group:Edge Detection,false
+--track@edge_intensity:Edge Detection::Intensity,0,1000,100,0.01
+--track@edge_threshold:Edge Detection::Threshold,-100,100,-100,0.01
+--group:Characters,false
+--string@characters_pool:Characters::Pool,
+--font@characters_font:Characters::Font,Noto Sans JP Black
+--track@characters_scale:Characters::Scale,0,1000,100,0.01
+--group:Color,false
+--track@color_steps:Color::Steps,2,128,2,1
+--select@color_source:Color::Source,Image=0,Layer=1
+--file@color_image:Color::Image,""
+--track@color_layer:Color::Layer,-100,100,0,1,---
+--group:Additional Options,false
+--select@unit:Unit,Frames=0,Seconds=1
+--select@layer_reference:Layer Reference,Absolute=0,Relative=1
+--track@seed:Seed,-10000,10000,0,1
+
+if obj.framerate == 0 then
+    print("@error", "Framerate value must be greater than zero")
+    return
+end
+
+do
+    local lerp, clamp, copy_xform, stop
+
+    do
+        local max, min = math.max, math.min
+
+        lerp = function(a, b, t)
+            return a + (b - a) * t
+        end
+
+        clamp = function(v, lower, upper)
+            return max(lower, min(upper, v))
+        end
+
+        copy_xform = function(dst, src)
+            dst.ox, dst.oy, dst.oz = src.ox, src.oy, src.oz
+            dst.cx, dst.cy, dst.cz = src.cx, src.cy, src.cz
+            dst.rx, dst.ry, dst.rz = src.rx, src.ry, src.rz
+            dst.sx, dst.sy, dst.sz = src.sx, src.sy, src.sz
+            dst.alpha = src.alpha
+        end
+
+        stop = function(e)
+            print("@error", e)
+            obj.load("text", "")
+        end
+    end
+
+
+    local buffer
+
+    do
+        buffer = require("string.buffer").new()
+    end
+
+    local utf8 = obj.module("UTF8@FlowType_K")
+    local hash = obj.module("Hash@FlowType_K")
+    local hash4d = hash.hash4d
+
+    local eps = 1.0e-4
+
+    local max, floor = math.max, math.floor
+    local copybuffer, pixelshader = obj.copybuffer, obj.pixelshader
+    local ID, INDEX, NUM, LAYER = obj.effect_id, obj.index, obj.num, obj.layer
+    local FPS, TIME = obj.framerate, obj.time
+
+    duration = unit == 0 and duration / FPS or duration
+
+    opacity_min = opacity_min * 0.01
+    opacity_max = opacity_max * 0.01
+
+    scale_min = scale_min * 0.01
+    scale_max = scale_max * 0.01
+
+    color_layer = layer_reference == 0 and max(color_layer, 0) or max(LAYER + color_layer, 0)
+
+    local should_blink_opacity = opacity_max - opacity_min > eps
+    local should_blink_scale = scale_max - scale_min > eps
+    local should_edge_detect = edge_threshold > -100.0 + eps
+
+    local should_load_lut = false
+    if color_source == 0 then
+        should_load_lut = color_image ~= ""
+    elseif color_source == 1 then
+        if color_layer > 0 and color_layer ~= LAYER then
+            if not obj.getvalue("layer" .. color_layer) then
+                local frame = obj.getvalue("frame_s") + obj.frame
+                print("@warn", "No object found in Layer " .. color_layer .. " at Frame " .. frame)
+            else
+                should_load_lut = true
+            end
+        end
+    end
+
+    if seed >= 0 then
+        math.randomseed(seed)
+        seed = LAYER + math.random(2147483647) + 1
+    else
+        seed = -seed
+    end
+
+    if math.abs(duration) < eps then
+        print("@error", "Duration value is too small for this animation")
+        return
+    end
+
+    local text = obj.getvalue(LAYER, "テキスト", "テキスト") --[[@as string | nil]]
+
+    local i, n = INDEX, NUM
+
+    if NUM > 1 then
+        local content
+
+        if based_on >= 0 then
+            local KEY_COUNT = "0fd2dd98-70e4-4c71-a1a5-042eecbfdbe0-" .. ID
+
+            if text ~= nil then
+                local c
+                if INDEX == 0 then
+                    content = text:gsub("\\\\", "\\"):gsub("\\n", "\n"):gsub("<.->", "")
+
+                    c = utf8.count(content, true)
+                    global[KEY_COUNT] = tostring(c)
+                else
+                    c = tonumber(global[KEY_COUNT])
+                end
+
+                if type(c) == "number" then
+                    if n % c == 0 then
+                        i = floor(i * c / n)
+                        n = c
+                    end
+                else
+                    print("@warn", "Shared count value is missing or corrupted")
+                end
+
+                if INDEX == NUM - 1 then
+                    global[KEY_COUNT] = nil
+                end
+            end
+        end
+
+        if text ~= nil and based_on > 0 then
+            local KEY_GROUP = "23ac879f-fa88-47fe-9047-98c62eb012d2-" .. ID
+
+            local t
+            if INDEX == 0 then
+                local regex = obj.module("Regex@FlowType_K")
+
+                t = {}
+
+                local j, id, pattern
+                if based_on == 1 then
+                    j = -1
+                    id = -1
+                    pattern = [=[[^\s\v\x85\pZ]]=]
+                elseif based_on == 2 then
+                    j = 0
+                    id = -2
+                    pattern = [=[[\s\v\x85\pZ]]=]
+                else
+                    j = 0
+                    id = -3
+                    pattern = "\\n"
+                end
+
+                for _, m in ipairs({ regex.mark(id, content, pattern) }) do
+                    if m[1] then
+                        j = j + 1
+                    end
+
+                    if not m[2] then
+                        t[#t + 1] = max(j, 0)
+                    end
+                end
+
+                global[KEY_GROUP] = buffer:reset():encode(t):get()
+            else
+                t = buffer:set(global[KEY_GROUP]):decode()
+            end
+
+            if type(t) == "table" and #t == n then
+                i = t[i + 1]
+                n = t[n] + 1
+            else
+                print("@warn", "Shared motion group table is missing or corrupted")
+            end
+
+            if INDEX == NUM - 1 then
+                global[KEY_GROUP] = nil
+            end
+        elseif based_on == -2 then
+            i = 0
+            n = 1
+        end
+    end
+
+    if (TIME - (duration < 0.0 and obj.totaltime or 0.0)) / duration < 1.0 then
+        if characters_pool ~= "" then
+            local alignment
+
+            if text ~= nil then
+                local styles = {
+                    ["標準文字"] = 0,
+                    ["影付き文字"] = 1,
+                    ["影付き文字(薄)"] = 2,
+                    ["縁取り文字"] = 3,
+                    ["縁取り文字(細)"] = 4,
+                    ["縁取り文字(太)"] = 5,
+                    ["縁取り文字(角)"] = 6,
+                }
+
+                local alignments = {
+                    ["左寄せ[上]"] = 0,
+                    ["中央揃え[上]"] = 1,
+                    ["右寄せ[上]"] = 2,
+                    ["左寄せ[中]"] = 3,
+                    ["中央揃え[中]"] = 4,
+                    ["右寄せ[中]"] = 5,
+                    ["左寄せ[下]"] = 6,
+                    ["中央揃え[下]"] = 7,
+                    ["右寄せ[下]"] = 8,
+                    ["縦書 上寄[右]"] = 9,
+                    ["縦書 中央[右]"] = 10,
+                    ["縦書 下寄[右]"] = 11,
+                    ["縦書 上寄[中]"] = 12,
+                    ["縦書 中央[中]"] = 13,
+                    ["縦書 下寄[中]"] = 14,
+                    ["縦書 上寄[左]"] = 15,
+                    ["縦書 中央[左]"] = 16,
+                    ["縦書 下寄[左]"] = 17,
+                }
+
+                obj.setfont(
+                    characters_font,
+                    obj.getvalue(LAYER, "テキスト", "サイズ") * characters_scale * 0.01,
+                    styles[obj.getvalue(LAYER, "テキスト", "文字装飾")],
+                    obj.getvalue(LAYER, "テキスト", "文字色") --[[@as number]],
+                    obj.getvalue(LAYER, "テキスト", "影・縁色") --[[@as number]],
+                    obj.getvalue(LAYER, "テキスト", "B") ~= "0",
+                    obj.getvalue(LAYER, "テキスト", "I") ~= "0",
+                    obj.getvalue(LAYER, "テキスト", "字間") --[[@as number]],
+                    obj.getvalue(LAYER, "テキスト", "行間") --[[@as number]]
+                )
+
+                alignment = alignments[obj.getvalue(LAYER, "テキスト", "文字揃え")]
+            else
+                obj.setfont(
+                    characters_font,
+                    max(obj.w, obj.h) * characters_scale * 0.01,
+                    0,
+                    0xffffff,
+                    0x000000,
+                    false,
+                    false,
+                    0,
+                    0
+                )
+
+                alignment = 4
+            end
+
+            local chars = utf8.split(characters_pool, true)
+
+            local hx, _, _, _ = hash4d(i, n, seed, FPS * TIME * 100.0, 1, #chars)
+
+            local xform = {}
+            copy_xform(xform, obj)
+
+            obj.load("text", chars[hx], 0.0, 0.0, alignment)
+
+            copy_xform(obj, xform)
+        end
+
+        local hx, hy, hz, hw = hash4d(i, n, seed + 1, FPS * TIME * 100.0)
+
+        if should_blink_opacity then
+            obj.alpha = lerp(opacity_min, opacity_max, floor(hx * opacity_steps) / (opacity_steps - 1))
+        end
+
+        if should_blink_scale then
+            local r = floor(hy * scale_steps) / (scale_steps - 1)
+            local scale = lerp(scale_min, scale_max, r)
+            obj.sx = scale
+            obj.sy = scale
+            obj.sz = scale
+        end
+
+        if should_edge_detect and hz < 0.5 then
+            local ok, e = pcall(function()
+                if not copybuffer("cache:tmp", "object") then
+                    error("Failed to copy buffer")
+                end
+
+                obj.effect(
+                    "エッジ抽出",
+                    "強さ",
+                    edge_intensity,
+                    "しきい値",
+                    edge_threshold,
+                    "輝度エッジを抽出",
+                    0,
+                    "透明度エッジを抽出",
+                    1
+                )
+
+                pixelshader("alpha_mask@Motion@FlowType_K", "cache:tmp", "object", { 0.0 }, "mask")
+
+                if not copybuffer("object", "cache:tmp") then
+                    error("Failed to copy buffer")
+                end
+            end)
+
+            if not ok then
+                stop(e)
+                return
+            end
+        end
+
+        if should_load_lut then
+            local ok, e = pcall(function()
+                local r = floor(hw * color_steps) / (color_steps - 1)
+
+                if not copybuffer("cache:tmp", "object") then
+                    error("Failed to copy buffer")
+                end
+
+                local xform = {}
+                copy_xform(xform, obj)
+
+                if color_source == 0 then
+                    if not obj.load("image", color_image) then
+                        if not copybuffer("object", "cache:tmp") then
+                            error("Failed to copy buffer")
+                        end
+
+                        error("Failed to load image file")
+                    end
+                elseif color_source == 1 then
+                    if not obj.load("layer", color_layer, true) then
+                        if not copybuffer("object", "cache:tmp") then
+                            error("Failed to copy buffer")
+                        end
+
+                        error("Failed to load layer data")
+                    end
+                end
+
+                pixelshader(
+                    "map@Motion@FlowType_K",
+                    "cache:tmp",
+                    { "cache:tmp", "object" },
+                    { r, 0.5 },
+                    "copy",
+                    "clamp"
+                )
+
+                if not copybuffer("object", "cache:tmp") then
+                    error("Failed to copy buffer")
+                end
+
+                copy_xform(obj, xform)
+            end)
+
+            if not ok then
+                stop(e)
+                return
+            end
+        end
+    end
+end
+
+@Echo
+
+--require:2004900
+--information:Echo@FlowType_K v0.3.3 by Korarei
+--label:Text
+
+--track@count:Count,0,100,2,1
+--track@interval:Interval,-100,100,-1,0.001
+--track@decay:Decay,0,100,50,0.01
+--select@composite:Composite=1,Above=0,Below=1
+--group:Tint
+--select@tint_source:Tint::Source,Image=0,Layer=1
+--file@tint_image:Tint::Image,""
+--track@tint_layer:Tint::Layer,-100,100,0,1,---
+--group:Additional Options,false
+--select@unit:Unit,Frames=0,Seconds=1
+--select@layer_reference:Layer Reference,Absolute=0,Relative=1
+
+if count < 1 then
+    return
+end
+
+do
+    local lerp, clamp, copy_xform, stop
+
+    do
+        local max, min = math.max, math.min
+
+        lerp = function(a, b, t)
+            return a + (b - a) * t
+        end
+
+        clamp = function(v, lower, upper)
+            return max(lower, min(upper, v))
+        end
+
+        copy_xform = function(dst, src)
+            dst.ox, dst.oy, dst.oz = src.ox, src.oy, src.oz
+            dst.cx, dst.cy, dst.cz = src.cx, src.cy, src.cz
+            dst.rx, dst.ry, dst.rz = src.rx, src.ry, src.rz
+            dst.sx, dst.sy, dst.sz = src.sx, src.sy, src.sz
+            dst.alpha = src.alpha
+        end
+
+        stop = function(e)
+            print("@error", e)
+            obj.load("text", "")
+        end
+    end
+
+
+    local ID = obj.effect_id
+    local CACHE_IMAGE = "cache:2261b3cd-be88-4ee0-b517-2314327fafe2-" .. ID
+    local CACHE_LUT = "cache:2b17699d-4e70-47fa-ac79-ffc32f08f712-" .. ID
+
+    local max = math.max
+    local copybuffer, pixelshader = obj.copybuffer, obj.pixelshader
+    local LAYER, TIME, TOTALTIME = obj.layer, obj.time, obj.totaltime
+
+    count = count + 1
+    decay = decay * 0.01
+
+    interval = unit == 0 and interval / obj.framerate or interval
+
+    tint_layer = layer_reference == 0 and max(tint_layer, 0) or max(LAYER + tint_layer, 0)
+
+    local should_load_lut = false
+    if tint_source == 0 then
+        should_load_lut = tint_image ~= ""
+    elseif tint_source == 1 then
+        if tint_layer > 0 and tint_layer ~= LAYER then
+            if not obj.getvalue("layer" .. tint_layer) then
+                local frame = obj.getvalue("frame_s") + obj.frame
+                print("@warn", "No object found in Layer " .. tint_layer .. " at Frame " .. frame)
+            else
+                should_load_lut = true
+            end
+        end
+    end
+
+    if should_load_lut then
+        local ok, e = pcall(function()
+            if not copybuffer("cache:tmp", "object") then
+                error("Failed to copy buffer")
+            end
+
+            local xform = {}
+            copy_xform(xform, obj)
+
+            if tint_source == 0 then
+                if not obj.load("image", tint_image) then
+                    if not copybuffer("object", "cache:tmp") then
+                        error("Failed to copy buffer")
+                    end
+
+                    error("Failed to load image file")
+                end
+            elseif tint_source == 1 then
+                if not obj.load("layer", tint_layer, true) then
+                    if not copybuffer("object", "cache:tmp") then
+                        error("Failed to copy buffer")
+                    end
+
+                    error("Failed to load layer data")
+                end
+            end
+
+            if not copybuffer(CACHE_LUT, "object") then
+                error("Failed to copy buffer")
+            end
+
+            if not copybuffer("object", "cache:tmp") then
+                error("Failed to copy buffer")
+            end
+
+            copy_xform(obj, xform)
+        end)
+
+        if not ok then
+            stop(e)
+            return
+        end
+    end
+
+    if not copybuffer(CACHE_IMAGE, "object") then
+        stop("Failed to copy buffer")
+        return
+    end
+
+    local xform = {}
+    copy_xform(xform, obj)
+
+    local i = -1
+    obj.multiobject(count, function()
+        i = i + 1
+
+        if not copybuffer("object", CACHE_IMAGE) then
+            stop("Failed to copy buffer")
+            return
+        end
+
+        copy_xform(obj, xform)
+
+        local j = composite == 0 and i or count - i - 1
+
+        if should_load_lut then
+            pixelshader(
+                "map@Motion@FlowType_K",
+                "object",
+                { "object", CACHE_LUT },
+                { j / (count - 1), 0.5 },
+                "copy",
+                "clamp"
+            )
+        end
+
+        obj.alpha = obj.alpha * (decay ^ j)
+
+        return clamp(TIME + interval * j, 0.0, TOTALTIME) - TIME
+    end)
+end

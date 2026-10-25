@@ -1,0 +1,6 @@
+RainOnPane by nctype
+licence: MIT
+from: https://github.com/nctype/aviutl2_script_RainOnPane/releases/download/v1.1.1/RainOnPane_v1.1.1.au2pkg.zip (tag v1.1.1, commit 94c40a406cb0)
+page: https://github.com/nctype/aviutl2_script_RainOnPane
+licence/README from: https://github.com/nctype/aviutl2_script_RainOnPane at v1.1.1
+Put here unchanged for Motolii (filament/aviutl_scripts).

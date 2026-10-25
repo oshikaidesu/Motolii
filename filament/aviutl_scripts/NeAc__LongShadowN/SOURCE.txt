@@ -1,0 +1,5 @@
+LongShadowN by 猫愛
+licence: Apache-2.0
+from: https://github.com/nea-c/aviutl2_script_LongShadowN/releases/download/r14/LongShadowN.zip (tag r14, commit 178618e7f415)
+page: https://github.com/nea-c/aviutl2_script_LongShadowN
+Put here unchanged for Motolii (filament/aviutl_scripts).

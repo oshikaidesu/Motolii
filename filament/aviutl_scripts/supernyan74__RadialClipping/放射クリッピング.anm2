@@ -1,0 +1,53 @@
+--information:放射クリッピング v1.1
+--label:クリッピング
+
+--track@Count:数,1,100,4,1
+--track@BaseAngle:基準角,0,360,0,0.01
+--track@ClipRatio:割合,0,100,50,0.01
+
+-- 数は切り抜く扇形の個数。残す領域と透明にする領域は同じ角度幅。
+-- 中心はオブジェクト中央。基準角0°では右方向を透明な扇形の中心とする。基準角は時計回り。
+
+--[[pixelshader@main:
+    cbuffer constant0 : register(b0)
+    {
+        float count, cx, cy, baseAngle, clipRatio;
+    }
+    
+    Texture2D tex : register(t0);
+    SamplerState smp : register(s0);
+
+    float mask(float2 p)
+    {
+        float radius = length(p);                               // 中央からの距離[ピクセル]
+        float angle = 0.0;
+        if (radius > 0.000001)
+        {
+            angle = atan2(p.y, p.x);                            // 時計回りの角度(X+方向を基準)[ラジアン]
+        }
+
+        float tau = 6.283185307179586;                          // 360°
+        float relativeAngle = angle - baseAngle;                // 現在の角度
+        float segmentAngle = tau / count;                       // 区間あたりの角度
+        float segment = relativeAngle / segmentAngle;           // 現在の区間
+        
+        float phase = frac(segment + 0.5);                      // 区間内の位相(0.5は基準角を透明領域の中央にするための補正)[区間]
+        float offset = abs(phase - 0.5);                        // 区間の中央からの位相のずれ[区間]
+        float boundaryOffset = offset - clipRatio / 2;          // 透明部分と描画部分の境界からの位相のずれ[区間]
+        float delta = boundaryOffset * segmentAngle;            // 透明部分と描画部分の境界からの角度のずれ[角度]
+        float boundaryDistance = radius * sin(delta);           // deltaの境界線からの距離[ピクセル]
+
+        return smoothstep(-0.5, 0.5, boundaryDistance);         // アンチエイリアス付き透明度
+    }
+
+    float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
+    {
+        float2 p = pos.xy - float2(cx, cy); // 中央を基準とした座標
+        float4 src = tex.Sample(smp, uv);   // テクスチャカラー取得
+        return src * mask(p);               // マスクを適用してクリッピング
+    }
+]]
+
+local n = math.max(1, math.min(100, math.floor(Count + 0.5)))
+local w, h = obj.getpixel()
+obj.pixelshader("main", "object", "object", {n, w / 2, h / 2, math.rad(BaseAngle % 360), ClipRatio / 100}, "copy", "clip")

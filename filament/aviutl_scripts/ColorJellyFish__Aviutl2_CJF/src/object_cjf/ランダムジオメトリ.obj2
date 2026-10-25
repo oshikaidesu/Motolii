@@ -1,0 +1,486 @@
+--label:CJF
+--information:ランダム多角形背景 for AviUtl ExEdit2 / AviUtl2 only
+--track@size:サイズ,64,2000,480,1
+--track@parts:連結数,1,5,1,1
+--track@linkDist:連結距離,0,100,35,0.1
+--track@minVerts:最小角数,3,8,4,1
+--track@maxVerts:最大角数,3,8,6,1
+--track@irregular:歪み,0,100,85,0.1
+--track@borderW:枠の太さ,0,60,10,0.1
+--track@stripeGap:斜線の間隔,4,120,28,0.1
+--track@stripeW:斜線の太さ,0,40,2.5,0.1
+--track@stripeAng:斜線の角度,-180,180,32,0.1
+--track@variant:バリエーション,0,100,0,1
+--track@opacity:不透明度,0,100,100,0.1
+--color@fillCol:塗り色,0xffd6e8
+--color@borderCol:枠色,0xd85a8c
+--color@stripeCol:斜線色,0xf098b0
+--check@useStripe:斜線を描く,true
+--check@fixSeed:シードを固定,false
+local ffi = require("ffi")
+
+local CACHE_NAME = "__random_geom_cache_v3"
+local CACHE_MAX = 24
+local cacheRoot = rawget(_G, CACHE_NAME)
+if type(cacheRoot) ~= "table" then
+	cacheRoot = { map = {}, order = {} }
+	rawset(_G, CACHE_NAME, cacheRoot)
+end
+
+local function unpack_rgb(c)
+	c = math.floor(tonumber(c) or 0)
+	local r = math.floor(c / 65536) % 256
+	local g = math.floor(c / 256) % 256
+	local b = c % 256
+	return r / 255, g / 255, b / 255
+end
+
+local function cache_touch(key)
+	local order = cacheRoot.order
+	for i = #order, 1, -1 do
+		if order[i] == key then
+			table.remove(order, i)
+		end
+	end
+	order[#order + 1] = key
+	while #order > CACHE_MAX do
+		local old = table.remove(order, 1)
+		cacheRoot.map[old] = nil
+	end
+end
+
+local function scanline_xs(pts, y)
+	local xs = {}
+	local n = #pts
+	for i = 1, n do
+		local j = (i % n) + 1
+		local x0, y0 = pts[i][1], pts[i][2]
+		local x1, y1 = pts[j][1], pts[j][2]
+		-- half-open edge test avoids double-counting vertices
+		if (y0 <= y and y1 > y) or (y1 <= y and y0 > y) then
+			local dy = y1 - y0
+			if math.abs(dy) > 1e-12 then
+				xs[#xs + 1] = x0 + (x1 - x0) * ((y - y0) / dy)
+			end
+		end
+	end
+	table.sort(xs)
+	return xs
+end
+
+local function merge_spans(spans)
+	if #spans == 0 then return spans end
+	table.sort(spans, function(a, b) return a[1] < b[1] end)
+	local out = { { spans[1][1], spans[1][2] } }
+	for i = 2, #spans do
+		local last = out[#out]
+		local s = spans[i]
+		if s[1] <= last[2] then
+			if s[2] > last[2] then last[2] = s[2] end
+		else
+			out[#out + 1] = { s[1], s[2] }
+		end
+	end
+	return out
+end
+
+local function union_spans_at_y(polys, y)
+	local spans = {}
+	for p = 1, #polys do
+		local xs = scanline_xs(polys[p], y)
+		for i = 1, #xs - 1, 2 do
+			local a, b = xs[i], xs[i + 1]
+			if b > a then
+				spans[#spans + 1] = { a, b }
+			end
+		end
+	end
+	return merge_spans(spans)
+end
+
+local sz = math.max(64, math.floor((tonumber(size) or 480) + 0.5))
+local partCount = math.max(1, math.min(5, math.floor((tonumber(parts) or 1) + 0.5)))
+local linkT = math.max(0, math.min(100, tonumber(linkDist) or 35)) / 100
+local vmin = math.max(3, math.min(8, math.floor((tonumber(minVerts) or 4) + 0.5)))
+local vmax = math.max(3, math.min(8, math.floor((tonumber(maxVerts) or 6) + 0.5)))
+if vmax < vmin then
+	vmin, vmax = vmax, vmin
+end
+local irreg = math.max(0, math.min(100, tonumber(irregular) or 80)) / 100
+local bW = math.max(0, tonumber(borderW) or 10)
+local doBorder = bW > 0.01
+local sGap = math.max(4, tonumber(stripeGap) or 28)
+local sW = math.max(0, tonumber(stripeW) or 2.5)
+local sAng = tonumber(stripeAng) or 32
+local op = math.max(0, math.min(100, tonumber(opacity) or 100)) / 100
+local doStripe = ((useStripe == true) or (useStripe == 1)) and (sW > 0.01)
+local fixSeedOn = (fixSeed == true) or (fixSeed == 1)
+local variantN = math.max(0, math.floor((tonumber(variant) or 0) + 0.5))
+local fillColN = math.floor(tonumber(fillCol) or 0)
+local borderColN = math.floor(tonumber(borderCol) or 0)
+local stripeColN = math.floor(tonumber(stripeCol) or 0)
+
+local frame_s = math.floor(tonumber(obj.frame_s) or 0)
+local layerN = math.floor(tonumber(obj.layer) or 1)
+local idN = math.floor(tonumber(obj.id) or 1)
+local baseSeed
+if fixSeedOn then
+	-- 開始フレーム/レイヤー/IDに依存せず、バリエーションだけで形状を決める
+	baseSeed = (variantN * 997 + 1) % 100000
+else
+	baseSeed = (frame_s * 131 + layerN * 17 + idN * 7 + variantN * 997) % 100000
+end
+if baseSeed < 1 then baseSeed = baseSeed + 1 end
+
+local seedKey
+if fixSeedOn then
+	seedKey = table.concat({ "F", variantN, baseSeed }, "|")
+else
+	seedKey = table.concat({ "A", idN, frame_s, layerN, variantN, baseSeed }, "|")
+end
+local cacheKey = table.concat({
+	seedKey,
+	sz, partCount, math.floor(linkT * 1000 + 0.5), vmin, vmax,
+	math.floor(irreg * 1000 + 0.5),
+	math.floor(bW * 100 + 0.5),
+	math.floor(sGap * 100 + 0.5),
+	math.floor(sW * 100 + 0.5),
+	math.floor(sAng * 100 + 0.5),
+	math.floor(op * 1000 + 0.5),
+	doStripe and 1 or 0,
+	fillColN, borderColN, stripeColN
+}, "|")
+
+local function R0()
+	return obj.rand1(baseSeed, 0)
+end
+local function R0range(a, b)
+	return a + (b - a) * R0()
+end
+local function R0i(a, b)
+	if b <= a then return a end
+	return math.floor(R0range(a, b + 1 - 1e-9))
+end
+
+local function make_blob(partIndex)
+	local seed = (baseSeed + partIndex * 7919) % 100000
+	if seed < 1 then seed = seed + 1 end
+	local function R()
+		return obj.rand1(seed, 0)
+	end
+	local function Rrange(a, b)
+		return a + (b - a) * R()
+	end
+	local function Ri(a, b)
+		if b <= a then return a end
+		return math.floor(Rrange(a, b + 1 - 1e-9))
+	end
+
+	local n = Ri(vmin, vmax)
+	local weights = {}
+	local wsum = 0
+	for i = 1, n do
+		local w = 0.08 + (R() ^ (0.55 + 0.35 * (1 - irreg))) * (0.6 + 1.4 * irreg)
+		weights[i] = w
+		wsum = wsum + w
+	end
+	local aspect = Rrange(0.38 + 0.20 * (1 - irreg), 0.95)
+	local stretchX, stretchY
+	if R() < 0.5 then
+		stretchX, stretchY = 1.0, aspect
+	else
+		stretchX, stretchY = aspect, 1.0
+	end
+	stretchX = stretchX * Rrange(0.88, 1.12)
+	stretchY = stretchY * Rrange(0.88, 1.12)
+	local radLo = 0.55 + 0.15 * (1 - irreg)
+	local radHi = 0.85 + 0.15 * irreg
+	local acc = 0
+	local raw = {}
+	for i = 1, n do
+		local sector = (weights[i] / wsum) * math.pi * 2
+		local t = 0.12 + 0.76 * (R() ^ (1.0 - 0.45 * irreg))
+		local ang = acc + sector * t
+		acc = acc + sector
+		local rad = Rrange(radLo, radHi)
+		raw[i] = {
+			math.cos(ang) * rad * stretchX,
+			math.sin(ang) * rad * stretchY
+		}
+	end
+	local grot = Rrange(0, math.pi * 2)
+	local gc, gs = math.cos(grot), math.sin(grot)
+	local pts = {}
+	for i = 1, n do
+		local x, y = raw[i][1], raw[i][2]
+		pts[i] = { x * gc - y * gs, x * gs + y * gc }
+	end
+	local cx, cy = 0, 0
+	for i = 1, n do
+		cx = cx + pts[i][1]
+		cy = cy + pts[i][2]
+	end
+	cx, cy = cx / n, cy / n
+	for i = 1, n do
+		pts[i][3] = math.atan2(pts[i][2] - cy, pts[i][1] - cx)
+	end
+	table.sort(pts, function(a, b) return a[3] < b[3] end)
+	local maxR = 0
+	for i = 1, n do
+		pts[i][3] = nil
+		pts[i][1] = pts[i][1] - cx
+		pts[i][2] = pts[i][2] - cy
+		local rr = math.sqrt(pts[i][1] * pts[i][1] + pts[i][2] * pts[i][2])
+		if rr > maxR then maxR = rr end
+	end
+	return pts, maxR
+end
+
+obj.clearbuffer("object", sz, sz)
+
+local hit = cacheRoot.map[cacheKey]
+if hit and hit.w == sz and hit.h == sz and hit.bytes ~= nil then
+	cache_touch(cacheKey)
+	local data, w, h = obj.getpixeldata("object", "rgba")
+	if data and w == hit.w and h == hit.h then
+		local dst = ffi.cast("unsigned char*", data)
+		local src = hit.bytes
+		local nbytes = w * h * 4
+		if ffi.copy then
+			ffi.copy(dst, src, nbytes)
+		else
+			local s = ffi.cast("unsigned char*", src)
+			for i = 0, nbytes - 1 do
+				dst[i] = s[i]
+			end
+		end
+		obj.putpixeldata("object", data, w, h, "rgba")
+	end
+	return
+end
+
+local polys = {}
+local centers = {}
+local localR = {}
+for p = 1, partCount do
+	local pts, maxR = make_blob(p)
+	local scaleP = R0range(0.70, 1.05)
+	for i = 1, #pts do
+		pts[i][1] = pts[i][1] * scaleP
+		pts[i][2] = pts[i][2] * scaleP
+	end
+	polys[p] = pts
+	localR[p] = maxR * scaleP
+	if p == 1 then
+		centers[1] = { 0, 0 }
+	else
+		local parent = (R0() < 0.65) and (p - 1) or R0i(1, p - 1)
+		local ang = R0range(0, math.pi * 2)
+		-- 連結距離: 小さいほど深く重なる / 大きいほど端同士の接触に近づく
+		local distLo = 0.28 + 0.57 * linkT
+		local distHi = 0.42 + 0.58 * linkT
+		local dist = (localR[parent] + localR[p]) * R0range(distLo, distHi)
+		centers[p] = {
+			centers[parent][1] + math.cos(ang) * dist,
+			centers[parent][2] + math.sin(ang) * dist
+		}
+	end
+end
+
+for p = 1, partCount do
+	local ox, oy = centers[p][1], centers[p][2]
+	for i = 1, #polys[p] do
+		polys[p][i][1] = polys[p][i][1] + ox
+		polys[p][i][2] = polys[p][i][2] + oy
+	end
+end
+
+local gcx, gcy = 0, 0
+local vcount = 0
+for p = 1, partCount do
+	for i = 1, #polys[p] do
+		gcx = gcx + polys[p][i][1]
+		gcy = gcy + polys[p][i][2]
+		vcount = vcount + 1
+	end
+end
+gcx, gcy = gcx / vcount, gcy / vcount
+local maxR = 0
+local bbMinX, bbMinY = 1e9, 1e9
+local bbMaxX, bbMaxY = -1e9, -1e9
+for p = 1, partCount do
+	for i = 1, #polys[p] do
+		local x = polys[p][i][1] - gcx
+		local y = polys[p][i][2] - gcy
+		polys[p][i][1] = x
+		polys[p][i][2] = y
+		local rr = math.sqrt(x * x + y * y)
+		if rr > maxR then maxR = rr end
+		if x < bbMinX then bbMinX = x end
+		if y < bbMinY then bbMinY = y end
+		if x > bbMaxX then bbMaxX = x end
+		if y > bbMaxY then bbMaxY = y end
+	end
+end
+local targetR = R0range(sz * 0.46, sz * 0.50)
+local scale = targetR / math.max(maxR, 1e-6)
+bbMinX, bbMinY, bbMaxX, bbMaxY = bbMinX * scale, bbMinY * scale, bbMaxX * scale, bbMaxY * scale
+for p = 1, partCount do
+	for i = 1, #polys[p] do
+		polys[p][i][1] = polys[p][i][1] * scale
+		polys[p][i][2] = polys[p][i][2] * scale
+	end
+end
+
+local fr, fg, fb = unpack_rgb(fillColN)
+local brc, bgc, bbc = unpack_rgb(borderColN)
+local sr, sg, sb = unpack_rgb(stripeColN)
+
+local ang = sAng * math.pi / 180
+local sdx, sdy = math.cos(ang), math.sin(ang)
+
+local data, w, h = obj.getpixeldata("object", "rgba")
+if not data or not w or not h or w < 1 or h < 1 then
+	return
+end
+
+local px = ffi.cast("unsigned char*", data)
+local nPix = w * h
+local solid = ffi.new("uint8_t[?]", nPix)
+local ox = (w - 1) * 0.5
+local oy = (h - 1) * 0.5
+
+local rad = 0
+if doBorder then
+	rad = math.max(1, math.floor(bW * 0.5 + 0.5))
+end
+local rad2 = rad * rad
+
+local x0b = math.max(0, math.floor(bbMinX + ox) - rad - 1)
+local y0b = math.max(0, math.floor(bbMinY + oy) - rad - 1)
+local x1b = math.min(w - 1, math.ceil(bbMaxX + ox) + rad + 1)
+local y1b = math.min(h - 1, math.ceil(bbMaxY + oy) + rad + 1)
+
+local fr8 = math.floor(fr * op * 255 + 0.5)
+local fg8 = math.floor(fg * op * 255 + 0.5)
+local fb8 = math.floor(fb * op * 255 + 0.5)
+local fa8 = math.floor(op * 255 + 0.5)
+local sr8 = math.floor(sr * op * 255 + 0.5)
+local sg8 = math.floor(sg * op * 255 + 0.5)
+local sb8 = math.floor(sb * op * 255 + 0.5)
+if fr8 > 255 then fr8 = 255 end
+if fg8 > 255 then fg8 = 255 end
+if fb8 > 255 then fb8 = 255 end
+if fa8 > 255 then fa8 = 255 end
+if sr8 > 255 then sr8 = 255 end
+if sg8 > 255 then sg8 = 255 end
+if sb8 > 255 then sb8 = 255 end
+
+local function write_fill(i, stripe)
+	local o = i * 4
+	if stripe then
+		px[o], px[o + 1], px[o + 2], px[o + 3] = sr8, sg8, sb8, fa8
+	else
+		px[o], px[o + 1], px[o + 2], px[o + 3] = fr8, fg8, fb8, fa8
+	end
+end
+
+-- Scanline fill of union (same coverage as point-in-any for simple polys)
+for iy = y0b, y1b do
+	local ly = iy - oy
+	local spans = union_spans_at_y(polys, ly)
+	for si = 1, #spans do
+		local xL = math.max(x0b, math.floor(spans[si][1] + ox + 1e-6))
+		local xR = math.min(x1b, math.ceil(spans[si][2] + ox - 1e-6) - 1)
+		if xR >= xL then
+			local row = iy * w
+			for ix = xL, xR do
+				local idx = row + ix
+				solid[idx] = 1
+				local stripe = false
+				if doStripe then
+					local lx = ix - ox
+					local phase = (lx * sdx + ly * sdy) % sGap
+					if phase < 0 then phase = phase + sGap end
+					stripe = phase <= sW
+				end
+				write_fill(idx, stripe)
+			end
+		end
+	end
+end
+
+-- Edge collect + stamp only inside AABB (skip when 枠の太さ=0)
+if doBorder then
+	local border = ffi.new("uint8_t[?]", nPix)
+	local edges = {}
+	for iy = y0b, y1b do
+		local row = iy * w
+		for ix = x0b, x1b do
+			local idx = row + ix
+			if solid[idx] == 1 then
+				local isEdge = false
+				if ix == 0 or iy == 0 or ix == w - 1 or iy == h - 1 then
+					isEdge = true
+				elseif solid[idx - 1] == 0 or solid[idx + 1] == 0 or solid[idx - w] == 0 or solid[idx + w] == 0 then
+					isEdge = true
+				end
+				if isEdge then
+					edges[#edges + 1] = idx
+				end
+			end
+		end
+	end
+
+	for ei = 1, #edges do
+		local idx = edges[ei]
+		local ex = idx % w
+		local ey = math.floor(idx / w)
+		for dy = -rad, rad do
+			local yy = ey + dy
+			if yy >= y0b and yy <= y1b then
+				local lim = math.floor(math.sqrt(rad2 - dy * dy) + 1e-6)
+				for dx = -lim, lim do
+					local xx = ex + dx
+					if xx >= x0b and xx <= x1b then
+						border[yy * w + xx] = 1
+					end
+				end
+			end
+		end
+	end
+
+	for iy = y0b, y1b do
+		local row = iy * w
+		for ix = x0b, x1b do
+			local i = row + ix
+			if border[i] == 1 then
+				local o = i * 4
+				local sa = px[o + 3] / 255
+				local oa = op
+				local outA = oa + sa * (1 - oa)
+				local sr0 = px[o] / 255
+				local sg0 = px[o + 1] / 255
+				local sb0 = px[o + 2] / 255
+				px[o] = math.floor((brc * oa + sr0 * (1 - oa)) * 255 + 0.5)
+				px[o + 1] = math.floor((bgc * oa + sg0 * (1 - oa)) * 255 + 0.5)
+				px[o + 2] = math.floor((bbc * oa + sb0 * (1 - oa)) * 255 + 0.5)
+				px[o + 3] = math.floor(outA * 255 + 0.5)
+			end
+		end
+	end
+end
+
+-- Persist copy for later frames (same params => skip rebuild)
+local stored = ffi.new("uint8_t[?]", nPix * 4)
+if ffi.copy then
+	ffi.copy(stored, px, nPix * 4)
+else
+	for i = 0, nPix * 4 - 1 do
+		stored[i] = px[i]
+	end
+end
+cacheRoot.map[cacheKey] = { w = w, h = h, bytes = stored }
+cache_touch(cacheKey)
+
+obj.putpixeldata("object", data, w, h, "rgba")

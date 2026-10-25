@@ -1,0 +1,530 @@
+--information:QRコード v1.0.2
+--track@size:サイズ,1,100,10,0.01
+--track@whitespace:余白,0,20,4,1
+--select@errorCorrection:誤り訂正,L=0,M=1,Q=2,H=3
+--select@shape:形状,四角=0,円=1,角丸=2
+--string@txt:テキスト,"https://example.com"
+--color@fg_col:前景色,0x000000
+--color@bg_col:背景色,0xffffff
+--check@bg_trans:背景透明,false
+--track@corner_r:角丸強度,0,100,30
+
+local cell_size = math.max(1, math.floor(tonumber(size) or 10))
+local margin = math.max(0, math.floor(tonumber(whitespace) or 4))
+local ec_level = math.max(0, math.min(3, math.floor(tonumber(errorCorrection) or 0)))
+local dot_shape = math.max(0, math.min(2, math.floor(tonumber(shape) or 0)))
+
+local qr_text = txt
+if type(qr_text) ~= "string" or qr_text == "" then
+    qr_text = "https://example.com"
+end
+
+local fg_color = (type(fg_col) == "number") and fg_col or 0x000000
+local bg_color = (type(bg_col) == "number") and bg_col or 0xffffff
+local is_bg_trans = (bg_trans == true)
+
+local corner_radius = 30
+if type(corner_r) == "number" then
+    corner_radius = math.max(0, math.min(50, corner_r))
+end
+
+-- LuaJIT ビット演算
+local band   = bit.band
+local bor    = bit.bor
+local bxor   = bit.bxor
+local lshift = bit.lshift
+local rshift = bit.rshift
+
+-- GF(256) テーブル初期化
+local EXP_TABLE = {}
+local LOG_TABLE = {}
+
+local function init_gf()
+    local x = 1
+    for i = 0, 254 do
+        EXP_TABLE[i] = x
+        LOG_TABLE[x] = i
+        x = x * 2
+        if x >= 256 then x = bxor(x, 285) end
+    end
+    for i = 255, 511 do
+        EXP_TABLE[i] = EXP_TABLE[i - 255]
+    end
+end
+init_gf()
+
+local function gf_mul(x, y)
+    if x == 0 or y == 0 then return 0 end
+    return EXP_TABLE[LOG_TABLE[x] + LOG_TABLE[y]]
+end
+
+local function rs_generator_poly(nsym)
+    local g = {1}
+    for i = 0, nsym - 1 do
+        local g_next = {}
+        for k = 1, #g + 1 do g_next[k] = 0 end
+        local root = EXP_TABLE[i]
+        for j = 1, #g do
+            g_next[j] = bxor(g_next[j], gf_mul(g[j], root))
+            g_next[j + 1] = bxor(g_next[j + 1], g[j])
+        end
+        g = g_next
+    end
+    local res = {}
+    for i = #g - 1, 1, -1 do
+        table.insert(res, g[i])
+    end
+    return res
+end
+
+local function rs_encode(data, nsym)
+    local g = rs_generator_poly(nsym)
+    local res = {}
+    for i = 1, #data do res[i] = data[i] end
+    for i = #data + 1, #data + nsym do res[i] = 0 end
+    for i = 1, #data do
+        local coef = res[i]
+        if coef ~= 0 then
+            for j = 1, nsym do
+                res[i + j] = bxor(res[i + j], gf_mul(g[j], coef))
+            end
+        end
+    end
+    local ec = {}
+    for i = #data + 1, #data + nsym do
+        table.insert(ec, res[i])
+    end
+    return ec
+end
+
+local VERSION_TABLE = {
+    [10] = {19, 7, 1, 19, 0, 0}, [11] = {16, 10, 1, 16, 0, 0}, [12] = {13, 13, 1, 13, 0, 0}, [13] = {9, 17, 1, 9, 0, 0},
+    [20] = {34, 10, 1, 34, 0, 0}, [21] = {28, 16, 1, 28, 0, 0}, [22] = {22, 18, 1, 22, 0, 0}, [23] = {16, 28, 1, 16, 0, 0},
+    [30] = {55, 15, 1, 55, 0, 0}, [31] = {44, 26, 1, 44, 0, 0}, [32] = {34, 18, 2, 17, 0, 0}, [33] = {26, 22, 2, 13, 0, 0},
+    [40] = {80, 20, 1, 80, 0, 0}, [41] = {64, 18, 2, 32, 0, 0}, [42] = {48, 26, 2, 24, 0, 0}, [43] = {36, 16, 4, 9, 0, 0},
+    [50] = {108, 26, 1, 108, 0, 0}, [51] = {86, 24, 2, 43, 0, 0}, [52] = {62, 18, 2, 15, 2, 16}, [53] = {46, 22, 2, 11, 2, 12},
+    [60] = {136, 18, 2, 68, 0, 0}, [61] = {108, 16, 4, 27, 0, 0}, [62] = {76, 24, 4, 19, 0, 0}, [63] = {60, 28, 4, 15, 0, 0},
+    [70] = {156, 20, 2, 78, 0, 0}, [71] = {124, 18, 4, 31, 0, 0}, [72] = {98, 18, 2, 24, 4, 25}, [73] = {66, 26, 4, 13, 1, 14},
+    [80] = {194, 24, 2, 97, 0, 0}, [81] = {154, 22, 2, 38, 2, 39}, [82] = {120, 22, 4, 18, 2, 19}, [83] = {86, 26, 4, 14, 2, 15},
+    [90] = {232, 30, 2, 116, 0, 0}, [91] = {182, 22, 3, 36, 2, 37}, [92] = {146, 20, 4, 16, 4, 17}, [93] = {110, 24, 4, 12, 4, 13},
+    [100] = {274, 18, 2, 68, 2, 69}, [101] = {216, 26, 4, 43, 1, 44}, [102] = {174, 24, 6, 19, 2, 20}, [103] = {130, 28, 6, 15, 2, 16},
+    [110] = {321, 20, 4, 80, 1, 81}, [111] = {251, 30, 1, 50, 4, 51}, [112] = {197, 24, 4, 24, 4, 25}, [113] = {145, 30, 3, 12, 8, 13},
+    [120] = {367, 24, 2, 91, 2, 92}, [121] = {283, 22, 6, 35, 2, 36}, [122] = {223, 28, 4, 18, 6, 19}, [123] = {165, 24, 7, 14, 4, 15},
+    [130] = {425, 26, 4, 106, 1, 107}, [131] = {335, 22, 8, 37, 1, 38}, [132] = {267, 22, 8, 20, 4, 21}, [133] = {199, 28, 12, 11, 1, 12},
+    [140] = {458, 30, 3, 114, 1, 115}, [141] = {370, 24, 4, 40, 5, 41}, [142] = {310, 24, 11, 16, 5, 17}, [143] = {224, 30, 11, 12, 5, 13},
+}
+
+local ALIGNMENT_PATTERNS = {
+    [1] = {}, [2] = {6, 18}, [3] = {6, 22}, [4] = {6, 26}, [5] = {6, 30},
+    [6] = {6, 34}, [7] = {6, 22, 38}, [8] = {6, 24, 42}, [9] = {6, 26, 46}, [10] = {6, 28, 50},
+    [11] = {6, 30, 54}, [12] = {6, 32, 58}, [13] = {6, 34, 62}, [14] = {6, 26, 46, 66},
+}
+
+local VERSION_BCH_POLY = 0x1F25
+
+local function mask_func(mask_pat, r, c)
+    if mask_pat == 0 then return (r + c) % 2 == 0 end
+    if mask_pat == 1 then return r % 2 == 0 end
+    if mask_pat == 2 then return c % 3 == 0 end
+    if mask_pat == 3 then return (r + c) % 3 == 0 end
+    if mask_pat == 4 then return (math.floor(r / 2) + math.floor(c / 3)) % 2 == 0 end
+    if mask_pat == 5 then return ((r * c) % 2) + ((r * c) % 3) == 0 end
+    if mask_pat == 6 then return (((r * c) % 2) + ((r * c) % 3)) % 2 == 0 end
+    if mask_pat == 7 then return (((r + c) % 2) + ((r * c) % 3)) % 2 == 0 end
+    return false
+end
+
+local function compute_penalty(grid, size)
+    local penalty = 0
+    for r = 1, size do
+        local run = 1
+        for c = 2, size do
+            if grid[r][c] == grid[r][c-1] then run = run + 1
+            else
+                if run >= 5 then penalty = penalty + 3 + (run - 5) end
+                run = 1
+            end
+        end
+        if run >= 5 then penalty = penalty + 3 + (run - 5) end
+    end
+    for c = 1, size do
+        local run = 1
+        for r = 2, size do
+            if grid[r][c] == grid[r-1][c] then run = run + 1
+            else
+                if run >= 5 then penalty = penalty + 3 + (run - 5) end
+                run = 1
+            end
+        end
+        if run >= 5 then penalty = penalty + 3 + (run - 5) end
+    end
+    for r = 1, size - 1 do
+        for c = 1, size - 1 do
+            local val = grid[r][c]
+            if grid[r+1][c] == val and grid[r][c+1] == val and grid[r+1][c+1] == val then
+                penalty = penalty + 3
+            end
+        end
+    end
+    local dark_count = 0
+    for r = 1, size do
+        for c = 1, size do
+            if grid[r][c] == 1 then dark_count = dark_count + 1 end
+        end
+    end
+    local ratio = (dark_count / (size * size)) * 100
+    local k1 = math.floor(math.abs(ratio - 50) / 5)
+    penalty = penalty + k1 * 10
+    return penalty
+end
+
+local function generate_qr(text_str, ec_lvl)
+    local data_bytes = {}
+    for i = 1, #text_str do
+        table.insert(data_bytes, string.byte(text_str, i))
+    end
+    local data_len = #data_bytes
+
+    local version = nil
+    for v = 1, 14 do
+        local key = v * 10 + ec_lvl
+        local cap = VERSION_TABLE[key][1]
+        local header_bits = 4 + (v < 10 and 8 or 16)
+        if data_len * 8 + header_bits <= cap * 8 then
+            version = v
+            break
+        end
+    end
+    if not version then version = 14 end
+
+    local v_key = version * 10 + ec_lvl
+    local v_info = VERSION_TABLE[v_key]
+    local total_data_bytes  = v_info[1]
+    local ec_bytes_per_block = v_info[2]
+    local g1_blocks         = v_info[3]
+    local g1_data_bytes     = v_info[4]
+    local g2_blocks         = v_info[5]
+    local g2_data_bytes     = v_info[6]
+
+    local bits = {}
+    local function append_bits(val, num_bits)
+        for i = num_bits - 1, 0, -1 do
+            table.insert(bits, band(rshift(val, i), 1))
+        end
+    end
+
+    append_bits(4, 4)
+    append_bits(data_len, version < 10 and 8 or 16)
+    for i = 1, #data_bytes do
+        append_bits(data_bytes[i], 8)
+    end
+    local term_len = math.min(4, total_data_bytes * 8 - #bits)
+    append_bits(0, term_len)
+    while (#bits % 8) ~= 0 do
+        table.insert(bits, 0)
+    end
+    local pad_bytes = {0xEC, 0x11}
+    local pad_idx = 1
+    while #bits < total_data_bytes * 8 do
+        append_bits(pad_bytes[pad_idx], 8)
+        pad_idx = (pad_idx == 1 and 2 or 1)
+    end
+
+    local encoded_data = {}
+    for i = 1, #bits, 8 do
+        local b_val = 0
+        for b = 0, 7 do
+            b_val = lshift(b_val, 1) + bits[i + b]
+        end
+        table.insert(encoded_data, b_val)
+    end
+
+    local blocks = {}
+    local data_idx = 1
+    for _ = 1, g1_blocks do
+        local blk = {}
+        for i = 1, g1_data_bytes do
+            table.insert(blk, encoded_data[data_idx])
+            data_idx = data_idx + 1
+        end
+        table.insert(blocks, blk)
+    end
+    for _ = 1, g2_blocks do
+        local blk = {}
+        for i = 1, g2_data_bytes do
+            table.insert(blk, encoded_data[data_idx])
+            data_idx = data_idx + 1
+        end
+        table.insert(blocks, blk)
+    end
+
+    local ec_blocks = {}
+    for _, blk in ipairs(blocks) do
+        table.insert(ec_blocks, rs_encode(blk, ec_bytes_per_block))
+    end
+
+    local final_bytes = {}
+    local max_data_len = 0
+    for _, blk in ipairs(blocks) do
+        if #blk > max_data_len then max_data_len = #blk end
+    end
+    for i = 1, max_data_len do
+        for _, blk in ipairs(blocks) do
+            if i <= #blk then table.insert(final_bytes, blk[i]) end
+        end
+    end
+    for i = 1, ec_bytes_per_block do
+        for _, ec_blk in ipairs(ec_blocks) do
+            table.insert(final_bytes, ec_blk[i])
+        end
+    end
+
+    local final_bits = {}
+    for _, b in ipairs(final_bytes) do
+        for i = 7, 0, -1 do
+            table.insert(final_bits, band(rshift(b, i), 1))
+        end
+    end
+
+    local size = 17 + 4 * version
+    local grid = {}
+    local reserved = {}
+    local is_pattern = {}
+    for r = 1, size do
+        grid[r] = {}
+        reserved[r] = {}
+        is_pattern[r] = {}
+        for c = 1, size do
+            grid[r][c] = 0
+            reserved[r][c] = false
+            is_pattern[r][c] = false
+        end
+    end
+
+    local function set_module(r, c, val, is_pat)
+        grid[r][c] = val
+        reserved[r][c] = true
+        if is_pat then is_pattern[r][c] = true end
+    end
+
+    local function draw_finder(top_r, top_c)
+        for r = -1, 7 do
+            for c = -1, 7 do
+                local gr, gc = top_r + r, top_c + c
+                if gr >= 1 and gr <= size and gc >= 1 and gc <= size then
+                    if r >= 0 and r <= 6 and c >= 0 and c <= 6 then
+                        local is_black = (r == 0 or r == 6 or c == 0 or c == 6 or (r >= 2 and r <= 4 and c >= 2 and c <= 4))
+                        set_module(gr, gc, is_black and 1 or 0, true)
+                    else
+                        set_module(gr, gc, 0, true)
+                    end
+                end
+            end
+        end
+    end
+
+    draw_finder(1, 1)
+    draw_finder(1, size - 6)
+    draw_finder(size - 6, 1)
+
+    local coords = ALIGNMENT_PATTERNS[version]
+    for _, r_center in ipairs(coords) do
+        for _, c_center in ipairs(coords) do
+            local overlap = (r_center <= 9 and c_center <= 9)
+                         or (r_center <= 9 and c_center >= size - 8)
+                         or (r_center >= size - 8 and c_center <= 9)
+            if not overlap then
+                for r = -2, 2 do
+                    for c = -2, 2 do
+                        local is_black = (math.abs(r) == 2 or math.abs(c) == 2 or (r == 0 and c == 0))
+                        set_module(r_center + 1 + r, c_center + 1 + c, is_black and 1 or 0, true)
+                    end
+                end
+            end
+        end
+    end
+
+    for i = 9, size - 8 do
+        if not reserved[7][i] then set_module(7, i, (i % 2 == 1) and 1 or 0, true) end
+        if not reserved[i][7] then set_module(i, 7, (i % 2 == 1) and 1 or 0, true) end
+    end
+
+    set_module(4 * version + 10, 9, 1, true)
+
+    for i = 1, 9 do
+        if not reserved[9][i] then reserved[9][i] = true end
+        if not reserved[i][9] then reserved[i][9] = true end
+    end
+    for i = size - 7, size do
+        if not reserved[9][i] then reserved[9][i] = true end
+        if not reserved[i][9] then reserved[i][9] = true end
+    end
+
+    if version >= 7 then
+        for r = 1, 6 do
+            for c = size - 10, size - 8 do
+                reserved[r][c] = true
+                reserved[c][r] = true
+            end
+        end
+    end
+
+    local bit_idx = 1
+    local col = size
+    local upward = true
+    while col >= 1 do
+        if col == 7 then col = 6 end
+        local cols = {col, col - 1}
+        local r_start = upward and size or 1
+        local r_end   = upward and 1 or size
+        local r_step  = upward and -1 or 1
+        for r = r_start, r_end, r_step do
+            for _, c in ipairs(cols) do
+                if c >= 1 and not reserved[r][c] then
+                    local val = (bit_idx <= #final_bits) and final_bits[bit_idx] or 0
+                    grid[r][c] = val
+                    bit_idx = bit_idx + 1
+                end
+            end
+        end
+        upward = not upward
+        col = col - 2
+    end
+
+    local ec_bits_map = {[0]=1, [1]=0, [2]=3, [3]=2}
+    local ec_b = ec_bits_map[ec_lvl]
+
+    local best_mask    = 0
+    local best_penalty = 1e9
+    local best_grid    = nil
+
+    for m = 0, 7 do
+        local masked_grid = {}
+        for r = 1, size do
+            masked_grid[r] = {}
+            for c = 1, size do
+                masked_grid[r][c] = grid[r][c]
+                if not reserved[r][c] then
+                    if mask_func(m, r - 1, c - 1) then
+                        masked_grid[r][c] = bxor(masked_grid[r][c], 1)
+                    end
+                end
+            end
+        end
+
+        local format_val = bor(lshift(ec_b, 3), m)
+        local val = lshift(format_val, 10)
+        local g_bch = 0x537
+        for i = 4, 0, -1 do
+            if band(rshift(val, i + 10), 1) == 1 then
+                val = bxor(val, lshift(g_bch, i))
+            end
+        end
+        local format_code = bxor(bor(lshift(format_val, 10), val), 0x5412)
+        local format_bits = {}
+        for i = 0, 14 do
+            table.insert(format_bits, band(rshift(format_code, i), 1))
+        end
+
+        local f_coords = {
+            {9,1}, {9,2}, {9,3}, {9,4}, {9,5}, {9,6}, {9,8}, {9,9},
+            {8,9}, {7,9}, {5,9}, {4,9}, {3,9}, {2,9}, {1,9}
+        }
+        for i = 1, 15 do
+            local coord = f_coords[i]
+            masked_grid[coord[1]][coord[2]] = format_bits[16 - i]
+        end
+
+        local f_coords2 = {
+            {size,9}, {size-1,9}, {size-2,9}, {size-3,9}, {size-4,9}, {size-5,9}, {size-6,9},
+            {9,size-7}, {9,size-6}, {9,size-5}, {9,size-4}, {9,size-3}, {9,size-2}, {9,size-1}, {9,size}
+        }
+        for i = 1, 15 do
+            local coord = f_coords2[i]
+            masked_grid[coord[1]][coord[2]] = format_bits[16 - i]
+        end
+
+        if version >= 7 then
+            local v_val = lshift(version, 12)
+            local v_bch = VERSION_BCH_POLY
+            for i = 5, 0, -1 do
+                if band(rshift(v_val, i + 12), 1) == 1 then
+                    v_val = bxor(v_val, lshift(v_bch, i))
+                end
+            end
+            local v_code = bor(lshift(version, 12), v_val)
+            local v_bits = {}
+            for i = 0, 17 do table.insert(v_bits, band(rshift(v_code, i), 1)) end
+            local idx = 1
+            for r = 1, 6 do
+                for c = size - 10, size - 8 do
+                    masked_grid[r][c] = v_bits[idx]
+                    masked_grid[c][r] = v_bits[idx]
+                    idx = idx + 1
+                end
+            end
+        end
+
+        local pen = compute_penalty(masked_grid, size)
+        if pen < best_penalty then
+            best_penalty = pen
+            best_mask    = m
+            best_grid    = masked_grid
+        end
+    end
+
+    return best_grid, size, is_pattern
+end
+
+-- QRコード生成
+local grid, qr_size, is_pattern = generate_qr(qr_text, ec_level)
+
+local total_modules = qr_size + margin * 2
+local canvas_w = total_modules * cell_size
+local canvas_h = total_modules * cell_size
+
+-- ① 仮想バッファを初期化（サイズ指定で透明クリアされる）
+obj.setoption("drawtarget", "tempbuffer", canvas_w, canvas_h)
+
+-- ② 背景を描画
+if not is_bg_trans then
+    obj.load("figure", "四角形", bg_color, canvas_w)
+    obj.draw(0, 0)
+end
+
+-- ③ 規格パターン（ファインダー・アライメント等）は常に四角形で描画
+obj.load("figure", "四角形", fg_color, cell_size)
+for r = 1, qr_size do
+    for c = 1, qr_size do
+        if grid[r][c] == 1 and is_pattern[r][c] then
+            local x = -canvas_w / 2 + (c - 1 + margin + 0.5) * cell_size
+            local y = -canvas_h / 2 + (r - 1 + margin + 0.5) * cell_size
+            obj.draw(x, y)
+        end
+    end
+end
+
+-- ④ データ領域のモジュールを選択形状で描画
+if dot_shape == 1 then
+    obj.load("figure", "円", fg_color, cell_size)
+elseif dot_shape == 2 then
+    local dot_sz = cell_size * (1 - (corner_radius / 100) * 0.3)
+    obj.load("figure", "円", fg_color, dot_sz)
+else
+    obj.load("figure", "四角形", fg_color, cell_size)
+end
+
+for r = 1, qr_size do
+    for c = 1, qr_size do
+        if grid[r][c] == 1 and not is_pattern[r][c] then
+            local x = -canvas_w / 2 + (c - 1 + margin + 0.5) * cell_size
+            local y = -canvas_h / 2 + (r - 1 + margin + 0.5) * cell_size
+            obj.draw(x, y)
+        end
+    end
+end
+
+-- ⑤ 描画先をフレームバッファに戻してから仮想バッファを読み込んで表示
+obj.setoption("drawtarget", "framebuffer")
+obj.load("tempbuffer")
+obj.draw(0, 0)

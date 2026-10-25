@@ -1,0 +1,344 @@
+--[[
+効果呼び出し_H v0.1.0 by HexBrowns
+
+  ランダム   : 候補の効果から、時間・個別オブジェクト・レイヤーごとに 1 つを選んで掛ける
+  登場退場   : 効果の項目の値を、登場・通常・退場の 3 つの値で補間して掛ける
+
+効果は obj.effect(名前, 項目, 値, ...) で掛ける（lua.txt の「関数」の obj.effect）。
+効果名・項目名は設定画面の名前（エイリアスに出力される名前）で書く。
+仕様: AI/specifications/20261009_効果呼び出し_H_spec.md
+
+※このファイルは名前が「@」で始まるので、コメントの中でも行頭に「@」を置かないこと
+  （セクションの区切りとして読まれる）。
+]]
+
+@ランダム
+--information:ランダム@効果呼び出し_H v0.1.0 by HexBrowns
+--label:HexScript
+
+--group:効果
+--text@cands:候補,ぼかし,範囲,20\nモザイク,サイズ,24
+--string@weights:頻度,
+--group:切り替え
+--select@unit:切り替えの単位=0,時間=0,個別オブジェクト=1,時間と個別オブジェクト=2,レイヤー=3
+--select@pick:選び方=0,ランダム=0,順番=1,続けて同じにしない=2
+--track@interval:切り替え間隔(f),1,3600,10,1
+--hide@interval:unit==1
+--hide@interval:unit==3
+--track@seed:シード,-10000,10000,0,1
+--group
+
+local floor = math.floor
+local SELF = "@効果呼び出し_H"
+local WINDOW = 64        -- 続けて同じにしない: この区間数だけさかのぼって決め直す
+
+-- 同じ内容の警告は 1 回だけ出す（global は文字列で保持される。lua.txt の「変数」）。
+-- 行の頭の [ランダム@効果呼び出し_H] は本体が付けるので、こちらでは付けない（実機のログ、検証 FGR-06）
+local function warn_once(msg)
+  local key = "effect_call_warn:" .. msg
+  if global[key] then return end
+  global[key] = "1"
+  print("@warn", msg)
+end
+
+local function trim(s)
+  return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+-- 全角の区切りを半角へ。区切りで分けて前後の空白を落とす
+local function split_fields(line)
+  line = line:gsub("，", ","):gsub("、", ",")
+  local out = {}
+  for f in (line .. ","):gmatch("([^,]*),") do
+    out[#out + 1] = trim(f)
+  end
+  return out
+end
+
+-- 数値にできれば数値、できなければ文字列のまま（色・リストはエイリアスの値の形で渡る）
+local function to_value(s)
+  local n = tonumber(s)
+  if n ~= nil then return n end
+  return s
+end
+
+-- 1 行を {name=効果名, args={項目, 値, ...}} にする。「なし」は name=nil
+local function parse_candidate(line)
+  local f = split_fields(line)
+  local name = f[1]
+  if name == "なし" then return { name = nil, args = {} } end
+  if name:find(SELF, 1, true) then
+    warn_once("自分自身は候補にできない: " .. name)
+    return nil
+  end
+  local args = {}
+  local n = #f - 1
+  if n % 2 == 1 then
+    warn_once("項目と値の数が合わない（最後の項目を捨てた）: " .. line)
+    n = n - 1
+  end
+  for i = 2, n, 2 do
+    args[#args + 1] = f[i]
+    args[#args + 1] = to_value(f[i + 1])
+  end
+  return { name = name, args = args }
+end
+
+local list = {}
+for line in (tostring(cands) .. "\n"):gmatch("([^\n]*)\n") do
+  line = trim(line:gsub("\r", ""))
+  if line ~= "" then
+    local c = parse_candidate(line)
+    if c then list[#list + 1] = c end
+  end
+end
+local n = #list
+if n == 0 then return end
+
+-- 頻度: 候補ごとの整数の比。空・数が合わない・合計 0 なら等しくする
+local w = {}
+local wstr = trim(tostring(weights or ""))
+if wstr ~= "" then
+  for _, f in ipairs(split_fields(wstr:gsub("%s+", ","))) do
+    if f ~= "" then
+      local v = tonumber(f)
+      w[#w + 1] = (v and v > 0) and floor(v) or 0
+    end
+  end
+  if #w ~= n then
+    warn_once("頻度の数（" .. #w .. "）が候補の数（" .. n .. "）と合わないので等しくした")
+    w = {}
+  end
+end
+local total = 0
+for i = 1, #w do total = total + w[i] end
+if total <= 0 then
+  w, total = {}, n
+  for i = 1, n do w[i] = 1 end
+end
+
+-- 区間の番号 b と、オブジェクトの番号 k
+local u = floor(unit)
+local b, k = 0, 0
+if u == 0 or u == 2 then b = floor(obj.frame / math.max(1, floor(interval))) end
+if u == 1 or u == 2 then k = obj.index end
+if u == 3 then k = obj.layer end
+local sd = floor(seed)
+
+-- 重みで 1 つ引く。skip を除いた中から引く（skip が nil なら全体）
+local function draw(block, salt, skip)
+  local sum = total
+  if skip then sum = total - w[skip] end
+  if sum <= 0 then return skip end
+  local r = obj.rand(0, sum - 1, sd, block * 4096 + k + salt)
+  for i = 1, n do
+    if i ~= skip then
+      if r < w[i] then return i end
+      r = r - w[i]
+    end
+  end
+  return n
+end
+
+local idx
+local mode = floor(pick)
+if mode == 1 then
+  idx = (b + k) % n + 1
+elseif mode == 2 and n == 2 then
+  -- 2 つなら交互（重みは効かない）
+  idx = (draw(0, 0, nil) - 1 + b) % 2 + 1
+elseif mode == 2 and n > 2 then
+  -- 前の区間と同じなら、それを除いて引き直す。WINDOW 区間前から順に決める
+  local s = math.max(0, b - WINDOW)
+  idx = draw(s, 0, nil)
+  for i = s + 1, b do
+    local cand = draw(i, 0, nil)
+    if cand == idx then cand = draw(i, 1048576, idx) end
+    idx = cand
+  end
+else
+  idx = draw(b, 0, nil)
+end
+
+local c = list[idx]
+if c.name == nil then return end
+local ok, err = pcall(obj.effect, c.name, unpack(c.args))
+if not ok then
+  warn_once("効果を掛けられない: " .. c.name .. "（" .. tostring(err) .. "）")
+end
+
+@登場退場
+--information:登場退場@効果呼び出し_H v0.1.0 by HexBrowns
+--label:HexScript
+
+--group:効果
+--text@spec:効果と値,ぼかし,範囲,50,0,50
+--group:時間
+--track@t_in:登場(秒),0,10,0.5,0.01
+--track@t_out:退場(秒),0,10,0.5,0.01
+--track@d_in:登場前の遅延(秒),0,10,0,0.01
+--track@d_out:退場後の遅延(秒),0,10,0,0.01
+--track@stagger:個別オブジェクトの時間差(秒),-5,5,0,0.001
+--group:イージング
+--select@ease_in:登場のイージング=2,直線=0,加速=1,減速=2,加減速=3,バック=4,バウンス=5
+--select@ease_out:退場のイージング=1,直線=0,加速=1,減速=2,加減速=3,バック=4,バウンス=5
+--group
+
+local floor = math.floor
+local SELF = "@効果呼び出し_H"
+
+-- 行の頭の [登場退場@効果呼び出し_H] は本体が付けるので、こちらでは付けない
+local function warn_once(msg)
+  local key = "effect_call_warn:" .. msg
+  if global[key] then return end
+  global[key] = "1"
+  print("@warn", msg)
+end
+
+local function trim(s)
+  return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function split_fields(line)
+  line = line:gsub("，", ","):gsub("、", ",")
+  local out = {}
+  for f in (line .. ","):gmatch("([^,]*),") do
+    out[#out + 1] = trim(f)
+  end
+  return out
+end
+
+local function to_value(s)
+  local n = tonumber(s)
+  if n ~= nil then return n end
+  return s
+end
+
+-- 行: 効果名,項目,登場の値,通常の値,退場の値。同じ効果名の続く行は 1 回の呼び出しにまとめる
+local groups = {}
+for line in (tostring(spec) .. "\n"):gmatch("([^\n]*)\n") do
+  line = trim(line:gsub("\r", ""))
+  if line ~= "" then
+    local f = split_fields(line)
+    if #f ~= 5 then
+      warn_once("1 行は「効果名,項目,登場の値,通常の値,退場の値」の 5 つ: " .. line)
+    elseif f[1]:find(SELF, 1, true) then
+      warn_once("自分自身は指定できない: " .. f[1])
+    else
+      local g = groups[#groups]
+      if g == nil or g.name ~= f[1] then
+        g = { name = f[1], items = {} }
+        groups[#groups + 1] = g
+      end
+      g.items[#g.items + 1] = { f[2], to_value(f[3]), to_value(f[4]), to_value(f[5]) }
+    end
+  end
+end
+if #groups == 0 then return end
+
+-- イージング（p は 0〜1）。exit は退場側で使うときに true。
+-- 加速・減速・加減速は登場・退場で同じ形。バックとバウンスは登場では「着いてから収まる」、退場では「溜めてから離れる」
+local function bounce_out(p)
+  local n1, d1 = 7.5625, 2.75
+  if p < 1 / d1 then
+    return n1 * p * p
+  elseif p < 2 / d1 then
+    p = p - 1.5 / d1
+    return n1 * p * p + 0.75
+  elseif p < 2.5 / d1 then
+    p = p - 2.25 / d1
+    return n1 * p * p + 0.9375
+  end
+  p = p - 2.625 / d1
+  return n1 * p * p + 0.984375
+end
+
+local function ease(kind, p, exit)
+  if p <= 0 then return 0 end
+  if p >= 1 then return 1 end
+  if kind == 1 then
+    return p * p
+  elseif kind == 2 then
+    return 1 - (1 - p) * (1 - p)
+  elseif kind == 3 then
+    if p < 0.5 then return 2 * p * p end
+    return 1 - 2 * (1 - p) * (1 - p)
+  elseif kind == 4 then
+    local c1 = 1.70158
+    local c3 = c1 + 1
+    if exit then return c3 * p * p * p - c1 * p * p end
+    local q = p - 1
+    return 1 + c3 * q * q * q + c1 * q * q
+  elseif kind == 5 then
+    if exit then return 1 - bounce_out(1 - p) end
+    return bounce_out(p)
+  end
+  return p
+end
+
+-- 時間差: 登場は番号順に遅らせ、退場は同じ順で早める（最後の 1 つがちょうど終わりに退場し終える）
+local num = math.max(1, obj.num)
+local index = obj.index
+local s = math.abs(stagger)
+local order = index
+if stagger < 0 then order = num - 1 - index end
+-- 終わりは最後のフレームの時刻（obj.totaltime は最後のフレームの 1 つ先。実機、検証 ECL-05）
+local t_end = obj.totaltime
+if obj.totalframe > 1 then t_end = obj.totaltime * (obj.totalframe - 1) / obj.totalframe end
+local u = obj.time - s * order                       -- 登場からの時間
+local r = t_end - obj.time - s * (num - 1 - order)  -- 退場の終わりまでの時間
+
+-- 0 = 登場の値, 1 = 通常の値, 2 = 退場の値 の間のどこにいるか
+local side, a, raw = "normal", 1, 1
+local in_active = u < d_in + t_in
+local out_active = r < d_out + t_out
+if in_active and out_active then
+  if u <= r then out_active = false else in_active = false end
+end
+if in_active then
+  side = "in"
+  if u < d_in or t_in <= 0 then
+    raw = 0
+  else
+    raw = (u - d_in) / t_in
+  end
+  a = ease(floor(ease_in), raw, false)
+elseif out_active then
+  side = "out"
+  if r < d_out or t_out <= 0 then
+    raw = 1
+  else
+    raw = 1 - (r - d_out) / t_out
+  end
+  a = ease(floor(ease_out), raw, true)
+end
+
+local function value_of(item)
+  local v_in, v_mid, v_out = item[2], item[3], item[4]
+  if side == "in" then
+    if type(v_in) == "number" and type(v_mid) == "number" then
+      return v_in + (v_mid - v_in) * a
+    end
+    if raw < 0.5 then return v_in end
+    return v_mid
+  elseif side == "out" then
+    if type(v_mid) == "number" and type(v_out) == "number" then
+      return v_mid + (v_out - v_mid) * a
+    end
+    if raw < 0.5 then return v_mid end
+    return v_out
+  end
+  return v_mid
+end
+
+for _, g in ipairs(groups) do
+  local args = {}
+  for _, item in ipairs(g.items) do
+    args[#args + 1] = item[1]
+    args[#args + 1] = value_of(item)
+  end
+  local ok, err = pcall(obj.effect, g.name, unpack(args))
+  if not ok then
+    warn_once("効果を掛けられない: " .. g.name .. "（" .. tostring(err) .. "）")
+  end
+end

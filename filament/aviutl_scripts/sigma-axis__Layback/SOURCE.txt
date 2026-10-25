@@ -1,0 +1,5 @@
+最背面に配置 by σ軸
+licence: Unlicense
+from: https://github.com/sigma-axis/aviutl2_script_Layback/releases/download/v1.10/aviutl2_script_Layback-v1.10.au2pkg.zip (tag v1.10, commit 3d74ba02ad15)
+page: https://github.com/sigma-axis/aviutl2_script_Layback
+Put here unchanged for Motolii (filament/aviutl_scripts).

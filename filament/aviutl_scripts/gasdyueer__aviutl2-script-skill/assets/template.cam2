@@ -1,0 +1,17 @@
+--information:カメラ効果 ver1.00
+-- 摄像机效果模板 (.cam2)
+-- 通过 obj.getoption("camera_param")/obj.setoption("camera_param",cam) 控制摄像机
+
+-- 配置项示例
+--track@amp:振幅,0,100,10
+--track@freq:周波数,0,10,1
+
+-- 获取当前摄像机参数
+cam = obj.getoption("camera_param")
+
+-- 摄像机位置を変更
+cam.tx = cam.tx + math.sin(obj.time * freq * math.pi * 2) * amp
+cam.ty = cam.ty + math.cos(obj.time * freq * math.pi * 2) * amp
+
+-- 应用摄像机参数
+obj.setoption("camera_param", cam)

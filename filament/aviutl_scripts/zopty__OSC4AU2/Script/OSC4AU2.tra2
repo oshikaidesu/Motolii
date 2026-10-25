@@ -1,0 +1,11 @@
+--param:ID,0
+local gp = obj.getpoint;
+local addr = "/osc4au2/" .. gp("param");
+local index, num = gp("link");
+
+local osc = obj.module("OSC4AU2");
+local values = osc.get(addr) or {};
+
+local v = values[index + 1] or 0;
+
+return gp(0) * (1 - v) + gp(1) * v;

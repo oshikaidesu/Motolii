@@ -1,0 +1,1406 @@
+@Orton
+
+--requires:2004100
+--information:Orton@Diffusion_K v1.2.3 by Korarei
+--label:光効果
+--filter
+
+--track@intensity:Intensity,0,100,100,0.01
+--track@blurriness:Blurriness,0,8192,25,0.01,0.00,0.01
+--track@exposure:Exposure,-10,10,1,0.001
+--group:Mask,true
+--separator:Luminance Mask
+--track@low:Low,0,1000,30,0.01,0.00,0.01
+--track@high:High,0,1000,100,0.01,0.00,0.01
+--track@softness:Softness,0,100,25,0.01
+--separator:Texture Mask
+--select@mask_source:Mask::Source,Image=0,Layer=1
+--select@mask_channel:Mask::Channel,Luminance=0,Alpha=1
+--file@mask_image:Mask::Image,
+--track@mask_layer:Mask::Layer,-100,100,0,1
+--separator:Mask Options
+--check@should_invert:Invert,0
+--group:Brightness & Contrast,false
+--track@brightness:Brightness,-1000,1000,0,0.01
+--track@contrast:Contrast,-1000,1000,0,0.01
+--group:Anisotropy,false
+--track@rotation:Rotation,-3600,3600,0,0.01
+--separator:Scale
+--track@scale_x:Scale::X,0,1000,100,0.01
+--track@scale_y:Scale::Y,0,1000,100,0.01
+--group:Chromatic Aberration,false
+--select@channels:Aberration::Channels,Red & Green=-1,Red & Blue=0,Green & Blue=1
+--track@offset:Aberration::Offset,-1000,1000,0,0.01
+--separator:LoCA
+--check@should_enable_loca:LoCA::Enable,false
+--track@loca_r:LoCA::Red,0,1000,120,0.01
+--track@loca_g:LoCA::Green,0,1000,100,0.01
+--track@loca_b:LoCA::Blue,0,1000,80,0.01
+--separator:LaCA
+--check@should_enable_laca:LaCA::Enable,0
+--track@laca_r:LaCA::Red,0,1000,102,0.01
+--track@laca_g:LaCA::Green,0,1000,100,0.01
+--track@laca_b:LaCA::Blue,0,1000,98,0.01
+--group:Compositing,false
+--select@blend_mode:Blend Mode=7,Replace=-1,Normal=0,Darken=1,Multiply=2,Color Burn=3,Linear Burn=4,Darker Color=5,Lighten=6,Screen=7,Color Dodge=8,Linear Dodge (Add)=9,Lighter Color=10
+--select@alpha_mode:Alpha Mode,Alpha Blending=0,Alpha Hashed=1
+--check@should_clamp:Clamp,0
+--check@should_isolate_glow:Glow Only,0
+--group:Additional Options,false
+--track@gamma:Gamma,0,10,2.2,0.001
+--select@layer_reference:Layer Reference,Absolute=0,Relative=1
+--value@_0:PI,{}
+--[[pixelshader@mask:
+struct PS_Input {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD;
+};
+
+Texture2D tex[2] : register(t0);
+SamplerState smp : register(s0);
+cbuffer params : register(b0) {
+    float2 threshold;
+    float softness;
+    float channel;
+    float should_invert;
+    float should_load_mask;
+    float exposure;
+    float brightness;
+    float contrast;
+    float gamma;
+}
+
+static const float eps = 1.0e-4;
+static const float3 y = float3(0.3, 0.59, 0.11);
+
+// Non-Linear -> Linear
+float4
+mask(PS_Input input) : SV_Target {
+    float4 src = max(tex[0].Load(int3(input.pos.xy, 0)), 0.0);
+    src.rgb *= rcp(max(src.a, eps));
+    src.rgb = pow(src.rgb, gamma);
+
+    const float lum = dot(src.rgb, y);
+    const float m0 = smoothstep(threshold.x - softness, threshold.x + softness, lum);
+    const float m1 = smoothstep(threshold.y + softness, threshold.y - softness, lum);
+
+    float4 mask = tex[1].Sample(smp, input.uv);
+    mask.rgb *= rcp(max(mask.a, eps));
+    const float m2 = saturate(lerp(dot(mask.rgb, y), mask.a, channel));
+
+    const float m = m0 * m1 * (1.0 + (m2 - 1.0) * should_load_mask);
+
+    src.rgb = ldexp(src.rgb, exposure);
+    src.rgb = max(mad(src.rgb, 1.0 + contrast, mad(contrast, -0.5, brightness)), 0.0);
+
+    return float4(src.rgb * src.a, src.a) * lerp(m, 1.0 - m, should_invert);
+}
+]]
+--[[pixelshader@rotate:
+struct PS_Input {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD;
+};
+
+Texture2D tex : register(t0);
+SamplerState smp : register(s0);
+cbuffer params : register(b0) {
+    column_major float2x2 mat;
+    float2 output_size;
+}
+
+float4
+rotate(PS_Input input) : SV_Target {
+    float2 input_size;
+    tex.GetDimensions(input_size.x, input_size.y);
+
+    return tex.Sample(smp, mad(mul(mat, (input.uv - 0.5) * output_size), rcp(input_size), 0.5));
+}
+]]
+--[[pixelshader@shift:
+struct PS_Input {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD;
+};
+
+Texture2D tex : register(t0);
+SamplerState smp : register(s0);
+cbuffer params : register(b0) {
+    float4 scale;
+    float offset;
+    float channels;
+}
+
+static const float eps = 1.0e-4;
+
+float4
+shift(PS_Input input) : SV_Target {
+    const float2 k = float2(-0.5 * channels, mad(1.5, channels * channels, -1.0));
+
+    const float2 offset_r = float2(offset * (k.x + k.y), 0.0);
+    const float2 offset_g = float2(offset * channels, 0.0);
+    const float2 offset_b = float2(offset * (k.x - k.y), 0.0);
+
+    float2 ra = tex.Sample(smp, mad(input.uv - 0.5, lerp(1.0, rcp(scale.r), scale.a), 0.5) + offset_r).ra;
+    float2 ga = tex.Sample(smp, mad(input.uv - 0.5, lerp(1.0, rcp(scale.g), scale.a), 0.5) + offset_g).ga;
+    float2 ba = tex.Sample(smp, mad(input.uv - 0.5, lerp(1.0, rcp(scale.b), scale.a), 0.5) + offset_b).ba;
+
+    ra.x *= rcp(max(ra.y, eps));
+    ga.x *= rcp(max(ga.y, eps));
+    ba.x *= rcp(max(ba.y, eps));
+
+    const float3 rgb = float3(ra.x, ga.x, ba.x);
+    const float a = max(ga.y, max(ra.y, ba.y));
+
+    return float4(rgb * a, a);
+}
+]]
+--[[pixelshader@blend:
+/*
+The following function is a modified version of pcg4d function
+Original implementation by Mark Jarzynski & Marc Olano
+https://github.com/markjarzynski/PCG3D/blob/master/LICENSE
+*/
+
+uint4
+pcg4d(uint4 v) {
+    v = v * 1664525u + 1013904223u;
+
+    v.x += v.y * v.w;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v.w += v.y * v.z;
+
+    v = v ^ v >> 16u;
+
+    v.x += v.y * v.w;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v.w += v.y * v.z;
+
+    return v;
+}
+
+inline float
+hash(float2 p, float2 s) {
+    return dot(pcg4d(uint4(p, s)), 1u) / 4294967295.0;
+}
+
+inline float4
+hash4d(float2 p, float2 s) {
+    return pcg4d(uint4(p, s)) / 4294967295.0;
+}
+
+// Darken/Lighten groupだけ
+Texture2D tex[2] : register(t0);
+cbuffer params : register(b0) {
+    float intensity;
+    float blend_mode;
+    float alpha_mode;
+    float gamma;
+    float should_clamp;
+    float should_isolate_glow;
+    float seed;
+}
+
+static const float eps = 1.0e-4;
+
+inline float4
+dissolve(float4 c, float2 p) {
+    return float4(c.rgb * rcp(max(c.a, eps)), 1.0) * step(hash(p, float2(seed, 0.0)) + eps, c.a);
+}
+
+inline float3
+darken(float3 base, float3 src) {
+    return min(base, src);
+}
+
+inline float3
+multiply(float3 base, float3 src) {
+    return base * src;
+}
+
+inline float3
+color_burn(float3 base, float3 src) {
+    return lerp(saturate(mad(base - 1.0, rcp(max(src, eps)), 1.0)), 0.0, step(src, 0.0));
+}
+
+inline float3
+linear_burn(float3 base, float3 src) {
+    return base + src - 1.0;
+}
+
+inline float3
+darker_color(float3 base, float3 src) {
+    return lerp(base, src, step(dot(src, 1.0), dot(base, 1.0)));
+}
+
+inline float3
+lighten(float3 base, float3 src) {
+    return max(base, src);
+}
+
+inline float3
+screen(float3 base, float3 src) {
+    return mad(base - 1.0, 1.0 - src, 1.0);
+}
+
+inline float3
+color_dodge(float3 base, float3 src) {
+    return lerp(lerp(min(base * rcp(max(1.0 - src, eps)), 1.0), 1.0, step(1.0, src)), 0.0, step(abs(base), eps));
+}
+
+inline float3
+linear_dodge(float3 base, float3 src) {
+    return base + src;
+}
+
+inline float3
+lighter_color(float3 base, float3 src) {
+    return lerp(src, base, step(dot(src, 1.0), dot(base, 1.0)));
+}
+
+float4
+blend(float4 pos : SV_Position) : SV_Target {
+    const int mode = int(blend_mode);
+
+    float4 src = max(tex[0].Load(int3(pos.xy, 0)), 0.0); // Linear
+    src.a = min(src.a, 1.0);
+
+    if (int(alpha_mode) == 1)
+        src = dissolve(src, pos.xy);
+
+    if (mode == -1) {
+        src.rgb *= rcp(max(src.a, eps));
+        src.rgb = pow(src.rgb, rcp(gamma));
+        const float4 output = lerp(src, saturate(src), should_clamp);
+        return float4(output.rgb * output.a, output.a);
+    }
+
+    float4 base = max(tex[1].Load(int3(pos.xy, 0)), 0.0); // Non-Linear
+    base.a = min(base.a, 1.0);
+
+    if (mode == 0) {
+        base.rgb *= rcp(max(base.a, eps));
+        base.rgb = pow(base.rgb, gamma);
+        base.rgb *= base.a;
+
+        src *= intensity;
+        float4 output = max(mad(1.0 - src.a, base, src), 0.0);
+
+        output.rgb *= rcp(max(output.a, eps));
+        output.rgb = pow(output.rgb, rcp(gamma));
+        output = lerp(output, saturate(output), should_clamp);
+        return float4(output.rgb * output.a, output.a);
+    }
+
+    src.rgb *= rcp(max(src.a, eps));
+    base.rgb *= rcp(max(base.a, eps));
+    src.a *= intensity;
+    base.rgb = pow(base.rgb, gamma);
+
+    float3 blended;
+    [forcecase]
+    switch (mode) {
+        case 1:
+            blended = darken(base.rgb, src.rgb);
+            break;
+        case 2:
+            blended = multiply(base.rgb, src.rgb);
+            break;
+        case 3:
+            blended = color_burn(base.rgb, src.rgb);
+            break;
+        case 4:
+            blended = linear_burn(base.rgb, src.rgb);
+            break;
+        case 5:
+            blended = darker_color(base.rgb, src.rgb);
+            break;
+        case 6:
+            blended = lighten(base.rgb, src.rgb);
+            break;
+        case 7:
+            blended = screen(base.rgb, src.rgb);
+            break;
+        case 8:
+            blended = color_dodge(base.rgb, src.rgb);
+            break;
+        case 9:
+            blended = linear_dodge(base.rgb, src.rgb);
+            break;
+        case 10:
+            blended = lighter_color(base.rgb, src.rgb);
+            break;
+        default:
+            blended = src.rgb;
+            break;
+    }
+
+    blended *= src.a * base.a;
+    src.rgb *= src.a;
+    base.rgb *= base.a;
+
+    float3 rgb = max(mad(1.0 - src.a, base.rgb, mad(1.0 - base.a, src.rgb, blended)), 0.0);
+    float a = mad(1.0 - base.a, src.a, base.a);
+    rgb *= rcp(max(a, eps));
+    rgb = pow(rgb, rcp(gamma));
+
+    float4 output = float4(rgb, a) * (1.0 + (src.a - 1.0) * should_isolate_glow);
+    output = lerp(output, saturate(output), should_clamp);
+    return float4(output.rgb * output.a, output.a);
+}
+]]
+
+do
+    local max, ceil, abs, cos, sin, rad = math.max, math.ceil, math.abs, math.cos, math.sin, math.rad
+    local copybuffer, clearbuffer, pixelshader = obj.copybuffer, obj.clearbuffer, obj.pixelshader
+    local W, H, LAYER = obj.w, obj.h, obj.layer
+
+    local eps = 1.0e-4
+
+    if W * H < 1 then
+        return
+    end
+
+    if next(_0) then
+        for k, v in pairs(_0) do
+            if k == "Intensity" and type(v) == "number" then
+                intensity = v
+            elseif k == "Blurriness" and type(v) == "number" then
+                blurriness = v
+            elseif k == "Exposure" and type(v) == "number" then
+                exposure = v
+            elseif k == "Low" and type(v) == "number" then
+                low = v
+            elseif k == "High" and type(v) == "number" then
+                high = v
+            elseif k == "Softness" and type(v) == "number" then
+                softness = v
+            elseif k == "Mask::Source" and type(v) == "string" then
+                if v == "Image" then
+                    mask_source = 0
+                elseif v == "Layer" then
+                    mask_source = 1
+                end
+            elseif k == "Mask::Channel" and type(v) == "string" then
+                if v == "Luminance" then
+                    mask_channel = 0
+                elseif v == "Alpha" then
+                    mask_channel = 1
+                end
+            elseif k == "Mask::Image" and type(v) == "string" then
+                mask_image = v
+            elseif k == "Mask::Layer" and type(v) == "number" then
+                mask_layer = v
+            elseif k == "Invert" and type(v) == "boolean" then
+                should_invert = v and 1 or 0
+            elseif k == "Brightness" and type(v) == "number" then
+                brightness = v
+            elseif k == "Contrast" and type(v) == "number" then
+                contrast = v
+            elseif k == "Rotation" and type(v) == "number" then
+                rotation = v
+            elseif k == "Scale::X" and type(v) == "number" then
+                scale_x = v
+            elseif k == "Scale::Y" and type(v) == "number" then
+                scale_y = v
+            elseif k == "Aberration::Channels" and type(v) == "string" then
+                if v == "Red & Green" then
+                    channels = -1
+                elseif v == "Red & Blue" then
+                    channels = 0
+                elseif v == "Green & Blue" then
+                    channels = 1
+                end
+            elseif k == "Aberration::Offset" and type(v) == "number" then
+                offset = v
+            elseif k == "LoCA::Enable" and type(v) == "boolean" then
+                should_enable_loca = v
+            elseif k == "LoCA::Red" and type(v) == "number" then
+                loca_r = v
+            elseif k == "LoCA::Green" and type(v) == "number" then
+                loca_g = v
+            elseif k == "LoCA::Blue" and type(v) == "number" then
+                loca_b = v
+            elseif k == "LaCA::Enable" and type(v) == "boolean" then
+                should_enable_laca = v and 1 or 0
+            elseif k == "LaCA::Red" and type(v) == "number" then
+                laca_r = v
+            elseif k == "LaCA::Green" and type(v) == "number" then
+                laca_g = v
+            elseif k == "LaCA::Blue" and type(v) == "number" then
+                laca_b = v
+            elseif k == "Blend Mode" and type(v) == "string" then
+                if v == "Normal" then
+                    blend_mode = 0
+                elseif v == "Darken" then
+                    blend_mode = 1
+                elseif v == "Multiply" then
+                    blend_mode = 2
+                elseif v == "Color Burn" then
+                    blend_mode = 3
+                elseif v == "Linear Burn" then
+                    blend_mode = 4
+                elseif v == "Darker Color" then
+                    blend_mode = 5
+                elseif v == "Lighten" then
+                    blend_mode = 6
+                elseif v == "Screen" then
+                    blend_mode = 7
+                elseif v == "Color Dodge" then
+                    blend_mode = 8
+                elseif v == "Linear Dodge (Add)" then
+                    blend_mode = 9
+                elseif v == "Lighter Color" then
+                    blend_mode = 10
+                elseif v == "Replace" then
+                    blend_mode = -1
+                end
+            elseif k == "Alpha Mode" and type(v) == "string" then
+                if v == "Alpha Blending" then
+                    alpha_mode = 0
+                elseif v == "Alpha Hashed" then
+                    alpha_mode = 1
+                end
+            elseif k == "Clamp" and type(v) == "boolean" then
+                should_clamp = v and 1 or 0
+            elseif k == "Glow Only" and type(v) == "boolean" then
+                should_isolate_glow = v and 1 or 0
+            elseif k == "Gamma" and type(v) == "number" then
+                gamma = v
+            elseif k == "Layer Reference" and type(v) == "string" then
+                if v == "Absolute" then
+                    layer_reference = 0
+                elseif v == "Relative" then
+                    layer_reference = 1
+                end
+            end
+        end
+    end
+
+    if intensity < eps then
+        return
+    end
+
+    local copyxform
+
+    do
+        copyxform = function(dst, src)
+            dst.ox, dst.oy, dst.oz = src.ox, src.oy, src.oz
+            dst.cx, dst.cy, dst.cz = src.cx, src.cy, src.cz
+            dst.rx, dst.ry, dst.rz = src.rx, src.ry, src.rz
+            dst.sx, dst.sy, dst.sz = src.sx, src.sy, src.sz
+            dst.alpha = src.alpha
+        end
+    end
+
+    intensity = intensity * 0.01
+
+    low = low * 0.01
+    high = high * 0.01
+    softness = max(softness * 0.005, 0.001)
+    mask_layer = max(layer_reference == 0 and mask_layer or mask_layer + LAYER, 0)
+    local xform = {}
+    local should_load_mask
+    if mask_source == 0 then
+        should_load_mask = mask_image ~= ""
+    else
+        should_load_mask = mask_layer > 0 and mask_layer ~= LAYER
+    end
+
+    brightness = brightness * 0.01
+    contrast = contrast * 0.01
+
+    rotation = rad(rotation)
+    scale_x = scale_x * 0.01
+    scale_y = scale_y * 0.01
+
+    loca_r = loca_r * 0.01
+    loca_g = loca_g * 0.01
+    loca_b = loca_b * 0.01
+    laca_r = laca_r * 0.01
+    laca_g = laca_g * 0.01
+    laca_b = laca_b * 0.01
+
+    local blurriness_x, blurriness_y = blurriness * scale_x, blurriness * scale_y
+    local sigma_x, sigma_y = blurriness_x / 3.0, blurriness_y / 3.0
+    local radius_x, radius_y = ceil(blurriness_x), ceil(blurriness_y)
+
+    local c, s = cos(rotation), sin(rotation)
+    local abs_c, abs_s = abs(c), abs(s)
+    local bw, bh = ceil(W * abs_c + H * abs_s), ceil(W * abs_s + H * abs_c)
+    clearbuffer("tempbuffer", bw, bh)
+    pixelshader("rotate", "tempbuffer", "object", { c, s, 0.0, 0.0, -s, c, bw, bh }, "copy", "clamp")
+
+    if should_load_mask then
+        copyxform(xform, obj)
+        clearbuffer("cache:img", W, H)
+        if not copybuffer("cache:img", "object") then
+            print("@error", "Failed to copy buffer")
+            return
+        end
+
+        if mask_source == 0 and not obj.load("image", mask_image) then
+            should_load_mask = false
+            print("@warn", "Failed to load mask image")
+            if not copybuffer("object", "cache:img") then
+                print("@error", "Failed to copy buffer")
+                return
+            end
+        elseif not obj.load("layer", mask_layer, true) then
+            should_load_mask = false
+            print("@warn", "Failed to load mask layer")
+            if not copybuffer("object", "cache:img") then
+                print("@error", "Failed to copy buffer")
+                return
+            end
+        end
+    end
+
+    clearbuffer("cache:mask", bw, bh)
+    pixelshader("mask", "cache:mask", { "tempbuffer", "object" }, {
+        low,
+        high,
+        softness,
+        mask_channel,
+        should_invert,
+        should_load_mask and 1 or 0,
+        exposure,
+        brightness,
+        contrast,
+        gamma,
+    }, "copy", "clip")
+
+    if should_load_mask then
+        copyxform(obj, xform)
+        if not copybuffer("object", "cache:img") then
+            print("@error", "Failed to copy buffer")
+            return
+        end
+    end
+
+    pixelshader(
+        "shift",
+        "tempbuffer",
+        "cache:mask",
+        { laca_r, laca_g, laca_b, should_enable_laca, offset / bw, channels },
+        "copy",
+        "clamp"
+    )
+
+    if should_enable_loca then
+        local sigma_r = sigma_x * loca_r
+        local sigma_g = sigma_x * loca_g
+        local sigma_b = sigma_x * loca_b
+        local sigma_a = max(sigma_r, sigma_g, sigma_b)
+        local radius_r = ceil(sigma_r * 3.0)
+        local radius_g = ceil(sigma_g * 3.0)
+        local radius_b = ceil(sigma_b * 3.0)
+        local radius_a = ceil(sigma_a * 3.0)
+
+        if radius_r + radius_g + radius_b + radius_a > 0 then
+            local params = { sigma_r, sigma_g, sigma_b, sigma_a, radius_r, radius_g, radius_b, radius_a, 1.0 / bw, 0.0 }
+            pixelshader("blur@ChannelBlur@Diffusion_K", "cache:mask", "tempbuffer", params, "copy", "clamp")
+        elseif not copybuffer("cache:mask", "tempbuffer") then
+            print("@error", "Failed to copy buffer")
+            return
+        end
+
+        sigma_r = sigma_y * loca_r
+        sigma_g = sigma_y * loca_g
+        sigma_b = sigma_y * loca_b
+        sigma_a = max(sigma_r, sigma_g, sigma_b)
+        radius_r = ceil(sigma_r * 3.0)
+        radius_g = ceil(sigma_g * 3.0)
+        radius_b = ceil(sigma_b * 3.0)
+        radius_a = ceil(sigma_a * 3.0)
+
+        if radius_r + radius_g + radius_b + radius_a > 0 then
+            local params = { sigma_r, sigma_g, sigma_b, sigma_a, radius_r, radius_g, radius_b, radius_a, 0.0, 1.0 / bh }
+            pixelshader("blur@ChannelBlur@Diffusion_K", "tempbuffer", "cache:mask", params, "copy", "clamp")
+        elseif not copybuffer("tempbuffer", "cache:mask") then
+            print("@error", "Failed to copy buffer")
+            return
+        end
+    else
+        if radius_x > 0 then
+            local params = { sigma_x, radius_x, 1.0 / bw, 0.0 }
+            pixelshader("blur@GaussianBlur@Diffusion_K", "cache:mask", "tempbuffer", params, "copy", "clamp")
+        elseif not copybuffer("cache:mask", "tempbuffer") then
+            print("@error", "Failed to copy buffer")
+            return
+        end
+
+        if radius_y > 0 then
+            local params = { sigma_y, radius_y, 0.0, 1.0 / bh }
+            pixelshader("blur@GaussianBlur@Diffusion_K", "tempbuffer", "cache:mask", params, "copy", "clamp")
+        elseif not copybuffer("tempbuffer", "cache:mask") then
+            print("@error", "Failed to copy buffer")
+            return
+        end
+    end
+
+    clearbuffer("cache:mask", W, H)
+    pixelshader("rotate", "cache:mask", "tempbuffer", { c, -s, 0.0, 0.0, s, c, W, H }, "copy", "clamp")
+
+    pixelshader(
+        "blend",
+        "object",
+        { "cache:mask", "object" },
+        { intensity, blend_mode, alpha_mode, gamma, should_clamp, should_isolate_glow, W * H }
+    )
+end
+
+@GaussianBlur
+
+--requires:2004100
+--information:GaussianBlur@Diffusion_K v1.2.3 by Korarei
+--label:ぼかし
+--filter
+
+--track@blurriness:Blurriness,0,8192,25,0.01,0.00,0.01
+--select@dimensions:Dimensions=2,Horizontal=0,Vertical=1,Horizontal and Vertical=2
+--check@should_resize:Resize,true
+--group:Additional Options,false
+--value@_0:PI,{}
+--[[computeshader@blit:
+RWTexture2D<half4> dst : register(u0);
+Texture2D src : register(t0);
+cbuffer params : register(b0) {
+    float2 origin;
+}
+
+// Countは `(元画像サイズ + 15) / 16` で計算すること
+[numthreads(16, 16, 1)]
+void
+blit(uint3 pos : SV_DispatchThreadID) {
+    uint2 size;
+    src.GetDimensions(size.x, size.y);
+    if (any(pos.xy >= size))
+        return;
+
+    dst[pos.xy + uint2(origin)] = src[pos.xy];
+}
+]]
+--[[pixelshader@blur:
+// 後で合計値除算をするため係数は省略
+// f は -1 / (2 * sigma * sigma)
+inline float
+gaussian(float x, float f) {
+    return exp(x * x * f);
+}
+struct PS_Input {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD;
+};
+
+Texture2D tex : register(t0);
+SamplerState smp : register(s0);
+cbuffer params : register(b0) {
+    float sigma;
+    float radius;
+    float2 texel;
+}
+
+static const float eps = 1.0e-4;
+
+float4
+blur(PS_Input input) : SV_Target {
+    const int r = int(radius);
+    const float f = rcp(-2.0 * sigma * sigma);
+
+    float4 color = tex.Sample(smp, input.uv);
+    float weight = 1.0;
+
+    for (int i = 1; i <= r; i += 2) {
+        const float x = float(i);
+
+        const float w0 = gaussian(x, f);
+        const float w1 = gaussian(x + 1.0, f);
+        const float w = w0 + w1;
+
+        const float2 offset = mad(w1, rcp(max(w, eps)), x) * texel;
+        color += (tex.Sample(smp, input.uv + offset) + tex.Sample(smp, input.uv - offset)) * w;
+        weight += w * 2.0;
+    }
+
+    return color * rcp(weight);
+}
+]]
+
+do
+    local move = table.move
+    local pixelshader, clearbuffer = obj.pixelshader, obj.clearbuffer
+    local w, h = obj.w, obj.h
+
+    if w * h < 1 then
+        return
+    end
+
+    if next(_0) then
+        for k, v in pairs(_0) do
+            if k == "Blurriness" and type(v) == "number" then
+                blurriness = v
+            elseif k == "Dimensions" and type(v) == "number" then
+                dimensions = v
+            elseif k == "Resize" and type(v) == "boolean" then
+                should_resize = v
+            end
+        end
+    end
+
+    local sigma = blurriness / 3.0
+    local radius = math.ceil(blurriness)
+    local params = { sigma, radius }
+
+    if radius < 1 then
+        return
+    end
+
+    if not obj.getinfo("filter") and should_resize and obj.copybuffer("tempbuffer", "object") then
+        local floor = math.floor
+
+        local x = dimensions ~= 1 and radius or 0
+        local y = dimensions ~= 0 and radius or 0
+        local cx, cy = floor((w + 15) * 0.0625), floor((h + 15) * 0.0625)
+        w, h = w + 2 * x, h + 2 * y
+
+        clearbuffer("object", w, h)
+        obj.computeshader("blit", "object", "tempbuffer", { x, y }, cx, cy)
+    end
+
+    if dimensions == 0 then
+        move({ 1.0 / w, 0.0 }, 1, 2, 3, params)
+        pixelshader("blur", "object", "object", params, "copy", "clamp")
+    elseif dimensions == 1 then
+        move({ 0.0, 1.0 / h }, 1, 2, 3, params)
+        pixelshader("blur", "object", "object", params, "copy", "clamp")
+    else
+        clearbuffer("tempbuffer", w, h)
+        move({ 1.0 / w, 0.0 }, 1, 2, 3, params)
+        pixelshader("blur", "tempbuffer", "object", params, "copy", "clamp")
+        move({ 0.0, 1.0 / h }, 1, 2, 3, params)
+        pixelshader("blur", "object", "tempbuffer", params, "copy", "clamp")
+    end
+end
+
+@ChannelBlur
+
+--requires:2004100
+--information:ChannelBlur@Diffusion_K v1.2.3 by Korarei
+--label:ぼかし
+--filter
+
+--group:Blurriness,true
+--track@blurriness_r:Blurriness::Red,0,8192,0,0.01,0.00,0.01
+--track@blurriness_g:Blurriness::Green,0,8192,0,0.01,0.00,0.01
+--track@blurriness_b:Blurriness::Blue,0,8192,0,0.01,0.00,0.01
+--track@blurriness_a:Blurriness::Alpha,0,8192,0,0.01,0.00,0.01
+--group
+--select@dimensions:Dimensions=2,Horizontal=0,Vertical=1,Horizontal and Vertical=2
+--check@should_resize:Resize,true
+--group:Additional Options,false
+--value@_0:PI,{}
+--[[pixelshader@blur:
+// 後で合計値除算をするため係数は省略
+// f は -1 / (2 * sigma * sigma)
+inline float
+gaussian(float x, float f) {
+    return exp(x * x * f);
+}
+struct PS_Input {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD;
+};
+
+Texture2D tex : register(t0);
+SamplerState smp : register(s0);
+cbuffer params : register(b0) {
+    float4 sigma;
+    float4 radius;
+    float2 texel;
+}
+
+static const float eps = 1.0e-4;
+
+float4
+blur(PS_Input input) : SV_Target {
+    const float4 f = rcp(-2.0 * sigma * sigma);
+
+    float4 weight = 1.0;
+    float4 color = tex.Sample(smp, input.uv);
+    color.rgb *= rcp(max(color.a, eps));
+
+    for (int i = 0; i < 3; ++i) {
+        const int r = int(radius[i]);
+        for (int j = 1; j <= r; j += 2) {
+            const float x = float(j);
+
+            const float w0 = gaussian(x, f[i]);
+            const float w1 = gaussian(x + 1.0, f[i]);
+            const float w = w0 + w1;
+
+            const float2 offset = mad(w1, rcp(max(w, eps)), x) * texel;
+            const float4 c0 = tex.Sample(smp, input.uv + offset);
+            const float4 c1 = tex.Sample(smp, input.uv - offset);
+            color[i] += (c0[i] * rcp(max(c0.a, eps)) + c1[i] * rcp(max(c1.a, eps))) * w;
+            weight[i] += w * 2.0;
+        }
+    }
+
+    const int r = int(radius.a);
+    for (int k = 1; k <= r; k += 2) {
+        const float x = float(k);
+
+        const float w0 = gaussian(x, f.a);
+        const float w1 = gaussian(x + 1.0, f.a);
+        const float w = w0 + w1;
+
+        const float2 offset = mad(w1, rcp(max(w, eps)), x) * texel;
+        color.a += (tex.Sample(smp, input.uv + offset).a + tex.Sample(smp, input.uv - offset).a) * w;
+        weight.a += w * 2.0;
+    }
+
+    color *= rcp(weight);
+
+    return float4(color.rgb * color.a, color.a);
+}
+]]
+
+do
+    local ceil, move = math.ceil, table.move
+    local pixelshader, clearbuffer = obj.pixelshader, obj.clearbuffer
+    local w, h = obj.w, obj.h
+
+    if w * h < 1 then
+        return
+    end
+
+    if next(_0) then
+        for k, v in pairs(_0) do
+            if k == "Blurriness::Red" and type(v) == "number" then
+                blurriness_r = v
+            elseif k == "Blurriness::Green" and type(v) == "number" then
+                blurriness_g = v
+            elseif k == "Blurriness::Blue" and type(v) == "number" then
+                blurriness_b = v
+            elseif k == "Blurriness::Alpha" and type(v) == "number" then
+                blurriness_a = v
+            elseif k == "Dimensions" and type(v) == "number" then
+                dimensions = v
+            elseif k == "Resize" and type(v) == "boolean" then
+                should_resize = v
+            end
+        end
+    end
+
+    local sigma_r = blurriness_r / 3.0
+    local sigma_g = blurriness_g / 3.0
+    local sigma_b = blurriness_b / 3.0
+    local sigma_a = blurriness_a / 3.0
+    local radius_r = ceil(blurriness_r)
+    local radius_g = ceil(blurriness_g)
+    local radius_b = ceil(blurriness_b)
+    local radius_a = ceil(blurriness_a)
+    local params = { sigma_r, sigma_g, sigma_b, sigma_a, radius_r, radius_g, radius_b, radius_a }
+
+    if radius_r + radius_g + radius_b + radius_a < 1 then
+        return
+    end
+
+    if not obj.getinfo("filter") and should_resize and obj.copybuffer("tempbuffer", "object") then
+        local floor = math.floor
+
+        local radius = math.max(radius_r, radius_g, radius_b, radius_a)
+        local x = dimensions ~= 1 and radius or 0
+        local y = dimensions ~= 0 and radius or 0
+        local cx, cy = floor((w + 15) * 0.0625), floor((h + 15) * 0.0625)
+        w, h = w + 2 * x, h + 2 * y
+
+        clearbuffer("object", w, h)
+        obj.computeshader("blit@GaussianBlur@Diffusion_K", "object", "tempbuffer", { x, y }, cx, cy)
+    end
+
+    if dimensions == 0 then
+        move({ 1.0 / w, 0.0 }, 1, 2, 9, params)
+        pixelshader("blur", "object", "object", params, "copy", "clamp")
+    elseif dimensions == 1 then
+        move({ 0.0, 1.0 / h }, 1, 2, 9, params)
+        pixelshader("blur", "object", "object", params, "copy", "clamp")
+    else
+        clearbuffer("tempbuffer", w, h)
+        move({ 1.0 / w, 0.0 }, 1, 2, 9, params)
+        pixelshader("blur", "tempbuffer", "object", params, "copy", "clamp")
+        move({ 0.0, 1.0 / h }, 1, 2, 9, params)
+        pixelshader("blur", "object", "tempbuffer", params, "copy", "clamp")
+    end
+end
+
+@Dissolve
+
+--requires:2004100
+--information:Dissolve@Diffusion_K v1.2.3 by Korarei
+--label:加工
+--filter
+
+--select@mode:Mode,Dissolve=0,Dancing Dissolve=1
+--group:Additional Options,false
+--value@_0:PI,{}
+--[[pixelshader@dissolve:
+/*
+The following function is a modified version of pcg4d function
+Original implementation by Mark Jarzynski & Marc Olano
+https://github.com/markjarzynski/PCG3D/blob/master/LICENSE
+*/
+
+uint4
+pcg4d(uint4 v) {
+    v = v * 1664525u + 1013904223u;
+
+    v.x += v.y * v.w;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v.w += v.y * v.z;
+
+    v = v ^ v >> 16u;
+
+    v.x += v.y * v.w;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v.w += v.y * v.z;
+
+    return v;
+}
+
+inline float
+hash(float2 p, float2 s) {
+    return dot(pcg4d(uint4(p, s)), 1u) / 4294967295.0;
+}
+
+inline float4
+hash4d(float2 p, float2 s) {
+    return pcg4d(uint4(p, s)) / 4294967295.0;
+}
+
+Texture2D tex : register(t0);
+cbuffer params : register(b0) {
+    float2 seed;
+}
+
+static const float eps = 1.0e-4;
+
+float4
+dissolve(float4 pos : SV_Position) : SV_Target {
+    const float4 src = tex.Load(int3(pos.xy, 0));
+    return float4(src.rgb * rcp(max(src.a, eps)), 1.0) * step(hash(pos.xy, seed) + eps, src.a);
+}
+]]
+
+do
+    local W, H = obj.w, obj.h
+
+    if W * H < 1 then
+        return
+    end
+
+    if next(_0) then
+        for k, v in pairs(_0) do
+            if k == "Mode" and type(v) == "string" then
+                if v == "Dissolve" then
+                    mode = 0
+                elseif v == "Dancing Dissolve" then
+                    mode = 1
+                end
+            end
+        end
+    end
+
+    obj.pixelshader("dissolve", "object", "object", { W * H, mode == 1 and obj.time * obj.framerate * 100.0 or 0.0 })
+end
+
+@Scatter
+
+--requires:2004100
+--information:Scatter@Diffusion_K v1.2.3 by Korarei
+--label:加工
+--filter
+
+--track@amount:Amount,0,1000,0,0.01
+--select@grain:Grain=2,Horizontal=0,Vertical=1,Both=2
+--check@should_resize:Resize,true
+--group:Additional Options,false
+--track@seed:Seed,-1000,1000,-1,1
+--value@_0:PI,{}
+--[[pixelshader@scatter:
+struct PS_Input {
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD;
+};
+/*
+The following function is a modified version of pcg4d function
+Original implementation by Mark Jarzynski & Marc Olano
+https://github.com/markjarzynski/PCG3D/blob/master/LICENSE
+*/
+
+uint4
+pcg4d(uint4 v) {
+    v = v * 1664525u + 1013904223u;
+
+    v.x += v.y * v.w;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v.w += v.y * v.z;
+
+    v = v ^ v >> 16u;
+
+    v.x += v.y * v.w;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v.w += v.y * v.z;
+
+    return v;
+}
+
+inline float
+hash(float2 p, float2 s) {
+    return dot(pcg4d(uint4(p, s)), 1u) / 4294967295.0;
+}
+
+inline float4
+hash4d(float2 p, float2 s) {
+    return pcg4d(uint4(p, s)) / 4294967295.0;
+}
+
+Texture2D tex : register(t0);
+SamplerState smp : register(s0);
+cbuffer params : register(b0) {
+    float2 sigma;
+    float2 seed;
+}
+
+static const float eps = 1.0e-4;
+
+float2
+box_muller(float2 p) {
+    const float4 h = hash4d(p, seed);
+    const float r = sqrt(-2.0 * log(max(h.x, eps)));
+    const float t = 6.28318530718 * h.y;
+    return r * float2(cos(t), sin(t)) * sigma;
+}
+
+float4
+scatter(PS_Input input) : SV_Target {
+    return tex.Sample(smp, input.uv + box_muller(input.pos.xy));
+}
+]]
+
+do
+    local w, h = obj.w, obj.h
+
+    local eps = 1.0e-4
+
+    if w * h < 1 then
+        return
+    end
+
+    if next(_0) then
+        for k, v in pairs(_0) do
+            if k == "Amount" and type(v) == "number" then
+                amount = v
+            elseif k == "Grain" and type(v) == "string" then
+                if v == "Horizontal" then
+                    grain = 0
+                elseif v == "Vertical" then
+                    grain = 1
+                elseif v == "Both" then
+                    grain = 2
+                end
+            elseif k == "Resize" and type(v) == "boolean" then
+                should_resize = v
+            elseif k == "Seed" and type(v) == "number" then
+                seed = v
+            end
+        end
+    end
+
+    if amount < eps then
+        return
+    end
+
+    seed = seed < 0 and -seed or obj.layer + seed
+
+    local sigma = amount * 0.05
+    local sigma_x = grain ~= 1 and sigma / w or 0.0
+    local sigma_y = grain ~= 0 and sigma / h or 0.0
+
+    if not obj.getinfo("filter") and should_resize and obj.copybuffer("tempbuffer", "object") then
+        local floor = math.floor
+
+        local d = math.ceil(sigma * 3.0)
+        local x = grain ~= 1 and d or 0
+        local y = grain ~= 0 and d or 0
+        local cx, cy = floor((w + 15) * 0.0625), floor((h + 15) * 0.0625)
+        w, h = w + 2 * x, h + 2 * y
+
+        obj.clearbuffer("object", w, h)
+        obj.computeshader("blit@GaussianBlur@Diffusion_K", "object", "tempbuffer", { x, y }, cx, cy)
+    end
+
+    obj.pixelshader("scatter", "object", "object", { sigma_x, sigma_y, seed, w * h }, "copy", "clip")
+end
+
+@Noise
+
+--requires:2004100
+--information:Noise@Diffusion_K v1.2.3 by Korarei
+--label:加工
+--filter
+
+--track@amount:Amount,0,100,0,0.01
+--select@color:Color=1,BW=0,RGB=1,RGBA=2
+--check@should_clamp:Clamp,1
+--group:Additional Options,false
+--track@seed:Seed,-1000,1000,-1,1
+--value@_0:PI,{}
+--[[pixelshader@noise:
+/*
+The following function is a modified version of pcg4d function
+Original implementation by Mark Jarzynski & Marc Olano
+https://github.com/markjarzynski/PCG3D/blob/master/LICENSE
+*/
+
+uint4
+pcg4d(uint4 v) {
+    v = v * 1664525u + 1013904223u;
+
+    v.x += v.y * v.w;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v.w += v.y * v.z;
+
+    v = v ^ v >> 16u;
+
+    v.x += v.y * v.w;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v.w += v.y * v.z;
+
+    return v;
+}
+
+inline float
+hash(float2 p, float2 s) {
+    return dot(pcg4d(uint4(p, s)), 1u) / 4294967295.0;
+}
+
+inline float4
+hash4d(float2 p, float2 s) {
+    return pcg4d(uint4(p, s)) / 4294967295.0;
+}
+
+Texture2D tex : register(t0);
+cbuffer params : register(b0) {
+    float2 seed;
+    float amount;
+    float color;
+    float should_clamp;
+}
+
+static const float eps = 1.0e-4;
+
+float4
+noise(float4 pos : SV_Position) : SV_Target {
+    float4 src = tex.Load(int3(pos.xy, 0));
+    src.rgb *= rcp(max(src.a, eps));
+
+    const float4 r = (hash4d(pos.xy, seed) - 0.5) * amount;
+    [forcecase]
+    switch (int(color)) {
+        case 0:
+            src.rgb += r.rrr;
+            break;
+        case 1:
+            src.rgb += r.rgb;
+            break;
+        case 2:
+            src += r;
+            break;
+        default:
+            break;
+    }
+
+    src.a = saturate(src.a);
+    src.rgb = max(src.rgb, 0.0);
+
+    const float4 output = lerp(src, saturate(src), should_clamp);
+    return float4(output.rgb * output.a, output.a);
+}
+]]
+
+do
+    local W, H = obj.w, obj.h
+
+    local eps = 1.0e-4
+
+    if W * H < 1 then
+        return
+    end
+
+    if next(_0) then
+        for k, v in pairs(_0) do
+            if k == "Amount" and type(v) == "number" then
+                amount = v
+            elseif k == "Color" and type(v) == "string" then
+                if v == "BW" then
+                    color = 0
+                elseif v == "RGB" then
+                    color = 1
+                elseif v == "RGBA" then
+                    color = 2
+                end
+            elseif k == "Clamp" and type(v) == "boolean" then
+                should_clamp = v and 1 or 0
+            elseif k == "Seed" and type(v) == "number" then
+                seed = v
+            end
+        end
+    end
+
+    if amount < eps then
+        return
+    end
+
+    amount = amount * 0.01
+    seed = seed < 0 and -seed or obj.layer + seed
+
+    obj.pixelshader("noise", "object", "object", { seed, W * H, amount, color, should_clamp })
+end
+
+@Noise(HSLA)
+
+--requires:2004100
+--information:Noise(HSLA)Diffusion_K v1.2.3 by Korarei
+--label:加工
+--filter
+
+--group:Amount,true
+--track@amount_h:Amount::Hue,0,1000,0,0.01
+--track@amount_s:Amount::Saturation,0,1000,0,0.01
+--track@amount_l:Amount::Lightness,0,1000,0,0.01
+--track@amount_a:Amount::Alpha,0,1000,0,0.01
+--group:Additional Options,false
+--track@seed:Seed,-1000,1000,-1,1
+--value@_0:PI,{}
+--[[pixelshader@noise_hsla:
+/*
+The following function is a modified version of pcg4d function
+Original implementation by Mark Jarzynski & Marc Olano
+https://github.com/markjarzynski/PCG3D/blob/master/LICENSE
+*/
+
+uint4
+pcg4d(uint4 v) {
+    v = v * 1664525u + 1013904223u;
+
+    v.x += v.y * v.w;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v.w += v.y * v.z;
+
+    v = v ^ v >> 16u;
+
+    v.x += v.y * v.w;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v.w += v.y * v.z;
+
+    return v;
+}
+
+inline float
+hash(float2 p, float2 s) {
+    return dot(pcg4d(uint4(p, s)), 1u) / 4294967295.0;
+}
+
+inline float4
+hash4d(float2 p, float2 s) {
+    return pcg4d(uint4(p, s)) / 4294967295.0;
+}
+
+Texture2D tex : register(t0);
+cbuffer params : register(b0) {
+    float4 amount;
+    float2 seed;
+}
+
+static const float eps = 1.0e-4;
+
+float4
+rgba2hsla(float4 c) {
+    const float4 k = float4(0.0, -rcp(3.0), 2.0 * rcp(3.0), -1.0);
+    const float4 p = lerp(float4(c.bg, k.wz), float4(c.gb, k.xy), step(c.b, c.g));
+    const float4 q = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
+
+    const float d = q.x - min(q.w, q.y);
+    const float l = 0.5 * (q.x + min(q.w, q.y));
+    const float h = abs(mad(q.w - q.y, rcp(max(6.0 * d, eps)), q.z));
+    const float s = d * rcp(max(1.0 - abs(mad(2.0, l, -1.0)), eps));
+
+    return float4(h, s, l, c.a);
+}
+
+float4
+hsla2rgba(float4 c) {
+    const float4 k = float4(1.0, 2.0 * rcp(3.0), rcp(3.0), 3.0);
+    const float3 p = abs(frac(c.xxx + k.xyz) * 6.0 - k.www);
+    const float3 q = saturate(p - k.xxx);
+    return float4(mad(q - 0.5, (1.0 - abs(mad(2.0, c.z, -1.0))) * c.y, c.z), c.a);
+}
+
+float4
+noise_hsla(float4 pos : SV_Position) : SV_Target {
+    float4 src = tex.Load(int3(pos.xy, 0));
+    src.rgb *= rcp(max(src.a, eps));
+
+    const float4 r = (hash4d(pos.xy, seed) - 0.5) * amount;
+    float4 hsla = rgba2hsla(saturate(src));
+    hsla += r;
+    hsla.x = frac(hsla.x);
+    const float4 rgba = hsla2rgba(saturate(hsla));
+
+    return float4(rgba.rgb * rgba.a, rgba.a);
+}
+]]
+
+do
+    local W, H = obj.w, obj.h
+
+    if W * H < 1 then
+        return
+    end
+
+    if next(_0) then
+        for k, v in pairs(_0) do
+            if k == "Amount::Hue" and type(v) == "number" then
+                amount_h = v
+            elseif k == "Amount::Saturation" and type(v) == "number" then
+                amount_s = v
+            elseif k == "Amount::Lightness" and type(v) == "number" then
+                amount_l = v
+            elseif k == "Amount::Alpha" and type(v) == "number" then
+                amount_a = v
+            elseif k == "Seed" and type(v) == "number" then
+                seed = v
+            end
+        end
+    end
+
+    amount_h = amount_h * 0.01
+    amount_s = amount_s * 0.01
+    amount_l = amount_l * 0.01
+    amount_a = amount_a * 0.01
+    seed = seed < 0 and -seed or obj.layer + seed
+
+    obj.pixelshader("noise_hsla", "object", "object", { amount_h, amount_s, amount_l, amount_a, seed, W * H })
+end

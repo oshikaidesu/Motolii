@@ -1,0 +1,6 @@
+グラデーション+ by azurite
+licence: CC0-1.0
+from: https://github.com/azurite581/AviUtl2-GradientPlus/releases/download/v1.1.2/GradientPlus-v1.1.2.au2pkg.zip (tag v1.1.2, commit 270ec484513e)
+page: https://github.com/azurite581/AviUtl2-GradientPlus
+licence/README from: https://github.com/azurite581/AviUtl2-GradientPlus at v1.1.2
+Put here unchanged for Motolii (filament/aviutl_scripts).

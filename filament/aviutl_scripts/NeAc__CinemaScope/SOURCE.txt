@@ -1,0 +1,5 @@
+シネマスコープ by 猫愛
+licence: MIT
+from: https://github.com/nea-c/aviutl2_script_CinemaScope/releases/download/r6/CinemaScope.zip (tag r6, commit ce8214a1de88)
+page: https://github.com/nea-c/aviutl2_script_CinemaScope
+Put here unchanged for Motolii (filament/aviutl_scripts).

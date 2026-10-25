@@ -1,0 +1,726 @@
+--information:光束_H v1.20 by HexBrowns
+--label:HexScript
+--group:形
+--select@ray_mode:光の出方=0,平行=0,放射=1,収束=2
+--select@fill_mode:光の中身=0,体積光=0,ベタ=1
+--track@direction:方向,-360,360,-90,0.1
+--hide@direction:ray_mode>0
+--check@screen_dir:画面基準,1
+--hide@screen_dir:ray_mode>0
+--track@spread:拡散角度,-170,170,0,0.1
+--hide@spread:ray_mode>0
+--track@light_x:光源X,-100000,100000,0,0.1
+--hide@light_x:ray_mode==0
+--track@light_y:光源Y,-100000,100000,0,0.1
+--hide@light_y:ray_mode==0
+--track@length:長さ,0,4000,300,0.1
+--track@decay:減衰,0,100,50,0.1
+--group:光
+--color@light_color:光の色,nil
+--track@intensity:強さ,0,1000,100,0.1
+--track@threshold:しきい値,0,100,0,0.1
+--check@light_only:光だけ,0
+--group:霧の設定
+--track@fog:霧,0,100,0,0.1
+--track@fog_scale:霧の大きさ,1,2000,150,0.1
+--track@wind_dir:風向き,-360,360,0,0.1
+--track@wind_speed:風の速さ,-5000,5000,60,0.1
+--track@seed:シード,-1000,1000,0,1
+--group:品質
+--select@res:解像度=2,等倍=1,1/2=2,1/4=4
+--select@march_mode:光線の作り方=0,倍々の畳み込み=0,等間隔の歩み=1
+--track@march_steps:歩数,2,256,16,1
+--hide@march_steps:march_mode==0
+--group
+
+--[[
+光束_H v1.20
+
+掛けたオブジェクトの光る部分から光の筋を伸ばす。
+  光の出方  平行（光の柱・窓からの日差し）/ 放射（光源から広がる）/ 収束（光源へ吸い込まれる）
+  光の中身  体積光（光線上の光を足す。厚い所ほど濃く、隙間は筋の抜けになる）/ ベタ（最初に当たった色で塗る）
+
+  仕様      AI/specifications/20260922_光束_H_spec.md
+  机上検証  AI/scripts/光束_H/verify_lightshaft.py
+  実機検証  AI/tools/debug_items/lsh.py（節 LSH）
+
+項目名は保存キーなので変えない。
+
+光源X/Y はオブジェクト座標（元の画像の中心から、px）。オブジェクトを回すと光源も回る。
+平行の 方向 は 画面基準 が 1 なら画面の向き（オブジェクトの Z 回転を打ち消す）。
+平行の 拡散角度 は光の筋の広がり（形の幅の両端が 拡散角度 / 2 ずつ開く。マイナスで先細り）。
+幅は画像の外接矩形ではなく形そのもの（アルファ 0.5 以上）を方向に垂直に測る（v1.10）。
+光の色 が透明なら元の色で光る。光はリニア（γ 2.2）で足し、1 を超えた分は頭打ちにする。
+
+光線を i 歩さかのぼる写像は、まっすぐな平行なら平行移動、それ以外は中心 c まわりの拡大
+T_i(p) = c + e^(-λ i)(p - c)（λ は実数）になる。放射・収束は c が光源、平行の拡散は c が形の後ろ
+（先細りは前）の点。どちらも T_a∘T_b = T_(a+b) なので、倍にしていく畳み込みで N 歩を log2 N 回のパスで計算する。
+シェーダーは回転（λ の虚部）も扱えるが、v1.10 で 弧の角度 をなくしたので虚部は常に 0 を渡す。
+
+光だけ が 0 なら、光を元の画像の上に重ねる（v1.11。v1.10 までは元の画像が前だった）。
+
+v1.10: 弧の角度（光を曲げる）をなくした（ユーザーの判断。ゴッドレイには要らない）。
+広げた画像が大きいときは、光を計算する解像度を自動で下げ、1 フレームに使う VRAM を抑える。
+v1.11: 光を元の画像の上に描く（ユーザーの依頼）。
+v1.13: 1 フレームに持つ cache が枠（cache と tempbuffer で合わせて 1600 万ドット）を超えないよう、
+作業解像度を自動で下げる条件に cache の合計を足した（広げた画像が大きいと黒いフレームになっていた）。
+v1.14: 広げた画像を cache に退避せず object のまま読む（横長の巨大素材で枠を超えて消えていた）。目安は共有の
+EffectUtils_Budget（1400 万ドット）にし、1/4 でも収まらなければ効果を掛けない（AI/scripts/issues/20261013_cache_budget_4k_wide_materials.md）。
+v1.20: 光線の作り方 に 等間隔の歩み を足した（既定は今までの 倍々の畳み込み）。光線を N 歩さかのぼる範囲を
+歩数 個の等間隔の点だけで読み重ねる（ps_lb_march を 1 回）。歩数が少ないと光線が形の写しの段や縞になる（古いゲームの
+ゴッドレイ風）。歩数が全体の歩数以上なら 1 歩ずつ読むので、倍々の畳み込みと同じ光になる（双線形の読み直しが無いぶん鋭い）。
+広げる量・作業解像度・cache の数え方は 倍々の畳み込み と同じ（使う cache はこちらの方が少ない）。
+]]
+
+--[[pixelshader@ps_lb_pool:
+// 形の広がりを測る升目へ縮める（平行のとき）。升目の値は中のアルファの最大値
+Texture2D src : register(t0);
+cbuffer P : register(b0) {
+    float2 img;
+    float factor;
+};
+float4 ps_lb_pool(float4 pos : SV_Position) : SV_Target {
+    int f = (int)factor;
+    int2 base = int2(pos.xy) * f;
+    int2 lim = int2(img);
+    float m = 0.0;
+    [loop]
+    for (int j = 0; j < 16; j++) {
+        if (j >= f) break;
+        [loop]
+        for (int i = 0; i < 16; i++) {
+            if (i >= f) break;
+            int2 q = base + int2(i, j);
+            if (q.x < lim.x && q.y < lim.y) {
+                m = max(m, src.Load(int3(q, 0)).a);
+            }
+        }
+    }
+    return float4(m, m, m, m);
+}
+]]
+
+--[[pixelshader@ps_lb_emit:
+// 放射を作業解像度へ縮める。出力の画素 i の中心は入力の (i + 0.5) factor で、±factor の 2 次元のテントで平均する。
+// kind 0: (色 x 被覆 x scale, 被覆) / kind 1: (0, 0, 0, 被覆)（ベタの種）
+Texture2D src : register(t0);
+cbuffer P : register(b0) {
+    float2 src_size;
+    float factor;
+    float kind;
+    float3 light_lin;
+    float use_source;
+    float scale;
+    float threshold;
+};
+float4 ps_lb_emit(float4 pos : SV_Position) : SV_Target {
+    int f = (int)factor;
+    float2 c = pos.xy * factor;
+    int2 first = int2(floor(c - factor));
+    int2 lim = int2(src_size);
+    float4 acc = float4(0, 0, 0, 0);
+    [loop]
+    for (int j = 0; j <= 8; j++) {
+        if (j > 2 * f) break;
+        [loop]
+        for (int i = 0; i <= 8; i++) {
+            if (i > 2 * f) break;
+            int2 p = first + int2(i, j);
+            float2 dd = abs((float2)p + 0.5 - c) / factor;
+            float w = max(0.0, 1.0 - dd.x) * max(0.0, 1.0 - dd.y);
+            if (w > 0.0 && p.x >= 0 && p.y >= 0 && p.x < lim.x && p.y < lim.y) {
+                float4 s = src.Load(int3(p, 0));
+                if (s.a > 0.0) {
+                    float3 straight = saturate(s.rgb / s.a);
+                    float v = max(straight.r, max(straight.g, straight.b));
+                    float e = threshold > 0.0 ? saturate((v - threshold) / max(1.0 - threshold, 1e-3)) : 1.0;
+                    float a = s.a * e;
+                    float3 col = use_source > 0.5 ? pow(straight, 2.2) : light_lin;
+                    acc += w * (kind > 0.5 ? float4(0, 0, 0, a) : float4(col * a, a));
+                }
+            }
+        }
+    }
+    float4 o = acc / (factor * factor);
+    // 体積光（scale = 1 / 厚み）はアルファも同じだけ縮める。アルファは使わないが、先細りで光線が頂点に集まると
+    // 重み付きの和が RGBA16F を超えて inf になった（v1.00、机上の描画モデルで発見）。ベタは scale = 1
+    return kind > 0.5 ? o : o * scale;
+}
+]]
+
+--[[pixelshader@ps_lb_step:
+// 倍にしていく畳み込みの 1 歩。s = p + A(p - origin) + shift を双線形で読む（外は透明）。
+// A = e^(-λa) - 1 を 2x2 にしたもの（平行移動なら 0）、shift = A(origin - c)（平行移動なら -a·方向）。
+// 中心 c が遠くても、p に小さな差を足す形なので float の精度が落ちない。
+// op 0（体積光）: X(p) + gain·Y(s)
+// op 1（ベタ）  : X(p) over Y(s)。r = 当たった点までの距離 x 被覆（乗算済み）、a = 被覆。
+//                距離は弦 |p - s| に弧の長さ／弦の比 dist_scale を掛ける（相似なので位置によらない）
+Texture2D xb : register(t0);
+Texture2D yb : register(t1);
+SamplerState smp : register(s0);
+cbuffer P : register(b0) {
+    float2 size;
+    float2 origin;
+    float2 shift;
+    float gain;
+    float op;
+    float4 amat;
+    float dist_scale;
+};
+float4 ps_lb_step(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy;
+    float2 q = p - origin;
+    float2 sp = p + float2(amat.x * q.x + amat.y * q.y, amat.z * q.x + amat.w * q.y) + shift;
+    float4 x = xb.Load(int3(p, 0));
+    float4 y = yb.SampleLevel(smp, sp / size, 0);
+    if (op < 0.5) {
+        return x + gain * y;
+    }
+    float d = length(p - sp) * dist_scale;
+    float a = x.a + (1.0 - x.a) * y.a;
+    float t = x.r + (1.0 - x.a) * (y.r + d * y.a);
+    return float4(t, 0.0, 0.0, a);
+}
+]]
+
+--[[pixelshader@ps_lb_march:
+// 等間隔の歩み（v1.20）。光線を n_total 歩さかのぼる範囲を count 個の等間隔の点 i_k = k·delta（delta = n_total / count）で読む。
+// T_i(p) は平行移動なら p − i·dir、拡大なら c + e^(−λ i)(p − c)。作業解像度の座標で、外は透明（sampler "clip"）。
+// op 0（体積光）: Σ delta·w(i_k)·g^(i_k)·S(T_i p)。w は平らな部分 n_flat まで 1、その先は e^(−(i − n_flat)/tail)。
+//                g^i は拡大のときの 1 歩の長さの違い e^(−λ i)（ps_lb_step の鎖の gain と同じ）
+// op 1（ベタ）  : 前から順に over。r = 当たった点までの距離 x 被覆（乗算済み）、a = 被覆（ps_lb_step の op 1 と同じ形）
+Texture2D sb : register(t0);
+SamplerState smp : register(s0);
+cbuffer P : register(b0) {
+    float2 size;
+    float2 center;
+    float2 dir;
+    float count;
+    float delta;
+    float kind;
+    float lam_re;
+    float n_flat;
+    float tail;
+    float op;
+};
+float4 ps_lb_march(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy;
+    float2 q = p - center;
+    float4 acc = float4(0, 0, 0, 0);
+    float t = 0.0;
+    float a = 0.0;
+    [loop]
+    for (int k = 0; k < 256; k++) {
+        if ((float)k >= count) break;
+        float i = (float)k * delta;
+        float e = exp(-lam_re * i);
+        float2 sp = kind < 0.5 ? p - i * dir : p + (e - 1.0) * q;
+        float4 y = sb.SampleLevel(smp, sp / size, 0);
+        if (op < 0.5) {
+            float w = i < n_flat ? 1.0 : (tail > 0.0 ? exp(-(i - n_flat) / tail) : 0.0);
+            float g = kind < 0.5 ? 1.0 : e;
+            acc += (delta * w * g) * y;
+        } else {
+            float d = length(p - sp);
+            t += (1.0 - a) * d * y.a;
+            a += (1.0 - a) * y.a;
+        }
+    }
+    return op < 0.5 ? acc : float4(t, 0.0, 0.0, a);
+}
+]]
+
+--[[pixelshader@ps_lb_final:
+// 光を等倍に戻し、霧を掛けて元の画像と重ねる。
+// ハッシュとバリューノイズは ビーム化_H の beamh_hash / beamh_lattice / beamh_value と同じ式（格子のずれを 2 次元にした）
+Texture2D src : register(t0);
+Texture2D sbuf : register(t1);
+Texture2D rbuf : register(t2);
+SamplerState smp : register(s0);
+cbuffer P : register(b0) {
+    float2 size;
+    float2 low_size;
+    float2 center;
+    float2 dir;
+    float2 origin;
+    float2 wind_int;
+    float2 wind_frac;
+    float factor;
+    float kind;
+    float fill_mode;
+    float lam_re;
+    float n_flat;
+    float tail;
+    float intensity;
+    float3 light_lin;
+    float use_source;
+    float fog;
+    float fog_scale;
+    float seed;
+    float light_only;
+    float lam_im;
+};
+uint lb_hash(int2 c, uint s) {
+    uint h = asuint(c.x) * 0x8da6b343u;
+    h = h ^ (asuint(c.y) * 0xd8163841u);
+    h = h ^ (s * 0xcb1ab31fu);
+    h = h ^ (h >> 16);
+    h = h * 0x7feb352du;
+    h = h ^ (h >> 15);
+    h = h * 0x846ca68bu;
+    h = h ^ (h >> 16);
+    return h;
+}
+float lb_lattice(int2 c, uint s) {
+    return (float)(lb_hash(c, s) >> 8) * (1.0 / 16777216.0);
+}
+// cs は格子の番号へ整数のまま足すずれ（長時間でも float の精度が落ちない）
+float lb_value(float2 q, int2 cs, uint s) {
+    float2 i = floor(q);
+    float2 f = q - i;
+    float2 w = f * f * (3.0 - 2.0 * f);
+    int2 c = int2(i) - cs;
+    float a = lb_lattice(c, s);
+    float b = lb_lattice(c + int2(1, 0), s);
+    float e = lb_lattice(c + int2(0, 1), s);
+    float g = lb_lattice(c + int2(1, 1), s);
+    return lerp(lerp(a, b, w.x), lerp(e, g, w.x), w.y);
+}
+float lb_fbm(float2 pl) {
+    float2 q = pl / fog_scale;
+    uint s = (uint)seed * 3u;
+    float sum = 0.0;
+    float amp = 1.0;
+    float mul = 1.0;
+    [unroll]
+    for (int k = 0; k < 3; k++) {
+        float2 sf = wind_frac * mul;
+        float2 sfi = floor(sf);
+        int2 cs = int2(wind_int) * (int)mul + int2(sfi);
+        sum += amp * lb_value(q * mul - (sf - sfi), cs, s + (uint)k);
+        amp *= 0.5;
+        mul *= 2.0;
+    }
+    return sum / 1.75;
+}
+// 光線を i 歩さかのぼった点 T_i(p) = c + e^(-λ i)(p - c)（拡大・回転のとき）
+float2 lb_sweep(float2 p, float i) {
+    float e = exp(-lam_re * i);
+    float an = -lam_im * i;
+    float cs = cos(an);
+    float sn = sin(an);
+    float2 q = p - center;
+    return center + e * float2(cs * q.x - sn * q.y, sn * q.x + cs * q.y);
+}
+float4 ps_lb_final(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy;
+    float4 s0 = src.Load(int3(p, 0));
+    float4 r = rbuf.SampleLevel(smp, (p / factor) / low_size, 0);
+    float rp = length(p - center);
+    float lam_abs = length(float2(lam_re, lam_im));
+    float3 light = float3(0, 0, 0);
+    if (fill_mode < 0.5) {
+        // 体積光: 1 歩の長さ（平行移動は factor px、拡大・回転は |λ|·|p - c|）を掛けて px の積分にする
+        float geom = kind < 0.5 ? factor : lam_abs * rp;
+        light = r.rgb * geom;
+    } else if (r.a > 1e-5) {
+        // ベタ: 当たった点までの距離 t から、何歩目か（重みの位置）と当たった点を戻す
+        float t = r.r / r.a * factor;
+        float ih = t / factor;
+        float2 h0 = p - t * dir;
+        float2 h1 = p - (t + 0.5 * factor) * dir;
+        if (kind > 0.5) {
+            float lr = max(lam_abs * rp, 1e-6);
+            ih = abs(lam_re) > 1e-7 ? -log(max(1.0 - t * lam_re / lr, 1e-6)) / lam_re : t / lr;
+            h0 = lb_sweep(p, ih);
+            h1 = lb_sweep(p, ih + 0.5);
+        }
+        float w = ih <= n_flat ? 1.0 : (tail > 0.0 ? exp(-(ih - n_flat) / tail) : 0.0);
+        float3 col = light_lin;
+        if (use_source > 0.5) {
+            float4 c0 = sbuf.SampleLevel(smp, (h0 / factor) / low_size, 0);
+            float4 c1 = sbuf.SampleLevel(smp, (h1 / factor) / low_size, 0);
+            float4 cs = c1.a > c0.a ? c1 : c0;
+            col = cs.a > 1e-5 ? cs.rgb / max(cs.a, 1e-5) : float3(0, 0, 0);
+        }
+        light = col * (r.a * w);
+    }
+    float g = fog > 0.0 ? 1.0 - fog * lb_fbm(p - origin) : 1.0;
+    light *= intensity * g;
+    float3 rgb = min(pow(max(light, 0.0), 1.0 / 2.2), 1.0);
+    float la = max(rgb.r, max(rgb.g, rgb.b));
+    float4 lo = float4(rgb, la);
+    if (light_only > 0.5) {
+        return lo;
+    }
+    // 光を元の画像の上に重ねる（光 over 元の画像）。v1.10 までは逆で、光が形の後ろに回っていた
+    return lo + s0 * (1.0 - lo.a);
+}
+]]
+
+local w0, h0 = obj.w, obj.h
+if w0 < 1 or h0 < 1 then return end
+if ray_mode > 0 then
+  obj.setanchor("light_x,light_y", 0)
+end
+
+local GAMMA = 2.2
+-- 1 フレームに使う VRAM の目安。広げた画像は object の 1 枚（v1.13 までは cache:lb/src にも退避していた）、光のバッファは作業解像度で
+-- 6〜7 枚。v1.00 は 16777216 画素まで広げ、等倍なら 1GB を超えて "invalid buffer type" が出た
+-- （AI/scripts/光束_H/issues/20260923_invalid_buffer_large_expansion.md）
+local MAX_PIXELS = 8388608    -- 広げた後の画素数の上限
+local WORK_MAX = 2097152      -- 光のバッファ 1 枚の画素数の目安。超えるなら作業解像度を 1/2・1/4 へ下げる
+local MAX_STEPS = 65536       -- 1 本の鎖の歩数の上限
+local EXTENT_GRID = 65536     -- 形の広がりを測る升目の数の目安
+local POOL_MAX = 16           -- ps_lb_pool のループの上限（縮小率）
+local budget = require("EffectUtils_Budget")
+local CACHE_BUDGET = budget.BUDGET -- 1 フレームに持つ cache の上限の目安。枠 16,000,000 に余裕を残す（v1.14 から共有の目安）
+local pool_pixels = 0         -- 升目（cache:lb/pool）の画素数。shape_extent が作ったときだけ入る
+
+local L = math.max(0, length)
+if L <= 0 or intensity <= 0 then
+  -- 光が無い。光だけなら何も残さない
+  if light_only == 1 then obj.clearbuffer("object") end
+  return
+end
+
+local s = math.floor(res + 0.5)
+if s ~= 2 and s ~= 4 then s = 1 end
+local f = math.max(0, math.min(1, decay / 100))
+
+local function lin_rgb(col)
+  local r, g, b = RGB(col)
+  return (r / 255) ^ GAMMA, (g / 255) ^ GAMMA, (b / 255) ^ GAMMA
+end
+
+
+-- 平行の向き。画面基準なら標準描画と効果の Z 回転を打ち消す
+local theta = direction
+if ray_mode == 0 and screen_dir == 1 then
+  theta = direction - ((obj.getvalue("rz") or 0) + (obj.rz or 0))
+end
+local rad = math.rad(theta)
+local dx, dy = math.cos(rad), math.sin(rad)
+local half_diag = math.sqrt(w0 * w0 + h0 * h0) / 2
+
+-- 重みは「平らな部分（長さ x (1 - 減衰)）+ 減衰していく尾」。尾は長さの所で約 5%（3λ）になり、9λ で打ち切る。
+-- 全体で長さの (1 + 2 x 減衰) 倍まで伸びる
+local span = 1 + 2 * f
+local L_flat, L_tot = L * (1 - f), L * span
+
+-- 形の広がり: アルファ 0.5 以上の画素を、方向 u と垂直 v = (−u.y, u.x) へ射影した最小・最大
+-- （元の画像の中心から px）。画像の外接矩形で測ると、方向を回したときに円い形でも幅が変わり、
+-- 先細りの長さや明るさが伸び縮みした（v1.00。AI/scripts/光束_H/issues/20260923_spread_depends_on_direction.md）。
+-- 形を升目へ縮めて getpixeldata で読む。形が無ければ nil
+local function shape_extent(ux, uy)
+  local ffi = require("ffi")
+  local k = math.min(POOL_MAX, math.max(1, math.ceil(math.sqrt(w0 * h0 / EXTENT_GRID))))
+  local gw, gh = math.ceil(w0 / k), math.ceil(h0 / k)
+  obj.clearbuffer("cache:lb/pool", gw, gh)
+  pool_pixels = gw * gh
+  obj.pixelshader("ps_lb_pool", "cache:lb/pool", "object", { w0, h0, k }, "copy")
+  local px = ffi.cast("uint8_t*", obj.getpixeldata("cache:lb/pool"))
+  local vx, vy = -uy, ux
+  local half = k / 2 * (math.abs(ux) + math.abs(uy))     -- 升目 1 つの射影の半分（u と v で同じ）
+  local d0, d1, n0, n1 = math.huge, -math.huge, math.huge, -math.huge
+  for gy = 0, gh - 1 do
+    local cy = (gy + 0.5) * k - h0 / 2
+    for gx = 0, gw - 1 do
+      if px[(gy * gw + gx) * 4 + 3] >= 128 then
+        local cx = (gx + 0.5) * k - w0 / 2
+        local pd, pn = cx * ux + cy * uy, cx * vx + cy * vy
+        if pd < d0 then d0 = pd end
+        if pd > d1 then d1 = pd end
+        if pn < n0 then n0 = pn end
+        if pn > n1 then n1 = pn end
+      end
+    end
+  end
+  if d0 > d1 then return nil end
+  return d0 - half, d1 + half, n0 - half, n1 + half
+end
+
+-- 光線の写し方。kind 0 = 平行移動（まっすぐな平行）、1 = 中心 c まわりの拡大（拡散角度・放射・収束）。
+-- 拡大は、全体（L_tot）ぶんの Λ_T と、平らな部分（L_flat）ぶんの |Λ_F| で決める（どちらも実数）。
+-- c は元の画像の中心を原点にした px
+local kind, ccx, ccy = 0, 0, 0
+local LT_re, LF_abs = 0, 0
+local thick = half_diag
+if ray_mode == 0 then
+  local nx, ny = -dy, dx
+  local ed = (w0 * math.abs(dx) + h0 * math.abs(dy)) / 2
+  local en = (w0 * math.abs(nx) + h0 * math.abs(ny)) / 2
+  local d0, d1, n0, n1 = -ed, ed, -en, en
+  if spread ~= 0 or fill_mode == 0 then
+    local e0, e1, e2, e3 = shape_extent(dx, dy)
+    if e0 then
+      d0, d1 = math.max(-ed, e0), math.min(ed, e1)
+      n0, n1 = math.max(-en, e2), math.min(en, e3)
+    end
+  end
+  thick = d1 - d0
+  -- 拡散角度: 形の幅の両端が 拡散角度 / 2 ずつ開くよう、形の中心の後ろ（先細りは前）の 1 点 c から拡大する
+  local hw = math.max(1, (n1 - n0) / 2)
+  local ka = math.tan(math.rad(math.max(-170, math.min(170, spread))) / 2) / hw
+  if math.abs(ka) > 1e-5 then
+    kind = 1
+    local r0 = 1 / ka                       -- 符号付き。先細り（負）なら c は形の中心の前
+    local md, mn = (d0 + d1) / 2, (n0 + n1) / 2
+    ccx = md * dx + mn * nx - r0 * dx
+    ccy = md * dy + mn * ny - r0 * dy
+    -- 形の中心が len だけ進む伸び（先細りで頂点に届いてしまう長さは手前で止める）
+    LT_re = math.log(math.max(1e-3, 1 + L_tot * ka))
+    LF_abs = math.abs(math.log(math.max(1e-3, 1 + L_flat * ka)))
+  end
+else
+  -- 放射・収束: 光源からの伸び（1 + 距離 / R 倍）で数える。R は光源から元の画像の中心まで（半対角より小さければ半対角）
+  kind = 1
+  ccx, ccy = light_x, light_y
+  local R = math.max(math.sqrt(light_x * light_x + light_y * light_y), half_diag)
+  LT_re = math.log(1 + L_tot / R)
+  LF_abs = math.log(1 + L_flat / R)
+  if ray_mode == 2 then LT_re = -LT_re end
+end
+
+-- 広げる量（元の画像の中心を原点にした座標で外接矩形を取る）。作業解像度 sv の余白込み
+local max_w, max_h = obj.getinfo("image_max")
+max_w = math.min(16384, max_w or 16384)
+max_h = math.min(16384, max_h or 16384)
+local function clamp_pair(a, b, avail)
+  avail = math.max(0, avail)
+  if a + b <= avail then return a, b end
+  local ka = math.floor(a * avail / (a + b))
+  return ka, avail - ka
+end
+local function plan_pad(sv)
+  local minx, maxx, miny, maxy = -w0 / 2, w0 / 2, -h0 / 2, h0 / 2
+  if kind == 0 then
+    minx = math.min(minx, -w0 / 2 + dx * L_tot)
+    maxx = math.max(maxx, w0 / 2 + dx * L_tot)
+    miny = math.min(miny, -h0 / 2 + dy * L_tot)
+    maxy = math.max(maxy, h0 / 2 + dy * L_tot)
+  else
+    -- 4 隅から出る光線の終点（c + e^(Λ_T)(隅 - c)）。拡大だけなので軌跡はまっすぐで、端は始点か終点にある
+    -- （v1.00 は曲がる光線のために 64 点で追っていた）。放射は縮めるときのテントで形の外へ 解像度 px ほど
+    -- にじむので、隅もその分だけ外に取る（光源が形の縁に来たとき、にじんだ放射から反対向きの光線が出る。
+    -- 拡散 90 の円で実際に画像の端まで届いた）
+    local ex = 2 * sv + 2
+    local m = math.exp(LT_re)
+    for _, cr in ipairs({ { -w0 / 2 - ex, -h0 / 2 - ex }, { w0 / 2 + ex, -h0 / 2 - ex },
+                          { w0 / 2 + ex, h0 / 2 + ex }, { -w0 / 2 - ex, h0 / 2 + ex } }) do
+      local x, y = ccx + m * (cr[1] - ccx), ccy + m * (cr[2] - ccy)
+      minx, maxx = math.min(minx, cr[1], x), math.max(maxx, cr[1], x)
+      miny, maxy = math.min(miny, cr[2], y), math.max(maxy, cr[2], y)
+    end
+  end
+  -- 余白は、倍にしていくパスのたびに双線形で読み直すぶんのにじみ（作業画素で数画素）を見込む
+  local margin = 4 + 6 * sv
+  local l = math.ceil(-w0 / 2 - minx) + margin
+  local r = math.ceil(maxx - w0 / 2) + margin
+  local t = math.ceil(-h0 / 2 - miny) + margin
+  local b = math.ceil(maxy - h0 / 2) + margin
+  -- image_max と画素数の上限に収める。各辺の比を保って切り詰める
+  l, r = clamp_pair(l, r, max_w - w0)
+  t, b = clamp_pair(t, b, max_h - h0)
+  if (w0 + l + r) * (h0 + t + b) > MAX_PIXELS then
+    local lo, hi = 0, 1
+    for _ = 1, 32 do
+      local k = (lo + hi) / 2
+      local ww = w0 + math.floor(l * k) + math.floor(r * k)
+      local hh = h0 + math.floor(t * k) + math.floor(b * k)
+      if ww * hh <= MAX_PIXELS then lo = k else hi = k end
+    end
+    l, r = math.floor(l * lo), math.floor(r * lo)
+    t, b = math.floor(t * lo), math.floor(b * lo)
+  end
+  return l, r, t, b
+end
+-- 作業解像度: 光のバッファ 1 枚が WORK_MAX 画素を超えるなら 1/2・1/4 へ粗くする（光はやわらかいので
+-- 見た目の差は小さい）。粗くすると余白も変わるので広げる量を求め直す。
+-- v1.13: cache と tempbuffer は合わせて 1600 万ドットの枠を共有し、超えると古いもの（cache:lb/src）から
+-- 黙って捨てられて黒いフレームになる（LSH-29 / 31、AI/scripts/issues/20260925_lightshaft_cache_budget_over_16m.md）。
+-- 1 フレームに持つ cache（光のバッファ 体積光 7 枚・ベタ 6 枚 + 升目）が CACHE_BUDGET を
+-- 超えるときも粗くする。v1.14 から広げた画像は退避しない（object のまま読む）
+local LIGHT_BUFS = fill_mode == 0 and 7 or 6
+local function cache_pixels(sv, l, r, t, b)
+  local ww, hh = w0 + l + r, h0 + t + b
+  return LIGHT_BUFS * math.ceil(ww / sv) * math.ceil(hh / sv) + pool_pixels
+end
+local left, right, top, bottom = plan_pad(s)
+while s < 4 and ((w0 + left + right) * (h0 + top + bottom) > WORK_MAX * s * s
+                 or cache_pixels(s, left, right, top, bottom) > CACHE_BUDGET) do
+  s = s * 2
+  left, right, top, bottom = plan_pad(s)
+end
+-- 1/4 でも収まらない（横長の巨大素材など）なら、広げる前に素通しにする
+if cache_pixels(s, left, right, top, bottom) > CACHE_BUDGET then
+  budget.refuse("光束_H", w0 + left + right, h0 + top + bottom)
+  if light_only == 1 then obj.clearbuffer("object") end
+  return
+end
+obj.effect("領域拡張", "上", top, "下", bottom, "左", left, "右", right, "塗りつぶし", 0)
+-- 広げ方が左右・上下で違うので、元の画像が同じ位置に残るよう中心をずらす（ロングシャドー_H と同じ）
+obj.cx = obj.cx + (left - right) / 2
+obj.cy = obj.cy + (top - bottom) / 2
+local W, H = obj.w, obj.h
+local Ww, Hw = math.ceil(W / s), math.ceil(H / s)
+
+-- 元の画像の中心と、拡大・回転の中心（広げた画像の画素座標）
+local ox, oy = left + w0 / 2, top + h0 / 2
+local lcx, lcy = ox + ccx, oy + ccy
+
+-- 歩数。平行移動は 1 歩 = 作業画素 1 つ。拡大は、中心から最も遠い隅で 1 歩が作業画素 1 つ以下になるよう
+-- 1 歩ぶんの λ = Λ_T / N_T を決める。全体 N_T 歩のうち、平らな部分が N1 歩、残り N2 = 9λ 歩が尾。
+-- lam_im（回転）は v1.10 で 弧の角度 をなくしたので常に 0
+local N_T, N1 = 1, 1
+local lam_re, lam_im = 0, 0
+if kind == 0 then
+  N_T = math.max(1, math.min(MAX_STEPS, math.ceil(L_tot / s)))
+  N1 = math.min(N_T, math.floor(L_flat / s + 0.5))
+else
+  local r_max = 0
+  for _, cr in ipairs({ { 0, 0 }, { W, 0 }, { 0, H }, { W, H } }) do
+    r_max = math.max(r_max, math.sqrt((cr[1] - lcx) ^ 2 + (cr[2] - lcy) ^ 2))
+  end
+  local LT_abs = math.abs(LT_re)
+  N_T = math.max(1, math.min(MAX_STEPS, math.ceil(LT_abs * r_max / s)))
+  lam_re = LT_re / N_T
+  N1 = math.min(N_T, math.floor(LF_abs / (LT_abs / N_T) + 0.5))
+end
+local N2 = f > 0 and (N_T - N1) or 0
+local lam = N2 / 9
+-- 1 歩の長さは光線を進むほど e^(λ) 倍になる。その違いを重みに入れる（平行移動は 1）
+local g = kind == 1 and math.exp(-lam_re) or 1
+
+-- 体積光の明るさの基準: 形の厚み（平行は形の方向の幅、放射・収束は半対角）と重みの総長（px）の小さい方
+local ell = math.max(1, math.min(thick, L_flat + (L_tot - L_flat) / 9))
+
+local use_source, lr, lg, lb = 1, 1, 1, 1
+if light_color then
+  use_source = 0
+  lr, lg, lb = lin_rgb(light_color)
+end
+
+local function emit(target, emit_kind, scale)
+  obj.clearbuffer(target, Ww, Hw)
+  obj.pixelshader("ps_lb_emit", target, "object", {
+    W, H, s, emit_kind,
+    lr, lg, lb, use_source,
+    scale, threshold / 100,
+  }, "copy")
+end
+
+-- 光線を a 歩さかのぼる写像 T_a(p) = p + A(p - o) + v の定数（作業解像度の座標）
+local owx, owy = ox / s, oy / s
+local cwx, cwy = lcx / s, lcy / s
+local function step(dst, xbuf, ybuf, a, gain, op)
+  local a00, a01, a10, a11 = 0, 0, 0, 0
+  -- ds はベタの距離の 弧 / 弦。光線はまっすぐなので常に 1（シェーダーは曲がる光線も扱える作りのまま）
+  local vx, vy, ds = -a * dx, -a * dy, 1
+  if kind == 1 then
+    local m = math.exp(-lam_re * a)
+    a00, a11 = m - 1, m - 1
+    local qx, qy = owx - cwx, owy - cwy
+    vx, vy = a00 * qx, a11 * qy
+  end
+  obj.clearbuffer(dst, Ww, Hw)
+  obj.pixelshader("ps_lb_step", dst, { xbuf, ybuf }, {
+    Ww, Hw, owx, owy,
+    vx, vy, gain, op,
+    a00, a01, a10, a11,
+    ds,
+  }, "copy", "clip")
+end
+
+-- n 歩ぶんの鎖。op 0 は Σ rho^i Y(T_i p)、op 1 は前から順に over。結果を out へ置く
+local POOL = { "cache:lb/c1", "cache:lb/c2", "cache:lb/c3" }
+local function free(a, b)
+  for _, x in ipairs(POOL) do
+    if x ~= a and x ~= b then return x end
+  end
+end
+local function chain(seed_buf, n, rho, op, out)
+  local block, acc = POOL[1], nil
+  obj.copybuffer(block, seed_buf)
+  local bn, an, rem = 1, 0, n
+  while rem > 0 do
+    if rem % 2 == 1 then
+      if acc == nil then
+        acc = free(block, nil)
+        obj.copybuffer(acc, block)
+      else
+        local dst = free(block, acc)
+        step(dst, acc, block, an, rho ^ an, op)
+        acc = dst
+      end
+      an = an + bn
+    end
+    rem = math.floor(rem / 2)
+    if rem > 0 then
+      local dst = free(block, acc)
+      step(dst, block, block, bn, rho ^ bn, op)
+      block = dst
+      bn = bn * 2
+    end
+  end
+  obj.copybuffer(out, acc)
+end
+
+-- 等間隔の歩み（v1.20）: 全体 N1 + N2 歩を 歩数 個の等間隔の点で読む 1 パス。歩数が全体より多ければ 1 歩ずつ読む
+local function march(seed_buf, op, out)
+  local n_total = N1 + N2
+  local count = math.max(1, math.min(256, math.floor(march_steps + 0.5), n_total))
+  obj.clearbuffer(out, Ww, Hw)
+  obj.pixelshader("ps_lb_march", out, seed_buf, {
+    Ww, Hw, cwx, cwy,
+    dx, dy, count, n_total / count,
+    kind, lam_re, N1, lam,
+    op,
+  }, "copy", "clip")
+end
+
+if march_mode == 1 then
+  if fill_mode == 0 then
+    emit("cache:lb/S", 0, 1 / ell)
+    march("cache:lb/S", 0, "cache:lb/R")
+  else
+    emit("cache:lb/S", 0, 1)
+    emit("cache:lb/seed", 1, 1)
+    march("cache:lb/seed", 1, "cache:lb/R")
+  end
+elseif fill_mode == 0 then
+  -- 体積光: 平らな部分 Box と、減衰する尾 Exp を別に作って継ぐ
+  emit("cache:lb/S", 0, 1 / ell)
+  local r_tail = lam > 0 and math.exp(-1 / lam) or 0
+  if N1 > 0 then chain("cache:lb/S", N1, g, 0, "cache:lb/flat") end
+  if N2 > 0 then chain("cache:lb/S", N2, g * r_tail, 0, "cache:lb/tail") end
+  if N1 > 0 and N2 > 0 then
+    step("cache:lb/R", "cache:lb/flat", "cache:lb/tail", N1, g ^ N1, 0)
+  elseif N1 > 0 then
+    obj.copybuffer("cache:lb/R", "cache:lb/flat")
+  else
+    obj.copybuffer("cache:lb/R", "cache:lb/tail")
+  end
+else
+  -- ベタ: 最初に当たった点までの距離と被覆を持ち回す。色は合成で当たった点から読む
+  emit("cache:lb/S", 0, 1)
+  emit("cache:lb/seed", 1, 1)
+  chain("cache:lb/seed", N1 + N2, 1, 1, "cache:lb/R")
+end
+
+-- 霧の風。格子の番号へ整数のまま足す分と小数の分に分ける
+local wr = math.rad(wind_dir)
+local wx = wind_speed * obj.time * math.cos(wr) / fog_scale
+local wy = wind_speed * obj.time * math.sin(wr) / fog_scale
+local wxi, wyi = math.floor(wx), math.floor(wy)
+
+obj.pixelshader("ps_lb_final", "object", { "object", "cache:lb/S", "cache:lb/R" }, {
+  W, H, Ww, Hw,
+  lcx, lcy, dx, dy,
+  ox, oy, wxi, wyi,
+  wx - wxi, wy - wyi, s, kind,
+  fill_mode, lam_re, N1, lam,
+  intensity / 100, lr, lg, lb,
+  use_source, fog / 100, fog_scale, math.floor(seed + 0.5) + 1000,
+  light_only, lam_im,
+}, "copy", "clip")

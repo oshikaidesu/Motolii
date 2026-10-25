@@ -1,0 +1,5 @@
+CrEasy by suti7yk5032
+licence: CC0-1.0
+from: https://github.com/suti7yk5032/CrEasy (branch main, commit 7b750895cf75) (commit 7b750895cf75)
+page: https://github.com/suti7yk5032/CrEasy
+Put here unchanged for Motolii (filament/aviutl_scripts).

@@ -1,0 +1,72 @@
+--label:加工
+--information:ReflectionOnPane v.1.0.1
+--track@exposure:露光,0,400,100,1
+--track@contrast:コントラスト,0,200,150,1
+--track@gamma:ガンマ,-100,100,-100,1
+--track@saturation:彩度,0,200,100,1
+--track@hue:色相,-180,180,0,1
+--track@reflection_strength:反射強度,0,100,65,0.1
+--track@blur_amount:ぼかし,0,20,3,0.1
+--track@offset_x:Xずれ（二重反射）,-100,100,0,0.1
+--track@offset_y:Yずれ（二重反射）,-100,100,0,0.1
+--select@fade_direction:エッジ方向,なし=0,左→右=1,右→左=2,上→下=3,下→上=4
+--track@fade_range:エッジ範囲,0,100,0,0.1
+--track@fade_softness:エッジ柔らかさ,0,100,60,0.1
+--hide@fade_range:fade_direction==0
+--hide@fade_softness:fade_direction==0
+--check@mirror:ミラー,true
+
+--[[pixelshader@exposure_gain:
+cbuffer ExposureParams : register(b0) {
+    float exposure_value;
+    float reserved0;
+    float reserved1;
+    float reserved2;
+};
+Texture2D exposure_source : register(t0);
+SamplerState exposure_sampler : register(s0);
+float4 exposure_gain(float4 position : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float4 color = exposure_source.Sample(exposure_sampler, uv);
+    color.rgb = saturate(color.rgb * exposure_value);
+    return color;
+}
+]]
+
+--[[pixelshader@edge_fade:
+cbuffer EdgeFadeParams : register(b0) {
+    float direction;
+    float fade_range;
+    float softness;
+    float reserved;
+};
+Texture2D source_texture : register(t0);
+SamplerState source_sampler : register(s0);
+float4 edge_fade(float4 position : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float4 color = source_texture.Sample(source_sampler, uv);
+    float edge_position = 1.0;
+    if (direction < 1.5) edge_position = uv.x;
+    else if (direction < 2.5) edge_position = 1.0 - uv.x;
+    else if (direction < 3.5) edge_position = uv.y;
+    else edge_position = 1.0 - uv.y;
+    float normalized_position = saturate(edge_position / max(fade_range, 0.0001));
+    float curve = lerp(0.12, 2.5, 1.0 - softness);
+    float mask = pow(normalized_position, curve);
+    return color * mask;
+}
+]]
+
+obj.pixelshader("exposure_gain", "object", "object", { math.max(0, math.min(400, exposure)) / 100, 0, 0, 0 }, "copy", "clamp")
+obj.effect("色調補正", "明るさ", 0, "コントラスト", contrast, "色相", hue, "輝度", 200, "彩度", saturation, "ガンマ", gamma)
+if blur_amount > 0 then obj.effect("ぼかし", "範囲", blur_amount) end
+if fade_direction ~= 0 and fade_range > 0 then
+    obj.pixelshader("edge_fade", "object", "object", { fade_direction, math.max(0.001, math.min(100, fade_range) / 100), math.max(0, math.min(100, fade_softness) / 100), 0 }, "copy", "clamp")
+end
+obj.alpha = obj.alpha * math.max(0, math.min(100, reflection_strength)) / 100
+if mirror then obj.ry = obj.ry + 180 end
+obj.setoption("blend", "screen")
+if math.abs(offset_x) > 0.0001 or math.abs(offset_y) > 0.0001 then
+    -- obj.draw() skips filters placed after this script, so execute them first.
+    obj.effect()
+    obj.draw()
+    obj.draw(offset_x, offset_y, 0, 1, 0.5)
+end

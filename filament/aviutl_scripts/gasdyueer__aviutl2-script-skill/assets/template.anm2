@@ -1,0 +1,17 @@
+--information:アニメーション効果 ver1.00
+-- 动画效果模板 (.anm2)
+-- 修改 obj.ox/oy/oz, obj.rx/ry/rz, obj.sx/sy/sz, obj.alpha 等属性
+-- 如需过滤对象支持，添加 --filter 声明
+
+-- 配置项示例
+--track@speed:速度,-100,100,0,0.1
+--check@enable:回転,0
+--color@col:色,0xffffff
+
+-- 时间驱动动画：右移
+obj.ox = obj.ox + speed * obj.time
+
+-- 条件旋转
+if enable == 1 then
+    obj.rz = obj.rz + obj.time * 360
+end

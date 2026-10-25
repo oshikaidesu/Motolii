@@ -1,0 +1,6 @@
+ObjectSlicerAnm2 by nssuperx
+licence: CC0-1.0
+from: https://github.com/nssuperx/ObjectSlicerAnm2 (branch main, commit 71459d5df1f5) (commit 71459d5df1f5)
+page: https://github.com/nssuperx/ObjectSlicerAnm2
+left out: 1 other, 1 .bat, 1 .go (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

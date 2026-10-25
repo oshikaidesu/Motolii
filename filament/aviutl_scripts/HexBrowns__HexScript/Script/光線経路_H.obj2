@@ -1,0 +1,338 @@
+--information:光線経路_H v1.02 by HexBrowns
+--label:HexScript
+--group:光線
+--track@start_x:始点X,-100000,100000,-800,0.1
+--track@start_y:始点Y,-100000,100000,350,0.1
+--track@angle:向き,-3600,3600,-20,0.1
+--track@length:長さ,0,100000,2400,0.1
+--track@width:太さ,0.5,500,8,0.1
+--color@color:色,0xffffff
+--select@cap:端の形=0,丸=0,平ら=1
+--track@show_from:表示の始まり,0,100,0,0.01
+--track@show_to:表示の終わり,0,100,100,0.01
+--group:反射
+--track@max_bounce:反射の上限,0,64,16,1
+--select@mirror_count:鏡の数=2,0=0,1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8
+--value@mirror1:鏡1,{600,-450,600,450}
+--hide@mirror1:mirror_count<1
+--value@mirror2:鏡2,{-700,-400,300,-400}
+--hide@mirror2:mirror_count<2
+--value@mirror3:鏡3,{-900,-500,-900,500}
+--hide@mirror3:mirror_count<3
+--value@mirror4:鏡4,{-900,500,900,500}
+--hide@mirror4:mirror_count<4
+--value@mirror5:鏡5,{-300,-200,-100,-100}
+--hide@mirror5:mirror_count<5
+--value@mirror6:鏡6,{100,100,300,200}
+--hide@mirror6:mirror_count<6
+--value@mirror7:鏡7,{-500,0,-400,200}
+--hide@mirror7:mirror_count<7
+--value@mirror8:鏡8,{400,-300,300,-100}
+--hide@mirror8:mirror_count<8
+--check@box_on:枠で反射,0
+--track@box_w:枠の幅,1,16384,1920,1
+--hide@box_w:box_on==0
+--track@box_h:枠の高さ,1,16384,1080,1
+--hide@box_h:box_on==0
+--group:分光の設定
+--check@prism_on:分光,0
+--value@prism:分光する線,{0,-300,100,300}
+--hide@prism:prism_on==0
+--track@prism_turn:曲がる角度,-180,180,15,0.1
+--hide@prism_turn:prism_on==0
+--track@prism_spread:広がり,-180,180,30,0.1
+--hide@prism_spread:prism_on==0
+--track@prism_count:色の数,2,24,7,1
+--hide@prism_count:prism_on==0
+--group:その他,false
+--check@give_path:ビーム化_H へ道のりを渡す,1
+--group
+
+--[[
+光線経路_H v1.02
+
+v1.02: 道のりの地図（cache:rayh）が 1500 万ドットを超えるときは渡さない（枠を超えて止まっていた）。
+
+始点から向きへ光線を飛ばし、鏡（線分）で反射させた経路を線として描くカスタムオブジェクト。
+分光する線を横切ると、色の数だけの虹色の光線に分かれる。見た目（芯・光・揺らぎ）は後に足す
+ビーム化_H が受け持つ。
+
+  仕様      AI/specifications/20260922_光線経路_H_spec.md
+  机上検証  AI/scripts/光線経路_H/verify_raypath.py
+  実機検証  AI/tools/debug_items/ray.py（節 RAY）
+
+項目名は保存キーなので変えない。
+鏡の数 はセレクト（0〜8）。--hide@ の < の条件はセレクトにしか効かない（トラックだと
+ホストが起動時に "invalid hide rule condition item" を出して隠さない。実機 2026-09-23）。
+
+座標はオブジェクト座標（オブジェクトの位置が原点、px）。鏡・分光する線は 2 点のアンカーで動かせる。
+長さ は始点からの道のり（反射しても曲がった先まで数える）。表示の始まり / 終わり は長さに対する %。
+分光する線を横切った光線は、そこで 色の数 本に分かれ、向きを 曲がる角度 ± 広がり / 2 に振る
+（赤が 曲がる角度 − 広がり / 2 の側、紫が + の側）。分かれた後の光線は分光する線を素通りする。
+
+ビーム化_H へ道のりを渡す: 同じオブジェクトの ビーム化_H（長さの測り方 = 形に沿う）が
+使う道のりの地図を cache:rayh/<obj.id> に置き、global["rayh:<obj.id>"] に
+"フレーム,幅,高さ,見せる範囲の始まり,終わり" を書く。光線が交差しても道のりが正しく渡る。
+]]
+
+--[[pixelshader@ps_rayh_draw:
+// 線分の集まりを描く。seg[2i] = (始点 x, y, 終点 x, y)（画像の px）、seg[2i+1] = (始点の道のり, 長さ, 色, 端)。
+// 色 < 0 は base_col、0..1 は赤→紫。端は 1 = 始点が平ら、2 = 終点が平ら（足し合わせ）。
+// mode 0 = 絵（乗算済み。覆いがいちばん大きい線分の色）、
+// mode 1 = 道のりの地図（中心線がいちばん近い線分の (道のり / 64 の整数部, 余り, 中心線からの距離, 1)）
+cbuffer P : register(b0) {
+    float2 size;
+    float nseg;
+    float hw;
+    float3 base_col;
+    float mode;
+    float4 seg[512];
+};
+float3 rayh_spectrum(float f) {
+    float3 k = fmod(float3(5.0, 3.0, 1.0) + f * 4.5, 6.0);
+    return 1.0 - saturate(min(k, 4.0 - k));
+}
+float4 ps_rayh_draw(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy;
+    float best_cov = 0.0;
+    float best_cd = 1e30;
+    float best_hue = -1.0;
+    float near_d = 1e30;
+    float near_s = 0.0;
+    float near_v = 0.0;
+    int n = (int)nseg;
+    [loop]
+    for (int i = 0; i < 256; i++) {
+        if (i >= n) break;
+        float4 A = seg[i * 2];
+        float4 B = seg[i * 2 + 1];
+        float2 a = A.xy;
+        float len = max(B.y, 1e-6);
+        float2 dir = (A.zw - A.xy) / len;
+        float along = dot(p - a, dir);
+        float perp = dot(p - a, float2(-dir.y, dir.x));
+        float hc = clamp(along, 0.0, len);
+        float d = length(p - a - dir * hc);
+        float sd = d - hw;
+        if (frac(B.w * 0.5) > 0.25 && along < 0.0) sd = max(abs(perp) - hw, -along);
+        if (B.w > 1.5 && along > len) sd = max(abs(perp) - hw, along - len);
+        float cov = saturate(0.5 - sd);
+        if (cov > best_cov + 1e-6 || (cov > 0.0 && cov >= best_cov - 1e-6 && d < best_cd)) {
+            best_cov = cov;
+            best_cd = d;
+            best_hue = B.z;
+        }
+        if (d < near_d) {
+            near_d = d;
+            near_s = B.x + hc;
+            near_v = perp;
+        }
+    }
+    if (mode > 0.5) {
+        if (n <= 0) return float4(0, 0, 0, 0);
+        float hi = floor(near_s / 64.0);
+        return float4(hi, near_s - hi * 64.0, near_v, 1.0);
+    }
+    float3 col = best_hue < 0.0 ? base_col : rayh_spectrum(best_hue);
+    return float4(col * best_cov, best_cov);
+}
+]]
+
+local MAX_SEG = 256            -- ps_rayh_draw の seg[512] に入る線分の数
+local EPS = 1e-6
+
+local L = math.max(0, length)
+local hw = math.max(0.25, width / 2)
+local nm = math.max(0, math.min(8, math.floor(mirror_count + 0.5)))
+
+-- アンカー。呼ぶ順序を変えない（lua.txt: 呼び出し順序や回数を変えると正しく反映されない）
+obj.setanchor("start_x,start_y", 0)
+for i = 1, nm do
+  obj.setanchor("mirror" .. i, 2, "line", "color", 0x80c0ff)
+end
+if prism_on == 1 then
+  obj.setanchor("prism", 2, "line", "color", 0xff80ff)
+end
+
+local sx, sy = start_x, start_y
+local rad = math.rad(angle)
+local ddx, ddy = math.cos(rad), math.sin(rad)
+-- 向きの目印と枠（動かせない線だけ）
+obj.setanchor({ sx, sy, sx + 120 * ddx, sy + 120 * ddy }, 2, "line", "color", 0xffff60)
+if box_on == 1 then
+  local bx, by = box_w / 2, box_h / 2
+  obj.setanchor({ -bx, -by, bx, -by, bx, by, -bx, by }, 4, "loop", "color", 0x60ff60)
+end
+
+-- 鏡（線分）。アンカーを動かすと配列が書き換わるので setanchor の後で読む
+local function seg_of(t)
+  if type(t) ~= "table" then return nil end
+  local a, b, c, d = tonumber(t[1]), tonumber(t[2]), tonumber(t[3]), tonumber(t[4])
+  if not (a and b and c and d) then return nil end
+  if (c - a) * (c - a) + (d - b) * (d - b) < 1e-6 then return nil end
+  return { a, b, c, d }
+end
+local MIR = { mirror1, mirror2, mirror3, mirror4, mirror5, mirror6, mirror7, mirror8 }
+local mirrors = {}
+for i = 1, nm do
+  local m = seg_of(MIR[i])
+  if m then mirrors[#mirrors + 1] = m end
+end
+if box_on == 1 then
+  local bx, by = box_w / 2, box_h / 2
+  mirrors[#mirrors + 1] = { -bx, -by, bx, -by }
+  mirrors[#mirrors + 1] = { bx, -by, bx, by }
+  mirrors[#mirrors + 1] = { bx, by, -bx, by }
+  mirrors[#mirrors + 1] = { -bx, by, -bx, -by }
+end
+local prism = prism_on == 1 and seg_of(prism) or nil
+
+-- 光線 p + t d と線分 m の交点。戻り値は t（無ければ nil）
+local function hit(x, y, dx, dy, m)
+  local ex, ey = m[3] - m[1], m[4] - m[2]
+  local den = dx * ey - dy * ex
+  if math.abs(den) < 1e-12 then return nil end
+  local ax, ay = m[1] - x, m[2] - y
+  local t = (ax * ey - ay * ex) / den
+  local u = (ax * dy - ay * dx) / den
+  if t > EPS and u >= 0 and u <= 1 then return t end
+  return nil
+end
+
+-- 光線を追う。線分は { x1, y1, x2, y2, 始点の道のり, 色, 光線の最初, 光線の最後 }
+local segs = {}
+local queue = { { x = sx, y = sy, dx = ddx, dy = ddy, s = 0, hue = -1, bounce = 0 } }
+local qi = 1
+local maxb = math.max(0, math.floor(max_bounce + 0.5))
+local K = math.max(2, math.min(24, math.floor(prism_count + 0.5)))
+while qi <= #queue and #segs < MAX_SEG and L > 0 do
+  local r = queue[qi]
+  qi = qi + 1
+  local x, y, dx, dy, s, bounce = r.x, r.y, r.dx, r.dy, r.s, r.bounce
+  local first = r.hue < 0
+  while #segs < MAX_SEG do
+    local remain = L - s
+    if remain <= EPS then break end
+    -- 反射した直後の同じ鏡は t ≒ 0 になり、hit の t > EPS で外れる
+    local best, bi = math.huge, 0
+    for i = 1, #mirrors do
+      local t = hit(x, y, dx, dy, mirrors[i])
+      if t and t < best then best, bi = t, i end
+    end
+    if prism and r.hue < 0 then
+      local t = hit(x, y, dx, dy, prism)
+      if t and t < best then best, bi = t, -1 end
+    end
+    if best >= remain then
+      segs[#segs + 1] = { x, y, x + dx * remain, y + dy * remain, s, r.hue, first, true }
+      break
+    end
+    local hx, hy = x + dx * best, y + dy * best
+    local ends = bi > 0 and bounce >= maxb
+    segs[#segs + 1] = { x, y, hx, hy, s, r.hue, first, ends }
+    first = false
+    s = s + best
+    if bi == -1 then
+      -- 分光: 色の数 本に分かれる。赤が 曲がる角度 − 広がり / 2 の側
+      local base = math.atan2(dy, dx)
+      for j = 0, K - 1 do
+        local f = j / (K - 1)
+        local a = base + math.rad(prism_turn + prism_spread * (f - 0.5))
+        queue[#queue + 1] = { x = hx, y = hy, dx = math.cos(a), dy = math.sin(a), s = s, hue = f,
+                              bounce = bounce }
+      end
+      break
+    end
+    if ends then break end
+    -- 反射
+    local m = mirrors[bi]
+    local ex, ey = m[3] - m[1], m[4] - m[2]
+    local el = math.sqrt(ex * ex + ey * ey)
+    local nx, ny = -ey / el, ex / el
+    local dn = dx * nx + dy * ny
+    dx, dy = dx - 2 * dn * nx, dy - 2 * dn * ny
+    x, y = hx, hy
+    bounce = bounce + 1
+  end
+end
+
+-- 表示の範囲で切り、端の形を決める
+local sa = L * math.max(0, math.min(100, show_from)) / 100
+local sb = L * math.max(0, math.min(100, show_to)) / 100
+local vis = {}
+local minx, miny, maxx, maxy = math.huge, math.huge, -math.huge, -math.huge
+for _, g in ipairs(segs) do
+  local len = math.sqrt((g[3] - g[1]) ^ 2 + (g[4] - g[2]) ^ 2)
+  local a, b = math.max(g[5], sa), math.min(g[5] + len, sb)
+  if len > EPS and b - a > EPS then
+    local ux, uy = (g[3] - g[1]) / len, (g[4] - g[2]) / len
+    local x1, y1 = g[1] + ux * (a - g[5]), g[2] + uy * (a - g[5])
+    local x2, y2 = g[1] + ux * (b - g[5]), g[2] + uy * (b - g[5])
+    local flags = 0
+    if cap == 1 then
+      if a > g[5] + 1e-9 or g[7] then flags = flags + 1 end
+      if b < g[5] + len - 1e-9 or g[8] then flags = flags + 2 end
+    end
+    vis[#vis + 1] = { x1, y1, x2, y2, a, b - a, g[6], flags }
+    minx = math.min(minx, x1, x2)
+    maxx = math.max(maxx, x1, x2)
+    miny = math.min(miny, y1, y2)
+    maxy = math.max(maxy, y1, y2)
+  end
+end
+
+local key = "rayh:" .. tostring(obj.id)
+if #vis == 0 then
+  obj.clearbuffer("object", 1, 1)
+  if global then global[key] = nil end
+  return
+end
+
+-- 画像は線の外接矩形（+ 太さ + 2px）。オブジェクトの原点が同じ所に来るよう中心をずらす（@Path_S と同じ）
+local m = hw + 2
+local L0, T0 = math.floor(minx - m), math.floor(miny - m)
+local R0, B0 = math.ceil(maxx + m), math.ceil(maxy + m)
+local max_w, max_h = obj.getinfo("image_max")
+max_w = math.min(16384, max_w or 16384)
+max_h = math.min(16384, max_h or 16384)
+if R0 - L0 > max_w then
+  local c = math.floor((L0 + R0) / 2)
+  L0, R0 = c - math.floor(max_w / 2), c - math.floor(max_w / 2) + max_w
+end
+if B0 - T0 > max_h then
+  local c = math.floor((T0 + B0) / 2)
+  T0, B0 = c - math.floor(max_h / 2), c - math.floor(max_h / 2) + max_h
+end
+local W, H = R0 - L0, B0 - T0
+
+local r, g, b = RGB(color)
+local consts = { W, H, #vis, hw, r / 255, g / 255, b / 255, 0 }
+for i = 1, MAX_SEG do
+  local v = vis[i]
+  local k = #consts
+  if v then
+    consts[k + 1], consts[k + 2], consts[k + 3], consts[k + 4] = v[1] - L0, v[2] - T0, v[3] - L0, v[4] - T0
+    consts[k + 5], consts[k + 6], consts[k + 7], consts[k + 8] = v[5], v[6], v[7], v[8]
+  else
+    for j = 1, 8 do consts[k + j] = 0 end
+  end
+end
+
+obj.clearbuffer("object", W, H)
+obj.cx, obj.cy = -(L0 + R0) / 2, -(T0 + B0) / 2
+obj.pixelshader("ps_rayh_draw", "object", { "object" }, consts, "copy")
+
+-- 道のりの地図は cache に置く。cache と tempbuffer は合わせて 1600 万ドットの枠を共有し、1 枚で超えると
+-- clearbuffer が C++ 例外になってスクリプトが止まる（v1.01 は枠で反射しない長い光線で止まった。
+-- AI/scripts/issues/20260925_raypath_cache_single_over_16m.md）。大きすぎるときは渡さない
+-- （ビーム化_H は自分で道のりを求め直す）（v1.02）
+local RAYH_MAX = 15000000
+if give_path == 1 and global and W * H <= RAYH_MAX then
+  local name = "cache:rayh/" .. tostring(obj.id)
+  consts[8] = 1
+  obj.clearbuffer(name, W, H)
+  obj.pixelshader("ps_rayh_draw", name, { "object" }, consts, "copy")
+  global[key] = string.format("%d,%d,%d,%.6f,%.6f", obj.frame, W, H, sa, sb)
+elseif global then
+  global[key] = nil
+end

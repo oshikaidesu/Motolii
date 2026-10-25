@@ -1,0 +1,128 @@
+--information:レベル補正_H v1.00 by HexBrowns
+--label:HexScript
+--filter
+--track@shadow:シャドウ,0,255,0,1
+--track@midtone:中間調,0.01,2,1,0.01
+--track@highlight:ハイライト,0,255,255,1
+--track@out_min:出力レベル最小,0,255,0,1
+--track@out_max:出力レベル最大,0,255,255,1
+--check@ch_r:Rチャンネル,1
+--check@ch_g:Gチャンネル,1
+--check@ch_b:Bチャンネル,1
+--check@ch_a:Aチャンネル,0
+
+-- レベル補正_H v1.00
+--
+-- 原作（どちらも元ファイルは Script/ に残してある。書き換えていない）
+--   レベル補正.anm2  しけもち（sikemoti）  https://note.com/sikemoti/n/n9b1843bfb32f
+--   Level.anm2       こんにゃくねこ（CatWithNeko）CC0-1.0
+--                    https://github.com/CatWithNeko/aviutl2-scripts#level
+-- 2 本を 1 本にまとめたフォーク。経緯と直した点の正本は
+-- AI/scripts/issues/20260915_levels_channel_check_and_premultiplied_alpha.md
+--
+-- 原作との互換
+--   - 項目名（.aup2 の保存キー）はレベル補正と同じ綴り。effect.name を書き換えれば値は引き継げる
+--     （原作の「_」項目 = 変数項目 params_table は使っていなかったので削った）
+--   - 中間調の向きも原作どおり pow(x, 中間調)。値を上げると暗くなる
+--     （Photoshop 等のガンマとは逆向き。項目名を変えないので向きも変えない）
+--   - Level は「シャドウ = Min x 255、ハイライト = Max x 255、他は初期値」で同じ式になる。
+--     シャドウ・ハイライトは 1 刻みなので、Min x 255 が整数にならない値は丸めが入る
+--
+-- 直した点
+--   1. R/G/B/A のチェックが効かなかった。チェックボックスの既定値が 0/1 なので変数は number 型で、
+--      Lua では 0 も真。原作の `channelR and 1.0 or 0.0` は常に 1 だった → `== 1` で判定する
+--   2. 乗算済みアルファを考慮していなかった。a > 0 の画素だけ RGB を a で割り戻し、
+--      ストレートの色で補正してから a を掛け直す。A はチェックが ON のときだけ補正する。
+--      出力は 0 <= rgb <= a にクランプ（処理しないチャンネルも含む）。完全透過は (0,0,0,0)
+--   3. シャドウ = ハイライトの 0 除算、中間調 0 の pow(x, 0) を避ける（Lua 側で下限を切る）
+--
+-- A を ON にすると、完全透過の画素にもアルファの式がそのまま掛かる。
+-- 出力レベル最小 > 0 ならオブジェクトの矩形全体にアルファ（色は出力レベル最小の灰）が乗る。
+-- アルファのレベル補正としてはこれが式どおりの結果なので、特別扱いしていない。
+
+--[[pixelshader@ps_levels_h:
+Texture2D src : register(t0);
+
+cbuffer constant0 : register(b0) {
+    float4 channel;     // 0-3  R/G/B/A を処理するか（0 か 1）
+    float in_min;       // 4    シャドウ / 255
+    float in_range;     // 5    (ハイライト - シャドウ) / 255。絶対値は 1/255 以上（Lua 側）
+    float out_min;      // 6    出力レベル最小 / 255
+    float out_max;      // 7    出力レベル最大 / 255
+    float gamma;        // 8    中間調。0.01 以上（Lua 側）
+};
+
+float4 ps_levels_h(float4 pos : SV_Position) : SV_Target {
+    float4 c = src.Load(int3(int(pos.x), int(pos.y), 0));
+    float a = c.a;
+
+    // 乗算済み -> ストレート。a = 0 の画素の色は決まらないので 0 とみなす
+    float3 rgb = float3(0.0, 0.0, 0.0);
+    if (a > 0.0) {
+        rgb = c.rgb / a;
+    }
+
+    // R/G/B のレベル補正。底は max で 0 以上にしたうえで、
+    // 底が 0 の画素は pow を通さず 0 にする（pow(0, e) の実装差を踏まない）
+    float3 n = saturate((rgb - float3(in_min, in_min, in_min)) / in_range);
+    float3 p = pow(max(n, float3(0.0, 0.0, 0.0)), float3(gamma, gamma, gamma));
+    p = (n > float3(0.0, 0.0, 0.0)) ? p : float3(0.0, 0.0, 0.0);
+    float3 lv = float3(out_min, out_min, out_min) + (out_max - out_min) * p;
+
+    // アルファ。A が OFF なら入力のまま
+    float a_out = a;
+    if (channel.a > 0.5) {
+        float na = saturate((a - in_min) / in_range);
+        float pa = (na > 0.0) ? pow(max(na, 0.0), gamma) : 0.0;
+        a_out = out_min + (out_max - out_min) * pa;
+    }
+
+    // 完全透過は RGB も 0（Premultiplied Alpha）
+    if (a_out <= 0.0) {
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
+
+    // 処理しないチャンネルは入力の乗算済み値を a_out / a 倍する。
+    // A が OFF なら a / a = 1 倍なので入力の値がそのまま残る
+    float3 keep = float3(0.0, 0.0, 0.0);
+    if (a > 0.0) {
+        keep = c.rgb * (a_out / a);
+    }
+    float3 prem = (channel.rgb > float3(0.5, 0.5, 0.5)) ? lv * a_out : keep;
+
+    // 乗算済みの不変条件 0 <= rgb <= a
+    prem = clamp(prem, float3(0.0, 0.0, 0.0), float3(a_out, a_out, a_out));
+    return float4(prem, a_out);
+}
+]]
+
+local obj = obj
+
+local use_r = (ch_r == 1)
+local use_g = (ch_g == 1)
+local use_b = (ch_b == 1)
+local use_a = (ch_a == 1)
+
+-- どのチャンネルも処理しないなら何もしない
+if not (use_r or use_g or use_b or use_a) then return end
+
+-- 恒等の設定（初期値）ならシェーダーを呼ばない
+if shadow == 0 and highlight == 255 and out_min == 0 and out_max == 255 and midtone == 1 then
+  return
+end
+
+local in_min = shadow / 255
+local in_range = (highlight - shadow) / 255
+-- シャドウ = ハイライトで 0 除算しないよう、幅の絶対値を 1/255 以上にする。
+-- 符号は保つ（ハイライト < シャドウ は原作と同じく反転として効く）
+if math.abs(in_range) < 1 / 255 then
+  in_range = (in_range < 0) and -1 / 255 or 1 / 255
+end
+-- 中間調 0 は pow(x, 0) で全画素が出力レベル最大に張り付き、x = 0 で未定義になる
+local gamma = math.max(midtone, 0.01)
+
+obj.pixelshader("ps_levels_h", "object", "object", {
+  use_r and 1 or 0, use_g and 1 or 0, use_b and 1 or 0, use_a and 1 or 0,
+  in_min, in_range, out_min / 255, out_max / 255,
+  gamma,
+})

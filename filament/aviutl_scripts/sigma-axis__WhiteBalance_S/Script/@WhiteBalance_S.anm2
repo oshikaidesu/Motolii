@@ -1,0 +1,337 @@
+--[[
+MIT License
+
+Copyright (c) 2026 sigma-axis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+https://mit-license.org/
+]]
+
+--
+-- v1.10
+--
+
+-- https://github.com/sigma-axis/aviutl2_script_WhiteBalance_S
+
+@ホワイトバランスσ
+--information:ホワイトバランスσ@WhiteBalance_S v1.10 by σ軸
+--label:WhiteBalance_S
+--filter
+--require:2011000
+--track@rate:強さ,0,100,100,0.01
+--checksection@col_indiv:成分を個別に指定,false,false
+--color@col_base:変換元,0xffffff
+--hide@col_base:col_indiv==1
+--color@col_dest:変換先,0xffffff
+--hide@col_dest:col_indiv==1
+--checksection@normalize:正規化,true,false
+--hide@normalize:col_indiv==1
+--track@comp1:倍率X/R,0,200,100,0.01
+--hide@comp1:col_indiv==0
+--track@comp2:倍率Y/G,0,200,100,0.01
+--hide@comp2:col_indiv==0
+--track@comp3:倍率Z/B,0,200,100,0.01
+--hide@comp3:col_indiv==0
+--group
+--select@space:色空間=0,XYZ=0,RGB=1
+--group:その他,false
+--value@PI:PI,{}
+--[[pixelshader@by_rgb:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+	float3 rate;
+};
+float4 by_rgb(float4 pos : SV_Position) : SV_Target
+{
+	float4 c = src[pos.xy];
+	c.rgb *= rate;
+	return c;
+}
+
+]]
+--[[pixelshader@by_xyz:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+	float3 rate;
+};
+static const float3x3 m1 = {
+	0.4124, 0.3576, 0.1805,
+	0.2126, 0.7152, 0.0722,
+	0.0193, 0.1192, 0.9505,
+}, m1_i = {
+	 3.2406254,   -1.537208,  -0.4986286,
+	-0.9689307,    1.875756,   0.041517522,
+	 0.055710122, -0.20402105, 1.056996,
+};
+float3 to_xyz(float3 c)
+{
+	static const float4 K = { 0.055, 1 / 1.055, 1 / 12.92, 0.04045 };
+	c = abs(c) <= K.w ? K.z * c : sign(c) * pow((abs(c) + K.x) * K.y, 2.4);
+	return mul(m1, c);
+}
+float3 from_xyz(float3 c)
+{
+	c = mul(m1_i, c);
+	static const float4 K = { 0.055, 1.055, 12.92, 0.0031308 };
+	return abs(c) <= K.w ? K.z * c : sign(c) * (K.y * pow(abs(c), 1 / 2.4) - K.x);
+}
+float4 by_xyz(float4 pos : SV_Position) : SV_Target
+{
+	float4 c = src[pos.xy];
+	c.rgb = c.a > 0 ? c.rgb / c.a : 1;
+	c.xyz = to_xyz(c.rgb);
+	c.xyz *= rate;
+	c.rgb = from_xyz(c.xyz);
+	c.rgb *= c.a;
+	return c;
+}
+
+]]
+local obj, math, bit_band, tonumber, type = obj, math, bit.band, tonumber, type;
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+local function as_bool(t, v)
+	if type(t) == "boolean" then return t;
+	elseif type(t) == "number" then return t ~= 0;
+	else return v end
+end
+rate = tonumber(PI.rate) or rate;
+col_base = tonumber(PI.col_base) or col_base;
+if type(PI.col_dest) == "table" then
+	comp1, comp2, comp3, col_indiv =
+		tonumber(PI.col_dest[1]) or comp1,
+		tonumber(PI.col_dest[2]) or comp2,
+		tonumber(PI.col_dest[3]) or comp3,
+		true;
+else
+	local c = tonumber(PI.col_dest);
+	if c then col_dest, col_indiv = c, false end
+end
+normalize = as_bool(PI.normalize, normalize);
+if type(PI.space) == "string" then
+	local name2num = {
+		["XYZ"] = 0, ["RGB"] = 1,
+	};
+	space = name2num[PI.space] or space;
+end
+
+-- normalize parameters.
+rate = math.min(math.max(rate / 100, 0), 1); if rate <= 0 then return end
+col_base = math.floor(0.5 + col_base) % 2 ^ 24;
+col_dest = math.floor(0.5 + col_dest) % 2 ^ 24;
+comp1, comp2, comp3 =
+	math.max(comp1 / 100, 0), math.max(comp2 / 100, 0), math.max(comp3 / 100, 0);
+space = math.min(math.max(math.floor(0.5 + space), 0), 1);
+
+--#endregion PI / normalize parameters.
+
+-- further calculations.
+if not col_indiv then
+	if col_base == col_dest then return end
+	local c1, c2, c3 =
+		bit_band(col_base, 0xff0000) / 0xff0000,
+		bit_band(col_base, 0x00ff00) / 0x00ff00,
+		bit_band(col_base, 0x0000ff) / 0x0000ff;
+	comp1, comp2, comp3 =
+		bit_band(col_dest, 0xff0000) / 0xff0000,
+		bit_band(col_dest, 0x00ff00) / 0x00ff00,
+		bit_band(col_dest, 0x0000ff) / 0x0000ff;
+
+	local t1, t2, t3, t4, m = 0.04045, 12.92, 0.055, 2.4, {
+		0.4124, 0.3576, 0.1805;
+		0.2126, 0.7152, 0.0722;
+		0.0193, 0.1192, 0.9505;
+	};
+	if space == 0 then -- XYZ
+		c1, c2, c3 =
+			c1 <= t1 and c1 / t2 or ((c1 + t3) / (1 + t3)) ^ t4,
+			c2 <= t1 and c2 / t2 or ((c2 + t3) / (1 + t3)) ^ t4,
+			c3 <= t1 and c3 / t2 or ((c3 + t3) / (1 + t3)) ^ t4;
+		c1, c2, c3 =
+			m[1] * c1 + m[2] * c2 + m[3] * c3,
+			m[4] * c1 + m[5] * c2 + m[6] * c3,
+			m[7] * c1 + m[8] * c2 + m[9] * c3;
+		comp1, comp2, comp3 =
+			comp1 <= t1 and comp1 / t2 or ((comp1 + t3) / (1 + t3)) ^ t4,
+			comp2 <= t1 and comp2 / t2 or ((comp2 + t3) / (1 + t3)) ^ t4,
+			comp3 <= t1 and comp3 / t2 or ((comp3 + t3) / (1 + t3)) ^ t4;
+		comp1, comp2, comp3 =
+			m[1] * comp1 + m[2] * comp2 + m[3] * comp3,
+			m[4] * comp1 + m[5] * comp2 + m[6] * comp3,
+			m[7] * comp1 + m[8] * comp2 + m[9] * comp3;
+	end
+	comp1, comp2, comp3 =
+		comp1 / math.max(c1, 0.0001),
+		comp2 / math.max(c2, 0.0001),
+		comp3 / math.max(c3, 0.0001);
+
+	if normalize then
+		-- normalize so Y of gray pixels remain unchanged.
+		local Y = comp2;
+		if space ~= 0 then
+			local x, y, z =
+				comp1 <= t1 and comp1 / t2 or ((comp1 + t3) / (1 + t3)) ^ t4,
+				comp2 <= t1 and comp2 / t2 or ((comp2 + t3) / (1 + t3)) ^ t4,
+				comp3 <= t1 and comp3 / t2 or ((comp3 + t3) / (1 + t3)) ^ t4;
+			Y = m[4] * x + m[5] * y + m[6] * z;
+			Y = Y <= 0.0031308 and t2 * Y or (1 + t3) * Y ^ (1 / t4) - t3;
+		end
+		if Y > 0 then
+			comp1, comp2, comp3 =
+				comp1 / Y, comp2 / Y, comp3 / Y;
+		end
+	end
+end
+
+comp1, comp2, comp3 =
+	comp1 ^ rate, comp2 ^ rate, comp3 ^ rate;
+
+-- apply shader.
+if comp1 ~= 1 or comp2 ~= 1 or comp3 ~= 1 then
+	obj.pixelshader(space == 0 and "by_xyz" or "by_rgb", "object", "object", {
+		comp1, comp2, comp3,
+	});
+end
+
+@色温度σ
+--information:色温度σ@WhiteBalance_S v1.10 by σ軸
+--label:WhiteBalance_S
+--filter
+--require:2011000
+--track@temp_base:変換元K,1666.67,25000,6500,0.01,,0.4
+--track@temp_dest:変換先K,1666.67,25000,6500,0.01,,0.4
+--track@mired_base:変換元M,40,600,154,0.001
+--track@mired_dest:変換先M,40,600,154,0.001
+--select@unit:単位=0,K=0,Mired=1
+--hide@temp_base:unit~=0
+--hide@temp_dest:unit~=0
+--hide@mired_base:unit==0
+--hide@mired_dest:unit==0
+--select@space:色空間=0,XYZ=0,RGB=1
+--group:その他,false
+--value@PI:PI,{}
+local obj, math, tonumber = obj, math, tonumber;
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+temp_base = tonumber(PI.temp_base) or temp_base;
+temp_dest = tonumber(PI.temp_dest) or temp_dest;
+mired_base = tonumber(PI.mired_base) or mired_base;
+mired_dest = tonumber(PI.mired_dest) or mired_dest;
+if type(PI.unit) == "string" then
+	local name2num = { ["K"] = 0, ["Mired"] = 1 };
+	unit = name2num[PI.unit] or unit;
+end
+local space_name;
+if type(PI.space) == "string" then space_name = PI.space;
+else
+	local num2name = { "XYZ", "RGB" };
+	space_name = num2name[space + 1] or "XYZ";
+end
+
+-- normalize parameters.
+if unit == 1 then
+	mired_base = math.min(math.max(mired_base, 40), 600);
+	mired_dest = math.min(math.max(mired_dest, 40), 600);
+	temp_base, temp_dest = 10 ^ 6 / mired_base, 10 ^ 6 / mired_dest;
+end
+temp_base = math.min(math.max(temp_base, 1666.67), 25000);
+temp_dest = math.min(math.max(temp_dest, 1666.67), 25000);
+if temp_base == temp_dest then return end
+
+--#endregion PI / normalize parameters.
+
+-- further calculations.
+local function calc_xz(T)
+	-- cf: https://en.wikipedia.org/wiki/Planckian_locus#Approximation
+	local t = 1000 / T;
+	local x = T <= 4000 and
+		-0.2661239 * t ^ 3 - 0.2343589 * t ^ 2 + 0.8776956 * t + 0.179910 or
+		-3.0258469 * t ^ 3 + 2.1070379 * t ^ 2 + 0.2226347 * t + 0.240390
+	local y = T <= 2222 and
+		-1.1063814 * x ^ 3 - 1.34811020 * x ^ 2 + 2.18555832 * x - 0.20219683 or T <= 4000 and
+		-0.9549476 * x ^ 3 - 1.37418593 * x ^ 2 + 2.09137015 * x - 0.16748867 or
+		 3.0817580 * x ^ 3 - 5.87338670 * x ^ 2 + 3.75112997 * x - 0.37001483;
+	return x / y, (1 - x) / y - 1;
+end
+local x1, z1 = calc_xz(temp_base);
+local x2, z2 = calc_xz(temp_dest);
+local y1, y2 = 1, 1;
+if space == "RGB" then
+	local m1_i = {
+		 3.2406254773201,   -1.5372079722103, -0.49862859869825;
+		-0.96893071472932,   1.8757560608852,  0.041517523842954;
+		 0.055710120445511, -0.20402105059849, 1.0569959422544;
+	};
+	x1, y1, z1 =
+		m1_i[1] * x1 + m1_i[2] + m1_i[3] * z1,
+		m1_i[4] * x1 + m1_i[5] + m1_i[6] * z1,
+		m1_i[7] * x1 + m1_i[8] + m1_i[9] * z1;
+	x2, y2, z2 =
+		m1_i[1] * x2 + m1_i[2] + m1_i[3] * z2,
+		m1_i[4] * x2 + m1_i[5] + m1_i[6] * z2,
+		m1_i[7] * x2 + m1_i[8] + m1_i[9] * z2;
+end
+
+-- apply effect.
+obj.effect("ホワイトバランスσ@WhiteBalance_S", "PI", ("space=%q,col_dest={%s,%s,%s}"):format(
+	space_name, 100 * x2 / x1, 100 * y2 / y1, 100 * z2 / z1));
+
+@色温度σ(Mired)
+-- 非推奨化に伴い，このスクリプトは更新凍結 / information も固定．
+--hidemenu
+--information:色温度σ(Mired)@WhiteBalance_S v1.10 by σ軸
+--label:WhiteBalance_S
+--filter
+--require:2011000
+--track@mired_base:変換元M,40,600,154,0.001
+--track@mired_dest:変換先M,40,600,154,0.001
+--select@space:色空間=0,XYZ=0,RGB=1
+--group:その他,false
+--value@PI:PI,{}
+local obj, math, tonumber = obj, math, tonumber;
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+mired_base = tonumber(PI.mired_base) or mired_base;
+mired_dest = tonumber(PI.mired_dest) or mired_dest;
+local space_name;
+if type(PI.space) == "string" then space_name = PI.space;
+else
+	local num2name = { "XYZ", "RGB" };
+	space_name = num2name[space + 1] or "XYZ";
+end
+
+-- normalize parameters.
+mired_base = math.min(math.max(mired_base, 40), 600);
+mired_dest = math.min(math.max(mired_dest, 40), 600);
+if mired_base == mired_dest then return end
+
+--#endregion PI / normalize parameters.
+
+-- apply effect.
+obj.effect("色温度σ@WhiteBalance_S", "単位", "Mired", "PI",
+	("space=%q,mired_base=%s,mired_dest=%s"):format(
+		space_name, mired_base, mired_dest));
+

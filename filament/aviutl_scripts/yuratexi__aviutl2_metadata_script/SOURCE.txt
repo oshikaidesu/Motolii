@@ -1,0 +1,5 @@
+aviutl2_metadata_script by yuratexi
+licence: MIT
+from: https://github.com/yuratexi/aviutl2_metadata_script (branch main, commit 41c030472038) (commit 41c030472038)
+page: https://github.com/yuratexi/aviutl2_metadata_script
+Put here unchanged for Motolii (filament/aviutl_scripts).

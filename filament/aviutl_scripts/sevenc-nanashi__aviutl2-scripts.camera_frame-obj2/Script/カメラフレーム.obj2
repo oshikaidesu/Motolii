@@ -1,0 +1,187 @@
+--label:画面効果
+--information:https://github.com/sevenc-nanashi/aviutl2-scripts/blob/main/scripts/%E3%83%89%E3%83%83%E3%83%88%E7%B5%B5%E5%A4%89%E5%BD%A2.anm2
+
+-- ========================================================================================================================
+-- 最新版をダウンロード：https://aviutl2-scripts-download.sevenc7c.workers.dev/%E3%82%AB%E3%83%A1%E3%83%A9%E3%83%95%E3%83%AC%E3%83%BC%E3%83%A0.obj2
+-- 説明書をブラウザで読む：https://github.com/sevenc-nanashi/aviutl2-scripts/blob/main/scripts/%E3%82%AB%E3%83%A1%E3%83%A9%E3%83%95%E3%83%AC%E3%83%BC%E3%83%A0/README.md
+--
+-- カメラフレームっぽい図形を描画するスクリプト。
+--
+-- [ PI ]
+--   - `width`：幅（ピクセル単位）
+--   - `height`：高さ（ピクセル単位）
+--   - `line_length`：線の長さ（ピクセル単位）
+--   - `line_thickness`：線の太さ（ピクセル単位）
+--   - `line_color`：線の色（`0xRRGGBB`）
+--   - `size_specifier`：サイズ指定（1=余白指定、2=絶対指定）
+--   - `debug`：デバッグモード
+--
+-- --< 更新履歴 >----------------------------------------------------------------------------------------------------------
+--
+-- [ v1.2（2026/8/18） ]
+--   - Tipsを追加
+--
+-- [ v1.1（2026/7/6） ]
+--   - 英語の言語ファイルを追加
+--
+-- [ v1.0（2026/3/3） ]
+--   - 初版リリース
+--
+-- ========================================================================================================================
+
+
+--track@width:幅,0,2048,100,1
+--track@height:高さ,0,2048,100,1
+--track@line_length:線の長さ,0,1000,150,1
+--track@line_thickness:線の太さ,1,1000,5,1
+--color@line_color:線の色,0xFFFFFF
+--select@size_specifier:サイズ指定=1,余白指定=1,絶対指定=2
+--check@debug:デバッグモード,false
+--value@PI:PI,{}
+--[[pixelshader@frame:
+cbuffer cb0 : register(b0) {
+  float line_length;
+  float line_thickness;
+  float width;
+  float height;
+  float color_red;
+  float color_green;
+  float color_blue;
+};
+
+float4 frame(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+  float x = pos.x;
+  float y = pos.y;
+
+  if (
+      // 左上：横
+      (x < line_length && y < line_thickness) ||
+      // 左上：縦
+      (x < line_thickness && y < line_length) ||
+      // 右下：横
+      (x > width - line_length && y > height - line_thickness) ||
+      // 右下：縦
+      (x > width - line_thickness && y > height - line_length) ||
+      // 右上：横
+      (x > width - line_length && y < line_thickness) ||
+      // 右上：縦
+      (x > width - line_thickness && y < line_length) ||
+      // 左下：横
+      (x < line_length && y > height - line_thickness) ||
+      // 左下：縦
+      (x < line_thickness && y > height - line_length)) {
+    return float4(color_red, color_green, color_blue, 1);
+  } else {
+    return float4(0, 0, 0, 0);
+  }
+}
+
+// vim: set ft=hlsl ts=4 sts=4 sw=4 noet:
+
+]]
+
+-- PIからパラメータを取得
+if type(PI.width) == "number" then
+  width = PI.width
+end
+if type(PI.height) == "number" then
+  height = PI.height
+end
+if type(PI.line_length) == "number" then
+  line_length = PI.line_size
+end
+if type(PI.line_color) == "number" then
+  line_color = PI.line_color
+end
+if type(PI.size_specifier) == "number" then
+  size_specifier = PI.size_specifier
+end
+if type(PI.debug) == "boolean" then
+  debug = PI.debug
+end
+
+-- デバッグ用関数
+local function debug_dump_internal(o)
+  if type(o) == "table" then
+    local s = "{ "
+    local keys = {}
+    local is_array = true
+    local max_index = 0
+    for k, _ in pairs(o) do
+      table.insert(keys, k)
+      if type(k) ~= "number" or k < 1 or math.floor(k) ~= k then
+        is_array = false
+      else
+        if k > max_index then
+          max_index = k
+        end
+      end
+    end
+    if is_array then
+      table.sort(keys, function(a, b)
+        return a < b
+      end)
+    else
+      table.sort(keys, function(a, b)
+        return tostring(a) < tostring(b)
+      end)
+    end
+    for i, k in ipairs(keys) do
+      local v = o[k]
+      if i > 1 then
+        s = s .. ", "
+      end
+      if is_array then
+        s = s .. debug_dump_internal(v)
+      else
+        s = s .. tostring(k) .. " = " .. debug_dump_internal(v)
+      end
+    end
+
+    return s .. " }"
+  else
+    return tostring(o)
+  end
+end
+local function debug_dump(m, o)
+  if debug then
+    if o == nil then
+      debug_print(debug_dump_internal(m))
+    else
+      debug_print(m .. ": " .. debug_dump_internal(o))
+    end
+  end
+end
+
+-- 図形オブジェクトでレンダリングするのはしんどいので、ピクセルシェーダーで描画する
+
+local resolved_width, resolved_height
+if size_specifier == 1 then
+  -- 余白指定
+  resolved_width = obj.screen_w - width * 2
+  resolved_height = obj.screen_h - height * 2
+else
+  -- 絶対指定
+  resolved_width = width
+  resolved_height = height
+end
+
+local red, green, blue = RGB(line_color)
+
+debug_dump("resolved_width", resolved_width)
+debug_dump("resolved_height", resolved_height)
+
+obj.setoption("drawtarget", "tempbuffer", resolved_width, resolved_height)
+obj.pixelshader("frame", "tempbuffer", {}, {
+  line_length,
+  line_thickness,
+  resolved_width,
+  resolved_height,
+  red / 255,
+  green / 255,
+  blue / 255,
+})
+obj.load("tempbuffer")
+
+--vim: set ft=lua:
+

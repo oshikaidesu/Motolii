@@ -1,0 +1,572 @@
+--[[
+MIT License
+Copyright (c) 2025 sigma-axis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+https://mit-license.org/
+]]
+
+--information:ペンローズタイル モザイクフェードσ v1.23 (for beta25) by σ軸
+--label:シーンチェンジ
+--track@bandwidth:変化幅,0,200,75,0.01
+--track@fade_time:フェード割合,0,100,15,0.01
+--check@reverse:反転,0
+--group:形状,true
+--select@shape:形状=0,円=0,四角=1,時計=2,ライン=3,ダブルライン=4,クロス=5
+--track@shape_rot:形状回転,-360,360,0,0.01
+--check@shape_orth:縦横比固定,1
+--file@file_image:遷移画像ファイル
+--group:タイル分類,true
+--select@pattern:種類=0,P2(Kite+Dart)=0,P3(菱形2種)=1
+--select@center_form:中心の形状=0,Sun=0,Star=1
+--group:タイル設定,false
+--track@size:最大サイズ,2,2000,192,0.01
+--track@deflate:分割回数,0,35,8,1
+--group:タイル配置,false
+--track@rotate:回転,-720,720,0,0.01
+--track0:X,-4000,4000,0,0.1
+--track1:Y,-4000,4000,0,0.1
+--group:その他,false
+--check@antialias:アンチエイリアス,1
+--value@PI:PI,{}
+--[[pixelshader@make_shape:
+cbuffer constant0 : register(b0) {
+	float2x2 rot_asp;
+	float2 center;
+	float shape_f;
+};
+
+float val_disk(float2 pt)
+{
+	return sqrt(dot(pt, pt) / 2);
+}
+
+float val_square(float2 pt)
+{
+	return max(abs(pt.x + pt.y), abs(pt.x - pt.y)) / 2;
+}
+
+float val_clock(float2 pt)
+{
+	return atan2(-pt.x, pt.y) / (2 * 3.141592653589793) + 0.5;
+}
+
+float val_line(float2 pt)
+{
+	return (1 - pt.x) / 2;
+}
+
+float val_line2(float2 pt)
+{
+	return abs(pt.x);
+}
+
+float val_cross(float2 pt)
+{
+	return min(abs(pt.x + pt.y), abs(pt.x - pt.y)) / 2;
+}
+
+float4 make_shape(float4 pos : SV_Position) : SV_Target
+{
+	const float2 pt = mul(rot_asp, pos.xy - center);
+	float val;
+	switch(uint(shape_f)) {
+	case 0: default: val = val_disk(pt); break;
+	case 1: val = val_square(pt); break;
+	case 2: val = val_clock(pt); break;
+	case 3: val = val_line(pt); break;
+	case 4: val = val_line2(pt); break;
+	case 5: val = val_cross(pt); break;
+	}
+	return float4(val, val, val, 1);
+}
+]]
+--[[pixelshader@apply:
+Texture2D img_prev : register(t0);
+Texture2D img_next : register(t1);
+Texture2D img_vals : register(t2);
+
+cbuffer constant0 : register(b0) {
+	float2x2 rot_scale;
+	float2 offset, size_scn, size_val;
+	float band_min, band_max,
+		depth_min_f, depth_max_f, fade_rate,
+		aa_thick;
+};
+
+float get_val(float2 pt)
+{
+	static const float3 luma_coeff = { 0.299, 0.587, 0.114 };
+	const float4 c = img_vals.Load(int3(clamp(floor(pt * size_val / size_scn), 0, int2(size_val) - 1), 0));
+	return band_min > band_max ? band_min :
+		smoothstep(band_min, band_max, 1 - dot(luma_coeff, c.rgb));
+}
+float get_fade(float val, out int depth)
+{
+	const float val1 = min(val, 1 - val);
+	if (val1 <= 0) depth = int(depth_max_f) + 1;
+	else depth = ceil(lerp(depth_max_f, depth_min_f, 2 * val1 / (1 - fade_rate)));
+	return smoothstep(1 - fade_rate, 1 + fade_rate, 2 * val);
+}
+
+static const float
+	phi = 1.618033988749894848,
+	phi_sq = 1 + phi,
+	phi_i = phi - 1,
+	c_1_5th = phi_i / 2,
+	s_1_5th = 0.951056516295153572,
+	c_2_5th = -phi / 2,
+	s_2_5th = 2 * c_1_5th * s_1_5th;
+static const float2
+	n_1_10th = { s_2_5th, +c_2_5th },
+	n_2_10th = { s_1_5th, -c_1_5th },
+	n_3_10th = { s_1_5th, +c_1_5th },
+	n_4_10th = { s_2_5th, -c_2_5th };
+static const float2x3 tr_c5 = {
+	1, 0, 0,
+	0, -1, 0,
+}, tr_c4 = {
+	+c_2_5th, +s_2_5th, 0,
+	-s_2_5th, +c_2_5th, 0,
+}, tr_c2 = {
+	+c_1_5th, +s_1_5th, 0,
+	-s_1_5th, +c_1_5th, 0,
+}, tr_c1 = {
+	+c_1_5th, +s_1_5th, 0,
+	+s_1_5th, -c_1_5th, 0,
+}, tr_c0 = {
+	-1, 0, 1,
+	0, 1, 0,
+};
+
+static const float3 edge_fig[4][3] = {
+	{ // kite
+		{ n_1_10th, 0 }, { -n_3_10th, n_3_10th.x }, { 0, 1, 0 },
+	}, { // dart
+		{ n_1_10th, 0 }, { -n_2_10th, phi_i * n_2_10th.x }, { 0, 1, 0 },
+	}, { // wide
+		{ n_1_10th, 0 }, { -n_4_10th, phi * n_4_10th.x }, { 0, 1, 0 },
+	}, { // long
+		{ n_2_10th, 0 }, { -n_3_10th, phi_i * n_3_10th.x }, { 0, 1, 0 },
+	},
+};
+
+static const float2x2 map_fig[4] = {
+	{ // kite
+		-c_2_5th, +phi_i * c_1_5th,
+		+s_2_5th, -phi_i * s_1_5th
+	}, { // dart
+		-c_2_5th, -phi_i * c_1_5th,
+		+s_2_5th, -phi_i * s_1_5th
+	}, { // wide
+		-c_2_5th, -c_2_5th,
+		+s_2_5th, -s_2_5th
+	}, { // long
+		+c_1_5th, +c_1_5th,
+		+s_1_5th, -s_1_5th
+	},
+};
+
+float2x2 inv_mat(float2x2 m)
+{
+	return float2x2(
+		+m._22, -m._12,
+		-m._21, +m._11
+	) / determinant(m);
+}
+float2x3 inv_map(float2x3 tr)
+{
+	const float2x2 m = inv_mat(float2x2(tr._11_12, tr._21_22));
+	const float2 p = mul(m, -tr._13_23);
+	return float2x3(m._11_12, p.x, m._21_22, p.y);
+}
+float2 rev_map(float2x3 tr, float2 pt)
+{
+	return mul(inv_mat(float2x2(tr._11_12, tr._21_22)), pt - tr._13_23);
+}
+
+float2x4 identify_angle(out int piece, float2 pt)
+{
+	float2x4 ret = {
+		1, 0, 0, pt.x,
+		0, 1, 0, pt.y,
+	};
+	ret = mul(float2x3(
+		rot_scale._11_12, -dot(rot_scale._11_12, offset),
+		rot_scale._21_22, -dot(rot_scale._21_22, offset)),
+		float3x4(ret, 0, 0, 1, 1));
+
+	// P2 -> 0: kite / left, 1: kite / right, 2: dart / left, 3: dart / right.
+	// P3 -> 4: wide / left, 5: wide / right, 6: long / left, 7: long / right.
+	piece = 4;
+	if (ret._24 < 0) {
+		piece ^= 1;
+		ret = mul(tr_c5, float3x4(ret, 0, 0, 1, 1));
+	}
+	if (dot(ret._14_24, n_4_10th) < 0) ret = mul(tr_c4, float3x4(ret, 0, 0, 1, 1));
+	else if (dot(ret._14_24, n_2_10th) < 0) ret = mul(tr_c2, float3x4(ret, 0, 0, 1, 1));
+	if (dot(ret._14_24, n_1_10th) < 0) {
+		piece ^= 1;
+		ret = mul(tr_c1, float3x4(ret, 0, 0, 1, 1));
+	}
+
+	return ret;
+}
+
+float2x3 identify_piece(out int piece, inout float2 pt)
+{
+	float2x4 ret = identify_angle(piece, pt);
+	bool flat = true;
+
+	for (int i = 0; i < int(depth_max_f); i++) {
+		if ((piece & 4) == 0) {
+			if ((piece & 2) == 0) {
+				const float2 p = ret._14_24 - float2(phi_i, 0);
+				if (dot(p, n_2_10th) < 0) {
+					piece ^= 5;
+					ret = mul(float2x3(
+						-phi * c_2_5th, phi * s_2_5th, 0,
+						phi * s_2_5th, phi * c_2_5th, 0),
+						float3x4(ret, 0, 0, 1, 1));
+				}
+				else {
+					piece ^= 7;
+					ret = mul(float2x3(
+						-phi, 0, phi,
+						0, phi, 0),
+						float3x4(ret, 0, 0, 1, 1));
+				}
+			}
+			else {
+				piece ^= 6;
+				ret = mul(float2x3(
+					phi * c_2_5th, -phi * s_2_5th, phi,
+					phi * s_2_5th, phi * c_2_5th, 0),
+					float3x4(ret, 0, 0, 1, 1));
+			}
+		}
+		else {
+			if ((piece & 2) == 0) {
+				const float2 p = ret._14_24 - float2(phi_i, 0);
+				if (dot(p, n_2_10th) < 0) {
+					piece ^= 6;
+					// identity.
+				}
+				else {
+					piece ^= 4;
+					ret = mul(float2x3(
+						c_2_5th, s_2_5th, -phi * c_2_5th,
+						-s_2_5th, c_2_5th, phi * s_2_5th),
+						float3x4(ret, 0, 0, 1, 1));
+				}
+			}
+			else {
+				piece ^= 7;
+				ret = mul(float2x3(
+					c_1_5th, -s_1_5th, -c_2_5th,
+					-s_1_5th, -c_1_5th, s_2_5th),
+					float3x4(ret, 0, 0, 1, 1));
+			}
+		}
+
+		if (i + 1 >= int(depth_min_f)) {
+			const float cx = dot(map_fig[piece >> 1]._11_12, float2(0.5, 0.5));
+			const float val = get_val(rev_map(float2x3(ret._11_12_13, ret._21_22_23), float2(cx, 0)));
+			int depth; get_fade(val, depth);
+			if (i + 1 >= depth) {
+				flat = false;
+				break;
+			};
+		}
+	}
+	if (flat) piece = -1;
+
+	pt = ret._14_24;
+	return float2x3(ret._11_12_13, ret._21_22_23);
+}
+
+float4 avg_figure(float2x3 tr_i, float2x2 m, float fade)
+{
+	const float x0 = m._11 + m._12;
+	float4 sum_prev = { 0, 0, 0, 0 }, sum_next = { 0, 0, 0, 0 };
+	for (int i = 0; i < 16; i++) {
+		for (int j = 0; j < 16; j++) {
+			float2 p = mul(m, float2((0.5 + i) / 16, (0.5 + j) / 16));
+			if (p.y < 0) p.x = x0 - p.x;
+			int2 p_i = int2(mul(tr_i, float3(p, 1)));
+			p_i = clamp(p_i, 0, int2(size_scn) - 1);
+			sum_prev += img_prev.Load(int3(p_i, 0));
+			sum_next += img_next.Load(int3(p_i, 0));
+		}
+	}
+	return lerp(sum_prev, sum_next, fade) / 256;
+}
+
+float4 apply(float4 pos : SV_Position) : SV_Target
+{
+	int piece; float2 pt = pos.xy;
+	const float2x3 tr = identify_piece(piece, pt);
+
+	[branch] if (piece < 0) {
+		return get_val(pos.xy) < 0.5 ?
+			img_prev.Load(int3(pos.xy, 0)) : img_next.Load(int3(pos.xy, 0));
+	}
+	else if (aa_thick > 0) {
+		float l = 2 * phi;
+		float2 e;
+		for (int i = 0; i < 3; i++) {
+			const float3 edge = edge_fig[piece >> 1][i];
+			const float l1 = dot(edge, float3(pt, 1));
+			if (l1 < l) {
+				l = l1;
+				e = edge.xy;
+			}
+		}
+
+		const float scale = sqrt(abs(determinant(float2x2(tr._11_12, tr._21_22))));
+		const float2 pos2 = rev_map(tr, pt - (l + scale) * e);
+		return lerp(img_prev.Load(int3(pos.xy, 0)), img_prev.Load(int3(pos2, 0)),
+			smoothstep(-scale * aa_thick / 2, scale * aa_thick / 2, -l));
+	}
+	else {
+		const float2x3 tr_i = inv_map(tr);
+		const float2x2 m = map_fig[piece >> 1];
+		int depth;
+		const float fade = get_fade(get_val(mul(tr_i, float3(dot(m._11_12, float2(0.5, 0.5)), 0, 1))), depth);
+		return avg_figure(tr_i, m, fade);
+	}
+}
+]]
+local obj, math, tonumber, type = obj, math, tonumber, type;
+
+-- set anchors.
+obj.setanchor("track", 0, "line");
+
+-- take parameters.
+--[==[
+	PI = {
+		bandwidth:		number?,
+		fade_time:		number?,
+		shape:			string?,
+		shape_rot:		number?,
+		shape_orth:		boolean|number|nil,
+		file_image:		string,
+		reverse:		boolean|number|nil,
+		pattern:		string?,
+		center_form:	string?,
+		size:			number?,
+		deflate:		number?,
+		rotate:			number?,
+		X:				number?,
+		Y:				number?,
+		antialias:		boolean|number|nil,
+		phase:			number?,
+	}
+]==]
+local function as_bool(t, v)
+	if type(t) == "boolean" then return t;
+	elseif type(t) == "number" then return t ~= 0;
+	else return v end
+end
+bandwidth = tonumber(PI.bandwidth) or bandwidth;
+fade_time = tonumber(PI.fade_time) or fade_time;
+if PI.shape then
+	local name2num = {
+		[0] = 0, 1, 2, 3, 4, 5; -- legacy compatibility.
+		["円"] = 0, ["四角"] = 1, ["時計"] = 2,
+		["ライン"] = 3, ["ダブルライン"] = 4, ["クロス"] = 5,
+	};
+	shape = name2num[PI.shape] or shape;
+end
+shape_rot = tonumber(PI.shape_rot) or shape_rot;
+shape_orth = as_bool(PI.shape_orth, shape_orth ~= 0);
+file_image = type(PI.file_image) == "string" and PI.file_image or file_image;
+reverse = as_bool(PI.reverse, reverse ~= 0);
+if PI.pattern then
+	local name2num = {
+		[0] = 0, 1; -- legacy compatibility.
+		["P2(Kite+Dart)"] = 0, ["P3(菱形2種)"] = 1,
+	};
+	pattern = name2num[PI.pattern] or pattern;
+end
+if PI.center_form then
+	local name2num = {
+		[0] = 0, 1; -- legacy compatibility.
+		Sun = 0, Star = 1,
+	};
+	center_form = name2num[PI.center_form] or center_form;
+end
+size = tonumber(PI.size) or size;
+deflate = tonumber(PI.deflate) or deflate;
+rotate = tonumber(PI.rotate) or rotate;
+local X = tonumber(PI.X) or obj.track0;
+local Y = tonumber(PI.Y) or obj.track1;
+antialias = as_bool(PI.antialias, antialias ~= 0);
+local phase = tonumber(PI.phase) or obj.getvalue("scenechange");
+
+-- normalize parameters.
+bandwidth = math.min(math.max(bandwidth / 100, 0), 2);
+fade_time = math.min(math.max(fade_time / 100, 1 / 1024), 1 - 1 / 1024);
+shape = math.min(math.max(math.floor(0.5 + shape), 0), 5);
+shape_rot = math.pi / 180 * shape_rot;
+local kite_dart = math.floor(0.5 + pattern) == 0;
+local center_sun = math.floor(0.5 + center_form) == 0;
+size = math.max(size, 2);
+deflate = math.min(math.max(math.floor(0.5 + deflate), 0), 35);
+rotate = math.pi / 180 * rotate;
+phase = math.min(math.max(phase, 0), 1);
+
+-- further calculations for the shape of transition.
+obj.copybuffer("tempbuffer", "object");
+local use_image = #file_image > 3;
+if use_image then
+	obj.load("image", file_image);
+	if obj.w < 1 or obj.h < 1 then
+		-- not a valid image file.
+		obj.copybuffer("object", "tempbuffer");
+		use_image = false;
+	else
+		if shape_orth then
+			-- crop the image to adjust the aspect ratio.
+			local crop_w, crop_h, d = 0, 0,
+				(obj.w * obj.screen_h - obj.h * obj.screen_w) / 2;
+			if d > 0 then crop_w = math.floor(math.min(0.5 + d / obj.screen_h, (obj.w - 1) / 2));
+			else crop_h = math.floor(math.min(0.5 - d / obj.screen_w, (obj.h - 1) / 2)) end
+			if crop_w > 0 or crop_h > 0 then
+				obj.effect("クリッピング", "左", crop_w, "右", crop_w, "上", crop_h, "下", crop_h);
+			end
+		end
+	end
+end
+if not use_image then
+	-- create a transition image.
+	local m11, m12, m21, m22 do
+		local c, s = math.cos(shape_rot), math.sin(shape_rot);
+		m11, m12, m21, m22 = c, s, -s, c;
+
+		local asp = obj.screen_w / obj.screen_h;
+		if not shape_orth then asp, m11, m21 = 1, m11 / asp, m21 / asp end
+
+		local u;
+		if shape == 0 then
+			-- 円
+			u = ((asp ^ 2 + 1) / 2) ^ 0.5;
+		elseif shape == 1 then
+			-- 四角
+			u = math.max(
+				math.abs(c - s) * asp + math.abs(c + s),
+				math.abs(c + s) * asp + math.abs(c - s)) / 2;
+		elseif shape == 2 then u = 1; -- 時計
+		elseif shape == 3 or shape == 4 then
+			-- ライン / ダブルライン
+			u = math.abs(c) * asp + math.abs(s);
+		else -- クロス
+			local x1, y1, x2, y2, x3, y3, x4, y4 = 0, 0, 0, 0, 0, 0, 0, 0;
+			if s ~= 0 then
+				local t = -c / s;
+				x1, y1 = math.min(math.max(-t, -asp), asp), 1;
+				x2, y2 = asp, math.min(math.max(t * asp, -1), 1);
+			end
+			if c ~= 0 then
+				local t = s / c;
+				x3, y3 = math.min(math.max(-t, -asp), asp), 1;
+				x4, y4 = asp, math.min(math.max(t * asp, -1), 1);
+			end
+			local C, S = c - s, c + s;
+			u = math.max(
+					math.min(math.abs(C * x1 + S * y1), math.abs(S * x1 - C * y1)),
+					math.min(math.abs(C * x2 + S * y2), math.abs(S * x2 - C * y2)),
+					math.min(math.abs(C * x3 + S * y3), math.abs(S * x3 - C * y3)),
+					math.min(math.abs(C * x4 + S * y4), math.abs(S * x4 - C * y4))) / 2;
+		end
+		u = 2 / (obj.screen_h * u);
+		m11, m12, m21, m22 = u * m11, u * m12, u * m21, u * m22;
+	end
+	obj.pixelshader("make_shape", "object", nil, {
+		m11, m21, 0, 0,
+		m12, m22;
+		obj.screen_w / 2, obj.screen_h / 2;
+		shape,
+	});
+end
+
+-- further calculations for tiling.
+local dx, dy = X + obj.screen_w / 2, Y + obj.screen_h / 2;
+local phi = (1 + 5 ^ 0.5) / 2;
+local R = ((math.abs(X) + obj.screen_w / 2) ^ 2 + (math.abs(Y) + obj.screen_h / 2) ^ 2) ^ 0.5;
+if kite_dart then
+	if center_sun then
+		R = R * (4 / 5 * (3 - phi)) ^ 0.5; -- R / \sqrt{1 - 1/4\phi^2}
+	else
+		R = R * phi;
+	end
+end
+R = math.log(R / size + 1, phi);
+local depth = kite_dart and
+	(center_sun and
+		4 * math.max(0, math.ceil((R - 1) / 2)) + 3 or
+		4 * math.max(0, math.ceil(R / 2)) + 1) or
+	(center_sun and
+		4 * math.max(0, math.ceil(R / 2)) or
+		4 * math.max(0, math.ceil((R - 1) / 2)) + 2);
+local size_adj = phi ^ math.floor(depth / 2) * size;
+local flip = (depth - 1) % 8 < 4 and 1 or -1;
+
+local m11, m12, m21, m22 = 0, flip / size_adj, -flip / size_adj, 0 do
+	local c, s = math.cos(rotate), math.sin(rotate);
+	m11, m12, m21, m22 =
+		-- multiplication of M * (rotation matrix).
+		m11 * c - m12 * s, m11 * s + m12 * c,
+		m21 * c - m22 * s, m21 * s + m22 * c;
+end
+
+-- apply the scene change.
+if reverse then phase = 1 - phase end
+local band_min, band_max;
+if bandwidth < 2 then
+	local W = 2 / (2 - bandwidth); -- 1 at bandwidth = 0, 2 at bandwidth = 1, pole at bandwidth = 2.
+	band_min, band_max = 1 - phase * W, (1 - phase) * W;
+else band_min, band_max = phase, -1 end
+obj.pixelshader("apply", antialias and "tempbuffer" or "framebuffer", {
+	reverse and "framebuffer" or "tempbuffer",
+	reverse and "tempbuffer" or "framebuffer",
+	"object"
+}, {
+	m11, m21, 0, 0,
+	m12, m22;
+	dx, dy; obj.screen_w, obj.screen_h; obj.w, obj.h;
+	band_min, band_max,
+	depth, depth + deflate, fade_time, 0,
+});
+
+-- apply antialias.
+if antialias then
+	obj.pixelshader("apply", "framebuffer", {
+		"tempbuffer",
+		"tempbuffer",
+		"object",
+	}, {
+		m11, m21, 0, 0,
+		m12, m22;
+		dx, dy; obj.screen_w, obj.screen_h; obj.w, obj.h;
+		band_min, band_max,
+		depth, depth + deflate, fade_time, 1,
+	});
+end

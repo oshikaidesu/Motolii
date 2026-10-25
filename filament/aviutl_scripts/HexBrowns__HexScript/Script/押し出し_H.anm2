@@ -1,0 +1,297 @@
+--information:押し出し_H v1.10 by HexBrowns
+--label:HexScript
+
+--group:押し出し
+--track@depth:奥行き,0,2000,40,0.1
+--track@side_step:側面の間隔,1,8,2,0.1
+--select@side_src:側面の色の決め方=0,色=0,元の色=1
+--color@side_color:側面の色,0x808080
+--hide@side_color:side_src==1
+--check@back_face:裏面を描く,1
+--group
+
+--group:ベベル
+--select@bevel:ベベルの形=1,なし=0,面取り=1,丸み=2
+--track@bevel_w:ベベルの幅,0,200,6,0.1
+--hide@bevel_w:bevel==0
+--track@bevel_d:ベベルの深さ,0,200,6,0.1
+--hide@bevel_d:bevel==0
+--select@bevel_src:ベベルの色の決め方=0,表面と同じ=0,側面と同じ=1
+--hide@bevel_src:bevel==0
+--group
+
+--group:光
+--track@light_dir:光の向き,-360,360,135,0.01
+--track@light_elev:光の高さ,0,90,45,0.01
+--track@ambient:環境光,0,100,35,0.1
+--check@shade_face:表面にも陰影,0
+--group
+
+--group:描き方
+--select@interp:補間=0,補間あり=0,補間なし=1
+--group
+
+--[[
+After Effects の 3D テキストの「押し出し」と「ベベル」に当たる効果。オブジェクトの形（アルファ）を奥行き方向に押し出して、
+縁に面取りか丸みを付けた立体にする。カメラ制御の下では本当の 3D として見える。
+
+1. 内側の各画素から一番近い外側（アルファ 0.5 未満、画像の外も外側）までの位置を、ジャンプフラッディング法で求める
+2. 奥行き方向に薄い板（スライス）を重ねて描く。どの板もオブジェクトの大きさの四角形を obj.drawpoly で Z の位置に描く
+   - 表面（Z = 0）: 元の画像。ベベルの幅だけ内側に削る
+   - ベベル（Z = 0..ベベルの深さ）: 板ごとに削る量を変える。面取りは直線、丸みは四分円。面の向きで陰影を付ける
+   - 側面（Z = ベベルの深さ..奥行き）: 全部同じ絵なので 1 回の drawpoly で描く。縁の向きで陰影を付ける。
+     板の間隔は 側面の間隔（px）。側面は奥行き方向に同じ色なので、間隔を広げても隙間はできない（輪郭が少し階段になる）。
+     ベベルの板も同じ間隔で並べる。板 1 枚ごとにオブジェクトの大きさ全部を塗るので、間隔が描く量を決める
+   - 裏面（Z = 奥行き）
+3. 奥の板から描く。カメラ制御の外でオブジェクトが裏を向いたら順番を逆にする（奥行きで隠れないため）
+- 以降のフィルタ効果は掛からない（lua.txt の obj.drawpoly）
+
+机上検証: AI/scripts/押し出し_H/verify_extrude.py
+
+v1.01: 4K・横長の巨大素材で cache と tempbuffer の枠（1600 万ドット）を超えないように、元の画像の退避 1 枚と
+一番近い外側の 2 枚が枠に収まらなければ、一番近い外側を縮めた解像度で求める（位置は元の解像度の px で持つ）。
+元の画像の退避だけで収まらなければ効果を掛けない。AI/scripts/issues/20261013_cache_budget_4k_wide_materials.md
+
+v1.10: 補間を足した。補間あり（既定・v1.01 と同じ）は drawpoly の既定のサンプラー（"clamp"）。補間なしは
+obj.setoption("sampler", "dot") で板の画素を補間せずに拾う（拡大・回転してもドットのまま）。"dot" は画像の外を透明として読む
+（lua.txt の「サンプラーモード」）ので、板の uv を画像の端の画素の内側へ 1/32 px 寄せ、丸めで外を読んで縁が透けるのを防ぐ。
+描き終えたらサンプラーを既定に戻す
+]]
+
+--[[pixelshader@ps_ext_seed:
+cbuffer P : register(b0) {
+    float2 size;      // 0-1 大きさ（元の解像度）
+    float scale;      // 2   この面の解像度 / 元の解像度（v1.01）
+};
+Texture2D src : register(t0);
+
+// 外側の画素は自分、内側の画素は一番近い画像の外（縁の 0.5px 外）を最初の候補にする。位置は元の解像度の px
+float4 ps_ext_seed(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy / scale;
+    if (src.Load(int3(int2(p), 0)).a < 0.5) return float4(p, 0.0, 1.0);
+    float2 s = float2(-0.5, p.y);
+    float best = p.x + 0.5;
+    if (size.x + 0.5 - p.x < best) { best = size.x + 0.5 - p.x; s = float2(size.x + 0.5, p.y); }
+    if (p.y + 0.5 < best) { best = p.y + 0.5; s = float2(p.x, -0.5); }
+    if (size.y + 0.5 - p.y < best) { best = size.y + 0.5 - p.y; s = float2(p.x, size.y + 0.5); }
+    return float4(s, 0.0, 1.0);
+}
+]]
+
+--[[pixelshader@ps_ext_jfa:
+cbuffer P : register(b0) {
+    float2 size;      // 0-1 大きさ（この面の解像度）
+    float stepk;      // 2   飛ぶ幅（この面の px）
+    float scale;      // 3   この面の解像度 / 元の解像度（v1.01。候補の位置と距離は元の解像度の px）
+};
+Texture2D seed : register(t0);
+
+// ジャンプフラッディング: 8 方向と自分の、stepk 先の画素が持つ候補のうち一番近いものを取る
+float4 ps_ext_jfa(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy / scale;
+    int2 ip = int2(pos.xy);
+    int2 hi = int2(size) - 1;
+    float2 best = seed.Load(int3(ip, 0)).rg;
+    float bd = dot(best - p, best - p);
+    [loop] for (int y = -1; y <= 1; y++) {
+        [loop] for (int x = -1; x <= 1; x++) {
+            int2 q = ip + int2(x, y) * (int)stepk;
+            if (q.x < 0 || q.y < 0 || q.x > hi.x || q.y > hi.y) continue;
+            float2 c = seed.Load(int3(q, 0)).rg;
+            float d = dot(c - p, c - p);
+            if (d < bd) { bd = d; best = c; }
+        }
+    }
+    return float4(best, 0.0, 1.0);
+}
+]]
+
+--[[pixelshader@ps_ext_slice:
+cbuffer P : register(b0) {
+    float2 size;       // 0-1  大きさ
+    float erode;       // 2    縁から削る量（px）。0 なら元の形
+    float kind;        // 3    0 表面 / 1 ベベル / 2 側面 / 3 裏面
+    float3 light;      // 4-6  光の向き（面から光へ。Z は奥向きなので手前は負）
+    float ambient;     // 7    環境光（0..1）
+    float3 color;      // 8-10 側面・ベベル・裏面の色（0..1）
+    float use_src;     // 11   1 で元の画像の色を使う
+    float nr;          // 12   ベベルの面の向きの、縁の外向きの成分
+    float nz;          // 13   同・Z の成分（手前が負）
+    float shade_face;  // 14   1 で表面にも陰影
+    float scale;       // 15   一番近い外側の面の解像度 / 元の解像度（v1.01）
+};
+Texture2D src : register(t0);
+Texture2D seed : register(t1);
+
+float4 ps_ext_slice(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy;
+    float4 s = src.Load(int3(int2(p), 0));
+    float2 sd = seed.Load(int3(int2(p * scale), 0)).rg - p;
+    float d = length(sd);
+    // 覆う割合: 削らないときは元のアルファ、削るときは縁からの距離
+    float cov = s.a;
+    if (erode > 0.0) cov = (s.a >= 0.5) ? saturate(d - erode + 0.5) : 0.0;
+    if (cov <= 0.0) return float4(0.0, 0.0, 0.0, 0.0);
+
+    float2 cn = (d > 1e-3) ? sd / d : float2(0.0, 0.0);   // 縁の外向き
+    float3 n = float3(0.0, 0.0, -1.0);
+    if (kind > 2.5) n = float3(0.0, 0.0, 1.0);
+    else if (kind > 1.5) n = float3(cn, 0.0);
+    else if (kind > 0.5) n = normalize(float3(cn * nr, nz));
+    float shade = ambient + (1.0 - ambient) * saturate(dot(n, light));
+    if (kind < 0.5 && shade_face < 0.5) shade = 1.0;
+
+    float3 base = (s.a > 1e-4) ? s.rgb / s.a : float3(0.0, 0.0, 0.0);
+    if (kind > 0.5 && use_src < 0.5) base = color;
+    return float4(base * shade * cov, cov);
+}
+]]
+
+local function num(v, d)
+  v = tonumber(v)
+  if v == nil or v ~= v then return d end
+  return v
+end
+
+local function clamp(x, a, b)
+  if x < a then return a elseif x > b then return b end
+  return x
+end
+
+local W, H = obj.w, obj.h
+if W <= 0 or H <= 0 then return end
+
+local D = math.max(num(depth, 40), 0)
+local BEVEL = math.floor(num(bevel, 1) + 0.5)
+local BW = (BEVEL > 0) and math.max(num(bevel_w, 6), 0) or 0
+local BD = (BEVEL > 0) and clamp(num(bevel_d, 6), 0, D) or 0
+if BW <= 0 or BD <= 0 then BEVEL, BW, BD = 0, 0, 0 end
+if D <= 0 then return end
+
+local SRC, SA, SB = "cache:ext/src", "cache:ext/sa", "cache:ext/sb"
+-- 一番近い外側を求める解像度の倍率 SC（v1.01。元の画像の退避と 2 枚が枠に収まるように）
+local budget = require("EffectUtils_Budget")
+local SC = budget.scale(W * H, 2 * W * H)
+if not SC then
+  budget.refuse("押し出し_H", W, H)
+  return
+end
+local JW, JH = math.max(1, math.ceil(W * SC)), math.max(1, math.ceil(H * SC))
+obj.copybuffer(SRC, "object")
+
+-- 一番近い外側（ジャンプフラッディング）
+obj.clearbuffer(SA, JW, JH)
+obj.pixelshader("ps_ext_seed", SA, {SRC}, {W, H, SC})
+obj.clearbuffer(SB, JW, JH)
+local cur, other = SA, SB
+local k = 1
+while k * 2 < math.max(JW, JH) do k = k * 2 end
+while k >= 1 do
+  obj.pixelshader("ps_ext_jfa", other, {cur}, {JW, JH, k, SC})
+  cur, other = other, cur
+  k = math.floor(k / 2)
+end
+-- 仕上げに 1 回足すと取りこぼしが減る（JFA+1）
+obj.pixelshader("ps_ext_jfa", other, {cur}, {JW, JH, 1, SC})
+cur, other = other, cur
+local SEED = cur
+obj.clearbuffer(other, 1, 1)   -- もう読まない（枠を空ける）
+
+local az, el = math.rad(num(light_dir, 135)), math.rad(clamp(num(light_elev, 45), 0, 90))
+local lx, ly, lz = math.cos(el) * math.cos(az), -math.cos(el) * math.sin(az), -math.sin(el)
+local AMB = clamp(num(ambient, 35) / 100, 0, 1)
+local col = math.floor(num(side_color, 0x808080)) % 0x1000000
+local cr, cg, cb = math.floor(col / 0x10000) / 255, math.floor(col / 0x100) % 0x100 / 255, col % 0x100 / 255
+local SIDE_SRC = (math.floor(num(side_src, 0) + 0.5) == 1) and 1 or 0
+local BEVEL_SRC = (math.floor(num(bevel_src, 0) + 0.5) == 0) and 1 or SIDE_SRC
+local SHADE_FACE = (shade_face == 1) and 1 or 0
+
+local function slice(erode, kind, use_src, nr, nz)
+  obj.pixelshader("ps_ext_slice", "object", {SRC, SEED}, {
+    W, H, erode, kind,
+    lx, ly, lz, AMB,
+    cr, cg, cb, use_src,
+    nr, nz, SHADE_FACE, SC,
+  })
+end
+
+-- 補間なし（v1.10）: uv を画像の端の画素の内側へ 1/32 px 寄せる（補間ありは 0〜W・0〜H のまま）
+local DOT = math.floor(num(interp, 0) + 0.5) == 1
+local U0, V0, U1, V1 = 0, 0, W, H
+if DOT then
+  local e = 1 / 32
+  U0, V0, U1, V1 = e, e, W - e, H - e
+end
+
+local function quad(z)
+  return {-W / 2, -H / 2, z, W / 2, -H / 2, z, W / 2, H / 2, z, -W / 2, H / 2, z, U0, V0, U1, V0, U1, V1, U0, V1}
+end
+
+-- ベベルの削る量 e(t) と面の向き（t = 0 が表面、1 がベベルの奥の端）
+local function bevel_at(t)
+  if BEVEL == 1 then
+    -- 面取り: e = 幅 x (1 - t)。面の向きは (奥行き, -幅)（縁の外向き, Z）
+    return BW * (1 - t), BD, -BW
+  end
+  -- 丸み: e = 幅 x (1 - √(1 - (1 - t)²))。e'(t) = -幅 x u / √(1 - u²)（u = 1 - t）
+  local u = 1 - t
+  local root = math.sqrt(math.max(1 - u * u, 1e-6))
+  return BW * (1 - root), BD, -BW * u / root
+end
+
+-- 描く板の並び（Z の大きい奥から）
+local plan = {}
+if back_face == 1 then plan[#plan + 1] = {kind = 3, z = D} end
+local STEP = clamp(num(side_step, 2), 1, 8)
+local side_n = 0
+if D - BD > 0 then
+  side_n = math.min(math.max(math.ceil((D - BD) / STEP), 1), 400)
+  plan[#plan + 1] = {kind = 2, z0 = BD, z1 = D, n = side_n}
+end
+if BEVEL > 0 then
+  local nb = math.min(math.max(math.ceil(BD / STEP), 2), 32)
+  for i = nb, 1, -1 do
+    local t = i / nb
+    plan[#plan + 1] = {kind = 1, z = t * BD, t = t}
+  end
+end
+plan[#plan + 1] = {kind = 0, z = 0}
+
+-- カメラ制御の外で裏を向いていたら、手前（Z の小さい方）から描く
+local cam = tonumber(obj.getoption("camera_mode")) or 0
+local reversed = false
+if cam == 0 then
+  local rx = math.rad((tonumber((obj.getvalue("rx"))) or 0) + (obj.rx or 0))
+  local ry = math.rad((tonumber((obj.getvalue("ry"))) or 0) + (obj.ry or 0))
+  if math.cos(rx) * math.cos(ry) < 0 then
+    local rev = {}
+    for i = #plan, 1, -1 do rev[#rev + 1] = plan[i] end
+    plan = rev
+    reversed = true
+  end
+end
+
+if DOT then obj.setoption("sampler", "dot") end
+for _, s in ipairs(plan) do
+  if s.kind == 0 then
+    slice(BW, 0, 1, 0, -1)
+    obj.drawpoly({quad(0)})
+  elseif s.kind == 1 then
+    local e, nr, nz = bevel_at(s.t)
+    slice(e, 1, BEVEL_SRC, nr, nz)
+    obj.drawpoly({quad(s.z)})
+  elseif s.kind == 2 then
+    slice(0, 2, SIDE_SRC, 0, 0)
+    local list = {}
+    -- 板の間が 側面の間隔 を越えないように並べる。奥から（裏を向いているときは手前から）
+    for j = 0, s.n do
+      local jj = reversed and j or (s.n - j)
+      list[#list + 1] = quad(s.z0 + (s.z1 - s.z0) * jj / s.n)
+    end
+    obj.drawpoly(list)
+  else
+    slice(0, 3, SIDE_SRC, 0, 0)
+    obj.drawpoly({quad(s.z)})
+  end
+end
+if DOT then obj.setoption("sampler") end   -- サンプラーを既定に戻す

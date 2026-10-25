@@ -1,0 +1,298 @@
+--[[
+AviUtl ExEdit2 (AviUtl2) 対応
+あとのせRTAタイマー(総タイム) カスタムオブジェクト "Seisa-Total"
+定義スクリプト
+
+Copyright (c) 2026-present Samuel LaDoCo (SLDC)
+Released under the MIT license
+https://github.com/samuelladoco/aviutl2-script-seisa?tab=MIT-1-ov-file
+]]
+
+
+-- ■ AviUtl ExEdit2 での設定項目
+-- □ スクリプト情報
+
+--information:あとのせRTAタイマー(総タイム) v1.0.2 by SLDC
+
+
+-- □ 必要な本体のバージョン番号
+
+-- 2.1.0 かそれ以降
+--require:2010000
+
+
+-- □ メディアオブジェクト種類
+
+--label:カスタムオブジェクト
+
+
+-- □ 設定項目
+
+--group:テキスト － 外形,true
+--track@fontsize:サイズ,1,1000,40,0.01
+--track@fontcharspacing:字間,-500,500,0,0.01
+--font@fontname:フォント,Yu Gothic UI
+--select@fonttype:文字の装飾,標準文字=0,影付き文字=1,影付き文字(薄)=2,縁取り文字=3,縁取り文字(細)=4,縁取り文字(太)=5,縁取り文字(角)=6
+--select@textalign:文字揃え種別,左寄せ[上]=0,中央揃え[上]=1,右寄せ[上]=2,左寄せ[中]=3,中央揃え[中]=4,右寄せ[中]=5,左寄せ[下]=6,中央揃え[下]=7,右寄せ[下]=8
+--check@fontb:B (太文字),false
+--check@fonti:I (斜体),false
+--
+--
+--group:テキスト － 色,true
+--separator:走行前
+--color@fontbeforerunningcol1:文字色(1),0xacacac
+--color@fontbeforerunningcol2:影・縁色(1),0x000000
+--
+--separator:走行中
+--color@fontnowrunningcol1:文字色(2),0x00cc36
+--color@fontnowrunningcol2:影・縁色(2),0x000000
+--
+--separator:中断中
+--color@fontnowpausedcol1:文字色(3),0x7a7a7a
+--color@fontnowpausedcol2:影・縁色(3),0x000000
+--
+--separator:走行後
+--color@fontafterrunningcol1:文字色(4),0x16a6ff
+--color@fontafterrunningcol2:影・縁色(4),0x000000
+--
+--
+--group:テキスト － 書式,true
+--select@timeformat:タイム書式,O:OO:OO.OOO=0,OhOOmOOsOOOms=1
+--select@timedigit:タイム桁数,自動調整=0,秒2桁以上=1,分1桁以上=2,分2桁以上=3,時1桁以上=4,時2桁以上=5,時3桁以上=6,時4桁以上=7
+--select@frameformat:フレーム番号,非表示=0,表示(半角スペース後)=1,表示(改行後)=2
+--select@framedigit:フレーム桁数,自動調整=0,2桁以上=2,3桁以上=3,4桁以上=4,5桁以上=5,6桁以上=6,7桁以上=7,8桁以上=8,9桁以上=9,10桁以上=10,11桁以上=11
+--
+--
+--group:タイムカウントルール,true
+--check@countinoddsections:奇数番目の区間でカウント,false
+--string@countstartframes:開始フレーム数,0
+--group
+
+
+-- ■ 処理 (フレームごと)
+
+-- 区間の計測状態(走行前, 走行中, 中断中, 走行後)ごとの文字色
+local fontcol1s = {
+    fontbeforerunningcol1, fontnowrunningcol1, fontnowpausedcol1, fontafterrunningcol1
+}
+-- 区間の計測状態(走行前, 走行中, 中断中, 走行後)ごとの影・縁色
+local fontcol2s = {
+    fontbeforerunningcol2, fontnowrunningcol2, fontnowpausedcol2, fontafterrunningcol2
+}
+--
+-- 区間の計測状態の列挙体
+local sectionstatetypes = {
+    -- 走行前
+    beforerunning = 1,
+    -- 走行中
+    nowrunning = 2,
+    -- 中断中
+    nowpaused = 3,
+    -- 走行後
+    afterrunning = 4
+}
+
+-- 各区間のオブジェクト基準での開始フレーム番号を得る
+local function getsectionstartframes()
+    local frames = {}
+    for sectionminus1 = 0, obj.getoption("section_num") - 1 do
+        table.insert(
+            frames,
+            math.floor(obj.getvalue("time", 0, sectionminus1) * obj.framerate + 0.5)
+        )
+    end
+    return frames
+end
+-- 各区間のオブジェクト基準での開始フレーム番号
+local sectionstartframes = getsectionstartframes()
+-- frame (オブジェクト基準でのフレーム番号) が含まれる区間番号を得る
+local function getsectionno(frame)
+    local no = 0
+    repeat
+        no = no + 1
+    until no == obj.getoption("section_num") or frame < sectionstartframes[no + 1]
+    return no
+end
+--
+-- 各区間の計測状態を得る
+local function getsectionstates()
+    -- Lua の Tables の仕様に深く立ち入らないよう、理解しやすい処理に
+    local states = {}
+    -- 最初と最後の区間は仮設定
+    for i = 1, obj.getoption("section_num") do
+        -- 奇数番目の区間でタイムカウント する場合は 走行中, 中断中, ...
+        if countinoddsections == true then
+            if i % 2 == 1 then
+                table.insert(states, sectionstatetypes.nowrunning)
+            else
+                table.insert(states, sectionstatetypes.nowpaused)
+            end
+            -- 奇数番目の区間でタイムカウント しない場合は 中断中, 走行中, ...
+        else
+            if i % 2 == 1 then
+                table.insert(states, sectionstatetypes.nowpaused)
+            else
+                table.insert(states, sectionstatetypes.nowrunning)
+            end
+        end
+    end
+    -- 最終の区間が 中断中 である場合は、 走行後 に書き換え
+    if states[obj.getoption("section_num")] ~= sectionstatetypes.nowrunning then
+        states[obj.getoption("section_num")] = sectionstatetypes.afterrunning
+    end
+    -- 最初の区間が 中断中 ないし 走行後 である場合は、 走行前 に書き換え
+    if states[1] ~= sectionstatetypes.nowrunning then
+        states[1] = sectionstatetypes.beforerunning
+    end
+    return states
+end
+-- 各区間の計測状態
+local sectionstates = getsectionstates()
+--
+-- 開始フレーム数を整数値で得る。
+-- ただし、無効な値の場合は nil を得る。
+local function getcountstartframesinintornil()
+    local n = tonumber(countstartframes)
+    if type(n) == "number" and math.floor(n) == n and n >= 0 then
+        return math.floor(n)
+    else
+        return nil
+    end
+end
+-- 開始フレーム数 (無効な値の場合は nil )
+local countstartframesinintornil = getcountstartframesinintornil()
+--
+-- frame (オブジェクト基準でのフレーム番号) を走行中の経過フレーム数に変換する。
+-- ただし、開始フレーム数が無効な値の場合は nil を得る。
+local function toelapsedrunframe(frame)
+    local n = countstartframesinintornil
+    --
+    if n == nil then
+        return nil
+    end
+    --
+    local framesection = getsectionno(frame)
+    for section = 1, framesection - 1 do
+        if sectionstates[section] == sectionstatetypes.nowrunning then
+            n = n + (sectionstartframes[section + 1] - sectionstartframes[section])
+        end
+    end
+    if sectionstates[framesection] == sectionstatetypes.nowrunning then
+        n = n + (frame - sectionstartframes[framesection])
+    end
+    return n
+end
+
+-- 時間テキストの区切り文字の選択肢
+local timeformatalternatives = { { ":", ":", ".", "" }, { "h", "m", "s", "ms" } }
+-- 時間テキストの書式
+local timeformatstr = string.format(
+    "%%04d%s%%02d%s%%02d%s%%03d%s", unpack(timeformatalternatives[timeformat + 1])
+)
+-- 基準フレーム数と時間テキストの先頭から削減する文字数の組の一覧
+local framesnumheadcharstobecutpairs = {
+    -- 1000時台
+    { 10 * 10 * 10 * 60 * 60 * obj.framerate, 1 },
+    --  100時台
+    { 10 * 10 * 60 * 60 * obj.framerate,      1 },
+    --   10時台
+    { 10 * 60 * 60 * obj.framerate,           1 },
+    --    1時台 + 区切り文字
+    { 1 * 60 * 60 * obj.framerate,            1 + #timeformatalternatives[timeformat + 1][1] },
+    --              10分台
+    { 10 * 60 * obj.framerate,                1 },
+    --               1分台 + 区切り文字
+    { 1 * 60 * obj.framerate,                 1 + #timeformatalternatives[timeformat + 1][2] },
+    --                   10秒台
+    { 10 * obj.framerate,                     1 }
+}
+-- 時間テキストの先頭削減文字数を得る。
+-- ただし、開始フレーム数が無効な値の場合は 0 を得る。
+local function getnumformattedtimeheadcharstobecut()
+    local runframemax = toelapsedrunframe(obj.totalframe)
+    --
+    if runframemax == nil then
+        return 0
+    end
+    --
+    local num = 0
+    for i = 1, #framesnumheadcharstobecutpairs do
+        if timedigit == #framesnumheadcharstobecutpairs - (i - 1) then
+            break
+        elseif runframemax < framesnumheadcharstobecutpairs[i][1] then
+            num = num + framesnumheadcharstobecutpairs[i][2]
+        else
+            break
+        end
+    end
+    return num
+end
+-- 時間テキストの先頭削減文字数
+local numformattedtimeheadcharstobecut = getnumformattedtimeheadcharstobecut()
+--
+-- 時間テキストとフレームテキストの間の区切り文字
+local timeframeseparators = { "", " ", "\n" }
+-- フレームテキストの書式
+local frameformatstrs = {
+    string.format("%s(", timeframeseparators[frameformat + 1]), "%011d / %d)"
+}
+-- フレームテキストのフレーム数部分の先頭削減文字数を得る。
+-- ただし、開始フレーム数が無効な値の場合は 0 を得る。
+local function getnumformattedframeheadcharstobecut()
+    local runframemax = toelapsedrunframe(obj.totalframe)
+    --
+    if runframemax == nil then
+        return 0
+    end
+    --
+    if runframemax == 0 then runframemax = 1 end
+    -- この処理系では math.floor(math.log(10, 10)) が 1 ではなく 0 を返すなど
+    -- runframemax がちょうど10の整数乗の場合に正しい値より 1 少ない値が得られてしまうため
+    -- 安全に回避するため 0.5 を加算
+    return math.max(
+        11 - math.max(math.floor(math.log(runframemax + 0.5, 10)) + 1, framedigit),
+        0
+    )
+end
+-- フレームテキストのフレーム数部分の先頭削減文字数
+local numformattedframeheadcharstobecut = getnumformattedframeheadcharstobecut()
+--
+-- elapsedframes (経過フレーム数) を時間テキストとフレームテキストに変換する。
+-- ただし、開始フレーム数が無効な値の場合は エラーメッセージを得る。
+local function toformattedtimeframe(elapsedframes)
+    if elapsedframes == nil then
+        return "(開始フレーム数に0以上の整数を入力してください)"
+    end
+    --
+    local framemodsceneframerate = elapsedframes % obj.framerate
+    --
+    local ms = math.floor((framemodsceneframerate / obj.framerate) * 1000 + 0.5)
+    local s = math.floor(elapsedframes / obj.framerate) % 60
+    local m = math.floor(elapsedframes / (obj.framerate * 60)) % 60
+    local h = math.floor(elapsedframes / (obj.framerate * 60 * 60))
+    --
+    local strtime = string.sub(
+        string.format(timeformatstr, unpack({ h, m, s, ms })),
+        numformattedtimeheadcharstobecut + 1
+    )
+    --
+    local strframe = ""
+    if frameformat ~= 0 then
+        strframe = frameformatstrs[1] .. string.sub(
+            string.format(frameformatstrs[2], unpack({ elapsedframes, obj.framerate })),
+            numformattedframeheadcharstobecut + 1
+        )
+    end
+    --
+    return strtime .. strframe
+end
+
+-- 時間テキストとフレームテキストを表示する
+obj.setfont(
+    fontname, fontsize,
+    fonttype,
+    fontcol1s[sectionstates[getsectionno(obj.frame)]],
+    fontcol2s[sectionstates[getsectionno(obj.frame)]],
+    fontb, fonti, fontcharspacing, 0
+)
+obj.load("text", toformattedtimeframe(toelapsedrunframe(obj.frame)), 0, 0, textalign)

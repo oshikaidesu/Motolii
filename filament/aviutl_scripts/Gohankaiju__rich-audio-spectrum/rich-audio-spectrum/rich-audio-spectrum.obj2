@@ -1,0 +1,100 @@
+--information:rich-audio-spectrum v1.0.0
+--require:2005300
+--select@preset:プリセット=1,AE Round Bars=1,AE Clean Spectrum=2,Neon Ring=3,Trap Halo=4,Podcast Wave=5,Editor Minimal=6,Stereo Scope=7,Bass Pulse=8,EDM Bars=9,Lo-Fi Meter=10,Cinematic Ribbon=11,Minimal Dots=12
+--track@freq_lo:最小範囲Hz,0,22050,0,1
+--track@freq_hi:最大範囲Hz,20,22050,1380,1
+--track@bands:分割数,1,2048,128,1
+--track@width:横幅,100,4000,1024,1
+--track@thickness:線太さ,0.5,1024,5,0.5
+--track@height_x:波形高さ,1,16,4,0.1
+--check@flip:上下反転,false
+--check@mirror:ミラー,false
+--track@bounce_pct:弾み%,0,150,0,1,OFF
+--track@fall_pct:落下%,0,100,0,1,OFF
+--color@col1:色1,0x00d9ff
+--color@col2:色2,0xff40ff
+--track@trail_pct:残像%,-1,100,-1,1
+--check@multi_obj:個別オブジェクト(試験),false
+--group:詳細調整,false
+--track@scale_pct:詳細調整::スケール%,10,400,100,1
+--track@gain_db:詳細調整::感度dB,-24,24,0,0.1
+--track@react_pct:詳細調整::反応の深さ%,10,300,100,1
+--track@attack_ms:詳細調整::Attack ms,0,500,0,1,プリセット値
+--track@release_ms:詳細調整::Release ms,0,2000,0,1,プリセット値
+--track@smoothness:詳細調整::滑らかさ,-1,100,-1,1
+--select@quality:詳細調整::品質,Auto=0,Preview=1,Balanced=2,High=3,Export=4
+--group
+
+-- rich-audio-spectrum: AviUtl2用オーディオビジュアライザー
+-- プリセット(スペクトラム/波形/円形/メーター/ステレオスコープ)を選び、
+-- 主要パラメータ(範囲/分割数/横幅/線太さ/波形高さ/弾み/落下など)は
+-- どのプリセットにも直接適用される。
+local okC, core = pcall(require, "ras_core")
+local okE, engine = pcall(require, "ras_engine")
+local okP, presets = pcall(require, "ras_presets")
+if okC and okE and okP then
+    local ok, err = pcall(function()
+        local p = presets.list[preset]
+        if not p then
+            core.error_text("プリセット定義が不正です。")
+            return
+        end
+        local cfg = {}
+        for k, v in pairs(p.cfg) do cfg[k] = v end
+        -- 主要パラメータを全プリセットへ直接適用する
+        if p.mode == "spectrum" then
+            cfg.freq_lo = freq_lo
+            cfg.freq_hi = freq_hi
+            cfg.bands = bands
+            cfg.width = width
+            cfg.thickness = thickness
+            cfg.height_x = height_x
+            cfg.height = nil            -- 波形高さ倍率から自動算出させる
+            cfg.flip = flip
+            cfg.mirror = mirror
+        elseif p.mode == "radial" then
+            cfg.freq_lo = freq_lo
+            cfg.freq_hi = freq_hi
+            cfg.bands = bands
+            cfg.thickness = thickness
+            cfg.barlen = (cfg.barlen or 160) * height_x / 4
+            cfg.mirror = mirror   -- EDM風の左右対称リング(継ぎ目なし)
+        elseif p.mode == "waveform" then
+            cfg.width = width
+            cfg.disp_pts = math.max(math.min(bands, 1024), 16)
+            cfg.thickness = thickness
+            cfg.height = (cfg.height or 300) * height_x / 4
+        elseif p.mode == "scope" then
+            cfg.size = width
+            cfg.points = math.max(math.min(bands, 735), 64)
+            cfg.thickness = thickness
+        elseif p.mode == "meter" then
+            cfg.height = (cfg.height or 400) * height_x / 4
+        end
+        local s = scale_pct / 100
+        for _, key in ipairs(engine.SCALE_KEYS[p.mode] or {}) do
+            if cfg[key] then cfg[key] = cfg[key] * s end
+        end
+        cfg.gain_db = (cfg.gain_db or 0) + gain_db
+        cfg.react_pct = react_pct
+        cfg.bounce_pct = bounce_pct
+        cfg.fall_pct = fall_pct
+        -- 0=プリセット値のまま / 指定時は上書き
+        if attack_ms > 0 then cfg.attack_ms = attack_ms end
+        if release_ms > 0 then cfg.release_ms = release_ms end
+        -- -1=プリセット値のまま / 0=OFF / 1以上=強さ指定
+        if smoothness >= 0 then cfg.smoothness = smoothness end
+        if trail_pct >= 0 then cfg.trail_pct = trail_pct end
+        cfg.quality = quality
+        cfg.multi_obj = multi_obj
+        -- 色は常にUIの色1/色2を使う(プリセットは形状・効果・反応のみを決める)
+        cfg.col1 = col1
+        cfg.col2 = col2
+        cfg.state_kind = "ras_" .. p.mode
+        engine.run(p.mode, cfg)
+    end)
+    if not ok then core.error_text(tostring(err)) end
+else
+    obj.setfont("メイリオ", 20, 1, 0xffdddd, 0x201010)
+    obj.load("text", "rich-audio-spectrum: 補助Luaファイルが見つかりません。\nrich-audio-spectrumフォルダごと配置してください。")
+end

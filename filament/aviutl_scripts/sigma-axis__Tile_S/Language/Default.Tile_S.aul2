@@ -1,0 +1,44 @@
+; Tooltip definitions
+;===============================================================
+; Target: Tile_S (https://github.com/sigma-axis/aviutl2_script_Tile_S)
+; Target Version: v1.32
+; Language: Default
+
+[Language]
+Information=Default tooltips for Tile_S v1.32 (日本語)
+
+;===============================================================
+
+[Tips.四角タイルσ@Tile_S]
+effect.name=長方形を並べたパターン模様です．4色に塗り分けられます．
+背景サイズ=幅と高さの設定を無視してシーンのサイズに合わせます．
+タイル種類=タイルの種類を少なくして単純化します．
+マス正方形(幅のみで指定)=マス高さを無視してタイルを正方形にします．
+ライン幅=小さくすると内部色が表示されます．
+余白幅=タイル同士の隙間の大きさ (横幅方向)
+余白高さ=タイル同士の隙間の大きさ (高さ方向)
+PI=PI = {\n  width: number?,\n  height: number?,\n  screen_size: boolean|number|nil,\n  limit_tiles: string?,\n  col: table|number|nil,\n  col_inner: table|number|nil,\n  alpha: table|number|nil,\n  block_w: number?,\n  block_h: number?,\n  block_square: boolean|number|nil,\n  line: table|number|nil,\n  radius: table|number|nil,\n  col_back: number?,\n  alpha_back: number?,\n  back_w: table|number|nil,\n  back_h: table|number|nil,\n  rotate: number?,\n  X: number?,\n  Y: number?,\n  antialias: boolean|number|nil,\n}
+
+[Tips.三角タイルσ@Tile_S]
+effect.name=正三角形を並べたパターン模様です．6色に塗り分けられます．
+背景サイズ=幅と高さの設定を無視してシーンのサイズに合わせます．
+タイル種類=タイルの種類を少なくして単純化します．
+ライン幅=小さくすると内部色が表示されます．
+余白幅=タイル同士の隙間の大きさ
+PI=PI = {\n  width: number?,\n  height: number?,\n  screen_size: boolean|number|nil,\n  limit_tiles: string?,\n  col: table|number|nil,\n  col_inner: table|number|nil,\n  alpha: table|number|nil,\n  block: number?,\n  line: table|number|nil,\n  radius: table|number|nil,\n  col_back: number?,\n  alpha_back: number?,\n  back: table|number|nil,\n  rotate: number?,\n  X: number?,\n  Y: number?,\n  antialias: boolean|number|nil,\n}
+
+[Tips.六角タイルσ@Tile_S]
+effect.name=正六角形を並べたパターン模様です．3色に塗り分けられます．
+背景サイズ=幅と高さの設定を無視してシーンのサイズに合わせます．
+タイル種類=タイルの種類を少なくして単純化します．
+ライン幅=小さくすると内部色が表示されます．
+余白幅=タイル同士の隙間の大きさ
+PI=PI = {\n  width: number?,\n  height: number?,\n  screen_size: boolean|number|nil,\n  limit_tiles: string?,\n  col: table|number|nil,\n  col_inner: table|number|nil,\n  alpha: table|number|nil,\n  block: number?,\n  line: table|number|nil,\n  radius: table|number|nil,\n  col_back: number?,\n  alpha_back: number?,\n  back: table|number|nil,\n  rotate: number?,\n  X: number?,\n  Y: number?,\n  antialias: boolean|number|nil,\n}
+
+[Tips.菱形タイルσ@Tile_S]
+effect.name=菱形を並べたパターン模様です．4色に塗り分けられます．
+背景サイズ=幅と高さの設定を無視してシーンのサイズに合わせます．
+タイル種類=タイルの種類を少なくして単純化します．
+ライン幅=小さくすると内部色が表示されます．
+余白幅=タイル同士の隙間の大きさ
+PI=PI = {\n  width: number?,\n  height: number?,\n  screen_size: boolean|number|nil,\n  limit_tiles: string?,\n  col: table|number|nil,\n  col_inner: table|number|nil,\n  alpha: table|number|nil,\n  block_w: number?,\n  block_h: number?,\n  line: table|number|nil,\n  radius: table|number|nil,\n  col_back: number?,\n  alpha_back: number?,\n  back: table|number|nil,\n  rotate: number?,\n  X: number?,\n  Y: number?,\n  antialias: boolean|number|nil,\n}

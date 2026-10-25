@@ -1,0 +1,12 @@
+# 油絵KR
+
+油絵風の効果を適用するスクリプト
+
+以下のフィルタが追加されます。
+- 加工\油絵KR
+
+公開ページ
+https://github.com/karoterra/aviutl2-OilPainting
+
+紹介動画
+https://www.nicovideo.jp/watch/sm39051118

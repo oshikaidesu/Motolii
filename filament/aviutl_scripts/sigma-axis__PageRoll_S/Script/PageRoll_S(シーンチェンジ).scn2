@@ -1,0 +1,161 @@
+--[[
+MIT License
+
+Copyright (c) 2025-2026 sigma-axis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+https://mit-license.org/
+]]
+
+--
+-- v1.22
+--
+
+-- https://github.com/sigma-axis/aviutl2_script_PageRoll_S
+
+--information:PageRoll_S(シーンチェンジ) v1.22 by σ軸
+--label:シーンチェンジ
+--require:2010800
+--track@angle:角度,-3600,3600,-90,0.01,,0.1
+--track@width:太さ,2,150,20,0.01,,0.33334
+--group:カメラ設定,false
+--track@X:視点X,-4000,4000,0,0.01,,0.25
+--track@Y:視点Y,-4000,4000,0,0.01,,0.25
+--trackgroup@X,Y:camera_pos
+--track@fov:視野角,0,120,70,0.01
+--group
+--track@shadow:陰影,0,100,50,0.01
+--group:裏地設定,false
+--select@backface:裏地=0,上側=0,下側=1,指定画像=2,仮想バッファ=3,一時キャッシュ=4
+--file@file_image:裏地画像
+--hide@file_image:backface~=2
+--string@cache_name:キャッシュ名,my_cache
+--hide@cache_name:backface~=4
+--select@back_orient:裏地向き=0,通常=0,左右反転=1,上下反転=2,180°反転=3
+--group
+--checksection@reverse:反転,false,false
+--group:その他,false
+--value@PI:PI,{}
+--[[pixelshader@combine:
+Texture2D img_prev : register(t0);
+Texture2D img_next : register(t1);
+cbuffer constant0 : register(b0) {
+	float2 dir, view_center;
+	float shadow;
+};
+float4 blend(float4 col_base, float4 col_over)
+{
+	return (1 - col_over.a) * col_base + col_over;
+}
+float4 combine(float4 pos : SV_Position) : SV_Target
+{
+	const float l = dot(dir, pos.xy - view_center);
+	float4 col = saturate(0.5 - 2 * l) * img_next[pos.xy];
+	col.rgb *= 1 - shadow * saturate(1 + (2.0 / 3) * l);
+	return blend(col, img_prev[pos.xy]);
+}
+
+]]
+local obj, math, tonumber, type = obj, math, tonumber, type;
+
+-- set anchors.
+obj.setanchor("X,Y", 0, "line");
+
+--#region PI / normalize parameters.
+
+-- take parameters.
+local function as_bool(t, v)
+	if type(t) == "boolean" then return t;
+	elseif type(t) == "number" then return t ~= 0;
+	else return v end
+end
+angle = tonumber(PI.angle) or angle;
+width = tonumber(PI.width) or width;
+X = tonumber(PI.X) or X;
+Y = tonumber(PI.Y) or Y;
+fov = tonumber(PI.fov) or fov;
+shadow = tonumber(PI.shadow) or shadow;
+if PI.backface then
+	local name2num = {
+		[0] = 0, 1, 2; -- legacy compatibility.
+		["上側"] = 0, ["下側"] = 1, ["指定画像"] = 2, ["仮想バッファ"] = 3, ["一時キャッシュ"] = 4
+	};
+	backface = name2num[PI.backface] or backface;
+end
+file_image = type(PI.file_image) == "string" and PI.file_image or file_image;
+cache_name = type(PI.cache_name) == "string" and PI.cache_name or cache_name;
+if type(PI.back_orient) == "string" then back_orient = PI.back_orient;
+else
+	-- legacy compatibility.
+	back_orient = tonumber(PI.back_orient) or back_orient;
+end
+reverse = as_bool(PI.reverse, reverse);
+local phase = tonumber(PI.phase) or obj.getvalue("scenechange");
+
+-- normalize parameters.
+angle = math.pi / 180 * angle;
+width = math.max(width / 100 * (obj.screen_w ^ 2 + obj.screen_h ^ 2) ^ 0.5, 8);
+fov = math.min(math.max(math.pi / 180 * fov, 0), (2 / 3) * math.pi);
+shadow = math.min(math.max(shadow / 100, 0), 1);
+backface = math.min(math.max(math.floor(0.5 + backface), 0), 4);
+if #file_image < 4 then
+	-- no valid file name.
+	if backface == 2 then backface = 0 end
+end
+if type(back_orient) ~= "string" then
+	back_orient = ({
+		[0] = "通常", "左右反転", "上下反転", "180°反転"
+	})[back_orient] or "通常";
+end
+phase = math.min(math.max(phase, 0), 1);
+
+--#endregion PI / normalize parameters.
+
+-- further calculations.
+if reverse then
+	phase = 1 - phase;
+	local cache_orig = "cache:pageroll_s/obj";
+	obj.copybuffer(cache_orig, "object");
+	obj.copybuffer("object", "framebuffer");
+	obj.copybuffer("framebuffer", cache_orig);
+end
+local c, s = math.cos(angle), math.sin(angle);
+local distance = phase * (width / 2 + math.abs(s) * obj.screen_w + math.abs(c) * obj.screen_h);
+
+-- apply rolling deformation.
+obj.effect("PageRoll_S", "PI",
+	("distance=%s,angle=%s,width=%s,X=%s,Y=%s,fov=%s,shadow=%s,unbound=false,backface=%q,cache_name=%q,back_orient=%q,file_image=%q"):format(
+		distance, 180 / math.pi * angle, width, X, Y, 180 / math.pi * fov, 100 * shadow,
+		backface == 0 and "元画像" or
+		backface == 1 and "フレームバッファ" or
+		backface == 2 and "元画像/画像ファイル" or
+		backface == 3 and "仮想バッファ" or
+		"一時キャッシュ", cache_name,
+		back_orient, file_image));
+
+-- shade and combine.
+obj.pixelshader("combine", "framebuffer", { "object", "framebuffer" },
+{
+	2 * s / width, -2 * c / width;
+	(s > 0 and 0 or obj.screen_w) + s * distance,
+	(c > 0 and obj.screen_h or 0) - c * distance;
+	shadow,
+});
+

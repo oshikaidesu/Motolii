@@ -1,0 +1,322 @@
+--information:Conway's Game of Life Script v1.03 (for beta53a) by σ軸
+--label:加工
+--filter
+--require:2005000
+--track@generation:世代数,0,65536,0,1,,0.125
+--select@channel:初代基準=0,不透明ピクセル=0,暗い色=1,明るい色=2
+--track@threshold:しきい値,0,100,50,0.01
+--color@color:色,ffffff
+--group:キャッシュ,false
+--check@cache:キャッシュ有効,false
+--check@clear_cache:キャッシュ削除,false
+--group:その他,false
+--select@wrap:画像ループ=0,なし=0,横方向=1,縦方向=2,両方向=3
+--track@expand:最大追加サイズ,0,2000,0,1
+--value@max_steps:最大ステップ数,1024
+--checksection@ignore_gen0:初代はそのまま表示,false,false
+--value@PI:PI,{}
+--[[pixelshader@from_luma:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+	float2 v;
+};
+float4 from_luma(float4 pos : SV_Position) : SV_Target
+{
+	float4 col = src[uint2(pos.xy)];
+	col *= col.a > 0 ? 1 / col.a : 0;
+
+	static const float3 luma = { 0.299, 0.587, 0.114 };
+	return float4(0, 0, 0, col.a * step(0,
+		dot(v, float2(dot(col.rgb, luma), 1))));
+}
+]]
+--[[pixelshader@from_alpha:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+	float thresh;
+};
+float4 from_alpha(float4 pos : SV_Position) : SV_Target
+{
+	return float4(0, 0, 0, step(thresh, src[uint2(pos.xy)].a));
+}
+]]
+--[[pixelshader@next_gen:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+	float4 col_live;
+	float2 size_f;
+};
+float4 next_gen(float4 pos : SV_Position) : SV_Target
+{
+	static const uint2 size = uint2(size_f);
+
+	const uint2 p0 = uint2(pos.xy);
+	bool living = src[p0].a > 0;
+	int around = 0;
+	for (int dy = -1; dy <= 1; dy++) {
+		for (int dx = -1; dx <= 1; dx++) {
+			uint2 p = p0 + uint2(dx, dy) + size;
+			p = size > 0 ? p % size : p;
+			if (src.Load(int3(p, 0)).a > 0) around++;
+		}
+	}
+	if (living)
+		living = around == 3 || around == 4;
+	else
+		living = around == 3;
+	return living ? col_live : 0;
+}
+]]
+--[[pixelshader@find_bound:
+Texture2D src : register(t0);
+cbuffer constant0 : register(b0) {
+	float2 size_f;
+};
+static const int2 size = int2(size_f);
+static const int stride = (size.x + size.y + 1) >> 1;
+
+float4 find_bound(float4 pos : SV_Position) : SV_Target
+{
+	bool is_zero = true;
+	const int i = int(pos.x) + stride * int(pos.y);
+	[branch] if (i < size.x) {
+		const int x = i;
+		for (int y = 0; y < size.y; y++)
+			is_zero = is_zero && src.Load(int3(x, y, 0)).a <= 0;
+	}
+	else {
+		const int y = i - size.x;
+		for (int x = 0; x < size.x; x++)
+			is_zero = is_zero && src.Load(int3(x, y, 0)).a <= 0;
+	}
+	return float4(0, 0, 0, is_zero ? 0 : 1);
+}
+]]
+local obj, math, tonumber, type = obj, math, tonumber, type;
+local key_name = "*GameOfLife_global";
+
+-- take parameters.
+--[==[
+	PI = {
+		generation:		number?,
+		channel:		string?,
+		threshold:		number?,
+		color:			number?,
+		cache:			boolean|number|nil,
+		clear_cache:	boolean|number|nil,
+		wrap:			string?,
+		expand:			number?,
+		max_steps:		number?,
+		ignore_gen0:	boolean|number|nil,
+	}
+]==]
+local function as_bool(t, v)
+	if type(t) == "boolean" then return t;
+	elseif type(t) == "number" then return t ~= 0;
+	else return v end
+end
+generation = tonumber(PI.generation) or generation;
+if PI.channel then
+	local name2num = {
+		["不透明ピクセル"] = 0, ["暗い色"] = 1, ["明るい色"] = 2
+	};
+	channel = name2num[PI.channel] or channel;
+end
+threshold = tonumber(PI.threshold) or threshold;
+color = tonumber(PI.color) or color;
+cache = as_bool(PI.cache, cache);
+clear_cache = as_bool(PI.clear_cache, clear_cache);
+if PI.wrap then
+	local name2num = {
+		["なし"] = 0, ["横方向"] = 1, ["縦方向"] = 2, ["両方向"] = 3
+	};
+	wrap = name2num[PI.wrap] or wrap;
+end
+expand = tonumber(PI.expand) or  expand;
+max_steps = tonumber(PI.max_steps) or tonumber(max_steps) or 1024;
+ignore_gen0 = as_bool(PI.ignore_gen0, ignore_gen0);
+if clear_cache then _G[key_name] = nil end
+
+-- normalize parameters.
+generation = math.max(math.floor(0.5 + generation), 0);
+channel = math.min(math.max(math.floor(0.5 + channel), 0), 2);
+threshold = math.min(math.max(threshold / 100, 2 ^ -16), 1 - 2 ^ -16);
+color = math.floor(0.5 + color) % 2 ^ 24;
+wrap = math.min(math.max(math.floor(0.5 + wrap), 0), 3);
+expand = math.max(math.floor(0.5 + expand), 0);
+if obj.getinfo("filter") then expand = 0 end
+max_steps = math.max(math.floor(0.5 + max_steps), 1);
+if ignore_gen0 and generation == 0 then return end
+
+-- further calculations.
+local steps = generation;
+local ext_l, ext_r, ext_u, ext_d = 0, 0, 0, 0;
+local expand_x, expand_y = expand, expand;
+if wrap % 2 == 1 then expand_x = 0 end
+if wrap >= 2 then expand_y = 0 end
+local image_max = 2 ^ 14; -- obj.getinfo("image_max")
+expand_x = math.min(expand_x, math.floor((image_max - obj.w) / 2));
+expand_y = math.min(expand_y, math.floor((image_max - obj.h) / 2));
+
+-- restore from cache.
+local tbl_cache, mode = nil, nil;
+if cache then
+	-- prepare the table to store.
+	local tbl_cache_global = _G[key_name];
+	if not tbl_cache_global then tbl_cache_global = {}; _G[key_name] = tbl_cache_global end
+	local key = obj.effect_id..":"..obj.id;
+	if obj.num > 0 then key = key..":"..obj.index..":"..obj.num end
+	tbl_cache = tbl_cache_global[key];
+	if not tbl_cache then tbl_cache = {}; tbl_cache_global[key] = tbl_cache end
+
+	mode = 4 * wrap + channel + threshold; -- works as a hash of the tuple (wrap, channel, threshold).
+	if obj.frame > 0 then
+		-- cache is stored as "double buffers" to fit the behavior of AviUtl2
+		-- that stopping preview playback rewinds the cursor position by one step.
+
+		-- look for an appropriate cache.
+		local t1, t2 = tbl_cache[1], tbl_cache[2];
+		if not (t1 and t1.mode == mode and t1.gen <= generation) then t1 = nil end
+		if not (t2 and t2.mode == mode and t2.gen <= generation) then t2 = nil end
+		if t2 and (not t1 or t1.gen < t2.gen) then
+			-- prioritize the closer generation.
+			t1, t2 = t2, t1;
+			tbl_cache[1], tbl_cache[2] = tbl_cache[2], tbl_cache[1];
+		end
+
+		-- restore from the selected cache.
+		if t1 then
+			obj.putpixeldata("object", unpack(t1.data));
+			ext_l, ext_r, ext_u, ext_d = t1.l, t1.r, t1.u, t1.d;
+			obj.cx, obj.cy = obj.cx + (ext_l - ext_r) / 2, obj.cy + (ext_u - ext_d) / 2;
+			steps = generation - t1.gen;
+
+			-- if no step is going to apply, change the color here.
+			if steps == 0 and t1.color ~= color then
+				obj.effect("単色化", "輝度を保持する", 0, "色", color);
+			end
+		end
+	end
+end
+
+-- limit the number of steps.
+if steps > max_steps then
+	generation, steps = generation - (steps - max_steps), max_steps;
+end
+
+-- binarize into living and dead cells.
+if steps == generation then -- only when the object was not loaded from cache.
+	if channel == 0 then
+		obj.pixelshader("from_alpha", "object", "object", { threshold });
+	else
+		obj.pixelshader("from_luma", "object", "object", {
+			channel == 1 and -1 or 1,
+			(channel == 1 and 1 or 0) - threshold,
+		});
+	end
+	if generation == 0 then
+		-- end up gen 0 here, only applying the color.
+		obj.effect("単色化", "輝度を保持する", 0, "色", color);
+		return;
+	end
+end
+
+-- adjust the size of the canvas.
+if ext_l > expand_x or ext_r > expand_x or ext_u > expand_y or ext_d > expand_y then
+	local l, r, u, d =
+		math.max(ext_l - expand_x, 0), math.max(ext_r - expand_x, 0),
+		math.max(ext_u - expand_y, 0), math.max(ext_d - expand_y, 0);
+	ext_l, ext_r, ext_u, ext_d = ext_l - l, ext_r - r, ext_u - u, ext_d - d;
+	while l > 0 or r > 0 or u > 0 or d > 0 do
+		local l1, r1, u1, d1 =
+			math.min(l, 4000), math.min(r, 4000),
+			math.min(u, 4000), math.min(d, 4000);
+		l, r, u, d = l - l1, r - r1, u - u1, d - d1;
+		obj.effect("クリッピング", "左", l1, "右", r1, "上", u1, "下", d1);
+	end
+end
+if steps > 0 and (expand_x > ext_l or expand_x > ext_r or expand_y > ext_u or expand_y > ext_d) then
+	local l, r, u, d =
+		math.min(steps, math.max(expand_x - ext_l, 0)),
+		math.min(steps, math.max(expand_x - ext_r, 0)),
+		math.min(steps, math.max(expand_y - ext_u, 0)),
+		math.min(steps, math.max(expand_y - ext_d, 0));
+	obj.cx, obj.cy = obj.cx + (l - r) / 2, obj.cy + (u - d) / 2;
+	ext_l, ext_r, ext_u, ext_d = ext_l + l, ext_r + r, ext_u + u, ext_d + d;
+	while l > 0 or r > 0 or u > 0 or d > 0 do
+		local l1, r1, u1, d1 =
+			math.min(l, 4000), math.min(r, 4000),
+			math.min(u, 4000), math.min(d, 4000);
+		l, r, u, d = l - l1, r - r1, u - u1, d - d1;
+		obj.effect("領域拡張", "左", l1, "右", r1, "上", u1, "下", d1);
+	end
+end
+
+-- apply steps.
+if steps > 0 then
+	local params = {
+		bit.band(color, 0xff0000) / 0xff0000,
+		bit.band(color, 0x00ff00) / 0x00ff00,
+		bit.band(color, 0x0000ff) / 0x0000ff, 1;
+		wrap % 2 == 1 and obj.w or 0,
+		wrap >= 2 and obj.h or 0;
+	};
+	obj.copybuffer("tempbuffer", "object"); -- to avoid unnecessary allocations, which significantly impacts the performance.
+	for i = 1, steps do
+		obj.pixelshader("next_gen",
+			(i - steps) % 2 == 0 and "object" or "tempbuffer",
+			(i - steps) % 2 == 1 and "object" or "tempbuffer", params);
+	end
+end
+
+-- crop unnecessary margin.
+if ext_l > 0 or ext_r > 0 or ext_u > 0 or ext_d > 0 then
+	local w, h = obj.w, obj.h;
+
+	obj.clearbuffer("tempbuffer",
+		w + h > image_max and math.ceil((w + h) / 2) or w + h,
+		w + h > image_max and 2 or 1);
+	obj.pixelshader("find_bound", "tempbuffer", "object", { w, h });
+	local data = obj.getpixeldata("tempbuffer");
+	local ffi = require("ffi");
+	local ptr = ffi.cast("uint8_t*", data) + 3;
+
+	-- find left.
+	local l, r, u, d = ext_l, ext_r, ext_u, ext_d;
+	for x = 0, l - 1 do
+		if ptr[4 * x] > 0 then l = x; break end
+	end
+	-- find right.
+	for x = w - 1, w - r, -1 do
+		if ptr[4 * x] > 0 then r = w - 1 - x; break end
+	end
+	-- find top.
+	ptr = ptr + 4 * w
+	for y = 0, u - 1 do
+		if ptr[4 * y] > 0 then u = y; break end
+	end
+	-- find bottom.
+	for y = h - 1, h - d, -1 do
+		if ptr[4 * y] > 0 then d = h - 1 - y; break end
+	end
+
+	-- apply clipping.
+	ext_l, ext_r, ext_u, ext_d = ext_l - l, ext_r - r, ext_u - u, ext_d - d;
+	while l > 0 or r > 0 or u > 0 or d > 0 do
+		local l1, r1, u1, d1 =
+			math.min(l, 4000), math.min(r, 4000),
+			math.min(u, 4000), math.min(d, 4000);
+		l, r, u, d = l - l1, r - r1, u - u1, d - d1;
+		obj.effect("クリッピング", "左", l1, "右", r1, "上", u1, "下", d1);
+	end
+end
+
+-- save the cache.
+if steps > 0 and tbl_cache then
+	tbl_cache[1], tbl_cache[2] = {
+		data = { obj.getpixeldata("object") },
+		l = ext_l, r = ext_r, u = ext_u, d = ext_d,
+		gen = generation,
+		mode = mode, color = color,
+	}, tbl_cache[1];
+end

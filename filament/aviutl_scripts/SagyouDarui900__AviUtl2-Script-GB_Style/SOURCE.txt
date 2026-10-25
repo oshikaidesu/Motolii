@@ -1,0 +1,5 @@
+AviUtl2-Script-GB_Style by SagyouDarui900
+licence: MIT
+from: https://github.com/SagyouDarui900/AviUtl2-Script-GB_Style (branch main, commit b1c819b6145b) (commit b1c819b6145b)
+page: https://github.com/SagyouDarui900/AviUtl2-Script-GB_Style
+Put here unchanged for Motolii (filament/aviutl_scripts).

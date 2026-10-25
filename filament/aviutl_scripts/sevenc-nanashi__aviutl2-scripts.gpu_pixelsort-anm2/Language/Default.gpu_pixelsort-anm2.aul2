@@ -1,0 +1,5 @@
+[Language]
+Information=Default Language for sevenc-nanashi/aviutl2-scripts / https://github.com/sevenc-nanashi/aviutl2-scripts
+[Tips.GPUピクセルソート]
+effect.name=GPUを使用してピクセルソートを行うスクリプト。\n\n┌ ⚠️ Warning\n│ ソート方向のサイズが4096ピクセル以下である必要があります。\n└────────\n
+PI=- `direction`：方向（0=横方向、1=縦方向、2=横方向（反転）、3=縦方向（反転））\n- `threshold_min`：しきい値の最小値\n- `threshold_max`：しきい値の最大値\n- `visualize_sort_range`：ソート範囲を可視化するか\n- `visualize_color`：ソート範囲可視化の色（`0xRRGGBB`）\n- `visualize_fill_opacity`：ソート範囲可視化の塗りの不透明度\n- `visualize_source_opacity`：ソート範囲可視化時の元画像の不透明度\n

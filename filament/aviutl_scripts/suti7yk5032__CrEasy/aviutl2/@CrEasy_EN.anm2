@@ -1,0 +1,282 @@
+@CrEasy
+--track@x_grid:X Grid,0,5000,0,1
+--track@y_grid:Y Grid,0,5000,0,1
+--track@z_grid:Z Grid,0,5000,0,1
+--track@mode:Direction,1,10,1,1
+--track@window_num_track:Number,1,1000,1,1
+--check@auto_layer_switch:Layer Mode,0
+--track@start_layer:Origin layer,1,5000,1,1
+--track@layer_interval:Layer Spacing,0,100,0,1
+--check@pass_switch:Pass-through,0
+--track@rand_seed:Seed(random),0,1000,100,1
+--track@screen_x_deadzone:X Limit,0,5000,0,1
+--track@screen_y_deadzone:Y Limit,0,5000,0,1
+
+
+local item_w, item_h = obj.getpixel()
+local screen_w = obj.screen_w
+local screen_h = obj.screen_h
+
+ox = 0
+oy = 0
+oz = 0
+
+
+if (auto_layer_switch == 1) then
+    if (layer_interval > 0) then
+        window_num = math.ceil((obj.layer - start_layer) / (layer_interval + 1))
+    else
+        window_num = (obj.layer - start_layer)
+    end
+else
+    window_num = window_num_track - 1
+end
+
+
+if (mode == 1) then
+    ox = (screen_w / 2 - item_w / 2) * -1 + x_grid * window_num
+    oy = (screen_h / 2 - item_h / 2) * -1 + y_grid * window_num
+
+elseif (mode == 2) then
+    ox = (screen_w / 2 - item_w / 2) + x_grid * window_num * -1
+    oy = (screen_h / 2 - item_h / 2) * -1 + y_grid * window_num
+
+elseif (mode == 3) then
+    ox = (screen_w / 2 - item_w / 2) * -1 + x_grid * window_num
+    oy = (screen_h / 2 - item_h / 2) + y_grid * window_num * -1
+
+elseif (mode == 4) then
+    ox = (screen_w / 2 - item_w / 2) + x_grid * window_num * -1
+    oy = (screen_h / 2 - item_h / 2) + y_grid * window_num * -1
+
+elseif (mode == 5) then
+    if (item_w % 2 == 1) then
+        ox = 0.5
+    end
+
+    if (item_h % 2 == 1) then
+        oy = 0.5
+    end
+
+elseif (mode == 6) then
+    if (item_w % 2 == 1) then
+        ox = 0.5
+    end
+
+    oy = (screen_h / 2 - item_h / 2) * -1 + y_grid * window_num
+
+elseif (mode == 7) then
+    if (item_w % 2 == 1) then
+        ox = 0.5
+    end
+
+    oy = (screen_h / 2 - item_h / 2) + y_grid * window_num * -1
+
+elseif (mode == 8) then
+    ox = (screen_w / 2 - item_w / 2) * -1 + x_grid * window_num
+
+    if (item_h % 2 == 1) then
+        oy = 0.5
+    end
+
+elseif (mode == 9) then
+    ox = (screen_w / 2 - item_w / 2) + x_grid * window_num * -1
+
+    if (item_h % 2 == 1) then
+        oy = 0.5
+    end
+
+elseif (mode == 10) then
+    ox = math.ceil(obj.rand(x_grid * -1, x_grid, rand_seed, 0))
+    oy = math.ceil(obj.rand(y_grid * -1, y_grid, rand_seed + 1, 0))
+    if (ox % 2 == 0) then
+        ox = ox + x_grid * -1
+    else
+        ox = ox + x_grid
+    end
+    if (oy % 2 == 1) then
+        oy = oy + y_grid * -1
+    else
+        oy = oy + y_grid
+    end
+
+    if (item_w % 2 == 1) then
+        ox = ox + 0.5
+    end
+    if (item_h % 2 == 1) then
+        oy = oy + 0.5 
+    end
+end
+
+
+if (screen_x_deadzone < 0) then
+    hamidashi_x_limit = (screen_w / 2) + (screen_x_deadzone) + (item_w / 2 * -1) + (obj.x * -1)
+    if (ox > hamidashi_x_limit) then
+        ox = hamidashi_x_limit
+    end
+elseif (screen_x_deadzone > 0) then
+    hamidashi_x_limit = (screen_w / 2 * -1) + (screen_x_deadzone) + (item_w / 2) + (obj.x * -1)
+    if (ox < hamidashi_x_limit) then
+        ox = hamidashi_x_limit
+    end
+end
+
+if (screen_y_deadzone < 0) then
+    hamidashi_y_limit = (screen_h / 2) + (screen_y_deadzone) + (item_h / 2 * -1) + (obj.y * -1)
+    if (oy > hamidashi_y_limit) then
+        oy = hamidashi_y_limit
+    end
+elseif (screen_y_deadzone > 0) then
+    hamidashi_y_limit = (screen_h / 2 * -1) + (screen_y_deadzone) + (item_h / 2) + (obj.y * -1)
+    if (oy < hamidashi_y_limit) then
+        oy = hamidashi_y_limit
+    end
+end
+
+
+if (z_grid > 0) then
+    if (mode == 10) then
+        oz = math.ceil(obj.rand(z_grid * -1, z_grid, rand_seed + 2, 0))
+        if (oz % 2 == 0) then
+            oz = oz + z_grid * -1
+        else
+            oz = oz + z_grid
+        end
+    else
+        oz = math.ceil(z_grid * window_num * -1)
+    end
+    
+    obj.oz = obj.oz + oz
+end
+
+
+if (pass_switch == 0) then
+    obj.ox = obj.ox + ox
+    obj.oy = obj.oy + oy
+end
+
+
+
+@Coordinate_NoSubpixel
+--track@x:X,-10000,10000,0,1
+--track@y:Y,-10000,10000,0,1
+--track@z:Z,-10000,10000,0,1
+--check@pass_switch:Pass-through,0
+
+
+if (pass_switch == 0) then
+    obj.ox = obj.ox + math.ceil(x)
+    obj.oy = obj.oy + math.ceil(y)
+    obj.oz = obj.oz + math.ceil(z)
+else
+    ox = ox + math.ceil(x)
+    oy = oy + math.ceil(y)
+    oz = oz + math.ceil(z)
+end
+
+
+
+@BackBlur_for_CrEasy
+-- The original script is AeroGlass風@hksy 
+-- The original creator is 白水. Thanks!
+
+
+--track@blur:Blur,0,100,5,1
+--track@color_power:Coloring,0,100,0,1
+--color@blur_color:Color,0x000000,0xffffff,0x74b8fc
+--file@mask_path:Mask File
+--check@alt_mask_switch:Alt Mask,0
+--track@offset_x:X Offset,-10000,10000,0,1
+--track@offset_y:Y Offset,-10000,10000,0,1
+--track@trim_x:X Trim,0,10000,0,1
+--track@trim_y:Y Trim,0,10000,0,1
+--check@limit_switch:Buffer limit,0
+
+
+local function rot(x,y,r)
+	local rad = r/180*math.pi
+	local sin = math.sin(rad)
+	local cos = math.cos(rad)
+	return	x*cos-y*sin, x*sin+y*cos
+end
+
+local w,h = obj.getpixel()
+local screen_w = obj.screen_w
+local screen_h = obj.screen_h
+
+local x = (obj.x + obj.ox + obj.cx + ox)
+local y = (obj.y + obj.oy + obj.cy + oy)
+local z = (obj.z + obj.oz + obj.cz + oz)
+local rz = obj.rz
+
+local blur_x = x
+local blur_y = y
+local blur_z = z
+
+obj.setoption("drawtarget","tempbuffer",w,h)
+
+if (alt_mask_switch == 1 or limit_switch == 1) then
+    local lx = (screen_w / 2) + (w / 2 * -1) + blur_x + offset_x + (trim_x / 2)
+    local rx = (screen_w / 2) + (w / 2) + blur_x + offset_x + (trim_x / 2)
+    local ty = (screen_h / 2) + (h / 2 * -1) + blur_y + offset_y + (trim_y / 2)
+    local uy = (screen_h / 2) + (h / 2) + blur_y + offset_y + (trim_y / 2)
+
+    local trim_w_limit = 0
+    local trim_h_limit = 0
+
+    local flx = lx
+    local fty = ty
+
+    if (rx > screen_w) then
+        trim_w_limit = rx - screen_w
+        offset_x = (rx - screen_w) * -1 / 2
+    elseif (lx < 0) then
+        flx = 0
+        trim_w_limit = lx * -1
+        offset_x = (lx * -1) / 2
+    end
+
+    if (uy > screen_h) then
+        trim_h_limit = uy - screen_h
+        offset_y = (uy - screen_h) * -1 / 2
+    elseif (ty < 0) then
+        fty = 0
+        trim_h_limit = ty * -1
+        offset_y = (ty * -1) / 2
+    end
+
+    obj.load("framebuffer", flx, fty, (w - trim_x - trim_w_limit), (h - trim_y - trim_h_limit))
+else
+    obj.load("framebuffer")
+end
+
+
+obj.effect("ぼかし","範囲",blur_power,"サイズ固定",1)
+if (color_power > 0) then
+	obj.effect("単色化","強さ",color_power,"color",blur_color,"輝度を保持する",0)
+end
+
+if (alt_mask_switch == 1 or limit_switch == 1) then
+    obj.draw(offset_x, offset_y, 0, 1, 1, 0, 0, 0)
+else
+    local dfx,dfy = rot(-blur_x,-blur_y,-rz)
+    obj.draw(dfx, dfy, 0, 1, 1, 0, 0, -rz)
+end
+
+if (alt_mask_switch == 0) then
+    obj.load("image", mask_path)
+end
+
+obj.setoption("blend","alpha_sub")
+obj.effect("反転","透明度反転",1)
+obj.draw()
+
+obj.setoption("blend",0)
+obj.load("layer", obj.layer, false)
+obj.draw()
+
+obj.load("tempbuffer")
+
+
+obj.ox = obj.ox + ox
+obj.oy = obj.oy + oy

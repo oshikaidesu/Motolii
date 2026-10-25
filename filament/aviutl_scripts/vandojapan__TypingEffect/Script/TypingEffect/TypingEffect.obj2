@@ -1,0 +1,228 @@
+--information:TypingEffect v0.9.15
+--group:文章,true
+--text@source:文章,今日はいい天気です
+--select@language:言語,日本語=0,中文=1
+--check@auto_analyze:自動解析,true
+--track@typing_speed:入力速度,1,60,12,0.1
+--track@conversion_wait:変換待ち,0,2000,350,10,待ちなし
+--track@section_wait:文節間隔,0,2000,120,10,待ちなし
+--group:書式,true
+--font@font_name:フォント,メイリオ
+--track@font_size:文字サイズ,8,500,72,1
+--select@decoration:装飾,標準=0,影付き=1,影付き(薄)=2,縁取り=3,縁取り(細)=4,縁取り(太)=5,縁取り(角)=6
+--color@text_color:文字色,0xffffff
+--color@edge_color:影・縁色,0x000000
+--check@bold:太字,false
+--check@italic:斜体,false
+--track@char_spacing:字間,-100,300,0,1
+--track@line_spacing:行間,-100,300,0,1
+--select@alignment:揃え,左寄[上]=0,中央[上]=1,右寄[上]=2,左寄[中]=3,中央[中]=4,右寄[中]=5,左寄[下]=6,中央[下]=7,右寄[下]=8
+--group:カーソル,false
+--check@show_cursor:カーソルを表示,true
+--check@keep_cursor:完了後も表示,false
+--track@cursor_blink_speed:速さ,0,15,1,0.01
+--track@cursor_blink_ratio:点滅割合,0,100,50,1
+--track@cursor_on_speed:点灯速度,0,100,100,1
+--track@cursor_off_speed:消灯速度,0,100,75,1
+--track@cursor_thickness:太さ,1,100,3,1
+--track@cursor_height_scale:高さ(%),10,300,100,1
+--track@cursor_vertical_offset:上下位置,-500,500,0,1
+--group:未確定文字,false
+--check@show_underline:変換前に下線を表示,true
+--track@underline_thickness:未確定文字::太さ,1,12,2,1
+--track@underline_vertical_offset:未確定文字::上下位置,-500,500,0,1
+--group
+
+local engine = obj.module("TypingEffect")
+
+-- LuaはAviUtl2固有の生計測だけを行い、値の解釈はRustへ委ねる。
+local function measure_layouts(texts, text_alignment)
+    local widths = {}
+    local heights = {}
+    local center_xs = {}
+    local center_ys = {}
+    for i = 1, #texts do
+        local w, h, cx, cy = obj.load(
+            "text.layout",
+            texts[i],
+            0,
+            0,
+            text_alignment
+        )
+        widths[i] = tonumber(w) or 0
+        -- -infはAviUtl2が高さを返さなかった場合の生値sentinel。
+        -- Rust側で従来どおりfont_sizeへfallbackする。
+        heights[i] = tonumber(h) or -math.huge
+        center_xs[i] = tonumber(cx) or 0
+        center_ys[i] = tonumber(cy) or 0
+    end
+    return widths, heights, center_xs, center_ys
+end
+
+-- 1行ごとの最大alphaだけを収集する。閾値判定と字面メトリクス化はRustが行う。
+local function append_metric_rows(rows, text, x_step)
+    if not obj.load("text", text) then
+        return 0
+    end
+    -- metric_textを連続計測しても直前画像のgetpixelキャッシュを再利用しない。
+    obj.pixeloption("get", "object")
+
+    local pixel_w, pixel_h = obj.getpixel()
+    if
+        type(pixel_w) ~= "number"
+        or type(pixel_h) ~= "number"
+        or pixel_w < 1
+        or pixel_h < 1
+    then
+        return 0
+    end
+    pixel_w = math.floor(pixel_w)
+    pixel_h = math.floor(pixel_h)
+
+    for y = 0, pixel_h - 1 do
+        local row_alpha = 0
+        local x = 0
+        while x < pixel_w do
+            local _, alpha = obj.getpixel(x, y, "col")
+            row_alpha = math.max(row_alpha, tonumber(alpha) or 0)
+            x = x + x_step
+        end
+        if (pixel_w - 1) % x_step ~= 0 then
+            local _, alpha = obj.getpixel(pixel_w - 1, y, "col")
+            row_alpha = math.max(row_alpha, tonumber(alpha) or 0)
+        end
+        rows[#rows + 1] = row_alpha
+    end
+    return pixel_h
+end
+
+local function measure_metrics(texts, x_step)
+    local heights = {}
+    local rows = {}
+    for i = 1, #texts do
+        heights[i] = append_metric_rows(rows, texts[i], x_step)
+    end
+    return heights, rows
+end
+
+-- Rustが返した矩形プリミティブをAviUtl2の頂点列へ変換して描画する。
+local function draw_rectangle(x, y, w, h, color, alpha)
+    local r, g, b = RGB(color)
+    r = r / 255 * alpha
+    g = g / 255 * alpha
+    b = b / 255 * alpha
+    local left = x - w / 2
+    local right = x + w / 2
+    local top = y - h / 2
+    local bottom = y + h / 2
+    obj.drawpoly({
+        { left,  top,    0, r, g, b, alpha },
+        { right, top,    0, r, g, b, alpha },
+        { right, bottom, 0, r, g, b, alpha },
+        { left,  bottom, 0, r, g, b, alpha }
+    }, 4)
+end
+
+obj.setfont(
+    font_name,
+    font_size,
+    decoration,
+    text_color,
+    edge_color,
+    bold,
+    italic,
+    char_spacing,
+    line_spacing
+)
+
+local measurement_style = {
+    font_name = font_name,
+    font_size = font_size,
+    decoration = decoration,
+    bold = bold,
+    italic = italic,
+    char_spacing = char_spacing,
+    line_spacing = line_spacing,
+    alignment = alignment
+}
+local render_settings = {
+    show_cursor = show_cursor,
+    keep_cursor = keep_cursor,
+    cursor_blink_speed = cursor_blink_speed,
+    cursor_blink_ratio = cursor_blink_ratio,
+    cursor_on_speed = cursor_on_speed,
+    cursor_off_speed = cursor_off_speed,
+    cursor_thickness = cursor_thickness,
+    cursor_height_scale = cursor_height_scale,
+    cursor_vertical_offset = cursor_vertical_offset,
+    show_underline = show_underline,
+    underline_thickness = underline_thickness,
+    underline_vertical_offset = underline_vertical_offset
+}
+
+local measurement_key,
+    layout_texts,
+    metric_texts,
+    metric_x_step,
+    text_alignment = engine.measurement_requests(
+        source,
+        language,
+        auto_analyze,
+        typing_speed,
+        conversion_wait,
+        section_wait,
+        measurement_style
+    )
+
+local layout_widths,
+    layout_heights,
+    layout_center_xs,
+    layout_center_ys = measure_layouts(layout_texts, text_alignment)
+local metric_heights, metric_rows = measure_metrics(metric_texts, metric_x_step)
+
+local display,
+    geometry,
+    canvas,
+    rectangle_xs,
+    rectangle_ys,
+    rectangle_widths,
+    rectangle_heights,
+    rectangle_alphas = engine.render_plan(
+        measurement_key,
+        source,
+        language,
+        auto_analyze,
+        typing_speed,
+        conversion_wait,
+        section_wait,
+        obj.time,
+        obj.framerate,
+        measurement_style,
+        render_settings,
+        layout_widths,
+        layout_heights,
+        layout_center_xs,
+        layout_center_ys,
+        metric_heights,
+        metric_rows
+    )
+
+obj.setoption("drawtarget", "tempbuffer", canvas.width, canvas.height)
+obj.load("text", display, 0, 0, canvas.alignment)
+obj.draw(geometry.text_x, geometry.text_y, 0)
+
+for i = 1, #rectangle_xs do
+    draw_rectangle(
+        rectangle_xs[i],
+        rectangle_ys[i],
+        rectangle_widths[i],
+        rectangle_heights[i],
+        text_color,
+        rectangle_alphas[i]
+    )
+end
+
+obj.copybuffer("object", "tempbuffer")
+obj.cx = geometry.center_x
+obj.cy = geometry.center_y
+obj.setoption("draw_state", false)

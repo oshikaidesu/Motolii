@@ -1,0 +1,112 @@
+--label:アニメーション効果
+
+-- ========================================================================================================================
+-- 最新版をダウンロード：https://aviutl2-scripts-download.sevenc7c.workers.dev/%E3%83%89%E3%82%AB%E3%83%99%E3%83%B3.anm2
+-- 説明書をブラウザで読む：https://github.com/sevenc-nanashi/aviutl2-scripts/blob/main/scripts/%E3%83%89%E3%82%AB%E3%83%99%E3%83%B3/README.md
+--
+-- [ドカベンの文字エフェクト](https://www.nicovideo.jp/watch/sm30220788)の移植。
+--
+-- [ パラメーター ]
+--   - 再生速度：アニメーションの速度（%）。100で通常速度、0でアニメーションを無効化します。
+--   - 自動で倒れる：有効にすると、起き上がってから倒れる動きを繰り返します。無効にすると、起き上がった状態を維持します。
+--   - 直立時間：倒れ始めるまでの待ち時間（フレーム数）。自動で倒れる場合のみ使用し、0では待たずに倒れ始めます。再生速度に応じて実際の待ち時間も変わります。
+--   - Yオフセット：変形の基準位置を縦方向に調整します。
+--   - コマ落ち：アニメーションを段階的に進め、カクカクした動きにします。
+--
+-- [ PI ]
+--   - `speed`：再生速度（数値、%）
+--   - `auto_fall`：自動で倒れる（`true` / `false`）
+--   - `upright`：直立時間（数値、0以上のフレーム数）
+--   - `y_offset`：Yオフセット（数値）
+--   - `drop_frame`：コマ落ち（`true` / `false`）
+--   - `divisions_override`：横方向の分割数（1以上の整数）。省略時は画像の幅に応じて1～32分割します。値を増やすと変形時の歪みが目立ちにくくなりますが、描画負荷も増えます。
+--
+-- --< 更新履歴 >----------------------------------------------------------------------------------------------------------
+--
+-- [ v1.0（2026/10/25） ]
+--   - 初版リリース
+--
+-- ========================================================================================================================
+
+
+--track@speed:再生速度,0,800,100,1,固定
+--check@auto_fall:自動で倒れる,false
+--track@upright:直立時間,0,800,-1,1
+--hide@upright:auto_fall=0
+
+--track@y_offset:Yオフセット,0,100,0,0.1
+--check@drop_frame:コマ落ち,true
+--value@PI:PI,{}
+if type(PI.speed) == "number" then
+  speed = PI.speed
+end
+if type(PI.auto_fall) == "boolean" then
+  auto_fall = PI.auto_fall
+end
+if type(PI.upright) == "number" then
+  upright = PI.upright
+end
+if type(PI.y_offset) == "number" then
+  y_offset = PI.y_offset
+end
+if type(PI.drop_frame) == "boolean" then
+  drop_frame = PI.drop_frame
+end
+
+local divisions_override = nil
+if type(PI.divisions_override) == "number" then
+  divisions_override = PI.divisions_override
+end
+
+local time
+if speed == 0 then
+  time = math.pi / 2
+else
+  time = obj.time * speed / 100
+end
+if drop_frame then
+  time = time - time % 0.12
+end
+if auto_fall then
+  time = time % (math.pi + upright / obj.framerate)
+else
+  time = math.min(time, math.pi / 2)
+end
+if time > math.pi / 2 then
+  time = math.min(math.pi / 2, math.pi + upright / obj.framerate - time)
+end
+
+local s, c = 1 / 2 - math.sin(time), 1 / 2 - math.cos(time) / 8
+local w, h = obj.getpixel()
+obj.setoption("drawtarget", "tempbuffer", w, h)
+local divisions = divisions_override or math.min(math.max(math.floor(obj.w / 32), 1), 32)
+
+local polygons = {}
+for i = 0, divisions - 1 do
+  local left, right = i / divisions, (i + 1) / divisions
+  table.insert(polygons, {
+    (left * 2 - 1) * obj.w * c,
+    (obj.h - y_offset) * s - y_offset / 2,
+    0,
+    (right * 2 - 1) * obj.w * c,
+    (obj.h - y_offset) * s - y_offset / 2,
+    0,
+    (right - 1 / 2) * obj.w,
+    obj.h / 2 - y_offset * (1 / 2 + s),
+    0,
+    (left - 1 / 2) * obj.w,
+    obj.h / 2 - y_offset * (1 / 2 + s),
+    0,
+    left * obj.w,
+    0,
+    right * obj.w,
+    0,
+    right * obj.w,
+    obj.h,
+    left * obj.w,
+    obj.h,
+  })
+end
+obj.drawpoly(polygons)
+obj.load("tempbuffer")
+

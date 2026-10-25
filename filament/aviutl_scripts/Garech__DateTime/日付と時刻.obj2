@@ -1,0 +1,671 @@
+--information:日付と時刻.obj2 v2.0 by Garech (Original by 連結歯車)
+--require:2005000
+
+--group:開始日時
+--track@a1:開始年,1583,2300,2020,1
+--track@a2:開始月,1,12,1,1
+--track@a3:開始日,1,31,1,1
+--track@a4:開始時,0,23,0,1
+--track@a5:開始分,0,59,0,1
+--track@a6:開始秒,0,59,0,1
+--group
+
+--select@form:表示形式=1,yyyy年mm月dd日(aaa) hh時nn分ss秒=1,gggee年mm月dd日(aaa) hh時nn分ss秒=2,yyyy/mm/dd (aaa) hh:nn:ss=3,mm/dd/yyyy (ddd) hh:nn:ss=4,ddddd，mmmmmm dd，yyyy=5,hh:nn:ss a.m./p.m.=6,午前/午後 hh時nn分ss秒=7,kkkdd日=8,カスタム=9
+--group:└表示形式の設定,false
+--string@form_custom: カスタム形式,
+--select@sk:数字の半角/全角,半角=1,1桁のとき全角=2,全角=3
+--select@zfield:ﾌｨｰﾙﾄﾞ文字,0=1,スペース=2
+--check@cap:日付大文字,false
+--check@ordinal:日にちの序数標識,false
+--check@gannen:元年表記,false
+--group
+
+--track@prog:加算時間,-100000,100000,0,1
+--group:└加算時間の設定,false
+--value@prog_unit:加算時間::単位時間,1
+--select@u1:加算時間::単位,秒=1,分=2,時=3,日=4,週=5,月=6,年=7
+--check@kasan100:加算時間100分割,false
+--group
+
+--track@spd:速度,-1000.00,1000.00,0.00,0.01
+--group:└速度の設定,false
+--value@spd_unit:速度::単位時間,1
+--select@u2:速度::単位,秒/再生秒=1,分/再生秒=2,時/再生秒=3,日/再生秒=4,週/再生秒=5,月/再生秒=6,年/再生秒=7
+--group
+
+--track@tran:推移,0.000,100.000,0.000,0.001
+--group:└推移の設定,false
+--track@b1:終了年,1583,2300,2020,1
+--track@b2:終了月,1,12,1,1
+--track@b3:終了日,1,31,1,1
+--track@b4:終了時,0,23,0,1
+--track@b5:終了分,0,59,0,1
+--track@b6:終了秒,0,59,0,1
+--group
+
+--check@keika_mode:経過時間モード,false
+--group:└経過時間モードの設定,false
+--track@pfield:ﾌｨｰﾙﾄﾞ幅,1,10,2,1
+--select@past:基点日時,最初のフレーム=1,最後のフレーム=2,開始=3,終了=4
+--select@u4:最上位の単位,秒=3,分=2,時間=1,日=4
+
+--group:テキスト
+--checksection@disp:表示,true,false
+--track@size:サイズ,1,256,34,1
+--font@font:フォント,ＭＳ ゴシック
+--color@col1:文字色,0xffffff
+--color@col2:影・縁色,0x000000
+--select@deco:装飾タイプ,標準文字=0,影付き文字=1,影付き文字(薄)=2,縁取り文字=3,縁取り文字(細)=4,縁取り文字(太)=5,縁取り文字(角)=6
+--select@align:文字揃え,左寄せ[上]=0,中央揃え[上]=1,右寄せ[上]=2,左寄せ[中]=3,中央揃え[中]=4,右寄せ[中]=5,左寄せ[下]=6,中央揃え[下]=7,右寄せ[下]=8,縦書 上寄[右]=9,縦書 中央[右]=10,縦書 下寄[右]=11,縦書 上寄[中]=12,縦書 中央[中]=13,縦書 下寄[中]=14,縦書 上寄[左]=15,縦書 中央[左]=16,縦書 下寄[左]=17
+--separator:以下をテキストオブジェクトに貼り付けて表示できます
+--string@cp:ﾃｷｽﾄｺﾋﾟﾍﾟ用,<?mes(global.dtime)?>
+
+--------------------------------------------------------------------
+-- 単位・フォーマット定義
+--------------------------------------------------------------------
+
+local unita = {"秒", "分", "時", "日", "週", "月", "年"}
+local unitb = {"秒/再生秒", "分/再生秒", "時/再生秒", "日/再生秒", "週/再生秒", "月/再生秒", "年/再生秒"}
+local forms = {
+	"yyyy年mm月dd日(aaa) hh時nn分ss秒", "gggee年mm月dd日(aaa) hh時nn分ss秒",
+	"yyyy/mm/dd (aaa) hh:nn:ss", "mm/dd/yyyy (ddd) hh:nn:ss", "ddddd, mmmmmm dd, yyyy", "hh:nn:ss a.m./p.m.",
+	"午前/午後 hh時nn分ss秒", "kkkdd日"
+}
+local sk_map = {"半角", "1桁のとき全角", "全角"}
+local zfield_map = {"0", "スペース"}
+local past_map = {"最初のフレーム", "最後のフレーム", "開始", "終了"}
+local u4_map = {"時間", "分", "秒", "日"}
+
+local form_str
+if form == 9 then
+	form_str = form_custom
+else
+	form_str = forms[form] or forms[1]
+end
+
+local u1_str = unita[u1] or unita[1]
+local u2_str = unitb[u2] or unitb[1]
+local sk_str = sk_map[sk] or sk_map[1]
+local zfield_str = zfield_map[zfield] or zfield_map[1]
+local past_str = past_map[past] or past_map[1]
+local u4_str = u4_map[u4] or u4_map[1]
+
+--------------------------------------------------------------------
+-- 指定により加算時間100分割する関数
+--------------------------------------------------------------------
+local kasan_split_100
+if kasan100 then -- 100分割の指定
+	kasan_split_100 = function(x) return x end -- そのまま返す
+else
+	kasan_split_100 = math.floor
+end
+
+local size_v, prog_v, spd_v, tran_v, disp_v = math.floor(size), kasan_split_100(prog), spd, tran / 100, disp
+local datea = {year = a1, month = a2, day = a3, hour = a4, min = a5, sec = a6, msec = 0}
+local dateb = {year = b1, month = b2, day = b3, hour = b4, min = b5, sec = b6, msec = 0}
+local scale_map = {1, 60, 3600, 86400, 604800, 2629743.84, 31556926.08}
+
+--------------------------------------------------------------------
+-- 符号関数
+--------------------------------------------------------------------
+local function sign(num)
+	local sgn
+	if num < 0 then
+		sgn = -1
+	elseif num == 0 then
+		sgn = 0
+	else
+		sgn = 1
+	end
+	return sgn
+end
+
+--------------------------------------------------------------------
+-- グレゴリオ暦 <-> ユリウス日番号(JDN) 変換
+-- ※範囲外の月日（例：2月31日）はオーバーフローとして自動正規化される
+--------------------------------------------------------------------
+local function date_to_jdn(y, m, d)
+	local a = math.floor((14 - m) / 12)
+	local yy = y + 4800 - a
+	local mm = m + 12 * a - 3
+	local jdn = d + math.floor((153 * mm + 2) / 5) + 365 * yy
+			+ math.floor(yy / 4) - math.floor(yy / 100) + math.floor(yy / 400) - 32045
+	return jdn
+end
+
+local EPOCH_JDN = 2440588 -- date_to_jdn(1970, 1, 1)
+
+local function jdn_to_date(jdn)
+	local a = jdn + 32044
+	local b = math.floor((4 * a + 3) / 146097)
+	local c = a - math.floor(146097 * b / 4)
+	local d = math.floor((4 * c + 3) / 1461)
+	local e = c - math.floor(1461 * d / 4)
+	local m = math.floor((5 * e + 2) / 153)
+
+	local day = e - math.floor((153 * m + 2) / 5) + 1
+	local month = m + 3 - 12 * math.floor(m / 10)
+	local year = 100 * b + d - 4800 + math.floor(m / 10)
+
+	return year, month, day
+end
+
+--------------------------------------------------------------------
+-- カレンダー日時 -> UNIXエポック秒（os.timeの代替）
+-- 範囲外の月日もオーバーフロー正規化されるためnilを返すことはない
+--------------------------------------------------------------------
+local function calc_time(t)
+	local jdn = date_to_jdn(t.year, t.month, t.day)
+	local days = jdn - EPOCH_JDN
+	return days * 86400 + t.hour * 3600 + t.min * 60 + t.sec
+end
+
+--------------------------------------------------------------------
+-- UNIXエポック秒 -> カレンダー日時テーブル（os.date("*t", time)の代替）
+--------------------------------------------------------------------
+local function calc_date(time)
+	local days = math.floor(time / 86400)
+	local secs = time % 86400
+	if secs < 0 then
+		secs = secs + 86400
+		days = days - 1
+	end
+
+	local hour = math.floor(secs / 3600)
+	local min = math.floor((secs % 3600) / 60)
+	local sec = secs % 60
+
+	-- 曜日: 1970/1/1(木)を基準に算出。1=日,2=月,...,7=土（os.dateのwday仕様に合わせる）
+	local wday = (days + 4) % 7 + 1
+
+	local jdn = days + EPOCH_JDN
+	local year, month, day = jdn_to_date(jdn)
+
+	return {
+		year = year, month = month, day = day,
+		hour = hour, min = min, sec = sec,
+		wday = wday
+	}
+end
+
+--------------------------------------------------------------------
+-- 時間を加算する関数
+--------------------------------------------------------------------
+local function time_add(t, v, u, ut, us)
+	if v == 0 then return t end -- 加算する時間が0なら即リターン
+
+	us = us or 1
+	if type(tonumber(us)) ~= "number" then us = 1 end
+
+	for i, w in ipairs(ut) do
+		if u == w then
+			t = t + v * scale_map[i] * us
+			break
+		end
+	end
+	return t
+end
+
+--------------------------------------------------------------------
+-- フォーマット文字列分割（rikky_module.textsplitの代替）
+-- UTF-8文字単位に分割する
+--------------------------------------------------------------------
+local function textsplit(s)
+	local t = {}
+	local i = 1
+	local len = #s
+	while i <= len do
+		local b = string.byte(s, i)
+		local n
+		if b >= 0xF0 then
+			n = 4
+		elseif b >= 0xE0 then
+			n = 3
+		elseif b >= 0xC0 then
+			n = 2
+		else
+			n = 1
+		end
+		table.insert(t, string.sub(s, i, i + n - 1))
+		i = i + n
+	end
+	return t
+end
+
+--------------------------------------------------------------------
+-- 日時計算メイン
+--------------------------------------------------------------------
+local date, time -- 先に宣言しておかないといけない
+local timea, timeb = calc_time(datea), calc_time(dateb)
+
+time = timea * (1 - tran_v) + timeb * tran_v
+time = time_add(time, prog_v, u1_str, unita, prog_unit)
+time = time_add(time, spd_v * obj.time, u2_str, unitb, spd_unit)
+
+local ttran = time
+local tprog = time - ttran
+local tspd = time - ttran - tprog
+
+-- 経過時間について処理
+local tp
+if keika_mode then
+	if past_str == "開始" then
+		tp = timea
+	elseif past_str == "終了" then
+		tp = timeb
+
+	elseif past_str == "最後のフレーム" then
+		local tran_l = obj.getvalue("track.tran", obj.totaltime, -1) / 100
+		tp = timea * (1 - tran_l) + timeb * tran_l
+		tp = time_add(tp, prog_v, u1_str, unita, prog_unit)
+		tp = time_add(tp, spd_v * obj.totaltime, u2_str, unitb, spd_unit)
+
+	else -- "最初のフレーム"
+		local tran_f = obj.getvalue("track.tran", 0, 0) / 100
+		tp = timea * (1 - tran_f) + timeb * tran_f
+		tp = time_add(tp, prog_v, u1_str, unita, prog_unit)
+	end
+
+	local d, t, top, sgn
+	sgn = sign(time - tp)
+
+	d = math.floor(math.abs(time - tp) / 86400) -- 一日は86400秒
+	t = math.abs(time - tp) % 86400
+
+	local dtp = {hour = math.floor(t / 3600), min = math.floor((t % 3600) / 60), sec = t % 60, day = d}
+
+	if u4_str == "時間" then
+		dtp.hour = sgn * (dtp.hour + dtp.day * 24)
+		dtp.day = 0
+		top = "h"
+	elseif u4_str == "分" then
+		dtp.min = sgn * (dtp.min + dtp.hour * 60 + dtp.day * 1440)
+		dtp.day, dtp.hour = 0, 0
+		top = "n"
+	elseif u4_str == "秒" then
+		dtp.sec = sgn * (dtp.sec + dtp.min * 60 + dtp.hour * 3600 + dtp.day * 86400)
+		dtp.day, dtp.hour, dtp.min = 0, 0, 0
+		top = "s"
+	else
+		dtp.day = sgn * dtp.day
+		top = "d"
+	end
+	dtp.year = 0
+	dtp.month = 0
+	dtp.wday = 8 -- 経過時間モード用の特殊値
+
+	time = time - tp
+	ttran = ttran - tp
+	date = dtp
+	date.past_top = top
+else
+	date = calc_date(time)
+end
+
+--------------------------------------------------------------------
+-- 表示形式変換関数 DTime
+--------------------------------------------------------------------
+local function DTime(form)
+local s = ""
+
+-- カスタム表示形式中の "\n" (バックスラッシュ+n) を実際の改行コードに変換
+form = string.gsub(form, "\\n", "\n")
+form = string.gsub(form, "\\t", "\t")
+
+local esc, other, nextf = false, false, false
+local max, fl = 0, 0
+local f, f0, am, pm, ord = "", "", "", "", ""
+local ap
+-- フォーマット用文字と最大文字数のマップ
+local map = {y = 4, g = 3, e = 2, m = 6, k = 3, d = 5, a = 4, h = 2, n = 2, s = 2, ["@"] = 4, ["|"] = 4}
+local ampm = {"午前/午後", "AM/PM", "A.M./P.M.", "am/pm", "a.m./p.m.", "A/P", "A./P.", "a/p", "a./p."}
+local sform = string.format
+local z, caps
+if zfield_str == "スペース" then
+	z = "%"
+else
+	z = "%0"
+end
+
+-- 指定時大文字化関数
+if cap then
+	caps = string.upper
+else
+	caps = function(s) return s end
+end
+
+-- 序数の日の設定
+if ordinal then
+	if date.day == 1 or date.day == 21 or date.day == 31 then
+		ord = caps("st")
+	elseif date.day == 2 or date.day == 22 then
+		ord = caps("nd")
+	elseif date.day == 3 or date.day == 23 then
+		ord = caps("rd")
+	else
+		ord = caps("th")
+	end
+end
+
+-- 午前/午後フォーマットの検索
+for i, v in ipairs(ampm) do
+	if string.find(form, v) then
+		am, pm = string.match(v, "([^%/]+)%/([^%/]+)")
+		form = string.gsub(form, v, "||||")
+		break
+	end
+end
+
+-- 午前/午後表示
+date.hour_display = date.hour -- 24時間表示/12時間表示を切り替えるため
+if not keika_mode and am ~= "" then -- 経過時間モードでない場合、かつ午前午後表記がある場合
+	if am == "午前" then
+		if date.hour <= 11 then
+			ap = am
+		else
+			ap = pm
+			date.hour_display = date.hour - 12
+		end
+	else -- "a.m."等の表記
+		if date.hour <= 11 then
+			ap = am
+		else
+			ap = pm
+			date.hour_display = date.hour - 12
+		end
+
+		if date.hour == 0 or date.hour == 12 then -- a.m./p.m.での深夜0時は12で表示
+			date.hour_display = 12
+		end
+	end
+end
+
+-- 元号変換関数
+local function togengo(date)
+	local g = ""
+	local y, m, d = date.year, date.month, date.day
+	local map = {
+				{g = 5, y = 2019, m =  5, d =  1}, -- 令和
+				{g = 4, y = 1989, m =  1, d =  8}, -- 平成
+				{g = 3, y = 1926, m = 12, d = 25}, -- 昭和
+				{g = 2, y = 1912, m =  7, d = 30}, -- 大正
+				{g = 1, y = 1868, m =  1, d = 25}  -- 明治
+				}
+
+	for i, v in ipairs(map) do
+		if y > v.y or (y == v.y and m > v.m) or (y == v.y and m == v.m and d >= v.d) then
+			g = v.g
+			y = y - v.y + 1
+
+			break
+		end
+	end
+
+	return g, y
+end
+
+-- 数字・－符号・スペース全角化関数
+local function tozenkakusuji(s)
+	local map = {"１", "２", "３", "４", "５", "６", "７", "８", "９"}
+	for i, w in ipairs(map) do
+		s = string.gsub(s, i, w)
+	end
+	s = string.gsub(s, "0", "０")
+	s = string.gsub(s, "-", "－")
+	s = string.gsub(s, " ", "　")
+
+	return s
+end
+
+-- 経過時間モードでの－符号追加処理関数
+local function keika_minus(s, v, hankaku_zenkaku)
+	local field, minus
+	if hankaku_zenkaku == "全角" then
+		if zfield_str == "スペース" then
+			field = "　"
+		else
+			field = "０"
+		end
+		minus = "－"
+	else -- "半角"
+		if zfield_str == "スペース" then
+			field = " "
+		else
+			field = "0"
+		end
+		minus = "-"
+	end
+
+	if keika_mode and v == 0 and string.find(f, date.past_top) and time < 0 then
+		if pfield > 1 then
+			s = string.gsub(s,"^"..field, "")
+		end
+		if hankaku_zenkaku == "全角" and zfield_str == "スペース" then -- ずれを解消
+			s = string.gsub(s, "０$", "")
+			s = s .. "－０"
+		else
+			s = minus .. s
+		end
+	end
+
+	return s
+end
+
+-- 変換関数
+local function conv(p, v, need0) -- need0はyがフォーマットに含まれるとき使用、不要か？
+	local s = ""
+
+	if keika_mode and string.find(f, date.past_top) then -- 経過時間モードで最上位の単位のとき
+		p = string.gsub(p, "%%0?%d?d", pfield.."d") -- フィールド幅を再設定
+		p = z .. p
+	end
+
+	-- 半角/全角、及び経過時間モードでの－符号追加処理
+	if sk_str == "全角" then
+		s = sform(p, v)
+		s = tozenkakusuji(s)
+		s = keika_minus(s, v, "全角")
+	elseif sk_str == "1桁のとき全角" then
+		-- 「1桁のとき全角」で全角になる条件：
+		-- 経過時間モードではなく、1桁のとき（負の数がないのでマイナス条件は不要）
+		-- または、経過時間モードで最上位単位ではなく、1桁のとき（同じくマイナス条件は不要）
+		-- または、経過時間モードで最上位単位であり、(vが正の数1桁またはv=0かつ0以上のtime)、かつ、フィールド幅が2桁以下のとき
+		if type(v) == "number" and ( not keika_mode and v < 10 or keika_mode and not string.find(f, date.past_top) and v < 10 or keika_mode and string.find(f, date.past_top) and (v > 0 and v < 10 or v == 0 and time >= 0) and pfield <= 2 ) then
+			p = string.gsub(p, "%d", "") -- 半角数字用フォーマットを消去
+			s = sform(p, v)
+			s = tozenkakusuji(s)
+			s = keika_minus(s, v, "全角")
+		else
+			s = sform(p, v)
+			s = keika_minus(s, v, "半角")
+		end
+	else -- "半角"
+		s = sform(p, v)
+		s = keika_minus(s, v, "半角")
+	end
+
+	return s
+end
+
+-- 書式関数
+local function formatting(f)
+	local s = ""
+	if string.find(f, "y") then
+		local y = date.year
+		if y <= 0 and not keika_mode then
+			y = - y + 1
+		end
+		local l = string.len(f)
+		local ys = tostring(y)
+		-- 0埋め（または指定文字埋め）でl桁化してから末尾l桁を取得
+		local padchar = (z == "%" ) and " " or "0"
+		while string.len(ys) < l do
+			ys = padchar .. ys
+		end
+		s = conv("%"..l.."s" ,string.sub(ys, -l), 0)
+	elseif f == "g" then
+		local map = {"M", "T", "S", "H", "R"}
+		local g, e = togengo(date)
+		s = sform("%s", map[g] or "N/A")
+	elseif f == "gg" then
+		local map = {"明", "大", "昭", "平", "令"}
+		local g, e = togengo(date)
+		s = sform("%s", map[g] or "N/A")
+	elseif f == "ggg" then
+		local map = {"明治", "大正", "昭和", "平成", "令和"}
+		local g, e = togengo(date)
+		s = sform("%s", map[g] or "N/A")
+	elseif f == "e" then
+		local g, e = togengo(date)
+		if gannen and e == 1 then
+			s = "元"
+		else
+			s = conv("%d", e)
+		end
+	elseif f == "ee" then
+		local g, e = togengo(date)
+		if gannen and e == 1 then
+			s = "元"
+		else
+			s = conv(z.."2d", e)
+		end
+	elseif f == "m" then
+		s = conv("%d", date.month)
+	elseif f == "mm" then
+		s = conv(z.."2d", date.month)
+	elseif f == "mmm" then
+		local map = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "N/A"}
+		s = sform("%3s", caps(map[date.month] or "N/A"))
+	elseif f == "mmmm" then
+		local map = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "N/A"}
+		s = sform("%s", caps(map[date.month] or "N/A"))
+	elseif f == "mmmmm" then
+		local map = {"J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D", "N/A"}
+		s = sform("%s", map[date.month] or "N/A")
+	elseif f == "mmmmmm" then
+		local map = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "N/A"}
+		s = sform("%9s", caps(map[date.month] or "N/A"))
+	elseif f == "k" then
+		local map = {"睦", "如", "弥", "卯", "皐", "水", "文", "葉", "長", "神", "霜", "師", "N/A"}
+		s = sform("%s", map[date.month] or "N/A")
+	elseif f == "kk" then
+		local map = {"睦月", "如月", "弥生", "卯月", "皐月", "水無月", "文月", "葉月", "長月", "神無月", "霜月", "師走", "N/A"}
+		s = sform("%s", map[date.month] or "N/A")
+	elseif f == "kkk" then
+		local map = {"　睦月", "　如月", "　弥生", "　卯月", "　皐月", "水無月", "　文月", "　葉月", "　長月", "神無月", "　霜月", "　師走", "N/A"}
+		s = sform("%s", map[date.month] or "N/A")
+	elseif f == "d" then
+		s = conv("%d"..ord, date.day)
+	elseif f == "dd" then
+		s = conv(z.."2d"..ord, date.day)
+	elseif f == "ddd" then
+		local map = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "N/A"}
+		s = sform("%s", caps(map[date.wday] or "N/A"))
+	elseif f == "dddd" then
+		local map = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "N/A"}
+		s = sform("%s", caps(map[date.wday] or "N/A"))
+	elseif f == "ddddd" then
+		local map = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "N/A"}
+		s = sform("%9s", caps(map[date.wday] or "N/A"))
+	elseif f == "aaa" then
+		local map = {"日", "月", "火", "水", "木", "金", "土"}
+		s = sform("%s", map[date.wday] or "N/A")
+	elseif f == "aaaa" then
+		local map = {"日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"}
+		s = sform("%s", map[date.wday] or "N/A")
+	elseif f == "h" then
+		s = conv("%d", date.hour_display)
+	elseif f == "hh" then
+		s = conv(z.."2d", date.hour_display)
+	elseif f == "n" then
+		s = conv("%d", date.min)
+	elseif f == "nn" then
+		s = conv(z.."2d", date.min)
+	elseif f == "s" then
+		s = conv("%d", date.sec)
+	elseif f == "ss" then
+		s = conv(z.."2d", date.sec)
+	elseif f == "||||" then
+		s = ap or "N/A"
+	else
+		s = f
+	end
+
+	return s
+end
+
+local c = textsplit(form)
+
+-- フォーマット制御
+table.insert(c, "0") -- 末尾用文字挿入
+for i, v in ipairs(c) do
+	other, nextf = false, false
+	if esc then
+		s = s..v
+		esc = false
+	elseif fl == 0 and v == "$" then
+		esc = true
+	else
+
+		if fl == 0 then -- フォーマットが保持されていないとき
+			for k, w in pairs(map) do
+				if v == k then
+					f = k
+					f0 = f
+					fl = 1
+					max = w
+					break
+				end
+			end
+		else
+			if v == f0 then
+				f = f..f0
+				fl = fl + 1
+			else  -- 別の文字があったときのフォーマット終了フラグ
+				other = true
+			end
+		end
+
+		if fl == 0 then -- フォーマットが見つからなかったとき
+			s = s..v
+		elseif other or max <= fl then -- フォーマットが確立したとき
+			s = s..formatting(f)
+			if other then
+				if v == "$" then
+					esc = true
+				else
+					for k, w in pairs(map) do
+						if v == k then -- 次が別のフォーマットだったとき
+							f = k
+							f0 = f
+							fl = 1
+							max = w
+							nextf = true -- フラグ
+							break
+						end
+					end
+					if not nextf then s = s..v end
+				end
+			end
+			if not nextf then
+				max, fl = 0, 0
+			end
+		end
+	end
+end
+s = string.sub(s, 1, -2) -- 末尾用文字削除
+
+return s
+end -- function DTime(form)
+
+--------------------------------------------------------------------
+-- 描画（このオブジェクトで描画）
+--------------------------------------------------------------------
+global.dtime = DTime(form_str)
+
+if disp_v then
+	obj.setfont(font, size_v, deco, col1, col2)
+	obj.load("text", global.dtime, 0.0, 0.0, align)
+else
+	obj.load("text", "")
+end

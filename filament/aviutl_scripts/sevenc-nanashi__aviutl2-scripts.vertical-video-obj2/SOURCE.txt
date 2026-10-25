@@ -1,0 +1,6 @@
+縦動画ガイド.obj2 by Nanashi.
+licence: MIT
+from: https://aviutl2-scripts-download.sevenc7c.workers.dev/%E7%B8%A6%E5%8B%95%E7%94%BB%E3%82%AC%E3%82%A4%E3%83%89.obj2?type=au2pkg (commit 5b705635a3d1)
+page: https://github.com/sevenc-nanashi/aviutl2-scripts/blob/main/scripts/%E7%B8%A6%E5%8B%95%E7%94%BB%E3%82%AC%E3%82%A4%E3%83%89/README.md
+licence/README from: https://github.com/sevenc-nanashi/aviutl2-scripts at 5b705635a3d14263c9d3f0cb67572e7754c1f247
+Put here unchanged for Motolii (filament/aviutl_scripts).

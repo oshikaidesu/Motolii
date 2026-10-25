@@ -1,0 +1,36 @@
+--label:クリッピング
+--track@duty:割合,0,100,50,0.01
+--track@width:幅,1,1000,30,0.01
+--track@angle:角度,-1800,1800,60,0.01
+--track@phase:位相,-360,360,0,0.01
+
+--[[pixelshader@main:
+cbuffer params : register(b0) {
+    float w;
+    float h;
+    float duty;
+    float size;
+    float angle;
+    float phase;
+};
+
+float4 main(float4 pos : SV_Position) : SV_Target {
+    float PI = radians(180);
+
+    float rad = radians(angle);
+    float a = (pos.x - w / 2) * sin(rad) + (pos.y - h / 2) * cos(rad);
+    a %= size * 2;
+    a /= size * 2;
+    float ph = asin(cos((a + phase) * 2 * PI)) / PI;
+    if (ph + 0.5 > duty)
+    {
+        return float4(1.0, 1.0, 1.0, 1.0);
+    }
+    else
+    {
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
+}
+]]
+
+obj.pixelshader("main", "object", nil, {obj.w, obj.h, duty/100, width, -angle, phase/360}, "mask")

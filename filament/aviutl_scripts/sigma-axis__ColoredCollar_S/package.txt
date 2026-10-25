@@ -1,0 +1,13 @@
+# ColoredCollar_S AviUtl ExEdit2 色付き縁取りスクリプト
+
+オブジェクトの境界部分の色を引き延ばして縁取りするスクリプトです．縁取りの透明度を調節したり，距離に応じて 2 色に塗り分ける色グラデーションもできます．
+
+公開ページ:
+https://github.com/sigma-axis/aviutl2_script_ColoredCollar_S
+
+紹介動画:
+https://www.nicovideo.jp/watch/sm45257124
+
+お願い:
+ニコニコ動画での親作品登録をしていただけると励みになります．
+作品 ID: sm45257124

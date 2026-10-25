@@ -1,0 +1,4122 @@
+@一時的に保存@一時保存読込
+--label:tim\オブジェクト制御\@一時保存読込
+obj.copybuffer("tempbuffer", "framebuffer")
+obj.copybuffer("cache:__ichijitekinihozon__", "tempbuffer")
+
+@一時的に保存(4面)@一時保存読込
+--label:tim\オブジェクト制御\@一時保存読込
+--track@track_save_target:保存先,1,4,1,1
+obj.load("framebuffer")
+local panel_index = track_save_target
+if T_TEMP_IMAGE_FOUR_PANEL_INITIALIZED == nil or T_TEMP_IMAGE_FOUR_PANEL_INITIALIZED == 0 then
+    obj.setoption("drawtarget", "tempbuffer", 2 * obj.screen_w, 2 * obj.screen_h)
+    T_TEMP_IMAGE_FOUR_PANEL_INITIALIZED = 1
+else
+    obj.setoption("drawtarget", "tempbuffer")
+end
+obj.draw((((panel_index - 1) % 2) - 0.5) * obj.screen_w, (math.floor((panel_index - 1) / 2) - 0.5) * obj.screen_h, 0)
+obj.copybuffer("cache:__ichijitekinihozon__", "tempbuffer")
+obj.alpha = 0
+
+@保存画像の読込@一時保存読込
+--label:tim\オブジェクト制御\@一時保存読込
+obj.copybuffer("object", "cache:__ichijitekinihozon__")
+
+@保存画像の読込(4面)@一時保存読込
+--label:tim\オブジェクト制御\@一時保存読込
+--track@track_load_target:読込先,1,4,1,1
+--check@check_adjust_center:中心調整,true
+local panel_index = track_load_target
+obj.copybuffer("object", "cache:__ichijitekinihozon__")
+if not check_adjust_center then
+    if panel_index == 1 then
+        obj.effect("クリッピング", "右", obj.screen_w, "下", obj.screen_h)
+        obj.ox = obj.screen_w / 2
+        obj.oy = obj.screen_h / 2
+    elseif panel_index == 2 then
+        obj.effect("クリッピング", "左", obj.screen_w, "下", obj.screen_h)
+        obj.ox = -obj.screen_w / 2
+        obj.oy = obj.screen_h / 2
+    elseif panel_index == 3 then
+        obj.effect("クリッピング", "右", obj.screen_w, "上", obj.screen_h)
+        obj.ox = obj.screen_w / 2
+        obj.oy = -obj.screen_h / 2
+    else
+        obj.effect("クリッピング", "左", obj.screen_w, "上", obj.screen_h)
+        obj.ox = -obj.screen_w / 2
+        obj.oy = -obj.screen_h / 2
+    end
+else
+    if panel_index == 1 then
+        obj.effect("クリッピング", "右", obj.screen_w, "下", obj.screen_h, "中心の位置を変更", 1)
+    elseif panel_index == 2 then
+        obj.effect("クリッピング", "左", obj.screen_w, "下", obj.screen_h, "中心の位置を変更", 1)
+    elseif panel_index == 3 then
+        obj.effect("クリッピング", "右", obj.screen_w, "上", obj.screen_h, "中心の位置を変更", 1)
+    else
+        obj.effect("クリッピング", "左", obj.screen_w, "上", obj.screen_h, "中心の位置を変更", 1)
+    end
+end
+
+T_TEMP_IMAGE_FOUR_PANEL_INITIALIZED = 0
+
+@ティーカップ@けいおんグッズ
+--label:tim\カスタムオブジェクト\@けいおんグッズ
+--track@track_cup_size:サイズ,0,5000,200,0.1
+--track@track_tea_level_percent:水面高さ,0,100,80,0.1
+--track@track_opacity:透明度,0,100,20,0.1
+--track@track_cup_saucer_gap:カップソーサー間,-1000,1000,13,0.1
+--value@segment_count:分割数,40
+--color@color_cup:カップ(色),0xffffff
+--color@color_saucer:ソーサー(色),0x02d2d2
+--color@color_tea:ティー(色),0xa14250
+-- ---$value:ティー境界補正
+--track@tea_boundary_adjust:ティー境界補正,-1000,1000,5,0.1
+-- ---$value:取っ手幅
+--track@handle_width_ratio:取っ手幅,0,1000,0.03,0.01
+-- ---$value:取っ手位置補正
+--track@handle_position_adjust:取っ手位置補正,-1000,1000,1,0.1
+-- ---$value:ｱﾝﾁｴｲﾘｱｽ[0/1/2]
+-- local ANT = 0
+
+local function calculate_cup_profile(x)
+    if x <= 0.9 then
+        return 1.191156183 * x ^ 4
+    else
+        local quadratic_coefficient = -12.88588146
+        local linear_coefficient = 26.66799905
+        return quadratic_coefficient * x * x + linear_coefficient * x + 1 - quadratic_coefficient - linear_coefficient
+    end
+end
+
+local function polar_to_cartesian(radius, angle)
+    return radius * math.cos(angle), radius * math.sin(angle)
+end
+
+local vertices_buffer = {}
+local function push_poly(x0, y0, z0, x1, y1, z1, x2, y2, z2, x3, y3, z3)
+    table.insert(
+        vertices_buffer,
+        { x0, y0, z0, x1, y1, z1, x2, y2, z2, x3, y3, z3, 0, 0, obj.w, 0, obj.w, obj.h, obj.h, 0 }
+    )
+end
+local function flush_polys()
+    obj.drawpoly(vertices_buffer)
+    vertices_buffer = {}
+end
+
+local cup_radius = track_cup_size / 2
+local cup_saucer_gap_ratio = track_cup_saucer_gap / 1000
+-- ANT = math.floor(ANT)
+local pi = math.pi
+
+--ティーカップ本体作成
+obj.load("figure", "四角形", color_cup, cup_radius)
+
+-- if ANT < 2 then
+--     obj.setoption("antialias", ANT)
+-- end
+
+local y1 = -cup_radius * calculate_cup_profile(0) - cup_radius * cup_saucer_gap_ratio
+local previous_radius = 0
+for i = 0, segment_count - 1 do
+    -- if ANT >= 2 then
+    --     if i == segment_count - 1 then
+    --         obj.setoption("antialias", 1)
+    --     else
+    --         obj.setoption("antialias", 0)
+    --     end
+    -- end
+    local profile_ratio = (i + 1) / segment_count
+    local y0 = -cup_radius * calculate_cup_profile(profile_ratio) - cup_radius * cup_saucer_gap_ratio
+    local current_radius = cup_radius * profile_ratio
+    local x0, z0 = polar_to_cartesian(current_radius, 0)
+    local x3, z3 = polar_to_cartesian(previous_radius, 0)
+    for j = 0, segment_count - 1 do
+        -- local start_angle = j * 2 * pi / segment_count
+        local end_angle = (j + 1) * 2 * pi / segment_count
+        local x1, z1 = polar_to_cartesian(current_radius, end_angle)
+        local x2, z2 = polar_to_cartesian(previous_radius, end_angle)
+        push_poly(x0, y0, z0, x1, y0, z1, x2, y1, z2, x3, y1, z3)
+        x0, z0 = x1, z1
+        x3, z3 = x2, z2
+    end
+    y1 = y0
+    previous_radius = current_radius
+end
+flush_polys()
+
+--皿作成
+obj.load("figure", "四角形", color_saucer, cup_radius)
+-- if ANT < 2 then
+--     obj.setoption("antialias", ANT)
+-- end
+local v1 = 0
+y1 = 0
+previous_radius = 0
+for i = 0, segment_count - 1 do
+    -- if ANT >= 2 then
+    --     if i == segment_count - 1 then
+    --         obj.setoption("antialias", 1)
+    --     else
+    --         obj.setoption("antialias", 0)
+    --     end
+    -- end
+    local profile_ratio = (i + 1) / segment_count
+    local y0 = -0.26 * cup_radius * profile_ratio ^ 2.4
+    local current_radius = 1.5 * cup_radius * profile_ratio
+    for j = 0, segment_count - 1 do
+        local start_angle = j * 2 * pi / segment_count
+        local end_angle = (j + 1) * 2 * pi / segment_count
+        local x0, z0 = polar_to_cartesian(current_radius, start_angle)
+        local x1, z1 = polar_to_cartesian(current_radius, end_angle)
+        local x2, z2 = polar_to_cartesian(previous_radius, end_angle)
+        local x3, z3 = polar_to_cartesian(previous_radius, start_angle)
+        push_poly(x0, y0, z0, x1, y0, z1, x2, y1, z2, x3, y1, z3)
+    end
+    -- local v1 = profile_ratio
+    y1 = y0
+    previous_radius = current_radius
+end
+flush_polys()
+
+--取っ手作成
+obj.load("figure", "四角形", color_cup, cup_radius * 0.6)
+-- if ANT > 1 then
+--     ANT = 1
+-- end
+--obj.setoption("antialias", ANT)
+local handle_offset_y = cup_radius * calculate_cup_profile(0.85) + cup_radius * cup_saucer_gap_ratio
+local handle_offset_x = (0.85 + 0.315) * cup_radius + handle_position_adjust
+local handle_half_depth = cup_radius * handle_width_ratio
+for j = 0, segment_count - 1 do
+    local start_angle = j * 2 * pi / segment_count
+    local end_angle = (j + 1) * 2 * pi / segment_count
+    local start_height_scale = 1 + 0.5 * ((1 + math.cos(start_angle)) / 2) ^ 12
+    local end_height_scale = 1 + 0.5 * ((1 + math.cos(end_angle)) / 2) ^ 12
+    local x0, y0 = polar_to_cartesian(cup_radius * 0.30 * start_height_scale, start_angle + 0.7 * pi)
+    local x1, y1 = polar_to_cartesian(cup_radius * 0.30 * end_height_scale, end_angle + 0.7 * pi)
+    local x2, y2 = polar_to_cartesian(cup_radius * 0.24 * end_height_scale, end_angle + 0.7 * pi)
+    local x3, y3 = polar_to_cartesian(cup_radius * 0.24 * start_height_scale, start_angle + 0.7 * pi)
+    push_poly(
+        x0 + handle_offset_x,
+        y0 - handle_offset_y,
+        handle_half_depth,
+        x1 + handle_offset_x,
+        y1 - handle_offset_y,
+        handle_half_depth,
+        x2 + handle_offset_x,
+        y2 - handle_offset_y,
+        handle_half_depth,
+        x3 + handle_offset_x,
+        y3 - handle_offset_y,
+        handle_half_depth
+    )
+    push_poly(
+        x0 + handle_offset_x,
+        y0 - handle_offset_y,
+        -handle_half_depth,
+        x1 + handle_offset_x,
+        y1 - handle_offset_y,
+        -handle_half_depth,
+        x2 + handle_offset_x,
+        y2 - handle_offset_y,
+        -handle_half_depth,
+        x3 + handle_offset_x,
+        y3 - handle_offset_y,
+        -handle_half_depth
+    )
+    push_poly(
+        x0 + handle_offset_x,
+        y0 - handle_offset_y,
+        handle_half_depth,
+        x1 + handle_offset_x,
+        y1 - handle_offset_y,
+        handle_half_depth,
+        x1 + handle_offset_x,
+        y1 - handle_offset_y,
+        -handle_half_depth,
+        x0 + handle_offset_x,
+        y0 - handle_offset_y,
+        -handle_half_depth
+    )
+    push_poly(
+        x2 + handle_offset_x,
+        y2 - handle_offset_y,
+        handle_half_depth,
+        x3 + handle_offset_x,
+        y3 - handle_offset_y,
+        handle_half_depth,
+        x3 + handle_offset_x,
+        y3 - handle_offset_y,
+        -handle_half_depth,
+        x2 + handle_offset_x,
+        y2 - handle_offset_y,
+        -handle_half_depth
+    )
+end
+
+flush_polys()
+
+--紅茶作成
+previous_radius = track_tea_level_percent / 100
+y1 = -cup_radius * calculate_cup_profile(previous_radius) - cup_radius * cup_saucer_gap_ratio
+previous_radius = cup_radius * previous_radius - tea_boundary_adjust
+obj.load("figure", "円", color_tea, 2 * previous_radius)
+-- if ANT > 1 then
+--     ANT = 1
+-- end
+-- obj.setoption("antialias", ANT)
+obj.alpha = 1 - track_opacity / 100
+obj.drawpoly(
+    -previous_radius,
+    y1,
+    -previous_radius,
+    previous_radius,
+    y1,
+    -previous_radius,
+    previous_radius,
+    y1,
+    previous_radius,
+    -previous_radius,
+    y1,
+    previous_radius
+)
+
+@律部屋テーブル@けいおんグッズ
+--label:tim\カスタムオブジェクト\@けいおんグッズ
+--track@track_size:サイズ,0,5000,250,0.1
+--track@track_top_thickness_percent:厚さ補正,0,5000,100,0.1
+--track@track_leg_length_percent:脚長補正,0,5000,100,0.1
+--color@color_tabletop:テーブル色,0xc0c0a0
+--color@color_legs:脚の色,0xffffff
+local vertices_buffer = {}
+local function push_poly(x0, y0, z0, x1, y1, z1, x2, y2, z2, x3, y3, z3)
+    table.insert(
+        vertices_buffer,
+        { x0, y0, z0, x1, y1, z1, x2, y2, z2, x3, y3, z3, 0, 0, obj.w, 0, obj.w, obj.h, obj.h, 0 }
+    )
+end
+local function flush_polys()
+    obj.drawpoly(vertices_buffer)
+    vertices_buffer = {}
+end
+
+local function draw_x_face(x, y1, y2, z1, z2)
+    push_poly(x, y1, z1, x, y1, z2, x, y2, z2, x, y2, z1)
+end
+
+local function draw_y_face(x1, x2, y, z1, z2)
+    push_poly(x1, y, z1, x2, y, z1, x2, y, z2, x1, y, z2)
+end
+
+local function draw_z_face(x1, y1, x2, y2, z)
+    push_poly(x1, y1, z, x2, y1, z, x2, y2, z, x1, y2, z)
+end
+
+local function draw_box(x1, y1, z1, x2, y2, z2) -- 数値は対角線指定(1<2)で表裏が正確に
+    draw_z_face(x1, y1, x2, y2, z1)
+    draw_z_face(x1, y2, x2, y1, z2)
+    draw_y_face(x1, x2, y1, z2, z1)
+    draw_y_face(x1, x2, y2, z1, z2)
+    draw_x_face(x1, y1, y2, z2, z1)
+    draw_x_face(x2, y1, y2, z1, z2)
+end
+
+local function draw_leg(x1, y1, z1, x2, y2, z2, size)
+    local x1_1 = x1 - size
+    local x1_2 = x1 + size
+    local z1_1 = z1 - size
+    local z1_2 = z1 + size
+    local x2_1 = x2 - size
+    local x2_2 = x2 + size
+    local z2_1 = z2 - size
+    local z2_2 = z2 + size
+    draw_y_face(x1_1, x1_2, y1, z1_2, z1_1)
+    draw_y_face(x2_1, x2_2, y2, z2_1, z2_2)
+    push_poly(x1_1, y1, z1_1, x1_2, y1, z1_1, x2_2, y2, z2_1, x2_1, y2, z2_1)
+    push_poly(x1_2, y1, z1_2, x1_1, y1, z1_2, x2_1, y2, z2_2, x2_2, y2, z2_2)
+    push_poly(x1_1, y1, z1_2, x1_1, y1, z1_1, x2_1, y2, z2_1, x2_1, y2, z2_2)
+    push_poly(x1_2, y1, z1_1, x1_2, y1, z1_2, x2_2, y2, z2_2, x2_2, y2, z2_1)
+end
+
+local zoom = obj.getvalue("zoom") * 0.01
+local table_half_size = track_size * zoom
+local scale_ratio = table_half_size / 250
+local top_thickness_ratio = track_top_thickness_percent * 0.01
+local leg_length_ratio = track_leg_length_percent * 0.01
+
+local y1 = -150 * scale_ratio * leg_length_ratio
+local vertical_offset = 150 * scale_ratio * (1 - leg_length_ratio)
+local y2 = 0
+
+obj.load("figure", "四角形", color_tabletop, table_half_size)
+draw_box(
+    -table_half_size,
+    (-150 - 10 * top_thickness_ratio) * scale_ratio + vertical_offset,
+    -table_half_size,
+    table_half_size,
+    -150 * scale_ratio + vertical_offset,
+    table_half_size
+)
+flush_polys()
+
+obj.load("figure", "四角形", color_legs, 150 * scale_ratio * leg_length_ratio)
+local leg_half_width = 8 * scale_ratio / 2
+local leg_inner_position = (225 - 12) * scale_ratio
+local leg_outer_position = (225 + 12) * scale_ratio
+local foot_position = 275 * scale_ratio
+
+draw_leg(-leg_outer_position, y1, -leg_inner_position, -foot_position, y2, -foot_position, leg_half_width)
+draw_leg(-leg_inner_position, y1, -leg_outer_position, -foot_position, y2, -foot_position, leg_half_width)
+draw_leg(leg_outer_position, y1, -leg_outer_position, foot_position, y2, -foot_position, leg_half_width)
+draw_leg(leg_inner_position, y1, -leg_inner_position, foot_position, y2, -foot_position, leg_half_width)
+draw_leg(leg_outer_position, y1, leg_inner_position, foot_position, y2, foot_position, leg_half_width)
+draw_leg(leg_inner_position, y1, leg_outer_position, foot_position, y2, foot_position, leg_half_width)
+draw_leg(-leg_outer_position, y1, leg_outer_position, -foot_position, y2, foot_position, leg_half_width)
+draw_leg(-leg_inner_position, y1, leg_inner_position, -foot_position, y2, foot_position, leg_half_width)
+
+flush_polys()
+
+@集中線T1@集中線T
+--label:tim\カスタムオブジェクト\@集中線T
+--track@track_spawn_probability:発生確率,0,100,40,0.1
+--track@track_line_width:線幅,1,400,15,0.1
+--track@track_center:中心,0,100,15,0.1
+--track@track_locality:局所性,0,100,0,0.1
+--color@color:色,0xffffff
+--track@track_center_x:中心位置X,-5000,5000,0,0.1
+--track@track_center_y:中心位置Y,-5000,5000,0,0.1
+--trackgroup@track_center_x,track_center_y:中心位置
+
+--track@track_center_randomness:中心ランダム度,0,1000,30,0.1
+--track@track_local_jump_probability:局所ジャンプ率[%],0,100,15,0.1
+--track@track_change_speed:変化速度,-100,100,0,0.1
+--track@track_blur:ぼかし,0,1000,0,0.1
+--check@check_auto_max_line_count:最大本数自動計算,false
+--track@track_max_line_count:最大本数,1,5000,500,1
+--track@track_seed:シード,0,1000000,0,1
+--track@track_width:幅,0,10000,0,1
+--track@track_height:高さ,0,10000,0,1
+--track@track_follow_center_layer:中心追尾レイヤー,0,1000,0,1,なし
+--hide@track_max_line_count:check_auto_max_line_count==1
+
+local find_ellipse_intersection = function(x0, y0, x1, y1, ellipse_radius_x, ellipse_radius_y)
+    local quadratic_a = ((x1 - x0) / ellipse_radius_x) ^ 2 + ((y1 - y0) / ellipse_radius_y) ^ 2
+    local quadratic_b = x0 * (x1 - x0) / (ellipse_radius_x * ellipse_radius_x)
+        + y0 * (y1 - y0) / (ellipse_radius_y * ellipse_radius_y)
+    local quadratic_c = x0 * x0 / (ellipse_radius_x * ellipse_radius_x)
+        + y0 * y0 / (ellipse_radius_y * ellipse_radius_y)
+        - 1
+    local distance_ratio = (-quadratic_b + math.sqrt(quadratic_b * quadratic_b - quadratic_a * quadratic_c))
+        / quadratic_a
+    local intersection_x = x0 + distance_ratio * (x1 - x0)
+    local intersection_y = y0 + distance_ratio * (y1 - y0)
+    return intersection_x, intersection_y
+end
+
+local center_x
+local center_y
+if track_follow_center_layer == nil or track_follow_center_layer == 0 then
+    obj.setanchor("track_center_x,track_center_y", 0)
+    center_x = track_center_x
+    center_y = track_center_y
+else
+    center_x = obj.getvalue("layer" .. track_follow_center_layer .. ".x")
+    center_y = obj.getvalue("layer" .. track_follow_center_layer .. ".y")
+end
+
+local vertices_buffer = {}
+local function push_poly(x0, y0, z0, x1, y1, z1, x2, y2, z2, x3, y3, z3)
+    table.insert(
+        vertices_buffer,
+        { x0, y0, z0, x1, y1, z1, x2, y2, z2, x3, y3, z3, 0, 0, obj.w, 0, obj.w, obj.h, obj.h, 0 }
+    )
+end
+local function flush_polys()
+    obj.drawpoly(vertices_buffer)
+    vertices_buffer = {}
+end
+
+local spawn_probability = track_spawn_probability
+local line_width = track_line_width
+local inner_radius_ratio = track_center * 0.01
+local locality_weight = 1 - math.log(track_locality + 1) / math.log(101)
+local screen_w = track_width > 0 and track_width or obj.screen_w
+local screen_h = track_height > 0 and track_height or obj.screen_h
+local max_line_count = track_max_line_count
+local size = math.sqrt(screen_w * screen_w + screen_h * screen_h)
+if check_auto_max_line_count then
+    max_line_count = math.floor(200 * math.pi / line_width)
+end
+local center_randomness = track_center_randomness * 0.01
+local local_jump_probability = track_local_jump_probability
+line_width = line_width * size / 1000
+inner_radius_ratio = inner_radius_ratio * size
+local seed = track_seed + math.floor(obj.time * obj.framerate * track_change_speed)
+obj.load("figure", "四角形", color, 1)
+obj.setoption("drawtarget", "tempbuffer", screen_w, screen_h)
+local selected_lines = {}
+if track_locality == 0 or spawn_probability == 100 then
+    for i = 1, max_line_count do
+        if spawn_probability >= obj.rand(0, 100, -i, seed + 1000) then
+            selected_lines[i] = 1
+        end
+    end
+else
+    local block_count = 3 + (max_line_count / 4 - 3) * locality_weight
+    local lines_per_block = max_line_count / block_count
+    spawn_probability = spawn_probability * 0.01
+    for j = 0, block_count - 1 do
+        for distance_ratio = 0, spawn_probability * lines_per_block - 1 do
+            local selected_line_index = math.floor(distance_ratio + lines_per_block * j + 1)
+            selected_lines[selected_line_index] = 1
+        end
+    end
+    for i = 1, max_line_count do
+        if local_jump_probability >= obj.rand(0, 100, -i, seed + 2000) and local_jump_probability > 0 then
+            local swap_line_index = obj.rand(1, max_line_count, -i, seed + 4000)
+            selected_lines[i], selected_lines[swap_line_index] = selected_lines[swap_line_index], selected_lines[i]
+        end
+    end
+end
+local angle_step = 2 * math.pi / max_line_count
+local angle_offset = obj.rand(0, 3600, -1, seed + 4000) * math.pi / 1800
+local ellipse_radius_x = screen_w / math.sqrt(2)
+local ellipse_radius_y = screen_h / math.sqrt(2)
+
+for i = 1, max_line_count do
+    if selected_lines[i] == 1 then
+        local line_angle = angle_step * i + angle_offset
+        local inner_radius = inner_radius_ratio + size * center_randomness * obj.rand(0, 1000, -i, seed + 5000) / 1000
+        local outer_radius = inner_radius + size
+        local x0 = inner_radius * math.sin(line_angle)
+        local y0 = inner_radius * math.cos(line_angle)
+        local x1 = -line_width * math.cos(line_angle) + outer_radius * math.sin(line_angle)
+        local y1 = line_width * math.sin(line_angle) + outer_radius * math.cos(line_angle)
+        local x2 = line_width * math.cos(line_angle) + outer_radius * math.sin(line_angle)
+        local y2 = -line_width * math.sin(line_angle) + outer_radius * math.cos(line_angle)
+
+        x1, y1 = find_ellipse_intersection(x0, y0, x1, y1, ellipse_radius_x, ellipse_radius_y)
+        x2, y2 = find_ellipse_intersection(x0, y0, x2, y2, ellipse_radius_x, ellipse_radius_y)
+        local radial_x = (x1 + x2) / 2 - center_x
+        local radial_y = (y1 + y2) / 2 - center_y
+        local radial_distance = math.sqrt(radial_x * radial_x + radial_y * radial_y)
+        x0, y0 =
+            center_x + radial_x * inner_radius / radial_distance, center_y + radial_y * inner_radius / radial_distance
+        local direction_x = (x1 + x2) / 2 - x0
+        local direction_y = (y1 + y2) / 2 - y0
+
+        if direction_x * radial_x + direction_y * radial_y > 0 then
+            push_poly(x0, y0, 0, x0, y0, 0, x1, y1, 0, x2, y2, 0)
+        end
+    end
+end
+flush_polys()
+obj.load("tempbuffer")
+obj.effect("ぼかし", "範囲", track_blur, "サイズ固定", 1)
+
+@集中線T2@集中線T
+--label:tim\カスタムオブジェクト\@集中線T
+--track@track_spawn_amount:発生量,0,100,35,0.1
+--track@track_center:中心,0,100,60,0.1
+--track@track_distribution:分布,0,100,50,0.01
+--track@track_period:放射周期,0,100,0,0.1
+--color@color:色,0xffffff
+--track@track_brightness:明るさ,0,1000,500,1
+--track@track_radial_speed:放射速度,-1000,1000,0,0.1
+--track@track_change_speed:変化速度,-100,100,0,0.1
+--track@track_rotation_speed:回転速度,-1000,1000,0,0.1
+--track@track_swirl:渦巻,-1000,1000,0,0.1
+--select@select_noise_type:タイプ=1,Type1=1,Type2=2,Type3=3,Type4=4,Type5=5,Type6=6
+--track@track_seed:シード,0,1000000,0,1
+--track@track_width:幅,0,10000,0,1
+--track@track_height:高さ,0,10000,0,1
+local noise_threshold = 100 - track_spawn_amount
+local clipping_center_y = track_center
+local noise_period_x = track_distribution
+local noise_period_y = track_period
+local screen_w = track_width > 0 and track_width or obj.screen_w
+local screen_h = track_height > 0 and track_height or obj.screen_h
+local glow_strength = track_brightness
+local radial_speed = track_radial_speed
+local noise_change_speed = track_change_speed
+local rotation_speed = track_rotation_speed
+local swirl = track_swirl
+local noise_type = math.floor(select_noise_type or 1)
+local seed = math.floor(track_seed or 0)
+
+noise_period_x = noise_period_x * noise_period_x * 0.01
+noise_period_y = noise_period_y / 25
+local size = (screen_w < screen_h) and screen_h or screen_w
+clipping_center_y = 0.01 * (clipping_center_y - 50) * size
+obj.load("figure", "四角形", 0xffffff, size)
+obj.effect(
+    "ノイズ",
+    "変化速度",
+    noise_change_speed,
+    "周期X",
+    noise_period_x,
+    "周期Y",
+    noise_period_y,
+    "速度Y",
+    -radial_speed,
+    "しきい値",
+    noise_threshold,
+    "seed",
+    seed + 3000,
+    "type",
+    noise_type
+)
+obj.effect("斜めクリッピング", "角度", 180, "ぼかし", size, "中心Y", clipping_center_y)
+obj.effect("極座標変換", "渦巻", swirl * 0.1, "回転", rotation_speed * obj.time)
+obj.setoption("drawtarget", "tempbuffer", screen_w, screen_h)
+obj.draw(0, 0, 0, 1.2)
+obj.load("tempbuffer")
+obj.effect("グロー", "強さ", glow_strength, "拡散", 1, "しきい値", 0, "ぼかし", 1)
+obj.effect("単色化", "color", color, "輝度を保持する", 0)
+
+@任意多角形@任意多角形
+--label:tim\カスタムオブジェクト\@任意多角形
+local orientation, side_product, is_point_inside_triangle, draw_triangle, half_thickness, vertex_count, original_vertex_count, vertices, original_vertices, max_x, max_y, maximum_radius_squared, farthest_vertex_index, polygon_orientation, ear_found, vertex_orientation, contains_other_vertex
+--color@fill_color:色,0xffffff
+--group:ガイド
+--check@check_show_guide:ガイド表示,false
+--track@track_guide_size:ガイドサイズ,0,1000,50,0.1
+--track@track_thickness:厚み,0,1000,0,0.1
+--color@guide_color:ガイド色,0xff0000
+--figure@guide_figure:図形,円
+--hide@track_guide_size:check_show_guide==0
+--hide@guide_color:check_show_guide==0
+--hide@guide_figure:check_show_guide==0
+
+function orientation(vector_a_x, vector_a_y, vector_b_x, vector_b_y)
+    if vector_a_x * vector_b_y - vector_a_y * vector_b_x > 0 then
+        return 1
+    else
+        return -1
+    end
+end
+
+function side_product(segment_point_1, segment_point_2, segment_point_3, segment_point_4)
+    return (
+        (segment_point_1.x - segment_point_2.x) * (segment_point_3.y - segment_point_1.y)
+        + (segment_point_1.y - segment_point_2.y) * (segment_point_1.x - segment_point_3.x)
+    )
+        * (
+            (segment_point_1.x - segment_point_2.x) * (segment_point_4.y - segment_point_1.y)
+            + (segment_point_1.y - segment_point_2.y) * (segment_point_1.x - segment_point_4.x)
+        )
+end
+
+function is_point_inside_triangle(triangle_point_1, triangle_point_2, triangle_point_3, test_point)
+    if
+        (triangle_point_1.x - triangle_point_3.x) * (triangle_point_1.y - triangle_point_2.y)
+        == (triangle_point_1.x - triangle_point_2.x) * (triangle_point_1.y - triangle_point_3.y)
+    then
+        return 0
+    elseif
+        (side_product(triangle_point_1, triangle_point_2, test_point, triangle_point_3) < 0)
+        or (side_product(triangle_point_1, triangle_point_3, test_point, triangle_point_2) < 0)
+        or (side_product(triangle_point_2, triangle_point_3, test_point, triangle_point_1) < 0)
+    then
+        return 0
+    else
+        return 1
+    end
+end
+
+function draw_triangle(segment_point_1, segment_point_2, segment_point_3)
+    obj.drawpoly(
+        segment_point_1.x,
+        segment_point_1.y,
+        0,
+        segment_point_1.x,
+        segment_point_1.y,
+        0,
+        segment_point_2.x,
+        segment_point_2.y,
+        0,
+        segment_point_3.x,
+        segment_point_3.y,
+        0
+    )
+end
+
+local guide_size = track_guide_size
+half_thickness = track_thickness / 2
+vertex_count = obj.getoption("section_num") + 1
+original_vertex_count = vertex_count
+vertices = {}
+for i = 1, vertex_count - 1 do
+    vertices[i] = {}
+    vertices[i].x = obj.getvalue("x", 0, i - 1)
+    vertices[i].y = obj.getvalue("y", 0, i - 1)
+end
+vertices[vertex_count] = {}
+vertices[vertex_count].x = obj.getvalue("x", 0, -1)
+vertices[vertex_count].y = obj.getvalue("y", 0, -1)
+vertices[0] = {}
+vertices[0] = vertices[vertex_count]
+vertices[vertex_count + 1] = {}
+vertices[vertex_count + 1] = vertices[1]
+
+original_vertices = {}
+for i = 0, vertex_count + 1 do
+    original_vertices[i] = {}
+    original_vertices[i].x = vertices[i].x
+    original_vertices[i].y = vertices[i].y
+end
+
+if check_show_guide then
+    obj.load("figure", guide_figure, guide_color, guide_size)
+    obj.effect("縁取り")
+    for i = 1, vertex_count do
+        vertices[i].x = vertices[i].x - obj.getvalue("x")
+        vertices[i].y = vertices[i].y - obj.getvalue("y")
+        obj.draw(vertices[i].x, vertices[i].y)
+    end
+    obj.load("figure", "四角形", fill_color, guide_size)
+end
+
+if vertex_count < 3 then
+    return
+end
+
+max_x = math.abs(vertices[1].x)
+max_y = math.abs(vertices[1].y)
+maximum_radius_squared = max_x * max_x + max_y * max_y
+farthest_vertex_index = 1
+for i = 2, vertex_count do
+    max_x = math.max(math.abs(vertices[i].x), max_x)
+    max_y = math.max(math.abs(vertices[i].y), max_y)
+    if maximum_radius_squared < vertices[i].x * vertices[i].x + vertices[i].y * vertices[i].y then
+        maximum_radius_squared = vertices[i].x * vertices[i].x + vertices[i].y * vertices[i].y
+        farthest_vertex_index = i
+    end
+end
+
+if not check_show_guide then
+    obj.load("figure", "四角形", fill_color, 2 * math.max(max_x, max_y))
+end
+
+if not check_show_guide then
+    obj.setoption("drawtarget", "tempbuffer", 2 * max_x, 2 * max_y)
+    obj.setoption("blend", "alpha_add")
+end
+
+polygon_orientation = orientation(
+    vertices[farthest_vertex_index].x - vertices[farthest_vertex_index - 1].x,
+    vertices[farthest_vertex_index].y - vertices[farthest_vertex_index - 1].y,
+    vertices[farthest_vertex_index + 1].x - vertices[farthest_vertex_index].x,
+    vertices[farthest_vertex_index + 1].y - vertices[farthest_vertex_index].y
+)
+repeat
+    i = 0
+    repeat
+        ear_found = 0
+        i = i + 1
+        vertex_orientation = orientation(
+            vertices[i].x - vertices[i - 1].x,
+            vertices[i].y - vertices[i - 1].y,
+            vertices[i + 1].x - vertices[i].x,
+            vertices[i + 1].y - vertices[i].y
+        )
+        if vertex_orientation == polygon_orientation then
+            contains_other_vertex = 0
+            for j = 1, vertex_count do
+                if j < i - 1 or j > i + 1 then
+                    contains_other_vertex =
+                        is_point_inside_triangle(vertices[i - 1], vertices[i], vertices[i + 1], vertices[j])
+                end --if
+                if contains_other_vertex == 1 then
+                    break
+                end
+            end --j
+            if contains_other_vertex == 0 then
+                ear_found = 1
+            end
+        end
+    until ear_found == 1
+    draw_triangle(vertices[i - 1], vertices[i], vertices[i + 1])
+    for j = i + 1, vertex_count do
+        vertices[j - 1] = vertices[j]
+    end
+    vertex_count = vertex_count - 1
+    vertices[0] = vertices[vertex_count]
+    vertices[vertex_count + 1] = vertices[1]
+until vertex_count < 4
+draw_triangle(vertices[1], vertices[2], vertices[3])
+if not check_show_guide then
+    obj.load("tempbuffer")
+    obj.ox = -obj.getvalue("x")
+    obj.oy = -obj.getvalue("y")
+
+    if half_thickness ~= 0 then
+        obj.setoption("drawtarget", "frame")
+        obj.oz = half_thickness
+        obj.draw()
+        obj.oz = -half_thickness
+        obj.draw()
+        obj.load("figure", "四角形", fill_color, 500)
+        for i = 0, original_vertex_count + 1 do
+            original_vertices[i].x = original_vertices[i].x - obj.getvalue("x")
+            original_vertices[i].y = original_vertices[i].y - obj.getvalue("y")
+        end
+        for i = 1, original_vertex_count do
+            obj.drawpoly(
+                original_vertices[i].x,
+                original_vertices[i].y,
+                -half_thickness,
+                original_vertices[i].x,
+                original_vertices[i].y,
+                half_thickness,
+                original_vertices[i + 1].x,
+                original_vertices[i + 1].y,
+                half_thickness,
+                original_vertices[i + 1].x,
+                original_vertices[i + 1].y,
+                -half_thickness
+            )
+        end
+    end
+end
+
+@任意多角形分離指定（座標）@任意多角形
+--label:tim\カスタムオブジェクト\@任意多角形
+--track@track_guide_size:ガイドサイズ,0,1000,50,0.1
+--color@guide_color:ガイド色,0xff0000
+--figure@guide_figure:図形,円
+obj.load("figure", guide_figure, guide_color, track_guide_size)
+T_POLYGON_SPLIT_COUNT = obj.getoption("section_num") + 1
+T_POLYGON_SPLIT_POSITIONS = {}
+for i = 1, T_POLYGON_SPLIT_COUNT - 1 do
+    T_POLYGON_SPLIT_POSITIONS[i] = {}
+    T_POLYGON_SPLIT_POSITIONS[i].x = obj.getvalue("x", 0, i - 1)
+    T_POLYGON_SPLIT_POSITIONS[i].y = obj.getvalue("y", 0, i - 1)
+end
+T_POLYGON_SPLIT_POSITIONS[T_POLYGON_SPLIT_COUNT] = {}
+T_POLYGON_SPLIT_POSITIONS[T_POLYGON_SPLIT_COUNT].x = obj.getvalue("x", 0, -1)
+T_POLYGON_SPLIT_POSITIONS[T_POLYGON_SPLIT_COUNT].y = obj.getvalue("y", 0, -1)
+T_POLYGON_SPLIT_POSITIONS[0] = {}
+T_POLYGON_SPLIT_POSITIONS[0] = T_POLYGON_SPLIT_POSITIONS[T_POLYGON_SPLIT_COUNT]
+T_POLYGON_SPLIT_POSITIONS[T_POLYGON_SPLIT_COUNT + 1] = {}
+T_POLYGON_SPLIT_POSITIONS[T_POLYGON_SPLIT_COUNT + 1] = T_POLYGON_SPLIT_POSITIONS[1]
+
+for i = 1, T_POLYGON_SPLIT_COUNT do
+    obj.draw(T_POLYGON_SPLIT_POSITIONS[i].x - obj.getvalue("x"), T_POLYGON_SPLIT_POSITIONS[i].y - obj.getvalue("y"))
+end
+
+@任意多角形分離指定（表示）@任意多角形
+--label:tim\カスタムオブジェクト\@任意多角形
+local orientation, side_product, is_point_inside_triangle, draw_triangle, half_thickness, vertex_count, vertices, original_vertex_count, original_vertices, max_x, max_y, maximum_radius_squared, farthest_vertex_index, polygon_orientation, ear_found, vertex_orientation, contains_other_vertex
+--track@track_thickness:厚み,0,1000,0,0.1
+--color@fill_color:色,0xffffff
+function orientation(vector_a_x, vector_a_y, vector_b_x, vector_b_y)
+    if vector_a_x * vector_b_y - vector_a_y * vector_b_x > 0 then
+        return 1
+    else
+        return -1
+    end
+end
+
+function side_product(segment_point_1, segment_point_2, segment_point_3, segment_point_4)
+    return (
+        (segment_point_1.x - segment_point_2.x) * (segment_point_3.y - segment_point_1.y)
+        + (segment_point_1.y - segment_point_2.y) * (segment_point_1.x - segment_point_3.x)
+    )
+        * (
+            (segment_point_1.x - segment_point_2.x) * (segment_point_4.y - segment_point_1.y)
+            + (segment_point_1.y - segment_point_2.y) * (segment_point_1.x - segment_point_4.x)
+        )
+end
+
+function is_point_inside_triangle(triangle_point_1, triangle_point_2, triangle_point_3, test_point)
+    if
+        (triangle_point_1.x - triangle_point_3.x) * (triangle_point_1.y - triangle_point_2.y)
+        == (triangle_point_1.x - triangle_point_2.x) * (triangle_point_1.y - triangle_point_3.y)
+    then
+        return 0
+    elseif
+        (side_product(triangle_point_1, triangle_point_2, test_point, triangle_point_3) < 0)
+        or (side_product(triangle_point_1, triangle_point_3, test_point, triangle_point_2) < 0)
+        or (side_product(triangle_point_2, triangle_point_3, test_point, triangle_point_1) < 0)
+    then
+        return 0
+    else
+        return 1
+    end
+end
+
+function draw_triangle(segment_point_1, segment_point_2, segment_point_3)
+    obj.drawpoly(
+        segment_point_1.x,
+        segment_point_1.y,
+        0,
+        segment_point_1.x,
+        segment_point_1.y,
+        0,
+        segment_point_2.x,
+        segment_point_2.y,
+        0,
+        segment_point_3.x,
+        segment_point_3.y,
+        0
+    )
+end
+
+half_thickness = track_thickness / 2
+
+if T_POLYGON_SPLIT_COUNT < 3 then
+    return
+end
+
+vertex_count = T_POLYGON_SPLIT_COUNT
+vertices = {}
+original_vertex_count = vertex_count
+original_vertices = {}
+for i = 0, vertex_count + 1 do
+    vertices[i] = {}
+    vertices[i].x = T_POLYGON_SPLIT_POSITIONS[i].x
+    vertices[i].y = T_POLYGON_SPLIT_POSITIONS[i].y
+    original_vertices[i] = {}
+    original_vertices[i].x = vertices[i].x
+    original_vertices[i].y = vertices[i].y
+end
+
+max_x = math.abs(vertices[1].x)
+max_y = math.abs(vertices[1].y)
+maximum_radius_squared = max_x * max_x + max_y * max_y
+farthest_vertex_index = 1
+for i = 2, vertex_count do
+    max_x = math.max(math.abs(vertices[i].x), max_x)
+    max_y = math.max(math.abs(vertices[i].y), max_y)
+    if maximum_radius_squared < vertices[i].x * vertices[i].x + vertices[i].y * vertices[i].y then
+        maximum_radius_squared = vertices[i].x * vertices[i].x + vertices[i].y * vertices[i].y
+        farthest_vertex_index = i
+    end
+end
+
+obj.load("figure", "四角形", fill_color, 2 * math.max(max_x, max_y))
+
+obj.setoption("drawtarget", "tempbuffer", 2 * max_x, 2 * max_y)
+obj.setoption("blend", "alpha_add")
+
+polygon_orientation = orientation(
+    vertices[farthest_vertex_index].x - vertices[farthest_vertex_index - 1].x,
+    vertices[farthest_vertex_index].y - vertices[farthest_vertex_index - 1].y,
+    vertices[farthest_vertex_index + 1].x - vertices[farthest_vertex_index].x,
+    vertices[farthest_vertex_index + 1].y - vertices[farthest_vertex_index].y
+)
+repeat
+    i = 0
+    repeat
+        ear_found = 0
+        i = i + 1
+        vertex_orientation = orientation(
+            vertices[i].x - vertices[i - 1].x,
+            vertices[i].y - vertices[i - 1].y,
+            vertices[i + 1].x - vertices[i].x,
+            vertices[i + 1].y - vertices[i].y
+        )
+        if vertex_orientation == polygon_orientation then
+            contains_other_vertex = 0
+            for j = 1, vertex_count do
+                if j < i - 1 or j > i + 1 then
+                    contains_other_vertex =
+                        is_point_inside_triangle(vertices[i - 1], vertices[i], vertices[i + 1], vertices[j])
+                end --if
+                if contains_other_vertex == 1 then
+                    break
+                end
+            end --j
+            if contains_other_vertex == 0 then
+                ear_found = 1
+            end
+        end
+    until ear_found == 1
+    draw_triangle(vertices[i - 1], vertices[i], vertices[i + 1])
+    for j = i + 1, vertex_count do
+        vertices[j - 1] = vertices[j]
+    end
+    vertex_count = vertex_count - 1
+    vertices[0] = vertices[vertex_count]
+    vertices[vertex_count + 1] = vertices[1]
+until vertex_count < 4
+draw_triangle(vertices[1], vertices[2], vertices[3])
+obj.load("tempbuffer")
+
+if half_thickness ~= 0 then
+    obj.setoption("drawtarget", "frame")
+    obj.oz = half_thickness
+    obj.draw()
+    obj.oz = -half_thickness
+    obj.draw()
+
+    obj.load("figure", "四角形", fill_color, 500)
+    for i = 1, original_vertex_count do
+        obj.drawpoly(
+            original_vertices[i].x,
+            original_vertices[i].y,
+            -half_thickness,
+            original_vertices[i].x,
+            original_vertices[i].y,
+            half_thickness,
+            original_vertices[i + 1].x,
+            original_vertices[i + 1].y,
+            half_thickness,
+            original_vertices[i + 1].x,
+            original_vertices[i + 1].y,
+            -half_thickness
+        )
+    end
+end
+
+@凸多角形@任意多角形
+--label:tim\カスタムオブジェクト\@任意多角形
+local half_thickness, vertex_count, original_vertex_count
+
+--color@fill_color:色,0xffffff
+--group:ガイド
+--check@check_show_guide:ガイド表示,false
+--track@track_guide_size:ガイドサイズ,0,1000,50,0.1
+--track@track_thickness:厚み,0,1000,0,0.1
+--color@guide_color:ガイド色,0xff0000
+--figure@guide_figure:図形,円
+--hide@track_guide_size:check_show_guide==0
+--hide@guide_color:check_show_guide==0
+--hide@guide_figure:check_show_guide==0
+
+local guide_size = track_guide_size
+half_thickness = track_thickness / 2
+vertex_count = obj.getoption("section_num") + 1
+original_vertex_count = vertex_count
+local vertices = {}
+for i = 1, vertex_count - 1 do
+    vertices[i] = {}
+    vertices[i].x = obj.getvalue("x", 0, i - 1)
+    vertices[i].y = obj.getvalue("y", 0, i - 1)
+end
+vertices[vertex_count] = {}
+vertices[vertex_count].x = obj.getvalue("x", 0, -1)
+vertices[vertex_count].y = obj.getvalue("y", 0, -1)
+vertices[0] = {}
+vertices[0] = vertices[vertex_count]
+vertices[vertex_count + 1] = {}
+vertices[vertex_count + 1] = vertices[1]
+
+local original_vertices = {}
+for i = 0, vertex_count + 1 do
+    original_vertices[i] = {}
+    original_vertices[i].x = vertices[i].x
+    original_vertices[i].y = vertices[i].y
+end
+
+obj.load("figure", guide_figure, guide_color, guide_size)
+
+if check_show_guide then
+    obj.load("figure", guide_figure, guide_color, guide_size)
+    obj.effect("縁取り")
+    for i = 1, vertex_count do
+        vertices[i].x = vertices[i].x - obj.getvalue("x")
+        vertices[i].y = vertices[i].y - obj.getvalue("y")
+        obj.draw(vertices[i].x, vertices[i].y)
+    end
+else
+    local max_x = math.abs(vertices[1].x)
+    local max_y = math.abs(vertices[1].y)
+    for i = 2, vertex_count do
+        max_x = math.max(math.abs(vertices[i].x), max_x)
+        max_y = math.max(math.abs(vertices[i].y), max_y)
+    end
+
+    obj.load("figure", "四角形", fill_color, 2 * math.max(max_x, max_y) + 10)
+
+    for i = 1, vertex_count do
+        local edge_angle_degrees = math.atan2(vertices[i + 1].y - vertices[i].y, vertices[i + 1].x - vertices[i].x)
+                * 180
+                / math.pi
+            + 180
+        local clipping_center_x, clipping_center_y
+        if math.abs(vertices[i + 1].x - vertices[i].x) > math.abs(vertices[i + 1].y - vertices[i].y) then
+            clipping_center_x = 0
+            clipping_center_y = -vertices[i].x
+                    * (vertices[i + 1].y - vertices[i].y)
+                    / (vertices[i + 1].x - vertices[i].x)
+                + vertices[i].y
+        else
+            clipping_center_x = -vertices[i].y
+                    * (vertices[i + 1].x - vertices[i].x)
+                    / (vertices[i + 1].y - vertices[i].y)
+                + vertices[i].x
+            clipping_center_y = 0
+        end
+        obj.effect(
+            "斜めクリッピング",
+            "角度",
+            edge_angle_degrees + 180,
+            "中心X",
+            clipping_center_x,
+            "中心Y",
+            clipping_center_y
+        )
+    end
+    obj.ox = -obj.getvalue("x")
+    obj.oy = -obj.getvalue("y")
+
+    if half_thickness ~= 0 then
+        obj.setoption("drawtarget", "framebuffer")
+        obj.oz = half_thickness
+        obj.draw()
+        obj.oz = -half_thickness
+        obj.draw()
+        obj.load("figure", "四角形", fill_color, 500)
+        for i = 0, original_vertex_count + 1 do
+            original_vertices[i].x = original_vertices[i].x - obj.getvalue("x")
+            original_vertices[i].y = original_vertices[i].y - obj.getvalue("y")
+        end
+        for i = 1, original_vertex_count do
+            obj.drawpoly(
+                original_vertices[i].x,
+                original_vertices[i].y,
+                -half_thickness,
+                original_vertices[i].x,
+                original_vertices[i].y,
+                half_thickness,
+                original_vertices[i + 1].x,
+                original_vertices[i + 1].y,
+                half_thickness,
+                original_vertices[i + 1].x,
+                original_vertices[i + 1].y,
+                -half_thickness
+            )
+        end
+    end
+end
+
+@二十六面体
+--label:tim\カスタムオブジェクト
+--track@track_size:サイズ,0,5000,200,0.1
+--track@track_cutting_size:切込量,0,5000,20,0.1
+--track@track_frame_width:枠,0,5000,5000,0.1
+--color@color_square_faces:色1,0xffffff
+--color@color_beveled_faces:色2,0xccffcc
+--color@color_triangular_faces:色3,0xffff00
+-- おそらくAviUtl2で削除されたので消す
+-- sampler="clip"/"dot"もやってみたけど差を感じなかったのでないものとする
+-- ---$check:アンチエイリアス
+-- local antialias = true
+
+local draw_quad = function(a, b, c, d)
+    obj.drawpoly(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z)
+end
+
+local zoom = obj.getvalue("zoom") * 0.01
+local scaled_size = track_size * zoom
+local scaled_cutting_size = track_cutting_size * zoom
+local scaled_frame_width = track_frame_width * zoom
+
+local half_size = scaled_size * 0.5
+local inset_half_size = half_size - scaled_cutting_size
+
+local face_vertices = {}
+for i = 1, 6 do
+    face_vertices[i] = {}
+end
+face_vertices[1] = {
+    { x = -inset_half_size, y = -inset_half_size, z = -half_size },
+    { x = inset_half_size, y = -inset_half_size, z = -half_size },
+    { x = inset_half_size, y = inset_half_size, z = -half_size },
+    {
+        x = -inset_half_size,
+        y = inset_half_size,
+        z = -half_size,
+    },
+}
+face_vertices[2] = {
+    { z = -inset_half_size, y = -inset_half_size, x = half_size },
+    { z = inset_half_size, y = -inset_half_size, x = half_size },
+    { z = inset_half_size, y = inset_half_size, x = half_size },
+    {
+        z = -inset_half_size,
+        y = inset_half_size,
+        x = half_size,
+    },
+}
+face_vertices[3] = {
+    { x = inset_half_size, y = -inset_half_size, z = half_size },
+    { x = -inset_half_size, y = -inset_half_size, z = half_size },
+    { x = -inset_half_size, y = inset_half_size, z = half_size },
+    {
+        x = inset_half_size,
+        y = inset_half_size,
+        z = half_size,
+    },
+}
+face_vertices[4] = {
+    { z = inset_half_size, y = -inset_half_size, x = -half_size },
+    { z = -inset_half_size, y = -inset_half_size, x = -half_size },
+    { z = -inset_half_size, y = inset_half_size, x = -half_size },
+    {
+        z = inset_half_size,
+        y = inset_half_size,
+        x = -half_size,
+    },
+}
+face_vertices[5] = {
+    { x = -inset_half_size, z = inset_half_size, y = -half_size },
+    { x = inset_half_size, z = inset_half_size, y = -half_size },
+    { x = inset_half_size, z = -inset_half_size, y = -half_size },
+    {
+        x = -inset_half_size,
+        z = -inset_half_size,
+        y = -half_size,
+    },
+}
+face_vertices[6] = {
+    { x = -inset_half_size, z = -inset_half_size, y = half_size },
+    { x = inset_half_size, z = -inset_half_size, y = half_size },
+    { x = inset_half_size, z = inset_half_size, y = half_size },
+    {
+        x = -inset_half_size,
+        z = inset_half_size,
+        y = half_size,
+    },
+}
+
+obj.load("figure", "四角形", color_square_faces, scaled_size - 2 * scaled_cutting_size, scaled_frame_width)
+-- obj.setoption("antialias", ANT)
+for i = 1, 6 do
+    draw_quad(face_vertices[i][1], face_vertices[i][2], face_vertices[i][3], face_vertices[i][4])
+end
+
+obj.load("figure", "四角形", color_beveled_faces, scaled_size)
+-- obj.setoption("antialias", ANT)
+for i = 1, 4 do
+    local next_face_index = (i % 4) + 1
+    local previous_face_index = ((next_face_index - 2) % 4) + 1
+    local reversed_vertex_index = 5 - i
+    local next_reversed_vertex_index = 5 - next_face_index
+    draw_quad(
+        face_vertices[i][3],
+        face_vertices[i][2],
+        face_vertices[next_face_index][1],
+        face_vertices[next_face_index][4]
+    )
+    draw_quad(
+        face_vertices[i][2],
+        face_vertices[i][1],
+        face_vertices[5][reversed_vertex_index],
+        face_vertices[5][next_reversed_vertex_index]
+    )
+    draw_quad(face_vertices[i][4], face_vertices[i][3], face_vertices[6][next_face_index], face_vertices[6][i])
+end
+
+obj.load("figure", "四角形", color_triangular_faces, scaled_size)
+-- obj.setoption("antialias", ANT)
+for i = 1, 4 do
+    local next_face_index = 5 - i
+    local previous_face_index = ((next_face_index - 2) % 4) + 1
+    local reversed_vertex_index = ((i - 2) % 4) + 1
+    draw_quad(
+        face_vertices[5][i],
+        face_vertices[5][i],
+        face_vertices[next_face_index][1],
+        face_vertices[previous_face_index][2]
+    )
+    draw_quad(face_vertices[6][i], face_vertices[6][i], face_vertices[reversed_vertex_index][3], face_vertices[i][4])
+end
+
+@バーコードT
+--label:tim\カスタムオブジェクト
+--track@track_min_width:最小幅,1,30,2,1
+--track@track_height:高さ,1,1000,50,1
+--track@track_horizontal_margin:左右余白,10,1000,30,1
+--track@track_vertical_margin:上下余白,10,1000,20,1
+--string@value_data:データ,AviUtl
+--color@color_bars:線色,0x0
+--color@color_background:背景色,0xffffff
+--check@check_use_code_c:CodeCも併用,0
+local bar_patterns = {
+    [0] = 212222,
+    222122,
+    222221,
+    121223,
+    121322,
+    131222,
+    122213,
+    122312,
+    132212,
+    221213,
+    221312,
+    231212,
+    112232,
+    122132,
+    122231,
+    113222,
+    123122,
+    123221,
+    223221,
+    221132,
+    221231,
+    213212,
+    223112,
+    312131,
+    311222,
+    321122,
+    321221,
+    312212,
+    322112,
+    322211,
+    212123,
+    212321,
+    232121,
+    111323,
+    131123,
+    131321,
+    112313,
+    132113,
+    132311,
+    211313,
+    231113,
+    231311,
+    112133,
+    112331,
+    132131,
+    113123,
+    113321,
+    133121,
+    313121,
+    211331,
+    231131,
+    213113,
+    213311,
+    213131,
+    311123,
+    311321,
+    331121,
+    312113,
+    312311,
+    332111,
+    314111,
+    221411,
+    431111,
+    111224,
+    111422,
+    121124,
+    121421,
+    141122,
+    141221,
+    112214,
+    112412,
+    122114,
+    122411,
+    142112,
+    142211,
+    241211,
+    221114,
+    413111,
+    241112,
+    134111,
+    111242,
+    121142,
+    121241,
+    114212,
+    124112,
+    124211,
+    411212,
+    421112,
+    421211,
+    212141,
+    214121,
+    412121,
+    111143,
+    111341,
+    131141,
+    114113,
+    114311,
+    411113,
+    411311,
+    113141,
+    114131,
+    311141,
+    411131,
+    211412,
+    211214,
+    211232,
+}
+local character_values = {
+    [" "] = 0,
+    ["!"] = 1,
+    ['"'] = 2,
+    ["#"] = 3,
+    ["$"] = 4,
+    ["%"] = 5,
+    ["&"] = 6,
+    ["'"] = 7,
+    ["("] = 8,
+    [")"] = 9,
+    ["*"] = 10,
+    ["+"] = 11,
+    [","] = 12,
+    ["-"] = 13,
+    ["."] = 14,
+    ["/"] = 15,
+    ["0"] = 16,
+    ["1"] = 17,
+    ["2"] = 18,
+    ["3"] = 19,
+    ["4"] = 20,
+    ["5"] = 21,
+    ["6"] = 22,
+    ["7"] = 23,
+    ["8"] = 24,
+    ["9"] = 25,
+    [":"] = 26,
+    [";"] = 27,
+    ["<"] = 28,
+    ["="] = 29,
+    [">"] = 30,
+    ["?"] = 31,
+    ["@"] = 32,
+    ["A"] = 33,
+    ["B"] = 34,
+    ["C"] = 35,
+    ["D"] = 36,
+    ["E"] = 37,
+    ["F"] = 38,
+    ["G"] = 39,
+    ["H"] = 40,
+    ["I"] = 41,
+    ["J"] = 42,
+    ["K"] = 43,
+    ["L"] = 44,
+    ["M"] = 45,
+    ["N"] = 46,
+    ["O"] = 47,
+    ["P"] = 48,
+    ["Q"] = 49,
+    ["R"] = 50,
+    ["S"] = 51,
+    ["T"] = 52,
+    ["U"] = 53,
+    ["V"] = 54,
+    ["W"] = 55,
+    ["X"] = 56,
+    ["Y"] = 57,
+    ["Z"] = 58,
+    ["["] = 59,
+    ["\\"] = 60,
+    ["]"] = 61,
+    ["^"] = 62,
+    ["_"] = 63,
+    ["`"] = 64,
+    ["a"] = 65,
+    ["b"] = 66,
+    ["c"] = 67,
+    ["d"] = 68,
+    ["e"] = 69,
+    ["f"] = 70,
+    ["g"] = 71,
+    ["h"] = 72,
+    ["i"] = 73,
+    ["j"] = 74,
+    ["k"] = 75,
+    ["l"] = 76,
+    ["m"] = 77,
+    ["n"] = 78,
+    ["o"] = 79,
+    ["p"] = 80,
+    ["q"] = 81,
+    ["r"] = 82,
+    ["s"] = 83,
+    ["t"] = 84,
+    ["u"] = 85,
+    ["v"] = 86,
+    ["w"] = 87,
+    ["x"] = 88,
+    ["y"] = 89,
+    ["z"] = 90,
+    ["{"] = 91,
+    ["|"] = 92,
+    ["}"] = 93,
+    ["~"] = 94,
+}
+local module_width = math.floor(track_min_width)
+local barcode_height = math.floor(track_height)
+local horizontal_margin = math.floor(track_horizontal_margin)
+local vertical_margin = 2 * math.floor(track_vertical_margin)
+horizontal_margin = 2 * math.max(horizontal_margin, 10 * module_width)
+local data_length = string.len(value_data)
+local checksum
+local encoded_pattern
+if check_use_code_c == 1 then
+    local digit_run_start, digit_run_end = string.find(value_data, "%d+", 1)
+    if digit_run_start == nil then
+        check_use_code_c = 0
+    else
+        local code_b_characters = {}
+        local code_c_digits = {}
+        for i = 1, data_length do
+            code_b_characters[i] = string.sub(value_data, i, i)
+        end
+        while digit_run_start do
+            local run_length = digit_run_end - digit_run_start + 1
+            if run_length > 3 then
+                run_length = run_length - run_length % 2
+                for i = 0, run_length - 1 do
+                    local ii = digit_run_start + i
+                    code_c_digits[ii], code_b_characters[ii] = code_b_characters[ii], nil
+                end
+            end
+            digit_run_start, digit_run_end = string.find(value_data, "%d+", digit_run_end + 1)
+        end
+        local data_position = 1
+        local checksum_weight = 1
+        if code_b_characters[1] then --CodeBスタート
+            checksum = 104 * 1
+            encoded_pattern = "211214"
+        else --CodeCスタート
+            checksum = 105 * 1
+            encoded_pattern = "211232"
+        end
+        while data_position <= data_length do
+            if code_b_characters[data_position] then --CodeB
+                while code_b_characters[data_position] do
+                    local symbol_value = character_values[code_b_characters[data_position]] or 0
+                    checksum = checksum + checksum_weight * symbol_value
+                    encoded_pattern = encoded_pattern .. bar_patterns[symbol_value]
+                    data_position = data_position + 1
+                    checksum_weight = checksum_weight + 1
+                end
+                if data_position <= data_length then
+                    checksum = checksum + checksum_weight * 99
+                    encoded_pattern = encoded_pattern .. "113141"
+                    checksum_weight = checksum_weight + 1
+                end
+            else --CodeC
+                while code_c_digits[data_position] do
+                    local symbol_value = code_c_digits[data_position] * 10 + code_c_digits[data_position + 1]
+                    checksum = checksum + checksum_weight * symbol_value
+                    encoded_pattern = encoded_pattern .. bar_patterns[symbol_value]
+                    data_position = data_position + 2
+                    checksum_weight = checksum_weight + 1
+                end
+                if data_position <= data_length then
+                    checksum = checksum + checksum_weight * 100
+                    encoded_pattern = encoded_pattern .. "114131"
+                    checksum_weight = checksum_weight + 1
+                end
+            end
+        end
+    end
+end
+if check_use_code_c == 0 then
+    checksum = 104 * 1
+    encoded_pattern = "211214"
+    for i = 1, data_length do
+        local character = string.sub(value_data, i, i)
+        local symbol_value = character_values[character] or 0
+        checksum = checksum + i * symbol_value
+        encoded_pattern = encoded_pattern .. bar_patterns[symbol_value]
+    end
+end
+checksum = checksum % 103
+encoded_pattern = encoded_pattern .. bar_patterns[checksum] .. "2331112"
+local module_widths = {}
+local pattern_length = string.len(encoded_pattern)
+local total_module_count = 0
+for i = 1, pattern_length do
+    module_widths[i] = string.sub(encoded_pattern, i, i)
+    total_module_count = total_module_count + module_widths[i]
+end
+local barcode_width = module_width * total_module_count
+local width_parity_adjust = math.abs(obj.screen_w - barcode_width) % 2
+local height_parity_adjust = math.abs(obj.screen_h - barcode_height) % 2
+obj.setoption("drawtarget", "tempbuffer")
+obj.load("figure", "四角形", color_background, 1)
+obj.effect(
+    "リサイズ",
+    "X",
+    barcode_width + width_parity_adjust + horizontal_margin,
+    "Y",
+    barcode_height + height_parity_adjust + vertical_margin,
+    "ドット数でサイズ指定",
+    1
+)
+obj.copybuffer("tempbuffer", "object")
+obj.load("figure", "四角形", color_background, 1)
+obj.effect("リサイズ", "X", total_module_count, "Y", 1, "ドット数でサイズ指定", 1)
+pattern_length = math.floor(pattern_length / 2)
+obj.pixeloption("type", "col")
+local pixel_offset = 0
+for i = 1, pattern_length + 1 do
+    for k = 0, module_widths[2 * i - 1] - 1 do
+        obj.putpixel(pixel_offset + k, 0, color_bars, 1)
+    end
+    pixel_offset = pixel_offset + module_widths[2 * i - 1] + (module_widths[2 * i] or 0)
+end
+obj.effect(
+    "リサイズ",
+    "X",
+    barcode_width,
+    "Y",
+    barcode_height,
+    "ドット数でサイズ指定",
+    1,
+    "補間なし",
+    1
+)
+obj.effect("領域拡張", "塗りつぶし", 0, "下", height_parity_adjust, "右", width_parity_adjust)
+obj.draw()
+obj.copybuffer("object", "tempbuffer")
+obj.cx = 0
+obj.cy = 0
+
+@ベジエ軌道Ｔ
+--label:tim\カスタムオブジェクト
+--track@track_index:軌道番号,1,100,1,1
+--select@select_orbit_target:軌道指定=0,全リンク=0,リンク1=1,リンク2=2,リンク3=3
+--track@track_graph_size:グラフサイズ,50,1000,200,1
+--value@value_control_points:アンカー,{ -50, 50, 50, -50 }
+--check@check_show_graph:グラフ表示,true
+local evaluate_bezier = function(t, x1, y1, x2, y2)
+    local inverse_time = 1 - t
+    x1 = (3 * inverse_time * inverse_time * x1 + (3 * inverse_time * x2 + t) * t) * t
+    y1 = (3 * inverse_time * inverse_time * y1 + (3 * inverse_time * y2 + t) * t) * t
+    return x1, y1
+end
+
+if T_BEZIER_ORBITS == nil then
+    T_BEZIER_ORBITS = {}
+end
+value_control_points = value_control_points or { -50, 50, 50, -50 }
+local orbit_index = track_index
+local graph_size = track_graph_size
+local half_graph_size = graph_size * 0.5
+obj.setanchor("value_control_points", 2)
+local control_1_x, control_1_y, control_2_x, control_2_y =
+    value_control_points[1], value_control_points[2], value_control_points[3], value_control_points[4]
+if control_1_x < -half_graph_size then
+    control_1_x = -half_graph_size
+elseif control_1_x > half_graph_size then
+    control_1_x = half_graph_size
+end
+if control_2_x < -half_graph_size then
+    control_2_x = -half_graph_size
+elseif control_2_x > half_graph_size then
+    control_2_x = half_graph_size
+end
+local normalized_control_1_x, normalized_control_1_y, normalized_control_2_x, normalized_control_2_y =
+    (control_1_x + half_graph_size) / graph_size,
+    (-control_1_y + half_graph_size) / graph_size,
+    (control_2_x + half_graph_size) / graph_size,
+    (-control_2_y + half_graph_size) / graph_size
+T_BEZIER_ORBITS[orbit_index] = {
+    normalized_control_1_x,
+    normalized_control_1_y,
+    normalized_control_2_x,
+    normalized_control_2_y,
+    select_orbit_target,
+}
+
+if check_show_graph then
+    obj.setoption("drawtarget", "tempbuffer", 1.5 * graph_size, 2 * graph_size)
+
+    local section_count = obj.getoption("section_num")
+    local time_marks = {}
+    for i = 0, section_count - 1 do
+        time_marks[i] = obj.getvalue("time", 0, i)
+    end
+    time_marks[section_count] = obj.getvalue("time", 0, -1)
+    local object_time = obj.time
+
+    local section_progress = 1
+    if obj.frame < obj.totalframe - 1 then
+        local i = 1
+        while time_marks[i] <= object_time do
+            i = i + 1
+        end
+        i = i - 1
+        section_progress = (object_time - time_marks[i]) / (time_marks[i + 1] - time_marks[i])
+    end
+
+    local lower_time = 0
+    local upper_time = 1
+
+    for i = 1, 10 do
+        local mid_time = (lower_time + upper_time) * 0.5
+        local curve_x, y = evaluate_bezier(
+            mid_time,
+            normalized_control_1_x,
+            normalized_control_1_y,
+            normalized_control_2_x,
+            normalized_control_2_y
+        )
+        if section_progress < curve_x then
+            upper_time = mid_time
+        else
+            lower_time = mid_time
+        end
+    end
+
+    obj.load("figure", "円", 0xffff00, 20)
+    local x, y = evaluate_bezier(
+        (lower_time + upper_time) * 0.5,
+        normalized_control_1_x,
+        normalized_control_1_y,
+        normalized_control_2_x,
+        normalized_control_2_y
+    )
+    x = x * graph_size - half_graph_size
+    y = -(y * graph_size - half_graph_size)
+    obj.draw(x, y)
+
+    obj.load("figure", "四角形", 0x0, graph_size)
+    obj.draw(0, 0, 0, 1, 0.5)
+    obj.load("figure", "四角形", 0xffffff, graph_size, 5)
+    obj.draw()
+    obj.load("figure", "円", 0x00ff00, 5)
+
+    for t = 0, 1, 0.01 do
+        local x, y = evaluate_bezier(
+            t,
+            normalized_control_1_x,
+            normalized_control_1_y,
+            normalized_control_2_x,
+            normalized_control_2_y
+        )
+        x = x * graph_size - half_graph_size
+        y = -(y * graph_size - half_graph_size)
+        obj.draw(x, y)
+    end
+    obj.load("figure", "円", 0xff0000, 20)
+    obj.draw(control_1_x, control_1_y)
+    obj.draw(control_2_x, control_2_y)
+    obj.load("tempbuffer")
+end
+
+@パズルピース
+--label:tim\カスタムオブジェクト
+--track@track_piece_size:サイズ,4,1000,120,1
+--track@track_piece_shape:P形状,1,22,1,1
+--track@track_bump:凹凸,1,2,1,1
+---$color_piece:色
+local color_piece = 0xffffff
+
+local piece_shape = track_piece_shape
+local piece_size = math.floor(track_piece_size)
+
+local draw_edge_shapes = function(half_piece_size, rotation_degrees, ...)
+    local edge_flags = { ... }
+    if edge_flags[1] == 1 then
+        obj.draw(0, -half_piece_size, 0, 1, 1, 0, 0, rotation_degrees)
+    end
+    if edge_flags[2] == 1 then
+        obj.draw(half_piece_size, 0, 0, 1, 1, 0, 0, 90 + rotation_degrees)
+    end
+    if edge_flags[3] == 1 then
+        obj.draw(0, half_piece_size, 0, 1, 1, 0, 0, 180 + rotation_degrees)
+    end
+    if edge_flags[4] == 1 then
+        obj.draw(-half_piece_size, 0, 0, 1, 1, 0, 0, 270 + rotation_degrees)
+    end
+end
+
+local create_base_edge_set = function(piece_size, half_piece_size, ...)
+    local edge_flags = { ... }
+    obj.setoption("drawtarget", "tempbuffer", 2 * piece_size, 2 * piece_size)
+    obj.load("figure", "四角形", 0xffffff, 1)
+    obj.setoption("blend", "alpha_add")
+    obj.drawpoly(
+        -half_piece_size,
+        -half_piece_size,
+        0,
+        half_piece_size,
+        -half_piece_size,
+        0,
+        half_piece_size,
+        half_piece_size,
+        0,
+        -half_piece_size,
+        half_piece_size,
+        0
+    )
+
+    obj.copybuffer("object", "cache:Img1")
+    obj.setoption("blend", "alpha_add")
+    draw_edge_shapes(half_piece_size, 0, edge_flags[1], edge_flags[2], edge_flags[3], edge_flags[4])
+    obj.setoption("blend", "alpha_sub")
+    draw_edge_shapes(half_piece_size, 180, edge_flags[5], edge_flags[6], edge_flags[7], edge_flags[8])
+end
+
+local create_combined_edge_set = function(piece_size, half_piece_size, ...)
+    local edge_flags = { ... }
+    create_base_edge_set(piece_size, half_piece_size, unpack(edge_flags, 1, 8))
+
+    obj.copybuffer("object", "cache:Img2")
+    obj.setoption("blend", "alpha_add")
+    draw_edge_shapes(half_piece_size, 0, edge_flags[9], edge_flags[10], edge_flags[11], edge_flags[12])
+    obj.setoption("blend", "alpha_sub")
+    draw_edge_shapes(half_piece_size, 180, edge_flags[13], edge_flags[14], edge_flags[15], edge_flags[16])
+end
+
+local create_piece_shape = function(piece_size, half_piece_size, piece_shape)
+    if piece_shape == 1 then
+        create_combined_edge_set(piece_size, half_piece_size, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0)
+    elseif piece_shape == 2 then
+        create_combined_edge_set(piece_size, half_piece_size, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0)
+    elseif piece_shape == 3 then
+        create_combined_edge_set(piece_size, half_piece_size, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1)
+    elseif piece_shape == 4 then
+        create_combined_edge_set(piece_size, half_piece_size, 1, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0)
+    elseif piece_shape == 9 or piece_shape == 13 or piece_shape == 18 then
+        create_base_edge_set(piece_size, half_piece_size, 1, 0, 1, 0, 0, 1, 0, 1)
+    elseif piece_shape == 10 or piece_shape == 14 or piece_shape == 19 then
+        create_base_edge_set(piece_size, half_piece_size, 1, 1, 0, 0, 0, 0, 1, 1)
+    elseif piece_shape == 11 or piece_shape == 15 or piece_shape == 20 then
+        create_base_edge_set(piece_size, half_piece_size, 1, 1, 1, 1, 0, 0, 0, 0)
+    elseif piece_shape == 12 or piece_shape == 16 or piece_shape == 21 then
+        create_base_edge_set(piece_size, half_piece_size, 1, 0, 0, 0, 0, 1, 1, 1)
+    elseif piece_shape == 17 or piece_shape == 22 then
+        create_base_edge_set(piece_size, half_piece_size, 1, 1, 1, 1, 1, 1, 1, 1)
+    end
+end
+
+local half_piece_size = piece_size / 2
+local quarter_piece_size = piece_size / 4
+local piece_canvas_size = 2 * piece_size + piece_size % 2 -- 四隅に隙間ができることがあるのを防止
+local aligned_half_piece_size = 2 * math.floor((half_piece_size + 1) / 2) -- 余分な線が入るのを防止
+
+if piece_shape >= 1 and piece_shape <= 4 then
+    obj.setoption("drawtarget", "tempbuffer", piece_size, piece_size)
+    local antialias_scale = 2
+    local scale_ratio = piece_size / 200
+    obj.load("figure", "円", 0xffffff, 78 * scale_ratio * antialias_scale)
+    obj.setoption("blend", "none")
+    local x0 = -39 * scale_ratio
+    local y0 = (-138 - 39 * 0.79 + 100) * scale_ratio
+    local y2 = (-138 + 39 * 0.79 + 100 + 2) * scale_ratio
+    obj.drawpoly(x0, y0, 0, -x0, y0, 0, -x0, y2, 0, x0, y2, 0)
+
+    local curve_adjustment = (2857 - 21 * math.sqrt(18119)) / 4640
+
+    local x4, y4 = 32.5445 * scale_ratio, (121.0223 + 0.4) * scale_ratio - 100 * scale_ratio
+    local x5, y5 = 23.9438 * scale_ratio, 110.7341 * scale_ratio - 100 * scale_ratio
+    local x6, y6 =
+        (32 + curve_adjustment) * scale_ratio,
+        (104 - math.sqrt(21 * 21 / 4 - curve_adjustment * curve_adjustment)) * scale_ratio - 100 * scale_ratio
+
+    obj.load("figure", "四角形", 0xffffff, 1)
+    obj.setoption("blend", "none")
+    obj.drawpoly(-x4, -y4, 0, x4, -y4, 0, x5, -y5, 0, -x5, -y5, 0)
+    obj.drawpoly(-x5, -y5, 0, x5, -y5, 0, x6, -y6, 0, -x6, -y6, 0)
+
+    obj.drawpoly(-x6, -y6, 0, x6, -y6, 0, x6, piece_size / 2, 0, -x6, piece_size / 2, 0)
+
+    obj.drawpoly(x6, -y6, 0, half_piece_size, 0, 0, half_piece_size, half_piece_size, 0, x6, half_piece_size, 0)
+    obj.drawpoly(-x6, -y6, 0, -half_piece_size, 0, 0, -half_piece_size, half_piece_size, 0, -x6, half_piece_size, 0)
+
+    obj.load("figure", "円", 0xffffff, 21 * scale_ratio * antialias_scale)
+    obj.setoption("blend", "alpha_sub")
+    obj.draw(32 * scale_ratio, -104 * scale_ratio + 100 * scale_ratio, 0, 1 / antialias_scale)
+    obj.draw(-32 * scale_ratio, -104 * scale_ratio + 100 * scale_ratio, 0, 1 / antialias_scale)
+
+    obj.copybuffer("cache:Img2", "tempbuffer")
+
+    obj.load("figure", "四角形", 0xffffff, 1)
+    obj.setoption("blend", "alpha_sub")
+    obj.drawpoly(
+        -half_piece_size,
+        0,
+        0,
+        half_piece_size,
+        0,
+        0,
+        half_piece_size,
+        half_piece_size,
+        0,
+        -half_piece_size,
+        half_piece_size,
+        0
+    )
+
+    obj.copybuffer("cache:Img1", "tempbuffer")
+
+    obj.copybuffer("tempbuffer", "cache:Img2")
+    obj.load("figure", "四角形", 0xffffff, 1)
+    obj.setoption("blend", "alpha_add")
+    obj.drawpoly(
+        -half_piece_size,
+        0,
+        0,
+        half_piece_size,
+        0,
+        0,
+        half_piece_size,
+        -half_piece_size,
+        0,
+        -half_piece_size,
+        -half_piece_size,
+        0
+    )
+
+    obj.copybuffer("object", "tempbuffer")
+    obj.effect("反転", "透明度反転", 1)
+    obj.effect("ローテーション", "90度回転", 2)
+    obj.copybuffer("cache:Img2", "object")
+
+    create_piece_shape(piece_size, half_piece_size, piece_shape)
+elseif piece_shape >= 5 and piece_shape <= 8 then
+    local diagonal_size = math.sqrt(2) * piece_size + 1
+    obj.setoption("drawtarget", "tempbuffer", piece_canvas_size, piece_canvas_size)
+    obj.load("figure", "円", 0xffffff, 3 * diagonal_size)
+    obj.setoption("blend", "alpha_add")
+    obj.draw(0, 0, 0, 1 / 3)
+    obj.copybuffer("object", "tempbuffer")
+    obj.setoption("blend", "alpha_sub")
+    if piece_shape == 5 then
+        obj.draw(-piece_size - 1, 0, 0) --ゴミ対策で±1
+        obj.draw(piece_size + 1, 0, 0)
+    elseif piece_shape == 6 then
+        obj.draw(0, piece_size + 1, 0)
+        obj.draw(-piece_size - 1, 0, 0)
+    elseif piece_shape == 8 then
+        obj.draw(0, piece_size + 1, 0)
+    end
+elseif piece_shape >= 9 and piece_shape <= 22 then
+    local x0, x1, x2, x3
+    local y0, y1, y2, y3
+
+    if piece_shape >= 9 and piece_shape <= 12 then
+        x0, y0, x1, y1, x2, y2, x3, y3 =
+            -half_piece_size * 0.44,
+            -half_piece_size * 0.25,
+            half_piece_size * 0.44,
+            -half_piece_size * 0.25,
+            half_piece_size * 0.3,
+            0,
+            -half_piece_size * 0.3,
+            0
+    elseif piece_shape >= 13 and piece_shape <= 17 then
+        local notch_unit = piece_size / 5
+        x0, y0, x1, y1, x2, y2, x3, y3 =
+            -half_piece_size + notch_unit,
+            -0.6 * notch_unit,
+            -half_piece_size + 2 * notch_unit,
+            -0.6 * notch_unit,
+            -half_piece_size + 2 * notch_unit,
+            0,
+            -half_piece_size + notch_unit,
+            0
+    elseif piece_shape >= 18 and piece_shape <= 22 then
+        local notch_unit = piece_size / 7
+        x0, y0, x1, y1, x2, y2, x3, y3 =
+            -half_piece_size + 2 * notch_unit,
+            -1.2 * notch_unit,
+            -half_piece_size + 2 * notch_unit,
+            -1.2 * notch_unit,
+            -half_piece_size + 3 * notch_unit,
+            0,
+            -half_piece_size + notch_unit,
+            0
+    end
+
+    obj.setoption("drawtarget", "tempbuffer", piece_size, aligned_half_piece_size)
+    obj.load("figure", "四角形", 0xffffff, 1)
+    obj.setoption("blend", "alpha_add")
+    obj.drawpoly(x0, y0, 0, x1, y1, 0, x2, y2, 0, x3, y3, 0)
+
+    if (piece_shape >= 13 and piece_shape <= 16) or (piece_shape >= 18 and piece_shape <= 21) then
+        obj.drawpoly(-x0, y0, 0, -x1, y1, 0, -x2, y2, 0, -x3, y3, 0)
+    end
+
+    obj.copybuffer("cache:Img1", "tempbuffer")
+    create_piece_shape(piece_size, half_piece_size, piece_shape)
+end
+
+if
+    track_bump == 2
+    and piece_shape ~= 2
+    and piece_shape ~= 6
+    and piece_shape ~= 10
+    and piece_shape ~= 14
+    and piece_shape ~= 19
+    and piece_shape ~= 17
+    and piece_shape ~= 22
+then
+    obj.copybuffer("cache:PC1", "tempbuffer")
+    obj.setoption("drawtarget", "tempbuffer", piece_canvas_size, piece_canvas_size)
+    obj.load("figure", "四角形", 0xffffff, 1)
+    obj.setoption("blend", "alpha_add")
+    obj.drawpoly(
+        -half_piece_size,
+        -half_piece_size,
+        0,
+        half_piece_size,
+        -half_piece_size,
+        0,
+        half_piece_size,
+        half_piece_size,
+        0,
+        -half_piece_size,
+        half_piece_size,
+        0
+    )
+    obj.drawpoly(
+        0,
+        -piece_size,
+        0,
+        0,
+        -piece_size,
+        0,
+        half_piece_size,
+        -half_piece_size,
+        0,
+        -half_piece_size,
+        -half_piece_size,
+        0
+    )
+    obj.drawpoly(
+        piece_size,
+        0,
+        0,
+        piece_size,
+        0,
+        0,
+        half_piece_size,
+        half_piece_size,
+        0,
+        half_piece_size,
+        -half_piece_size,
+        0
+    )
+    obj.drawpoly(
+        0,
+        piece_size,
+        0,
+        0,
+        piece_size,
+        0,
+        -half_piece_size,
+        half_piece_size,
+        0,
+        half_piece_size,
+        half_piece_size,
+        0
+    )
+    obj.drawpoly(
+        -piece_size,
+        0,
+        0,
+        -piece_size,
+        0,
+        0,
+        -half_piece_size,
+        -half_piece_size,
+        0,
+        -half_piece_size,
+        half_piece_size,
+        0
+    )
+    obj.copybuffer("object", "cache:PC1")
+    obj.setoption("blend", "alpha_sub")
+    obj.draw(-piece_size, 0, 0)
+    obj.draw(piece_size, 0, 0)
+    obj.draw(0, -piece_size, 0)
+    obj.draw(0, piece_size, 0)
+end
+obj.copybuffer("object", "tempbuffer")
+obj.effect("単色化", "輝度を保持する", 0, "color", color_piece)
+
+@泡
+--label:tim\カスタムオブジェクト
+--track@track_bubble_count:個数,0,1000,200,0.1
+--track@track_rise_speed:速度,-50,50,-8,0.1
+--track@track_horizontal_direction:方向,-50,50,0,0.1
+--track@track_shape_adjustment:形状補正,0,100,50,0.1
+--track@track_size:サイズ,0,1000,100,0.1
+--color@bubble_color:色,0xffffff
+--track@track_fluctuation_width:ゆらぎ幅,0,10,2,0.1
+--track@track_fluctuation_speed:ゆらぎ速度,-50,50,2,0.1
+--track@track_depth:奥行き,0,100,15,0.1
+--check@check_after_effect:事後エフェクト,false
+--track@track_display_area_correction:表示領域補正,0.1,10,1,0.1
+obj.load("figure", "円", bubble_color, track_size)
+obj.effect("ぼかし", "範囲", track_size)
+obj.effect("クリッピング", "右", track_size * 1.4 * track_shape_adjustment / 100)
+obj.effect("クリッピング", "左", track_size * 1.4 * track_shape_adjustment / 100)
+obj.effect("斜めクリッピング")
+obj.effect("極座標変換")
+
+local horizontal_extent = obj.screen_w * track_display_area_correction / 2 + obj.w
+local vertical_extent = obj.screen_h * track_display_area_correction / 2 + obj.h
+if not check_after_effect then
+    obj.effect()
+else
+    obj.setoption(
+        "drawtarget",
+        "tempbuffer",
+        obj.screen_w * track_display_area_correction,
+        obj.screen_h * track_display_area_correction
+    )
+end
+local elapsed_progress = track_rise_speed / 10
+local horizontal_travel = track_horizontal_direction * obj.w
+elapsed_progress = elapsed_progress * obj.time
+local fluctuation_phase = track_fluctuation_speed * obj.time * math.pi * 2 / 10
+local bubble_count = track_bubble_count
+local fluctuation_width = track_fluctuation_width * obj.w
+local minimum_x = -horizontal_extent
+local maximum_x = horizontal_extent
+if horizontal_travel < 0 then
+    maximum_x = maximum_x - horizontal_travel
+else
+    minimum_x = minimum_x - horizontal_travel
+end
+for i = 1, bubble_count do
+    local depth_scale = 1 / (1 + track_depth * i / bubble_count)
+    local cycle_progress = elapsed_progress * depth_scale + obj.rand(0, 1000, i, 1000) / 1000
+    local cycle_index = math.floor(cycle_progress)
+    cycle_progress = cycle_progress - cycle_index
+    local fluctuation_angle = fluctuation_phase + math.pi * 2 * obj.rand(0, 1000, i, 1001) / 1000
+    local bubble_x = obj.rand(minimum_x, maximum_x, i, cycle_index)
+        + (math.sin(fluctuation_angle) * fluctuation_width + cycle_progress * horizontal_travel) * depth_scale
+    local bubble_y = cycle_progress * vertical_extent * 2 - vertical_extent
+    obj.draw(bubble_x, bubble_y, 0, depth_scale)
+end
+
+if check_after_effect then
+    obj.load("tempbuffer")
+end
+
+@ヘブバン風音声波形T
+--label:tim\カスタムオブジェクト
+--track@track_size:外円サイズ,0,5000,300,1
+--track@track_split_amount:分割量,2,400,120,1
+--track@track_max_percent:最大長%,0,2000,30,0.1
+--track@track_upper_limit:音量上限,1,100000,30000,1
+--color@wave_color_1:波形色1,0xc19ec1
+--color@wave_color_2:波形色2,0x40acac
+--color@wave_color_3:波形色3,0x5a72ec
+--color@circle_color_1:円色1,0x40acac
+--color@circle_color_2:円色2,0xed7aff
+--track@track_lower_limit:音量下限,0,100000,0,1
+--track@track_boundary_adjust:境界補正,0,20,2,1
+--value@size_array:サイズ配列,{ 4, 3, 4, 4, 1 }
+--value@count_array:個数配列,{ 100, 230, 180 }
+--value@speed_array:速度配列,{ 2, 2.8, 0 }
+--group:オリジナル背景設定
+--check@check_original_background:オリジナル背景を使用,false
+--track@track_wave_opacity_percent:波形透明度％,0,100,35,0.1
+--track@track_time_offset:時間オフセット,-10000,10000,1000,1
+--group:
+
+--value@override_params:PI,nil
+--check@check_reverse_waveform:波形反転,false
+--hide@track_wave_opacity_percent:check_original_background==0
+--hide@track_time_offset:check_original_background==0
+
+local floor = math.floor
+local abs = math.abs
+local max = math.max
+local min = math.min
+local sin = math.sin
+local cos = math.cos
+local pi = math.pi
+local exp = math.exp
+override_params = override_params or {}
+local params = override_params
+if override_params[1] == "蒼井" then
+    override_params = {}
+end
+local reverse_waveform = override_params[0] == nil and check_reverse_waveform or override_params[0]
+local base_size = math.floor(override_params[1] or track_size)
+local split_count = floor(override_params[2] or track_split_amount)
+local max_wave_length = (override_params[3] or track_max_percent) * base_size / 100
+local upper_limit = floor(override_params[4] or track_upper_limit)
+local lower_limit = floor(track_lower_limit or 0)
+local wave_color_1_value = wave_color_1 or 0xc19ec1
+local wave_color_2_value = wave_color_2 or 0x40acac
+local wave_color_3_value = wave_color_3 or 0x5a72ec
+local circle_color_1_value = circle_color_1 or 0x40acac
+local circle_color_2_value = circle_color_2 or 0xed7aff
+local boundary_adjust = track_boundary_adjust or 2
+local inner_circle_dot_size, middle_circle_dot_size, outer_circle_dot_size, wave_dot_size, wave_bar_width =
+    unpack(size_array or { 4, 3, 4, 4, 1 })
+local inner_circle_count, middle_circle_count, outer_circle_count = unpack(count_array or { 100, 230, 180 })
+local inner_circle_phase, outer_circle_phase, wave_phase = unpack(speed_array or { 2, 2.8, 0 })
+local use_original_background = check_original_background
+local wave_opacity = (track_wave_opacity_percent or 35) / 100
+local time_offset = (track_time_offset or 1000) + obj.time
+override_params = nil
+wave_color_1 = nil
+wave_color_2 = nil
+wave_color_3 = nil
+circle_color_1 = nil
+circle_color_2 = nil
+track_lower_limit = nil
+track_boundary_adjust = nil
+size_array = nil
+count_array = nil
+speed_array = nil
+check_original_background = nil
+track_wave_opacity_percent = nil
+track_time_offset = nil
+check_reverse_waveform = nil
+local size_scale = base_size / 300
+local dt = -obj.time / 180
+inner_circle_dot_size = (inner_circle_dot_size or 4) * size_scale
+inner_circle_dot_size = max(inner_circle_dot_size, 1)
+middle_circle_dot_size = (middle_circle_dot_size or 1) * size_scale
+middle_circle_dot_size = max(middle_circle_dot_size, 1)
+outer_circle_dot_size = (outer_circle_dot_size or 4) * size_scale
+outer_circle_dot_size = max(outer_circle_dot_size, 1)
+wave_dot_size = (wave_dot_size or 3) * size_scale
+wave_dot_size = max(wave_dot_size, 1)
+wave_bar_width = (wave_bar_width or 4) * size_scale
+wave_bar_width = max(wave_bar_width, 1)
+inner_circle_count = inner_circle_count or 100
+middle_circle_count = middle_circle_count or 230
+outer_circle_count = outer_circle_count or 180
+inner_circle_phase = (inner_circle_phase or 2) * dt
+outer_circle_phase = (outer_circle_phase or 2.8) * dt
+wave_phase = (wave_phase or 0) * dt
+local audio_sample_count, rate, audio_buffer = obj.getaudio(nil, "audiobuffer", "pcm", 5000)
+local wave_samples = {}
+local sample_count = 3 * split_count
+boundary_adjust = min(boundary_adjust, split_count - 1)
+for i = 1, sample_count do
+    local k = floor(1 + (i - 1) * (audio_sample_count - 1) / (sample_count - 1))
+    local l = abs(audio_buffer[k])
+    l = max(l, lower_limit)
+    l = min(l, upper_limit)
+    wave_samples[i] = l * max_wave_length / upper_limit
+end
+if reverse_waveform then
+    for i = 1, sample_count / 2 do
+        wave_samples[i], wave_samples[sample_count - i + 1] = wave_samples[sample_count - i + 1], wave_samples[i]
+    end
+end
+if boundary_adjust > 0 then
+    for k = 0, 2 do
+        local k_sp_n = k * split_count + 1
+        local m = (wave_samples[k_sp_n + split_count - 1] + wave_samples[k_sp_n]) / 2
+        wave_samples[k_sp_n] = m
+        for i = 1, boundary_adjust - 1 do
+            wave_samples[k_sp_n + i] = (wave_samples[k_sp_n + i] * i + m * (boundary_adjust - i)) / boundary_adjust
+            wave_samples[k_sp_n + split_count - i] = (
+                wave_samples[k_sp_n + split_count - i] * i + m * (boundary_adjust - i)
+            ) / boundary_adjust
+        end
+    end
+end
+local w = base_size + max_wave_length + wave_dot_size
+if use_original_background then
+    w = max(w, base_size * 678 / 300)
+end
+w = 2 * floor(w / 2) + 10
+local h = w
+w = w + abs(obj.screen_w - w) % 2
+h = h + abs(obj.screen_h - h) % 2
+if use_original_background then
+    obj.setoption("drawtarget", "tempbuffer")
+    obj.load("figure", "四角形", 0x00001e, 1)
+    obj.effect("リサイズ", "ドット数でサイズ指定", 1, "X", w, "Y", h)
+    obj.copybuffer("tempbuffer", "object")
+    obj.load("figure", "円", 0x508787, base_size * 1.2)
+    obj.effect("ぼかし", "範囲", base_size / 3 * 1.2)
+    obj.draw()
+
+    obj.load("figure", "円", 0x4a6074, 36 * size_scale)
+    for k = 1, 5 do
+        local r = size_scale * (150 + 36 * k)
+        local d_s = (k + 3) / (12 * k + 50)
+        local n = 2 * pi / d_s
+        local bai = (k + 4) / 18
+        for i = 0, n do
+            local s_bai = bai * (n - i) / n
+            local ss = i * d_s - time_offset * exp((0.205 * (k - 1)) ^ 3) / 35
+            local x = r * cos(ss)
+            local y = r * sin(ss)
+            obj.draw(x, y, 0, s_bai, 0.5)
+        end
+    end
+    if wave_opacity > 0 then
+        obj.copybuffer("cache:wave", "tempbuffer")
+    end
+else
+    obj.setoption("drawtarget", "tempbuffer", w, h)
+end
+local make_circle = function(color, circle_size, count, phase, radius)
+    obj.load("figure", "円", color, circle_size * 2)
+    for i = 0, count - 1 do
+        local s = (i / count * 2 + phase) * pi
+        obj.draw(radius * cos(s), radius * sin(s), 0, 0.5)
+    end
+end
+make_circle(circle_color_1_value, inner_circle_dot_size, inner_circle_count, inner_circle_phase, base_size / 4)
+make_circle(circle_color_1_value, middle_circle_dot_size, middle_circle_count, inner_circle_phase, base_size / 2 * 0.95)
+make_circle(circle_color_2_value, outer_circle_dot_size, outer_circle_count, outer_circle_phase, base_size / 2)
+local make_wave = function(color, band_index, radius)
+    local nn1 = floor((band_index - 1) * audio_sample_count / 3 + 1) -- N>2
+    local nn2 = floor(band_index * audio_sample_count / 3)
+    local dd = (band_index - 1) / 3
+    local dt = (band_index - 1) * split_count + 1
+    obj.load("figure", "円", color, wave_dot_size * 2)
+    for i = 0, split_count - 1 do
+        local l2 = wave_samples[i + dt] / 2
+        local s = ((i + dd) / split_count * 2 + wave_phase) * pi
+        obj.draw((radius - l2) * cos(s), (radius - l2) * sin(s), 0, 0.5)
+        obj.draw((radius + l2) * cos(s), (radius + l2) * sin(s), 0, 0.5)
+    end
+    for i = 0, split_count - 1 do
+        local l = wave_samples[i + dt]
+        local s = ((i + dd) / split_count * 2 + wave_phase) * pi
+        local d = (i + dd) / split_count * 360 + 90 + wave_phase * 180
+        obj.load("figure", "四角形", color, 1)
+        obj.effect("リサイズ", "ドット数でサイズ指定", 1, "X", wave_bar_width, "Y", l)
+        obj.draw(radius * cos(s), radius * sin(s), 0, 1, 1, 0, 0, d)
+    end
+end
+make_wave(wave_color_1_value, 1, base_size * 5 / 16)
+make_wave(wave_color_2_value, 2, base_size * 6 / 16)
+make_wave(wave_color_3_value, 3, base_size * 7 / 16)
+if use_original_background and wave_opacity > 0 then
+    obj.copybuffer("object", "cache:wave")
+    obj.draw(0, 0, 0, 1, wave_opacity)
+end
+if params[1] == "蒼井" then
+    local lw = params[3] or base_size / 10
+    local sf = { params[2] or "", lw, params[4] or 3, params[5] or 0xffffff, params[6] or 0x0 }
+    local txt1 = "前は・・・だれもまもれなかった・・・"
+    local txt2 = "こんどはまもれましたか・・・？"
+    local t = 3 * floor(6 * (obj.time - 2))
+    obj.setfont(unpack(sf))
+    obj.load("text", txt1)
+    local w0 = obj.getpixel()
+    txt1 = txt1:sub(1, max(t, 0))
+    txt2 = txt2:sub(1, max(t - 54, 0))
+    local w
+    if txt1 ~= "" then
+        obj.setfont(unpack(sf))
+        obj.load("text", txt1)
+        w = obj.getpixel()
+        obj.draw(-w0 / 2 + w / 2, -lw / 2 * 1.2)
+        if txt2 ~= "" then
+            obj.setfont(unpack(sf))
+            obj.load("text", txt2)
+            w = obj.getpixel()
+            obj.draw(-w0 / 2 + w / 2, lw / 2 * 1.2)
+        end
+    end
+end
+obj.copybuffer("object", "tempbuffer")
+
+@ひょうたんTM
+--label:tim\カスタムオブジェクト
+--track@track_height:高さ,0,2000,80,0.1
+--track@track_width:幅,0,2000,250,0.1
+--track@track_neck:くびれ,0,2000,10,0.1
+--track@track_squash:つぶれ,0,100,40,0.1
+--color@color:色,0xffffff
+--track@track_segment_count:分割数,1,200,30,1
+--track@track_repeat_count:繰り返し,1,180,1,1
+--check@check_high_accuracy:高精度,false
+local height_radius = track_height * 0.5
+local half_width = track_width * 0.5
+local neck_radius = track_neck * 0.5
+local vertical_scale = 1 - track_squash * 0.01
+local segment_count = math.max(1, math.floor(track_segment_count or 30))
+local repeat_count = math.max(1, math.floor(track_repeat_count or 1))
+local use_high_accuracy = check_high_accuracy == true or check_high_accuracy == 1
+height_radius = math.min(half_width, height_radius)
+neck_radius = math.min(neck_radius, height_radius)
+if use_high_accuracy then
+    height_radius, half_width, neck_radius = 2 * height_radius, 2 * half_width, 2 * neck_radius
+end
+
+local center_offset = half_width - height_radius
+local inner_arc_radius, x0, y0
+if height_radius == neck_radius then
+    --inner_arc_radius=∞
+    x0 = center_offset
+    y0 = height_radius
+else
+    inner_arc_radius = 0.5
+        * (center_offset * center_offset / (height_radius - neck_radius) - height_radius - neck_radius)
+    x0 = center_offset * inner_arc_radius / (height_radius + inner_arc_radius)
+    y0 = (neck_radius + inner_arc_radius) * height_radius / (height_radius + inner_arc_radius)
+end
+
+local outer_segment_count = segment_count
+local inner_segment_count = segment_count
+
+obj.setoption("drawtarget", "tempbuffer", 2 * half_width, 2 * height_radius * vertical_scale)
+
+obj.load("figure", "四角形", color, 1)
+obj.setoption("blend", "alpha_add2")
+
+local x1 = x0
+local y1 = math.sqrt(height_radius * height_radius - (x1 - center_offset) ^ 2) * vertical_scale
+for i = 1, outer_segment_count do
+    local x2 = i * (half_width - x0) / outer_segment_count + x0
+    local y2 = math.sqrt(height_radius * height_radius - (x2 - center_offset) ^ 2) * vertical_scale
+    obj.drawpoly(x1, -y1, 0, x2, -y2, 0, x2, y2, 0, x1, y1, 0)
+    obj.drawpoly(-x2, -y2, 0, -x1, -y1, 0, -x1, y1, 0, -x2, y2, 0)
+    x1, y1 = x2, y2
+end
+
+if height_radius == neck_radius then
+    local y1 = neck_radius * vertical_scale
+    obj.drawpoly(0, -y1, 0, x0, -y1, 0, x0, y1, 0, 0, y1, 0)
+    obj.drawpoly(-x0, -y1, 0, 0, -y1, 0, 0, y1, 0, -x0, y1, 0)
+else
+    local x1 = 0
+    local y1 = neck_radius * vertical_scale
+    for i = 1, inner_segment_count do
+        local x2 = i * x0 / inner_segment_count
+        local y2 = (neck_radius + inner_arc_radius - math.sqrt(inner_arc_radius * inner_arc_radius - x2 * x2))
+            * vertical_scale
+        obj.drawpoly(x1, -y1, 0, x2, -y2, 0, x2, y2, 0, x1, y1, 0)
+        obj.drawpoly(-x2, -y2, 0, -x1, -y1, 0, -x1, y1, 0, -x2, y2, 0)
+        x1, y1 = x2, y2
+    end
+end
+
+obj.load("tempbuffer")
+
+if repeat_count > 1 then
+    obj.setoption("drawtarget", "tempbuffer", 2 * half_width, 2 * half_width)
+    obj.setoption("blend", 0)
+    for i = 0, repeat_count - 1 do
+        obj.draw(0, 0, 0, 1, 1, 0, 0, i / repeat_count * 180)
+    end
+    obj.load("tempbuffer")
+end
+
+if use_high_accuracy then
+    obj.effect("リサイズ", "拡大率", 50)
+end
+
+@インクTM
+--label:tim\カスタムオブジェクト
+--track@track_size:サイズ,0,2000,200,1
+--track@track_roundness:円形度合,0,100,60,0.1
+--track@track_shape:形状,0,10000,3000,1
+--track@track_unfold:展開,0,100,100,0.1
+--color@color:色,0xffffff
+--check@check_use_new_rendering:新描画法,true
+--track@track_body_scale_percent:本体拡大率%,0,300,100,0.1
+--track@track_splash_count_1:飛沫数1,0,100,5,1
+--track@track_splash_count_2:飛沫数2,0,100,4,1
+--track@track_splash_1_width_scale_percent:飛散1幅拡大率%,0,300,100,0.1
+--track@track_splash_2_scale_percent:飛散2拡大率%,0,300,100,0.1
+--track@track_splash_2_distortion_percent:飛散2歪み%,0,100,0,0.1
+--track@track_body_shape_seed:本体変化乱数,0,100000,0,1
+--track@track_splash_seed_1:飛散変化乱数1,0,100000,0,1
+--track@track_splash_seed_2:飛散変化乱数2,0,100000,0,1
+--hide@track_body_scale_percent:check_use_new_rendering==0
+--hide@track_splash_1_width_scale_percent:check_use_new_rendering==0
+--hide@track_splash_2_scale_percent:check_use_new_rendering==0
+--hide@track_splash_2_distortion_percent:check_use_new_rendering==0
+--hide@track_body_shape_seed:check_use_new_rendering==0
+--hide@track_splash_seed_1:check_use_new_rendering==0
+--hide@track_splash_seed_2:check_use_new_rendering==0
+
+local use_new_rendering = check_use_new_rendering == true or check_use_new_rendering == 1
+local splash_count_1 = math.floor(math.abs(track_splash_count_1 or 0))
+local splash_count_2 = math.floor(math.abs(track_splash_count_2 or 0))
+local body_seed = math.floor(math.abs(track_body_shape_seed or 0))
+local splash_seed_1 = math.floor(math.abs(track_splash_seed_1 or 0))
+local splash_seed_2 = math.floor(math.abs(track_splash_seed_2 or 0))
+local body_scale = (track_body_scale_percent or 100) * 0.01
+local splash_width_scale = (track_splash_1_width_scale_percent or 100) * 0.01
+local splash_scale_2 = (track_splash_2_scale_percent or 100) * 0.01
+local splash_distortion_2 = (track_splash_2_distortion_percent or 0) * 0.02
+
+if use_new_rendering then
+    local l = track_size
+    local cp = track_roundness * 0.01
+    local lh = l * 0.5
+    local seed = track_shape
+    local dev = track_unfold * 0.01
+    obj.load("figure", "四角形", color, 1)
+    local threshold_1 = {}
+    local threshold_2 = {}
+    for j = 1, splash_count_1 do
+        threshold_1[j] = obj.rand(30, 60, -j - splash_seed_1, 10000 + seed) * 0.01
+    end
+    for j = 1, splash_count_2 do
+        threshold_2[j] = obj.rand(20, 80, -j - splash_seed_2, 11000 + seed) * 0.01
+    end
+    --飛散1
+    local r1 = 30 * 0.5
+    local w = 100 * 0.5
+
+    local c1 = 4 * math.sqrt(0.12 * 0.12 - (0.2 - 0.12) ^ 2)
+    local xc = {}
+    local yc = {}
+    local yd = {}
+    local ye = {}
+    local numc = -1
+
+    if dev > 0.3 then
+        local r1 = r1 * splash_width_scale
+        local n1 = 18
+        local n2 = 102
+        for i = 0, n1 - 1 do
+            numc = numc + 1
+            local x1 = i / n1 * 0.2
+            xc[numc] = -w * (0.3 * i / n1 - 1)
+            yc[numc] = r1 * 0.48 * (math.sqrt(1 - (x1 / 0.12 - 1) ^ 2))
+        end
+        for i = 0, n2 do
+            local x1 = 0.7 * i / n2 + 0.2
+            numc = numc + 1
+            xc[numc] = -w * (-0.7 + 1.7 * i / n2)
+            yc[numc] = r1 * (3 * (x1 - 0.2) * (x1 - 0.6) + c1)
+        end
+    end
+    for j = 1, splash_count_1 do
+        if dev > threshold_1[j] then
+            local dd = 3 * (dev - threshold_1[j])
+            dd = dd > 1 and 1 or dd
+            dd = dd * (2 - dd)
+            local d_n = math.floor(numc * (1 - dd))
+
+            local ycc = {}
+            for i = 0, d_n - 1 do
+                ycc[i] = 0
+            end
+            for i = d_n, numc do
+                ycc[i] = yc[i - d_n]
+            end
+            obj.setoption("drawtarget", "tempbuffer", 2 * w, 2 * r1)
+            obj.setoption("blend", "alpha_add")
+            for i = 0, numc do
+                local d = 0
+                local e = 0
+                if ycc[i] > 0 then
+                    for k = 1, 3 do
+                        local kk = k + splash_seed_1
+                        d = d
+                            + math.sin(
+                                    obj.rand(10, 20, -kk, j + 100 + seed) * 0.1 * math.pi * i / numc
+                                        + obj.rand(0, 731, -kk, j + 200 + seed) * 0.01
+                                )
+                                * obj.rand(30, 50, -kk, j + 300 + seed)
+                    end
+                    e = -d
+                    for k = 1, 3 do
+                        local kk = k + splash_seed_1
+                        d = d
+                            + math.sin(
+                                    obj.rand(100, 150, -kk, j + 400 + seed) * 0.1 * math.pi * i / numc
+                                        + obj.rand(0, 731, -kk, j + 500 + seed) * 0.01
+                                )
+                                * 15
+                                / k
+                        e = e
+                            + math.cos(
+                                    obj.rand(100, 150, -kk, j + 700 + seed) * 0.1 * math.pi * i / numc
+                                        + obj.rand(0, 731, -kk, j + 800 + seed) * 0.01
+                                )
+                                * 15
+                                / k
+                    end
+                else
+                    e, d = 0, 0
+                end
+                yd[i] = ycc[i] + d * 0.04
+                ye[i] = ycc[i] + e * 0.03
+            end
+
+            for i = 0, numc - 1 do
+                if ycc[i] > 0 then
+                    obj.drawpoly(xc[i], -yd[i], 0, xc[i + 1], -yd[i + 1], 0, xc[i + 1], ye[i + 1], 0, xc[i], ye[i], 0)
+                end
+            end
+            obj.copybuffer("cache:HS1_img" .. j, "tempbuffer")
+        end
+    end
+
+    --本体
+    local dd = dev * 1.5
+    dd = dd > 1 and 1 or dd
+    dd = dd * (2 - dd)
+    obj.setoption("drawtarget", "tempbuffer", l, l)
+    obj.setoption("blend", "alpha_add")
+    local rr = {}
+    for i = 0, 199 do
+        local ff = 0
+        for k = 1, 30 do
+            local cpp = 0.2 * (1 - cp / (1 + (k - 1) * 0.01))
+            ff = ff + math.sin((math.pi * k * i + obj.rand(0, 731, -k - body_seed, seed)) * 0.01) / k * cpp
+        end
+        for k = 65, 80 do
+            local cpp = 0.15 * (1 - cp / (1 + (k - 1) * 0.01))
+            ff = ff + math.sin((math.pi * k * i + obj.rand(0, 731, -k - body_seed, seed)) * 0.01) / k * cpp
+        end
+        rr[i] = (ff * dd + 0.5) * lh * dd * body_scale
+    end
+    rr[200] = rr[0]
+    for i = 1, 4 do
+        rr[-i] = rr[200 - i]
+        rr[200 + i] = rr[i]
+    end
+    local r0
+    local t0
+    local x0, y0 = rr[0], 0
+    for i = 1, 200 do
+        local r1 = rr[i]
+        local t1 = i * math.pi / 100
+        local x1, y1 = r1 * math.cos(t1), r1 * math.sin(t1)
+        obj.drawpoly(x0, y0, 0, x1, y1, 0, 0, 0, 0, 0, 0, 0)
+        x0, y0 = x1, y1
+    end
+
+    --飛散1
+    for i = 1, splash_count_1 do
+        if dev > threshold_1[i] then
+            local ii = i + splash_seed_1
+            obj.copybuffer("object", "cache:HS1_img" .. i)
+            local j = (obj.rand(0, 199 / splash_count_1, -ii, 1000 + seed) + math.floor(200 * i / splash_count_1)) % 200
+            local angle_radians = j * math.pi / 100
+            local p2 = obj.rand(80, 100, -ii, 3000 + seed) * 0.01
+            local p3 = obj.rand(70, 90, -ii, 4000 + seed) * 0.01
+            local hsl = lh * obj.rand(25, 80, -ii, 2000 + seed) * 0.01
+            local x1 = p3
+                * math.min(
+                    rr[j - 4],
+                    rr[j - 3],
+                    rr[j - 2],
+                    rr[j - 1],
+                    rr[j],
+                    rr[j + 1],
+                    rr[j + 2],
+                    rr[j + 3],
+                    rr[j + 4],
+                    lh - hsl
+                )
+            local x2 = x1 + p3 * hsl
+            local y2 = p2 * hsl * r1 / w * 0.5
+
+            local y1 = -y2
+            local cos = math.cos(angle_radians)
+            local sin = math.sin(angle_radians)
+            local u0, v0 = x1 * cos - y1 * sin, x1 * sin + y1 * cos
+            local u1, v1 = x2 * cos - y1 * sin, x2 * sin + y1 * cos
+            local u2, v2 = x2 * cos - y2 * sin, x2 * sin + y2 * cos
+            local u3, v3 = x1 * cos - y2 * sin, x1 * sin + y2 * cos
+            obj.drawpoly(u0, v0, 0, u1, v1, 0, u2, v2, 0, u3, v3, 0)
+            obj.load("figure", "四角形", color, 1)
+            obj.drawpoly(u0, v0, 0, 0, 0, 0, 0, 0, 0, u3, v3, 0)
+        end
+    end
+
+    --飛散2
+
+    obj.load("figure", "四角形", color, 1)
+
+    for j = 1, splash_count_2 do
+        if dev > threshold_2[j] then
+            local dd = 10 * (dev - threshold_2[j])
+            dd = dd > 1 and 1 or dd
+            dd = dd * (2 - dd) * splash_scale_2
+            local n = 20
+            local jj = j + splash_seed_2
+            local k = (obj.rand(0, 199 / splash_count_2, -jj, 8000 + seed) + math.floor(200 * j / splash_count_2)) % 200
+            local angle_radians = k * math.pi / 100
+            local r0 = lh * obj.rand(50, 85, -jj, 7000 + seed) * 0.01
+            local ox, oy = r0 * math.cos(angle_radians), r0 * math.sin(angle_radians)
+            local de = obj.rand(0, 628, -jj, 11000 + seed) * 0.01
+            local siz = lh * 0.15 * obj.rand(40, 90, -jj, 9000 + seed) * 0.01 * 0.5 * dd
+            local rh = obj.rand(200, 800, -jj, 10000 + seed)
+            local r = {}
+            local t = {}
+            for i = 0, n - 1 do
+                local d = 0
+                for k = 1, 3 do
+                    d = d
+                        + math.sin(
+                                2 * k * math.pi * i / n
+                                    + obj.rand(0, 731, -k - splash_seed_2, j + 200 + seed) * 0.01
+                                    + de
+                            )
+                            * obj.rand(20, 80, -k - splash_seed_2, j + 300 + seed)
+                end
+                local x = 1 - math.abs(i - n / 2) / (n / 2)
+                r[i] = siz * (1 + d * 0.001) * (splash_distortion_2 * x * x * (x - 1) + 1) ^ 1.5
+                t[i] = i * 2 * math.pi / n + angle_radians
+            end
+            r[n] = r[0]
+            t[n] = 0 + angle_radians
+            local x0, y0 = r[0] * math.cos(t[0]) + ox, r[0] * math.sin(t[0]) + oy
+            for i = 1, n do
+                local x1, y1 = r[i] * math.cos(t[i]) + ox, r[i] * math.sin(t[i]) + oy
+                obj.drawpoly(x0, y0, 0, x0, y0, 0, x1, y1, 0, ox, oy, 0)
+                x0, y0 = x1, y1
+            end
+        end
+    end
+
+    obj.load("tempbuffer")
+else --ここからOLD-------
+    local l = track_size
+    local cp = track_roundness * 0.01
+    local lh = l * 0.5
+    local seed = track_shape
+    local n = 30
+    obj.load("figure", "四角形", color, 1)
+    --飛散1
+    local r1 = 30 * 0.5
+    local w = 100 * 0.5
+    local c1 = 4 * math.sqrt(0.12 * 0.12 - (0.2 - 0.12) ^ 2)
+    local xc = {}
+    local yc = {}
+    local yd = {}
+    local ye = {}
+    local numc = -1
+    for i = 0, n - 1 do
+        numc = numc + 1
+        local x1 = i / n * 0.2
+        xc[numc] = -w * (0.3 * i / n - 1)
+        yc[numc] = r1 * 0.48 * (math.sqrt(1 - (x1 / 0.12 - 1) ^ 2))
+    end
+    for i = 0, 3 * n do
+        local x1 = 0.7 * i / (3 * n) + 0.2
+        numc = numc + 1
+        xc[numc] = -w * (-0.7 + 1.7 * i / (3 * n))
+        yc[numc] = r1 * (3 * (x1 - 0.2) * (x1 - 0.6) + c1)
+    end
+    for j = 1, splash_count_1 do
+        obj.setoption("drawtarget", "tempbuffer", 2 * w, 2 * r1)
+        obj.setoption("blend", "alpha_add")
+        for i = 0, numc do
+            local d = 0
+            local e = 0
+            for k = 1, 3 do
+                d = d
+                    + math.sin(
+                            obj.rand(10, 20, k, j + 100 + seed) * 0.1 * math.pi * i / numc
+                                + obj.rand(0, 731, k, j + 200 + seed) * 0.01
+                        )
+                        * obj.rand(30, 50, k, j + 300 + seed)
+            end
+            e = -d
+            for k = 1, 3 do
+                d = d
+                    + math.sin(
+                            obj.rand(100, 150, k, j + 400 + seed) * 0.1 * math.pi * i / numc
+                                + obj.rand(0, 731, k, j + 500 + seed) * 0.01
+                        )
+                        * 15
+                        / k
+                e = e
+                    + math.cos(
+                            obj.rand(100, 150, k, j + 700 + seed) * 0.1 * math.pi * i / numc
+                                + obj.rand(0, 731, k, j + 800 + seed) * 0.01
+                        )
+                        * 15
+                        / k
+            end
+            yd[i] = yc[i] + d * 0.04
+            ye[i] = yc[i] + e * 0.03
+        end
+        for i = 0, numc - 1 do
+            obj.drawpoly(xc[i], -yd[i], 0, xc[i + 1], -yd[i + 1], 0, xc[i + 1], ye[i + 1], 0, xc[i], ye[i], 0)
+        end
+        obj.copybuffer("cache:HS1_img" .. j, "tempbuffer")
+    end
+
+    --飛散2
+
+    n = 20
+    for j = 1, splash_count_2 do
+        local siz = lh * 0.15 * obj.rand(95, 100, j, 9000 + seed) * 0.01
+        local rh = obj.rand(200, 800, j, 10000 + seed)
+        obj.setoption("drawtarget", "tempbuffer", 2 * siz, 2 * siz)
+        obj.setoption("blend", "alpha_add")
+        local r = {}
+        local t = {}
+        for i = 0, n - 1 do
+            local d = 0
+            for k = 1, 3 do
+                d = d
+                    + math.sin(2 * k * math.pi * i / n + obj.rand(0, 731, k, j + 200 + seed) * 0.01)
+                        * obj.rand(20, 80, k, j + 300 + seed)
+            end
+            r[i] = siz * (1 + d * 0.001) * 0.5
+            t[i] = i * 2 * math.pi / n
+        end
+        r[n] = r[0]
+        t[n] = 0
+        local x0, y0 = r[0], 0
+        for i = 0, n - 1 do
+            local x1, y1 = r[i + 1] * math.cos(t[i + 1]), r[i] * math.sin(t[i + 1])
+            obj.drawpoly(x0, y0, 0, x0, y0, 0, x1, y1, 0, 0, 0, 0)
+            x0, y0 = x1, y1
+        end
+        obj.copybuffer("cache:HS2_img" .. j, "tempbuffer")
+    end
+
+    --本体
+
+    obj.setoption("drawtarget", "tempbuffer", l, l)
+    obj.setoption("blend", "alpha_add")
+    local rr = {}
+    for i = 0, 199 do
+        local ff = 0
+        for k = 1, 30 do
+            local cpp = 0.2 * (1 - cp / (1 + (k - 1) * 0.01))
+            ff = ff + math.sin((math.pi * k * i + obj.rand(0, 731, k, seed)) * 0.01) / k * cpp
+        end
+        for k = 65, 80 do
+            local cpp = 0.15 * (1 - cp / (1 + (k - 1) * 0.01))
+            ff = ff + math.sin((math.pi * k * i + obj.rand(0, 731, k, seed)) * 0.01) / k * cpp
+        end
+        rr[i] = (ff + 0.5) * lh
+    end
+    rr[200] = rr[0]
+    local r0
+    local t0
+    local x0, y0 = rr[0], 0
+    for i = 0, 199 do
+        local r1 = rr[i + 1]
+        local t1 = (i + 1) * math.pi / 100
+        local x1, y1 = r1 * math.cos(t1), r1 * math.sin(t1)
+        obj.drawpoly(x0, y0, 0, x1, y1, 0, 0, 0, 0, 0, 0, 0)
+        x0, y0 = x1, y1
+    end
+
+    --飛散1
+    for i = 1, splash_count_1 do
+        obj.copybuffer("object", "cache:HS1_img" .. i)
+        local j = (obj.rand(0, 199 / splash_count_1, i, 1000 + seed) + math.floor(200 * i / splash_count_1)) % 200
+        local angle_radians = j * math.pi / 100
+        local r0 = rr[j]
+        local p1 = (lh - r0) / (2 * w - r1) * obj.rand(50, 100, i, 2000 + seed) * 0.01
+        local p2 = obj.rand(80, 100, i, 3000 + seed) * 0.01
+        local p3 = obj.rand(50, 90, i, 4000 + seed) * 0.01
+        local x1 = p3 * r0 - p1 * r1
+        local x2 = p3 * r0 + p1 * (2 * w - r1)
+        local y2 = r1 * p1 * p2
+        local y1 = -y2
+        local cos = math.cos(angle_radians)
+        local sin = math.sin(angle_radians)
+        local u0, v0 = x1 * cos - y1 * sin, x1 * sin + y1 * cos
+        local u1, v1 = x2 * cos - y1 * sin, x2 * sin + y1 * cos
+        local u2, v2 = x2 * cos - y2 * sin, x2 * sin + y2 * cos
+        local u3, v3 = x1 * cos - y2 * sin, x1 * sin + y2 * cos
+        obj.drawpoly(u0, v0, 0, u1, v1, 0, u2, v2, 0, u3, v3, 0)
+    end
+
+    --飛散2
+    for i = 1, splash_count_2 do
+        obj.copybuffer("object", "cache:HS2_img" .. i)
+        local de = obj.rand(0, 360, i, 11000 + seed)
+        local b = obj.rand(66, 100, i, 6000 + seed) * 0.01
+        local r0 = obj.rand(lh * 0.5, lh * 0.85, i, 7000 + seed)
+        local j = (obj.rand(0, 199 / splash_count_2, i, 8000 + seed) + math.floor(200 * i / splash_count_2)) % 200
+        local angle_radians = j * math.pi / 100
+        local ox, oy = r0 * math.cos(angle_radians), r0 * math.sin(angle_radians)
+        obj.draw(ox, oy, 0, b, 1, 0, 0, de)
+    end
+    obj.load("tempbuffer")
+end
+
+@Lensflare
+--label:tim\カスタムオブジェクト
+--track@track_light_center_x:光中心(X),-5000,5000,-320,0.1
+--track@track_light_center_y:光中心(Y),-5000,5000,-180,0.1
+--track@track_offset_x:ずれ(X),-5000,5000,640,0.1
+--track@track_offset_y:ずれ(Y),-5000,5000,360,0.1
+--track@track_blur:ぼかし,0,1000,5,0.1
+--track@track_flicker:点滅幅,0,1,0.1,0.01
+local center_x = track_light_center_x
+local center_y = track_light_center_y
+local offset_x = track_offset_x
+local offset_y = track_offset_y
+
+local flicker_alpha = 1 - track_flicker + track_flicker * obj.rand(0, 100) / 100
+
+local make_disc
+
+local function make_light(x, y, flare_size, noise_speed)
+    obj.load("figure", "四角形", 0xffffff, 8 * flare_size / 9)
+    obj.effect("ノイズ", "周期X", 20, "周期Y", 0, "しきい値", 24, "変化速度", noise_speed)
+    obj.effect("境界ぼかし", "範囲", flare_size / 3, "縦横比", -100)
+    obj.effect("クリッピング", "上", flare_size / 3)
+    obj.effect("極座標変換", "中心幅", flare_size / 25)
+    obj.alpha = 0.5 * flicker_alpha
+    obj.ox = x
+    obj.oy = y
+    obj.zoom = 2
+    obj.draw()
+
+    obj.load("figure", "円", 0xffffff, 4 * flare_size / 15)
+    obj.effect("ぼかし", "範囲", flare_size / 10)
+    obj.ox = x
+    obj.oy = y
+    obj.effect("ぼかし", "範囲", track_blur)
+    obj.draw()
+    make_disc(x, y, flare_size, 120, 70, 70, 1, 0.2)
+end
+
+make_disc = function(x, y, flare_size, r, g, b, outer_alpha, inner_alpha)
+    obj.load("figure", "四角形", r * 256 ^ 2 + g * 256 + b, flare_size * 482 / 500)
+    obj.alpha = outer_alpha * flicker_alpha
+    obj.effect("クリッピング", "上", 0.9 * flare_size)
+    obj.effect("境界ぼかし", "範囲", 0.23 * flare_size, "縦横比", -100)
+    obj.effect("クリッピング", "下", 0.0395 * flare_size)
+    obj.effect("極座標変換", "中心幅", 0.175 * flare_size)
+    obj.ox = x
+    obj.oy = y
+    obj.effect("ぼかし", "範囲", track_blur)
+    obj.draw()
+
+    obj.load("figure", "円", r * 256 ^ 2 + g * 256 + b, 0.964 * flare_size)
+    obj.alpha = inner_alpha * flicker_alpha
+    obj.ox = x
+    obj.oy = y
+    obj.effect("ぼかし", "範囲", track_blur)
+    obj.draw()
+end
+
+make_light(center_x, center_y, 450, 0)
+make_disc(center_x + 0.60 * offset_x, center_y + 0.60 * offset_y, 200, 255, 255, 128, 0.4, 0.3) --middle yellow
+make_disc(center_x + 0.85 * offset_x, center_y + 0.85 * offset_y, 250, 170, 255, 128, 0.4, 0.2) --middle green
+make_disc(center_x + offset_x, center_y + offset_y, 500, 255, 255, 128, 0.3, 0.1) --big yellow
+make_disc(center_x + 0.58 * offset_x, center_y + 0.58 * offset_y, 100, 255, 255, 128, 0.4, 0.3) --middle-small yellow
+make_disc(center_x + 0.68 * offset_x, center_y + 0.68 * offset_y, 80, 170, 255, 128, 0.2, 0.1) --small green
+make_disc(center_x + 0.62 * offset_x, center_y + 0.62 * offset_y, 50, 255, 255, 128, 0.4, 0.3) --small yellow
+make_disc(center_x + 0.35 * offset_x, center_y + 0.35 * offset_y, 50, 255, 255, 128, 0.4, 0.3) --small yellow
+make_disc(center_x - 0.23 * offset_x, center_y - 0.23 * offset_y, 350, 100, 100, 255, 0.2, 0.1) --big parple
+make_disc(center_x + 0.41 * offset_x, center_y + 0.41 * offset_y, 10, 255, 255, 255, 0.5, 0.5) --small white
+make_disc(center_x + 0.50 * offset_x, center_y + 0.50 * offset_y, 10, 255, 255, 255, 0.5, 0.5) --small white
+make_disc(center_x - 0.13 * offset_x, center_y - 0.13 * offset_y, 75, 255, 255, 255, 0.2, 0.1) --middle white
+
+@稲妻
+--label:tim\カスタムオブジェクト
+local draw_rectangle, core_size
+--track@track_pattern:パターン,0,1000,0,0.1
+--track@track_unfold_amount:展開度,0,100,50,0.01
+--track@track_size:サイズ,1,100,6,0.1
+--track@track_interval:コア間隔,2,100,3,0.1
+--value@core_position:位置,{ 0, -150, 0, 150 }
+--color@core_color:コア色,0xffffff
+--group:発光
+
+--color@glow_color:発光色,0x0000ff
+--track@track_glow_strength:発光強さ,0,200,40,0.1
+--track@track_glow_diffusion:発光拡散,0,1000,300,0.1
+--track@track_glow_threshold:発光しきい値,0,200,0,0.1
+--track@track_glow_diffusion_speed:発光拡散速度,0,100,10,0.1
+--group:軌道
+
+--track@track_fork_count:軌道フォーク数,0,25,8,1
+--track@track_straightness:軌道直進性,1,100,8,1
+--track@track_branch_range:軌道設置範囲,0,100,30,0.1
+--track@track_bend_probability:軌道折れ確率,0,100,80,0.1
+--group:
+
+--value@track_area_size:領域サイズ,{ -180, -180, 180, 180 }
+--check@check_show_frame:枠表示,true
+local random_seed = math.floor(track_pattern)
+
+local attenuation_rate = 100 - track_unfold_amount
+attenuation_rate = (math.exp(0.10 * attenuation_rate) - 1) / 62
+
+local fast_draw_buffer = {}
+local function fast_draw(x, y, zoom)
+    table.insert(fast_draw_buffer, {
+        x - obj.w / 2 * zoom,
+        y - obj.h / 2 * zoom,
+        0,
+        x + obj.w / 2 * zoom,
+        y - obj.h / 2 * zoom,
+        0,
+        x + obj.w / 2 * zoom,
+        y + obj.h / 2 * zoom,
+        0,
+        x - obj.w / 2 * zoom,
+        y + obj.h / 2 * zoom,
+        0,
+        0,
+        0,
+        obj.w,
+        0,
+        obj.w,
+        obj.h,
+        0,
+        obj.h,
+    })
+end
+local function flush_fast_draw()
+    if #fast_draw_buffer == 0 then
+        return
+    end
+    obj.drawpoly(fast_draw_buffer)
+    fast_draw_buffer = {}
+end
+
+local function draw_lightning_branch(
+    start_x,
+    start_y,
+    end_x,
+    end_y,
+    core_interval,
+    branch_size,
+    straightness,
+    remaining_forks,
+    branch_range
+)
+    if core_interval < 0.3 then
+        return
+    end
+
+    local branch_vector_x, branch_vector_y = end_x - start_x, end_y - start_y
+    local branch_length_squared = branch_vector_x * branch_vector_x + branch_vector_y * branch_vector_y
+    local branch_length = math.sqrt(branch_length_squared)
+    local base_step_x = branch_vector_x * core_interval / branch_length
+    local base_step_y = branch_vector_y * core_interval / branch_length
+
+    fast_draw(start_x, start_y, branch_size / core_size)
+
+    local angle_jitter = obj.rand(-75, 75, 0, 10 + random_seed) * 0.01
+    local angle_sine = math.sin(angle_jitter)
+    local angle_cosine = math.cos(angle_jitter)
+    local step_x, step_y =
+        angle_cosine * base_step_x + angle_sine * base_step_y, -angle_sine * base_step_x + angle_cosine * base_step_y
+    local offset_x = 0
+    local offset_y = 0
+    local i = 0
+
+    local branch_trigger_offsets = {}
+
+    for j = 1, 3 do
+        branch_trigger_offsets[j] = obj.rand(0, branch_vector_y * 0.5, i, j + random_seed)
+    end
+
+    while offset_y * offset_y < branch_vector_y * branch_vector_y do
+        i = i + 1
+        local attenuation = math.exp(-attenuation_rate * offset_y / branch_vector_y)
+
+        if attenuation < 0.005 then
+            return
+        end
+
+        local retry_count = 0
+        repeat
+            retry_count = retry_count + 1
+            angle_jitter = obj.rand(-75, 75, i, 12 + random_seed + 100 * retry_count) * 0.01
+            angle_sine = math.sin(angle_jitter)
+            angle_cosine = math.cos(angle_jitter)
+            step_x, step_y =
+                (angle_cosine * base_step_x + angle_sine * base_step_y) * attenuation,
+                (-angle_sine * base_step_x + angle_cosine * base_step_y) * attenuation
+        until step_y * base_step_y > 0
+
+        local run_length_factor = math.log(obj.rand(2, 100, i, 11 + random_seed))
+            / math.log(track_bend_probability)
+            / core_interval
+
+        for k = 0, straightness * run_length_factor do
+            fast_draw(
+                start_x + offset_x + k * step_x,
+                start_y + offset_y + k * step_y,
+                branch_size / core_size * attenuation
+            )
+        end
+
+        offset_x = offset_x + straightness * run_length_factor * step_x
+        offset_y = offset_y + straightness * run_length_factor * step_y
+
+        for j = 1, 3 do
+            if
+                branch_trigger_offsets[j] ~= nil
+                and branch_trigger_offsets[j] * branch_trigger_offsets[j] < offset_y * offset_y
+                and remaining_forks > 1
+            then
+                random_seed = random_seed + 1
+                remaining_forks = remaining_forks - 1
+                local fork_end_offset_x = obj.rand(-branch_range, branch_range, i, 13 + random_seed)
+                    * 0.01
+                    * branch_vector_y
+                draw_lightning_branch(
+                    start_x + offset_x,
+                    start_y + offset_y,
+                    end_x + fork_end_offset_x,
+                    end_y,
+                    core_interval * 0.8 * attenuation,
+                    branch_size * 0.8 * attenuation,
+                    straightness,
+                    remaining_forks,
+                    branch_range
+                )
+                branch_trigger_offsets[j] = nil
+            end
+        end
+    end
+end
+
+function draw_rectangle(x1, y1, x2, y2)
+    obj.drawpoly(x1, y1, 0, x2, y1, 0, x2, y2, 0, x1, y2, 0, 0, 0, obj.w, 0, obj.w, obj.h, 0, obj.h)
+end
+
+core_size = track_size
+local remaining_forks = math.floor(track_fork_count or 0)
+local straightness = math.floor(track_straightness or 1)
+local branch_range = track_branch_range or 30
+local glow_strength = track_glow_strength or 40
+local glow_diffusion = track_glow_diffusion or 300
+local glow_threshold = track_glow_threshold or 0
+local glow_diffusion_speed = track_glow_diffusion_speed or 10
+
+local core_interval = track_interval
+
+obj.setanchor("core_position", 2, "line")
+local start_x, start_y, end_x, end_y = unpack(core_position)
+obj.setanchor("track_area_size", 2)
+local area_min_x, area_min_y, area_max_x, area_max_y = unpack(track_area_size)
+local area_center_x, area_center_y = (area_max_x + area_min_x) / 2, (area_max_y + area_min_y) / 2
+
+if remaining_forks > 25 then
+    remaining_forks = 25
+end
+
+straightness = math.floor(straightness)
+if straightness < 1 then
+    straightness = 1
+end
+
+obj.setoption("drawtarget", "tempbuffer", math.abs(area_max_x - area_min_x), math.abs(area_max_y - area_min_y))
+
+obj.load("figure", "円", core_color, core_size)
+
+draw_lightning_branch(
+    start_x - area_center_x,
+    start_y - area_center_y,
+    end_x - area_center_x,
+    end_y - area_center_y,
+    core_interval,
+    core_size,
+    straightness,
+    remaining_forks,
+    branch_range
+)
+flush_fast_draw()
+
+if obj.getoption("gui") == true and obj.getinfo("saving") == false and check_show_frame then
+    obj.load("figure", "四角形", 0xffffff, 100)
+    area_min_x = area_min_x - area_center_x
+    area_max_x = area_max_x - area_center_x
+    area_min_y = area_min_y - area_center_y
+    area_max_y = area_max_y - area_center_y
+    draw_rectangle(area_min_x, area_min_y - 0.5, area_max_x, area_min_y + 0.5)
+    draw_rectangle(area_min_x, area_max_y - 0.5, area_max_x, area_max_y + 0.5)
+    draw_rectangle(area_min_x - 0.5, area_min_y, area_min_x + 0.5, area_max_y)
+    draw_rectangle(area_max_x - 0.5, area_min_y, area_max_x + 0.5, area_max_y)
+end
+
+obj.load("tempbuffer")
+
+obj.cx, obj.cy = obj.cx - area_center_x, obj.cy - area_center_y
+
+obj.effect("色調補正", "明るさ", 200)
+obj.effect(
+    "発光",
+    "強さ",
+    glow_strength,
+    "拡散",
+    glow_diffusion,
+    "しきい値",
+    glow_threshold,
+    "拡散速度",
+    glow_diffusion_speed,
+    "color",
+    core_color,
+    "no_color",
+    0,
+    "サイズ固定",
+    1
+)
+obj.effect(
+    "発光",
+    "強さ",
+    glow_strength,
+    "拡散",
+    glow_diffusion,
+    "しきい値",
+    glow_threshold,
+    "拡散速度",
+    glow_diffusion_speed,
+    "color",
+    glow_color,
+    "no_color",
+    0,
+    "サイズ固定",
+    1
+)
+
+@マルチラインT
+--label:tim\カスタムオブジェクト
+--track@track_anchor_count:アンカー数,1,16,4,1
+--track@track_line_width:線幅,0,1000,20,0.1
+--track@track_arrowhead_width_percent:矢尻幅％,0,1000,200,0.1
+--track@track_arrowhead_length_percent:矢尻長％,0,1000,240,0.1
+--color@color_line:線色,0xff0000
+--string@value_segment_visibility:表示指示,10
+--check@check_round_corners:角丸,0
+--check@check_join_segments:結合,0
+--track@track_snap_x:Xスナップ,1,500,30,1
+--track@track_snap_y:Yスナップ,1,500,30,1
+--value@anchor_positions:座標,{ -150, -100, 150, -100, -150, 100, 150, 100 }
+--check@check_reverse_arrow_position:矢印位置反転,false
+--ver1.1
+
+local color_line = color_line or 0xff0000
+local value_segment_visibility = value_segment_visibility or 1
+local check_round_corners = check_round_corners
+local check_join_segments = check_join_segments
+local snap_x = math.abs(track_snap_x or 0)
+local snap_y = math.abs(track_snap_y or 0)
+
+local anchor_count = track_anchor_count
+
+local line_width = track_line_width
+local arrowhead_width = line_width * track_arrowhead_width_percent * 0.01
+local arrowhead_length = line_width * track_arrowhead_length_percent * 0.01
+
+obj.setanchor("anchor_positions", anchor_count, "line")
+
+local visibility_pattern_length = string.len(value_segment_visibility)
+local segment_visibility = {}
+for i = 1, visibility_pattern_length do
+    segment_visibility[i] = tonumber(string.sub(value_segment_visibility, i, i))
+end
+
+local anchor_x_positions = {}
+local anchor_y_positions = {}
+
+for i = 1, anchor_count do
+    anchor_x_positions[i] = anchor_positions[2 * i - 1]
+    anchor_y_positions[i] = anchor_positions[2 * i]
+
+    if snap_x > 0 then
+        anchor_x_positions[i] = anchor_x_positions[i] + snap_x * 0.5
+        local snap_index = math.floor(anchor_x_positions[i] / snap_x)
+        anchor_x_positions[i] = snap_index * snap_x
+    end
+    if snap_y > 0 then
+        anchor_y_positions[i] = anchor_y_positions[i] + snap_y * 0.5
+        local snap_index = math.floor(anchor_y_positions[i] / snap_y)
+        anchor_y_positions[i] = snap_index * snap_y
+    end
+
+    local pattern_index = ((i - 1) % visibility_pattern_length) + 1
+    segment_visibility[i] = segment_visibility[pattern_index]
+end
+
+if check_reverse_arrow_position then
+    for i = 1, anchor_count / 2 do
+        anchor_x_positions[i], anchor_x_positions[anchor_count + 1 - i] =
+            anchor_x_positions[anchor_count + 1 - i], anchor_x_positions[i]
+        anchor_y_positions[i], anchor_y_positions[anchor_count + 1 - i] =
+            anchor_y_positions[anchor_count + 1 - i], anchor_y_positions[i]
+        segment_visibility[i], segment_visibility[anchor_count + 0 - i] =
+            segment_visibility[anchor_count + 0 - i], segment_visibility[i]
+    end
+end
+
+local max_x = math.max(unpack(anchor_x_positions))
+local min_x = math.min(unpack(anchor_x_positions))
+local max_y = math.max(unpack(anchor_y_positions))
+local min_y = math.min(unpack(anchor_y_positions))
+
+local center_x = (max_x + min_x) * 0.5
+local center_y = (max_y + min_y) * 0.5
+
+for i = 1, anchor_count do
+    anchor_x_positions[i] = anchor_x_positions[i] - center_x
+    anchor_y_positions[i] = anchor_y_positions[i] - center_y
+end
+
+local arrowhead_enabled = {}
+if check_join_segments == 1 then
+    for i = 1, anchor_count - 2 do
+        if segment_visibility[i + 1] == 1 then
+            arrowhead_enabled[i] = 0
+        else
+            arrowhead_enabled[i] = 1
+        end
+    end
+
+    arrowhead_enabled[anchor_count - 1] = 1
+else
+    for i = 1, anchor_count - 1 do
+        arrowhead_enabled[i] = 1
+    end
+end
+
+local canvas_margin = math.max(arrowhead_width, line_width)
+obj.setoption("drawtarget", "tempbuffer", max_x - min_x + canvas_margin, max_y - min_y + canvas_margin)
+obj.setoption("blend", "alpha_add")
+obj.load("figure", "四角形", color_line, 1)
+
+for i = 1, anchor_count - 1 do
+    if segment_visibility[i] == 1 then
+        local arrowhead_length = arrowhead_length * arrowhead_enabled[i] --ahを局所定義
+
+        local segment_delta_x = anchor_x_positions[i + 1] - anchor_x_positions[i]
+        local segment_delta_y = anchor_y_positions[i + 1] - anchor_y_positions[i]
+        local segment_length = math.sqrt(segment_delta_x * segment_delta_x + segment_delta_y * segment_delta_y)
+        local normal_scale = line_width / segment_length * 0.5
+        local normal_x = segment_delta_y * normal_scale
+        local normal_y = -segment_delta_x * normal_scale
+
+        local x1, y1 = anchor_x_positions[i] - normal_x, anchor_y_positions[i] - normal_y
+        local x2, y2 = anchor_x_positions[i] + normal_x, anchor_y_positions[i] + normal_y
+        local x = anchor_x_positions[i] + segment_delta_x * (segment_length - arrowhead_length) / segment_length
+        local y = anchor_y_positions[i] + segment_delta_y * (segment_length - arrowhead_length) / segment_length
+        local x3, y3 = x + normal_x, y + normal_y
+        local x4, y4 = x - normal_x, y - normal_y
+        obj.drawpoly(x1, y1, 0, x2, y2, 0, x3, y3, 0, x4, y4, 0)
+
+        if arrowhead_length ~= 0 then
+            normal_scale = arrowhead_width / segment_length * 0.5
+            normal_x = segment_delta_y * normal_scale
+            normal_y = -segment_delta_x * normal_scale
+            x1, y1 = x + normal_x, y + normal_y
+            x2, y2 = x - normal_x, y - normal_y
+            obj.drawpoly(
+                anchor_x_positions[i + 1],
+                anchor_y_positions[i + 1],
+                0,
+                anchor_x_positions[i + 1],
+                anchor_y_positions[i + 1],
+                0,
+                x1,
+                y1,
+                0,
+                x2,
+                y2,
+                0
+            )
+        end
+    end
+end
+
+if check_round_corners == 1 then
+    obj.load("figure", "円", color_line, 2 * line_width)
+    if segment_visibility[1] == 1 then
+        obj.draw(anchor_x_positions[1], anchor_y_positions[1], 0, 0.5)
+    end
+    for i = 2, anchor_count - 1 do
+        if
+            segment_visibility[i] == 1
+            or (segment_visibility[i] == 0 and segment_visibility[i - 1] == 1 and arrowhead_length == 0)
+        then
+            obj.draw(anchor_x_positions[i], anchor_y_positions[i], 0, 0.5)
+        end
+    end
+    if segment_visibility[anchor_count - 1] == 1 and arrowhead_length == 0 then
+        obj.draw(anchor_x_positions[anchor_count], anchor_y_positions[anchor_count], 0, 0.5)
+    end
+end
+
+obj.load("tempbuffer")
+obj.cx = obj.cx - center_x
+obj.cy = obj.cy - center_y
+
+@もじゃもじゃT
+--label:tim\カスタムオブジェクト
+--track@track_size:サイズ,1,2000,200,1
+--track@track_percent:誤差％,0,100,30,0.1
+--track@track_line_width:線幅,1,200,6,1
+--track@track_count:巻き数,0,200,5,0.01
+--check@check_time_expansion:時間展開,false
+--color@param_color:色,0xff0000
+--track@param_spacing:間隔,0,600,0,0.1
+--track@param_center_offset_x:中心ずれX,-1000,1000,0,0.1
+--track@param_center_offset_y:中心ずれY,-1000,1000,0,0.1
+local param_center_offset = { param_center_offset_x, param_center_offset_y }
+
+--track@param_attenuation_percent:減衰速度％,-100,100,0,0.1
+--track@param_attenuation_shape:減衰形状,0,20,0,0.1
+--track@param_circle_ratio:円状,0,100,100,0.1
+--track@param_start_angle:開始角度,-360,360,0,0.1
+--track@param_radius_offset:半径ｵﾌｾｯﾄ,-1000,1000,0,0.1
+--track@param_error_balance:誤差比,-100,100,0,0.1
+--select@param_time_expand_mode:時間展開法=0,等速度=0,等角速度=1,反転等速度=2,反転等角速度=3
+--track@param_circumference_divisions:周分割,3,30,4,1
+--track@param_resolution:分解能,1,50,40,1
+--track@param_overdraw_count:重ね描き,0,20,0,1
+--group:乱数
+--track@param_seed:シード,0,1000000,0,1
+--track@param_seed_step:変化間隔,0,10000,0,1
+--group:
+
+--value@param_override:PI,{}
+--hide@param_time_expand_mode:check_time_expansion==0
+
+local pi = math.pi
+local sin = math.sin
+local cos = math.cos
+local max = math.max
+local min = math.min
+local abs = math.abs
+local sqrt = math.sqrt
+local floor = math.floor
+local ceil = math.ceil
+param_override = param_override or {}
+local size = (param_override[1] or track_size) / 2
+local radius_variation = (param_override[2] or track_percent) / 100
+local line_width = floor(param_override[3] or track_line_width)
+local turn_count = param_override[4] or track_count
+local color = param_color or 0xffffff
+local spacing = abs(param_spacing or 2)
+if spacing < 1 then
+    spacing = math.log(line_width)
+    spacing = (0.5126 * spacing + 0.4641) * spacing
+    spacing = math.max(spacing, 1)
+end
+local center_offset = param_center_offset or { 0, 0 }
+center_offset[1] = (center_offset[1] or 0) / turn_count
+center_offset[2] = abs(center_offset[2] or 0) / turn_count
+local attenuation_percent = abs(param_attenuation_percent or 0) / 100
+local attenuation_shape = abs(param_attenuation_shape or 0) + 1
+local circle_ratio = (param_circle_ratio or 100) / 100
+circle_ratio = max(circle_ratio, 0)
+circle_ratio = min(circle_ratio, 1)
+local time_expand_mode = param_time_expand_mode or 0
+local f0 = math.rad(param_start_angle or 0)
+local radius_offset = abs(param_radius_offset or 0)
+local error_balance = (param_error_balance or 0) / 100
+error_balance = max(error_balance, -1)
+error_balance = min(error_balance, 1)
+local radius_variation_1 = (error_balance >= 0 and 1 or 1 + error_balance) * radius_variation
+local radius_variation_2 = (error_balance >= 0 and 1 - error_balance or 1) * radius_variation
+local circumference_divisions = floor(param_circumference_divisions or 4)
+circumference_divisions = max(circumference_divisions, 3)
+circumference_divisions = min(circumference_divisions, 30)
+local resolution = floor(abs(param_resolution or 10))
+resolution = max(resolution, 1)
+resolution = min(resolution, 50)
+local overdraw_count = floor(abs(param_overdraw_count or 0))
+if overdraw_count == 0 then
+    if line_width < 4 then
+        overdraw_count = ({ 5, 3, 2 })[line_width]
+    else
+        overdraw_count = 1
+    end
+end
+local seed = abs(param_seed or 0) + 1
+local seed_step = floor(param_seed_step or 0)
+local time_expand = param_override[0] == nil and check_time_expansion or param_override[0]
+-- param_override = nil
+-- param_color = nil
+-- param_spacing = nil
+-- param_center_offset = nil
+-- param_attenuation_percent = nil
+-- param_attenuation_shape = nil
+-- param_circle_ratio = nil
+-- param_time_expand_mode = nil
+-- param_start_angle = nil
+-- param_radius_offset = nil
+-- param_error_balance = nil
+-- param_circumference_divisions = nil
+-- param_resolution = nil
+-- param_overdraw_count = nil
+-- param_seed = nil
+-- param_seed_step = nil
+obj.load("figure", "円", color, line_width * 2)
+obj.effect("リサイズ", "拡大率", 50)
+if turn_count == 0 then
+    obj.alpha = 0
+else
+    local interpolation_strength = 0.6
+    if circumference_divisions == 3 then
+        interpolation_strength = 0.44
+    elseif circumference_divisions == 4 then
+        interpolation_strength = 0.55
+    end
+    local interpolation
+    if radius_variation >= 0.1 then
+        interpolation = obj.interpolation
+    else
+        interpolation = function(t, prev_x, prev_y, cur_x, cur_y, next_x, next_y, next2_x, next2_y)
+            local x, y = obj.interpolation(t, prev_x, prev_y, cur_x, cur_y, next_x, next_y, next2_x, next2_y)
+            local x21, y21 = next_x - cur_x, next_y - cur_y
+            local dx1, dy1 = next_x - prev_x, next_y - prev_y
+            local dx2, dy2 = cur_x - next2_x, cur_y - next2_y
+            local determinant = dx2 * dy1 - dx1 * dy2
+            local coefficient_a = (-dy2 * x21 + dx2 * y21) / determinant * interpolation_strength
+            local coefficient_b = (-dy1 * x21 + dx1 * y21) / determinant * interpolation_strength
+            coefficient_a = min(coefficient_a, 0.75)
+            coefficient_a = max(coefficient_a, 0)
+            coefficient_b = min(coefficient_b, 0.75)
+            coefficient_b = max(coefficient_b, 0)
+            local it = 1 - t
+            local u1, v1 = cur_x + coefficient_a * dx1, cur_y + coefficient_a * dy1
+            local u2, v2 = next_x + coefficient_b * dx2, next_y + coefficient_b * dy2
+            local bezier_x1, bezier_y1 = it * cur_x + t * u1, it * cur_y + t * v1
+            local bezier_x2, bezier_y2 = it * u1 + t * u2, it * v1 + t * v2
+            local bezier_x3, bezier_y3 = it * u2 + t * next_x, it * v2 + t * next_y
+            bezier_x1, bezier_y1 = it * bezier_x1 + t * bezier_x2, it * bezier_y1 + t * bezier_y2
+            bezier_x2, bezier_y2 = it * bezier_x2 + t * bezier_x3, it * bezier_y2 + t * bezier_y3
+            bezier_x1, bezier_y1 = it * bezier_x1 + t * bezier_x2, it * bezier_y1 + t * bezier_y2
+            local s = radius_variation / 0.1
+            x, y = (1 - s) * bezier_x1 + s * x, (1 - s) * bezier_y1 + s * y
+            return x, y
+        end
+    end
+    if seed_step > 0 then
+        seed = seed + floor(obj.time * obj.framerate / seed_step)
+    end
+    center_offset[1] = center_offset[1] / circumference_divisions
+    center_offset[2] = center_offset[2] / circumference_divisions
+    local rounded_turn_count = ceil(turn_count)
+    local point_count = circumference_divisions * rounded_turn_count
+    local points_y = {}
+    local points_x = {}
+    for i = -1, point_count + 1 do
+        local radius = size * (1 + radius_variation_1 * obj.rand(-1000, 1000 * 0, -seed, 2 * i + 3) / 1000)
+        local f = 2
+                * pi
+                / circumference_divisions
+                * (i + radius_variation_2 * obj.rand(-1000, 1000, -seed, 2 * i + 4) / 1000)
+            + f0
+        local x = max(1 - i / point_count, 0)
+        x = min(x, 1)
+        radius = radius * (1 - attenuation_percent * (1 - math.pow(x, attenuation_shape))) + radius_offset
+        radius = radius > 0 and (radius < size and radius or size) or 0
+        points_x[i] = radius * sin(f)
+        points_y[i] = radius * cos(f)
+    end
+    local half_point_count = point_count / 2
+    local ocx = center_offset[1] * half_point_count
+    local ocy = center_offset[2] * half_point_count
+    local interpolated_y = {}
+    local interpolated_x = {}
+    for i = 0, point_count - 1 do
+        local x0, y0, x1, y1, x2, y2, x3, y3 =
+            points_x[i - 1],
+            points_y[i - 1],
+            points_x[i],
+            points_y[i],
+            points_x[i + 1],
+            points_y[i + 1],
+            points_x[i + 2],
+            points_y[i + 2]
+        for s = 0, resolution - 1 do
+            local k = resolution * i + s
+            local resolution_ratio = s / resolution
+            local x, y = interpolation(resolution_ratio, x0, y0, x1, y1, x2, y2, x3, y3)
+            interpolated_x[k], interpolated_y[k] =
+                x + center_offset[1] * ((i + resolution_ratio) - half_point_count),
+                -circle_ratio * y + center_offset[2] * ((i + resolution_ratio) - half_point_count)
+        end
+    end
+    local x, y =
+        points_x[point_count] + center_offset[1] * half_point_count,
+        -circle_ratio * points_y[point_count] + center_offset[2] * half_point_count
+    local sample_count = resolution * point_count
+    interpolated_x[sample_count] = x
+    interpolated_y[sample_count] = y
+    local calc_max_dimension = function(values, screen_size, max_limit)
+        local max_value = values[0]
+        local min_value = values[0]
+        local value_count = #values
+        for i = 1, value_count do
+            max_value = max_value < values[i] and values[i] or max_value
+        end
+        for i = 1, value_count do
+            min_value = min_value > values[i] and values[i] or min_value
+        end
+        max_value = max(abs(max_value), abs(min_value))
+        max_value = floor(max_value + line_width / 2 + 5)
+        max_value = 2 * max_value + screen_size % 2
+        return min(max_value, max_limit)
+    end
+    local max_x, max_y = obj.getinfo("image_max")
+    local max_buffer_width = calc_max_dimension(interpolated_x, obj.screen_w, max_x)
+    local max_buffer_height = calc_max_dimension(interpolated_y, obj.screen_h, max_y)
+    obj.setoption("drawtarget", "tempbuffer", max_buffer_width, max_buffer_height)
+    turn_count = sample_count * turn_count / rounded_turn_count
+    point_count = floor(turn_count)
+    local partial_turn = turn_count - point_count
+    local final_time = point_count
+    if partial_turn > 0 then
+        turn_count = point_count + 1
+        interpolated_x[turn_count], interpolated_y[turn_count], final_time =
+            (1 - partial_turn) * interpolated_x[point_count] + partial_turn * interpolated_x[turn_count],
+            (1 - partial_turn) * interpolated_y[point_count] + partial_turn * interpolated_y[turn_count],
+            (1 - partial_turn) * point_count + partial_turn * turn_count
+    end
+    local draw_x = {}
+    local draw_y = {}
+    local draw_time = {}
+    local x0, y0, t0, distance_accumulator, draw_count = interpolated_x[0], interpolated_y[0], 0, 0, 0
+    for i = 1, turn_count do
+        local current_time = i < turn_count and i or final_time
+        local x1, y1, t1 = interpolated_x[i], interpolated_y[i], current_time
+        local dx, dy = (x1 - x0), (y1 - y0)
+        local segment_length = sqrt(dx * dx + dy * dy)
+        if distance_accumulator > segment_length then
+            distance_accumulator = distance_accumulator - segment_length
+        else
+            local remaining_distance = segment_length - distance_accumulator
+            local n = floor(remaining_distance / spacing)
+            for k = 0, n do
+                local t = distance_accumulator / segment_length
+                draw_count = draw_count + 1
+                draw_x[draw_count], draw_y[draw_count], draw_time[draw_count] =
+                    (1 - t) * x0 + t * x1, (1 - t) * y0 + t * y1, (1 - t) * t0 + t * t1
+                distance_accumulator = distance_accumulator + spacing
+            end
+            distance_accumulator = distance_accumulator - segment_length
+        end
+        x0, y0, t0 = x1, y1, t1
+    end
+    local start_index, end_index, step_index = 1, draw_count, 1
+    if time_expand then
+        local t = obj.time / obj.totaltime
+        if time_expand_mode == 1 then
+            local target_time = draw_time[draw_count] * t
+            for i = 1, draw_count do
+                if draw_time[i] > target_time then
+                    break
+                end
+                end_index = i
+            end
+        elseif time_expand_mode == 2 then
+            start_index, end_index, step_index = draw_count, draw_count - (draw_count - 1) * t, -1
+        elseif time_expand_mode == 3 then
+            local target_time = draw_time[draw_count] * (1 - t)
+            for i = draw_count, 1, -1 do
+                if draw_time[i] < target_time then
+                    break
+                end
+                end_index = i
+            end
+            start_index, step_index = draw_count, -1
+        else
+            end_index = 1 + (draw_count - 1) * t
+        end
+    end
+    for i = start_index, end_index, step_index do
+        obj.draw(draw_x[i], draw_y[i])
+    end
+    obj.copybuffer("object", "tempbuffer")
+    for i = 2, overdraw_count do
+        obj.draw()
+        obj.copybuffer("object", "tempbuffer")
+    end
+    obj.cx = -ocx
+    obj.cy = -ocy
+end
+
+@簡易トーンカーブ
+--label:tim\色調整
+--track@track_size_x:サイズX,50,1000,600,0.1
+--track@track_size_y:サイズY,50,1000,200,0.1
+--track@track_display_mode:表示方式,-1,2,0,1
+--track@track_red_bump:赤凹凸,-30,30,0,0.01
+--track@track_green_bump:緑凹凸,-30,30,0,0.01
+--track@track_blue_bump:青凹凸,-30,30,0,0.01
+--check@check_set_red_only:Rのみ設定,0
+--check@check_set_green_only:Gのみ設定,0
+--check@check_set_blue_only:Bのみ設定,0
+--value@curve_points:カーブ,{ -280, 80, -200, 0, -120, -80, -80, 80, 0, 0, 80, -80, 120, 80, 200, 0, 280, -80 }
+--track@track_display_precision:表示精度,1,100,20,1
+--check@check_show_curve:カーブ表示,true
+-- require("T_Color_Module")
+local color_module = obj.module("tim2")
+local draw_tone_curve = function(
+    channel,
+    point_index,
+    canvas_width,
+    canvas_height,
+    offset_x,
+    offset_y,
+    curve_color,
+    show_curve,
+    bump_amount,
+    curve_type
+)
+    local half_canvas_width = canvas_width * 0.5
+    local half_canvas_height = canvas_height * 0.5
+    local graph_half_width = canvas_width * 0.4
+    local graph_half_height = canvas_height * 0.4
+    local graph_width = canvas_width * 0.8
+    local graph_height = canvas_height * 0.8
+    if show_curve then
+        obj.load("figure", "四角形", 0xffffff, 1)
+        obj.drawpoly(
+            -half_canvas_width + offset_x - 1,
+            -half_canvas_height + offset_y,
+            0,
+            half_canvas_width + offset_x + 1,
+            -half_canvas_height + offset_y,
+            0,
+            half_canvas_width + offset_x + 1,
+            half_canvas_height + offset_y,
+            0,
+            -half_canvas_width + offset_x - 1,
+            half_canvas_height + offset_y,
+            0
+        )
+    end
+    if curve_type >= 0 then
+        local graph_left = offset_x - graph_half_width
+        local graph_top = offset_y - graph_half_height
+        local x0, y0 =
+            (curve_points[point_index] - graph_left) / graph_width,
+            (curve_points[point_index + 1] - graph_top) / graph_height
+        local x1, y1 =
+            (curve_points[point_index + 2] - graph_left) / graph_width,
+            (curve_points[point_index + 3] - graph_top) / graph_height
+        local x2, y2 =
+            (curve_points[point_index + 4] - graph_left) / graph_width,
+            (curve_points[point_index + 5] - graph_top) / graph_height
+        if x0 > x1 then
+            x0, x1 = x1, x0
+            y0, y1 = y1, y0
+        end
+        if x1 > x2 then
+            x1, x2 = x2, x1
+            y1, y2 = y2, y1
+            if x0 > x2 then
+                x0, x2 = x2, x0
+                y0, y2 = y2, y0
+            end
+        end
+        local curve_parameters
+        if curve_type == 0 then
+            y0 = y0 + bump_amount * x0 * x0 * x0
+            y1 = y1 + bump_amount * x1 * x1 * x1
+            y2 = y2 + bump_amount * x2 * x2 * x2
+            local first_slope = (y1 - y0) / (x1 - x0)
+            local second_slope = (y2 - y0) / (x2 - x0)
+            local quadratic_coefficient = (first_slope - second_slope) / (x1 - x2)
+            local linear_coefficient = first_slope - quadratic_coefficient * (x1 + x0)
+            local constant_coefficient = y0 - quadratic_coefficient * x0 * x0 - linear_coefficient * x0
+            curve_parameters = {
+                curve_type,
+                bump_amount,
+                -quadratic_coefficient,
+                -linear_coefficient,
+                1 - constant_coefficient,
+                0,
+                0,
+                0,
+            }
+        elseif curve_type == 1 then
+            local left_slope = (y1 - y0) / (x1 - x0)
+            local left_intercept = y0 - left_slope * x0 - bump_amount / 20
+            local right_slope = (y2 - y1) / (x2 - x1)
+            local right_intercept = y1 - right_slope * x1 + bump_amount / 20
+            curve_parameters =
+                { curve_type, -left_slope, 1 - left_intercept, -right_slope, 1 - right_intercept, x1, 0, 0 }
+        elseif curve_type == 2 then
+            local left_width, full_width, right_width = x1 - x0, x2 - x0, x2 - x1
+            local left_slope, center_slope, right_slope =
+                (y1 - y0) / left_width, (y2 - y0) / full_width, (y2 - y1) / right_width
+            if bump_amount ~= 0 then
+                local center_angle = bump_amount / 10 + math.atan2(y2 - y0, full_width)
+                center_slope = math.tan(center_angle)
+            end
+            local left_quadratic = (center_slope - left_slope) / left_width
+            local left_linear = center_slope - 2 * x1 * left_quadratic
+            local left_constant = y1 - (left_quadratic * x1 + left_linear) * x1
+            local right_quadratic = -(center_slope - right_slope) / right_width
+            local right_linear = center_slope - 2 * x1 * right_quadratic
+            local right_constant = y1 - (right_quadratic * x1 + right_linear) * x1
+            curve_parameters = {
+                curve_type,
+                -left_quadratic,
+                -left_linear,
+                1 - left_constant,
+                -right_quadratic,
+                -right_linear,
+                1 - right_constant,
+                x1,
+            }
+        end
+        color_module.color_set_tone_curve(channel, unpack(curve_parameters))
+    end
+    if show_curve then
+        obj.load("figure", "四角形", curve_color, 1)
+        obj.effect("リサイズ", "ドット数でサイズ指定", 1, "X", 256, "Y", 2 * graph_height)
+        local pixel_data, width, height = obj.getpixeldata("object", "bgra")
+        color_module.color_draw_tone_curve(pixel_data, width, height, channel, curve_color)
+        obj.putpixeldata("object", pixel_data, width, height, "bgra")
+        obj.effect("リサイズ", "ドット数でサイズ指定", 1, "X", graph_width, "Y", graph_height)
+        obj.draw(offset_x, offset_y)
+    end
+end
+local canvas_width, canvas_height = track_size_x, track_size_y
+local red_bump = track_red_bump
+local green_bump = track_green_bump or 0
+local blue_bump = track_blue_bump or 0
+local curve_type = track_display_mode
+check_set_red_only = check_set_red_only or 0
+check_set_green_only = check_set_green_only or 0
+check_set_blue_only = check_set_blue_only or 0
+if check_set_red_only == 1 or check_set_green_only == 1 or check_set_blue_only == 1 then
+    if check_show_curve then
+        obj.setanchor("curve_points", 3)
+    end
+    obj.setoption("drawtarget", "tempbuffer", canvas_width / 3, canvas_height)
+    if check_set_red_only == 1 then
+        draw_tone_curve(0, 1, canvas_width / 3, canvas_height, 0, 0, 0xff0000, check_show_curve, red_bump, curve_type)
+        T_TONE_CURVE_R = 1
+    elseif check_set_green_only == 1 then
+        draw_tone_curve(1, 1, canvas_width / 3, canvas_height, 0, 0, 0x00ff00, check_show_curve, red_bump, curve_type)
+        T_TONE_CURVE_G = 1
+    else
+        draw_tone_curve(2, 1, canvas_width / 3, canvas_height, 0, 0, 0x0000ff, check_show_curve, red_bump, curve_type)
+        T_TONE_CURVE_B = 1
+    end
+else
+    T_TONE_CURVE_R = 1
+    T_TONE_CURVE_G = 1
+    T_TONE_CURVE_B = 1
+    if check_show_curve then
+        obj.setanchor("curve_points", 9)
+    end
+    obj.setoption("drawtarget", "tempbuffer", canvas_width, canvas_height)
+    draw_tone_curve(
+        0,
+        1,
+        canvas_width / 3,
+        canvas_height,
+        -canvas_width / 3,
+        0,
+        0xff0000,
+        check_show_curve,
+        red_bump,
+        curve_type
+    )
+    draw_tone_curve(1, 7, canvas_width / 3, canvas_height, 0, 0, 0x00ff00, check_show_curve, green_bump, curve_type)
+    draw_tone_curve(
+        2,
+        13,
+        canvas_width / 3,
+        canvas_height,
+        canvas_width / 3,
+        0,
+        0x0000ff,
+        check_show_curve,
+        blue_bump,
+        curve_type
+    )
+end
+obj.load("tempbuffer")
+
+@簡易ヒストグラム
+--label:tim\色調整
+--track@track_layer:レイヤー,1,1000,1,1
+--track@track_width:幅,100,1000,256,1
+--track@track_height:高さ,100,1000,200,1
+--track@track_vertical_scale_percent:縦倍率%,1,1000,100,0.1
+--check@check_load_effects:エフェクト読込,1
+--check@check_show_red:R表示,1
+--check@check_show_green:G表示,1
+--check@check_show_blue:B表示,1
+--check@check_show_luminance:輝度表示,true
+local function is_enabled(value)
+    return value == true or value == 1
+end
+
+local output_width = track_width
+local output_height = track_height
+local color_module = obj.module("tim2")
+obj.load("layer", track_layer, is_enabled(check_load_effects))
+local source_width, source_height = obj.getpixel()
+obj.effect("領域拡張", "右", 256 - source_width, "下", output_height - source_height)
+local pixel_data, processed_width, processed_height = obj.getpixeldata("object", "bgra")
+color_module.color_create_histogram(
+    pixel_data,
+    256,
+    output_height,
+    source_width,
+    source_height,
+    processed_width,
+    processed_height,
+    track_vertical_scale_percent / 100,
+    is_enabled(check_show_luminance),
+    is_enabled(check_show_red),
+    is_enabled(check_show_green),
+    is_enabled(check_show_blue)
+)
+obj.putpixeldata("object", pixel_data, processed_width, processed_height, "bgra")
+obj.effect(
+    "クリッピング",
+    "中心の位置を変更",
+    1,
+    "右",
+    math.max(0, processed_width - 256),
+    "下",
+    math.max(0, processed_height - output_height)
+)
+obj.effect("リサイズ", "ドット数でサイズ指定", 1, "X", output_width, "Y", output_height)
+obj.effect("縁取り", "サイズ", 1, "ぼかし", 0, "color", 0x0)
+obj.effect("縁取り", "サイズ", 2, "ぼかし", 0, "color", 0xffffff)
+
+@色相環
+--label:tim\色調整
+--track@track_radius:半径,0,1000,100,0.1
+--track@track_saturation:彩度,0,100,100,0.1
+--track@track_lightness:明度,0,100,100,0.1
+--track@track_width_percent:幅％,0,100,25,0.1
+--track@track_split_count:分割数,3,360,24,1
+local split_count = math.max(3, math.floor(track_split_count or 24))
+local outer_radius = track_radius
+local inner_radius = outer_radius * (100 - track_width_percent) * 0.01
+local saturation = track_saturation
+local value = track_lightness
+obj.setoption("drawtarget", "tempbuffer", 2 * outer_radius, 2 * outer_radius)
+obj.setoption("blend", "alpha_add")
+local previous_angle = (-1 / split_count + 2 / 3) * math.pi
+local x1, y1 = outer_radius * math.sin(previous_angle), outer_radius * math.cos(previous_angle)
+local x2, y2 = inner_radius * math.sin(previous_angle), inner_radius * math.cos(previous_angle)
+for i = 0, split_count do
+    obj.load("figure", "四角形", HSV(360 * i / split_count, saturation, value), 1)
+    local current_angle = (-(2 * i - 1) / split_count + 2 / 3) * math.pi
+    local x0, y0 = outer_radius * math.sin(current_angle), outer_radius * math.cos(current_angle)
+    local x3, y3 = inner_radius * math.sin(current_angle), inner_radius * math.cos(current_angle)
+    obj.drawpoly(x0, y0, 0, x1, y1, 0, x2, y2, 0, x3, y3, 0)
+    previous_angle, x1, y1, x2, y2 = current_angle, x0, y0, x3, y3
+end
+obj.load("tempbuffer")
+obj.setoption("blend", 0)
+
+@ぐにゃ枠T
+--label:tim\装飾
+local seed_interval_index
+--track@track_size:サイズ,0,3000,200,1
+--track@track_line_width:線幅,1,500,5,1
+--track@track_fluctuation_amount:変動量,-500,500,10,0.1
+--track@track_fluctuation_length:変動長,2,5000,70,1
+--color@param_line_color:線色,0xffffff
+--check@check_single_line:単一線,false
+--figure@param_figure:形状,円
+--track@param_extension_percent:延長%,-100,500,10,0.1
+--track@param_aspect_ratio:縦横比,-100,100,0,0.1
+--track@param_dot_spacing:点間隔,0,200,2,1
+--track@param_subdivision_precision:分割精度,1,200,10,1
+--group:追加角度
+--track@param_additional_angle:追加角度::追加角度,-360,360,0,0.1
+--check@param_auto_direction:自動方向,0
+--group:重ね描き
+--track@param_overdraw_count:重ね描き回数,1,20,1,1
+--check@param_auto_adjust_overdraw:重ね描き::自動調整,1
+--group:乱数
+
+--track@param_seed:シード,0,1000000,0,1
+--track@param_seed_change_interval:変化間隔,0,10000,0,1
+--group:
+
+--value@param_override:PI,{}
+--hide@param_aspect_ratio:check_single_line==1
+
+param_override = param_override or {}
+local frame_size = math.floor(param_override[1] or track_size)
+local line_width = math.floor(param_override[2] or track_line_width)
+local fluctuation_amount = (param_override[3] or track_fluctuation_amount)
+local fluctuation_length = math.floor(param_override[4] or track_fluctuation_length)
+local line_color = param_line_color or 0xffffff
+local figure = param_figure or "円"
+local extension_ratio = (param_extension_percent or 0) / 100
+local aspect_ratio = (param_aspect_ratio or 0) / 100
+local dot_spacing = math.floor(param_dot_spacing or 1)
+local additional_angle = param_additional_angle or 0
+local auto_direction = param_auto_direction == 1
+local subdivision_count = math.floor(param_subdivision_precision or 10)
+local overdraw_count = math.floor(param_overdraw_count or 1)
+local auto_adjust_overdraw = param_auto_adjust_overdraw == 1
+local random_seeds = param_seed or 0
+local seed_change_interval = param_seed_change_interval or 0
+local single_line = param_override[0] == nil and check_single_line or param_override[0]
+if dot_spacing == 0 then
+    dot_spacing = math.floor(2 * math.sqrt(0.2 * (2 * line_width - 0.2)))
+end --円と円の交わりによる窪みが0.2ピクセル以下
+dot_spacing = math.max(dot_spacing, 1)
+subdivision_count = math.max(subdivision_count, 1)
+if auto_adjust_overdraw and line_width < 4 then
+    overdraw_count = ({ 5, 3, 2 })[line_width]
+end
+aspect_ratio = math.max(aspect_ratio, -1)
+aspect_ratio = math.min(aspect_ratio, 1)
+if string.find(tostring(random_seeds), "table:") then
+    local base_seed = random_seeds[1] or 0
+    random_seeds[1] = math.abs(math.floor(base_seed)) + 2
+    for i = 2, 4 do
+        random_seeds[i] = math.abs(math.floor(random_seeds[i] or base_seed)) + 2
+    end
+else
+    random_seeds = math.abs(math.floor(random_seeds or 0)) + 2
+    random_seeds = { random_seeds, random_seeds, random_seeds, random_seeds }
+end
+if seed_change_interval > 0 then
+    seed_interval_index = math.floor(obj.time * obj.framerate / seed_change_interval)
+    for i = 1, 4 do
+        random_seeds[i] = random_seeds[i] + seed_interval_index
+    end
+end
+obj.load("figure", figure, line_color, line_width * 2)
+obj.effect("リサイズ", "拡大率", 50 * obj.zoom)
+obj.zoom = 1
+local draw_points_along_curve = function(
+    x0_value,
+    y0_value,
+    direction_sign,
+    center_x,
+    center_y,
+    sampled_point_count,
+    side_length,
+    sampled_x,
+    sampled_y,
+    swap_axes,
+    side_index
+)
+    local next_draw_distance = dot_spacing
+    local x0, y0 = x0_value, y0_value
+    local x1, y1 = sampled_x[direction_sign], sampled_y[direction_sign]
+    local rz0 = 90 * (4 - direction_sign - 2 * math.abs(side_index - 2.5)) --({0,180,180,0})[Sdn]
+    for i = 1, sampled_point_count do
+        local x2, y2 = sampled_x[direction_sign * (i + 1)], sampled_y[direction_sign * (i + 1)]
+        local segment_length = math.sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0))
+        local rotation_degrees = additional_angle
+        if auto_direction then
+            rotation_degrees = rotation_degrees + math.atan2(y2 - y0, x2 - x0) / math.pi * 180 + rz0
+        end
+        while segment_length > next_draw_distance do
+            local segment_ratio = next_draw_distance / segment_length
+            local x, y = (1 - segment_ratio) * x0 + segment_ratio * x1, (1 - segment_ratio) * y0 + segment_ratio * y1
+            if 2 * direction_sign * ((1 - swap_axes) * x + swap_axes * y) > side_length then
+                return
+            end
+            obj.draw(x + center_x, y + center_y, 0, 1, 1, 0, 0, rotation_degrees)
+            next_draw_distance = next_draw_distance + dot_spacing
+        end
+        next_draw_distance = next_draw_distance - segment_length
+        x0, y0, x1, y1 = x1, y1, x2, y2
+    end
+end
+local draw_side = function(side_length, center_x, center_y, side_index, swap_axes)
+    local sample_extent_count = math.ceil(side_length / fluctuation_length / 2) + 3
+    local random_offsets = {}
+    local random_seed = 4 * random_seeds[side_index] + side_index
+    random_offsets[0] = fluctuation_amount * obj.rand(-500, 500, -2, random_seed) / 1000
+    for i = 1, sample_extent_count do
+        random_offsets[i] = fluctuation_amount * obj.rand(-500, 500, -(2 * i + 2), random_seed) / 1000
+        random_offsets[-i] = fluctuation_amount * obj.rand(-500, 500, -(2 * i + 1), random_seed) / 1000
+    end
+    local sampled_x = {}
+    local sampled_y = {}
+    local sampled_point_count = -1
+    local x0, y0, z0, x1, y1, z1, x2, y2, z2 =
+        -fluctuation_length,
+        random_offsets[-1],
+        random_offsets[1],
+        0,
+        random_offsets[0],
+        random_offsets[0],
+        fluctuation_length,
+        random_offsets[1],
+        random_offsets[-1]
+    for i = 0, sample_extent_count - 2 do
+        local x3, y3, z3 = fluctuation_length * (i + 2), random_offsets[i + 2], random_offsets[-i - 2]
+        for j = 0, subdivision_count - 1 do
+            local t = j / subdivision_count
+            sampled_point_count = sampled_point_count + 1
+            sampled_x[sampled_point_count], sampled_y[sampled_point_count] =
+                obj.interpolation(t, x0, y0, x1, y1, x2, y2, x3, y3)
+            sampled_x[-sampled_point_count], sampled_y[-sampled_point_count] =
+                obj.interpolation(t, -x0, z0, -x1, z1, -x2, z2, -x3, z3)
+        end
+        x0, y0, z0, x1, y1, z1, x2, y2, z2 = x1, y1, z1, x2, y2, z2, x3, y3, z3
+    end
+    if swap_axes == 1 then
+        sampled_x, sampled_y = sampled_y, sampled_x
+    end
+    local x0_value, y0_value = sampled_x[0], sampled_y[0]
+    local rotation_degrees = additional_angle
+    if auto_direction then
+        rotation_degrees = rotation_degrees
+            + (
+                    math.atan2(sampled_y[1] - sampled_y[-1], sampled_x[1] - sampled_x[-1]) / math.pi
+                    + 1.5
+                    - math.abs(side_index - 2.5)
+                )
+                * 180
+    end
+    obj.draw(x0_value + center_x, y0_value + center_y, 0, 1, 1, 0, 0, rotation_degrees)
+    draw_points_along_curve(
+        x0_value,
+        y0_value,
+        1,
+        center_x,
+        center_y,
+        sampled_point_count,
+        side_length,
+        sampled_x,
+        sampled_y,
+        swap_axes,
+        side_index
+    )
+    draw_points_along_curve(
+        x0_value,
+        y0_value,
+        -1,
+        center_x,
+        center_y,
+        sampled_point_count,
+        side_length,
+        sampled_x,
+        sampled_y,
+        swap_axes,
+        side_index
+    )
+end
+local frame_width, frame_height = frame_size, frame_size
+local extension_length = frame_size * 2 * extension_ratio
+local positive_extension_length = math.max(extension_length, 0)
+local output_width, output_height
+if single_line then
+    output_height = line_width + 10
+    output_width = output_height + frame_size + positive_extension_length
+    output_height = output_height + math.abs(fluctuation_amount)
+else
+    if aspect_ratio > 0 then
+        frame_height = frame_height * (1 - aspect_ratio)
+    else
+        frame_width = frame_width * (1 + aspect_ratio)
+    end
+    local frame_margin = math.abs(fluctuation_amount) + positive_extension_length + line_width + 10
+    output_width, output_height = math.floor(frame_width + frame_margin), math.floor(frame_height + frame_margin)
+end
+obj.setoption(
+    "drawtarget",
+    "tempbuffer",
+    output_width + (obj.screen_w - output_width) % 2,
+    output_height + (obj.screen_h - output_height) % 2
+)
+if single_line then
+    draw_side(frame_width + extension_length, 0, 0, 1, 0)
+else
+    draw_side(frame_width + extension_length, 0, -frame_height / 2, 1, 0) --上
+    draw_side(frame_width + extension_length, 0, frame_height / 2, 2, 0) --下
+    draw_side(frame_height + extension_length, -frame_width / 2, 0, 3, 1) --左
+    draw_side(frame_height + extension_length, frame_width / 2, 0, 4, 1) --右
+end
+obj.copybuffer("object", "tempbuffer")
+for i = 2, overdraw_count do
+    obj.draw()
+    obj.copybuffer("object", "tempbuffer")
+end
+

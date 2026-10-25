@@ -1,0 +1,5 @@
+[Language]
+Information=Default Language for sevenc-nanashi/aviutl2-scripts / https://github.com/sevenc-nanashi/aviutl2-scripts
+[Tips.旧発光]
+effect.name=AviUtl1の発光を再現します。\n
+PI=- `strength`：強さ\n- `diffusion`：拡散\n- `threshold`：しきい値\n- `speed`：拡散速度\n- `light_color`：光色（`0xRRGGBB`、`false`で元の色差を使用）\n- `fixed_size`：サイズ固定（`true` / `false`）\n

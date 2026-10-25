@@ -1,0 +1,6 @@
+dithering.anm2 by nssuperx
+licence: CC0-1.0
+from: https://github.com/nssuperx/dithering.anm2 (branch main, commit 367dc9b74ab6) (commit 367dc9b74ab6)
+page: https://github.com/nssuperx/dithering.anm2
+left out: 1 other, 1 .bat, 1 .go (Windows binaries, archives, build sources, files over 1 MB)
+Put here unchanged for Motolii (filament/aviutl_scripts).

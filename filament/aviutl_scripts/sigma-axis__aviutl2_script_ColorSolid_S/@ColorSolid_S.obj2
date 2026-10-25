@@ -1,0 +1,482 @@
+--[[
+MIT License
+Copyright (c) 2025 sigma-axis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+https://mit-license.org/
+]]
+@XYZ色立体
+--information:XYZ色立体@ColorSolid_S v1.00 (for beta22a) by σ軸
+--label:編集補助\色調整
+--track@size:サイズ,1,4096,256,1
+--track@view_angle:断面角度,0,90,0,0.01
+--track@lightness:明るさ,0,100,50,0.001
+--track@add_hue:回転,-720,720,0,0.01
+--check@limit:RGB限定,true
+--[[pixelshader@draw:
+cbuffer constant0 : register(b0) {
+	float lightness, limit_f;
+	float3x3 mat;
+};
+static const float3x3 M_i = {
+	 3.2406254  , -1.537208  , -0.4986286  ,
+	-0.9689307  ,  1.875756  ,  0.041517522,
+	 0.055710122, -0.20402105,  1.056996
+};
+static const float3 white = { 0.9505, 1, 1.089 };
+static const float xy_boost = 1.25;
+float3 from_lin(float3 c)
+{
+	static const float4 K = { 0.055, 1.055, 12.92, 0.0031308 };
+	return abs(c) <= K.w ? K.z * c : sign(c) * (K.y * pow(abs(c), 1 / 2.4) - K.x);
+}
+float4 draw(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
+{
+	float3 xyL = mul(mat, float3(uv - 0.5, lightness));
+	xyL.xy /= xy_boost;
+	xyL.z += 0.5;
+	xyL.xy += xyL.z * white.xy;
+	xyL.z = dot(white, 1) * xyL.z - dot(xyL.xy, 1);
+	float4 col = float4(from_lin(mul(M_i, xyL)), 1);
+	if (limit_f > 0) {
+		const float3 a = saturate(min(col.rgb, 1 - col.rgb) / fwidth(col.rgb) + 1);
+		col *= a.r * a.g * a.b;
+	}
+	return col;
+}
+]]
+local obj, math = obj, math;
+size = math.max(math.floor(0.5 + size), 1);
+view_angle = math.pi / 180 * math.min(math.max(view_angle, 0), 90);
+lightness = math.min(math.max(lightness / 100, 0), 1);
+add_hue = math.pi / 180 * (add_hue % 360);
+
+local C, S, c, s = math.cos(view_angle), math.sin(view_angle), math.cos(add_hue), math.sin(add_hue);
+local H = math.ceil((C + S) * size);
+local a = -H / size;
+obj.setoption("drawtarget", "tempbuffer", size, H);
+obj.load("tempbuffer");
+obj.pixelshader("draw", "object", nil, {
+	C * (lightness - 0.5);
+	limit and 1 or 0; 0, 0;
+	c, s, 0, 0,
+	-a * C * s, a * C * c, a * S, 0,
+	S * s, -S * c, C;
+});
+
+@RGB色立体
+--information:RGB色立体@ColorSolid_S v1.00-beta2 (for beta22a) by σ軸
+--label:編集補助\色調整
+--track@size:サイズ,1,4096,256,1
+--track@lightness:明るさ,0,100,50,0.001
+--track@view_angle:断面角度,0,90,0,0.01
+--track@add_hue:回転,-720,720,0,0.01
+--select@space:色空間=0,RGB(gamma)=0,RGB(linear)=1
+--check@limit:RGB限定,true
+--[[pixelshader@draw:
+cbuffer constant0 : register(b0) {
+	float lightness, linear_f, limit_f;
+	float3x3 mat;
+};
+float3 from_lin(float3 c)
+{
+	static const float4 K = { 0.055, 1.055, 12.92, 0.0031308 };
+	return abs(c) <= K.w ? K.z * c : sign(c) * (K.y * pow(abs(c), 1 / 2.4) - K.x);
+}
+static const float3x3 M = {
+	         0, -4 / 3.0, 1,
+	+1.1547005, +2 / 3.0, 1,
+	-1.1547005, +2 / 3.0, 1,
+};
+float4 draw(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
+{
+	float3 xyL = mul(mat, float3(uv - 0.5, lightness));
+	xyL.z += 0.5;
+	float4 col = { mul(M, xyL), 1 };
+	if (linear_f > 0) col.rgb = from_lin(col.rgb);
+	if (limit_f > 0) {
+		const float3 a = saturate(min(col.rgb, 1 - col.rgb) / fwidth(col.rgb) + 1);
+		col *= a.r * a.g * a.b;
+	}
+	return col;
+}
+]]
+local obj, math = obj, math;
+size = math.max(math.floor(0.5 + size), 1);
+view_angle = math.pi / 180 * math.min(math.max(view_angle, 0), 90);
+lightness = math.min(math.max(lightness / 100, 0), 1);
+add_hue = math.pi / 180 * (add_hue % 360);
+space = math.min(math.max(math.floor(0.5 + space), 0), 2);
+
+local C, S, c, s = math.cos(view_angle), math.sin(view_angle), math.cos(add_hue), math.sin(add_hue);
+local H = math.ceil((C + S) * size);
+local a = -H / size;
+obj.setoption("drawtarget", "tempbuffer", size, H);
+obj.load("tempbuffer");
+obj.pixelshader("draw", "object", nil, {
+	C * (lightness - 0.5);
+	space > 0 and 1 or 0;
+	limit and 1 or 0; 0;
+	c, s, 0, 0,
+	-a * C * s, a * C * c, a * S, 0,
+	S * s, -S * c, C;
+});
+
+@OKLCh色立体
+--information:OKLCh色立体@ColorSolid_S v1.00-beta2 (for beta22a) by σ軸
+--label:編集補助\色調整
+--track@size:サイズ,1,4096,256,1
+--track@lightness:明るさ,0,100,50,0.001
+--track@view_angle:断面角度,0,90,0,0.01
+--track@add_hue:回転,-720,720,0,0.01
+--check@limit:RGB限定,true
+--[[pixelshader@draw:
+cbuffer constant0 : register(b0) {
+	float lightness, limit_f;
+	float3x3 mat;
+};
+static const float3x3 m1_rgb_i = {
+	 4.0767417   , -3.3077116,  0.23096994,
+	-1.268438    ,  2.6097574, -0.34131938,
+	-0.0041960864, -0.7034186,  1.7076147
+}, m2_i = {
+	1,  0.39633778 ,  0.21580376,
+	1, -0.105561346, -0.06385417,
+	1, -0.089484185, -1.2914855
+};
+static const float ab_boost = 1.50;
+float3 from_lin(float3 c)
+{
+	static const float4 K = { 0.055, 1.055, 12.92, 0.0031308 };
+	return abs(c) <= K.w ? K.z * c : sign(c) * (K.y * pow(abs(c), 1 / 2.4) - K.x);
+}
+float3 from_lms_gamma(float3 c)
+{
+	return mul(m1_rgb_i, c * c * c);
+}
+float4 draw(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
+{
+	float3 Lab = mul(mat, float3(uv - 0.5, lightness)).zxy;
+	Lab.yz /= ab_boost; Lab.x += 0.5;
+	float4 col = float4(from_lin(from_lms_gamma(mul(m2_i, Lab))), 1);
+	if (limit_f > 0) {
+		const float3 a = saturate(min(col.rgb, 1 - col.rgb) / fwidth(col.rgb)
+			+ saturate(128 * saturate(Lab.x) + 0.5)); // care points near black, where differential is zero.
+		col *= a.r * a.g * a.b;
+	}
+	return col;
+}
+]]
+local obj, math = obj, math;
+size = math.max(math.floor(0.5 + size), 1);
+view_angle = math.pi / 180 * math.min(math.max(view_angle, 0), 90);
+lightness = math.min(math.max(lightness / 100, 0), 1);
+add_hue = math.pi / 180 * ((add_hue + 90) % 360);
+
+local C, S, c, s = math.cos(view_angle), math.sin(view_angle), math.cos(add_hue), math.sin(add_hue);
+local H = math.ceil((C + S) * size);
+local a = -H / size;
+obj.setoption("drawtarget", "tempbuffer", size, H);
+obj.load("tempbuffer");
+obj.pixelshader("draw", "object", nil, {
+	C * (lightness - 0.5);
+	limit and 1 or 0; 0, 0;
+	c, s, 0, 0,
+	-a * C * s, a * C * c, a * S, 0,
+	S * s, -S * c, C;
+});
+
+@YUV色立体
+--information:YUV色立体@ColorSolid_S v1.00-beta2 (for beta22a) by σ軸
+--label:編集補助\色調整
+--track@size:サイズ,1,4096,256,1
+--track@lightness:明るさ,0,100,50,0.001
+--track@view_angle:断面角度,0,90,0,0.01
+--track@add_hue:回転,-720,720,0,0.01
+--select@space:色空間=0,BT.601=0,BT.709=1,BT.2020=2
+--check@limit:RGB限定,true
+--[[pixelshader@draw:
+cbuffer constant0 : register(b0) {
+	float lightness, limit_f;
+	float3x3 M_i;
+	float3x3 mat;
+};
+float4 draw(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
+{
+	float3 yuv = mul(mat, float3(uv - 0.5, lightness)).zxy;
+	yuv.x += 0.5;
+	float4 col = float4(mul(M_i, yuv), 1);
+	if (limit_f > 0) {
+		const float3 a = saturate(min(col.rgb, 1 - col.rgb) / fwidth(col.rgb) + 1);
+		col *= a.r * a.g * a.b;
+	}
+	return col;
+}
+]]
+local obj, math = obj, math;
+size = math.max(math.floor(0.5 + size), 1);
+view_angle = math.pi / 180 * math.min(math.max(view_angle, 0), 90);
+lightness = math.min(math.max(lightness / 100, 0), 1);
+add_hue = math.pi / 180 * (add_hue % 360);
+space = math.min(math.max(math.floor(0.5 + space), 0), 2);
+
+local C, S, c, s = math.cos(view_angle), math.sin(view_angle), math.cos(add_hue), math.sin(add_hue);
+local H = math.ceil((C + S) * size);
+local a = -H / size;
+obj.setoption("drawtarget", "tempbuffer", size, H);
+obj.load("tempbuffer");
+local M_i = space == 0 and { -- BT.601.
+	1, 0, 1.402;
+	1, -0.34413628620102, -0.71413628620102;
+	1, 1.772, 0;
+} or space == 1 and { -- BT.709.
+	1, 0, 1.5748;
+	1, -0.18732427293065, -0.46812427293065;
+	1, 1.8556, 0;
+} or { -- BT.2020. (same as BT.2100.)
+	1, 0, 1.4746;
+	1, -0.16455312684366, -0.57135312684366;
+	1, 1.8814, 0;
+};
+obj.pixelshader("draw", "object", nil, {
+	C * (lightness - 0.5); limit and 1 or 0; 0, 0;
+	M_i[1], M_i[4], M_i[7], 0;
+	M_i[2], M_i[5], M_i[8], 0;
+	M_i[3], M_i[6], M_i[9], 0;
+	c, s, 0, 0,
+	-a * C * s, a * C * c, a * S, 0,
+	S * s, -S * c, C;
+});
+
+@HSV色立体
+--information:HSV色立体@ColorSolid_S v1.00-beta2 (for beta22a) by σ軸
+--label:編集補助\色調整
+--track@size:サイズ,1,4096,256,1
+--track@lightness:明るさ,0,100,50,0.001
+--track@view_angle:断面角度,0,90,0,0.01
+--track@add_hue:色相ずれ,-720,720,0,0.01
+--select@model:モデル=0,円柱=0,円錐=1,六角柱=2,六角錐=3
+--check@limit:RGB限定,true
+--[[pixelshader@draw:
+cbuffer constant0 : register(b0) {
+	float lightness, add_hue,
+		hexagon_f, cylinder_f, limit_f;
+	float2x2 mat;
+};
+float3 hsv2rgb(float3 c)
+{
+    static const float3 K = { 1.0, 2.0 / 3.0, 1.0 / 3.0 };
+    const float3 p = 6 * abs(frac(c.x + K) - 0.5);
+    return c.z - c.y * saturate(2 - p);
+}
+float4 draw(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
+{
+	const float2 yL = mul(mat, float2(uv.y - 0.5, lightness)) + 0.5;
+
+	static const float pi = 3.1415927,
+		sqrt3 = 1.7320508;
+	const float2 p = 2 * float2(uv.x, yL.x) - 1;
+	float R = length(p), A = 3 + atan2(-p.x, p.y) * (3 / pi);
+	if (hexagon_f > 0) {
+		int ai; const float af = (pi / 3) * (modf(A, ai) - 0.5);
+		float x, y; sincos(af, y, x);
+		R *= (2 / sqrt3) * x; A = ai + (y + 0.5);
+	}
+	float S = R;
+	if (cylinder_f > 0) S *= yL.y;
+
+	float4 col = float4(hsv2rgb(float3((A - add_hue) / 6, S, yL.y)), 1);
+	if (limit_f > 0) {
+		float alpha = fwidth(yL.y) > 0 ? saturate(min(yL.y, 1 - yL.y) / fwidth(yL.y) + 1) : 1;
+		if (cylinder_f > 0)
+			alpha *= saturate((1 - R) / fwidth(R) + 1);
+		else alpha *= saturate((yL.y - R) / fwidth(yL.y - R) + 1);
+		col *= alpha;
+	}
+	return col;
+}
+]]
+local obj, math = obj, math;
+size = math.max(math.floor(0.5 + size), 1);
+view_angle = math.pi / 180 * math.min(math.max(view_angle, 0), 90);
+lightness = math.min(math.max(lightness / 100, 0), 1);
+add_hue = (add_hue % 360) / 60;
+model = math.min(math.max(math.floor(0.5 + model), 0), 3);
+
+local C, S = math.cos(view_angle), math.sin(view_angle);
+local H = math.ceil((C + S) * size);
+local a = H / size;
+obj.setoption("drawtarget", "tempbuffer", size, H);
+obj.load("tempbuffer");
+obj.pixelshader("draw", "object", nil, {
+	C * (lightness - 0.5); add_hue;
+	model < 2 and 0 or 1;
+	(model % 2) == 0 and 1 or 0;
+	limit and 1 or 0; 0, 0, 0;
+	a * C, -a * S, 0, 0,
+	S, C;
+});
+
+@HSL色立体
+--information:HSL色立体@ColorSolid_S v1.00-beta2 (for beta22a) by σ軸
+--label:編集補助\色調整
+--track@size:サイズ,1,4096,256,1
+--track@lightness:明るさ,0,100,50,0.001
+--track@view_angle:断面角度,0,90,0,0.01
+--track@add_hue:色相ずれ,-720,720,0,0.01
+--select@model:モデル=0,円柱=0,双円錐=1,六角柱=2,双六角錐=3
+--check@limit:RGB限定,true
+--[[pixelshader@draw:
+cbuffer constant0 : register(b0) {
+	float lightness, add_hue,
+		hexagon_f, cylinder_f, limit_f;
+	float2x2 mat;
+};
+float3 hsl2rgb(float3 c)
+{
+    static const float3 K = { 1.0, 2.0 / 3.0, 1.0 / 3.0 };
+    const float3 p = 6 * abs(frac(c.x + K) - 0.5);
+    return (c.z + c.y / 2) - c.y * saturate(2 - p);
+}
+float4 draw(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
+{
+	const float2 yL = mul(mat, float2(uv.y - 0.5, lightness)) + 0.5;
+
+	static const float pi = 3.1415927,
+		sqrt3 = 1.7320508;
+	const float2 p = 2 * float2(uv.x, yL.x) - 1;
+	float R = length(p), A = 3 + atan2(-p.x, p.y) * (3 / pi);
+	if (hexagon_f > 0) {
+		int ai; const float af = (pi / 3) * (modf(A, ai) - 0.5);
+		float x, y; sincos(af, y, x);
+		R *= (2 / sqrt3) * x; A = ai + (y + 0.5);
+	}
+	float S = R;
+	if (cylinder_f > 0) S *= 2 * min(yL.y, 1 - yL.y);
+
+	float4 col = float4(hsl2rgb(float3((A - add_hue) / 6, S, yL.y)), 1);
+	if (limit_f > 0) {
+		float alpha = fwidth(yL.y) > 0 ? saturate(min(yL.y, 1 - yL.y) / fwidth(yL.y) + 1) : 1;
+		if (cylinder_f > 0)
+			alpha *= saturate((1 - R) / fwidth(R) + 1);
+		else alpha *= saturate((yL.y - R / 2) / fwidth(yL.y - R / 2) + 1) *
+			saturate((1 - yL.y - R / 2) / fwidth(yL.y + R / 2) + 1);
+		col *= alpha;
+	}
+	return col;
+}
+]]
+local obj, math = obj, math;
+size = math.max(math.floor(0.5 + size), 1);
+view_angle = math.pi / 180 * math.min(math.max(view_angle, 0), 90);
+lightness = math.min(math.max(lightness / 100, 0), 1);
+add_hue = (add_hue % 360) / 60;
+model = math.min(math.max(math.floor(0.5 + model), 0), 3);
+
+local C, S = math.cos(view_angle), math.sin(view_angle);
+local H = math.ceil((C + S) * size);
+local a = H / size;
+obj.setoption("drawtarget", "tempbuffer", size, H);
+obj.load("tempbuffer");
+obj.pixelshader("draw", "object", nil, {
+	C * (lightness - 0.5); add_hue;
+	model < 2 and 0 or 1;
+	(model % 2) == 0 and 1 or 0;
+	limit and 1 or 0; 0, 0, 0;
+	a * C, -a * S, 0, 0,
+	S, C;
+});
+
+@色ピッカー
+--information:色ピッカー@ColorSolid_S v1.00-beta2 (for beta22a) by σ軸
+--label:編集補助\色調整
+--track@size:サイズ,1,4096,256,1
+--track@lightness:明るさ,0,100,50,0.001
+--track@view_angle:断面角度,0,90,0,0.01
+--track@thick_ring:純色幅,0,100,0,0.01
+--track@thick_hole:無彩色幅,0,100,0,0.01
+--track@add_hue:色相ずれ,-720,720,0,0.01
+--select@model:モデル=0,円=0,六角形=1
+--[[pixelshader@draw:
+cbuffer constant0 : register(b0) {
+	float lightness, add_hue,
+		lbd_grad, ubd_grad,
+		hexagon_f;
+	float2x2 mat;
+};
+float3 hsv2rgb(float3 c)
+{
+    static const float3 K = { 1.0, 2.0 / 3.0, 1.0 / 3.0 };
+    const float3 p = 6 * abs(frac(c.x + K) - 0.5);
+    return c.z - c.y * saturate(2 - p);
+}
+float4 draw(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target
+{
+	const float2 yL = mul(mat, float2(uv.y - 0.5, lightness)) + 0.5;
+
+	static const float pi = 3.1415927,
+		sqrt3 = 1.7320508;
+	const float2 p = 2 * float2(uv.x, yL.x) - 1;
+	float R = length(p), A = 3 + atan2(-p.x, p.y) * (3 / pi);
+	if (hexagon_f > 0) {
+		int ai; const float af = (pi / 3) * (modf(A, ai) - 0.5);
+		float x, y; sincos(af, y, x);
+		R *= (2 / sqrt3) * x; A = ai + (y + 0.5);
+	}
+	const float S = smoothstep(lbd_grad, ubd_grad, R);
+
+	float4 col = float4(hsv2rgb(float3(
+		(A - add_hue) / 6, S,
+		1 - (1 - S) * (1 - yL.y))), 1);
+	col *= saturate((1 - R) / fwidth(R) + 1)
+		* (fwidth(yL.y) > 0 ? saturate(min(yL.y, 1 - yL.y) / fwidth(yL.y) + 1) : 1);
+	return col;
+}
+]]
+local obj, math = obj, math;
+size = math.max(math.floor(0.5 + size), 1);
+view_angle = math.pi / 180 * math.min(math.max(view_angle, 0), 90);
+lightness = math.min(math.max(lightness / 100, 0), 1);
+thick_ring = math.min(math.max(thick_ring / 100, 0), 1);
+thick_hole = math.min(math.max(thick_hole / 100, 0), 1);
+add_hue = (add_hue % 360) / 60;
+model = math.min(math.max(math.floor(0.5 + model), 0), 1);
+
+local thresh_ring, thresh_hole do
+	local x, y = thick_ring, thick_hole;
+	if x > y then x = 2 * x - y;
+	else y = 2 * y - x end
+	thresh_ring, thresh_hole = 1 - x / 2, y / 2;
+
+	-- erase artifacts on edges.
+	if thresh_hole >= 1 then thresh_ring, thresh_hole = 2, 2 end
+end
+local C, S = math.cos(view_angle), math.sin(view_angle);
+local H = math.ceil((C + S) * size);
+local a = H / size;
+obj.setoption("drawtarget", "tempbuffer", size, H);
+obj.load("tempbuffer");
+obj.pixelshader("draw", "object", nil, {
+	C * (lightness - 0.5); add_hue;
+	thresh_hole; thresh_ring;
+	model > 0 and 1 or 0; 0, 0, 0;
+	a * C, -a * S, 0, 0,
+	S, C;
+});

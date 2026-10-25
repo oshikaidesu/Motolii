@@ -1,0 +1,2805 @@
+@本体
+--information:本体@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--group:出力
+--track@speed:出力速度,0,10000,200,0.01
+--track@rate:出力頻度,0,5000,10,0.01
+--track@sync:同時発生数,1,100,1,1
+--track@dir:出力方向,-3600,3600,0,0.01
+--track@spread:拡散角度,0,180,60,0.01
+--track@zdir:Z出力方向,-3600,3600,0,0.01
+--track@zspread:Z拡散角度,0,180,0,0.01
+--track@life:生存時間,0.001,600,3,0.001
+--track@tsub:開始時間,0,600,0,0.001
+--group
+--group:運動
+--track@accel:加速度,-10000,10000,0,0.01
+--track@gx:重力X,-10000,10000,0,0.01
+--track@gy:重力Y,-10000,10000,0,0.01
+--track@gz:重力Z,-10000,10000,0,0.01
+--group
+--group:回転
+--select@rot_random:初期の回転=1,指定どおり=0,Z軸だけランダム=1,XYZランダム=2
+--track@rx0:X軸回転,-3600,3600,0,0.01
+--track@ry0:Y軸回転,-3600,3600,0,0.01
+--track@rz0:Z軸回転,-3600,3600,0,0.01
+--track@vrx:X軸回転速度,-36000,36000,0,0.01
+--track@vry:Y軸回転速度,-36000,36000,0,0.01
+--track@vrz:Z軸回転速度,-36000,36000,60,0.01
+--check@revrot:逆回転,0
+--group
+--group:拡大率と透過率
+--track@zoom0:始拡大率,0,5000,100,0.01
+--track@zoom1:終拡大率,0,5000,100,0.01
+--track@alpha0:始透過率,0,100,0,0.01
+--track@alpha1:終透過率,0,100,50,0.01
+--group
+--group:描画
+--select@draw_order:描画順=0,新しい粒子が手前=0,古い粒子が手前=1
+--select@face:表示する面=0,両面=0,表だけ=1,裏だけ=2,裏だけ(画像も裏)=3
+--select@rot_order:回転の順番=0,標準=0,X→Y→Z=1,X→Z→Y=2,Y→X→Z=3,Y→Z→X=4,Z→X→Y=5,Z→Y→X=6
+--select@facing:向き=0,回転どおり=0,進行方向を向く=1,カメラを見る=2
+--select@blend:合成モード=0,通常=0,加算=1,減算=2,乗算=3,スクリーン=4,オーバーレイ=5,比較(明)=6,比較(暗)=7,差分=8
+--check@reverse:逆再生,0
+--check@vanish:終了時に消える,0
+--check@plane:平面描写,0
+--track@plane_w:平面の幅,1,8192,1920,1
+--track@plane_h:平面の高さ,1,8192,1080,1
+--hide@plane_w:plane==0
+--hide@plane_h:plane==0
+--check@screen_fix:画面に貼り付ける,0
+--group
+--group:その他
+--check@birth:放出時の値を使う,1
+--track@seed:シード,-100000,100000,0,1
+--track@precision:描写精度,1,10,2,1
+--select@integ:積分法=0,半陰的オイラー=0,陽的オイラー=1,RK4=2
+--track@hmul:刻みの倍率,1,20,1,0.01
+--check@diag:診断ログ,0
+--select@guide:ガイドの表示=0,なし=0,編集中だけ=1,出力にも=2
+--select@hud:状態の表示=0,なし=0,編集中だけ=1,出力にも=2
+--check@hud_no:粒子の番号も表示,0
+--track@preview:編集中の粒子の割合,1,100,100,0.01
+--string@share:渡す名前,
+--check@share_only:渡すだけ（自分では描かない）,0
+--track@share_n:渡す数,100,10000,500,1
+--group
+--[[pixelshader@prh_glass:
+// ガラス化: t0 = 粒子を描いた画像（アルファだけ使う）、t1 = フレームバッファ（下のレイヤーまでの絵）。
+// 粒子のアルファをぼかした勾配の向きへ背景をずらして読み、縁を明るくする。出力は乗算済み
+cbuffer P : register(b0) {
+    float4 aff0;        // この画像の画素 (px, py) → 画面の画素 x = aff0.x*px + aff0.y*py + aff0.z
+    float4 aff1;        //                                  y = aff1.x*px + aff1.y*py + aff1.z
+    float4 tint;        // 色（rgb）と色の強さ（a）
+    float2 inv_screen;  // 1 / 画面の大きさ
+    float2 texel;       // 1 / この画像の大きさ
+    float refraction;   // 屈折（px）
+    float width;        // 縁の幅（px）
+    float edge;         // 縁の明るさ（0..1）
+    float blur;         // 背景のぼかし（px）
+};
+Texture2D mask : register(t0);
+Texture2D bg : register(t1);
+SamplerState smp : register(s0);
+
+float4 prh_glass(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float a = mask.SampleLevel(smp, uv, 0).a;
+    if (a <= 0.0) return float4(0, 0, 0, 0);
+    float2 g = float2(0, 0);
+    [loop] for (int i = 0; i < 12; i++) {
+        float ang = 6.2831853 * i / 12.0;
+        float2 d = float2(cos(ang), sin(ang));
+        g += d * mask.SampleLevel(smp, uv + d * width * texel, 0).a;
+    }
+    g = g / 6.0;
+    float2 px = pos.xy + g * refraction;
+    float2 sp = float2(dot(aff0.xy, px) + aff0.z, dot(aff1.xy, px) + aff1.z);
+    float2 suv = sp * inv_screen;
+    float4 col = bg.SampleLevel(smp, suv, 0);
+    if (blur > 0.0) {
+        float4 acc = col;
+        [loop] for (int k = 0; k < 8; k++) {
+            float ang2 = 6.2831853 * k / 8.0;
+            acc += bg.SampleLevel(smp, suv + float2(cos(ang2), sin(ang2)) * blur * inv_screen, 0);
+        }
+        col = acc / 9.0;
+    }
+    col.rgb = lerp(col.rgb, col.rgb * tint.rgb, tint.a);
+    float e = saturate(length(g) * 1.5) * edge;
+    col.rgb = col.rgb + e * (1.0 - col.rgb);
+    col.a = max(col.a, e);
+    return col * a;
+}
+]]
+-- 付けたオブジェクトの画像を粒子として放出する。拡張（出力位置・回転・風など）は本体より上に付ける。
+-- 計算は Script/Particle_H.lua。計画: AI/specifications/20261002_拡張パーティクル_H_spec.md
+local P = require("Particle_H")
+local t_start = P.clock()
+local SUFFIX = "@拡張パーティクル_H"
+local function on(v) return v == true or v == 1 end
+local fps = obj.framerate
+local total = obj.totaltime
+local reverse = on(reverse)
+local birth_mode = on(birth)
+local start = tsub
+
+-- 時刻: シミュレーション時刻 s とオブジェクトの時刻 t の対応（開始時間・逆再生）
+local now = (reverse and (total - obj.time) or obj.time) + start
+local function obj_time(s)
+  local t = s - start
+  if reverse then t = total - t end
+  if t < 0 then return 0 elseif t > total then return total end
+  return t
+end
+local function obj_time_raw(s)
+  local t = s - start
+  if reverse then t = total - t end
+  return t
+end
+
+-- 拡張: 本体より上にあり（無効なものは除く）、今のフレームに書かれた値だけを使う
+local above, seen = {}, {}
+for i = 1, 64 do
+  local ok, name = pcall(obj.getoption, "script_name", -i, true)
+  if not ok or name == nil then break end
+  if name ~= "" then
+    seen[#seen + 1] = name
+    local kind = name:match("^(.-)" .. SUFFIX .. "$")
+    if kind then above[kind] = true end
+  end
+end
+-- 本体のメインの関数のローカル変数は、UI の変数（本体が先頭に local で足す）と合わせて 200 個まで。
+-- ほかで使わない変数は do … end の中に閉じる（v0.17.0。超えると「main function has more than 200 local variables」で全部止まる）
+local ext
+do
+  local box = _G.Particle_H_ext and _G.Particle_H_ext[obj.id]
+  ext = function(kind, key)
+    local e = box and box[key]
+    if e and above[kind] and e.origin == obj.originframe then return e end
+    return nil
+  end
+end
+local e_emit = ext("出力位置", "emit")
+local e_rot = ext("回転", "rot")
+local e_zoal = ext("拡大率と透過率", "zoal")
+local e_indiv = ext("個別微調整", "indiv")
+if e_zoal then e_zoal.total = total end
+-- カーブエディタ_H のスロット（補間 = カーブエディタ_H）。スロットの式を 0..1 → 割合の関数にする
+local ce2_hash, ce2_err = "", nil
+local function ce2(slot)
+  local fn, err, hash = P.ce2_slot(slot)
+  ce2_hash = ce2_hash .. "|" .. slot .. ":" .. (hash or "")
+  if err then ce2_err = ce2_err or err end
+  return fn
+end
+if e_zoal then
+  if e_zoal.zmode == 9 then e_zoal.zfn = ce2(e_zoal.zslot) end
+  if e_zoal.amode == 9 then e_zoal.afn = ce2(e_zoal.aslot) end
+  if e_zoal.vmode == 9 then e_zoal.vfn = ce2(e_zoal.vslot) end
+end
+local X = {
+  wind = ext("風", "wind"), noise = ext("ノイズ場", "noise"), att = ext("集結点", "att"), bnc = ext("跳ね返り", "bnc"),
+  beh = ext("挙動", "beh"), disp = ext("分散と停止", "disp"), orbit = ext("円運動", "orbit"), time = ext("時間の付け替え", "time"),
+  field = ext("力場", "field"), path = ext("パス", "path"), gather = ext("形へ集まる", "gather"), inter = ext("粒子どうし", "inter"),
+}
+local gather_fn = (X.gather and X.gather.curve == 9) and ce2(X.gather.slot) or nil
+local e_look = ext("見た目の調整", "look")
+local e_child = ext("子粒子", "child")
+local e_shadow = ext("影", "shadow")
+local e_light = ext("光源", "light")
+local e_bake = ext("焼き付け", "bake")
+local e_mat, e_filt, e_color = ext("素材", "mat"), ext("フィルター", "filt"), ext("色の変化", "color")
+local e_trail, e_fan, e_mesh = ext("軌跡", "trail"), ext("ファンネル", "fan"), ext("メッシュ", "mesh")
+if e_color and e_color.ckind == 9 then e_color.cfn = ce2(e_color.cslot) end
+local e_grid, e_solid, e_glass = ext("格子", "grid"), ext("立体物", "solid"), ext("ガラス化", "glass")
+local e_audio, e_custom = ext("音", "audio"), ext("カスタム描画", "custom")
+-- 時間の付け替え: 進行時間を使うなら、粒子の時刻をその値にする
+if X.time and X.time.tp_on then now = X.time.tp + start end
+
+-- トラックバー: 動いていて「放出時の値を使う」なら、その時刻の値を読む（フレームごとに標本を取り、間は直線で補う）
+local NOW_VALUES = {
+  speed = speed, dir = dir, spread = spread, zdir = zdir, zspread = zspread, life = life, accel = accel,
+  gx = gx, gy = gy, gz = gz, rx0 = rx0, ry0 = ry0, rz0 = rz0, vrx = vrx, vry = vry, vrz = vrz,
+  zoom0 = zoom0, zoom1 = zoom1, alpha0 = alpha0, alpha1 = alpha1, rate = rate,
+}
+local moving = {}
+for name in pairs(NOW_VALUES) do
+  local m = obj.getoption("track_mode", name)
+  moving[name] = (m ~= nil and m ~= 0 and m ~= "")
+end
+local gets = 0
+local sample
+do
+  local samples = {}
+  sample = function(name, f)
+    local tab = samples[name]
+    if not tab then tab = {}; samples[name] = tab end
+    local v = tab[f]
+    if v == nil then
+      v = obj.getvalue("track." .. name, f / fps)
+      if v == nil then v = NOW_VALUES[name] end
+      tab[f] = v
+      gets = gets + 1
+    end
+    return v
+  end
+end
+local function value_at_obj(name, t)
+  local x = t * fps
+  local f0 = math.floor(x)
+  local v0 = sample(name, f0)
+  local fr = x - f0
+  if fr <= 0 then return v0 end
+  return v0 + (sample(name, f0 + 1) - v0) * fr
+end
+local function track(name, s)
+  if birth_mode and moving[name] then return value_at_obj(name, obj_time(s)) end
+  return NOW_VALUES[name]
+end
+-- 動かないトラックバーの値（計算の側で直接読む）
+local track_const = {}
+for name, v in pairs(NOW_VALUES) do
+  if not (birth_mode and moving[name]) then track_const[name] = v end
+end
+
+-- 拡張のトラックバー（風力・ノイズの強さ）: 動いていれば、その時刻の値を読む
+local ext_val
+do
+local ext_samples = {}
+local EXT_EFFECT = { wind = "風" .. SUFFIX, noise = "ノイズ場" .. SUFFIX }
+ext_val = function(kind, var, s)
+  local e = X[kind]
+  local item = e.mv and e.mv[var]
+  if not item then return e[var] end
+  local key = kind .. "." .. var
+  local tab = ext_samples[key]
+  if not tab then tab = {}; ext_samples[key] = tab end
+  local function get(f)
+    local v = tab[f]
+    if v == nil then
+      v = obj.getvalue(EXT_EFFECT[kind], item, f / fps)
+      if v == nil then v = e[var] end
+      tab[f] = v
+      gets = gets + 1
+    end
+    return v
+  end
+  local x = obj_time(s) * fps
+  local f0 = math.floor(x)
+  local v0 = get(f0)
+  local fr = x - f0
+  if fr <= 0 then return v0 end
+  return v0 + (get(f0 + 1) - v0) * fr
+end
+end
+
+-- 他レイヤー: 位置・Z軸回転・拡大率・中心を、フレームごとに読んで間を直線で補う。
+-- 本体の位置（標準描画の値。同じ時刻）を引いて、本体から見た座標にする。対象が無い時刻は nil
+local function num(v, d) return tonumber(v) or d end
+local layer_frame
+do
+local layer_tabs = {}
+layer_frame = function(n, f)
+  local tab = layer_tabs[n]
+  if not tab then tab = {}; layer_tabs[n] = tab end
+  local v = tab[f]
+  if v == nil then
+    local t = f / fps
+    local L = "layer" .. n .. "."
+    local x = obj.getvalue(L .. "x", t)
+    if x == nil then
+      v = false
+    else
+      v = { x - num(obj.getvalue("x", t), 0), num(obj.getvalue(L .. "y", t), 0) - num(obj.getvalue("y", t), 0),
+            num(obj.getvalue(L .. "z", t), 0) - num(obj.getvalue("z", t), 0), num(obj.getvalue(L .. "rz", t), 0),
+            num(obj.getvalue(L .. "sx", t), 1), num(obj.getvalue(L .. "sy", t), 1),
+            num(obj.getvalue(L .. "cx", t), 0), num(obj.getvalue(L .. "cy", t), 0) }
+    end
+    tab[f] = v
+    gets = gets + 1
+  end
+  return v
+end
+end
+local function layer_obj(n)
+  return function(t)
+    local x = t * fps
+    local f0 = math.floor(x)
+    local a = layer_frame(n, f0)
+    if not a then return nil end
+    local fr = x - f0
+    local b = fr > 0 and layer_frame(n, f0 + 1) or nil
+    if not b then return a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8] end
+    return a[1] + (b[1] - a[1]) * fr, a[2] + (b[2] - a[2]) * fr, a[3] + (b[3] - a[3]) * fr, a[4] + (b[4] - a[4]) * fr,
+           a[5] + (b[5] - a[5]) * fr, a[6] + (b[6] - a[6]) * fr, a[7] + (b[7] - a[7]) * fr, a[8] + (b[8] - a[8]) * fr
+  end
+end
+local function layer_at(n)
+  local f = layer_obj(n)
+  return function(s) return f(obj_time(s)) end
+end
+
+-- 他レイヤーの形: 今のフレームの画像（そのオブジェクトの効果の後）のアルファを読む。自分の画像と obj の値は後で戻す
+local saved
+local function save_self()
+  if saved then return end
+  saved = { cx = obj.cx, cy = obj.cy, cz = obj.cz, ox = obj.ox, oy = obj.oy, oz = obj.oz, rx = obj.rx, ry = obj.ry, rz = obj.rz,
+            zoom = obj.zoom, alpha = obj.alpha, aspect = obj.aspect, sx = obj.sx, sy = obj.sy, sz = obj.sz }
+  obj.copybuffer("cache:prh_self", "object")
+end
+local layer_mask
+do
+local masks = {}
+layer_mask = function(n, thr)
+  local key = n .. "/" .. thr
+  if masks[key] ~= nil then return masks[key] or nil end
+  save_self()
+  local Mk = false
+  if n >= 1 and n ~= obj.layer and obj.load("layer", n, true) then
+    local data, w, h = obj.getpixeldata("object")
+    if data and w and h and w > 0 and h > 0 then Mk = P.build_mask(data, w, h, thr) end
+  end
+  masks[key] = Mk
+  return Mk or nil
+end
+end
+
+-- 時刻と画像に依る値（積分の目印には入れない）。関数ファイルは中身の目印を目印に入れる
+local errs, RT, fhash = {}, {}, ""
+if ce2_err then errs.ce2 = ce2_err end
+-- 自分の画像を並べる: 自分の画像（素材の元）のアルファを、並べる間隔のマスにする。他レイヤーを読む前に読む（毎フレーム読む）
+if e_emit and e_emit.shape == 8 then
+  local data, w, h = obj.getpixeldata("object")
+  if data and w and h and w > 0 and h > 0 then
+    if e_emit.gsplit == 1 then
+      -- 破片: ボロノイの領域（形はシードと画像の大きさで決まる）
+      RT.cells = P.image_shards(data, w, h, e_emit.gshards, e_emit.grand / 100, P.seed_key(seed, obj.layer))
+    else
+      RT.cells = P.image_cells(data, w, h, e_emit.gcell)
+    end
+  end
+end
+-- 文字の並び: 素材のテキストを 1 文字ずつ測って並べる（測った幅はフォントと文字ごとに取っておく）
+_G.Particle_H_textw = _G.Particle_H_textw or {}
+local function text_layout()
+  if RT.tlayout ~= nil then return RT.tlayout or nil end
+  RT.tlayout = false
+  if e_mat and e_mat.kind == 4 and (e_mat.count or 0) > 0 then
+    save_self()
+    local TW_ = _G.Particle_H_textw
+    local fk = table.concat({ tostring(e_mat.font), e_mat.tsize, e_mat.tdeco }, "|") .. "|"
+    local set = false
+    local function measure(str)
+      local v = TW_[fk .. str]
+      if not v then
+        if not set then obj.setfont(e_mat.font, e_mat.tsize, e_mat.tdeco, e_mat.tcol1, e_mat.tcol2); set = true end
+        obj.load("text", str)
+        v = { obj.w or 0, obj.h or 0 }
+        TW_[fk .. str] = v
+      end
+      return v[1], v[2]
+    end
+    RT.tlayout = P.text_layout(e_mat.rawtext, e_mat.by_line, measure,
+      { size = e_mat.tsize, space = e_mat.tspace or 0, lspace = e_mat.tlspace or 0, align = e_mat.talign or 1 })
+    RT.tmat = e_mat
+  end
+  return RT.tlayout or nil
+end
+if e_emit and e_emit.shape == 9 then text_layout() end
+if e_emit and e_emit.shape >= 5 and e_emit.shape <= 7 then
+  if e_emit.shape <= 6 then
+    RT.lay = layer_at(e_emit.layer)
+    if e_emit.shape == 6 then RT.emask = layer_mask(e_emit.layer, e_emit.thr / 100) end
+  else
+    local env, err, hash = P.load_func(e_emit.func)
+    if env and (env.xyz or env.xyzd) then RT.efn = { xyz = env.xyz, xyzd = env.xyzd }
+    elseif e_emit.func ~= "" then errs.emit = err or "xyz も xyzd も無い" end
+    fhash = fhash .. "|e" .. hash
+  end
+end
+-- 出力位置「渡された粒子」: 誕生時刻のシーンのフレームの履歴を引く（同じフレームは 1 回だけ）
+local shared_found
+if e_emit and e_emit.shape == 10 and e_emit.sname ~= "" then
+  local skey = (obj.scene_id ~= nil and (tostring(obj.scene_id) .. ":") or "") .. e_emit.sname
+  local f0 = (obj.originframe or (obj.frame_s + obj.frame)) - obj.frame
+  local memo = {}
+  RT.shared = function(b)
+    local fb = f0 + math.floor(obj_time_raw(b) * fps + 0.5)
+    local A = memo[fb]
+    if A == nil then A = P.share_hist(skey, fb) or false; memo[fb] = A end
+    if A then shared_found = true end
+    return A or nil
+  end
+  RT.shared_b = { num(obj.getvalue("x"), 0) + (obj.ox or 0), num(obj.getvalue("y"), 0) + (obj.oy or 0), num(obj.getvalue("z"), 0) + (obj.oz or 0) }
+end
+-- 粒子どうしの「当たる相手」（v0.13.0）: 相手が渡した粒子の履歴を、シミュレーション時刻 t のシーンのフレームで引く
+local other_found
+if X.inter and (X.inter.other or "") ~= "" then
+  local okey = (obj.scene_id ~= nil and (tostring(obj.scene_id) .. ":") or "") .. X.inter.other
+  local f0 = (obj.originframe or (obj.frame_s + obj.frame)) - obj.frame
+  local bx, by, bz = num(obj.getvalue("x"), 0) + (obj.ox or 0), num(obj.getvalue("y"), 0) + (obj.oy or 0), num(obj.getvalue("z"), 0) + (obj.oz or 0)
+  local memo = {}
+  RT.inter_other = function(t)
+    -- 刻みの時刻のシーンのフレーム（端数あり）。はさむ 2 つのフレームから、同じ番号の粒子の位置を直線で補う（v0.16.0）
+    local fb = f0 + obj_time_raw(t) * fps
+    local L = memo[fb]
+    if L == nil then
+      local A = P.share_at(okey, fb)
+      if A then
+        L = { n = A.n, x = {}, y = {}, z = {}, vx = A.vx, vy = A.vy }
+        for i = 1, A.n do L.x[i], L.y[i], L.z[i] = A.x[i] - bx, A.y[i] - by, A.z[i] - bz end
+        other_found = true
+      else
+        L = false
+      end
+      memo[fb] = L
+    end
+    return L or nil
+  end
+end
+if X.beh and (X.beh.vfile or "") ~= "" then
+  local env, err, hash = P.load_func(X.beh.vfile)
+  if env and env.vector then RT.vfn = env.vector else errs.vector = err or "vector が無い" end
+  fhash = fhash .. "|v" .. hash
+end
+if X.bnc and (X.bnc.blayer or 0) > 0 then
+  local Mk = layer_mask(X.bnc.blayer, X.bnc.bthr / 100)
+  if Mk then RT.bshape = { at = layer_at(X.bnc.blayer), mask = Mk, e = X.bnc.be2, inv = X.bnc.binv } end
+end
+-- 力場「画像の明るさ」: 対象の明るさの格子と、オブジェクトの時刻での位置
+if X.field then
+  for i, F in ipairs(X.field.list) do
+    if F.type == 5 then
+      RT.fimg = RT.fimg or {}
+      local Mk = layer_mask(F.layer or 1, 0.5)
+      if Mk then RT.fimg[i] = { mask = Mk, lay = layer_obj(F.layer or 1) } end
+    end
+  end
+end
+-- 形へ集まる（計算した位置を行き先へ寄せる）
+local gather
+if X.gather then
+  local G = X.gather
+  gather = { src = G.src, pick = G.pick, pts = G.pts, np = G.np, radius = G.radius, start = G.start, dur = G.dur, base = G.base,
+             spread = G.spread, order = G.order, curve = G.curve, rep = G.rep, fn = gather_fn, align = G.align,
+             after = G.after, leave = G.leave, jitter = G.jitter }
+  if G.src == 0 then
+    gather.mask = layer_mask(G.layer, G.thr / 100)
+    local la = layer_at(G.layer)
+    gather.lay = function() return la(now) end
+  elseif G.src == 2 then
+    gather.tlay = text_layout()
+    gather.tmat = RT.tmat
+  end
+end
+-- メッシュ「三角形で塗る」の他レイヤーの画像の色
+if e_mesh and e_mesh.rule == 2 and e_mesh.fill == 1 then
+  local Mk = layer_mask(e_mesh.flayer, 0.5)
+  if Mk then
+    local la = layer_at(e_mesh.flayer)
+    e_mesh.cimg = { mask = Mk, lay = function() return la(now) end }
+  end
+end
+local grid
+if e_grid then
+  grid = { mode = e_grid.mode, a = e_grid.a, b = e_grid.b, c = e_grid.c, inv = e_grid.inv }
+  if e_grid.layer > 0 then grid.mask = layer_mask(e_grid.layer, e_grid.thr / 100) end
+end
+if saved then
+  obj.copybuffer("object", "cache:prh_self")
+  for k2, v in pairs(saved) do obj[k2] = v end
+  saved = nil
+end
+
+-- 音: 今の音の大きさ（周波数を低い方から 10 に分けた帯の値）。基準（P.AUDIO_REF）で 0..1 にする
+local audio
+if e_audio then
+  local src = e_audio.src == 1 and e_audio.file or "audiobuffer"
+  local lv, raw = 0, -1
+  if src and src ~= "" then
+    local buf = {}
+    local ok, nb = pcall(obj.getaudio, buf, src, "spectrum", 10)
+    if ok and (tonumber(nb) or 0) > 0 then
+      raw = buf[e_audio.band] or 0
+      if e_audio.band2 > 0 then raw = math.max(raw, buf[e_audio.band2] or 0) end
+      lv = math.min(math.max(raw * e_audio.gain / 100 / P.AUDIO_REF, 0), 1)
+    end
+  end
+  audio = { level = lv, raw = raw, zoom = e_audio.zoom, alpha = e_audio.alpha, spread = e_audio.spread }
+end
+
+-- 積分の状態を引き継げるかの目印（位置に効く設定。時刻で読む値は入れない）
+local function ser(v, skip)
+  local t = type(v)
+  if t == "table" then
+    local keys = {}
+    for k2 in pairs(v) do
+      if k2 ~= "origin" and k2 ~= "mv" and not (skip and skip[k2]) then keys[#keys + 1] = tostring(k2) end
+    end
+    table.sort(keys)
+    local parts = {}
+    for _, k2 in ipairs(keys) do
+      local val = v[k2]
+      if val == nil then val = v[tonumber(k2)] end
+      parts[#parts + 1] = k2 .. "=" .. ser(val)
+    end
+    return "{" .. table.concat(parts, ",") .. "}"
+  elseif t == "number" then
+    return string.format("%.10g", v)
+  end
+  return tostring(v)
+end
+-- 音の拍で出す（v0.11.0）: 拍の時刻（オブジェクトの時刻）と数。拍が変われば粒子の生まれる時刻が変わるので、シグネチャに入れる
+local beat_ts, beat_cs, beat_err
+if e_audio and (e_audio.beat or 0) ~= 0 then
+  local ts, ss
+  if e_audio.beat == 1 then
+    if e_audio.src ~= 1 or e_audio.file == "" then
+      beat_err = "拍で出す「音声ファイルの拍」は、音を「音声ファイル」にしてファイルを選ぶ"
+    else
+      local err
+      ts, ss, err = P.file_beats(e_audio.file, e_audio.bband, e_audio.bth)
+      if not ts then beat_err = "音声ファイルの拍: " .. tostring(err) end
+    end
+  else
+    -- BPM のグリッド（シーンの秒）→ オブジェクトの時刻
+    local ok, list = pcall(obj.getinfo, "bpm_list")
+    local t0 = ((obj.originframe or (obj.frame_s + obj.frame)) - obj.frame) / fps
+    ts, ss = P.bpm_beats(ok and list or nil, t0, t0 + total, e_audio.bdiv)
+    for i = 1, #ts do ts[i] = ts[i] - t0 end
+    if #ts == 0 then beat_err = "BPM のグリッドが無い" end
+  end
+  if ts then
+    beat_ts, beat_cs = {}, {}
+    for i, t in ipairs(ts) do
+      if t >= 0 and t <= total then
+        beat_ts[#beat_ts + 1] = t
+        beat_cs[#beat_cs + 1] = e_audio.bacc and math.max(math.floor(e_audio.bn * ss[i] + 0.5), 1) or e_audio.bn
+      end
+    end
+  end
+  fhash = fhash .. "|ab" .. (beat_ts and (table.concat(beat_ts, ",") .. "/" .. table.concat(beat_cs, ",")) or "-")
+end
+-- 音の大きさで出す数（v0.15.0）: 音声ファイルの音の大きさの表。数が変わるので、ファイルと設定をシグネチャに入れる
+local loud_tab, loud_err
+if e_audio and (e_audio.arate or 0) > 0 then
+  if e_audio.src ~= 1 or e_audio.file == "" then
+    loud_err = "音の大きさで出す数は、音を「音声ファイル」にしてファイルを選ぶ（編集中の音は、過去の音を読めないので使えない）"
+  else
+    local err
+    loud_tab, err = P.file_loudness(e_audio.file, e_audio.arband)
+    if not loud_tab then loud_err = "音の大きさで出す数: " .. tostring(err) end
+  end
+  fhash = fhash .. "|al" .. (loud_tab and (e_audio.arate .. "/" .. e_audio.arband .. "/" .. e_audio.file .. "/" .. loud_tab.n) or "-")
+end
+local sig, bake_keep_look, sig_motion
+do
+local sig_parts = {}
+for name, v in pairs(NOW_VALUES) do
+  if not (birth_mode and moving[name]) then sig_parts[#sig_parts + 1] = name .. "=" .. string.format("%.10g", v) end
+end
+table.sort(sig_parts)
+local sig_ext = {}
+for _, kind in ipairs({ "wind", "noise", "att", "bnc", "beh", "disp", "orbit", "time", "field", "inter" }) do
+  if X[kind] then sig_ext[#sig_ext + 1] = kind .. ser(X[kind], X[kind].mv) end
+end
+local sig_rest = "|" .. table.concat(sig_ext, "|") .. "|" .. ser(e_emit) .. ser(e_indiv) ..
+  (e_zoal and ser({ e_zoal.vm0, e_zoal.vm1, e_zoal.vmode, e_zoal.vrep, e_zoal.vslot }) or "") .. ce2_hash ..
+  string.format("|%s|%s|%s|%s|%s|%s", tostring(birth_mode), tostring(reverse), start, precision, seed, sync) .. fhash ..
+  ((integ ~= 0 or hmul ~= 1) and string.format("|im%s/%.6g", tostring(integ), hmul) or "")
+sig = table.concat(sig_parts, ",") .. sig_rest
+-- 焼き付けのシグネチャ（v0.16.0）: 動き（位置と回転が決まる値）だけ。拡大率・透過率のトラックバーは入れない（読んだ後に今の値で計算し直す）。
+-- 計算の後に位置を動かすもの（回転・子粒子・軌跡・形へ集まる・格子・音の広がり）も入れる。
+-- 形へ集まるの「回転と大きさをそろえる」は拡大率も変えるので、そのときは見た目の値も入れる（計算し直さない）
+local LOOK_NAMES = { zoom0 = true, zoom1 = true, alpha0 = true, alpha1 = true }
+bake_keep_look = X.gather and X.gather.align
+local motion_parts = {}
+for _, p_ in ipairs(sig_parts) do
+  if bake_keep_look or not LOOK_NAMES[p_:match("^([^=]+)")] then motion_parts[#motion_parts + 1] = p_ end
+end
+sig_motion = table.concat(motion_parts, ",") .. sig_rest .. (on(vanish) and "|va1" or "") .. "|" .. ser(e_rot) .. ser(X.child) .. ser(X.gather) .. ser(e_grid) ..
+  (e_trail and ser({ e_trail.mode, e_trail.n, e_trail.dt }) or "") .. (e_audio and ser({ e_audio.spread }) or "")
+end
+_G.Particle_H_cache = _G.Particle_H_cache or {}
+-- v0.19.2: シーンチェンジ・モーションブラーの参照フレームの描画（本体 2.1.14〜）は別のキャッシュにする。
+-- 参照フレームは今より前のフレームを描き直すので、同じキャッシュだと通常の描画と行き来するたびに粒子を誕生から計算し直していた
+local cache_key = obj.id
+local ok_ref, is_ref = pcall(obj.getinfo, "reference_frame")
+if ok_ref and is_ref == true then
+  cache_key = tostring(obj.id) .. "/ref"
+end
+local cache = _G.Particle_H_cache[cache_key] or {}
+_G.Particle_H_cache[cache_key] = cache
+
+-- 放出の数: 頻度が動いていれば、シミュレーション時刻 0 から今までを 1 フレームずつ積む
+local rate_obj
+if moving.rate then
+  local dt = 1 / fps
+  local nS = math.floor(now * fps) + 2
+  local smp = {}
+  for i = 1, nS do smp[i] = value_at_obj("rate", obj_time((i - 1) * dt)) end
+  rate_obj = P.rate_table(smp, dt)
+else
+  rate_obj = P.rate_const(rate)
+end
+-- 時間の付け替え: 数を保つ（頻度 = 保つ数 ÷ 生存時間）・一斉に出す（オブジェクトの時刻 → シミュレーション時刻）
+if X.time and X.time.keep_on then rate_obj = P.rate_const(X.time.keep_n / math.max(life, 1e-3)) end
+-- 音の大きさで出す数: フレームごとの数に 1 ＋ % × 音の大きさ を掛ける（ファイルの時刻 = オブジェクトの時刻）
+if loud_tab then rate_obj = P.rate_loud(rate_obj, loud_tab, e_audio.arate, 1 / fps, now, obj_time) end
+-- 時間の付け替え: 出し方（まばら・まとめ撃ち）。一斉に出す分は足す前に変える
+if X.time and (X.time.pace or 0) ~= 0 and not X.time.loop_on then
+  rate_obj = P.rate_paced(rate_obj, X.time.pace, X.time.pace_n, X.time.pace_var, P.seed_key(seed, obj.layer), 1 / fps, now)
+end
+if X.time and #(X.time.burst_t or {}) > 0 and (X.time.burst_n or 0) > 0 then
+  local ts = {}
+  for i, t in ipairs(X.time.burst_t) do ts[i] = (reverse and (total - t) or t) + start end
+  rate_obj = P.add_bursts(rate_obj, ts, X.time.burst_n)
+end
+-- 音の拍で出す: 拍の時刻に、拍ごとの数を一斉に出す
+if beat_ts and #beat_ts > 0 then
+  local ts = {}
+  for i, t in ipairs(beat_ts) do ts[i] = (reverse and (total - t) or t) + start end
+  rate_obj = P.add_bursts_var(rate_obj, ts, beat_cs)
+end
+-- 自分の画像を並べる: 出す時刻にマスの数だけ一斉に出す（出力頻度・同時発生数は使わない）
+local sync_v, cells_n = sync, 0
+if e_emit and e_emit.shape == 8 then
+  cells_n = RT.cells and RT.cells.n or 0
+  rate_obj = P.add_bursts(P.rate_const(0), { (reverse and (total - e_emit.gtime) or e_emit.gtime) + start }, cells_n)
+  sync_v = 1
+end
+
+-- 生存時間の上限（窓の計算用）
+local life_max = life
+if birth_mode and moving.life then
+  local F = math.floor(total * fps)
+  for f = 0, F do life_max = math.max(life_max, sample("life", f)) end
+end
+if e_indiv and e_indiv.life ~= 0 then
+  local p = e_indiv.life
+  life_max = p > 0 and life_max * (1 + p / 100) or life_max - p
+end
+
+-- 子粒子
+local child
+if e_child then
+  child = { event = e_child.event, n = math.max(math.floor(e_child.n), 1), interval = math.max(e_child.interval, 0.01),
+            speed = e_child.speed, spread = e_child.spread, inherit = e_child.inherit, life = math.max(e_child.life, 0.001),
+            zoom = e_child.zoom, gy = e_child.gy, drag = e_child.drag, alpha1 = e_child.alpha1, ext = e_child.ext }
+end
+-- 時間の付け替え: ループ。時刻を「満ちた後の周期の中の時刻」にし、1 周期に出る数（整数に丸める）で粒子の番号を巻く
+local loop_e
+if X.time and X.time.loop_on then
+  local T = math.max(X.time.loop_t, 0.1)
+  local pe = math.max(math.floor(rate * T + 0.5), 1)
+  rate_obj = P.rate_const(pe / T)
+  -- 進行時間を使うなら、その値を周期で巻く
+  local t = X.time.tp_on and X.time.tp or (reverse and (total - obj.time) or obj.time)
+  local m = math.ceil((life_max + (child and child.life or 0)) / T) + 1
+  now = m * T + (t % T)
+  loop_e = pe
+end
+local keep_n = 0
+if X.bnc and X.bnc.keep_stop then keep_n = X.bnc.keep_max end
+if X.disp and X.disp.keep_stop then keep_n = math.max(keep_n, X.disp.keep_max) end
+-- 焼き付け（v0.13.0）: フレーム（オブジェクトの頭から）ごとに、計算した粒子をファイルに置く / 読む。設定（シグネチャ）が変われば使わない
+local bake_path, bake_sig, bake_n, bake_err, BR
+if e_bake and e_bake.mode ~= 0 then
+  if e_bake.dir == "" then
+    bake_err = "焼き付けの置くフォルダが選ばれていない"
+  else
+    local BS = string.char(92)
+    local dir = e_bake.dir
+    if dir:sub(-1) ~= BS and dir:sub(-1) ~= "/" then dir = dir .. BS end
+    bake_path = dir .. (e_bake.name ~= "" and e_bake.name or "particles") .. ".prh"
+    bake_sig = P.BAKE_VERSION .. "|" .. P.text_hash(sig_motion)
+    bake_n = math.floor(total * fps + 0.5) + 1
+    if e_bake.mode == 2 then
+      local why
+      BR, why = P.bake_read(bake_path, bake_sig, bake_n, obj.frame)
+      if BR then
+        BR.cells = RT.cells
+      elseif why == "無い" then
+        bake_err = "焼き付けのファイルが無い: " .. bake_path
+      elseif why == "違う" then
+        bake_err = "焼き付けが今の設定と違うので使わない（書き出し直す）"
+      else
+        bake_err = e_bake.sim and "焼き付けに無いフレームがある（そのフレームは計算した）" or "焼き付けに無いフレームがある（そのフレームは描かない）"
+      end
+    end
+  end
+end
+local bake_nosim = e_bake and e_bake.mode == 2 and not BR and not e_bake.sim
+local scfg = {
+  now = now, t_end = total + start, sk = P.seed_key(seed, obj.layer), sync = sync_v,
+  rate = rate_obj, life_max = life_max, track = track, track_const = track_const, obj_time = obj_time,
+  rot_random = tonumber(rot_random) or 1, revrot = on(revrot), vanish_at_end = on(vanish),
+  emit = e_emit, rot = e_rot, zoal = e_zoal, indiv = e_indiv,
+  ext = X, ext_val = ext_val, cache = cache, sig = sig, fps = fps, precision = precision, integ = integ, hmul = hmul,
+  alive_hint = math.max(math.max(rate_obj.rate(now), 0) * (life_max + (child and child.life or 0)) * math.max(sync_v, 1), cells_n) + keep_n,
+  trail = (e_trail and e_trail.mode ~= 2) and { n = e_trail.n, dt = e_trail.dt } or nil,
+  rt = RT, errs = errs, audio = audio, grid = grid, obj_time_raw = obj_time_raw, look = e_look, gather = gather,
+  child = child, loop_e = loop_e, t_start = start,
+  need_tb = (e_filt and (e_filt.base == 3 or e_filt.base == 4)) or (e_color and (e_color.mode == 6 or e_color.mode == 7)) or nil,
+  need_fb = (e_filt and e_filt.base == 4) or (e_color and e_color.mode == 7) or nil, colsrc = (e_color and e_color.mode == 5) and e_color.levels or nil,
+}
+-- 終了時に消える（v0.19.1）: 最後のフレーム（総時間の 1 フレーム手前）で粒子が残らないよう、そこまでに消え終わる粒子だけを生む。
+-- ループでは時刻を周期で巻くので、終わりは今の時刻からオブジェクトの残りの時間だけ先
+scfg.t_vanish = total + start - 1 / fps
+if loop_e and not X.time.tp_on and not reverse then scfg.t_vanish = now + (total - 1 / fps - obj.time) end
+-- 焼き付けを書くときは、跳ね返った年齢・分散した年齢も書く（読んだ後に拡大率・透過率・色を計算し直すため）
+if bake_path and e_bake.mode == 1 then scfg.need_tb, scfg.need_td = true, true end
+if BR and not bake_keep_look then P.relook(BR, scfg) end
+local res = BR or (bake_nosim and { n = 0, overflow = 0, steps = 0, resets = 0 }) or P.simulate(scfg)
+local t_sim = P.clock()
+if bake_path and e_bake.mode == 1 then
+  local ok, err = P.bake_write(bake_path, bake_sig, bake_n, obj.frame, res)
+  if not ok then bake_err = err end
+  if e_bake.csv then
+    local ok2, err2 = P.csv_write(e_bake.dir, e_bake.name ~= "" and e_bake.name or "particles", obj.frame, res)
+    if not ok2 then bake_err = err2 end
+  end
+end
+-- 粒子を外へ渡す（受け取って描く・出力位置「渡された粒子」が読む）。座標は本体の位置を足して置く
+local share_name = tostring(share or "")
+local share_dup = false
+if share_name ~= "" then
+  local sx0, sy0, sz0 = num(obj.getvalue("x"), 0) + (obj.ox or 0), num(obj.getvalue("y"), 0) + (obj.oy or 0), num(obj.getvalue("z"), 0) + (obj.oz or 0)
+  local scene_part = obj.scene_id ~= nil and (tostring(obj.scene_id) .. ":") or ""
+  share_dup = P.share_put(scene_part .. share_name, res, sx0, sy0, sz0, obj.originframe or (obj.frame_s + obj.frame), obj.id,
+                          tonumber(share_n) or 500)
+end
+local draw_off = share_name ~= "" and on(share_only)
+-- 編集中の粒子の割合（編集中だけ。出力は全部描く）
+local editing = obj.getoption("gui") == true
+if editing and (tonumber(preview) or 100) < 100 then P.thin(res, preview, P.seed_key(seed, obj.layer)) end
+
+-- 描く
+local facing = tonumber(facing) or 0
+local cam_mode = num(obj.getoption("camera_mode"), 0)
+-- 画面に貼り付ける: カメラ制御の下で、既定のカメラで見た絵を今のカメラでも同じに写す（描く直前に頂点を移す）
+local scr_on = on(screen_fix) and cam_mode ~= 0
+local CAM0 = { x = 0, y = 0, z = -P.SCREEN_D0, tx = 0, ty = 0, tz = 0, rz = 0, ux = 0, uy = -1, uz = 0, d = P.SCREEN_D0 }
+local cam_basis
+if facing == 2 then
+  local c = scr_on and CAM0 or obj.getoption("camera_param")
+  local fx, fy, fz = c.tx - c.x, c.ty - c.y, c.tz - c.z
+  local fl = math.sqrt(fx * fx + fy * fy + fz * fz)
+  if fl > 0 then fx, fy, fz = fx / fl, fy / fl, fz / fl end
+  local ux, uy, uz = c.ux, c.uy, c.uz
+  local rx, ry, rz = fy * uz - fz * uy, fz * ux - fx * uz, fx * uy - fy * ux     -- 右 = 前 × 上
+  local rl = math.sqrt(rx * rx + ry * ry + rz * rz)
+  if rl > 0 then rx, ry, rz = rx / rl, ry / rl, rz / rl end
+  local dx, dy, dz = fy * rz - fz * ry, fz * rx - fx * rz, fx * ry - fy * rx     -- 下 = 前 × 右
+  cam_basis = { rx = rx, ry = ry, rz = rz, ux = dx, uy = dy, uz = dz }
+end
+local ro = tonumber(rot_order) or 0
+local mat = e_mat or { kind = 0 }
+-- カスタム描画: 関数ファイルの particle_obj で描いた絵を素材にする（読めなければ素材のまま）
+local custom_fn
+if e_custom then
+  local env, err = P.load_func(e_custom.file)
+  if env and env.particle_obj then
+    custom_fn = env.particle_obj
+    mat = { kind = 6, cvar = e_custom.cvar, clv = e_custom.clv }
+  elseif e_custom.file ~= "" then
+    errs.custom = err or "particle_obj が無い"
+  end
+end
+-- 目の位置（本体から見た座標）。曲面・厚みの三角形を奥から並べるのに使う
+local bx0, by0, bz0 = num(obj.getvalue("x"), 0) + (obj.ox or 0), num(obj.getvalue("y"), 0) + (obj.oy or 0), num(obj.getvalue("z"), 0) + (obj.oz or 0)
+local eye = { -bx0, -by0, -1024 - bz0 }
+if cam_mode ~= 0 and not scr_on then
+  local c = obj.getoption("camera_param")
+  if c and c.x then eye = { c.x - bx0, c.y - by0, c.z - bz0 } end
+end
+local solid, model, model_err
+if e_solid then
+  solid = { type = e_solid.type, div = e_solid.div, size = e_solid.size, bh = e_solid.bh, bv = e_solid.bv, depth = e_solid.depth,
+            mscale = e_solid.mscale, my = e_solid.my }
+  -- モデル（v0.17.0）: 読めなければ六面体で描く（注意を出す）
+  if solid.type == 6 then
+    model, model_err = P.pmd_load(e_solid.model)
+    if not model then solid.type = 0 end
+  end
+end
+local opt = {
+  order = ro == 0 and P.STANDARD_ORDER or ro, facing = facing, cam = cam_basis, face = tonumber(face) or 0,
+  sk = P.seed_key(seed, obj.layer), cut_size = mat.csize or 60, cut_center = mat.ccenter, solid = solid, eye = eye,
+}
+-- 光源（v0.11.0）: 向きを長さ 1 にし、% を割合にする
+local LT
+if e_light then
+  local dx, dy, dz = e_light.lx, e_light.ly, e_light.lz
+  local l = math.sqrt(dx * dx + dy * dy + dz * dz)
+  if l < 1e-9 then dx, dy, dz, l = 0, 0, 1, 1 end
+  LT = {
+    kind = e_light.kind, dx = dx / l, dy = dy / l, dz = dz / l, px = e_light.pos[1], py = e_light.pos[2], pz = e_light.pos[3],
+    amb = e_light.amb / 100, pow = e_light.pow / 100, spec = e_light.spec / 100, levels = math.max(math.floor(e_light.levels), 2),
+    back = e_light.back, col = e_light.col,
+  }
+end
+local R = P.build_draw(res, {
+  mat = mat, color = e_color, filt = e_filt, trail = e_trail, fan = e_fan, mesh = e_mesh, solid = solid, shadow = e_shadow,
+  old_front = (tonumber(draw_order) or 0) == 1, sk = opt.sk, obj_now = obj.time, total = total, light = LT, lopt = opt,
+})
+local runs = R.runs
+
+-- カスタム描画: 要る鍵（種類 × 時間の段）ごとに 1 回だけ関数を呼び、キャッシュに置く
+if custom_fn then
+  local done = {}
+  for _, r in ipairs(runs) do
+    local mk = r.key:match("^(u%d+_%d+)/")
+    if mk and not done[mk] then
+      done[mk] = true
+      local var, lv = mk:match("^u(%d+)_(%d+)$")
+      var, lv = tonumber(var), tonumber(lv)
+      local t = e_custom.clv > 1 and lv / (e_custom.clv - 1) * life or 0
+      local vals = e_custom.vals
+      local seed_v = math.floor(P.rnd(var, P.CH.cust + 1, opt.sk) * 100000)
+      local ok, err = pcall(custom_fn, t, 0, life, var, 0, seed_v, e_custom.v1, e_custom.v2, e_custom.v3,
+        vals[1], vals[2], vals[3], vals[4], vals[5], vals[6], vals[7], vals[8],
+        e_custom.col1, e_custom.col2, e_custom.fig1, e_custom.fig2, e_custom.chk1, e_custom.chk2)
+      if not ok then errs.custom = errs.custom or tostring(err) end
+      obj.setoption("drawtarget", "framebuffer")
+      obj.copybuffer("cache:prh_" .. mk, "object")
+    end
+  end
+end
+
+local tex_fail
+-- 素材を読み込み、色とフィルターを掛ける（鍵が変わったときだけ）。
+-- base: モデルの材質（v0.17.0）。テクスチャがあればそれを、無ければ拡散色の四角を素材の代わりに読む
+local function prepare(key, base)
+  local mk, look = key:match("^([^/]*)/(.*)$")
+  local c, num_ = mk:sub(1, 1), tonumber(mk:sub(2))
+  if base then
+    -- テクスチャが読めなければ（obj.load が false）、拡散色の四角にする（注意を出す）
+    if not (base.tex and obj.load("image", base.tex)) then
+      if base.tex then tex_fail = base.tex end
+      local function ch(v) return math.floor(math.min(math.max(v, 0), 1) * 255 + 0.5) end
+      obj.load("figure", "四角形", ch(base.r) * 65536 + ch(base.g) * 256 + ch(base.b), 8)
+    end
+  elseif c == "o" then
+    obj.copybuffer("object", "cache:prh_orig")
+  elseif c == "f" then
+    obj.load("figure", mat.figs[num_] or "円", mat.fcol, mat.fsize, mat.fline)
+  elseif c == "i" then
+    obj.load("image", mat.files[num_])
+  elseif c == "t" then
+    obj.setfont(mat.font, mat.tsize, mat.tdeco, mat.tcol1, mat.tcol2)
+    obj.load("text", mat.units[num_])
+  elseif c == "m" then
+    obj.load("movie", mat.mfile, num_ / mat.fps)
+  elseif c == "u" then
+    obj.copybuffer("object", "cache:prh_" .. mk)
+  elseif c == "s" then
+    obj.load("figure", e_fan.fig, e_fan.col, e_fan.size, 4000)
+  elseif c == "r" then
+    obj.load("figure", "円", e_fan.ring_col, e_fan.ring_size, e_fan.ring_width)
+  end
+  local cl, fl = look:match("c(%d+)"), look:match("x(%d+)")
+  if cl and e_color then
+    obj.effect("単色化", "色", P.level_color(e_color, tonumber(cl)), "強さ", e_color.str, "輝度を保持する", e_color.keep and 1 or 0)
+  end
+  if fl and e_filt then
+    local args = { e_filt.name, e_filt.item, P.level_value(e_filt, tonumber(fl)) }
+    for _, kv in ipairs(e_filt.fixed) do args[#args + 1] = kv[1]; args[#args + 1] = kv[2] end
+    obj.effect(unpack(args))
+  end
+  -- 光源（鍵の l<段>）: 段 / (段数 − 1) が 1 未満なら黒へ、1 を超えれば光の色へ単色化で寄せる
+  local ll = look:match("l(%d+)")
+  if ll and LT then
+    local v = tonumber(ll) / (LT.levels - 1)
+    if v < 1 - 1e-9 then
+      obj.effect("単色化", "色", 0x000000, "強さ", (1 - v) * 100, "輝度を保持する", 0)
+    elseif v > 1 + 1e-9 then
+      obj.effect("単色化", "色", LT.col, "強さ", math.min(v - 1, 1) * 100, "輝度を保持する", 0)
+    end
+  end
+  -- 影（鍵の終わりの h）: 影の色に塗りつぶし、ぼかす（大きさは変えない）
+  if e_shadow and look:find("h", 1, true) then
+    obj.effect("単色化", "色", e_shadow.col, "強さ", 100, "輝度を保持する", 0)
+    if e_shadow.blur > 0 then obj.effect("ぼかし", "範囲", e_shadow.blur, "サイズ固定", 1) end
+  end
+end
+
+local need_orig = false
+for _, r in ipairs(runs) do if r.key:sub(1, 1) == "o" then need_orig = true; break end end
+if need_orig then obj.copybuffer("cache:prh_orig", "object") end
+local plane_on = on(plane)
+-- ガラス化: 粒子を仮想バッファに描き、その形でフレームバッファ（下のレイヤーまでの絵）をずらして読む。カメラ制御の下では使わない
+local glass = e_glass and cam_mode == 0
+local use_tb = plane_on or glass
+-- 画面に貼り付ける変換（仮想バッファに描くときは使わない）
+local scr
+if scr_on and not use_tb then scr = P.screen_basis(obj.getoption("camera_param"), bx0, by0, bz0) end
+local BLENDS = { "add", "sub", "mul", "screen", "overlay", "light", "dark", "diff" }
+local BL = BLENDS[tonumber(blend) or 0]
+-- 合成モード: 直接描くときは粒子に、仮想バッファに描くときは最後の絵に掛ける
+if BL and not use_tb then obj.setoption("blend", BL) end
+if use_tb then
+  if plane_on then obj.setoption("drawtarget", "tempbuffer", plane_w, plane_h)
+  else obj.setoption("drawtarget", "tempbuffer", obj.screen_w, obj.screen_h) end
+end
+-- 頂点色で描くもの（帯・メッシュ）は粒子の後ろ
+if scr then P.screen_apply(scr, R.cq4, false); P.screen_apply(scr, R.cq3, false) end
+if not draw_off and #R.cq4 > 0 then obj.drawpoly(R.cq4, 4) end
+if not draw_off and #R.cq3 > 0 then obj.drawpoly(R.cq3, 3) end
+local cur, drawn = nil, 0
+for _, run in ipairs(draw_off and {} or runs) do
+  if run.key ~= cur then
+    prepare(run.key)
+    cur = run.key
+  end
+  if run.vn == 5 and model then
+    -- モデル（v0.17.0）: 材質ごとにテクスチャ（無ければ拡散色の四角）を読んで、その材質の三角形を描く。裏を向いた面は描かない
+    for mi, Mt in ipairs(model.mats) do
+      local mv = P.model_verts(R, run, model, mi, opt)
+      if #mv > 0 then
+        local mkey = run.key .. "|m" .. mi
+        local groups = LT and P.light_split(LT, mv, false) or { { nil, mv } }
+        for _, B in ipairs(groups) do
+          local k2 = B[1] and (run.key .. "l" .. B[1]) or run.key
+          if mkey .. k2 ~= cur then prepare(k2, Mt); cur = mkey .. k2 end
+          if scr then P.screen_apply(scr, B[2], false) end
+          obj.setoption("culling", 1)
+          obj.drawpoly(B[2], 3, run.alpha * math.min(math.max(Mt.a, 0), 1))
+          obj.setoption("culling", 0)
+        end
+      end
+    end
+    drawn = drawn + #run.items
+    goto next_run
+  end
+  local verts = P.run_verts(R, run, obj.w, obj.h, opt)
+  if #verts > 0 and run.vn == 5 and LT then
+    -- 光源の立体物: 三角形ごとに面の向きが違うので、光の段ごとに素材を変えて描く（画面に貼り付けるなら段を決めてから移す）
+    for _, B in ipairs(P.light_split(LT, verts, solid.type <= 3)) do
+      local k2 = run.key .. "l" .. B[1]
+      if k2 ~= cur then prepare(k2); cur = k2 end
+      if scr then P.screen_apply(scr, B[2], false) end
+      if solid.type <= 3 then obj.setoption("culling", 1) end
+      obj.drawpoly(B[2], 3, run.alpha)
+      if solid.type <= 3 then obj.setoption("culling", 0) end
+    end
+    drawn = drawn + #run.items
+    verts = {}
+  end
+  if scr then P.screen_apply(scr, verts, run.vn == 4) end
+  if #verts > 0 then
+    if run.vn == 4 then
+      obj.drawpoly(verts, run.alpha)
+    elseif run.vn == 5 and solid.type <= 3 then
+      -- 閉じた凸の立体は、裏を向いた面を描かない
+      obj.setoption("culling", 1)
+      obj.drawpoly(verts, 3, run.alpha)
+      obj.setoption("culling", 0)
+    else
+      obj.drawpoly(verts, 3, run.alpha)
+    end
+    drawn = drawn + #run.items
+  end
+  ::next_run::
+end
+if use_tb then
+  -- 仮想バッファの絵をオブジェクトにして、本体より下の効果を掛けてから描く。
+  -- drawpoly を使うとスクリプト以降の効果は自動では走らない（lua.txt の obj.drawpoly。実機 EPR-20 で確認）ので、自分で呼ぶ
+  obj.load("tempbuffer")
+  obj.setoption("drawtarget", "framebuffer")
+  if glass then
+    -- この画像の画素 → 画面の画素（標準描画の位置・中心・拡大率・Z軸回転と、ここまでの効果の値。au2-shader-lua）
+    local ccx, ccy = num(obj.getvalue("cx"), 0) + (obj.cx or 0), num(obj.getvalue("cy"), 0) + (obj.cy or 0)
+    local ssx, ssy = num(obj.getvalue("sx"), 1) * (obj.sx or 1), num(obj.getvalue("sy"), 1) * (obj.sy or 1)
+    local rot = (num(obj.getvalue("rz"), 0) + (obj.rz or 0)) * math.pi / 180
+    local c, s = math.cos(rot), math.sin(rot)
+    local a11, a12, a21, a22 = c * ssx, -s * ssy, s * ssx, c * ssy
+    local px0, py0 = obj.w / 2 + ccx, obj.h / 2 + ccy
+    local t1 = obj.screen_w / 2 + bx0 - (a11 * px0 + a12 * py0)
+    local t2 = obj.screen_h / 2 + by0 - (a21 * px0 + a22 * py0)
+    local col = e_glass.col
+    local cr, cg, cb = math.floor(col / 65536) % 256 / 255, math.floor(col / 256) % 256 / 255, col % 256 / 255
+    obj.pixelshader("prh_glass", "object", { "object", "framebuffer" }, {
+      a11, a12, t1, 0, a21, a22, t2, 0, cr, cg, cb, e_glass.tint / 100,
+      1 / obj.screen_w, 1 / obj.screen_h, 1 / obj.w, 1 / obj.h,
+      e_glass.ref, e_glass.width, e_glass.edge / 100, e_glass.blur,
+    }, "copy", "clamp")
+  end
+  if plane_on then obj.effect() end
+  if BL then obj.setoption("blend", BL) end
+  obj.draw()
+else
+  obj.setoption("draw_state", true)
+end
+
+-- 警告（変わったときだけログへ。状態の表示にも出す）
+local warns = {}
+for i = 1, 64 do
+  local ok, name = pcall(obj.getoption, "script_name", i, true)
+  if not ok or name == nil then break end
+  local kind = name ~= "" and name:match("^(.-)" .. SUFFIX .. "$")
+  if kind and kind ~= "本体" then warns[#warns + 1] = "本体より下の「" .. kind .. "」は使われない（本体より上へ）" end
+end
+if X.orbit and (X.wind or X.noise or X.att or X.bnc or X.disp or X.field or (X.beh and X.beh.sp > 0)) then
+  warns[#warns + 1] = "円運動を付けているので、風・ノイズ場・集結点・跳ね返り・分散と停止・力場・挙動不審は効かない"
+end
+if X.path and X.orbit then warns[#warns + 1] = "パスと円運動を両方付けているので、パスを使う" end
+if X.time and X.time.loop_on then
+  if (X.time.pace or 0) ~= 0 or X.time.keep_on or #(X.time.burst_t or {}) > 0 or moving.rate then
+    warns[#warns + 1] = "ループでは一定の出力頻度だけを使う（出し方・一斉に出す・数を保つ・出力頻度の移動は使わない）"
+  end
+  if X.noise and X.noise.speed ~= 0 then warns[#warns + 1] = "ノイズ場の変化の速さが 0 でないと、ループの継ぎ目で流れがずれる" end
+end
+if e_child and e_child.event == 1 and not X.bnc then warns[#warns + 1] = "子粒子の「最初に跳ね返ったとき」は、跳ね返りを付けたときだけ出る" end
+if e_child and e_child.event == 2 and not (X.disp and (X.disp.dt > 0 or X.disp.dbounce)) then
+  warns[#warns + 1] = "子粒子の「分散したとき」は、分散と停止で分散するときだけ出る"
+end
+if X.path and (X.wind or X.noise or X.att or X.bnc or X.disp or X.field or (X.beh and X.beh.sp > 0)) then
+  warns[#warns + 1] = "パスを付けているので、風・ノイズ場・集結点・跳ね返り・分散と停止・力場・挙動不審は効かない"
+end
+if e_emit and e_emit.shape == 8 and cells_n > P.MAX_PARTICLES then
+  warns[#warns + 1] = "並べるマスが " .. cells_n .. " 個あり、" .. P.MAX_PARTICLES .. " 個を超える分は描かない（並べる間隔を広げる）"
+end
+if ((e_emit and e_emit.shape == 9) or (X.gather and X.gather.src == 2)) and not RT.tlayout then
+  warns[#warns + 1] = "文字の並びは、素材をテキストにしたときだけ使える"
+end
+if e_mat and e_mat.kind == 1 and e_mat.cwhere == 1 and not (e_emit and e_emit.shape == 8) then
+  warns[#warns + 1] = "切り抜く所「出た所」は、出力位置「自分の画像を並べる」と一緒に使う"
+end
+if gather and gather.src == 0 and not (gather.mask and gather.mask.nc > 0) then
+  warns[#warns + 1] = "形へ集まるの対象レイヤー " .. X.gather.layer .. " に形が無い"
+end
+if e_color and e_color.mode == 5 and not (e_emit and (e_emit.shape == 6 or e_emit.shape == 8)) then
+  warns[#warns + 1] = "色の決め方「出た所の色」は、出力位置が「他レイヤーの形」か「自分の画像を並べる」のときだけ使える"
+end
+if e_mesh and e_mesh.rule == 2 and e_mesh.fill == 1 and not e_mesh.cimg then
+  warns[#warns + 1] = "三角形で塗るの色を取るレイヤー " .. e_mesh.flayer .. " に画像が無い"
+end
+if e_glass and cam_mode ~= 0 then warns[#warns + 1] = "カメラ制御の下ではガラス化は効かない" end
+if beat_err then warns[#warns + 1] = beat_err end
+if model_err then warns[#warns + 1] = "立体物のモデル: " .. tostring(model_err) .. "（六面体で描いた）" end
+if tex_fail then warns[#warns + 1] = "立体物のモデルのテクスチャを読めない: " .. tex_fail .. "（拡散色で描いた）" end
+if loud_err then warns[#warns + 1] = loud_err end
+if e_child and e_child.ext and (X.orbit or X.path) then
+  warns[#warns + 1] = "子粒子の「動きの拡張も掛ける」は、円運動・パスの粒子では使えない（子は閉じた式で動く）"
+end
+if ((e_filt and (e_filt.base == 3 or e_filt.base == 4)) or (e_color and (e_color.mode == 6 or e_color.mode == 7))) and not X.bnc then
+  warns[#warns + 1] = "「跳ね返ってから・跳ね返るまで」は跳ね返りを付けたときだけ変わる（今は始の値のまま）"
+end
+if X.disp and (X.disp.link or 0) == 2 and X.disp.dbounce then
+  warns[#warns + 1] = "分散と停止の「止まってから分散する」は、反射で分散するときは使えない"
+end
+if bake_err then warns[#warns + 1] = bake_err end
+if X.inter and (X.inter.other or "") ~= "" and not other_found and res.inter_n then
+  warns[#warns + 1] = "当たる相手「" .. X.inter.other .. "」の粒子が渡されていない（相手の本体の渡す名前と、相手を上のレイヤーに置く）"
+end
+if X.inter and (X.orbit or X.path) then warns[#warns + 1] = "粒子どうしは、円運動・パスと一緒には効かない" end
+if res.inter_over and res.inter_over > 0 then
+  warns[#warns + 1] = "粒子どうしで一緒に進めるのは " .. math.floor(X.inter.imax or P.INTER_MAX) .. " 個まで（超えた " .. res.inter_over ..
+    " 個は力を受けない。一緒に進める数を上げる）"
+end
+if e_light and e_glass then warns[#warns + 1] = "ガラス化には光源は効かない" end
+if scr_on and use_tb then warns[#warns + 1] = "平面描写では、画面に貼り付けるは効かない" end
+if e_emit and e_emit.shape == 10 then
+  if e_emit.sname == "" then warns[#warns + 1] = "出力位置「渡された粒子」の受け取る名前が空"
+  elseif not shared_found and res.n == 0 then warns[#warns + 1] = "「" .. e_emit.sname .. "」の粒子が渡されていない" end
+end
+if share_dup then warns[#warns + 1] = "渡す名前「" .. share_name .. "」が、ほかのオブジェクトと重なっている（後から書いた方が使われる）" end
+if e_solid and e_mat and e_mat.kind == 1 and (e_mat.shape or 0) ~= 0 then warns[#warns + 1] = "立体物では、切り抜きの形は四角として貼る" end
+do
+  local parts = {}
+  for k2, v in pairs(errs) do parts[#parts + 1] = "自作関数 " .. k2 .. ": " .. tostring(v) end
+  table.sort(parts)
+  for _, v in ipairs(parts) do warns[#warns + 1] = v end
+end
+local wmsg = table.concat(warns, " / ")
+_G.Particle_H_err = _G.Particle_H_err or {}
+if _G.Particle_H_err[obj.id] ~= wmsg then
+  _G.Particle_H_err[obj.id] = wmsg
+  if wmsg ~= "" then print("@warn", "[拡張パーティクル_H] 注意: " .. wmsg) end
+end
+
+-- ガイドと状態の表示（編集中だけ = obj.getoption("gui") が真のとき。lua.txt「動画の出力中は非表示状態になります」）
+local gmode, hmode = tonumber(guide) or 0, tonumber(hud) or 0
+if BL then obj.setoption("blend", "none") end
+if gmode == 2 or (gmode == 1 and editing) then
+  local fl = {}
+  if X.field then for i, F in ipairs(X.field.list) do fl[i] = P.prepare_field(F) end end
+  local gl = P.guide(X, fl, 2)
+  if #gl > 0 then obj.drawpoly(gl, 4) end
+end
+if hmode == 2 or (hmode == 1 and editing) then
+  local t_end = P.clock()
+  local lines = {
+    string.format("粒子 %d / 描いた %d / 上限で落ちた %d", res.n, drawn, res.overflow),
+    string.format("計算 %.1f ms / 描画 %.1f ms", (t_sim - t_start) * 1000, (t_end - t_sim) * 1000),
+  }
+  for _, w in ipairs(warns) do lines[#lines + 1] = "注意: " .. w end
+  obj.setfont("MS UI Gothic", 24, 3, 0xffffff, 0x000000)
+  obj.load("text", table.concat(lines, "\n"))
+  -- 画面の左上へ（本体の位置から逆に戻す）
+  obj.draw(-bx0 - obj.screen_w / 2 + obj.w / 2 + 16, -by0 - obj.screen_h / 2 + obj.h / 2 + 16, 0)
+  if on(hud_no) then
+    -- 粒子の番号（新しい粒子から 100 個まで）。個別微調整の「乱数を変える番号」に使う
+    obj.setfont("MS UI Gothic", 18, 3, 0xffff80, 0x000000)
+    local c = 0
+    for i = 0, res.n - 1 do
+      if c >= 100 then break end
+      if res.alpha[i] > 0 then
+        obj.load("text", tostring(res.k[i]))
+        obj.draw(res.x[i] + 14, res.y[i] - 14, res.z[i])
+        c = c + 1
+      end
+    end
+  end
+end
+
+-- 診断ログ（変わったときだけ。毎フレーム変わる値は入れない）
+if on(diag) then
+  local kinds = {}
+  for k in pairs(above) do kinds[#kinds + 1] = k end
+  table.sort(kinds)
+  local used = {}
+  if e_emit then used[#used + 1] = "出力位置" end
+  if e_rot then used[#used + 1] = "回転" end
+  if e_zoal then used[#used + 1] = "拡大率と透過率" end
+  if e_indiv then used[#used + 1] = "個別微調整" end
+  for _, kind in ipairs({ "wind", "noise", "att", "bnc", "beh", "disp", "orbit", "time", "field", "inter" }) do
+    if X[kind] then used[#used + 1] = kind end
+  end
+  if e_mat then used[#used + 1] = "mat" .. e_mat.kind end
+  if e_filt then used[#used + 1] = "filt" end
+  if e_color then used[#used + 1] = "color" end
+  if e_trail then used[#used + 1] = "trail" .. e_trail.mode end
+  if e_fan then used[#used + 1] = "fan" end
+  if e_mesh then used[#used + 1] = "mesh" end
+  if e_grid then used[#used + 1] = "grid" .. e_grid.mode end
+  if e_solid then used[#used + 1] = "solid" .. e_solid.type end
+  if e_glass then used[#used + 1] = glass and "glass" or "glass(camera)" end
+  if e_audio then used[#used + 1] = "audio" end
+  if custom_fn then used[#used + 1] = "custom" end
+  if RT.lay then used[#used + 1] = "lay" end
+  if RT.emask then used[#used + 1] = "emask" .. RT.emask.nc end
+  if RT.bshape then used[#used + 1] = "bshape" end
+  if RT.efn then used[#used + 1] = "efn" end
+  if RT.vfn then used[#used + 1] = "vfn" end
+  if X.field then used[#used + 1] = "field" .. #X.field.list end
+  if X.path then used[#used + 1] = "path" end
+  if X.time and (X.time.pace or 0) ~= 0 then used[#used + 1] = "pace" .. X.time.pace end
+  if loop_e then used[#used + 1] = "loop" .. loop_e end
+  if keep_n > 0 then used[#used + 1] = "keep" .. keep_n end
+  if child then used[#used + 1] = "child" .. child.event end
+  if gather then used[#used + 1] = "gather" .. gather.src end
+  if RT.cells then used[#used + 1] = (RT.cells.shards and "shards" or "cells") .. RT.cells.n end
+  if res.qpal then used[#used + 1] = "qpal" .. #res.qpal end
+  if e_mesh and e_mesh.rule == 2 then used[#used + 1] = "delaunay" end
+  if e_shadow then used[#used + 1] = "shadow" .. e_shadow.mode end
+  if LT then used[#used + 1] = "light" .. LT.kind end
+  if beat_ts then used[#used + 1] = "beats" .. #beat_ts end
+  if res.inter_n then used[#used + 1] = "inter" .. res.inter_n end
+  if BR then used[#used + 1] = "baked" end
+  if bake_path and e_bake.mode == 1 then used[#used + 1] = "baking" end
+  if RT.tlayout then used[#used + 1] = "text" .. RT.tlayout.n end
+  if e_look then used[#used + 1] = "look" end
+  if BL then used[#used + 1] = "blend=" .. BL end
+  local msg = string.format("[拡張パーティクル_H] layer=%d above=%s used=%s seen=%s runs=%d merged=%s",
+    obj.layer, table.concat(kinds, ","), table.concat(used, ","), table.concat(seen, "|"), #runs, tostring(runs.merged == true))
+  _G.Particle_H_diag = _G.Particle_H_diag or {}
+  if _G.Particle_H_diag[obj.id] ~= msg then
+    _G.Particle_H_diag[obj.id] = msg
+    print("@warn", msg)
+  end
+  -- 数の要約も、変わったときだけ出す（フレーム番号・計算の刻みの数・音の大きさのように毎フレーム変わる値は入れない）
+  local stat = string.format("[拡張パーティクル_H] alive=%d drawn=%d overflow=%d over=%d cq=%d getvalue=%d resets=%d",
+    res.n, drawn, res.overflow, R.over, #R.cq4 + #R.cq3, gets, res.resets)
+  _G.Particle_H_diag2 = _G.Particle_H_diag2 or {}
+  if _G.Particle_H_diag2[obj.id] ~= stat then
+    _G.Particle_H_diag2[obj.id] = stat
+    print("@warn", stat)
+  end
+end
+
+@出力位置
+--information:出力位置@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--select@shape:出力の形=1,点=0,線=1,線を走る=2,箱=3,球=4,他レイヤーを追う=5,他レイヤーの形=6,関数=7,自分の画像を並べる=8,文字の並び=9,渡された粒子=10
+--track@npts:アンカー数,2,16,2,1
+--value@pos:座標,{-300,0,0,300,0,0}
+--check@from_points:各点から出す,0
+--track@run_time:走る時間,0.001,600,2,0.001
+--check@loop:一周する,1
+--track@hollow:内側の空間,0,99,0,0.01
+--check@same_pos:同時発生分を同じ位置,0
+--track@layer:対象レイヤー,1,1000,1,1
+--track@thr:しきい値,0,100,50,0.01
+--select@oarea:出す所=0,形の中=0,形の縁=1
+--select@oweight:出す数の重み=0,なし=0,明るい所ほど多く=1,暗い所ほど多く=2
+--check@use_dir:動く向きに出す,0
+--select@ltrace:追う位置=0,生まれた時刻=0,通った所からランダム=1,通る所全体からランダム=2
+--track@add_vel:動きの速さを足す,0,1000,0,0.01
+--file@func:関数ファイル
+--check@chain:上の出力位置につなぐ,0
+--track@gcell:並べる間隔,2,1000,20,1
+--track@gtime:出す時刻,0,600,0,0.001
+--select@gsplit:並べ方=0,格子=0,破片=1
+--track@gshards:破片の数,2,2000,80,1
+--track@grand:破片の不ぞろい,0,100,70,0.01
+--string@sname:受け取る名前,
+--hide@npts:shape==0
+--hide@npts:shape>2
+--hide@from_points:shape~=1
+--hide@run_time:shape~=2
+--hide@loop:shape~=2
+--hide@hollow:shape<3
+--hide@hollow:shape>4
+--hide@layer:shape<5
+--hide@layer:shape>6
+--hide@thr:shape~=6
+--hide@oarea:shape~=6
+--hide@oweight:shape~=6
+--hide@use_dir:shape<5
+--hide@use_dir:shape==7
+--hide@use_dir:shape==8
+--hide@use_dir:shape==9
+--hide@add_vel:shape<5
+--hide@add_vel:shape==7
+--hide@add_vel:shape==8
+--hide@add_vel:shape==9
+--hide@sname:shape~=10
+--hide@ltrace:shape~=5
+--hide@func:shape~=7
+--hide@chain:shape==0
+--hide@chain:shape>2
+--hide@gcell:shape~=8
+--hide@gcell:gsplit==1
+--hide@gtime:shape~=8
+--hide@gsplit:shape~=8
+--hide@gshards:shape~=8
+--hide@gshards:gsplit==0
+--hide@grand:shape~=8
+--hide@grand:gsplit==0
+-- 本体より上に付ける。粒子の出る位置を点・線・線を走る・箱・球にする（座標はオブジェクトの中心から）。
+-- 他レイヤーを追う: 対象レイヤーのオブジェクトの位置から出す（その時刻の位置。本体から見た座標）。
+--   追う位置: 通った所からランダム = 0〜生まれた時刻の、通る所全体からランダム = オブジェクト全体の、でたらめな時刻の位置から出す。
+-- 他レイヤーの形: 対象レイヤーのオブジェクトの形（アルファがしきい値 % 以上の所）から出す（位置・Z軸回転・拡大率に付いていく）。
+-- 動く向きに出す: 対象の動く向きを出力方向にする（本体の拡散角度は効く）。動きの速さを足す: 対象の速さの % を粒子の速さに足す。
+-- 関数: 関数ファイル（.lua）の xyz(t) か xyzd(t) が返す位置から出す（t はオブジェクトの時刻・秒。xyzd は出力方向と Z出力方向もラジアンで返す）。
+-- 自分の画像を並べる: 自分の画像を並べる間隔（px）のマスに分け、透明でないマスの中心から、出す時刻（秒）に一斉に出す（出力頻度は使わない）。
+-- 並べ方「破片」: 格子の代わりに、およそ破片の数のボロノイの領域（割れたガラスのような多角形）に割る。不ぞろいは種の点のずれ（%）。
+-- 文字の並び: 素材のテキストを、テキストオブジェクトのように並べた位置から 1 文字ずつ出す（出力頻度が 1 秒に出す文字の数）
+-- 渡された粒子: 本体の「渡す名前」で渡された粒子の、生まれた時刻の位置から出す（受け取る名前で選ぶ。渡す側を上のレイヤーに置く）。
+--   動く向きに出す・動きの速さを足すは、その粒子の動きを使う
+local function on(v) return v == true or v == 1 end
+local shape = tonumber(shape) or 1
+local n = (shape == 3 or shape == 4) and 2 or math.max(math.floor(npts), 2)
+local pts = {}
+if shape >= 1 and shape <= 4 then
+  local def = {}
+  for i = 0, n - 1 do
+    def[#def + 1] = -300 + 600 * i / (n - 1); def[#def + 1] = 0; def[#def + 1] = 0
+  end
+  obj.setanchor("pos", n, "xyz", "line", def)
+  for i = 1, n * 3 do pts[i] = (pos and pos[i]) or def[i] end
+end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+-- 上の出力位置につなぐ: このフレームに上の出力位置（線・線を走る）が書いた点の後ろに、この点を足す
+local prev = box.emit
+if on(chain) and (shape == 1 or shape == 2) and prev and prev.origin == obj.originframe and (prev.shape == 1 or prev.shape == 2) then
+  local all = {}
+  for i = 1, prev.n * 3 do all[i] = prev.pts[i] end
+  for i = 1, n * 3 do all[#all + 1] = pts[i] end
+  pts, n = all, prev.n + n
+end
+box.emit = {
+  origin = obj.originframe, shape = shape, pts = pts, n = n, from_points = on(from_points),
+  run_time = run_time, loop = on(loop), hollow = hollow, same_pos = on(same_pos),
+  layer = math.floor(layer), thr = thr, use_dir = on(use_dir), add_vel = add_vel, func = func or "",
+  oarea = tonumber(oarea) or 0, oweight = tonumber(oweight) or 0,
+  gcell = math.max(math.floor(gcell), 2), gtime = gtime,
+  gsplit = tonumber(gsplit) or 0, gshards = math.floor(gshards), grand = grand,
+  sname = tostring(sname or ""), trace = tonumber(ltrace) or 0,
+}
+
+@回転
+--information:回転@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--group:揺れ
+--track@swing_speed:揺れ速度,0,36000,60,0.01
+--track@swing_x:X揺れ回転,0,3600,0,0.01
+--track@swing_y:Y揺れ回転,0,3600,0,0.01
+--track@swing_z:Z揺れ回転,0,3600,0,0.01
+--check@phase_random:揺れの位相をランダム,1
+--check@swing_sync:揺れ同期,0
+--group
+--group:放射時の角度
+--track@inc_x:X放射時角度増減,-36000,36000,0,0.01
+--track@inc_y:Y放射時角度増減,-36000,36000,0,0.01
+--track@inc_z:Z放射時角度増減,-36000,36000,0,0.01
+--group
+--group:回転の加速
+--track@acc_x:X回転加速度,-36000,36000,0,0.01
+--track@acc_y:Y回転加速度,-36000,36000,0,0.01
+--track@acc_z:Z回転加速度,-36000,36000,0,0.01
+--track@lim_x:X加速上限,0,36000,0,0.01,なし
+--track@lim_y:Y加速上限,0,36000,0,0.01,なし
+--track@lim_z:Z加速上限,0,36000,0,0.01,なし
+--track@acc_time:加速タイミング,0,600,0,0.001
+--check@acc_rel:相対時間,1
+--check@no_rev:加速度反転なし,1
+--group
+--group:個別
+--track@i_speed:個別揺れ速度,-10000,10000,0,0.01
+--track@i_amp:個別揺れ回転,-10000,10000,0,0.01
+--track@i_acc:個別回転加速度,-10000,10000,0,0.01
+--track@i_time:個別加速タイミング,-10000,10000,0,0.01
+--group
+-- 本体より上に付ける。回転を揺らす・放射した時刻で角度を変える・回転を加速する
+local function on(v) return v == true or v == 1 end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.rot = {
+  origin = obj.originframe,
+  swing_speed = swing_speed, swing = { swing_x, swing_y, swing_z },
+  phase_random = on(phase_random), sync = on(swing_sync),
+  inc = { inc_x, inc_y, inc_z },
+  acc = { acc_x, acc_y, acc_z }, limit = { lim_x, lim_y, lim_z },
+  acc_time = acc_time, relative = on(acc_rel), no_reverse = on(no_rev),
+  indiv_speed = i_speed, indiv_amp = i_amp, indiv_acc = i_acc, indiv_time = i_time,
+}
+
+@拡大率と透過率
+--information:拡大率と透過率@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--track@zoom0:始拡大率,0,5000,100,0.01
+--track@zoom1:終拡大率,0,5000,100,0.01
+--track@alpha0:始透過率,0,100,0,0.01
+--track@alpha1:終透過率,0,100,50,0.01
+--select@base:時間の基準=0,粒子ごと=0,オブジェクト=1
+--group:拡大率の中間点
+--value@zmid_t:中間点の時刻(拡大率),{}
+--value@zmid_v:中間点の値(拡大率),{}
+--select@zmode:補間(拡大率)=0,直線=0,瞬間=1,反復=2,加速=3,減速=4,加減速=5,バウンス=6,弾性=7,バック=8,カーブエディタ_H=9
+--track@zrep:反復の回数(拡大率),1,100,2,1
+--track@zslot:スロット(拡大率),1,1000,1,1
+--group
+--group:透過率の中間点
+--value@amid_t:中間点の時刻(透過率),{}
+--value@amid_v:中間点の値(透過率),{}
+--select@amode:補間(透過率)=0,直線=0,瞬間=1,反復=2,加速=3,減速=4,加減速=5,バウンス=6,弾性=7,バック=8,カーブエディタ_H=9
+--track@arep:反復の回数(透過率),1,100,2,1
+--track@aslot:スロット(透過率),1,1000,1,1
+--group
+--group:反射と分散
+--track@zb:反射中間点(拡大率),0,10,0,1,なし
+--track@zd:分散中間点(拡大率),0,10,0,1,なし
+--track@ab:反射中間点(透過率),0,10,0,1,なし
+--track@ad:分散中間点(透過率),0,10,0,1,なし
+--group
+--group:速度倍率
+--track@vm0:始速度倍率,0,10000,100,0.01
+--track@vm1:終速度倍率,0,10000,100,0.01
+--select@vmode:補間(速度倍率)=0,直線=0,瞬間=1,反復=2,加速=3,減速=4,加減速=5,バウンス=6,弾性=7,バック=8,カーブエディタ_H=9
+--track@vrep:反復の回数(速度倍率),1,100,2,1
+--track@vslot:スロット(速度倍率),1,1000,1,1
+--group
+--hide@zrep:zmode~=2
+--hide@zslot:zmode~=9
+--hide@arep:amode~=2
+--hide@aslot:amode~=9
+--hide@vrep:vmode~=2
+--hide@vslot:vmode~=9
+-- 本体より上に付ける。本体の拡大率と透過率を置き換え、中間点（時刻は秒）を足す。
+-- 時間の基準: 粒子ごと = 生まれてからの時刻（終わりは寿命）/ オブジェクト = オブジェクトの時刻（終わりはオブジェクトの終わり）。
+-- 補間: 点と点の間の変わり方（区間ごとに掛かる）。反復: 反復の回数だけ往復する（奇数は次の値、偶数は前の値で終わる）。
+-- カーブエディタ_H: スロットの式で変わる（CurveEditor_H の Live スロット）。
+-- 速度倍率: 粒子の自分の速さ（出力速度・加速度）に、寿命に沿って掛ける %（風などの外から受けた速さには掛けない）
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+local function arr(t)
+  local o = {}
+  if type(t) == "table" then for i = 1, #t do o[i] = tonumber(t[i]) or 0 end end
+  return o
+end
+box.zoal = {
+  origin = obj.originframe,
+  zoom0 = zoom0, zoom1 = zoom1, alpha0 = alpha0, alpha1 = alpha1,
+  zmid_t = arr(zmid_t), zmid_v = arr(zmid_v), amid_t = arr(amid_t), amid_v = arr(amid_v),
+  zmode = tonumber(zmode) or 0, amode = tonumber(amode) or 0, by_object = (tonumber(base) or 0) == 1,
+  zb = math.floor(zb), zd = math.floor(zd), ab = math.floor(ab), ad = math.floor(ad),
+  zrep = math.floor(zrep), zslot = math.floor(zslot), arep = math.floor(arep), aslot = math.floor(aslot),
+  vm0 = vm0, vm1 = vm1, vmode = tonumber(vmode) or 0, vrep = math.floor(vrep), vslot = math.floor(vslot),
+}
+
+@個別微調整
+--information:個別微調整@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--group:ばらつき(正の値は元の値の%・負の値は幅)
+--track@i_speed:速度,-10000,10000,0,0.01
+--track@i_accel:加速度,-10000,10000,0,0.01
+--track@i_vrx:X軸回転速度,-10000,10000,0,0.01
+--track@i_vry:Y軸回転速度,-10000,10000,0,0.01
+--track@i_vrz:Z軸回転速度,-10000,10000,0,0.01
+--track@i_alpha:透過率,-10000,10000,0,0.01
+--track@i_zoom:拡大率,-10000,10000,0,0.01
+--track@i_gx:重力X,-10000,10000,0,0.01
+--track@i_gy:重力Y,-10000,10000,0,0.01
+--track@i_gz:重力Z,-10000,10000,0,0.01
+--track@i_rate:出力頻度,-10000,10000,0,0.01
+--track@i_life:生存時間,-10000,10000,0,0.01
+--group
+--check@same_group:同時発生の組で揃える,0
+--value@reseed:乱数を変える番号,{}
+--track@reseed_salt:変え方,1,1000,1,1
+-- 本体より上に付ける。粒子ごとに値をばらつかせる。正の値は元の値の %、負の値は絶対値の幅（原作の説明書 09 の式）。
+-- 乱数を変える番号: {番号,番号,…} の粒子だけ、乱数を変える（変え方を変えると別の乱数）。番号は本体の「粒子の番号も表示」で見る
+local function on(v) return v == true or v == 1 end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.indiv = {
+  origin = obj.originframe,
+  speed = i_speed, accel = i_accel, vrx = i_vrx, vry = i_vry, vrz = i_vrz, alpha = i_alpha, zoom = i_zoom,
+  gx = i_gx, gy = i_gy, gz = i_gz, rate = i_rate, life = i_life, same_group = on(same_group),
+  reseed = (function() local o = {} if type(reseed) == "table" then for i = 1, #reseed do o[i] = tonumber(reseed[i]) or -1 end end return o end)(),
+  salt = math.floor(reseed_salt),
+}
+
+@風
+--information:風@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--track@wx:風力X,-10000,10000,100,0.01
+--track@wy:風力Y,-10000,10000,0,0.01
+--track@wz:風力Z,-10000,10000,0,0.01
+--track@drag:空気抵抗,0,100,0,0.01
+--check@use_point:発生場所を使う,0
+--value@wpos:発生場所,{0,0,0}
+--track@wrange:届く距離,1,100000,500,0.01
+--track@i_wind:個別風力,-10000,10000,0,0.01
+--hide@wpos:use_point==0
+--hide@wrange:use_point==0
+-- 本体より上に付ける。粒子を風で流す。風力は 1 秒あたりの速度の変化（px/秒²）。空気抵抗は速度に比例して遅らせる強さ（1/秒）。
+-- 風力はトラックバーを動かすと、その時刻の値で吹く（粒子の過去の動きも、その時刻の風で計算する）
+local function on(v) return v == true or v == 1 end
+local mv = {}
+for var, item in pairs({ wx = "風力X", wy = "風力Y", wz = "風力Z" }) do
+  local m = obj.getoption("track_mode", var)
+  if m ~= nil and m ~= 0 and m ~= "" then mv[var] = item end
+end
+local up = on(use_point)
+if up then obj.setanchor("wpos", 1, "xyz") end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.wind = {
+  origin = obj.originframe, wx = wx, wy = wy, wz = wz, drag = drag, use_point = up,
+  pt = { (wpos and wpos[1]) or 0, (wpos and wpos[2]) or 0, (wpos and wpos[3]) or 0 }, range = wrange, i_wind = i_wind, mv = mv,
+}
+
+@ノイズ場
+--information:ノイズ場@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--track@nstr:強さ,0,100000,300,0.01
+--track@nscale:大きさ,1,10000,200,0.01
+--track@nspeed:変化の速さ,0,100,0.5,0.001
+--track@nseed:シード,-100000,100000,0,1
+--check@nz:Z方向にも,0
+--track@nstart:効き始め,0,600,0,0.001
+--track@nfade:ゆるやかに効かせる,0,600,0,0.001
+--track@i_noise:個別の強さ,-10000,10000,0,0.01
+--select@ntype:元のノイズ=0,値ノイズ=0,勾配ノイズ=1,ブロック=2
+-- 本体より上に付ける。見えない流れ（カールノイズ）で粒子を渦のように流す。原作の「空間場」の代わり（式は別物）。
+-- 強さ: 力の大きさ（px/秒²）。大きさ: 渦の大きさ（px）。変化の速さ: 流れが時間で変わる速さ（1/秒）。効き始め・ゆるやかに効かせる: 粒子が生まれてからの秒
+-- 元のノイズ（v0.19.0）: 値ノイズ（今まで）/ 勾配ノイズ（渦の大きさがそろう）/ ブロック（升ごとに縦か横の一定の流れ。格子に沿って折れ曲がる）
+local function on(v) return v == true or v == 1 end
+local mv = {}
+local m = obj.getoption("track_mode", "nstr")
+if m ~= nil and m ~= 0 and m ~= "" then mv.str = "強さ" end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.noise = {
+  origin = obj.originframe, str = nstr, scale = nscale, speed = nspeed, seed = nseed, z = on(nz),
+  -- 元のノイズは値ノイズ（0）なら入れない。焼き付けのシグネチャ（ser(X.noise)）を v0.18.0 と同じに保つ
+  start = nstart, fade = nfade, i_noise = i_noise, mv = mv, ntype = ((tonumber(ntype) or 0) ~= 0) and tonumber(ntype) or nil,
+}
+
+@集結点
+--information:集結点@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--select@cmode:選び方=0,ランダム=0,一番近い点=1,順に巡る=2
+--track@cnum:点の数,1,5,1,1
+--value@cpos:座標,{0,-300,0}
+--track@cstart:集結開始時間,0,600,0.5,0.001
+--check@crel:相対時間,1
+--track@cstrength:追従の強さ,0,1000,4,0.01
+--track@cspeed:集結速度,0,10000,0,0.01,そのまま
+--track@cxy:XY方向角度,-180,180,0,0.01
+--track@cexy:XY拡散度,0,180,0,0.01
+--track@cz:Z方向角度,-90,90,0,0.01
+--track@cez:Z拡散度,0,90,0,0.01
+--select@carrive:着いたら=0,そのまま=0,消える=1,止まる=2
+--track@cradius:着いたとみなす半径,0,10000,20,0.01
+--track@cinterval:巡る間隔,0.001,600,1,0.001
+--track@i_cstart:個別集結開始時間,-10000,10000,0,0.01
+--check@cchain:上の集結点につなぐ,0
+--hide@cinterval:cmode~=2
+--hide@cradius:carrive==0
+-- 本体より上に付ける。集結開始時間を過ぎた粒子が、点へ向かって進む。
+-- 追従の強さ: 1 秒あたりに向きを点へ寄せる強さ。集結速度: 0 なら今の速さのまま向きだけ変える。
+-- 相対時間: オン = 粒子が生まれてからの秒 / オフ = オブジェクトの始まりからの秒。
+-- 上の集結点につなぐ: 集結点を 2 つ重ねると、点を 5 つより多く置ける（設定は下の集結点のものを使う）
+local function on(v) return v == true or v == 1 end
+local n = math.max(math.min(math.floor(cnum), 5), 1)
+local def = {}
+for i = 0, n - 1 do def[#def + 1] = (i - (n - 1) / 2) * 200; def[#def + 1] = -300; def[#def + 1] = 0 end
+obj.setanchor("cpos", n, "xyz", "line", def)
+local pts = {}
+for i = 1, n * 3 do pts[i] = (cpos and cpos[i]) or def[i] end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+-- 上の集結点につなぐ: このフレームに上の集結点が書いた点の後ろに、この点を足す（5 つより多く置ける）
+local prev = box.att
+if on(cchain) and prev and prev.origin == obj.originframe then
+  local all = {}
+  for i = 1, prev.n * 3 do all[i] = prev.pts[i] end
+  for i = 1, n * 3 do all[#all + 1] = pts[i] end
+  pts, n = all, prev.n + n
+end
+box.att = {
+  origin = obj.originframe, mode = tonumber(cmode) or 0, n = n, pts = pts, start = cstart, rel = on(crel),
+  strength = cstrength, speed = cspeed, xy = cxy, exy = cexy, z = cz, ez = cez, arrive = tonumber(carrive) or 0,
+  radius = cradius, interval = cinterval, i_start = i_cstart,
+}
+
+@跳ね返り
+--information:跳ね返り@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--group:面
+--select@bx:X方向の面=0,両面=0,小さい側だけ=1,大きい側だけ=2,なし=3
+--track@xmin:X最小,-100000,100000,-960,0.01
+--track@xmax:X最大,-100000,100000,960,0.01
+--track@ex:X反発係数,0,10,0.9,0.001
+--select@by:Y方向の面=0,両面=0,小さい側だけ=1,大きい側だけ=2,なし=3
+--track@ymin:Y最小,-100000,100000,-540,0.01
+--track@ymax:Y最大,-100000,100000,540,0.01
+--track@ey:Y反発係数,0,10,0.9,0.001
+--select@bz:Z方向の面=3,両面=0,小さい側だけ=1,大きい側だけ=2,なし=3
+--track@zmin:Z最小,-100000,100000,-500,0.01
+--track@zmax:Z最大,-100000,100000,500,0.01
+--track@ez:Z反発係数,0,10,0.9,0.001
+--group
+--group:球
+--select@sph:球の面=0,なし=0,外側で跳ね返る=1,内側に閉じ込める=2,半球（上側）=3
+--value@spos:球の中心,{0,0,0}
+--track@srad:球の半径,1,100000,200,0.01
+--track@se:球の反発係数,0,10,0.9,0.001
+--group
+--group:他レイヤーの形
+--track@blayer:当たるレイヤー,0,1000,0,1,なし
+--track@bthr:形のしきい値,0,100,50,0.01
+--track@be2:形の反発係数,0,10,0.9,0.001
+--check@binv:形の中に閉じ込める,0
+--group
+--track@bfric:摩擦,0,100,0,0.01
+--check@irr:イレギュラー,0
+--track@irrp:確率,0,100,30,0.01
+--track@irra:ずれの角度,0,180,45,0.01
+--check@keep_stop:止まったら残す,0
+--track@keep_max:残す数,1,10000,500,1
+--track@keep_speed:止まったとみなす速さ,0,1000,20,0.01
+--select@bfinite:面の広さ=0,無限=0,範囲の中だけ=1
+--check@broll:転がる,0
+--track@brrad:粒子の半径,0.1,10000,10,0.01
+--hide@brrad:broll==0
+--group:面を変える
+--track@btime:面を変える時刻,0,600,0,0.001,変えない
+--check@brel:面を変える時刻は粒子ごと,0
+--select@bx2:変えた後のX方向の面=0,そのまま=0,両面=1,小さい側だけ=2,大きい側だけ=3,なし=4
+--select@by2:変えた後のY方向の面=0,そのまま=0,両面=1,小さい側だけ=2,大きい側だけ=3,なし=4
+--select@bz2:変えた後のZ方向の面=0,そのまま=0,両面=1,小さい側だけ=2,大きい側だけ=3,なし=4
+--select@bs2:変えた後の球の面=0,そのまま=0,なし=1,外側で跳ね返る=2,内側に閉じ込める=3,半球（上側）=4
+--group
+--hide@keep_max:keep_stop==0
+--hide@keep_speed:keep_stop==0
+--hide@xmin:bx==3
+--hide@xmax:bx==3
+--hide@ex:bx==3
+--hide@ymin:by==3
+--hide@ymax:by==3
+--hide@ey:by==3
+--hide@zmin:bz==3
+--hide@zmax:bz==3
+--hide@ez:bz==3
+--hide@spos:sph==0
+--hide@srad:sph==0
+--hide@se:sph==0
+--hide@irrp:irr==0
+--hide@irra:irr==0
+-- 本体より上に付ける。座標はオブジェクトの中心から。反発係数: 1 で同じ速さ、0.5 で半分の速さで跳ね返る。
+-- 面の広さ: 無限 = 面は無限に広い。範囲の中だけ = 面はほかの 2 軸の最小〜最大の中だけにあり、外を通る粒子はすり抜ける（原作の領域内反射のオフ）。
+-- 面を変える時刻: その時刻（秒。オブジェクトの時刻、粒子ごとなら生まれてから）より後は、変えた後の面にする（そのまま = 変えない）。
+-- 動く面には対応しない（今の値を全時刻に使う）。
+-- 転がる: 面に当たった後の、面に沿う速さ ÷ 粒子の半径 で Z 軸に回る（宙では同じ速さで回り続ける）。回転の拡張の回転に足す。
+-- 他レイヤーの形: 当たるレイヤーのオブジェクトの形（アルファがしきい値 % 以上の所）で跳ね返る。XY だけで見る（Z は見ない）。
+-- 位置・Z軸回転・拡大率の動きには付いていく。形そのものの変化は今のフレームの形を全時刻に使う。
+-- 摩擦: 当たるたびに、面に沿う速さを (100 − 摩擦) % にする（床で滑って止まる）
+-- 止まったら残す: 跳ね返った後に速さが 止まったとみなす速さ（px/秒）を下回ったら、その場に止め、寿命の後も残す（新しい方から 残す数 まで）
+local function on(v) return v == true or v == 1 end
+local s = tonumber(sph) or 0
+if s ~= 0 then obj.setanchor("spos", 1, "xyz") end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.bnc = {
+  origin = obj.originframe, bx = tonumber(bx) or 0, by = tonumber(by) or 0, bz = tonumber(bz) or 3,
+  xmin = math.min(xmin, xmax), xmax = math.max(xmin, xmax), ymin = math.min(ymin, ymax), ymax = math.max(ymin, ymax),
+  zmin = math.min(zmin, zmax), zmax = math.max(zmin, zmax), ex = ex, ey = ey, ez = ez,
+  sph = s, spos = { (spos and spos[1]) or 0, (spos and spos[2]) or 0, (spos and spos[3]) or 0 }, srad = srad, se = se,
+  irr = on(irr), irrp = irrp, irra = irra,
+  blayer = math.floor(blayer), bthr = bthr, be2 = be2, binv = on(binv), fric = bfric,
+  keep_stop = on(keep_stop), keep_max = math.floor(keep_max), keep_speed = keep_speed,
+  finite = tonumber(bfinite) or 0, ctime = btime, crel = on(brel),
+  cbx = tonumber(bx2) or 0, cby = tonumber(by2) or 0, cbz = tonumber(bz2) or 0, csph = tonumber(bs2) or 0,
+  roll = on(broll), rrad = brrad,
+}
+
+@挙動
+--information:挙動@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--group:位置のずれ
+--track@jx:X方向,0,10000,0,0.01
+--track@jy:Y方向,0,10000,0,0.01
+--track@jz:Z方向,0,10000,0,0.01
+--track@jn:間隔,1,10000,10,1
+--select@jpat:つなぎ方=1,折れ線=0,曲線=1
+--track@jsmooth:滑らかさ,0,100,100,0.01
+--hide@jsmooth:jpat==0
+--group
+--group:ゆらぎ
+--track@ys:ゆらぎ速度,0,36000,180,0.01
+--track@yx:ゆらぎ幅X,0,10000,0,0.01
+--track@yy:ゆらぎ幅Y,0,10000,0,0.01
+--track@yz:ゆらぎ幅Z,0,10000,0,0.01
+--check@yrel:進行方向基準,0
+--track@i_ys:個別ゆらぎ速度,-10000,10000,0,0.01
+--track@i_ya:個別ゆらぎ幅,-10000,10000,0,0.01
+--group
+--group:挙動不審
+--track@sp:不審確率,0,100,0,0.01
+--track@si:不審間隔,0.001,600,0.5,0.001
+--track@ssp:不審速度,0,100000,200,0.01
+--select@sdir:不審方向=0,指定=0,ランダム=1
+--track@sdx:不審方向X,-10000,10000,0,0.01
+--track@sdy:不審方向Y,-10000,10000,-100,0.01
+--track@sdz:不審方向Z,-10000,10000,0,0.01
+--check@sz3:ランダムにZも含める,0
+--hide@sdx:sdir==1
+--hide@sdy:sdir==1
+--hide@sdz:sdir==1
+--hide@sz3:sdir==0
+--group
+--file@vfile:速度の関数
+-- 本体より上に付ける。
+-- 位置のずれ: 出る位置を、粒子の並び（間隔の数ごと）に沿ってなめらかにずらす（px）。
+-- ゆらぎ: 粒子を左右・上下に揺らす（速度は度/秒、360 で 1 秒に 1 往復。幅は px）。進行方向基準: X が進む向きと直角、Y が進む向き。
+-- 挙動不審: 不審間隔（秒）ごとに、不審確率（%）で、その向きへ不審速度（px/秒）ではじかれる。
+-- 速度の関数: 関数ファイル（.lua）の vector(t) が返す速度（px/秒。t は粒子が生まれてからの秒）を足して動かす
+local function on(v) return v == true or v == 1 end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.beh = {
+  origin = obj.originframe, jx = jx, jy = jy, jz = jz, jn = jn, jpat = tonumber(jpat) or 1, jsmooth = jsmooth,
+  ys = ys, yx = yx, yy = yy, yz = yz, yrel = on(yrel), i_ys = i_ys, i_ya = i_ya,
+  sp = sp, si = si, ssp = ssp, sdir = tonumber(sdir) or 0, sdx = sdx, sdy = sdy, sdz = sdz, sz3 = on(sz3),
+  vfile = vfile or "",
+}
+
+@分散と停止
+--information:分散と停止@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--group:分散
+--track@dt:分散タイム,0,600,1,0.001,なし
+--check@dbounce:反射で分散,0
+--track@dxy:XY拡散度,0,180,60,0.01
+--track@dz:Z拡散度,0,90,0,0.01
+--select@dspd:分散後の速さ=0,そのまま=0,指定=1
+--track@dv:分散後の速度,0,10000,200,0.01
+--check@dacc_on:分散後の加速度を変える,0
+--track@dac:分散後の加速度,-10000,10000,0,0.01
+--track@i_dt:個別分散タイム,-10000,10000,0,0.01
+--hide@dv:dspd==0
+--hide@dac:dacc_on==0
+--group
+--group:停止
+--track@stop:急停止,0,600,0,0.001,なし
+--track@i_stop:個別急停止,-10000,10000,0,0.01
+--select@dlink:つなぐ=0,つながない=0,分散してから止める=1,止まってから分散する=2
+--track@dlt:つなぐ時間,0.001,600,1,0.001
+--track@dlti:個別つなぐ時間,-10000,10000,0,0.01
+--hide@dlt:dlink==0
+--hide@dlti:dlink==0
+--check@keep_stop:止まったら残す,0
+--track@keep_max:残す数,1,10000,500,1
+--track@keep_speed:止まったとみなす速さ,0,1000,20,0.01
+--hide@keep_max:keep_stop==0
+--hide@keep_speed:keep_stop==0
+--group
+-- 本体より上に付ける。
+-- 分散: 粒子が生まれてから分散タイム（秒）で、進む向きを拡散度（度）の範囲でばらばらに変える（花火）。反射で分散: 最初に跳ね返ったときに分散する。
+-- 急停止: 生まれてからこの秒数で速さを 0 にする（重力・風などは効き続ける）。
+-- つなぐ（原作の分散停止リンク）: 分散してから止める = 分散した時刻 ＋ つなぐ時間 で急停止。止まってから分散する = 急停止の時刻 ＋ つなぐ時間 で分散（分散の速さを決めていなければ生まれたときの速さ。反射で分散のときは使えない）
+local function on(v) return v == true or v == 1 end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.disp = {
+  origin = obj.originframe, dt = dt, dbounce = on(dbounce), dxy = dxy, dz = dz, dspd = tonumber(dspd) or 0, dv = dv,
+  dacc_on = on(dacc_on), dac = dac, i_dt = i_dt, stop = stop, i_stop = i_stop,
+  link = tonumber(dlink) or 0, link_t = dlt, i_link = dlti,
+  keep_stop = on(keep_stop), keep_max = math.floor(keep_max), keep_speed = keep_speed,
+}
+
+@円運動
+--information:円運動@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--select@ocenter:中心=0,出力位置=0,指定=1,範囲からランダム=2
+--value@opos:中心の座標,{0,0,0}
+--track@orx:範囲X,0,100000,640,0.01
+--track@ory:範囲Y,0,100000,360,0.01
+--track@orz:範囲Z,0,100000,0,0.01
+--track@ow:角速度,-36000,36000,90,0.01
+--track@oacc:角速度の加速,-36000,36000,0,0.01
+--check@ononeg:減速で止める,1
+--track@ovr:半径速度,-10000,10000,50,0.01
+--track@olim:半径上限,0,100000,0,0.01,なし
+--track@oax:回転平面X角,-360,360,0,0.01
+--track@oay:回転平面Y角,-360,360,0,0.01
+--track@i_ow:個別角速度,-10000,10000,0,0.01
+--track@i_ovr:個別半径速度,-10000,10000,0,0.01
+--hide@opos:ocenter~=1
+--hide@orx:ocenter~=2
+--hide@ory:ocenter~=2
+--hide@orz:ocenter~=2
+-- 本体より上に付ける。粒子を中心のまわりで回す。円運動があるときは、本体の出力速度・加速度・重力と、
+-- 風・ノイズ場・集結点・跳ね返り・分散と停止・挙動不審は使わない。
+-- 中心=出力位置: 粒子の出た位置が中心（半径 0 から半径速度で広がる）。角速度は度/秒、半径速度は px/秒
+local function on(v) return v == true or v == 1 end
+local c = tonumber(ocenter) or 0
+if c == 1 then obj.setanchor("opos", 1, "xyz") end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.orbit = {
+  origin = obj.originframe, center = c, pos = { (opos and opos[1]) or 0, (opos and opos[2]) or 0, (opos and opos[3]) or 0 },
+  rx = orx, ry = ory, rz = orz, w = ow, acc = oacc, nonneg = on(ononeg), vr = ovr, lim = olim, ax = oax, ay = oay,
+  i_w = i_ow, i_vr = i_ovr,
+}
+
+@時間の付け替え
+--information:時間の付け替え@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--check@tp_on:進行時間を使う,0
+--track@tp:進行時間,-9999,9999,0,0.001
+--value@emit_win:放射時間,{}
+--value@act_win:活動時間,{}
+--check@act_rel:相対時間,0
+--value@burst_t:一斉に出す時刻,{}
+--track@burst_n:一斉に出す数,0,10000,100,1
+--check@keep_on:数を保つ,0
+--track@keep_n:保つ数,1,10000,300,1
+--select@pace:出し方=0,一定=0,まばら=1,まとめ撃ち=2
+--track@pace_n:まとめる数,1,1000,10,1
+--track@pace_var:ばらつき,0,100,50,0.01
+--check@loop_on:ループ,0
+--track@loop_t:周期,0.1,600,5,0.001
+--hide@tp:tp_on==0
+--hide@keep_n:keep_on==0
+--hide@pace_n:pace~=2
+--hide@pace_var:pace~=2
+--hide@loop_t:loop_on==0
+-- 本体より上に付ける。
+-- 進行時間: オンにすると、粒子の時刻をこのトラックバーの値（秒）にする（動かすと早送り・巻き戻し・停止ができる）。
+-- 放射時間: 粒子を出す時間帯。{始,終,始,終,…}（秒。オブジェクトの始まりから。終に -1 で最後まで）。空なら常に出す。
+-- 活動時間: 粒子が動く時間帯（同じ書き方）。外では止まる（拡大率・透過率は変わり続ける）。相対時間: オン = 粒子が生まれてからの秒。
+-- 一斉に出す時刻: {秒,秒,…}（オブジェクトの始まりから）に、一斉に出す数 だけまとめて出す（出力頻度の分とは別に）。
+-- 数を保つ: 出力頻度の代わりに、保つ数 ÷ 生存時間 の頻度で出す（生きている粒子がおよそ保つ数になる）
+-- 出し方: まばら = 間隔がでたらめ（平均は出力頻度）/ まとめ撃ち = まとめる数（± ばらつき %）ずつ、でたらめな時刻にまとめて出す。
+-- ループ: 周期（秒）で同じ絵に戻る（周期の始まりと終わりがつながる）。1 周期に出る数が整数になるよう出力頻度を少し丸め、開始時間は使わない（進行時間は使う）
+local function on(v) return v == true or v == 1 end
+local function arr(t)
+  local o = {}
+  if type(t) == "table" then for i = 1, #t do o[i] = tonumber(t[i]) or 0 end end
+  return o
+end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.time = {
+  origin = obj.originframe, tp_on = on(tp_on), tp = tp, emit_win = arr(emit_win), act_win = arr(act_win), act_rel = on(act_rel),
+  burst_t = arr(burst_t), burst_n = math.floor(burst_n), keep_on = on(keep_on), keep_n = keep_n,
+  pace = tonumber(pace) or 0, pace_n = math.floor(pace_n), pace_var = pace_var, loop_on = on(loop_on), loop_t = loop_t,
+}
+
+@素材
+--information:素材@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--select@kind:素材=0,元の画像=0,切り抜き=1,図形=2,画像フォルダ=3,テキスト=4,動画=5
+--group:切り抜きの設定
+--select@cshape:切り抜く形=0,四角=0,円=1,三角=2,五角=3,六角=4,星=5,ランダム=6,不定の四角形=7
+--select@cwhere:切り抜く所=0,ランダム=0,出た所=1
+--track@csize:切り抜く大きさ,1,4000,60,0.01
+--check@ccenter:中央だけ,0
+--group
+--group:図形の設定
+--track@fignum:使う図形の数,1,3,1,1
+--figure@fig1:図形1,円
+--figure@fig2:図形2,四角形
+--figure@fig3:図形3,三角形
+--track@fsize:図形の大きさ,1,4000,20,0.01
+--color@fcol:図形の色,0xffffff
+--track@fline:図形のライン幅,0,4000,4000,1
+--group
+--group:画像フォルダの設定
+--folder@idir:画像フォルダ
+--select@iorder:選び方=0,名前順=0,ランダム=1,連番として再生=2
+--track@ifps:連番の速さ,0.01,240,30,0.01
+--group
+--group:テキストの設定
+--text@txt:テキスト,拡張パーティクル
+--file@tfile:テキストファイル
+--font@tfont:フォント,MS UI Gothic
+--track@tsize:文字の大きさ,1,1000,40,0.01
+--select@tdeco:装飾=0,標準文字=0,影付き文字=1,影付き文字(薄)=2,縁取り文字=3,縁取り文字(細)=4,縁取り文字(太)=5,縁取り文字(角)=6
+--color@tcol1:文字色,0xffffff
+--color@tcol2:影・縁色,0x000000
+--select@tunit:分け方=0,一文字=0,一行=1
+--select@torder:並び=0,入力順=0,逆順=1,ランダム=2
+--track@tswitch:切替間隔,0,600,0,0.001,切り替えない
+--select@talign:文字揃え=1,左=0,中央=1,右=2
+--track@tspace:文字の間隔,-1000,1000,0,0.01
+--track@tlspace:行の間隔,-1000,1000,0,0.01
+--group
+--group:動画の設定
+--file@mfile:動画ファイル
+--track@mpos:再生位置,0,100,0,0.01
+--track@mspeed:再生速度,-5000,5000,100,0.01
+--check@mrandpos:再生位置をランダム,0
+--track@mispeed:再生速度のばらつき,-10000,10000,0,0.01
+--check@msync:全部の粒子をそろえる,0
+--track@mlevels:動画の段数,1,64,16,1
+--group
+--hide@cshape:kind~=1
+--hide@csize:kind~=1
+--hide@ccenter:kind~=1
+--hide@cwhere:kind~=1
+--hide@fignum:kind~=2
+--hide@fig1:kind~=2
+--hide@fig2:kind~=2
+--hide@fig3:kind~=2
+--hide@fsize:kind~=2
+--hide@fcol:kind~=2
+--hide@fline:kind~=2
+--hide@idir:kind~=3
+--hide@iorder:kind~=3
+--hide@ifps:kind~=3
+--hide@txt:kind~=4
+--hide@tfile:kind~=4
+--hide@tfont:kind~=4
+--hide@tsize:kind~=4
+--hide@tdeco:kind~=4
+--hide@tcol1:kind~=4
+--hide@tcol2:kind~=4
+--hide@tunit:kind~=4
+--hide@torder:kind~=4
+--hide@tswitch:kind~=4
+--hide@talign:kind~=4
+--hide@tspace:kind~=4
+--hide@tlspace:kind~=4
+--hide@mfile:kind~=5
+--hide@mpos:kind~=5
+--hide@mspeed:kind~=5
+--hide@mrandpos:kind~=5
+--hide@mispeed:kind~=5
+--hide@msync:kind~=5
+--hide@mlevels:kind~=5
+-- 本体より上に付ける。粒子の見た目（素材）を変える。
+-- 切り抜き: 元の画像のでたらめな場所を、形で切り抜いて粒子にする（大きさは px）。切り抜く所「出た所」: 出力位置「自分の画像を並べる」のマスを切り抜く（並べ直すと元の画像）。
+-- 画像フォルダ: フォルダの中の画像（png / jpg / jpeg / bmp / gif / webp / tga）を使う。連番として再生: 粒子が生まれてから連番の速さ（枚/秒）で次の画像へ。
+-- テキスト: 文字（または行）を粒子にする。テキストファイルを選ぶとそちらを使う（UTF-8）。切替間隔（秒）ごとに次の文字へ変わる。
+-- 文字揃え・文字の間隔・行の間隔: 出力位置・形へ集まるの「文字の並び」で文字を並べるときに使う（px）。
+-- 動画: 粒子ごとに動画を再生する。動画の段数: 1 フレームに読む動画の絵の数の上限（多いほど滑らかで重い）
+local function on(v) return v == true or v == 1 end
+local P = require("Particle_H")
+local kind = tonumber(kind) or 0
+_G.Particle_H_matcache = _G.Particle_H_matcache or {}
+local MC = _G.Particle_H_matcache
+local m = {
+  origin = obj.originframe, kind = kind, shape = tonumber(cshape) or 0, csize = csize, ccenter = on(ccenter), cwhere = tonumber(cwhere) or 0,
+  figs = { fig1, fig2, fig3 }, fignum = math.max(math.min(math.floor(fignum), 3), 1), fsize = fsize, fcol = fcol, fline = fline,
+  order = 0, fps = 30, count = 0, switch = 0,
+}
+if kind == 3 then
+  local key = "dir|" .. tostring(idir)
+  local files = MC[key]
+  if not files then
+    files = P.list_dir(idir, { png = true, jpg = true, jpeg = true, bmp = true, gif = true, webp = true, tga = true })
+    MC[key] = files
+  end
+  m.files, m.count, m.order, m.fps = files, #files, tonumber(iorder) or 0, ifps
+elseif kind == 4 then
+  local key = "txt|" .. tostring(tfile) .. "|" .. tostring(txt) .. "|" .. tostring(tunit)
+  local ent = MC[key]
+  if not ent or not ent.units then
+    local text = txt
+    if tfile and tfile ~= "" then text = P.read_text(tfile) or "" end
+    ent = { units = P.split_units(text, (tonumber(tunit) or 0) == 1), text = text }
+    MC[key] = ent
+  end
+  local units = ent.units
+  m.units, m.count, m.order, m.switch = units, #units, tonumber(torder) or 0, tswitch
+  m.rawtext, m.by_line = ent.text, (tonumber(tunit) or 0) == 1
+  m.talign, m.tspace, m.tlspace = tonumber(talign) or 1, tspace, tlspace
+  m.font, m.tsize, m.tdeco, m.tcol1, m.tcol2 = tfont, tsize, tonumber(tdeco) or 0, tcol1, tcol2
+elseif kind == 5 then
+  local key = "mov|" .. tostring(mfile)
+  local info = MC[key]
+  if not info then
+    local frames, rate, scale = 0, 0, 0
+    if mfile and mfile ~= "" then frames, rate, scale = obj.load("movie.info", mfile) end
+    local fps = (scale and scale > 0) and rate / scale or 30
+    info = { fps = fps > 0 and fps or 30, duration = (frames or 0) / (fps > 0 and fps or 30) }
+    MC[key] = info
+  end
+  m.mfile, m.fps, m.duration = mfile, info.fps, info.duration
+  m.pos, m.speed, m.randpos, m.i_speed, m.sync, m.levels = mpos, mspeed, on(mrandpos), mispeed, on(msync), math.floor(mlevels)
+  m.obj_now = obj.time
+  if not mfile or mfile == "" or info.duration <= 0 then m.kind = 0 end
+end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.mat = m
+
+@フィルター
+--information:フィルター@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--string@fname:効果名,ぼかし
+--string@fitem:変化させる項目,範囲
+--track@fv0:始の値,-100000,100000,0,0.01
+--track@fv1:終の値,-100000,100000,20,0.01
+--select@fbase:変化の基準=0,寿命=0,オブジェクト=1,ランダム=2,跳ね返ってから=3,跳ね返るまで=4
+--track@flevels:段数,1,64,16,1
+--track@fiv:個別,0,100,0,0.01
+--string@ffixed:固定の項目,
+--check@fparticle:粒子に掛ける,1
+--check@ftrail:軌跡に掛ける,0
+--check@ffan:ファンネルに掛ける,0
+-- 本体より上に付ける。粒子ごとに、値を変えながら標準のフィルタ効果を掛ける（例: 効果名 ぼかし・変化させる項目 範囲）。
+-- 値は段数に分けて、段ごとに 1 回だけ掛ける（多いほど滑らかで重い）。変化の基準: 寿命 = 生まれてから消えるまで / オブジェクト = オブジェクトの始まりから終わりまで / ランダム = 粒子ごとにでたらめ。
+-- 個別: 粒子ごとに値の位置を ±この % ずらす。固定の項目: 「項目=値」をカンマで区切って並べる（例: 縦横比=-50,光の強さ=20）。
+-- スクリプトの効果は掛からない（標準の効果だけ）
+local function on(v) return v == true or v == 1 end
+local fixed = {}
+local spec = tostring(ffixed or ""):gsub("＝", "="):gsub("，", ","):gsub("、", ",")
+for pair in spec:gmatch("[^,]+") do
+  local k, v = pair:match("^%s*(.-)%s*=%s*(.-)%s*$")
+  if k and k ~= "" then fixed[#fixed + 1] = { k, tonumber(v) or v } end
+end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.filt = {
+  origin = obj.originframe, name = fname, item = fitem, v0 = fv0, v1 = fv1, base = tonumber(fbase) or 0,
+  levels = math.max(math.floor(flevels), 1), i_v = fiv, fixed = fixed,
+  particle = on(fparticle), trail = on(ftrail), fan = on(ffan),
+}
+
+@色の変化
+--information:色の変化@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--select@cmode:色の決め方=0,寿命で変える=0,ランダム=1,同時発生の組でランダム=2,速さで変える=3,奥行きで変える=4,出た所の色=5,跳ね返ってから=6,跳ね返るまで=7
+--track@cnum:色の数,1,4,2,1
+--color@c1:色1,0xff5050
+--color@c2:色2,0xffd040
+--color@c3:色3,0x40c0ff
+--color@c4:色4,0xffffff
+--file@cpal:パレット
+--track@cref:基準の速さ,1,100000,300,0.01
+--track@cz0:奥行きの始め,-100000,100000,0,0.01
+--track@cz1:奥行きの終わり,-100000,100000,1000,0.01
+--track@cstr:強さ,0,100,100,0.01
+--check@ckeep:輝度を保持する,0
+--track@clevels:段数,1,64,16,1
+--select@ccurve:補間=0,直線=0,瞬間=1,反復=2,加速=3,減速=4,加減速=5,バウンス=6,弾性=7,バック=8,カーブエディタ_H=9
+--track@crep:反復の回数,1,100,2,1
+--track@cslot:スロット,1,1000,1,1
+--select@ccs:色空間=0,sRGB=0,リニア=1,Oklab=2,HSV=3,HSL=4,Lab=5,LCh=6,Oklch=7,HWB=9
+--select@chue:色相経路=0,短経路=0,長経路=1
+--select@cdiff:色差=0,RGB=0,YCbCr=1,Oklab=2,CIEDE2000=3
+--check@ctrail:軌跡にも,1
+--check@cfan:ファンネルにも,0
+--hide@clevels:cmode==1
+--hide@clevels:cmode==2
+--hide@ccurve:cmode==1
+--hide@ccurve:cmode==2
+--hide@crep:cmode==1
+--hide@crep:cmode==2
+--hide@crep:ccurve~=2
+--hide@cslot:cmode==1
+--hide@cslot:cmode==2
+--hide@cslot:ccurve~=9
+--hide@ccurve:cmode==5
+--hide@crep:cmode==5
+--hide@cslot:cmode==5
+--hide@cref:cmode~=3
+--hide@cz0:cmode~=4
+--hide@cz1:cmode~=4
+--hide@ccs:cmode==1
+--hide@ccs:cmode==2
+--hide@ccs:cmode==5
+--hide@chue:cmode==1
+--hide@chue:cmode==2
+--hide@chue:cmode==5
+--hide@chue:ccs<3
+--hide@chue:ccs==5
+--hide@cdiff:cmode~=5
+-- 本体より上に付ける。粒子を単色化で色付けする。
+-- 寿命で変える: 生まれてから消えるまでに 色1 → 色2 → …（色の数まで）と変わる（段数に分けて描く。補間で変わり方を選ぶ）。ランダム: 粒子ごとに色をでたらめに選ぶ。
+-- 速さで変える: 速さ 0 で色1、基準の速さ（px/秒）以上で最後の色。奥行きで変える: Z が始め→終わりで色1→最後の色。
+-- パレット: 選ぶと、色1〜4 の代わりにパレット（Default の .palette）の色を順に使う（64 色まで。色の数は使わない）。
+-- 出た所の色: 出力位置が「他レイヤーの形」「自分の画像を並べる」のとき、出た所の画像の色にする（画像の色から 段数 色を選んで近い色で塗る）。
+-- 白い素材（図形など）は「輝度を保持する」をオフにする（オンだと白のまま）
+-- 色空間（v0.18.0）: 色1 → 色2 → …（パレットも）の間をどの色空間で混ぜるか。sRGB は今までと同じ。Oklab / Oklch は中間がくすみにくく、明るさがそろう。
+-- 色相経路: 色相のある色空間（HSV・HSL・LCh・Oklch・HWB）で、色相を短い方と長い方のどちらへ回るか。
+-- 色差（v0.18.0）: 出た所の色を、選んだ色の中のどれに寄せるかを決める色の差。RGB は今までと同じ（選ぶ色そのものは RGB で選ぶ）。
+-- CIEDE2000 は、出た所の画像が毎フレーム変わる（動画など）と重い（色 3000 で 1 フレーム約 70ms）。止まった画像なら最初のフレームだけ
+local function on(v) return v == true or v == 1 end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+local mode = tonumber(cmode) or 0
+local n = math.max(math.min(math.floor(cnum), 4), 1)
+local cols = { c1, c2, c3, c4 }
+if cpal and cpal ~= "" then
+  -- パレット（番号=rrggbb の行）。読めなければ色1〜4 のまま
+  local text = require("Particle_H").read_text(cpal)
+  if text then
+    local pal = {}
+    for idx, hex in text:gmatch("(%d+)%s*=%s*(%x%x%x%x%x%x)") do pal[#pal + 1] = { tonumber(idx), tonumber(hex, 16) } end
+    table.sort(pal, function(a, b) return a[1] < b[1] end)
+    if #pal > 0 then
+      cols = {}
+      for i = 1, math.min(#pal, 64) do cols[i] = pal[i][2] end
+      n = #cols
+    end
+  end
+end
+local by_level = mode == 0 or mode == 3 or mode == 4 or mode == 5 or mode == 6 or mode == 7
+box.color = {
+  origin = obj.originframe, mode = mode, cols = cols, n = n, ref = cref, z0 = cz0, z1 = cz1,
+  levels = by_level and math.max(math.floor(clevels), 1) or n, str = cstr, keep = on(ckeep),
+  ckind = tonumber(ccurve) or 0, crep = math.floor(crep), cslot = math.floor(cslot),
+  trail = on(ctrail), fan = on(cfan),
+  space = tonumber(ccs) or 0, hue = tonumber(chue) or 0, metric = tonumber(cdiff) or 0,
+}
+
+@軌跡
+--information:軌跡@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--select@tmode:軌跡の形=0,粒子を並べる=0,帯=1,速度で伸ばす=2
+--track@tnum:尻尾の数,1,32,8,1
+--track@tint:間隔,0.001,10,0.05,0.001
+--track@talpha:尻尾の透過率,0,100,80,0.01
+--track@tzoom:尻尾の拡大率,0,1000,50,0.01
+--color@tcol:帯の色,0xffffff
+--color@tcol2:帯の色2,0xffffff
+--select@tgrad:帯の色の変わり方=0,同じ色=0,頭から尻尾へ=1
+--select@tcs:色空間=0,sRGB=0,リニア=1,Oklab=2,HSV=3,HSL=4,Lab=5,LCh=6,Oklch=7,HWB=9
+--select@thue:色相経路=0,短経路=0,長経路=1
+--track@twidth:帯の幅,0.1,1000,8,0.01
+--track@tstretch:伸ばす時間,0,10,0.05,0.001
+--hide@tnum:tmode==2
+--hide@tint:tmode==2
+--hide@talpha:tmode==2
+--hide@tzoom:tmode==2
+--hide@tcol:tmode~=1
+--hide@tcol2:tmode~=1
+--hide@tgrad:tmode~=1
+--hide@twidth:tmode~=1
+--hide@tstretch:tmode~=2
+--hide@tcs:tmode~=1
+--hide@tcs:tgrad==0
+--hide@thue:tmode~=1
+--hide@thue:tgrad==0
+--hide@thue:tcs<3
+--hide@thue:tcs==5
+-- 本体より上に付ける。
+-- 粒子を並べる: 少し前の位置（間隔は秒）に、粒子を薄く小さくして並べる（尻尾の透過率・拡大率はいちばん後ろの値）。
+-- 帯: 少し前の位置を結んだ帯を描く（幅は px。頭から尻尾へ で、帯の色 → 帯の色2 と変わる）。速度で伸ばす: 粒子を進む向きの後ろへ、速さ × 伸ばす時間 だけ伸ばす
+-- 色空間・色相経路（v0.18.0）: 帯の色 → 帯の色2 をどの色空間で混ぜるか。sRGB は今までと同じ
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.trail = {
+  origin = obj.originframe, mode = tonumber(tmode) or 0, n = math.max(math.min(math.floor(tnum), 32), 1), dt = tint,
+  alpha_end = talpha, zoom_end = tzoom, col = tcol, width = twidth, stretch = tstretch,
+  col2 = tcol2, grad = tonumber(tgrad) or 0, space = tonumber(tcs) or 0, hue = tonumber(thue) or 0,
+}
+
+@ファンネル
+--information:ファンネル@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--track@fnum:数,0,50,3,1
+--track@frad:半径,0,10000,60,0.01
+--select@fsame:見た目=0,図形=0,粒子と同じ=1
+--figure@ffig:図形,円
+--track@fsize:大きさ,1,4000,12,0.01
+--color@fcol:色,0xffffff
+--track@frev:公転速度,-36000,36000,180,0.01
+--track@frot:自転速度,-36000,36000,0,0.01
+--check@feven:等間隔,1
+--check@f3d:立体的に回す,0
+--track@rnum:円環の数,0,10,0,1
+--track@rsize:円環の大きさ,1,10000,120,0.01
+--track@rwidth:円環の幅,1,1000,3,0.01
+--color@rcol:円環の色,0xffffff
+--hide@ffig:fsame==1
+--hide@fcol:fsame==1
+-- 本体より上に付ける。粒子のまわりに小さな図形（ファンネル）を回し、輪（円環）を付ける。
+-- 半径・大きさは px（粒子の拡大率に合わせて変わる）。見た目=粒子と同じ のとき、大きさは粒子に対する %。公転・自転速度は度/秒。
+-- 立体的に回す: 粒子ごとに回る面を傾ける（円環も傾く）
+local function on(v) return v == true or v == 1 end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.fan = {
+  origin = obj.originframe, n = math.floor(fnum), rad = frad, same = (tonumber(fsame) or 0) == 1, fig = ffig, size = fsize,
+  col = fcol, rev = frev, rot = frot, even = on(feven), d3 = on(f3d),
+  rings = math.floor(rnum), ring_size = rsize, ring_width = rwidth, ring_col = rcol,
+}
+
+@メッシュ
+--information:メッシュ@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--select@mrule:結び方=0,生まれた順の隣=0,近い粒子=1,三角形で塗る=2
+--track@mdist:結ぶ距離,1,10000,150,0.01
+--track@mmax:最大の線の数,1,16,3,1
+--color@mcol:色,0xffffff
+--track@mwidth:線の幅,0.1,100,2,0.01
+--track@malpha:透過率,0,100,30,0.01
+--check@mfade:遠いほど薄く,1
+--check@mgroup:同時発生で分ける,0
+--check@mface:面にする,0
+--check@mmul:粒子の透過率を掛ける,1
+--select@mfillc:面の色=0,粒子の色=0,他レイヤーの画像の色=1,指定の色=2
+--track@mflayer:色を取るレイヤー,1,1000,1,1
+--track@mmaxedge:長い辺を除く,0,10000,0,0.01,除かない
+--check@medge:線も描く,0
+--hide@mdist:mrule==0
+--hide@mdist:mrule==2
+--hide@mmax:mrule==0
+--hide@mmax:mrule==2
+--hide@mfade:mrule==0
+--hide@mfade:mrule==2
+--hide@mface:mrule==1
+--hide@mface:mrule==2
+--hide@mgroup:mrule==2
+--hide@mfillc:mrule~=2
+--hide@mflayer:mrule~=2
+--hide@mflayer:mfillc~=1
+--hide@mmaxedge:mrule~=2
+--hide@medge:mrule~=2
+-- 本体より上に付ける。粒子どうしを線で結ぶ（粒子の後ろに描く）。
+-- 生まれた順の隣: 生まれた順に次の粒子と結ぶ（面にする: 続く 3 つを三角形にする）。近い粒子: 結ぶ距離（px）以内の粒子と、1 粒子あたり最大の線の数まで結ぶ
+local function on(v) return v == true or v == 1 end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.mesh = {
+  origin = obj.originframe, rule = tonumber(mrule) or 0, dist = mdist, max = math.floor(mmax), col = mcol, width = mwidth,
+  alpha = malpha, fade = on(mfade), group = on(mgroup), face = on(mface), mul = on(mmul),
+  fill = tonumber(mfillc) or 0, flayer = math.floor(mflayer), maxedge = mmaxedge, edge = on(medge),
+}
+
+@格子
+--information:格子@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--select@gmode:格子の形=0,直交=0,極座標=1
+--track@gsx:間隔X,0,10000,20,0.01,なし
+--track@gsy:間隔Y,0,10000,20,0.01,なし
+--track@gsz:間隔Z,0,10000,0,0.01,なし
+--track@gr:間隔(半径),0,10000,20,0.01,なし
+--track@gth:間隔(角度),0,360,10,0.01,なし
+--track@gph:間隔(仰角),0,180,0,0.01,なし
+--group:マスク
+--track@glayer:マスクのレイヤー,0,1000,0,1,なし
+--track@gthr:マスクのしきい値,0,100,50,0.01
+--check@ginv:マスクを反転,0
+--group
+--hide@gsx:gmode==1
+--hide@gsy:gmode==1
+--hide@gsz:gmode==1
+--hide@gr:gmode==0
+--hide@gth:gmode==0
+--hide@gph:gmode==0
+-- 本体より上に付ける。粒子の位置を格子の点にそろえる（間隔は px。極座標は本体の中心から、角度と仰角は度）。
+-- マスクのレイヤー: そのレイヤーのオブジェクトの形（アルファ）を本体の中心に重ね、形の外の粒子を描かない（反転で形の中を描かない）
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+local mode = tonumber(gmode) or 0
+box.grid = {
+  origin = obj.originframe, mode = mode,
+  a = mode == 0 and gsx or gr, b = mode == 0 and gsy or gth, c = mode == 0 and gsz or gph,
+  layer = math.floor(glayer), thr = gthr, inv = ginv == true or ginv == 1,
+}
+
+@立体物
+--information:立体物@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--select@stype:立体の形=0,六面体=0,球=1,錐体=2,双錐体=3,曲面=4,厚み=5,モデル=6
+--track@ssize:大きさ,0,4000,0,0.01,素材の大きさ
+--track@sdiv:分割数,3,64,8,1
+--track@sbh:横の曲がり,-100,100,50,0.01
+--track@sbv:縦の曲がり,-100,100,0,0.01
+--track@sdepth:奥行き,0,4000,20,0.01
+--file@smodel:モデルファイル
+--track@smscale:モデルの拡大率,0,10000,100,0.01
+--track@smy:モデルの中心の高さ,-10000,10000,0,0.01
+--hide@smodel:stype~=6
+--hide@smscale:stype~=6
+--hide@smy:stype~=6
+--hide@ssize:stype>3
+--hide@sdiv:stype==0
+--hide@sdiv:stype==6
+--hide@sbh:stype~=4
+--hide@sbv:stype~=4
+--hide@sdepth:stype~=5
+-- 本体より上に付ける。粒子を立体にする（素材を各面に貼る）。大きさ: px（0 は素材の大きさ）。
+-- 分割数: 球・錐体の面の細かさ、曲面の細かさ、厚みの重ねる枚数。曲がり: 100 で幅（高さ）を円周とする筒に巻き付く。奥行き: 厚みの px。
+-- 粒子が多いと重い（球は 1 粒あたり 分割数 × 分割数 枚の三角形）。
+-- モデル: pmd（MikuMikuDance）の静止した形を粒子ごとに置く（ボーン・表情は読まない）。テクスチャはモデルと同じフォルダから読む。
+--   モデルの 1 単位 = 10px × モデルの拡大率 %。モデルの中心の高さ: モデルの (0, この値, 0) を粒子の位置に置く（モデルの単位）。
+--   重い（三角形の数 × 粒子の数）。素材の画像は使わない
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.solid = {
+  origin = obj.originframe, type = tonumber(stype) or 0, size = ssize, div = math.floor(sdiv), bh = sbh, bv = sbv, depth = sdepth,
+  model = tostring(smodel or ""), mscale = smscale, my = smy,
+}
+
+@ガラス化
+--information:ガラス化@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--track@gref:屈折,-1000,1000,40,0.01
+--track@gwid:縁の幅,1,500,16,0.01
+--track@gedge:縁の明るさ,0,100,30,0.01
+--track@gblur:背景のぼかし,0,100,0,0.01
+--color@gcol:色,0xffffff
+--track@gtint:色の強さ,0,100,0,0.01
+-- 本体より上に付ける。粒子をガラスにする（粒子の形の向こうの絵を、縁ほどずらして見せる）。屈折・縁の幅・ぼかしは px。
+-- 粒子の形（アルファ）だけを使い、色は使わない。カメラ制御の下では効かない（粒子をそのまま描く）
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.glass = {
+  origin = obj.originframe, ref = gref, width = gwid, edge = gedge, blur = gblur, col = gcol, tint = gtint,
+}
+
+@音
+--information:音@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--select@asrc:音=0,編集中の音=0,音声ファイル=1
+--file@afile:音声ファイル
+--track@aband:周波数帯,1,10,1,1
+--track@aband2:もう一つの周波数帯,0,10,0,1,なし
+--track@again:感度,0,10000,100,0.01
+--track@azoom:拡大率,-1000,1000,100,0.01
+--track@aalpha:透過率,-100,100,0,0.01
+--track@aspread:広がり,-1000,1000,0,0.01
+--select@abeat:拍で出す=0,出さない=0,音声ファイルの拍=1,BPMのグリッド=2
+--track@abn:拍ごとの数,1,10000,30,1
+--track@abth:拍の感度,0,100,50,0.01
+--select@abband:拍を見る音=0,全体=0,低い音=1,高い音=2
+--track@abdiv:グリッドの細かさ,1,16,1,1
+--check@abacc:強い拍ほど多く,1
+--track@arate:音の大きさで出す数,0,1000,0,0.01,変えない
+--select@arband:音の大きさを見る音=0,全体=0,低い音=1,高い音=2
+--hide@arate:asrc==0
+--hide@arband:asrc==0
+--hide@afile:asrc==0
+--hide@abn:abeat==0
+--hide@abth:abeat~=1
+--hide@abband:abeat~=1
+--hide@abdiv:abeat~=2
+--hide@abacc:abeat==0
+-- 本体より上に付ける。今の音の大きさで、今いる粒子の拡大率・透過率・広がり（出た所からの距離）を変える（値は音がいちばん大きいときの変化 %）。
+-- 周波数帯: 音を低い方から 10 に分けた番号。もう一つの周波数帯を選ぶと、大きい方を使う。
+-- 過去の音は読めないので、出る数や速さは変えない（拍で出すは別。下）。
+-- 拍で出す: 拍の時刻に 拍ごとの数 だけ一斉に出す。音声ファイルの拍は、音を「音声ファイル」にしてファイルを選ぶ（ファイルの先頭 = オブジェクトの始まり）。
+--   WAV のほか、mp3・m4a など Windows（Media Foundation）が読める形式も使える。
+--   拍の感度が大きいほど小さな立ち上がりも拾う。BPMのグリッドは、編集画面のグリッド（BPM）の拍。細かさ 2 で 8 分、4 で 16 分。
+--   強い拍ほど多く: 音の拍は立ち上がりの大きさ、グリッドは小節の頭 1 / 拍 0.7 / 拍の間 0.4 を数に掛ける
+-- 音の大きさで出す数: 音声ファイルの音の大きさ（一番大きい所が 1）に合わせて、出力頻度に 1 ＋ この % × 音の大きさ を掛ける（0 で変えない）
+local function on(v) return v == true or v == 1 end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.audio = {
+  origin = obj.originframe, src = tonumber(asrc) or 0, file = afile or "", band = math.floor(aband), band2 = math.floor(aband2),
+  gain = again, zoom = azoom, alpha = aalpha, spread = aspread,
+  beat = tonumber(abeat) or 0, bn = math.floor(abn), bth = abth, bband = tonumber(abband) or 0, bdiv = math.floor(abdiv), bacc = on(abacc),
+  arate = arate, arband = tonumber(arband) or 0,
+}
+
+@カスタム描画
+--information:カスタム描画@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--file@cfile:関数ファイル
+--track@cvar:種類の数,1,64,4,1
+--track@clv:時間の段数,1,64,8,1
+--track@cv1:値1,-9999,9999,0,0.01
+--track@cv2:値2,-9999,9999,0,0.01
+--track@cv3:値3,-9999,9999,0,1
+--value@cvals:設定値,{}
+--color@ccol1:色1,0xffffff
+--color@ccol2:色2,0x000000
+--figure@cfig1:図形1,円
+--figure@cfig2:図形2,四角形
+--check@cchk1:チェック1,0
+--check@cchk2:チェック2,0
+-- 本体より上に付ける。関数ファイル（.lua）の particle_obj で描いた絵を粒子にする（素材の代わり）。
+-- particle_obj(t, t0, life, pi, pj, seed, 値1, 値2, 値3, 設定値1〜8, 色1, 色2, 図形1, 図形2, チェック1, チェック2) を、
+-- 種類（pi = 0〜種類の数-1）× 時間の段（t = 0〜生存時間）ごとに 1 回だけ呼ぶ。関数は仮想バッファに描いて obj.load("tempbuffer") で終える。
+-- 種類の数 × 時間の段数は 64 まで（超える分は段数を減らす）
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+local nvar = math.max(math.floor(cvar), 1)
+local nlv = math.max(math.min(math.floor(clv), math.floor(64 / nvar)), 1)
+box.custom = {
+  origin = obj.originframe, file = cfile or "", cvar = nvar, clv = nlv, v1 = cv1, v2 = cv2, v3 = cv3, vals = cvals or {},
+  col1 = ccol1, col2 = ccol2, fig1 = cfig1, fig2 = cfig2, chk1 = (cchk1 == true or cchk1 == 1) and 1 or 0,
+  chk2 = (cchk2 == true or cchk2 == 1) and 1 or 0,
+}
+
+@力場
+--information:力場@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--select@ftype:力の種類=0,渦=0,引力・斥力=1,衝撃波=2,双極=3,浮力=4,画像の明るさ=5
+--value@fpos:中心,{0,0,0,300,0,0}
+--track@fstr:強さ,-100000,100000,300,0.01
+--track@frange:届く距離,0,100000,500,0.01,どこまでも
+--track@i_fstr:個別の強さ,-10000,10000,0,0.01
+--check@fchain:上の力場に足す,0
+--group:渦
+--track@fspin:回す強さ,-100000,100000,600,0.01
+--track@fup:軸に沿う強さ,-100000,100000,0,0.01
+--track@fax:軸の傾きX,-180,180,0,0.01
+--track@fay:軸の傾きY,-180,180,0,0.01
+--group
+--group:衝撃波
+--track@ft0:起きる時刻,0,600,1,0.001
+--track@fwave:広がる速さ,0,100000,600,0.01
+--track@fwidth:波の幅,1,10000,60,0.01
+--group
+--group:双極
+--track@ffollow:沿わせる強さ,0,1000,4,0.01
+--group
+--group:浮力
+--track@fcool:冷める時間,0,600,1,0.001,冷めない
+--track@fheavy:冷めた後の重さ,-100000,100000,300,0.01
+--track@fbase:基準の高さ,-100000,100000,0,0.01
+--group
+--group:画像の明るさ
+--track@flayer:対象レイヤー,1,1000,1,1
+--select@fgrad:向き=0,明るい方へ=0,暗い方へ=1,明るさの等高線に沿う=2
+--group
+--hide@fpos:ftype==5
+--hide@frange:ftype==5
+--hide@flayer:ftype~=5
+--hide@fgrad:ftype~=5
+--hide@fspin:ftype~=0
+--hide@fup:ftype~=0
+--hide@fax:ftype~=0
+--hide@fay:ftype~=0
+--hide@ft0:ftype~=2
+--hide@fwave:ftype~=2
+--hide@fwidth:ftype~=2
+--hide@ffollow:ftype~=3
+--hide@fcool:ftype~=4
+--hide@fheavy:ftype~=4
+--hide@fbase:ftype~=4
+-- 本体より上に付ける。粒子に力を掛ける（積分で動かす。座標はオブジェクトの中心から、力は px/秒²）。
+-- 渦: 軸の周りを回す（回す強さ）・軸へ寄せる（強さ。負なら外へ）・軸に沿って押す。軸は画面の奥向きを傾きで回す。
+-- 引力・斥力: 中心へ引く（負なら押す）。届く距離: その距離で力が半分になる（どこまでも = 弱めない）。
+-- 衝撃波: 起きる時刻（秒）から広がる輪で外へ押す。波が通り過ぎる間に、粒子の速さが 強さ（px/秒）だけ増える。
+-- 双極: 中心の 1 点目（N 極）から出て 2 点目（S 極）へ入る線に沿って、向きを寄せる。強さが正なら、沿って進む速さ（px/秒）。
+-- 浮力: 上へ押す。冷める時間で 0 になり、その分 冷めた後の重さ で下へ引く。届く距離があれば、基準の高さより上で弱める。
+-- 画像の明るさ: 対象レイヤーのオブジェクトの明るさの勾配に沿って押す（明るい方へ / 暗い方へ / 等高線に沿う）。強さ × 勾配の大きさ（64px で明るさが 0→1 なら強さいっぱい）。
+-- 上の力場に足す: すぐ上に置いた力場と一緒に使う（力場を重ねる）
+local function on(v) return v == true or v == 1 end
+local ty = tonumber(ftype) or 0
+local def = { 0, 0, 0, 300, 0, 0 }
+if ty == 3 then obj.setanchor("fpos", 2, "xyz", "line", def) elseif ty ~= 5 then obj.setanchor("fpos", 1, "xyz", def) end
+local pos = {}
+for i = 1, 6 do pos[i] = (fpos and fpos[i]) or def[i] end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+local F = {
+  type = ty, pos = pos, str = fstr, range = frange, i_str = i_fstr, spin = fspin, up = fup, ax = fax, ay = fay,
+  t0 = ft0, wave = fwave, width = fwidth, follow = ffollow, cool = fcool, heavy = fheavy, base = fbase,
+  layer = math.floor(flayer), grad = tonumber(fgrad) or 0,
+}
+local list = { F }
+local prev = box.field
+if on(fchain) and prev and prev.origin == obj.originframe then
+  list = {}
+  for i, v in ipairs(prev.list) do list[i] = v end
+  list[#list + 1] = F
+end
+box.field = { origin = obj.originframe, list = list }
+
+@見た目の調整
+--information:見た目の調整@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--group:速さ
+--track@sref:基準の速さ,1,100000,300,0.01
+--track@szoom:速さで大きさ,-1000,1000,0,0.01
+--track@salpha:速さで透過率,-100,100,0,0.01
+--group
+--group:奥行き
+--track@dz0:奥行きの始め,-100000,100000,0,0.01
+--track@dz1:奥行きの終わり,-100000,100000,1000,0.01
+--track@dzoom:奥ほど大きさ,-100,1000,0,0.01
+--track@dalpha:奥ほど透過率,-100,100,0,0.01
+--group
+--group:点滅
+--track@blink_hz:点滅の速さ,0,100,2,0.01
+--track@blink_depth:点滅の深さ,0,100,0,0.01
+--select@blink_shape:点滅の形=0,なめらか=0,きらめき=1
+--check@blink_rand:位相をランダム,1
+--group
+--group:形
+--track@aspect:縦横比,-99,99,0,0.01
+--track@i_aspect:個別縦横比,0,99,0,0.01
+--track@shear:ゆがみ,-200,200,0,0.01
+--track@i_shear:個別ゆがみ,0,200,0,0.01
+--group
+-- 本体より上に付ける。
+-- 速さ: 基準の速さ（px/秒）で、大きさ・透過率をこの % だけ変える（速さに比例。基準の 10 倍まで）。
+-- 奥行き: Z が始め→終わりの間で、大きさ・透過率を 0 → この % だけ変える（奥が大きい Z）。
+-- 点滅: なめらか = 1 秒に 点滅の速さ 回、深さ % だけ暗くなる / きらめき = 1 / 点滅の速さ 秒ごとに、ときどき強く光る（ふだんは深さ % 暗い）。
+-- 形: 縦横比（プラス = 横が縮む / マイナス = 縦が縮む）とゆがみ（%。横へ傾ける）。個別は粒子ごとのばらつきの幅
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.look = {
+  origin = obj.originframe, sref = sref, szoom = szoom, salpha = salpha, dz0 = dz0, dz1 = dz1, dzoom = dzoom, dalpha = dalpha,
+  blink_hz = blink_hz, blink_depth = blink_depth, blink_shape = tonumber(blink_shape) or 0,
+  blink_rand = blink_rand == true or blink_rand == 1,
+  aspect = aspect, i_aspect = i_aspect, shear = shear, i_shear = i_shear,
+}
+
+@パス
+--information:パス@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--track@pnum:アンカー数,2,16,3,1
+--value@ppos:道,{-600,0,0,0,-200,0,600,0,0}
+--select@pcurve:つなぎ方=1,折れ線=0,曲線=1
+--track@pspeed:流れる速さ,-10000,10000,300,0.01
+--track@paccel:流れる加速度,-10000,10000,0,0.01
+--track@pwidth:道の幅,0,10000,40,0.01
+--select@pend:端に着いたら=0,消える=0,止まる=1,最初へ戻る=2,折り返す=3
+--select@pstart:出る所=0,道の始め=0,道のどこでも=1,出力位置から一番近い所=2
+--track@i_pspeed:個別の速さ,-10000,10000,0,0.01
+--check@pchain:上のパスにつなぐ,0
+-- 本体より上に付ける。粒子をアンカーで引いた道に沿って流す（円運動と同じく、本体の速さ・重力と動きの拡張は使わない）。
+-- 曲線: アンカーを通る曲線。流れる速さ（px/秒。負なら逆向き）と加速度で、道のりを進む。道の幅: 道と直角の向きに散らす幅（px）。
+-- 出る所: 道の始め（速さが負なら終わり）/ 道のどこでも / 出力位置から一番近い所（道からのずれを保つ。幅は使わない）。
+-- 上のパスにつなぐ: すぐ上に置いたパスの点の後ろに、この点を足す（アンカーを 16 より多く置ける）
+local function on(v) return v == true or v == 1 end
+local n = math.max(math.floor(pnum), 2)
+local def = {}
+for i = 0, n - 1 do
+  def[#def + 1] = -600 + 1200 * i / (n - 1); def[#def + 1] = (i % 2 == 1) and -200 or 0; def[#def + 1] = 0
+end
+obj.setanchor("ppos", n, "xyz", "line", def)
+local pts = {}
+for i = 1, n * 3 do pts[i] = (ppos and ppos[i]) or def[i] end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+local prev = box.path
+if on(pchain) and prev and prev.origin == obj.originframe then
+  local all = {}
+  for i = 1, prev.n * 3 do all[i] = prev.pts[i] end
+  for i = 1, n * 3 do all[#all + 1] = pts[i] end
+  pts, n = all, prev.n + n
+end
+box.path = {
+  origin = obj.originframe, pts = pts, n = n, curve = tonumber(pcurve) or 1, speed = pspeed, accel = paccel, width = pwidth,
+  pend = tonumber(pend) or 0, start = tonumber(pstart) or 0, i_speed = i_pspeed,
+}
+
+@形へ集まる
+--information:形へ集まる@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--select@gsrc:行き先=0,他レイヤーの形=0,出た所=1,文字の並び=2,アンカー=3
+--track@glayer:対象レイヤー,1,1000,1,1
+--track@gthr:しきい値,0,100,50,0.01
+--select@gpick:行き先の選び方=0,ランダム=0,近い所=1,均等に=2
+--track@gnpts:アンカー数,1,16,1,1
+--value@gpos:点,{0,0,0}
+--track@grad:行き先の広がり,0,10000,0,0.01
+--track@gstart:集まり始める時刻,0,600,1,0.001
+--track@gdur:かかる時間,0.001,600,1,0.001
+--select@gbase:時間の基準=0,粒子ごと=0,オブジェクト=1
+--track@gspread:ずらす幅,0,600,0,0.001
+--select@gorder:ずらす順=0,番号順=0,ランダム=1,行き先の左から=2,行き先の中心から=3
+--select@gcurve:補間=4,直線=0,瞬間=1,反復=2,加速=3,減速=4,加減速=5,バウンス=6,弾性=7,バック=8,カーブエディタ_H=9
+--track@grep:反復の回数,1,100,2,1
+--track@gslot:スロット,1,1000,1,1
+--check@galign:回転と大きさをそろえる,1
+--select@gafter:着いたら=0,とどまる=0,離れる=1
+--track@gleave:離れ始める時刻,0,600,3,0.001
+--track@gjitter:着いた後のゆらぎ,0,1000,0,0.01
+--hide@glayer:gsrc~=0
+--hide@gthr:gsrc~=0
+--hide@gpick:gsrc~=0
+--hide@gnpts:gsrc~=3
+--hide@gpos:gsrc<2
+--hide@grep:gcurve~=2
+--hide@gslot:gcurve~=9
+--hide@gleave:gafter~=1
+-- 本体より上に付ける。集まり始める時刻から、かかる時間で、粒子を行き先へ寄せる（動きの計算の後に掛ける。どの動きとも組める）。
+-- 行き先: 他レイヤーの形（ランダム / 近い所 = いまの位置から一番近い形の中 / 均等に）・出た所（生まれた位置へ戻る）・
+--         文字の並び（素材のテキストの位置。点の 1 点目が中心）・アンカー（粒子ごとに順に割り当てる）。行き先の広がり: 行き先の周りに散らす半径（px）。
+-- 時間の基準: 粒子ごと = 生まれてからの秒 / オブジェクト = オブジェクトの時刻。ずらす幅: 粒子ごとに始める時刻を 0〜この秒数ずらす（ずらす順で並べる）。
+-- 回転と大きさをそろえる: 回転を 0、拡大率を 100% へ同じ進みで寄せる。離れる: 離れ始める時刻から、かかる時間で元の動きへ戻る
+local function on(v) return v == true or v == 1 end
+local src = tonumber(gsrc) or 0
+local np = 1
+local pts = { 0, 0, 0 }
+if src == 2 then
+  obj.setanchor("gpos", 1, "xyz", { 0, 0, 0 })
+  for i = 1, 3 do pts[i] = (gpos and gpos[i]) or 0 end
+elseif src == 3 then
+  np = math.max(math.floor(gnpts), 1)
+  local def = {}
+  for i = 0, np - 1 do
+    local a = i / np * 2 * math.pi
+    def[#def + 1] = np > 1 and 300 * math.cos(a) or 0; def[#def + 1] = np > 1 and 300 * math.sin(a) or 0; def[#def + 1] = 0
+  end
+  obj.setanchor("gpos", np, "xyz", def)
+  pts = {}
+  for i = 1, np * 3 do pts[i] = (gpos and gpos[i]) or def[i] end
+end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.gather = {
+  origin = obj.originframe, src = src, layer = math.floor(glayer), thr = gthr, pick = tonumber(gpick) or 0, np = np, pts = pts,
+  radius = grad, start = gstart, dur = gdur, base = tonumber(gbase) or 0, spread = gspread, order = tonumber(gorder) or 0,
+  curve = tonumber(gcurve) or 4, rep = math.floor(grep), slot = math.floor(gslot), align = on(galign),
+  after = tonumber(gafter) or 0, leave = gleave, jitter = gjitter,
+}
+
+@子粒子
+--information:子粒子@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--select@cevent:出す時=0,消えるとき=0,最初に跳ね返ったとき=1,分散したとき=2,動いている間=3
+--track@cnum:出す数,1,100,8,1
+--track@cint:間隔,0.01,10,0.1,0.001
+--track@cspeed:速さ,0,10000,150,0.01
+--track@cspread:拡散角度,0,180,180,0.01
+--track@cinherit:親の速さを受け継ぐ,0,100,0,0.01
+--track@clife:生存時間,0.001,600,1,0.001
+--track@czoom:大きさ,0,1000,50,0.01
+--track@cgy:重力Y,-10000,10000,0,0.01
+--track@cdrag:空気抵抗,0,100,0,0.01
+--track@calpha1:終透過率,0,100,100,0.01
+--check@cext:動きの拡張も掛ける,0
+--hide@cint:cevent~=3
+-- 本体より上に付ける。親の粒子の出来事から、子の粒子を出す（子は親と同じ素材で描く）。
+-- 出す時: 消えるとき（寿命の終わり）/ 最初に跳ね返ったとき（跳ね返りが要る）/ 分散したとき（分散と停止が要る）/ 動いている間（間隔ごとに、その時の位置から）。
+-- 子は 1 回に 出す数 だけ出て、速さ（の 60〜100%）で、親の進む向きから ± 拡散角度 の向きへ飛ぶ（親の速さを受け継ぐ % を足す）。
+-- 子は 速さ・重力Y・空気抵抗 だけで動く。大きさは素材の大きさに対する %。透過率は 0 から 終透過率 へ。
+-- 動きの拡張も掛ける: 親と同じ風・ノイズ場・力場・跳ね返りを子にも掛ける（集結点・分散と停止などは掛けない。子の数だけ重くなる）
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.child = {
+  origin = obj.originframe, event = tonumber(cevent) or 0, n = math.floor(cnum), interval = cint, speed = cspeed, spread = cspread,
+  inherit = cinherit, life = clife, zoom = czoom, gy = cgy, drag = cdrag, alpha1 = calpha1, ext = cext == true or cext == 1,
+}
+
+@影
+--information:影@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--select@smode:落とし方=0,ずらす=0,床に写す=1
+--track@sdx:ずらすX,-10000,10000,20,0.01
+--track@sdy:ずらすY,-10000,10000,20,0.01
+--track@sfloor:床の高さ,-100000,100000,400,0.01
+--track@slx:光の向きX,-10,10,0.5,0.01
+--track@slz:光の向きZ,-10,10,0,0.01
+--track@sdark:影の濃さ,0,100,60,0.01
+--track@sblur:影のぼかし,0,200,6,0.01
+--color@scol:影の色,0x000000
+--track@sfade:高さで薄く,0,100000,0,0.01,薄くしない
+--hide@sdx:smode~=0
+--hide@sdy:smode~=0
+--hide@sfloor:smode~=1
+--hide@slx:smode~=1
+--hide@slz:smode~=1
+--hide@sfade:smode~=1
+-- 本体より上に付ける。粒子の影を、粒子より先に（後ろに）同じ素材で描く。
+-- ずらす: 画面の上でずらす（ドロップシャドウ）。床に写す: 床の高さ（Y）の面へ、光の向き（下へ 1 進むごとに X・Z へ進む量）で写し、床に寝かせて描く。
+-- 影の濃さ: 粒子の不透明度に掛ける %。高さで薄く: 床からこの距離（px）で影が消える
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.shadow = {
+  origin = obj.originframe, mode = tonumber(smode) or 0, dx = sdx, dy = sdy, floor = sfloor, lx = slx, lz = slz,
+  dark = sdark, blur = sblur, col = scol, fade = sfade,
+}
+
+@受け取って描く
+--information:受け取って描く@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--string@rname:受け取る名前,
+--track@rzoom:拡大率,0,5000,100,0.01
+--check@ralpha:粒子の透過率を使う,1
+--check@rrot:粒子の回転を使う,1
+--check@rdiag:診断ログ,0
+-- 本体の「渡す名前」で渡された粒子の位置に、このオブジェクトの画像を描く（本体とは別のオブジェクトに付ける）。
+-- 位置は渡した側の座標（本体の位置を足した値）からこのオブジェクトの位置を引いて置く。拡大率は粒子の拡大率に掛ける %。
+-- 渡す側が同じフレームで先に計算されていないと、前のフレームの粒子になる（ログに注意が出る）
+local P = require("Particle_H")
+local function on(v) return v == true or v == 1 end
+local function num(v, d) return tonumber(v) or d end
+local name = tostring(rname or "")
+local frame = obj.originframe or (obj.frame_s + obj.frame)
+local scene_part = obj.scene_id ~= nil and (tostring(obj.scene_id) .. ":") or ""
+local S, lag
+if name ~= "" then S, lag = P.share_get(scene_part .. name, frame) end
+local warn = ""
+if name == "" then
+  warn = "受け取る名前が空"
+elseif not S then
+  warn = "「" .. name .. "」の粒子が渡されていない"
+elseif lag > 0 then
+  warn = "「" .. name .. "」の粒子は " .. lag .. " フレーム前のもの（渡す側を、受け取る側より上のレイヤーへ）"
+elseif lag < 0 then
+  warn = "「" .. name .. "」の粒子は " .. -lag .. " フレーム先のもの（使わない）"
+end
+-- 上のレイヤーが先に計算される（実機 EPR-204〜207）。渡す側が下だと 1 つ前のフレームの粒子になる。
+-- 使うのは今のフレームと 1 つ前だけ（それより古いのは渡す側がもう無い、先のものは戻って描いている）
+if S and lag ~= 0 and lag ~= 1 then S = nil end
+_G.Particle_H_err = _G.Particle_H_err or {}
+if _G.Particle_H_err[obj.id] ~= warn then
+  _G.Particle_H_err[obj.id] = warn
+  if warn ~= "" then print("@warn", "[拡張パーティクル_H] 注意: " .. warn) end
+end
+if on(rdiag) then
+  local msg = string.format("受け取って描く %s: 粒子 %d / フレームの差 %s", name, S and S.n or 0, tostring(lag))
+  _G.Particle_H_rdiag = _G.Particle_H_rdiag or {}
+  if _G.Particle_H_rdiag[obj.id] ~= msg then
+    _G.Particle_H_rdiag[obj.id] = msg
+    print("@warn", "[拡張パーティクル_H] " .. msg)
+  end
+end
+if S then
+  local bx, by, bz = num(obj.getvalue("x"), 0) + (obj.ox or 0), num(obj.getvalue("y"), 0) + (obj.oy or 0), num(obj.getvalue("z"), 0) + (obj.oz or 0)
+  local groups = P.receive_quads(S, obj.w, obj.h, bx, by, bz, rzoom / 100, on(ralpha), on(rrot))
+  for lv = 1, 64 do
+    local list = groups[lv]
+    if list then obj.drawpoly(list, lv / 64) end
+  end
+end
+obj.setoption("draw_state", true)
+
+@光源
+--information:光源@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--select@lkind:光の種類=0,平行光=0,点光源=1
+--track@lx:光の向きX,-10,10,0.5,0.01
+--track@ly:光の向きY,-10,10,1,0.01
+--track@lz:光の向きZ,-10,10,1,0.01
+--value@lpos:光の位置,{-400,-400,-300}
+--track@lamb:環境光,0,100,30,0.01
+--track@lpow:光の強さ,0,200,100,0.01
+--track@lspec:ハイライト,0,100,0,0.01
+--track@llev:段数,2,32,8,1
+--check@lback:裏も照らす,1
+--color@lcol:光の色,0xffffff
+--hide@lx:lkind==1
+--hide@ly:lkind==1
+--hide@lz:lkind==1
+--hide@lpos:lkind==0
+-- 本体より上に付ける。粒子の面の向きと光から明るさを求め、段数の段に分けて暗く（ハイライトは光の色へ明るく）描く。
+-- 光の向き: 光が進む向き（初期値は左上の手前から右下の奥へ）。点光源: 光の位置（アンカー）から粒子へ向かう光。
+-- 明るさ = 環境光 + 光の強さ × 面が光の方を向いている度合い（%）。裏も照らす: 裏を向いた面も、裏から当たる光で照らす。
+-- 立体物は面ごとに明るさが変わる（閉じた立体 = 六面体・球・錐体・双錐体では、裏も照らすを使わない）。段数 × 素材 × 色の段の数だけ素材を読み直すので、段数を上げるほど重い
+local function on(v) return v == true or v == 1 end
+local kind = tonumber(lkind) or 0
+if kind == 1 then obj.setanchor("lpos", 1, "xyz") end
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+box.light = {
+  origin = obj.originframe, kind = kind, lx = lx, ly = ly, lz = lz,
+  pos = { (lpos and lpos[1]) or -400, (lpos and lpos[2]) or -400, (lpos and lpos[3]) or -300 },
+  amb = lamb, pow = lpow, spec = lspec, levels = llev, back = on(lback), col = lcol,
+}
+
+@粒子どうし
+--information:粒子どうし@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--track@ir:届く距離,1,2000,40,0.01
+--track@irep:反発,0,100000,500,0.01
+--track@isize:粒子の大きさ,0,2000,0,0.01,重なってよい
+--track@iatt:引き合い,-100000,100000,0,0.01
+--track@ifric:粒子どうしの摩擦,0,100,0,0.01
+--group:群れ
+--track@bsep:離れる,0,100,0,0.01
+--track@bali:向きをそろえる,0,100,0,0.01
+--track@bcoh:群れの中心へ寄る,0,100,0,0.01
+--track@bview:見える角度,0,180,135,0.01
+--track@bvmin:最低の速さ,0,10000,0,0.01
+--track@bvmax:最高の速さ,0,10000,0,0.01,制限しない
+--group
+--check@i3d:奥行きも使う,0
+--string@iother:当たる相手（受け取る名前）,
+--track@iorad:相手の大きさ,0,2000,20,0.01
+--track@iorep:相手から押される強さ,0,100000,500,0.01
+--track@imax:一緒に進める数,100,10000,3000,1
+-- 本体より上に付ける。粒子どうしを押し合わせ・引き合わせ、群れにする。全部の粒子を同じ時刻の刻みで一緒に進める（3,000 個まで）。
+-- 反発: 届く距離（px）の中で、近いほど強く押し合う（px/秒²）。粒子の大きさ: これより近づかない（位置を押し戻し、近づく速さを消す。積み上がる）。
+-- 粒子どうしの摩擦: 触れている粒子どうしがずれる速さを弱め、押し合う量 × 摩擦 までのずれを止める（%。粒子の大きさと一緒に使うと砂が山になる）。引き合い: 届く距離の中で寄る（負なら離れる）。群れ: 見える角度（進む向きから ± 度）の中の仲間から、離れる・向きをそろえる・中心へ寄る（%）。
+-- 最低の速さ・最高の速さ: 速さをこの範囲に収める。奥行きも使う: オフなら XY の距離だけで考える（軽い）。
+-- 粒子どうしを使うと、最初のフレームと後ろへ飛んだときに頭から計算し直すので重い（途中の状態を取っておき、そこから進め直す）。
+-- 当たる相手: 別のオブジェクトの本体が「渡す名前」で渡した粒子に当たって押される（相手は押し返さない）。相手の大きさ: 中心どうしがこれより近づかない（px）。
+--   相手を上のレイヤーに置く。相手の位置は 1 フレームに 500 個まで（多ければ間引く）
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+local function on(v) return v == true or v == 1 end
+box.inter = {
+  origin = obj.originframe, r = ir, rep = irep, size = isize, att = iatt, fric = ifric,
+  sep = bsep, ali = bali, coh = bcoh, view = bview, vmin = bvmin, vmax = bvmax, d3 = on(i3d),
+  other = tostring(iother or ""), orad = iorad, orep = iorep, imax = imax,
+}
+
+@焼き付け
+--information:焼き付け@拡張パーティクル_H v0.19.2 by HexBrowns
+--label:HexScript
+--select@bmode:焼き付け=0,使わない=0,書き出す=1,読み込む=2
+--folder@bdir:置くフォルダ
+--string@bname:名前,particles
+--check@bsim:無いフレームは計算する,1
+--check@bcsv:CSV も書く,0
+--hide@bcsv:bmode~=1
+--hide@bdir:bmode==0
+--hide@bname:bmode==0
+--hide@bsim:bmode~=2
+-- 本体より上に付ける。計算した粒子をフレームごとにファイル（置くフォルダの 名前.prh）に書き、読み込むときは計算を飛ばす。
+-- 書き出す: 描いたフレームを書く（出力すると全部のフレームが埋まる。どの順で描いても上書きできる）。
+-- 読み込む: そのフレームの記録があれば計算せずに描く。無いフレームは、無いフレームは計算する がオンなら計算し、オフなら描かない。
+-- 本体・拡張の動きの設定が変わった焼き付けは使わない（ログに注意が出る。書き出し直す）。重い粒子どうしを一度だけ計算して、後は軽く見るのに使う。
+-- 拡大率・透過率・色・素材などの見た目だけを変えたときは、焼き付けを使い続ける（位置は焼き付けのまま、見た目は今の設定で計算し直す）。
+-- CSV も書く: 置くフォルダの 名前_csv に、フレームごとの 00012.csv（1 行 1 粒: k,x,y,z,rx,ry,rz,zoom,alpha,age,life）も書く
+_G.Particle_H_ext = _G.Particle_H_ext or {}
+local box = _G.Particle_H_ext[obj.id] or {}
+_G.Particle_H_ext[obj.id] = box
+local function on(v) return v == true or v == 1 end
+box.bake = { origin = obj.originframe, mode = tonumber(bmode) or 0, dir = tostring(bdir or ""), name = tostring(bname or ""), sim = on(bsim),
+             csv = on(bcsv) }

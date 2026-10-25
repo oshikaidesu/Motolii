@@ -1,0 +1,183 @@
+--information:カラフルランダム配置_H v1.20 by HexBrowns
+--label:HexScript
+--object
+
+--group:配置
+--track@track0:個数,0,1000,5,1
+--track@track1:X幅[%],0,5000,100,0.1
+--track@track2:Y幅[%],0,5000,100,0.1
+--track@track3:Z幅[%],0,5000,0,0.1
+--select@sampling:散らし方=0,一様乱数=0,ジッター格子=1,Halton列=2
+--group
+
+--group:図形
+--figure@name:種類,円
+--track@f_size:サイズ,1,2000,100,1
+--track@f_line:ライン幅,1,4000,4000,1
+--check@colorful:カラフル,1
+--color@col:色,0xffffff
+--hide@col:colorful==1
+--select@color_space:色空間=0,今まで=0,HSV=3,Oklch=7
+--hide@color_space:colorful==0
+--track@ok_l:明度(L),0,100,75,0.1
+--hide@ok_l:colorful==0
+--hide@ok_l:color_space~=7
+--track@ok_c:彩度(C),0,0.4,0.15,0.001
+--hide@ok_c:colorful==0
+--hide@ok_c:color_space~=7
+--track@rzv_ran:ランダムZ回転,0,3600,0,0.1
+--track@s_ran:ランダム拡大[-%],0,100,0,0.1
+--group
+
+--[[
+@FIGURE.obj2 の @カラフルランダム配置（第三者作）を軽くした版。原作は残してある。
+
+本版で変えたこと
+  ・「カラフル」を OFF にすると色を指定でき、図形の読み込みとフィルタ効果の実行が 1 フレーム 1 回になる
+    （原作は粒ごとに毎フレーム読み込み直していた）
+  ・原作は for i=0,n で「個数 + 1」個描いていた。本版は個数どおり描く
+    （i = 0 〜 個数-1 の粒は原作と同じ位置・色・大きさ。原作の最後の 1 個だけが無くなる）
+  ・旧形式の --dialog を --track@ / --figure@ / --check@ に置き換えた
+
+カラフルの色空間（v1.10）
+  今まで : 原作の式。乱数 c（-0.5〜0.5）で G = cos、負なら B・正なら R = sin。青〜緑〜赤だけで紫・マゼンタは出ない
+  HSV    : 同じ乱数で色相を一周から選ぶ。彩度・明度は 100%
+  Oklch  : 同じ乱数で色相を一周から選び、明度(L)・彩度(C) は項目の値。sRGB に無い色は L と色相を保って C を下げる
+  どれも乱数は 1 粒に obj.rand(0, 100, i, 100) を 1 回だけ引く（位置・回転・大きさの乱数は色空間で変わらない）
+
+散らし方（v1.20。X・Y・Z の位置の引き方。回転・大きさ・色の乱数は変わらない）
+  一様乱数     : v1.10 までと同じ。粒ごとに obj.rand で引く。固まる所と空く所ができる
+  ジッター格子 : 範囲を「列 x 行 >= 個数」のマス（縦横比は X幅・Y幅に合わせる）に分け、1 マスに 1 粒をマスの中のランダムな位置に置く。
+                 どの粒がどのマスに入るかは、マスの数と互いに素な歩幅で一周する並べ替え。Z は個数の段に分けて同じように置く。
+                 個数・X幅・Y幅を変えるとマスの分け方が変わり、全部の粒の位置が変わる
+  Halton列     : 低食い違い列。粒 i の X・Y・Z を 2・3・5 進の桁を逆に並べた小数（radical inverse）で決める。
+                 続いた番号の粒ほど離れた所に入る。粒 i の位置は個数によらないので、個数を増やしても今ある粒は動かない。
+                 列の読み始めをオブジェクトごとの乱数でずらす（同じ設定のオブジェクトを 2 つ置いても重ならない）
+  どれも決定的（同じ設定なら毎フレーム同じ位置）
+
+版の履歴
+  v1.00 初版
+  v1.10（2026-10-13）カラフルの色空間（今まで / HSV / Oklch。既定は今まで）を足した。
+        仕様: AI/specifications/20261013_色空間拡張_spec.md
+  v1.20（2026-10-15）散らし方（一様乱数 / ジッター格子 / Halton列。既定は一様乱数）を足した。
+        候補一覧: AI/docs/20261015_方式の選択肢_候補.md の 12
+
+検証器: AI/scripts/カラフルランダム配置_H/verify_colorful_random.py
+        AI/scripts/カラフルランダム配置_H/verify_colorspace_ext.py（色空間）
+        AI/scripts/カラフルランダム配置_H/verify_sampling.py（散らし方）
+
+散らし方の部品（gcd・coprime_step・radinv）はカラフルパーティクル_H.obj2 と同じ。直すときは両方を直す
+]]
+
+local obj, math = obj, math
+
+local n = math.floor(track0)
+if n < 1 then
+  obj.setoption("draw_state", true)
+  return
+end
+
+local sw, sh = obj.screen_w, obj.screen_h
+local time = obj.time
+
+if colorful ~= 1 then
+  obj.load("figure", name, col, f_size, f_line)
+  obj.effect()
+end
+
+-- Oklch は共有部品で計算する。読めなければ今までの式で描く
+local cs
+if colorful == 1 and color_space == 7 then
+  local okc, m = pcall(require, "EffectUtils_ColorSpace")
+  if okc and m then
+    cs = m
+  elseif not _COLORFUL_RANDOM_H_WARNED then
+    _COLORFUL_RANDOM_H_WARNED = true
+    print("@warn", "[カラフルランダム配置_H] Oklch に EffectUtils_ColorSpace.lua が要ります（Script/ に置いてください）。今までの式で描きます")
+  end
+end
+
+-- 粒 i の色。乱数は色空間によらず obj.rand(0, 100, i, 100) を 1 回だけ引く（0〜100 の 101 通り）
+local function colorful_color(i)
+  local r = obj.rand(0, 100, i, 100)
+  if color_space == 3 then
+    return HSV(r / 101 * 360, 100, 100)
+  elseif cs then
+    return cs.pack(cs.from_space(r / 101, ok_c, ok_l / 100, 7))
+  end
+  local c = (r - 50) / 100
+  if c < 0 then
+    return math.floor(math.cos(math.pi * c) * 255) * 256 + math.floor(math.sin(math.pi * -c) * 255)
+  end
+  return math.floor(math.cos(math.pi * c) * 255) * 256 + math.floor(math.sin(math.pi * c) * 255) * 65536
+end
+
+-- 散らし方の部品（カラフルパーティクル_H.obj2 と同じ）
+local function gcd(a, b)
+  while b ~= 0 do a, b = b, a % b end
+  return a
+end
+-- 0〜m-1 を一周する並べ替え (i * 歩幅 + ずらし) % m の歩幅。m と互いに素で m * f に近いもの
+local function coprime_step(m, f)
+  if m <= 2 then return 1 end
+  local a = math.max(1, math.floor(m * f + 0.5))
+  while gcd(a, m) ~= 1 do a = a + 1 end
+  return a
+end
+-- k を b 進で書いた桁を小数点の後ろへ逆順に並べた値（0 以上 1 未満）
+local function radinv(k, b)
+  local f, r = 1 / b, 0
+  while k > 0 do
+    local d = k % b
+    r = r + d * f
+    k = (k - d) / b
+    f = f / b
+  end
+  return r
+end
+
+local mode = sampling or 0
+local cols, rows, cells, gstep, goff, zstep, zoff, hoff
+if mode == 1 then
+  local gw, gh = sw * track1, sh * track2
+  if gh <= 0 then
+    cols = n
+  elseif gw <= 0 then
+    cols = 1
+  else
+    cols = math.floor(math.sqrt(n * gw / gh) + 0.5)
+  end
+  cols = math.max(1, math.min(n, cols))
+  rows = math.ceil(n / cols)
+  cells = cols * rows
+  gstep, goff = coprime_step(cells, 0.618), obj.rand(0, cells - 1, 0, 30)
+  zstep, zoff = coprime_step(n, 0.382), obj.rand(0, n - 1, 0, 31)
+elseif mode == 2 then
+  hoff = obj.rand(0, 9999, 0, 32)
+end
+
+for i = 0, n - 1 do
+  if colorful == 1 then
+    obj.load("figure", name, colorful_color(i), f_size, f_line)
+    obj.effect()
+  end
+  local x, y, z
+  if mode == 1 then
+    local c = (i * gstep + goff) % cells
+    x = ((c % cols + obj.rand1(i, 20)) / cols * 2 - 1) * sw / 2 * track1 / 100
+    y = ((math.floor(c / cols) + obj.rand1(i, 21)) / rows * 2 - 1) * sh / 2 * track2 / 100
+    z = (((i * zstep + zoff) % n + obj.rand1(i, 22)) / n * 2 - 1) * 500 * track3 / 100
+  elseif mode == 2 then
+    local k = i + 1 + hoff
+    x = (radinv(k, 2) * 2 - 1) * sw / 2 * track1 / 100
+    y = (radinv(k, 3) * 2 - 1) * sh / 2 * track2 / 100
+    z = (radinv(k, 5) * 2 - 1) * 500 * track3 / 100
+  else
+    x = obj.rand(-sw, sw, i, 0) / 2 * track1 / 100
+    y = obj.rand(-sh, sh, i, 1) / 2 * track2 / 100
+    z = obj.rand(-1000, 1000, i, 2) / 2 * track3 / 100
+  end
+  local rz = obj.rand(-100, 100, i, 3) / 100 * time * rzv_ran
+  local zoom = 1 - obj.rand(0, s_ran, i, 4) / 100
+  obj.draw(x, y, z, zoom, 1, 0, 0, rz)
+end

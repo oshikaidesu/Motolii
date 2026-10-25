@@ -1,0 +1,898 @@
+@描画
+--information:描画@図形グラデーション_H v2.10 by HexBrowns
+--label:HexScript
+--filter
+
+--select@grad_type:種類=0,角度=0,線形=1,円形=2,矩形=3,ひし形=4
+--select@blend_mode:合成モード=0,塗り替え=0,通常=1,加算=2,減算=3,乗算=4,スクリーン=5,オーバーレイ=6,比較(明)=7,比較(暗)=8,輝度=9,色差=10,陰影=11,明暗=12,差分=13
+--track@strength:強さ,0,100,100,0.1
+--select@alpha_mode:透明な色=0,形ごと透明にする=0,元の色を残す=1
+--hide@alpha_mode:blend_mode>0
+
+--group:位置
+--track@angle:角度,-3600,3600,0,0.1
+--track@center_x:中心X,-5000,5000,0,0.1
+--track@center_y:中心Y,-5000,5000,0,0.1
+--check@center_percent:中心を%で指定,0
+--select@extent_basis:範囲の基準=0,画像サイズ=0,ピクセル=1
+--hide@extent_basis:grad_type==0
+--track@extent:範囲,1,1000,100,0.1
+--hide@extent:grad_type==0
+--hide@extent:extent_basis==1
+--track@extent_px:範囲(px),1,20000,300,0.1
+--hide@extent_px:grad_type==0
+--hide@extent_px:extent_basis==0
+--track@aspect:縦横比,-100,100,0,0.1
+--hide@aspect:grad_type<2
+--check@aspect_before:縦横比を回転前に掛ける,0
+--hide@aspect_before:grad_type<2
+--check@fixed_width:幅を角度で変えない,0
+--hide@fixed_width:grad_type~=1
+--hide@fixed_width:extent_basis==1
+--group
+
+--group:色
+--track@palette_id:パレットID,0,100,0,1,使わない
+--select@color_count:色数=2,2色=2,3色=3,4色=4,5色=5
+--check@even:位置を等間隔にする,1
+--hide@even:color_count==2
+--color@color_a:開始色,0xf1c85a
+--track@alpha_a:開始色透明度,0,100,0,0.1
+--color@color_m1:中間色1,0xffffff
+--hide@color_m1:color_count==2
+--track@alpha_m1:中間色1透明度,0,100,0,0.1
+--hide@alpha_m1:color_count==2
+--track@pos_m1:中間色1位置,0,100,25,0.1
+--hide@pos_m1:color_count==2
+--hide@pos_m1:even==1
+--color@color_m2:中間色2,0xff8040
+--hide@color_m2:color_count<4
+--track@alpha_m2:中間色2透明度,0,100,0,0.1
+--hide@alpha_m2:color_count<4
+--track@pos_m2:中間色2位置,0,100,50,0.1
+--hide@pos_m2:color_count<4
+--hide@pos_m2:even==1
+--color@color_m3:中間色3,0x4080ff
+--hide@color_m3:color_count<5
+--track@alpha_m3:中間色3透明度,0,100,0,0.1
+--hide@alpha_m3:color_count<5
+--track@pos_m3:中間色3位置,0,100,75,0.1
+--hide@pos_m3:color_count<5
+--hide@pos_m3:even==1
+--color@color_b:終了色,0xfaf3de
+--track@alpha_b:終了色透明度,0,100,0,0.1
+--select@space:色空間=0,sRGB=0,リニア=1,Oklab=2,HSV=3,HSL=4,Lab=5,LCh=6,Oklch=7,XYZ=8,HWB=9
+--select@hue_path:色相経路=0,短経路=0,長経路=1
+--hide@hue_path:space<3
+--hide@hue_path:space==5
+--hide@hue_path:space==8
+--group
+
+--group:変化
+--track@trans_range:遷移範囲,0,100,100,0.1
+--select@trans_pattern:遷移方法=1,ストップに収束=0,中間の位置に収束=1,次のストップに収束=2
+--select@curve:変化の仕方=0,直線=0,なめらか=1,イーズイン=2,イーズアウト=3
+--track@offset:オフセット,-1000,1000,0,0.1
+--track@pos_start:開始位置,0,100,0,0.1
+--track@pos_end:終了位置,0,100,100,0.1
+--track@repeat_n:繰り返し,1,100,1,1
+--check@mirror:折り返す,0
+--check@invert:反転,0
+--track@grad_steps:段数(0で連続),0,256,0,1
+--select@grad_dither:ディザ=0,なし=0,Bayer=1,ノイズ=2
+--group
+
+--[[
+図形グラデーション_H v2.10 描画
+
+  v2.10: 段数(0で連続) / ディザ を足した（多色グラデーション_H v1.10 と同じ項目名・同じ式）。既定の 0 / なし で v2.02 と同じ絵。
+  v2.02: 合成モードのときの素材の退避（cache）を 1 つの名前にし、読み終えたら縮める。
+  並べたオブジェクトを描き直すと退避が消えて invalid buffer type になりうる（多色グラデーション_H v1.03 と同じ直し）
+
+  オブジェクトの形（アルファ）はそのままに、中身をグラデーションで塗り替える。
+  標準の「図形」（円 / 四角形 / 三角形 / 五角形 / 六角形 / 星型）に掛けるのが基本の使い方で、
+  テキストや画像にも掛けられる。フィルタオブジェクトの後ろに置けば画面全体にも効く。
+
+  v2.00 でグラデーションジェネレーター（sikemoti、Script 内の同名ファイル）の機能を取り込んだ。
+  色は最大 5 色、色空間 10 種、遷移範囲 / 遷移方法、イージング、合成モード、オフセット、
+  縦横比、別レイヤーの 色設定 からパレットを読む仕組み。
+  v1.00（単体ファイルの 図形グラデーション_H.anm2）とは効果名が違うので、
+  v1.00 で保存したプロジェクトの設定は読めない（v1.00 は oldScript へ退避した）。
+
+  種類
+    角度    中心から見た向きで色が変わる（円錐グラデーション）。
+            角度 0 で継ぎ目が真上、そこから時計回りに 開始色 → 終了色。
+            「折り返す」を ON にすると継ぎ目が消える
+    線形    角度 0 で下 → 上、90 で左 → 右（CSS の linear-gradient と同じ向き）。
+            範囲 100% でオブジェクトの端から端まで。「幅を角度で変えない」を ON にすると
+            角度によらずオブジェクトの高さで 0〜100%
+    円形    オブジェクトに内接する楕円の縁で 100%（円の図形ならちょうど縁）
+    矩形    オブジェクトの外枠で 100%
+    ひし形  オブジェクトの上下左右の端を結ぶひし形で 100%
+    範囲の基準 = ピクセル（v2.01）では、範囲(px) が 0% から 100% までの距離になる（多色グラデーション_H の 幅 と同じ）。
+    線形は全長（中心の両側に半分ずつ。角度によらない）、円形 / 矩形 / ひし形は中心からの半径で、オブジェクトの縦横比は効かない
+    円形 / 矩形 / ひし形 は「角度」で時計回りに回り、「縦横比」で潰れる
+    （縦横比 + で横が、- で縦が縮む。既定は回転してから潰す）
+
+  位置 t（0〜1）の作り方
+      形から t → オフセット（t をずらす）→ 繰り返し（折り返す）→ 反転
+      → 開始位置 / 終了位置 で切り出し
+    開始位置 > 終了位置 にすると向きが逆になる。オフセットを動かすと模様が流れる。
+    ジェネレーターの ズーム・幅拡縮基準点 は、範囲 と 開始位置 / 終了位置 で同じことができる
+
+  色
+    色数 2〜5。開始色が 0%、終了色が 100%、中間色は位置を指定するか等間隔に並ぶ。
+    前の色より手前の位置は前の色の位置に揃える。透明度 0 が不透明。
+    パレットID を 1 以上にすると、同じフレームで先に描かれた（レイヤー番号の小さい）
+    色設定@図形グラデーション_H のうち同じ ID のものの色を使う。無ければ自分の色を使う。
+    色の補間は乗算済み（CSS と同じ）なので、透明へ向かうグラデーションで色が黒ずまない。
+    色相のある色空間（HSV / HSL / LCh / Oklch / HWB）では、無彩色の側は相手の色相に合わせる
+    （白へ向かって色相が一周しない）。XYZ はリニアと同じ結果になる（線形変換のため）
+
+  区間ごとの変化（全区間に同じ設定が効く）
+    遷移範囲  区間のうち色が変わる幅。100 で区間全体、0 で境目がくっきり分かれる
+    遷移方法  変わる場所。ストップに収束 = 区間の始め、中間 = 真ん中、次のストップ = 区間の終わり
+    変化の仕方 直線 / なめらか / イーズイン / イーズアウト
+
+  段数とディザ（v2.10）
+    段数      2 以上で、上の手順で作った位置 t を段数で等分し、段 k（0〜段数-1）を位置 k/(段数-1) の色で塗る
+              （最初の段は開始色、最後の段は終了色）。色ではなく位置を区切るので、どの色空間・遷移の設定でも
+              各段はそのグラデーションの途中の色になる。繰り返し・折り返しでは 1 回ごとに段数の帯になる。0 と 1 は連続
+    ディザ    段の中心どうしの間で隣の段を混ぜて、段をつなぐ（混ぜる割合は位置に比例）。
+              Bayer は 8x8 の組織的ディザ、ノイズは画素ごとのハッシュ。どちらもオブジェクトの画素の位置で決まる
+              （オブジェクトと一緒に動く）。段数が 0 / 1 のときは効かない（トラックは --hide@ の条件に書けないので隠していない）
+
+  合成モード
+    塗り替え  形はそのまま中身を置き換える。「透明な色」で、色の透明度を
+              形ごと透明にする（抜き）か、元の色を残す（下の色が透ける）かを選ぶ
+    それ以外  元の画像にグラデーションを合成モードで重ねる。アルファは元の画像のまま
+              （多色グラデーション_H v1.01 と同じ組み方。半透明の縁で素材を二重に数えない）
+
+  継ぎ目と繰り返しの境目は 1 画素を 4 点で塗り分けて平均している（ジャギー対策）。
+  中心X / 中心Y はオブジェクト内の画素単位（Y は下が正）。「中心を%で指定」ではオブジェクトの
+  幅・高さに対する % になる（0 が中心、50 が右端・下端）。
+
+  机上検証: AI/scripts/図形グラデーション_H/verify_gradient.py
+
+  ※このコメント内で行頭に半角のアットマークを置かないこと（マルチセクションの偽登録を招く）。
+]]
+
+--[[pixelshader@ps_sg_main:
+#define TAU 6.28318530717958647692
+
+cbuffer Params : register(b0) {
+    float4 stop_col[5];   // 0-19  各色のストレートの sRGB と不透明度（使わない分は終了色）
+    float4 stop_pos;      // 20-23 1〜4 番目の色の位置（0〜1）
+    float2 size;          // 24-25 バッファの幅・高さ
+    float2 center;        // 26-27 中心のずれ（画素）
+    float2 half_ext;      // 28-29 範囲を掛けた半幅・半高
+    float2 aspect_mul;    // 30-31 縦横比の倍率
+    float stop_pos4;      // 32    5 番目の色の位置
+    float stop_count;     // 33
+    float angle;          // 34    ラジアン
+    float grad_type;      // 35
+    float t_start;        // 36
+    float t_end;          // 37
+    float repeat_count;   // 38
+    float mirror;         // 39
+    float curve;          // 40
+    float invert;         // 41
+    float space;          // 42
+    float hue_long;       // 43
+    float strength;       // 44
+    float out_mode;       // 45    0 = 塗り替え・抜く / 1 = 塗り替え・残す / 2 = グラデーションだけ
+    float trans_range;    // 46    0〜1
+    float trans_pattern;  // 47
+    float offset;         // 48    t のずれ（0〜1 が 100%）
+    float aspect_before;  // 49
+    float fixed_width;    // 50
+    float step_count;     // 51    [v2.10] 段数（2 未満は連続）
+    float dither_mode;    // 52    [v2.10] ディザ（0 なし / 1 Bayer / 2 ノイズ）
+};
+
+Texture2D tex : register(t0);
+
+static const float2 AA_OFFSET[4] = {
+    float2(-0.125, -0.375), float2(0.375, -0.125), float2(0.125, 0.375), float2(-0.375, 0.125)
+};
+
+// ---------------------------------------------------------------- 色空間
+
+float to_linear1(float c) {
+    return c <= 0.04045 ? c / 12.92 : pow(abs((c + 0.055) / 1.055), 2.4);
+}
+
+float to_srgb1(float c) {
+    return c <= 0.0031308 ? c * 12.92 : 1.055 * pow(abs(c), 1.0 / 2.4) - 0.055;
+}
+
+float3 to_linear(float3 c) {
+    return float3(to_linear1(c.r), to_linear1(c.g), to_linear1(c.b));
+}
+
+float3 to_srgb(float3 c) {
+    float3 s = saturate(c);
+    return float3(to_srgb1(s.r), to_srgb1(s.g), to_srgb1(s.b));
+}
+
+float cbrt1(float x) {
+    return sign(x) * pow(abs(x), 1.0 / 3.0);
+}
+
+// Oklab（Björn Ottosson）
+float3 linear_to_oklab(float3 c) {
+    float l = 0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b;
+    float m = 0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b;
+    float s = 0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b;
+    float l_ = cbrt1(l);
+    float m_ = cbrt1(m);
+    float s_ = cbrt1(s);
+    return float3(
+        0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
+        1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+        0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_);
+}
+
+float3 oklab_to_linear(float3 c) {
+    float l_ = c.x + 0.3963377774 * c.y + 0.2158037573 * c.z;
+    float m_ = c.x - 0.1055613458 * c.y - 0.0638541728 * c.z;
+    float s_ = c.x - 0.0894841775 * c.y - 1.2914855480 * c.z;
+    float l = l_ * l_ * l_;
+    float m = m_ * m_ * m_;
+    float s = s_ * s_ * s_;
+    return float3(
+         4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s);
+}
+
+// sRGB（D65）のリニア ⇔ XYZ
+float3 linear_to_xyz(float3 c) {
+    return float3(
+        0.4124564 * c.r + 0.3575761 * c.g + 0.1804375 * c.b,
+        0.2126729 * c.r + 0.7151522 * c.g + 0.0721750 * c.b,
+        0.0193339 * c.r + 0.1191920 * c.g + 0.9503041 * c.b);
+}
+
+float3 xyz_to_linear(float3 c) {
+    return float3(
+         3.2404542 * c.x - 1.5371385 * c.y - 0.4985314 * c.z,
+        -0.9692660 * c.x + 1.8760108 * c.y + 0.0415560 * c.z,
+         0.0556434 * c.x - 0.2040259 * c.y + 1.0572252 * c.z);
+}
+
+float lab_f(float t) {
+    return t > 0.008856 ? cbrt1(t) : 7.787 * t + 16.0 / 116.0;
+}
+
+float lab_finv(float f) {
+    float f3 = f * f * f;
+    return f3 > 0.008856 ? f3 : (f - 16.0 / 116.0) / 7.787;
+}
+
+float3 xyz_to_lab(float3 c) {
+    float fx = lab_f(c.x / 0.95047);
+    float fy = lab_f(c.y);
+    float fz = lab_f(c.z / 1.08883);
+    return float3(116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz));
+}
+
+float3 lab_to_xyz(float3 c) {
+    float fy = (c.x + 16.0) / 116.0;
+    float fx = fy + c.y / 500.0;
+    float fz = fy - c.z / 200.0;
+    return float3(lab_finv(fx) * 0.95047, lab_finv(fy), lab_finv(fz) * 1.08883);
+}
+
+// 色相のある色空間は x に色相（0〜1 周）を置く
+float3 lab_to_polar(float3 v) {
+    return float3(frac(atan2(v.z, v.y) / TAU + 1.0), length(float2(v.y, v.z)), v.x);
+}
+
+float3 polar_to_lab(float3 p) {
+    return float3(p.z, p.y * cos(p.x * TAU), p.y * sin(p.x * TAU));
+}
+
+float hue_of(float3 c, float mx, float mn) {
+    float d = mx - mn;
+    float h = 0.0;
+    if (d > 0.000001) {
+        if (mx == c.r) {
+            h = (c.g - c.b) / d;
+        } else if (mx == c.g) {
+            h = (c.b - c.r) / d + 2.0;
+        } else {
+            h = (c.r - c.g) / d + 4.0;
+        }
+    }
+    return frac(h / 6.0 + 1.0);
+}
+
+float3 hue_rgb(float h) {
+    float3 p = abs(frac(float3(h, h, h) + float3(1.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
+    return saturate(p - 1.0);
+}
+
+float3 rgb_to_hsv(float3 c) {
+    float mx = max(c.r, max(c.g, c.b));
+    float mn = min(c.r, min(c.g, c.b));
+    float s = mx > 0.000001 ? (mx - mn) / mx : 0.0;
+    return float3(hue_of(c, mx, mn), s, mx);
+}
+
+float3 hsv_to_rgb(float3 c) {
+    return c.z * lerp(float3(1.0, 1.0, 1.0), hue_rgb(c.x), saturate(c.y));
+}
+
+float3 rgb_to_hsl(float3 c) {
+    float mx = max(c.r, max(c.g, c.b));
+    float mn = min(c.r, min(c.g, c.b));
+    float l = (mx + mn) * 0.5;
+    float den = 1.0 - abs(2.0 * l - 1.0);
+    float s = den > 0.000001 ? (mx - mn) / den : 0.0;
+    return float3(hue_of(c, mx, mn), s, l);
+}
+
+float3 hsl_to_rgb(float3 c) {
+    float chroma = (1.0 - abs(2.0 * c.z - 1.0)) * saturate(c.y);
+    return (hue_rgb(c.x) - 0.5) * chroma + c.z;
+}
+
+float3 rgb_to_hwb(float3 c) {
+    float mx = max(c.r, max(c.g, c.b));
+    float mn = min(c.r, min(c.g, c.b));
+    return float3(hue_of(c, mx, mn), mn, 1.0 - mx);
+}
+
+float3 hwb_to_rgb(float3 c) {
+    float w = max(c.y, 0.0);
+    float b = max(c.z, 0.0);
+    float sum = w + b;
+    if (sum > 1.0) {
+        w = w / sum;
+        b = b / sum;
+    }
+    return hue_rgb(c.x) * (1.0 - w - b) + w;
+}
+
+// space: 0 sRGB / 1 リニア / 2 Oklab / 3 HSV / 4 HSL / 5 Lab / 6 LCh / 7 Oklch / 8 XYZ / 9 HWB
+float3 to_space(float3 c) {
+    float3 r = c;
+    if (space > 8.5) {
+        r = rgb_to_hwb(c);
+    } else if (space > 7.5) {
+        r = linear_to_xyz(to_linear(c));
+    } else if (space > 6.5) {
+        r = lab_to_polar(linear_to_oklab(to_linear(c)));
+    } else if (space > 5.5) {
+        r = lab_to_polar(xyz_to_lab(linear_to_xyz(to_linear(c))));
+    } else if (space > 4.5) {
+        r = xyz_to_lab(linear_to_xyz(to_linear(c)));
+    } else if (space > 3.5) {
+        r = rgb_to_hsl(c);
+    } else if (space > 2.5) {
+        r = rgb_to_hsv(c);
+    } else if (space > 1.5) {
+        r = linear_to_oklab(to_linear(c));
+    } else if (space > 0.5) {
+        r = to_linear(c);
+    }
+    return r;
+}
+
+float3 from_space(float3 c) {
+    float3 r = saturate(c);
+    if (space > 8.5) {
+        r = saturate(hwb_to_rgb(c));
+    } else if (space > 7.5) {
+        r = to_srgb(xyz_to_linear(c));
+    } else if (space > 6.5) {
+        r = to_srgb(oklab_to_linear(polar_to_lab(c)));
+    } else if (space > 5.5) {
+        r = to_srgb(xyz_to_linear(lab_to_xyz(polar_to_lab(c))));
+    } else if (space > 4.5) {
+        r = to_srgb(xyz_to_linear(lab_to_xyz(c)));
+    } else if (space > 3.5) {
+        r = saturate(hsl_to_rgb(c));
+    } else if (space > 2.5) {
+        r = saturate(hsv_to_rgb(c));
+    } else if (space > 1.5) {
+        r = to_srgb(oklab_to_linear(c));
+    } else if (space > 0.5) {
+        r = to_srgb(c);
+    }
+    return r;
+}
+
+bool is_polar() {
+    return (space > 2.5 && space < 4.5) || (space > 5.5 && space < 7.5) || space > 8.5;
+}
+
+// 色相を持たない（無彩色の）色か
+bool no_hue(float3 v) {
+    bool r = v.y < 0.0001;
+    if (space > 8.5) {
+        r = v.y + v.z > 0.9999;
+    } else if (space > 6.5) {
+        r = v.y < 0.0002;
+    } else if (space > 5.5) {
+        r = v.y < 0.05;
+    }
+    return r;
+}
+
+// ---------------------------------------------------------------- 位置
+
+// バッファ中心からの位置 p（画素、Y 下向き）→ グラデーション上の位置 t（0〜1）
+float grad_t(float2 p) {
+    float cs = cos(angle);
+    float sn = sin(angle);
+    float2 pa = aspect_before > 0.5 ? p / aspect_mul : p;
+    float2 q = float2(pa.x * cs + pa.y * sn, -pa.x * sn + pa.y * cs);
+    float2 den = aspect_before > 0.5 ? half_ext : half_ext * aspect_mul;
+    float2 qn = q / max(den, float2(0.0001, 0.0001));
+    bool conic = grad_type < 0.5;
+    float t = 0.0;
+    if (conic) {
+        // 角度: 真上が 0、時計回りに増える。継ぎ目は角度の向き
+        t = frac((atan2(p.x, -p.y) - angle) / TAU);
+    } else if (grad_type < 1.5) {
+        // 線形: 進む向き d。角度 0 で上へ、90 で右へ
+        float2 d = float2(sn, -cs);
+        float len = abs(half_ext.x * d.x) + abs(half_ext.y * d.y);
+        if (fixed_width > 0.5) {
+            len = half_ext.y;
+        }
+        t = dot(p, d) / max(len, 0.0001) * 0.5 + 0.5;
+    } else if (grad_type < 2.5) {
+        t = length(qn);
+    } else if (grad_type < 3.5) {
+        t = max(abs(qn.x), abs(qn.y));
+    } else {
+        t = abs(qn.x) + abs(qn.y);
+    }
+
+    t = t - offset;
+    float u = t * repeat_count;
+    if (mirror > 0.5) {
+        t = 1.0 - abs(frac(u) * 2.0 - 1.0);
+    } else if (repeat_count > 1.5 || conic) {
+        t = frac(u);
+    } else {
+        t = saturate(t);
+    }
+
+    if (invert > 0.5) {
+        t = 1.0 - t;
+    }
+
+    float span = t_end - t_start;
+    t = abs(span) > 0.00001 ? saturate((t - t_start) / span) : step(t_start, t);
+    return t;
+}
+
+// ---------------------------------------------------------------- 色
+
+// 区間の中の位置 u に 遷移範囲・遷移方法・変化の仕方 を掛ける
+float shape_u(float u) {
+    float r = max(trans_range, 0.0001);
+    float v = u / r;
+    if (trans_pattern > 1.5) {
+        v = (u - (1.0 - r)) / r;
+    } else if (trans_pattern > 0.5) {
+        v = (u - (0.5 - r * 0.5)) / r;
+    }
+    v = saturate(v);
+    if (curve > 2.5) {
+        v = v * (2.0 - v);
+    } else if (curve > 1.5) {
+        v = v * v;
+    } else if (curve > 0.5) {
+        v = v * v * (3.0 - 2.0 * v);
+    }
+    return v;
+}
+
+// t の色を乗算済みの sRGB で返す。補間は選んだ色空間で、乗算済みのまま行う
+// （色相のある色空間では色相だけは乗算しない）
+// 色空間への変換は区間の両端の 2 色だけ行う（5 色を先に全部変換すると、変換がシェーダー内に 5 回複製されて
+// コンパイルが重くなる）
+float4 grad_color(float t) {
+    float4 k0 = stop_col[0];
+    float4 k1 = stop_col[1];
+    float p0 = stop_pos.x;
+    float p1 = stop_pos.y;
+    if (t > stop_pos.y && stop_count > 2.5) {
+        k0 = stop_col[1]; k1 = stop_col[2]; p0 = stop_pos.y; p1 = stop_pos.z;
+    }
+    if (t > stop_pos.z && stop_count > 3.5) {
+        k0 = stop_col[2]; k1 = stop_col[3]; p0 = stop_pos.z; p1 = stop_pos.w;
+    }
+    if (t > stop_pos.w && stop_count > 4.5) {
+        k0 = stop_col[3]; k1 = stop_col[4]; p0 = stop_pos.w; p1 = stop_pos4;
+    }
+    // 2 色の変換も [loop] で 1 回分のコードにまとめる（展開すると to_space が 2 回複製される）
+    float3 c0 = float3(0.0, 0.0, 0.0);
+    float3 c1 = float3(0.0, 0.0, 0.0);
+    [loop]
+    for (int j = 0; j < 2; j++) {
+        float3 v = to_space(j == 0 ? k0.rgb : k1.rgb);
+        if (j == 0) {
+            c0 = v;
+        } else {
+            c1 = v;
+        }
+    }
+    float u = p1 - p0 > 0.000001 ? saturate((t - p0) / (p1 - p0)) : 1.0;
+    u = shape_u(u);
+
+    float a = lerp(k0.a, k1.a, u);
+    float3 v = c0;
+    if (is_polar()) {
+        float3 x0 = c0;
+        float3 x1 = c1;
+        if (no_hue(x0)) {
+            x0.x = x1.x;
+        } else if (no_hue(x1)) {
+            x1.x = x0.x;
+        }
+        float dh = x1.x - x0.x;
+        if (hue_long > 0.5) {
+            if (dh > 0.0 && dh < 0.5) {
+                dh = dh - 1.0;
+            } else if (dh <= 0.0 && dh > -0.5) {
+                dh = dh + 1.0;
+            }
+        } else {
+            if (dh > 0.5) {
+                dh = dh - 1.0;
+            } else if (dh < -0.5) {
+                dh = dh + 1.0;
+            }
+        }
+        float2 yz = lerp(float2(x0.y, x0.z) * k0.a, float2(x1.y, x1.z) * k1.a, u);
+        yz = a > 0.000001 ? yz / a : lerp(float2(x0.y, x0.z), float2(x1.y, x1.z), u);
+        v = float3(frac(x0.x + dh * u + 1.0), yz.x, yz.y);
+    } else {
+        float3 pc = lerp(c0 * k0.a, c1 * k1.a, u);
+        v = a > 0.000001 ? pc / a : lerp(c0, c1, u);
+    }
+    return float4(from_space(v) * a, a);
+}
+
+// ---- [v2.10 から] 段数とディザ（多色グラデーション_H の ps_gradient にも同じものがある。変えるときは両方を直す）----
+// 段数 n（2 以上）: 位置 t を n 等分し、段 k（0..n-1）を位置 k/(n-1) にする（色ではなく位置を区切る）。
+// ディザ: 段の番号 = floor(t x n - 0.5 + しきい値)。段の中心（t x n - 0.5 が整数）では混ざらず、
+// 中心どうしの間で隣の段の割合が位置に比例して増える。なしは floor(t x n)（等幅の段）
+uint grad_pcg_hash(uint v) {
+    uint state = v * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+// しきい値（0..1）。1 = Bayer 8x8、2 = ノイズ（画素ごとの PCG ハッシュの上位 24 ビット）、それ以外は 0.5
+float grad_dither_threshold(uint2 ip, float mode) {
+    float thr = 0.5;
+    if (mode > 1.5) {
+        thr = (float)(grad_pcg_hash(ip.x + grad_pcg_hash(ip.y)) >> 8u) / 16777216.0;
+    } else if (mode > 0.5) {
+        uint x = ip.x & 7u;
+        uint y = ip.y & 7u;
+        uint xy = x ^ y;
+        uint m = ((xy & 1u) << 5u) | ((y & 1u) << 4u) | ((xy & 2u) << 2u) | ((y & 2u) << 1u)
+               | ((xy & 4u) >> 1u) | ((y & 4u) >> 2u);
+        thr = ((float)m + 0.5) / 64.0;
+    }
+    return thr;
+}
+
+float grad_quantize(float u, float n, float mode, float thr) {
+    float r = u;
+    if (n > 1.5) {
+        float lv = mode > 0.5 ? floor(u * n - 0.5 + thr) : floor(u * n);
+        r = clamp(lv, 0.0, n - 1.0) / (n - 1.0);
+    }
+    return r;
+}
+// ---- [v2.10 まで] ----
+
+float4 ps_sg_main(float4 pos : SV_Position) : SV_Target {
+    float4 src = tex.Load(int3(int2(pos.xy), 0));
+    float4 result = float4(0.0, 0.0, 0.0, 0.0);
+    bool gradient_only = out_mode > 1.5;
+    if (src.a > 0.0 || gradient_only) {
+        float2 p = pos.xy - size * 0.5 - center;
+
+        // 継ぎ目・繰り返しの境目・遷移範囲 0 の境目のジャギー対策（回転格子の 4 点）。
+        // [loop] で回す: 展開すると grad_color が 4 回複製されてコンパイルに約 1 秒かかった（v2.00、実機 1021.9ms）
+        float4 g = float4(0.0, 0.0, 0.0, 0.0);
+        // [v2.10] 段数とディザ: 4 点とも画素の同じしきい値で位置 t を段に区切ってから色を決める
+        float q_thr = step_count > 1.5 ? grad_dither_threshold(uint2(pos.xy), dither_mode) : 0.5;  // [v2.10]
+        [loop]
+        for (int k = 0; k < 4; k++) {
+            g += grad_color(grad_quantize(grad_t(p + AA_OFFSET[k]), step_count, dither_mode, q_thr));  // [v2.10]
+        }
+        g *= 0.25;
+
+        if (gradient_only) {
+            result = g;
+        } else {
+            float3 src_c = src.rgb / src.a;
+            float3 g_c = g.a > 0.000001 ? g.rgb / g.a : src_c;
+            float3 c = lerp(src_c, g_c, strength);
+            float a = src.a * lerp(1.0, g.a, strength);
+            if (out_mode > 0.5) {
+                c = lerp(src_c, g_c, g.a * strength);
+                a = src.a;
+            }
+            result = float4(c * a, a);
+        }
+    }
+    return result;
+}
+]]
+
+--[[pixelshader@ps_sg_opaque:
+// 素材を不透明にする: rgb = ストレートの色、α = 1（多色グラデーション_H v1.01 の ps_opaque と同じ）。
+// α = 0 の画素は黒にする（最後に素材の α 0 で切り抜くので見えない）
+static const float HALF_MAX = 65504.0;
+Texture2D<float4> src_tex : register(t0);
+float4 ps_sg_opaque(float4 pos : SV_Position) : SV_Target {
+    float4 px = src_tex.Load(int3(pos.xy, 0));
+    float4 r = float4(0.0, 0.0, 0.0, 1.0);
+    if (px.a > 0.0) {
+        r = float4(clamp(px.rgb / px.a, -HALF_MAX, HALF_MAX), 1.0);
+    }
+    return r;
+}
+]]
+
+--[[pixelshader@ps_sg_restore:
+// 合成結果のストレートの色に素材のアルファを掛け直す（多色グラデーション_H v1.01 の ps_restore と同じ）
+Texture2D<float4> blended_tex : register(t0);
+Texture2D<float4> source_tex : register(t1);
+float4 ps_sg_restore(float4 pos : SV_Position) : SV_Target {
+    float4 t = blended_tex.Load(int3(pos.xy, 0));
+    float4 o = source_tex.Load(int3(pos.xy, 0));
+    float4 r = float4(0.0, 0.0, 0.0, 0.0);
+    if (o.a > 0.0) {
+        r = float4(t.rgb / max(t.a, 0.000001) * o.a, o.a);
+    }
+    return r;
+}
+]]
+
+if strength <= 0 then return end
+if obj.w <= 0 or obj.h <= 0 then return end
+
+-- 正本: この関数は 色設定 セクションにも同じものがある（変えるときは両方を直す）
+local function build_stops(count, even_flag, cols, alphas, poss)
+  local n = math.max(2, math.min(5, math.floor((count or 2) + 0.5)))
+  local function stop(c, t, pos)
+    c = c or 0
+    local r = math.floor(c / 65536) % 256
+    local g = math.floor(c / 256) % 256
+    local b = c % 256
+    local a = 1 - math.max(0, math.min(100, t or 0)) / 100
+    return { r / 255, g / 255, b / 255, a, pos }
+  end
+  local even_on = (even_flag == 1 or even_flag == true)
+  local list = { stop(cols[1], alphas[1], 0) }
+  local prev = 0
+  for k = 1, n - 2 do
+    local pos = k / (n - 1)
+    if not even_on then
+      -- 前の色より手前には置かない（CSS のグラデーションと同じ扱い）
+      pos = math.max(prev, math.min(1, (poss[k] or 0) / 100))
+    end
+    prev = pos
+    list[#list + 1] = stop(cols[k + 1], alphas[k + 1], pos)
+  end
+  list[#list + 1] = stop(cols[5], alphas[5], 1)
+  return list
+end
+
+local stops = build_stops(color_count, even,
+  { color_a, color_m1, color_m2, color_m3, color_b },
+  { alpha_a, alpha_m1, alpha_m2, alpha_m3, alpha_b },
+  { pos_m1, pos_m2, pos_m3 })
+
+-- パレットID: 同じフレームで先に描かれた 色設定 の色を使う（フレームが違えば古い値なので使わない）
+local pid = math.floor((palette_id or 0) + 0.5)
+if pid >= 1 then
+  local store = SHAPE_GRADIENT_H_PALETTES
+  local entry = store and store[pid]
+  if entry and entry.frame == obj.getvalue("frame_s") + obj.frame then
+    stops = entry.stops
+  end
+end
+
+-- 使わない色は終了色（位置 1）で埋める。シェーダーはその区間に入らない
+local n = #stops
+local s1, s2, s3, s4, s5 = stops[1], stops[2] or stops[n], stops[3] or stops[n],
+  stops[4] or stops[n], stops[5] or stops[n]
+
+local ext = math.max(extent, 1) / 100
+local cx, cy = center_x, center_y
+if center_percent == 1 or center_percent == true then
+  cx = center_x / 100 * obj.w
+  cy = center_y / 100 * obj.h
+end
+-- 範囲の基準（v2.01）: 画像サイズ はオブジェクトの半幅・半高 x 範囲、ピクセル は 範囲(px) を 0〜100% の距離にする。
+-- 線形は全長を範囲(px) にするため、半分の長さを高さ側に入れて「幅を角度で変えない」の経路を使う
+local half_x, half_y = obj.w * 0.5 * ext, obj.h * 0.5 * ext
+local fixed = (fixed_width == 1 or fixed_width == true) and 1 or 0
+if extent_basis == 1 then
+  local len = math.max(extent_px or 300, 1)
+  if grad_type == 1 then
+    half_x, half_y = len * 0.5, len * 0.5
+    fixed = 1
+  else
+    half_x, half_y = len, len
+  end
+end
+local asp = math.max(-100, math.min(100, aspect)) / 100
+local ax = math.max(0.001, asp > 0 and 1 - asp or 1)
+local ay = math.max(0.001, asp < 0 and 1 + asp or 1)
+local mode = blend_mode
+local out_mode = (alpha_mode == 1) and 1 or 0
+local str = math.min(strength, 100) / 100
+if mode > 0 then
+  out_mode = 2
+end
+
+local C = {
+  s1[1], s1[2], s1[3], s1[4],
+  s2[1], s2[2], s2[3], s2[4],
+  s3[1], s3[2], s3[3], s3[4],
+  s4[1], s4[2], s4[3], s4[4],
+  s5[1], s5[2], s5[3], s5[4],
+  s1[5], s2[5], s3[5], s4[5],
+  obj.w, obj.h,
+  cx, cy,
+  half_x, half_y,
+  ax, ay,
+  s5[5],
+  n,
+  angle * math.pi / 180,
+  grad_type,
+  pos_start / 100,
+  pos_end / 100,
+  math.max(1, math.floor(repeat_n + 0.5)),
+  (mirror == 1 or mirror == true) and 1 or 0,
+  curve,
+  (invert == 1 or invert == true) and 1 or 0,
+  space,
+  hue_path,
+  (mode > 0) and 1 or str,
+  out_mode,
+  math.max(0, math.min(100, trans_range)) / 100,
+  trans_pattern,
+  offset / 100,
+  (aspect_before == 1 or aspect_before == true) and 1 or 0,
+  fixed,
+  math.floor((grad_steps or 0) + 0.5),   -- [v2.10] 段数（2 未満は連続）
+  grad_dither or 0,                      -- [v2.10] ディザ
+}
+
+if mode == 0 then
+  obj.pixelshader("ps_sg_main", "object", { "object" }, C)
+  return
+end
+
+-- 合成モード: 素材を不透明にして仮想バッファへ置き、グラデーションを合成モードで重ね、
+-- 最後に素材のアルファを掛け直す（多色グラデーション_H v1.01 と同じ流れ。実機 GRD-11 で確認済み）。
+-- 仮想バッファへの obj.draw() はオブジェクトの座標・回転を反映しない（lua.txt の drawtarget）
+local BLEND = { "none", "add", "sub", "mul", "screen", "overlay", "light", "dark",
+                "brightness", "chroma", "shadow", "light_dark", "diff" }
+-- v2.02: 素材の退避。cache と tempbuffer は合わせて 1600 万ドットの枠を共有し、超えると最も古いものから
+-- 黙って捨てられる。v2.01 はオブジェクトごとに名前を変えて（src_<obj.id>）使い終えても残していたので、
+-- 多色グラデーション_H v1.02 と同じく、並べたオブジェクトを描き直すと退避が消えうる
+-- （AI/scripts/issues/20260925_gradient_orig_cache_evicted_on_rerender.md）。
+-- 名前を 1 つにし、tempbuffer を先に作ってから退避し（退避の後に確保を挟まない）、読み終えたら縮める
+local src_cache = "cache:shape_gradient_h/src"
+obj.setoption("drawtarget", "tempbuffer", obj.w, obj.h)
+obj.copybuffer(src_cache, "object")
+obj.pixelshader("ps_sg_opaque", "object", { "object" }, {}, "copy")
+obj.draw()
+obj.pixelshader("ps_sg_main", "object", { "object" }, C)
+obj.setoption("blend", BLEND[mode] or "none")
+obj.draw(0, 0, 0, 1, str)
+obj.setoption("blend", "none")
+obj.setoption("drawtarget", "framebuffer")
+obj.copybuffer("object", "tempbuffer")
+obj.pixelshader("ps_sg_restore", "object", { "object", src_cache }, {}, "copy")
+-- 読み終えた退避は縮めて枠を空ける（次に書くときは必ず作り直しになり、最も新しいものとして数えられる。v2.02）
+obj.clearbuffer(src_cache, 1, 1)
+
+@色設定
+--information:色設定@図形グラデーション_H v2.01 by HexBrowns
+--label:HexScript
+--filter
+
+--track@palette_id:パレットID,1,100,1,1
+--select@color_count:色数=2,2色=2,3色=3,4色=4,5色=5
+--check@even:位置を等間隔にする,1
+--hide@even:color_count==2
+--color@color_a:開始色,0xf1c85a
+--track@alpha_a:開始色透明度,0,100,0,0.1
+--color@color_m1:中間色1,0xffffff
+--hide@color_m1:color_count==2
+--track@alpha_m1:中間色1透明度,0,100,0,0.1
+--hide@alpha_m1:color_count==2
+--track@pos_m1:中間色1位置,0,100,25,0.1
+--hide@pos_m1:color_count==2
+--hide@pos_m1:even==1
+--color@color_m2:中間色2,0xff8040
+--hide@color_m2:color_count<4
+--track@alpha_m2:中間色2透明度,0,100,0,0.1
+--hide@alpha_m2:color_count<4
+--track@pos_m2:中間色2位置,0,100,50,0.1
+--hide@pos_m2:color_count<4
+--hide@pos_m2:even==1
+--color@color_m3:中間色3,0x4080ff
+--hide@color_m3:color_count<5
+--track@alpha_m3:中間色3透明度,0,100,0,0.1
+--hide@alpha_m3:color_count<5
+--track@pos_m3:中間色3位置,0,100,75,0.1
+--hide@pos_m3:color_count<5
+--hide@pos_m3:even==1
+--color@color_b:終了色,0xfaf3de
+--track@alpha_b:終了色透明度,0,100,0,0.1
+
+--[[
+図形グラデーション_H v2.01 色設定
+
+  色の並び（パレット）を ID を付けて置いておく。画像は変えない。
+  描画@図形グラデーション_H の パレットID を同じ番号にすると、その色で塗る。
+  1 つのパレットを何個の 描画 から使ってもよい（読んでも消えない）。
+
+  置き方: 描画 と**同じフレーム**で、**レイヤー番号の小さい側**（先に描かれる側）に置く。
+  フィルタオブジェクトに付ければ画面は何も変わらない。
+  同じ ID の 色設定 が同じフレームに複数あると、後から描かれた方が勝つ。
+
+  受け渡しは Lua のグローバル変数（SHAPE_GRADIENT_H_PALETTES）で、フレーム番号を添えて置く。
+  描画側はフレーム番号が一致するときだけ使うので、色設定 が終わったフレームで古い色は残らない。
+  フレーム番号は obj.getvalue("frame_s") + obj.frame。グループ制御に追加した効果から見ると
+  この値が食い違う（.claude/rules/au2-lua-pitfalls.md）ので、色設定 はグループ制御に入れない。
+
+  ※このコメント内で行頭に半角のアットマークを置かないこと（マルチセクションの偽登録を招く）。
+]]
+
+-- 正本: 描画 セクションの build_stops（変えるときは両方を直す）
+local function build_stops(count, even_flag, cols, alphas, poss)
+  local n = math.max(2, math.min(5, math.floor((count or 2) + 0.5)))
+  local function stop(c, t, pos)
+    c = c or 0
+    local r = math.floor(c / 65536) % 256
+    local g = math.floor(c / 256) % 256
+    local b = c % 256
+    local a = 1 - math.max(0, math.min(100, t or 0)) / 100
+    return { r / 255, g / 255, b / 255, a, pos }
+  end
+  local even_on = (even_flag == 1 or even_flag == true)
+  local list = { stop(cols[1], alphas[1], 0) }
+  local prev = 0
+  for k = 1, n - 2 do
+    local pos = k / (n - 1)
+    if not even_on then
+      pos = math.max(prev, math.min(1, (poss[k] or 0) / 100))
+    end
+    prev = pos
+    list[#list + 1] = stop(cols[k + 1], alphas[k + 1], pos)
+  end
+  list[#list + 1] = stop(cols[5], alphas[5], 1)
+  return list
+end
+
+local pid = math.floor((palette_id or 0) + 0.5)
+if pid < 1 then return end
+
+SHAPE_GRADIENT_H_PALETTES = SHAPE_GRADIENT_H_PALETTES or {}
+SHAPE_GRADIENT_H_PALETTES[pid] = {
+  frame = obj.getvalue("frame_s") + obj.frame,
+  stops = build_stops(color_count, even,
+    { color_a, color_m1, color_m2, color_m3, color_b },
+    { alpha_a, alpha_m1, alpha_m2, alpha_m3, alpha_b },
+    { pos_m1, pos_m2, pos_m3 }),
+}

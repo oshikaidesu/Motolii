@@ -1,0 +1,5 @@
+AviUtl-Scripts by nea-c
+licence: MIT
+from: https://github.com/nea-c/AviUtl-Scripts (branch master, commit efcc3b357cbb) (commit efcc3b357cbb)
+page: https://github.com/nea-c/AviUtl-Scripts
+Put here unchanged for Motolii (filament/aviutl_scripts).

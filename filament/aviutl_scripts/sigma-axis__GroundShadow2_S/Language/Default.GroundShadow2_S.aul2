@@ -1,0 +1,28 @@
+; Tooltip definitions
+;===============================================================
+; Target: GroundShadow2_S (https://github.com/sigma-axis/aviutl2_script_GroundShadow2_S)
+; Target Version: v1.40
+; Language: Default
+
+[Language]
+Information=Default tooltips for GroundShadow2_S v1.40 (日本語)
+
+;===============================================================
+
+[Tips.GroundShadow2_S]
+effect.name=影を立体的に地面や壁へ落とします．
+地面角度=影の射影先の平面の角度，正で上り坂，0 で水平，負で下り坂．
+光源角度=光源の上下方向の角度，正で下手前から上奥，0 で水平，負で上手前から下奥．
+光源傾斜=光源の左右方向の角度，正で左手前から右奥，0 で水平，負で右手前から左奥．
+地面位置X=緑のアンカー線
+地面位置Y=緑のアンカー線
+地面位置Z=緑のアンカー線
+カメラ位置X=青のアンカー線
+カメラ位置Y=青のアンカー線
+光分散=地面との距離に応じたぼかし，拡散角度の tan 値を % 単位で指定．
+境界ぼかし=地面との距離に依存しないぼかし，ピクセル数で指定．
+影の範囲=足元付近の影のみを描画，範囲をピクセル数で指定．
+先端ぼかし=「影の範囲」の境界部分のぼかし幅
+合成モード=「影を別オブジェクトで描画」時のみ有効．
+精度=「光分散」の計算のサンプル数．指定値を超えない最大の奇数の平方が実効値．
+PI=PI = {\n  ground_pos: table? { x, y, z },\n  ground_screen: boolean|number|nil,\n  ground_angle: number?,\n  light_angle: number?,\n  light_slope: number?,\n  rotation: number?,\n  camera_pos: table? { x, y },\n  camera_screen: boolean|number|nil,\n  camera_fov: number?,\n  col: number?,\n  col_alpha: number?,\n  alpha: number?,\n  front_alpha: number?,\n  conic_blur: number?,\n  edge_blur: number?,\n  len: number?,\n  tip_blur: number?,\n  pos: table? { x, y },\n  draw: boolean|number|nil,\n  blend: string?,\n  quality: number?,\n  max_w: number?,\n  max_h: number?,\n}

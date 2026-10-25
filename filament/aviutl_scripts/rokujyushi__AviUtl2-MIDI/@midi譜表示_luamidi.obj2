@@ -1,0 +1,640 @@
+@midi_luamidi
+--label:カスタムオブジェクト
+--group:入力/タイムライン,false
+--file@midiFile:MIDIファイル
+--track@trackIndex:表示トラック_0=全て,0,32,0,1
+--track@keyCount:鍵盤数,12,128,88,1
+--track@keyShift:鍵盤シフト,0,127,0,1
+--track@keyWidth:鍵幅,4,60,12,1
+--track@gapSize:間隙,0,10,1,1
+--track@pixelsPerSec:縦スケール_px/秒,20,1000,200,1
+--track@aheadSec:先読み秒,0,30,5,1
+--track@behindSec:後読み秒,0,30,2,1
+--track@timeShiftMs:時間ずれ_ms,-6000,6000,0,1
+--check@logInputDebug:入力監視ログ,0
+--group:鍵盤/リロード,false
+--track@whiteLen:白鍵長,0,200,40,1
+--track@blackLen:黒鍵長,0,200,20,1
+--track@reloadToken:再読み込みキー,0,1000,0,1
+--group:表示/カラー,false
+--check@showKeyboard:鍵盤表示,1
+--check@showBeatLines:拍線表示,0
+--color@noteColor:ノート色,0xff8844
+--color@activeColor:発音色,0xffee55
+--color@whiteColor:白鍵色,0xffffff
+--color@blackColor:黒鍵色,0x222222
+--group:ガイド拡張,false
+--color@measureColor:小節線色,0x666666
+--color@beatColor:拍線色,0x444444
+--track@lineThickness:ライン幅,1,20,2,1
+
+local midiFile = midiFile
+local trackIndex = trackIndex
+local keyCount = keyCount
+local keyShift = keyShift
+local keyWidth = keyWidth
+local gapSize = gapSize
+local pixelsPerSec = pixelsPerSec
+local aheadSec = aheadSec
+local behindSec = behindSec
+local timeShiftMs = timeShiftMs
+local logInputDebug = logInputDebug
+local whiteLen = whiteLen
+local blackLen = blackLen
+local reloadToken = reloadToken
+local showKeyboard = showKeyboard
+local showBeatLines = showBeatLines
+local noteColor = noteColor
+local activeColor = activeColor
+local whiteColor = whiteColor
+local blackColor = blackColor
+local measureColor = measureColor
+local beatColor = beatColor
+local lineThickness = lineThickness
+
+local raw_params = {
+    trackIndex = trackIndex,
+    keyCount = keyCount,
+    keyShift = keyShift,
+    keyWidth = keyWidth,
+    gapSize = gapSize,
+    pixelsPerSec = pixelsPerSec,
+    aheadSec = aheadSec,
+    behindSec = behindSec,
+    timeShiftMs = timeShiftMs,
+    whiteLen = whiteLen,
+    blackLen = blackLen,
+    reloadToken = reloadToken,
+    showKeyboard = showKeyboard,
+    showBeatLines = showBeatLines,
+    lineThickness = lineThickness,
+    logInputDebug = logInputDebug
+}
+
+local function log_warn(msg)
+    if type(debug_print) == "function" then
+        local frame = obj and obj.frame or "?"
+        local time = obj and obj.time or 0
+        debug_print(string.format("[midi_luamidi][frame=%s][time=%.3f] %s", tostring(frame), type(time) == "number" and time or 0, msg))
+    end
+end
+
+local function describe_value(v)
+    if v == math.huge then
+        return "inf"
+    end
+    if v == -math.huge then
+        return "-inf"
+    end
+    if v ~= v then
+        return "nan"
+    end
+    return tostring(v)
+end
+
+local function sanitize_number(value, fallback, label)
+    local valid = type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
+    if not valid then
+        if label then
+            log_warn(string.format("%s が不正値(%s)のため %s を使用します", label, describe_value(value), describe_value(fallback)))
+        end
+        return fallback
+    end
+    return value
+end
+
+local function sanitize_range(value, fallback, min_value, max_value, label)
+    local sanitized = sanitize_number(value, fallback, label)
+    local clamped = sanitized
+    if min_value ~= nil and clamped < min_value then
+        clamped = min_value
+    end
+    if max_value ~= nil and clamped > max_value then
+        clamped = max_value
+    end
+    if clamped ~= sanitized and label then
+        log_warn(string.format("%s を範囲内に調整しました (%s → %s)", label, describe_value(sanitized), describe_value(clamped)))
+    end
+    return clamped
+end
+
+local function sanitize_integer_range(value, fallback, min_value, max_value, label)
+    local sanitized = sanitize_range(value, fallback, min_value, max_value, label)
+    if sanitized >= 0 then
+        sanitized = math.floor(sanitized + 0.5)
+    else
+        sanitized = math.ceil(sanitized - 0.5)
+    end
+    return sanitized
+end
+
+trackIndex = sanitize_integer_range(trackIndex, 0, 0, 32, "trackIndex")
+keyCount = sanitize_integer_range(keyCount, 88, 12, 128, "keyCount")
+keyShift = sanitize_integer_range(keyShift, 0, 0, 127, "keyShift")
+keyWidth = sanitize_range(keyWidth, 12, 4, 60, "keyWidth")
+gapSize = sanitize_range(gapSize, 1, 0, 10, "gapSize")
+pixelsPerSec = sanitize_range(pixelsPerSec, 200, 20, 1000, "pixelsPerSec")
+aheadSec = sanitize_range(aheadSec, 5, 0, 30, "aheadSec")
+behindSec = sanitize_range(behindSec, 2, 0, 30, "behindSec")
+timeShiftMs = sanitize_range(timeShiftMs, 0, -6000, 6000, "timeShiftMs")
+whiteLen = sanitize_range(whiteLen, 40, 0, 200, "whiteLen")
+blackLen = sanitize_range(blackLen, 20, 0, 200, "blackLen")
+reloadToken = sanitize_integer_range(reloadToken, 0, 0, 1000, "reloadToken")
+showKeyboard = sanitize_integer_range(showKeyboard, 1, 0, 1, "showKeyboard")
+showBeatLines = sanitize_integer_range(showBeatLines, 0, 0, 1, "showBeatLines")
+noteColor = sanitize_number(noteColor, 0xff8844, "noteColor")
+activeColor = sanitize_number(activeColor, 0xffee55, "activeColor")
+whiteColor = sanitize_number(whiteColor, 0xffffff, "whiteColor")
+blackColor = sanitize_number(blackColor, 0x222222, "blackColor")
+measureColor = sanitize_number(measureColor, 0x666666, "measureColor")
+beatColor = sanitize_number(beatColor, 0x444444, "beatColor")
+lineThickness = sanitize_integer_range(lineThickness, 2, 1, 20, "lineThickness")
+logInputDebug = sanitize_integer_range(logInputDebug, 0, 0, 1, "logInputDebug")
+
+local monitored_params = {
+    "trackIndex",
+    "keyCount",
+    "keyShift",
+    "keyWidth",
+    "gapSize",
+    "pixelsPerSec",
+    "aheadSec",
+    "behindSec",
+    "timeShiftMs",
+    "whiteLen",
+    "blackLen",
+    "reloadToken",
+    "showKeyboard",
+    "showBeatLines",
+    "lineThickness",
+    "logInputDebug"
+}
+
+local function log_input_snapshot(raw, current)
+    if logInputDebug == 0 or type(debug_print) ~= "function" then
+        return
+    end
+    local diffs = {}
+    for _, name in ipairs(monitored_params) do
+        local before_desc = describe_value(raw[name])
+        local after_desc = describe_value(current[name])
+        if before_desc ~= after_desc then
+            diffs[#diffs + 1] = string.format("%s:%s→%s", name, before_desc, after_desc)
+        end
+    end
+    if #diffs == 0 then
+        log_warn("入力監視: 全項目が UI 範囲内です")
+    else
+        log_warn("入力監視: " .. table.concat(diffs, ", "))
+    end
+end
+
+local current_params = {
+    trackIndex = trackIndex,
+    keyCount = keyCount,
+    keyShift = keyShift,
+    keyWidth = keyWidth,
+    gapSize = gapSize,
+    pixelsPerSec = pixelsPerSec,
+    aheadSec = aheadSec,
+    behindSec = behindSec,
+    timeShiftMs = timeShiftMs,
+    whiteLen = whiteLen,
+    blackLen = blackLen,
+    reloadToken = reloadToken,
+    showKeyboard = showKeyboard,
+    showBeatLines = showBeatLines,
+    lineThickness = lineThickness,
+    logInputDebug = logInputDebug
+}
+
+log_input_snapshot(raw_params, current_params)
+
+local function show_message(msg)
+    obj.setfont("", 40, 4)
+    obj.load("text", msg)
+    obj.draw()
+end
+
+local function ensure_package_path()
+    local script_path = ""
+    if obj and type(obj.getinfo) == "function" then
+        local ok, path = pcall(obj.getinfo, "script_path")
+        if ok and type(path) == "string" then
+            script_path = path
+        end
+    end
+    if script_path == "" then
+        log_warn("スクリプトのパスを取得できなかったため lua-midi の参照パスを追加できません")
+        return
+    end
+    local separator = script_path:sub(-1)
+    if separator ~= "/" and separator ~= "\\" then
+        script_path = script_path .. "/"
+    end
+    local lib_path = script_path .. "lua-midi/lib/?.lua"
+    if not package.path:find(lib_path, 1, true) then
+        package.path = lib_path .. ";" .. package.path
+    end
+end
+
+ensure_package_path()
+midi = require("midi")
+
+_G.MIDI_LUAMIDI_CACHE = _G.MIDI_LUAMIDI_CACHE or {}
+local MIDI_LUAMIDI_CACHE = _G.MIDI_LUAMIDI_CACHE
+
+local function ticks_to_seconds(tick, tempos, division)
+    local prev = tempos[1]
+    if not prev then
+        return tick / (division * 2)
+    end
+    if tick <= prev.tick then
+        local sec_per_tick = 60 / (prev.bpm * division)
+        return prev.seconds + (tick - prev.tick) * sec_per_tick
+    end
+    for i = 2, #tempos do
+        local cur = tempos[i]
+        if tick < cur.tick then
+            local sec_per_tick = 60 / (prev.bpm * division)
+            return prev.seconds + (tick - prev.tick) * sec_per_tick
+        end
+        prev = cur
+    end
+    local sec_per_tick = 60 / (prev.bpm * division)
+    return prev.seconds + (tick - prev.tick) * sec_per_tick
+end
+
+local function seconds_to_ticks(seconds, tempos, division)
+    local prev = tempos[1]
+    if not prev then
+        return seconds * division * 2
+    end
+    prev.seconds = prev.seconds or 0
+    if seconds <= prev.seconds then
+        local sec_per_tick = 60 / (prev.bpm * division)
+        return prev.tick + (seconds - prev.seconds) / sec_per_tick
+    end
+    for i = 2, #tempos do
+        local cur = tempos[i]
+        if seconds < cur.seconds then
+            local sec_per_tick = 60 / (prev.bpm * division)
+            return prev.tick + (seconds - prev.seconds) / sec_per_tick
+        end
+        prev = cur
+    end
+    local sec_per_tick = 60 / (prev.bpm * division)
+    return prev.tick + (seconds - prev.seconds) / sec_per_tick
+end
+
+local function finalize_tempos(tempos, division)
+    if #tempos == 0 then
+        tempos[1] = {tick = 0, bpm = 120, seconds = 0}
+        return
+    end
+    table.sort(tempos, function(a, b)
+        if a.tick == b.tick then
+            return (a.order or 0) < (b.order or 0)
+        end
+        return a.tick < b.tick
+    end)
+    tempos[1].seconds = tempos[1].seconds or 0
+    for i = 2, #tempos do
+        local prev = tempos[i - 1]
+        local cur = tempos[i]
+        local delta = math.max(cur.tick - prev.tick, 0)
+        local sec_per_tick = 60 / (prev.bpm * division)
+        cur.seconds = (prev.seconds or 0) + delta * sec_per_tick
+    end
+end
+
+local function parse_midi(path, reload_key)
+    if not path or path == "" then
+        log_warn("MIDIファイルが指定されていません")
+        return nil, "MIDIファイルを指定してください"
+    end
+
+    local cache_key = path .. "#" .. tostring(reload_key)
+    local cached = MIDI_LUAMIDI_CACHE[cache_key]
+    if cached then
+        return cached
+    end
+
+    local file, err = io.open(path, "rb")
+    if not file then
+        log_warn("ファイルを開けません: " .. tostring(err))
+        return nil, "ファイルを開けません: " .. tostring(err)
+    end
+
+    local division = 480
+    local tempos = {}
+    local tempo_order = 0
+    local tracks = {}
+    local signatures = {}
+    local track_count = 0
+    local current_track = 0
+    local current_tick = 0
+    local max_tick = 0
+
+    local function ensure_track(idx)
+        if not tracks[idx] then
+            tracks[idx] = {notes = {}, active = {}}
+        end
+        return tracks[idx]
+    end
+
+    local function close_active(track_data)
+        if not track_data then
+            return
+        end
+        for key, note in pairs(track_data.active) do
+            note.stopTick = max_tick
+            table.insert(track_data.notes, note)
+        end
+        track_data.active = {}
+    end
+
+    local function callback(event, ...)
+        if event == "header" then
+            division = select(3, ...)
+        elseif event == "track" then
+            current_track = select(1, ...)
+            track_count = math.max(track_count, current_track)
+            current_tick = 0
+            ensure_track(current_track)
+        elseif event == "deltatime" then
+            current_tick = current_tick + select(1, ...)
+            if current_tick > max_tick then
+                max_tick = current_tick
+            end
+        elseif event == "setTempo" then
+            tempo_order = tempo_order + 1
+            tempos[#tempos + 1] = {tick = current_tick, bpm = select(1, ...), order = tempo_order}
+        elseif event == "timeSignature" then
+            local numerator, denominator = ...
+            signatures[#signatures + 1] = {tick = current_tick, numerator = numerator, denominator = denominator}
+        elseif event == "noteOn" then
+            local channel, key, velocity = ...
+            local track_data = ensure_track(current_track)
+            if velocity > 0 then
+                track_data.active[key] = {key = key, channel = channel, startTick = current_tick, velocity = velocity}
+            else
+                local active = track_data.active[key]
+                if active then
+                    active.stopTick = current_tick
+                    table.insert(track_data.notes, active)
+                    track_data.active[key] = nil
+                end
+            end
+        elseif event == "noteOff" then
+            local channel, key = ...
+            local track_data = ensure_track(current_track)
+            local active = track_data.active[key]
+            if active then
+                active.stopTick = current_tick
+                table.insert(track_data.notes, active)
+                track_data.active[key] = nil
+            end
+        elseif event == "endOfTrack" then
+            close_active(tracks[current_track])
+        end
+    end
+
+    local success, process_err = pcall(function()
+        midi.process(file, callback)
+    end)
+    file:close()
+
+    if not success then
+        log_warn("MIDI解析に失敗: " .. tostring(process_err))
+        return nil, "MIDI解析に失敗しました: " .. tostring(process_err)
+    end
+
+    finalize_tempos(tempos, division)
+    if #tempos == 0 then
+        tempos[1] = {tick = 0, bpm = 120, seconds = 0}
+    end
+    table.sort(signatures, function(a, b)
+        return a.tick < b.tick
+    end)
+    if #signatures == 0 then
+        signatures[1] = {tick = 0, numerator = 4, denominator = 4}
+    end
+    for i = 1, #signatures do
+        signatures[i].seconds = ticks_to_seconds(signatures[i].tick, tempos, division)
+    end
+
+    local all_notes = {}
+    for idx, track in pairs(tracks) do
+        local converted = {}
+        for _, note in ipairs(track.notes) do
+            local start_tick = note.startTick or 0
+            local stop_tick = note.stopTick or start_tick + 1
+            if stop_tick > start_tick then
+                local start_sec = ticks_to_seconds(start_tick, tempos, division)
+                local stop_sec = ticks_to_seconds(stop_tick, tempos, division)
+                local converted_note = {
+                    key = note.key,
+                    channel = note.channel,
+                    startTime = start_sec,
+                    endTime = stop_sec,
+                    velocity = note.velocity or 0
+                }
+                table.insert(converted, converted_note)
+                table.insert(all_notes, converted_note)
+            end
+        end
+        track.notes = converted
+    end
+
+    local midi_data = {
+        division = division,
+        tempos = tempos,
+        tracks = tracks,
+        signatures = signatures,
+        all = all_notes,
+        lengthSec = ticks_to_seconds(max_tick, tempos, division),
+        trackCount = track_count
+    }
+
+    MIDI_LUAMIDI_CACHE[cache_key] = midi_data
+    return midi_data
+end
+
+local midi_data, err = parse_midi(midiFile, reloadToken)
+if not midi_data then
+    show_message(err)
+    return
+end
+
+local target = math.floor(trackIndex)
+local notes
+if target <= 0 then
+    notes = midi_data.all
+else
+    local track = midi_data.tracks[target]
+    if not track then
+        log_warn(string.format("要求トラック %d が存在しません", target))
+        show_message(string.format("トラック %d は存在しません", target))
+        return
+    end
+    notes = track.notes
+end
+
+local key_count = math.max(1, math.floor(keyCount))
+local key_shift = math.floor(keyShift)
+local e = math.min(128, key_shift + key_count)
+local s = math.max(1, e - key_count + 1)
+local width = keyWidth
+local gap = gapSize * 0.5
+local white_len = whiteLen
+local black_len = blackLen
+local ahead = math.max(0, aheadSec)
+local behind = math.max(0, behindSec)
+local scale = pixelsPerSec
+local current_time = obj.time + timeShiftMs * 0.001
+
+local sub = {0, 0.5, 1, 1.5, 2, 3, 3.5, 4, 4.5, 5, 5.5, 6}
+local is_white = {true, false, true, false, true, true, false, true, false, true, false, true}
+local key_pos = {}
+local whites, blacks = {}, {}
+local position_offset = (math.floor((e - 1) / 12) * 7 + sub[((e - 1) % 12) + 1] + 1 + math.floor((s - 1) / 12) * 7 + sub[((s - 1) % 12) + 1]) * width * 0.5
+local dir = 1
+for i = s, e do
+    local idx = ((i - 1) % 12) + 1
+    local x = ((math.floor((i - 1) / 12) * 7 + sub[idx]) * width - position_offset) * dir
+    key_pos[i] = x
+    local target_list = is_white[idx] and whites or blacks
+    target_list[#target_list + 1] = i
+end
+
+local function draw_rect(color, x0, y0, x1, y1)
+    obj.load("figure", "四角形", color, 1)
+    obj.drawpoly(x0, y0, 0, x1, y0, 0, x1, y1, 0, x0, y1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1)
+end
+
+if showKeyboard ~= 0 then
+    for _, note_id in ipairs(whites) do
+        local base_x = key_pos[note_id] + gap
+        draw_rect(whiteColor, base_x, -white_len, base_x + width - gap * 2, 0)
+    end
+    for _, note_id in ipairs(blacks) do
+        local base_x = key_pos[note_id] + gap * 0.5
+        draw_rect(blackColor, base_x, -black_len, base_x + width - gap, 0)
+    end
+end
+
+local lower_bound = -behind
+local upper_bound = ahead
+local function clamp_range(a, b)
+    local start = math.max(a, lower_bound)
+    local stop = math.min(b, upper_bound)
+    return start, stop
+end
+
+local line_left, line_right = math.huge, -math.huge
+for _, pos in pairs(key_pos) do
+    local left = pos + gap
+    local right = left + width - gap * 2
+    if left < line_left then
+        line_left = left
+    end
+    if right > line_right then
+        line_right = right
+    end
+end
+if line_left == math.huge then
+    line_left = -width * 0.5
+    line_right = width * 0.5
+end
+
+local function collect_grid_lines(data, current, lower, upper)
+    if showBeatLines == 0 then
+        return nil
+    end
+    local signatures = data.signatures
+    if not signatures then
+        return nil
+    end
+    local lower_time = current + lower
+    local upper_time = current + upper
+    local lower_tick = seconds_to_ticks(lower_time, data.tempos, data.division)
+    local upper_tick = seconds_to_ticks(upper_time, data.tempos, data.division)
+    local result = {}
+    local idx = 1
+    while idx <= #signatures do
+        local sig = signatures[idx]
+        local numerator = math.max(1, sig.numerator or 4)
+        local denominator = math.max(1, sig.denominator or 4)
+        local next_tick = idx < #signatures and signatures[idx + 1].tick or math.huge
+        if next_tick < lower_tick then
+            idx = idx + 1
+        else
+            local region_start = math.max(sig.tick, lower_tick)
+            local region_end = math.min(next_tick, upper_tick)
+            if region_start > region_end then
+                idx = idx + 1
+            else
+                local beat_tick = data.division * 4 / denominator
+                if beat_tick <= 0 then
+                    beat_tick = data.division
+                end
+                local offset = region_start - sig.tick
+                local beat_index = math.floor(offset / beat_tick)
+                local current_tick = sig.tick + beat_index * beat_tick
+                if current_tick < region_start then
+                    current_tick = current_tick + beat_tick
+                    beat_index = beat_index + 1
+                end
+                while current_tick <= region_end do
+                    local is_measure = (beat_index % numerator) == 0
+                    local sec = ticks_to_seconds(current_tick, data.tempos, data.division)
+                    if sec >= lower_time and sec <= upper_time then
+                        result[#result + 1] = {
+                            offset = sec - current,
+                            kind = is_measure and "measure" or "beat"
+                        }
+                    end
+                    current_tick = current_tick + beat_tick
+                    beat_index = beat_index + 1
+                end
+                idx = idx + 1
+            end
+        end
+    end
+    return result
+end
+
+local function draw_line(color, center_y)
+    local half = lineThickness * 0.5
+    draw_rect(color, line_left, center_y - half, line_right, center_y + half)
+end
+
+local grid_lines = collect_grid_lines(midi_data, current_time, lower_bound, upper_bound)
+if grid_lines then
+    for _, line in ipairs(grid_lines) do
+        local y = line.offset * scale
+        if line.kind == "measure" then
+            draw_line(measureColor, y)
+        else
+            draw_line(beatColor, y)
+        end
+    end
+end
+
+for _, note in ipairs(notes) do
+    local start_offset = note.startTime - current_time
+    local end_offset = note.endTime - current_time
+    if end_offset >= lower_bound and start_offset <= upper_bound then
+        local start_clamped, end_clamped = clamp_range(start_offset, end_offset)
+        local x = key_pos[note.key + 1]
+        if x then
+            local color = (start_offset <= 0 and end_offset >= 0) and activeColor or noteColor
+            local left = x + gap
+            local right = left + width - gap * 2
+            local y0 = start_clamped * scale
+            local y1 = end_clamped * scale
+            draw_rect(color, left, y0, right, y1)
+        end
+    end
+end

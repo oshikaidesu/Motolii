@@ -1,0 +1,1047 @@
+--information:平面トラッキング_H v1.00 by HexBrowns
+--label:HexScript
+--object
+
+--file@file:動画ファイル
+--track@start:開始位置,0,100000,0,0.001
+--track@ref_frame:基準フレーム,-100000,100000,0,1
+--value@corners:四隅,{-200,-150,200,-150,200,150,-200,150}
+
+--group:トラッキング
+--select@model:動きの種類=0,透視=0,移動・回転・拡大=1,移動=2
+--select@npts:点の数=1,32=0,64=1,128=2
+--select@win:窓の大きさ=1,9=0,13=1,17=2
+--select@search:探す範囲=1,狭い=0,普通=1,広い=2
+--group
+
+--group:挿入
+--select@output:出力=0,確認用=0,合成=1,挿入だけ=2
+--track@ins_layer:挿入するレイヤー,0,1000,0,1
+--group
+
+--[[
+After Effects の「平面トラッカー」（Mocha AE）と「コーナーピン」に当たるカスタムオブジェクト。動画ファイルの中の平らな面
+（看板・画面・壁など）の動きを追い、別のレイヤーの画像をその面に透視で貼る。
+
+1. 基準フレームで、四隅（アンカー）で囲んだ面の中から模様のある点を選ぶ（構造テンソルの小さい方の固有値が大きい所）。
+   点ごとに、基準フレームの明るさの縮小階層から窓（型紙）を切り出して global に残す
+2. 各フレームで、前のフレームまでの動きから今の射影変換 H（基準 → 今）を予想し、点ごとに Lucas-Kanade 法で位置を直す。
+   窓は H で歪めて比べる（面が傾いても形が合う）。明るさの平均の差は無視する。粗い段から細かい段へ
+3. 点の位置から H を RANSAC で求め（外れた点を除く）、残った点で最小二乗に掛け直す。2 回繰り返す
+4. 型紙はいつも基準フレームのもの（前のフレームと比べない）なので、ずれが積み重ならない
+5. H はフレームごとに global に残す。基準フレームから続けて求めた範囲（lo..hi）の外へ出たら、その端から 1 フレームずつ追う
+   （1 回の表示で 300 フレームまで）。設定と四隅と動画が同じなら、別のオブジェクトとも結果を共有する
+6. 挿入するレイヤーの画像を、今の四隅（四隅を H で写した所）に射影で貼る。出力は 確認用（枠と点を重ねる）/ 合成 / 挿入だけ
+- 座標は動画の画素で、画素の中心が +0.5（SV_Position と同じ）。四隅はオブジェクトの中心から（アンカーの座標）
+- 読み戻し（obj.getpixeldata）は 8bit でストレートなので、数値は 7bit ずつ（2k+1）/255 に詰めてアルファ 1 で書く。
+  四捨五入でも切り捨てでも同じ値に戻る
+
+机上検証: AI/scripts/平面トラッキング_H/verify_planar.py
+]]
+
+--[[pixelshader@ps_ptk_lum:
+cbuffer P : register(b0) {
+    float2 size;    // 0-1 大きさ
+};
+Texture2D src : register(t0);
+SamplerState smp : register(s0);
+
+// 明るさ。3x3 の二項フィルタ（境目をバイリニアで 4 回読む）で少しならす
+float4 ps_ptk_lum(float4 pos : SV_Position) : SV_Target {
+    float3 w = float3(0.2126, 0.7152, 0.0722);
+    float2 p = pos.xy;
+    float l = 0.25 * (dot(src.SampleLevel(smp, (p + float2(-0.5, -0.5)) / size, 0).rgb, w)
+                    + dot(src.SampleLevel(smp, (p + float2( 0.5, -0.5)) / size, 0).rgb, w)
+                    + dot(src.SampleLevel(smp, (p + float2(-0.5,  0.5)) / size, 0).rgb, w)
+                    + dot(src.SampleLevel(smp, (p + float2( 0.5,  0.5)) / size, 0).rgb, w));
+    return float4(l, l, l, 1.0);
+}
+]]
+
+--[[pixelshader@ps_ptk_down:
+cbuffer P : register(b0) {
+    float2 size;    // 0-1 出力の大きさ
+    float2 src;     // 2-3 1 段細かい方の大きさ
+};
+Texture2D tex : register(t0);
+SamplerState smp : register(s0);
+
+// 半分に縮める（2x2 の境目をバイリニアで読むと 4 画素の平均になる）
+float4 ps_ptk_down(float4 pos : SV_Position) : SV_Target {
+    return tex.SampleLevel(smp, (pos.xy * 2.0) / src, 0);
+}
+]]
+
+--[[pixelshader@ps_ptk_grad:
+cbuffer P : register(b0) {
+    float2 size;    // 0-1 大きさ
+};
+Texture2D tex : register(t0);
+SamplerState smp : register(s0);
+
+// r = 明るさ、g / b = 横 / 縦の傾き（中心差分。この段の画素の単位）
+float4 ps_ptk_grad(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy;
+    float c = tex.SampleLevel(smp, p / size, 0).r;
+    float gx = 0.5 * (tex.SampleLevel(smp, (p + float2(1.0, 0.0)) / size, 0).r
+                    - tex.SampleLevel(smp, (p - float2(1.0, 0.0)) / size, 0).r);
+    float gy = 0.5 * (tex.SampleLevel(smp, (p + float2(0.0, 1.0)) / size, 0).r
+                    - tex.SampleLevel(smp, (p - float2(0.0, 1.0)) / size, 0).r);
+    return float4(c, gx, gy, 1.0);
+}
+]]
+
+--[[pixelshader@ps_ptk_score:
+cbuffer P : register(b0) {
+    float4 qa;      // 0-3  基準の四隅（左上 x, y, 右上 x, y）
+    float4 qb;      // 4-7  （右下 x, y, 左下 x, y）
+    float2 size0;   // 8-9  動画の大きさ
+    float grid;     // 10   候補の格子の数（一辺）
+    float r;        // 11   窓の半径（px）
+    float margin;   // 12   四隅の内側に空ける割合
+};
+Texture2D g0 : register(t0);
+SamplerState smp : register(s0);
+
+float3 enc21(float v) {
+    v = clamp(floor(v + 0.5), 0.0, 2097151.0);
+    float a = floor(v / 16384.0);
+    float rem = v - a * 16384.0;
+    float b = floor(rem / 128.0);
+    float c = rem - b * 128.0;
+    return (float3(a, b, c) * 2.0 + 1.0) / 255.0;
+}
+
+// 候補の点（四隅の中の格子）ごとに、窓の中の構造テンソルの小さい方の固有値（1 画素あたり）の平方根を書く
+float4 ps_ptk_score(float4 pos : SV_Position) : SV_Target {
+    float2 uv = margin + (1.0 - 2.0 * margin) * (floor(pos.xy) + 0.5) / grid;
+    float2 top = lerp(qa.xy, qa.zw, uv.x);
+    float2 bot = lerp(qb.zw, qb.xy, uv.x);
+    float2 p = lerp(top, bot, uv.y);
+    float a = 0.0;
+    float b = 0.0;
+    float c = 0.0;
+    float n = 0.0;
+    [loop] for (float dy = -r; dy <= r; dy += 1.0) {
+        [loop] for (float dx = -r; dx <= r; dx += 1.0) {
+            float4 g = g0.SampleLevel(smp, (p + float2(dx, dy)) / size0, 0);
+            a += g.g * g.g;
+            b += g.g * g.b;
+            c += g.b * g.b;
+            n += 1.0;
+        }
+    }
+    a /= n;
+    b /= n;
+    c /= n;
+    float lmin = 0.5 * (a + c) - sqrt(max(0.25 * (a - c) * (a - c) + b * b, 0.0));
+    return float4(enc21(sqrt(max(lmin, 0.0)) * 1048576.0), 1.0);
+}
+]]
+
+--[[pixelshader@ps_ptk_patch:
+cbuffer P : register(b0) {
+    float2 size0;   // 0-1 動画の大きさ
+    float nl;       // 2   段の数
+    float r;        // 3   窓の半径（px）
+};
+Texture2D l0 : register(t0);
+Texture2D l1 : register(t1);
+Texture2D l2 : register(t2);
+Texture2D l3 : register(t3);
+Texture2D pts : register(t4);   // 点の位置（型紙と同じ並びの、右端の列）
+SamplerState smp : register(s0);
+
+float dec7(float v) { return floor(floor(v * 255.0 + 0.5) * 0.5); }
+float dec21(float3 c) { return dec7(c.r) * 16384.0 + dec7(c.g) * 128.0 + dec7(c.b); }
+
+float lv(float L, float2 q) {
+    float s = exp2(-L);
+    float2 uv = (q * s) / ceil(size0 * s);
+    float v = l3.SampleLevel(smp, uv, 0).r;
+    if (L < 0.5) v = l0.SampleLevel(smp, uv, 0).r;
+    else if (L < 1.5) v = l1.SampleLevel(smp, uv, 0).r;
+    else if (L < 2.5) v = l2.SampleLevel(smp, uv, 0).r;
+    return v;
+}
+
+// 型紙: 点 i の行 i x P..、段 L の列 L x P.. に、点を中心にした P x P の明るさ（段 L の画素の間隔）。右端の列は点の位置をそのまま写す
+float4 ps_ptk_patch(float4 pos : SV_Position) : SV_Target {
+    float P = 2.0 * r + 1.0;
+    float2 c = floor(pos.xy);
+    float cx = nl * P;
+    if (c.x > cx - 0.5) return pts.Load(int3(int2(c), 0));
+    float i = floor(c.y / P);
+    float L = floor(c.x / P);
+    float2 d = float2(c.x - L * P, c.y - i * P) - r;
+    float2 p = float2(dec21(pts.Load(int3(int(cx), int(i * P), 0)).rgb),
+                      dec21(pts.Load(int3(int(cx), int(i * P + 1.0), 0)).rgb)) / 64.0 - 4096.0;
+    float l = lv(L, p + d * exp2(L));
+    return float4(l, l, l, 1.0);
+}
+]]
+
+--[[pixelshader@ps_ptk_track:
+cbuffer P : register(b0) {
+    float4 ha;      // 0-3  H（基準 → 今。h33 = 1）の h11 h12 h13 h21
+    float4 hb;      // 4-7  h22 h23 h31 h32
+    float2 size0;   // 8-9  動画の大きさ
+    float nl;       // 10   型紙の段の数
+    float r;        // 11   窓の半径（px）
+    float top;      // 12   探し始める段
+    float iters;    // 13   段ごとの繰り返し
+};
+Texture2D l0 : register(t0);
+Texture2D l1 : register(t1);
+Texture2D l2 : register(t2);
+Texture2D l3 : register(t3);
+Texture2D atlas : register(t4);
+SamplerState smp : register(s0);
+
+float dec7(float v) { return floor(floor(v * 255.0 + 0.5) * 0.5); }
+float dec21(float3 c) { return dec7(c.r) * 16384.0 + dec7(c.g) * 128.0 + dec7(c.b); }
+
+float3 enc21(float v) {
+    v = clamp(floor(v + 0.5), 0.0, 2097151.0);
+    float a = floor(v / 16384.0);
+    float rem = v - a * 16384.0;
+    float b = floor(rem / 128.0);
+    float c = rem - b * 128.0;
+    return (float3(a, b, c) * 2.0 + 1.0) / 255.0;
+}
+
+float4 lv(float L, float2 q) {
+    float s = exp2(-L);
+    float2 uv = (q * s) / ceil(size0 * s);
+    float4 v = l3.SampleLevel(smp, uv, 0);
+    if (L < 0.5) v = l0.SampleLevel(smp, uv, 0);
+    else if (L < 1.5) v = l1.SampleLevel(smp, uv, 0);
+    else if (L < 2.5) v = l2.SampleLevel(smp, uv, 0);
+    return v;
+}
+
+float2 hmap(float2 p) {
+    float x = ha.x * p.x + ha.y * p.y + ha.z;
+    float y = ha.w * p.x + hb.x * p.y + hb.y;
+    float w = hb.z * p.x + hb.w * p.y + 1.0;
+    return float2(x, y) / w;
+}
+
+// 点 i（行）の今の位置。列 0 = x、列 1 = y、列 2 = 確からしさ（3 列とも同じ計算をして、自分の列だけ書く）
+float4 ps_ptk_track(float4 pos : SV_Position) : SV_Target {
+    float P = 2.0 * r + 1.0;
+    float i = floor(pos.y);
+    float col = floor(pos.x);
+    float cx = nl * P;
+    float2 p = float2(dec21(atlas.Load(int3(int(cx), int(i * P), 0)).rgb),
+                      dec21(atlas.Load(int3(int(cx), int(i * P + 1.0), 0)).rgb)) / 64.0 - 4096.0;
+    float2 base = hmap(p);
+    float2 dl = float2(0.0, 0.0);
+    float ratio = 9.0;
+    float lmin = 0.0;
+    float far = 0.0;
+    [loop] for (float L = top; L > -0.5; L -= 1.0) {
+        float sc = exp2(L);
+        [loop] for (float it = 0.0; it < iters; it += 1.0) {
+            float sxx = 0.0;
+            float sxy = 0.0;
+            float syy = 0.0;
+            float sgx = 0.0;
+            float sgy = 0.0;
+            float se = 0.0;
+            float sgxe = 0.0;
+            float sgye = 0.0;
+            float see = 0.0;
+            float st = 0.0;
+            float stt = 0.0;
+            float n = 0.0;
+            [loop] for (float dy = -r; dy <= r; dy += 1.0) {
+                [loop] for (float dx = -r; dx <= r; dx += 1.0) {
+                    float4 c = lv(L, hmap(p + float2(dx, dy) * sc) + dl);
+                    float t = atlas.Load(int3(int(L * P + dx + r), int(i * P + dy + r), 0)).r;
+                    float e = c.r - t;
+                    sxx += c.g * c.g;
+                    sxy += c.g * c.b;
+                    syy += c.b * c.b;
+                    sgx += c.g;
+                    sgy += c.b;
+                    se += e;
+                    sgxe += c.g * e;
+                    sgye += c.b * e;
+                    see += e * e;
+                    st += t;
+                    stt += t * t;
+                    n += 1.0;
+                }
+            }
+            // 明るさの平均の差を除いた残差で、平行移動 dl を直す（傾きも平均を引く）
+            float mgx = sgx / n;
+            float mgy = sgy / n;
+            float me = se / n;
+            float a = sxx - n * mgx * mgx + 1e-6 * n;
+            float b = sxy - n * mgx * mgy;
+            float c2 = syy - n * mgy * mgy + 1e-6 * n;
+            float bx = sgxe - n * mgx * me;
+            float by = sgye - n * mgy * me;
+            float det = a * c2 - b * b;
+            float2 dd = -sc * float2(c2 * bx - b * by, a * by - b * bx) / det;
+            float l = length(dd);
+            if (l > 1.5 * sc) dd *= 1.5 * sc / l;
+            dl += dd;
+            float rms = sqrt(max(see / n - me * me, 0.0));
+            float sdt = sqrt(max(stt / n - (st / n) * (st / n), 1e-8));
+            ratio = rms / sdt;
+            lmin = (0.5 * (a + c2) - sqrt(max(0.25 * (a - c2) * (a - c2) + b * b, 0.0))) / n;
+        }
+    }
+    if (length(dl) > 2.5 * r * exp2(top)) far = 1.0;
+    float2 q = base + dl;
+    float inside = (q.x >= 0.0 && q.y >= 0.0 && q.x <= size0.x && q.y <= size0.y) ? 1.0 : 0.0;
+    float ok = (far < 0.5 && inside > 0.5 && ratio < 0.7 && lmin > 4e-6) ? 1.0 : 0.0;
+    if (col < 0.5) return float4(enc21((q.x + 4096.0) * 64.0), 1.0);
+    if (col < 1.5) return float4(enc21((q.y + 4096.0) * 64.0), 1.0);
+    return float4((float3(ok * 127.0, clamp(floor(ratio * 100.0), 0.0, 127.0), 0.0) * 2.0 + 1.0) / 255.0, 1.0);
+}
+]]
+
+--[[pixelshader@ps_ptk_comp:
+cbuffer P : register(b0) {
+    float4 ga;      // 0-3   画素 → 挿入の uv の射影（g11 g12 g13 g21）
+    float4 gb;      // 4-7   g22 g23 g31 g32
+    float4 qa;      // 8-11  今の四隅（左上 x, y, 右上 x, y）
+    float4 qb;      // 12-15 （右下 x, y, 左下 x, y）
+    float2 size;    // 16-17 大きさ
+    float g33;      // 18
+    float mode;     // 19    0 確認用 / 1 合成 / 2 挿入だけ
+    float npts;     // 20    確認用に重ねる点の数
+    float state;    // 21    0 追えている / 1 見失った / 2 まだ求めていない
+    float has_ins;  // 22    1 で挿入する画像がある
+};
+Texture2D frame : register(t0);
+Texture2D ins : register(t1);
+Texture2D pts : register(t2);
+SamplerState smp : register(s0);
+
+float dec7(float v) { return floor(floor(v * 255.0 + 0.5) * 0.5); }
+float dec21(float3 c) { return dec7(c.r) * 16384.0 + dec7(c.g) * 128.0 + dec7(c.b); }
+
+float seg(float2 p, float2 a, float2 b) {
+    float2 ab = b - a;
+    float t = saturate(dot(p - a, ab) / max(dot(ab, ab), 1e-6));
+    return length(p - a - ab * t);
+}
+
+float4 ps_ptk_comp(float4 pos : SV_Position) : SV_Target {
+    float2 p = pos.xy;
+    float3 h = float3(ga.x * p.x + ga.y * p.y + ga.z, ga.w * p.x + gb.x * p.y + gb.y, gb.z * p.x + gb.w * p.y + g33);
+    float2 uv = h.xy / (abs(h.z) > 1e-9 ? h.z : 1e-9);
+    float2 fw = fwidth(uv);
+    float4 col = float4(0.0, 0.0, 0.0, 0.0);
+    if (mode < 1.5) col = frame.Load(int3(int2(p), 0));
+    if (has_ins > 0.5 && state < 1.5) {
+        // 四隅の外は縁の 1 画素ぶんでなめらかに消す
+        float d = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
+        float cov = saturate(d / max(max(fw.x, fw.y), 1e-6) + 0.5);
+        if (h.z <= 1e-9) cov = 0.0;
+        float4 c = ins.SampleLevel(smp, saturate(uv), 0) * cov;
+        col = c + col * (1.0 - c.a);
+    }
+    if (mode < 0.5) {
+        if (state < 1.5) {
+            float3 lc = (state > 0.5) ? float3(1.0, 0.0, 0.0) : float3(0.0, 1.0, 0.0);
+            float dm = min(min(seg(p, qa.xy, qa.zw), seg(p, qa.zw, qb.xy)), min(seg(p, qb.xy, qb.zw), seg(p, qb.zw, qa.xy)));
+            col = lerp(col, float4(lc, 1.0), saturate(1.5 - dm));
+        }
+        [loop] for (float k = 0.0; k < npts; k += 1.0) {
+            float2 q = float2(dec21(pts.Load(int3(int(k), 0, 0)).rgb), dec21(pts.Load(int3(int(k), 1, 0)).rgb)) / 64.0 - 4096.0;
+            float3 pc = (dec7(pts.Load(int3(int(k), 2, 0)).r) > 63.0) ? float3(0.0, 1.0, 1.0) : float3(1.0, 0.0, 1.0);
+            col = lerp(col, float4(pc, 1.0), saturate(3.5 - length(p - q)));
+        }
+    }
+    return col;
+}
+]]
+
+local ffi = require("ffi")
+local bit = require("bit")
+
+local function num(v, d)
+  v = tonumber(v)
+  if v == nil or v ~= v then return d end
+  return v
+end
+
+local function clamp(x, a, b)
+  if x < a then return a elseif x > b then return b end
+  return x
+end
+
+if file == nil or file == "" then return end
+local nframes, rate, scale = obj.load("movie.info", file)
+nframes, rate, scale = num(nframes, 0), num(rate, 0), num(scale, 0)
+if nframes <= 0 or rate <= 0 or scale <= 0 then return end
+local fps = rate / scale
+
+obj.setanchor("corners", 4, "loop", "color", 0x00ff00)
+local CS = {-200, -150, 200, -150, 200, 150, -200, 150}
+if type(corners) == "table" and #corners >= 8 then
+  for k = 1, 8 do CS[k] = num(corners[k], CS[k]) end
+end
+
+-- 動画のフレーム番号（0 始まり）。一番近いフレーム（開始位置は 0.001 秒刻みなので、40/30 秒は 1.333 秒になる）
+local function vframe(t)
+  return clamp(math.floor(t * fps + 0.5), 0, nframes - 1)
+end
+local START = num(start, 0)
+local f = vframe(START + obj.time)
+local sfps = num(obj.framerate, fps)
+if sfps <= 0 then sfps = fps end
+local fr = vframe(START + math.floor(num(ref_frame, 0) + 0.5) / sfps)
+
+local FRAME = "cache:ptk/frame"
+obj.load("movie.frame", file, f)
+local W, H = obj.w, obj.h
+if W <= 0 or H <= 0 then return end
+obj.copybuffer(FRAME, "object")
+
+local MODEL = clamp(math.floor(num(model, 0) + 0.5), 0, 2)
+local N = ({32, 64, 128})[clamp(math.floor(num(npts, 1) + 0.5), 0, 2) + 1]
+local R = ({4, 6, 8})[clamp(math.floor(num(win, 1) + 0.5), 0, 2) + 1]
+local NL = ({2, 3, 4})[clamp(math.floor(num(search, 1) + 0.5), 0, 2) + 1]
+local PW = 2 * R + 1
+local OUT = clamp(math.floor(num(output, 0) + 0.5), 0, 2)
+local MAX_STEPS = 300
+
+-- 基準の四隅（動画の画素）
+local RC = {}
+for k = 1, 4 do
+  RC[2 * k - 1] = CS[2 * k - 1] + W / 2
+  RC[2 * k] = CS[2 * k] + H / 2
+end
+
+-- ---- 射影変換（3x3、行優先。h33 = 1 に揃える）
+
+local function hnorm(m)
+  local s = m[9]
+  if math.abs(s) < 1e-12 then return nil end
+  local o = {}
+  for k = 1, 9 do o[k] = m[k] / s end
+  return o
+end
+
+local function hmul(a, b)
+  local o = {}
+  for i = 0, 2 do
+    for j = 0, 2 do
+      o[i * 3 + j + 1] = a[i * 3 + 1] * b[j + 1] + a[i * 3 + 2] * b[j + 4] + a[i * 3 + 3] * b[j + 7]
+    end
+  end
+  return o
+end
+
+local function hinv(m)
+  local a, b, c, d, e, g, h, i, j = m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9]
+  local A, B, C = e * j - g * i, -(d * j - g * h), d * i - e * h
+  local det = a * A + b * B + c * C
+  if math.abs(det) < 1e-15 then return nil end
+  return {A / det, -(b * j - c * i) / det, (b * g - c * e) / det,
+          B / det, (a * j - c * h) / det, -(a * g - c * d) / det,
+          C / det, -(a * i - b * h) / det, (a * e - b * d) / det}
+end
+
+local function happly(m, x, y)
+  local w = m[7] * x + m[8] * y + m[9]
+  if math.abs(w) < 1e-12 then w = 1e-12 end
+  return (m[1] * x + m[2] * y + m[3]) / w, (m[4] * x + m[5] * y + m[6]) / w
+end
+
+local IDENT = {1, 0, 0, 0, 1, 0, 0, 0, 1}
+
+-- 連立一次方程式（部分ピボット付きの消去法）。解けなければ nil
+local function solve(A, b, n)
+  local M = {}
+  for r = 1, n do
+    M[r] = {}
+    for c = 1, n do M[r][c] = A[r][c] end
+    M[r][n + 1] = b[r]
+  end
+  for c = 1, n do
+    local piv, best = c, math.abs(M[c][c])
+    for r = c + 1, n do
+      if math.abs(M[r][c]) > best then piv, best = r, math.abs(M[r][c]) end
+    end
+    if best < 1e-12 then return nil end
+    M[c], M[piv] = M[piv], M[c]
+    for r = c + 1, n do
+      local k = M[r][c] / M[c][c]
+      if k ~= 0 then
+        for cc = c, n + 1 do M[r][cc] = M[r][cc] - k * M[c][cc] end
+      end
+    end
+  end
+  local x = {}
+  for r = n, 1, -1 do
+    local s = M[r][n + 1]
+    for c = r + 1, n do s = s - M[r][c] * x[c] end
+    x[r] = s / M[r][r]
+  end
+  return x
+end
+
+-- 対応 (sx, sy) → (dx, dy) の並び idx から射影変換を最小二乗で求める（座標を正規化してから）
+local function fit_homography(src, dst, idx)
+  local function norm(pts)
+    local mx, my = 0, 0
+    for _, k in ipairs(idx) do mx, my = mx + pts[2 * k - 1], my + pts[2 * k] end
+    mx, my = mx / #idx, my / #idx
+    local md = 0
+    for _, k in ipairs(idx) do md = md + math.sqrt((pts[2 * k - 1] - mx) ^ 2 + (pts[2 * k] - my) ^ 2) end
+    md = md / #idx
+    if md < 1e-9 then return nil end
+    return mx, my, math.sqrt(2) / md
+  end
+  local smx, smy, ss = norm(src)
+  local dmx, dmy, ds = norm(dst)
+  if smx == nil or dmx == nil then return nil end
+  local A, b = {}, {}
+  for r = 1, 8 do
+    A[r] = {0, 0, 0, 0, 0, 0, 0, 0}
+    b[r] = 0
+  end
+  local function add(row, rhs)
+    for r = 1, 8 do
+      if row[r] ~= 0 then
+        for c = 1, 8 do A[r][c] = A[r][c] + row[r] * row[c] end
+        b[r] = b[r] + row[r] * rhs
+      end
+    end
+  end
+  for _, k in ipairs(idx) do
+    local x, y = (src[2 * k - 1] - smx) * ss, (src[2 * k] - smy) * ss
+    local u, v = (dst[2 * k - 1] - dmx) * ds, (dst[2 * k] - dmy) * ds
+    add({x, y, 1, 0, 0, 0, -x * u, -y * u}, u)
+    add({0, 0, 0, x, y, 1, -x * v, -y * v}, v)
+  end
+  local h = solve(A, b, 8)
+  if h == nil then return nil end
+  local Hn = {h[1], h[2], h[3], h[4], h[5], h[6], h[7], h[8], 1}
+  local Ts = {ss, 0, -ss * smx, 0, ss, -ss * smy, 0, 0, 1}
+  local Tdi = {1 / ds, 0, dmx, 0, 1 / ds, dmy, 0, 0, 1}
+  return hnorm(hmul(Tdi, hmul(Hn, Ts)))
+end
+
+-- 移動・回転・拡大（u = a x - b y + tx, v = b x + a y + ty）。2 点以上
+local function fit_similarity(src, dst, idx)
+  local n = #idx
+  local sx, sy, dx, dy = 0, 0, 0, 0
+  for _, k in ipairs(idx) do
+    sx, sy = sx + src[2 * k - 1], sy + src[2 * k]
+    dx, dy = dx + dst[2 * k - 1], dy + dst[2 * k]
+  end
+  sx, sy, dx, dy = sx / n, sy / n, dx / n, dy / n
+  local den, na, nb = 0, 0, 0
+  for _, k in ipairs(idx) do
+    local x, y = src[2 * k - 1] - sx, src[2 * k] - sy
+    local u, v = dst[2 * k - 1] - dx, dst[2 * k] - dy
+    den = den + x * x + y * y
+    na = na + x * u + y * v
+    nb = nb + x * v - y * u
+  end
+  if den < 1e-9 then return nil end
+  local a, b = na / den, nb / den
+  return {a, -b, dx - (a * sx - b * sy), b, a, dy - (b * sx + a * sy), 0, 0, 1}
+end
+
+local function fit_translation(src, dst, idx)
+  local tx, ty = 0, 0
+  for _, k in ipairs(idx) do
+    tx, ty = tx + dst[2 * k - 1] - src[2 * k - 1], ty + dst[2 * k] - src[2 * k]
+  end
+  return {1, 0, tx / #idx, 0, 1, ty / #idx, 0, 0, 1}
+end
+
+local FIT = ({fit_homography, fit_similarity, fit_translation})[MODEL + 1]
+local MIN_SAMPLE = ({4, 2, 1})[MODEL + 1]
+local RANSAC_ITERS = ({300, 120, 40})[MODEL + 1]
+
+-- RANSAC。ok の点だけを使う。外れ値を除いて掛け直した変換と、当てはまった点の表（k → true）を返す
+local function robust_fit(src, dst, ok, thr, seed)
+  local valid = {}
+  for k = 1, #ok do
+    if ok[k] then valid[#valid + 1] = k end
+  end
+  if #valid < MIN_SAMPLE + 2 then return nil end
+  local state = seed % 2147483646 + 1
+  local function rnd(n)
+    state = state * 48271 % 2147483647
+    return state % n + 1
+  end
+  local thr2 = thr * thr
+  local function inliers(m)
+    local list = {}
+    for _, k in ipairs(valid) do
+      local x, y = happly(m, src[2 * k - 1], src[2 * k])
+      if (x - dst[2 * k - 1]) ^ 2 + (y - dst[2 * k]) ^ 2 < thr2 then list[#list + 1] = k end
+    end
+    return list
+  end
+  local best = nil
+  -- 当てはまる点の割合 w から、99.9% の確かさで外れ値を含まない組を引くのに要る回数で打ち切る（8 回以上）
+  local need, it = RANSAC_ITERS, 0
+  while it < need do
+    it = it + 1
+    local pick, seen = {}, {}
+    while #pick < MIN_SAMPLE do
+      local k = valid[rnd(#valid)]
+      if not seen[k] then
+        seen[k] = true
+        pick[#pick + 1] = k
+      end
+    end
+    local m = FIT(src, dst, pick)
+    if m ~= nil then
+      local list = inliers(m)
+      if best == nil or #list > #best then
+        best = list
+        local miss = 1 - (#best / #valid) ^ MIN_SAMPLE
+        local k = (miss <= 1e-9) and 1 or math.ceil(math.log(0.001) / math.log(miss))
+        need = math.min(RANSAC_ITERS, math.max(8, k))
+      end
+    end
+  end
+  if best == nil or #best < math.max(MIN_SAMPLE + 2, 0.3 * #valid) then return nil end
+  local m = FIT(src, dst, best)
+  if m == nil then return nil end
+  for _ = 1, 2 do
+    local list = inliers(m)
+    if #list < MIN_SAMPLE + 2 then break end
+    local m2 = FIT(src, dst, list)
+    if m2 == nil then break end
+    m, best = m2, list
+  end
+  local set = {}
+  for _, k in ipairs(best) do set[k] = true end
+  return m, set
+end
+
+-- 単位正方形 → 四隅（左上・右上・右下・左下）の射影変換
+local function square_to_quad(q)
+  local A, b = {}, {}
+  local us = {0, 1, 1, 0}
+  local vs = {0, 0, 1, 1}
+  for k = 1, 4 do
+    local x, y, u, v = us[k], vs[k], q[2 * k - 1], q[2 * k]
+    A[2 * k - 1] = {x, y, 1, 0, 0, 0, -x * u, -y * u}
+    b[2 * k - 1] = u
+    A[2 * k] = {0, 0, 0, x, y, 1, -x * v, -y * v}
+    b[2 * k] = v
+  end
+  local h = solve(A, b, 8)
+  if h == nil then return nil end
+  return {h[1], h[2], h[3], h[4], h[5], h[6], h[7], h[8], 1}
+end
+
+-- ---- 読み戻しと書き込み（8bit・ストレート。値は 7bit ずつ (2k+1) に詰める）
+
+local function d7(p, o) return math.floor(p[o] / 2) end
+local function d21(p, o) return d7(p, o) * 16384 + d7(p, o + 1) * 128 + d7(p, o + 2) end
+local function put21(p, o, v)
+  v = clamp(math.floor(v + 0.5), 0, 2097151)
+  local a = math.floor(v / 16384)
+  local r = v - a * 16384
+  local b2 = math.floor(r / 128)
+  p[o] = a * 2 + 1
+  p[o + 1] = b2 * 2 + 1
+  p[o + 2] = (r - b2 * 128) * 2 + 1
+  p[o + 3] = 255
+end
+
+-- バッファを確保して、本体の画素の置き場に fill で書き、書き戻す
+local function upload(name, w, h, fill)
+  obj.clearbuffer(name, w, h)
+  local data, dw, dh = obj.getpixeldata(name)
+  if data == nil or dw ~= w or dh ~= h then return false end
+  local p = ffi.cast("uint8_t*", data)
+  ffi.fill(p, w * h * 4, 0)
+  fill(p)
+  obj.putpixeldata(name, data, w, h)
+  return true
+end
+
+-- ---- 記録（global。設定・四隅・動画が同じなら共有する）
+
+local function fnv(s, h)
+  for k = 1, #s do
+    h = bit.bxor(h, s:byte(k))
+    h = bit.tobit(bit.lshift(h, 24) + h * 403)
+  end
+  return h
+end
+local key = table.concat({file, fr, W, H, MODEL, N, R, NL,
+  string.format("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f", CS[1], CS[2], CS[3], CS[4], CS[5], CS[6], CS[7], CS[8])}, "|")
+local GP = "ptk/" .. bit.tohex(fnv(key, -2128831035)) .. bit.tohex(fnv(key, 0x1234567)) .. "/"
+
+local function gget(k)
+  local v = global[GP .. k]
+  if v == nil or v == "" then return nil end
+  return v
+end
+local function gset(k, v) global[GP .. k] = v end
+
+local function nums(s)
+  local t = {}
+  for w in string.gmatch(s, "[^,]+") do t[#t + 1] = tonumber(w) end
+  return t
+end
+
+-- このオブジェクトの設定が変わったら（四隅をドラッグしたときなど）、前の設定の記録を消す
+local function gdel(k)
+  if not pcall(function() global[k] = nil end) then global[k] = "" end
+end
+do
+  local slot = "ptk/last/" .. tostring(obj.id)
+  local old = global[slot]
+  if old ~= nil and old ~= "" and old ~= GP then
+    local r = global[old .. "range"]
+    if r ~= nil and r ~= "" then
+      local t = nums(r)
+      if t[1] and t[2] then
+        for k = t[1], t[2] do
+          gdel(old .. "h" .. k)
+          gdel(old .. "p" .. k)
+        end
+      end
+    end
+    for _, k in ipairs({"atlas", "src", "n", "range", "fail"}) do gdel(old .. k) end
+  end
+  global[slot] = GP
+end
+
+-- フレーム k の記録: H（9 個）と、見失ったか
+local function get_h(k)
+  local s = gget("h" .. k)
+  if s == nil then return nil end
+  local t = nums(s)
+  return {H = {t[1], t[2], t[3], t[4], t[5], t[6], t[7], t[8], 1}, lost = t[9] == 1}
+end
+
+local function put_h(k, m, lost, pts)
+  gset("h" .. k, string.format("%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%d",
+    m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], lost and 1 or 0))
+  if pts ~= nil then gset("p" .. k, pts) end
+end
+
+-- ---- 縮小階層
+
+local LUM, PYR, LV = {}, {}, {}
+for L = 0, NL - 1 do
+  LUM[L] = "cache:ptk/l" .. L
+  PYR[L] = "cache:ptk/g" .. L
+  LV[L] = {math.ceil(W / 2 ^ L), math.ceil(H / 2 ^ L)}
+end
+local ATLAS, PTSB, TRK, SC, INS, PTS = "cache:ptk/atlas", "cache:ptk/ptsb", "cache:ptk/trk", "cache:ptk/sc", "cache:ptk/ins", "cache:ptk/pts"
+
+local made = {}
+local function ensure(name, w, h)
+  local k = w .. "x" .. h
+  if made[name] ~= k then
+    obj.clearbuffer(name, w, h)
+    made[name] = k
+  end
+end
+
+local function pyramid(src)
+  ensure(LUM[0], W, H)
+  obj.pixelshader("ps_ptk_lum", LUM[0], {src}, {W, H}, "copy", "clamp")
+  for L = 1, NL - 1 do
+    ensure(LUM[L], LV[L][1], LV[L][2])
+    obj.pixelshader("ps_ptk_down", LUM[L], {LUM[L - 1]}, {LV[L][1], LV[L][2], LV[L - 1][1], LV[L - 1][2]}, "copy", "clamp")
+  end
+  for L = 0, NL - 1 do
+    ensure(PYR[L], LV[L][1], LV[L][2])
+    obj.pixelshader("ps_ptk_grad", PYR[L], {LUM[L]}, {LV[L][1], LV[L][2]}, "copy", "clamp")
+  end
+end
+
+local function levels_res(last)
+  return {PYR[0], PYR[math.min(1, NL - 1)], PYR[math.min(2, NL - 1)], PYR[math.min(3, NL - 1)], last}
+end
+
+-- ---- 基準フレーム: 点を選び、型紙を作る
+
+local MARGIN = 0.08
+local function quad_point(u, v)
+  local tx, ty = RC[1] + (RC[3] - RC[1]) * u, RC[2] + (RC[4] - RC[2]) * u
+  local bx, by = RC[7] + (RC[5] - RC[7]) * u, RC[8] + (RC[6] - RC[8]) * u
+  return tx + (bx - tx) * v, ty + (by - ty) * v
+end
+
+local function setup_ref(src)
+  pyramid(src)
+  local GN = math.ceil(math.sqrt(N * 4))
+  ensure(SC, GN, GN)
+  obj.pixelshader("ps_ptk_score", SC, {PYR[0]}, {
+    RC[1], RC[2], RC[3], RC[4], RC[5], RC[6], RC[7], RC[8], W, H, GN, R, MARGIN,
+  }, "copy", "clamp")
+  local data = obj.getpixeldata(SC)
+  if data == nil then return false end
+  local p = ffi.cast("const uint8_t*", data)
+  local cand, top = {}, 0
+  for j = 0, GN - 1 do
+    for i = 0, GN - 1 do
+      local s = d21(p, (j * GN + i) * 4) / 1048576
+      local x, y = quad_point(MARGIN + (1 - 2 * MARGIN) * (i + 0.5) / GN, MARGIN + (1 - 2 * MARGIN) * (j + 0.5) / GN)
+      if s > 0 and x >= 0 and y >= 0 and x <= W and y <= H then
+        cand[#cand + 1] = {s = s, x = math.floor(x * 64 + 0.5) / 64, y = math.floor(y * 64 + 0.5) / 64, k = #cand + 1}
+        top = math.max(top, s)
+      end
+    end
+  end
+  table.sort(cand, function(a, b)
+    if a.s ~= b.s then return a.s > b.s end
+    return a.k < b.k
+  end)
+  -- 強い順に、前に選んだ点から離れているものを取る。足りなければ間隔を問わずに足す
+  local side = 0
+  for k = 1, 4 do
+    local k2 = k % 4 + 1
+    side = side + math.sqrt((RC[2 * k2 - 1] - RC[2 * k - 1]) ^ 2 + (RC[2 * k2] - RC[2 * k]) ^ 2) / 4
+  end
+  local dmin2 = (1.4 * side * (1 - 2 * MARGIN) / GN) ^ 2
+  local pick, used = {}, {}
+  for pass = 1, 2 do
+    for k, c in ipairs(cand) do
+      if #pick >= N then break end
+      if not used[k] and c.s >= top * 0.03 then
+        local far = true
+        if pass == 1 then
+          for _, q in ipairs(pick) do
+            if (q.x - c.x) ^ 2 + (q.y - c.y) ^ 2 < dmin2 then
+              far = false
+              break
+            end
+          end
+        end
+        if far then
+          pick[#pick + 1] = c
+          used[k] = true
+        end
+      end
+    end
+  end
+  if #pick < 8 then return false end
+  local n = #pick
+  local AW, AH = NL * PW + 1, n * PW
+  local ok = upload(PTSB, AW, AH, function(q)
+    for i = 0, n - 1 do
+      put21(q, ((i * PW) * AW + AW - 1) * 4, (pick[i + 1].x + 4096) * 64)
+      put21(q, ((i * PW + 1) * AW + AW - 1) * 4, (pick[i + 1].y + 4096) * 64)
+    end
+  end)
+  if not ok then return false end
+  ensure(ATLAS, AW, AH)
+  obj.pixelshader("ps_ptk_patch", ATLAS, levels_res(PTSB), {W, H, NL, R}, "copy", "clamp")
+  local adata, aw, ah = obj.getpixeldata(ATLAS)
+  if adata == nil or aw ~= AW or ah ~= AH then return false end
+  gset("atlas", ffi.string(ffi.cast("const char*", adata), AW * AH * 4))
+  -- 8bit に丸めた型紙を書き戻す（次の表示から読む型紙と同じにする）
+  obj.putpixeldata(ATLAS, adata, AW, AH)
+  local list, pts = {}, {}
+  for i = 1, n do
+    list[#list + 1] = string.format("%.6f,%.6f", pick[i].x, pick[i].y)
+    pts[#pts + 1] = string.format("%.3f,%.3f,1", pick[i].x, pick[i].y)
+  end
+  gset("n", tostring(n))
+  gset("src", table.concat(list, ","))
+  put_h(fr, IDENT, false, table.concat(pts, ","))
+  gset("range", fr .. "," .. fr)
+  return true
+end
+
+-- ---- 1 フレームずつ追う
+
+local SRC_PTS, NP = nil, 0
+
+local function load_atlas()
+  local s = gget("atlas")
+  local n = tonumber(gget("n") or "0") or 0
+  if s == nil or n <= 0 then return false end
+  local AW, AH = NL * PW + 1, n * PW
+  if #s ~= AW * AH * 4 then return false end
+  return upload(ATLAS, AW, AH, function(q) ffi.copy(q, s, #s) end)
+end
+
+local function run_track(m, top, iters)
+  ensure(TRK, 3, NP)
+  obj.pixelshader("ps_ptk_track", TRK, levels_res(ATLAS), {
+    m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], W, H, NL, R, top, iters,
+  }, "copy", "clamp")
+  local data = obj.getpixeldata(TRK)
+  if data == nil then return nil end
+  local p = ffi.cast("const uint8_t*", data)
+  local dst, ok = {}, {}
+  for i = 0, NP - 1 do
+    local o = i * 12
+    dst[2 * i + 1] = d21(p, o) / 64 - 4096
+    dst[2 * i + 2] = d21(p, o + 4) / 64 - 4096
+    ok[i + 1] = d7(p, o + 8) >= 64
+  end
+  return dst, ok
+end
+
+local function step(k, dir)
+  local prev = get_h(k - dir)
+  if prev == nil then return false end
+  local prev2 = get_h(k - 2 * dir)
+  local pred = prev.H
+  if prev2 ~= nil and not prev.lost and not prev2.lost then
+    local inv2 = hinv(prev2.H)
+    if inv2 ~= nil then pred = hnorm(hmul(prev.H, hmul(inv2, prev.H))) or prev.H end
+  end
+  if k == f then
+    pyramid(FRAME)
+  else
+    obj.load("movie.frame", file, k)
+    if obj.w ~= W or obj.h ~= H then return false end
+    pyramid("object")
+  end
+  local function attempt(m0)
+    local dst, ok = run_track(m0, NL - 1, 6)
+    if dst == nil then return nil end
+    local m1, set1 = robust_fit(SRC_PTS, dst, ok, 2.5, k * 7 + 1)
+    if m1 == nil then return nil end
+    -- 予想した H で窓を歪めたので、結果が予想とほぼ同じ（四隅の差が 1px 未満）なら掛け直さない
+    local moved = 0
+    for c = 1, 4 do
+      local x0, y0 = happly(m0, RC[2 * c - 1], RC[2 * c])
+      local x1, y1 = happly(m1, RC[2 * c - 1], RC[2 * c])
+      moved = math.max(moved, (x1 - x0) ^ 2 + (y1 - y0) ^ 2)
+    end
+    if moved < 1 then
+      -- 当てはまりの幅だけ 2 回目と同じに狭めて掛け直す（読み戻しは要らない）
+      local m2, set2 = robust_fit(SRC_PTS, dst, ok, 1.5, k * 7 + 3)
+      if m2 == nil then return m1, set1, dst end
+      return m2, set2, dst
+    end
+    local dst2, ok2 = run_track(m1, math.min(1, NL - 1), 4)
+    if dst2 == nil then return m1, set1, dst end
+    local m2, set2 = robust_fit(SRC_PTS, dst2, ok2, 1.5, k * 7 + 3)
+    if m2 == nil then return m1, set1, dst end
+    return m2, set2, dst2
+  end
+  local m, set, dst = attempt(pred)
+  if m == nil and pred ~= prev.H then m, set, dst = attempt(prev.H) end
+  if m == nil then
+    put_h(k, prev.H, true, nil)
+    return true
+  end
+  local pts = {}
+  for i = 1, NP do
+    pts[#pts + 1] = string.format("%.3f,%.3f,%d", dst[2 * i - 1], dst[2 * i], set[i] and 1 or 0)
+  end
+  put_h(k, m, false, table.concat(pts, ","))
+  return true
+end
+
+-- ---- 今のフレームの H を用意する
+
+local state = 2
+local cur = nil
+if gget("fail") == nil then
+  if gget("range") == nil then
+    local src = FRAME
+    if fr ~= f then
+      obj.load("movie.frame", file, fr)
+      src = "object"
+    end
+    if obj.w == W and obj.h == H and setup_ref(src) then
+      made[ATLAS] = "loaded"
+    else
+      gset("fail", "1")
+    end
+  end
+  local rg = gget("range") and nums(gget("range")) or nil
+  if rg ~= nil then
+    local lo, hi = rg[1], rg[2]
+    if f < lo or f > hi then
+      SRC_PTS = nums(gget("src") or "")
+      NP = #SRC_PTS / 2
+      if NP > 0 and (made[ATLAS] == "loaded" or load_atlas()) then
+        local steps = 0
+        if f > hi then
+          for k = hi + 1, f do
+            if steps >= MAX_STEPS or not step(k, 1) then break end
+            steps = steps + 1
+            hi = k
+          end
+        else
+          for k = lo - 1, f, -1 do
+            if steps >= MAX_STEPS or not step(k, -1) then break end
+            steps = steps + 1
+            lo = k
+          end
+        end
+        gset("range", lo .. "," .. hi)
+      end
+    end
+  end
+  cur = get_h(f)
+  if cur ~= nil then state = cur.lost and 1 or 0 end
+end
+if gget("fail") ~= nil then
+  -- 基準フレームで点が選べなかった（模様が無い）: 四隅をそのまま赤で見せる
+  cur = {H = IDENT, lost = true}
+  state = 1
+end
+
+-- ---- 挿入と表示
+
+local has_ins = 0
+local L_INS = math.floor(num(ins_layer, 0) + 0.5)
+if L_INS >= 1 and L_INS ~= obj.layer then
+  local names = {"ox", "oy", "oz", "rx", "ry", "rz", "cx", "cy", "cz", "sx", "sy", "sz", "alpha", "zoom", "aspect"}
+  local saved = {}
+  for k, n in ipairs(names) do saved[k] = obj[n] end
+  if obj.load("layer", L_INS, true) and obj.w > 0 and obj.h > 0 then
+    obj.copybuffer(INS, "object")
+    has_ins = 1
+  end
+  for k, n in ipairs(names) do obj[n] = saved[k] end
+end
+
+local QC = {0, 0, 0, 0, 0, 0, 0, 0}
+local GI = {1, 0, 0, 0, 1, 0, 0, 0, 1}
+if cur ~= nil then
+  for k = 1, 4 do
+    QC[2 * k - 1], QC[2 * k] = happly(cur.H, RC[2 * k - 1], RC[2 * k])
+  end
+  local g = square_to_quad(QC)
+  local gi = g and hinv(g) or nil
+  if gi ~= nil then GI = gi else has_ins = 0 end
+end
+
+local npts = 0
+local pts_res = FRAME
+if OUT == 0 and state == 0 then
+  local s = gget("p" .. f)
+  local t = s and nums(s) or {}
+  local n = math.floor(#t / 3)
+  if n > 0 and upload(PTS, n, 3, function(q)
+    for i = 0, n - 1 do
+      put21(q, i * 4, (t[3 * i + 1] + 4096) * 64)
+      put21(q, (n + i) * 4, (t[3 * i + 2] + 4096) * 64)
+      q[(2 * n + i) * 4] = (t[3 * i + 3] == 1) and 255 or 1
+      q[(2 * n + i) * 4 + 3] = 255
+    end
+  end) then
+    npts = n
+    pts_res = PTS
+  end
+end
+
+obj.copybuffer("object", FRAME)
+obj.pixelshader("ps_ptk_comp", "object", {FRAME, (has_ins == 1) and INS or FRAME, pts_res}, {
+  GI[1], GI[2], GI[3], GI[4], GI[5], GI[6], GI[7], GI[8],
+  QC[1], QC[2], QC[3], QC[4], QC[5], QC[6], QC[7], QC[8],
+  W, H, GI[9], OUT, npts, state, has_ins,
+}, "copy", "clamp")

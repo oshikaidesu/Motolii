@@ -1,0 +1,623 @@
+--information:RainOnPane v1.1.1
+--label:カスタムオブジェクト
+--require:2003700
+--group:
+--group:雨粒,true
+--track@drop_density:密度,0,500,165,1
+--track@drop_size:サイズ,10,300,100,1
+--track@drop_motion:更新速度,0,200,35,1
+--track@drop_refraction:雨粒屈折,0,150,38,1
+--group
+--group:流れ,true
+--track@runner_count:数,0,100,42,1
+--track@runner_length:長さ,100,2400,900,10
+--track@runner_width:太さ,2,150,10,1
+--track@runner_speed:流速,0,500,105,1
+--track@runner_refraction:流れ屈折,0,300,165,1
+--group
+--group:雨筋,true
+--track@clear_width:雨筋幅,50,400,115,1
+--track@vapor_removal:曇り除去,0,100,80,1
+--track@drop_removal:雨粒除去,0,100,100,1
+--track@edge_capture:縁の巻込み,0,100,15,1
+--track@trail_hold:雨筋保持時間,0,30,8,0.1
+--group
+--group:再付着,true
+--track@vapor_recovery:曇りの回復,0.1,60,18,0.1
+--track@drop_regen:雨粒の再付着,0.1,120,24,0.1
+--group
+--group:ガラス,true
+--track@wetness:濡れ,0,200,100,1
+--track@depth:立体感,0,200,115,1
+--track@softness:水のボケ,0,100,28,1
+--track@randomness:ランダム,0,200,125,1
+--track@opacity:透明度,0,100,100,1
+--track@seed:シード,0,9999,2846,1
+--group
+--group:すりガラス,true
+--track@frost_blur:すりガラスぼかし,0,80,0,1
+--track@frost_strength:すりガラス強度,0,200,0,1
+--group
+--group:曇り,true
+--track@vapor_blur:曇りぼかし,0,120,0,1
+--track@vapor_strength:曇り強度,0,200,0,1
+--group
+--group:変形,true
+--check@transform_enabled:四隅変形,false
+--track@transform_feather:境界ぼかし,0,100,4,0.1
+--check@light_preview:軽量プレビュー,false
+--track@tlx:左上X補正,-4000,4000,0,1
+--track@tly:左上Y補正,-4000,4000,0,1
+--trackgroup@tlx,tly:左上
+--track@trx:右上X補正,-4000,4000,0,1
+--track@try_:右上Y補正,-4000,4000,0,1
+--trackgroup@trx,try_:右上
+--track@brx:右下X補正,-4000,4000,0,1
+--track@bry:右下Y補正,-4000,4000,0,1
+--trackgroup@brx,bry:右下
+--track@blx:左下X補正,-4000,4000,0,1
+--track@bly:左下Y補正,-4000,4000,0,1
+--trackgroup@blx,bly:左下
+--group
+
+--[[pixelshader@rain_on_pane_gaussian:
+Texture2D src_tex : register(t0);
+SamplerState smp : register(s0);
+cbuffer constant0 : register(b0) { float4 c0; }; // width, height, radius, vertical
+
+float4 rain_on_pane_gaussian(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float2 horizontal = float2(c0.z / 6.0 / max(c0.x, 1.0), 0.0);
+    float2 vertical = float2(0.0, c0.z / 6.0 / max(c0.y, 1.0));
+    float2 stepUV = lerp(horizontal, vertical, step(0.5, c0.w));
+    float4 v = src_tex.Sample(smp, uv) * (924.0 / 4096.0);
+    v += src_tex.Sample(smp, saturate(uv + stepUV * 1.0)) * (792.0 / 4096.0);
+    v += src_tex.Sample(smp, saturate(uv - stepUV * 1.0)) * (792.0 / 4096.0);
+    v += src_tex.Sample(smp, saturate(uv + stepUV * 2.0)) * (495.0 / 4096.0);
+    v += src_tex.Sample(smp, saturate(uv - stepUV * 2.0)) * (495.0 / 4096.0);
+    v += src_tex.Sample(smp, saturate(uv + stepUV * 3.0)) * (220.0 / 4096.0);
+    v += src_tex.Sample(smp, saturate(uv - stepUV * 3.0)) * (220.0 / 4096.0);
+    v += src_tex.Sample(smp, saturate(uv + stepUV * 4.0)) * (66.0 / 4096.0);
+    v += src_tex.Sample(smp, saturate(uv - stepUV * 4.0)) * (66.0 / 4096.0);
+    v += src_tex.Sample(smp, saturate(uv + stepUV * 5.0)) * (12.0 / 4096.0);
+    v += src_tex.Sample(smp, saturate(uv - stepUV * 5.0)) * (12.0 / 4096.0);
+    v += src_tex.Sample(smp, saturate(uv + stepUV * 6.0)) * (1.0 / 4096.0);
+    v += src_tex.Sample(smp, saturate(uv - stepUV * 6.0)) * (1.0 / 4096.0);
+    return v;
+}
+]]
+
+--[[pixelshader@rain_on_pane:
+Texture2D frame_tex : register(t0);
+Texture2D vapor_tex : register(t1);
+SamplerState smp : register(s0);
+
+cbuffer constant0 : register(b0) {
+    float4 c0; // width, height, time, seed
+    float4 c1; // drop density, size, motion, refraction
+    float4 c2; // runner count, length, width, speed
+    float4 c3; // runner refraction, wetness, depth, softness
+    float4 c4; // randomness, opacity, frost blur, frost strength
+    float4 c5; // vapor blur, vapor strength, clear width, vapor removal
+    float4 c6; // drop removal, edge capture, trail hold, vapor recovery
+    float4 c7;  // droplet regeneration, reserved
+    float4 c8;  // inverse homography row 0, transform enabled
+    float4 c9;  // inverse homography row 1, normalized edge feather
+    float4 c10; // inverse homography row 2, reserved
+    float4 c11; // forward homography row 0, reserved
+    float4 c12; // forward homography row 1, reserved
+    float4 c13; // forward homography row 2, reserved
+};
+
+float2 pane_to_screen(float2 paneUV) {
+    float3 p = float3(paneUV, 1.0);
+    float z = dot(c13.xyz, p);
+    z = (abs(z) < 0.00001) ? 0.00001 : z;
+    return float2(dot(c11.xyz, p), dot(c12.xyz, p)) / z;
+}
+
+float hash12(float2 p) {
+    float3 p3 = frac(float3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33 + c0.w * 0.001);
+    return frac((p3.x + p3.y) * p3.z);
+}
+
+float2 hash22(float2 p) {
+    float3 p3 = frac(float3(p.xyx) * float3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, p3.yzx + 33.33 + c0.w * 0.001);
+    return frac((p3.xx + p3.yz) * p3.zy);
+}
+
+float hash1(float n) {
+    return frac(sin(n * 12.9898 + c0.w * 78.233) * 43758.5453);
+}
+
+float runner_path(float y, float key, float width, float randomness) {
+    float a = sin(y * 0.018 + key * 1.71);
+    float b = sin(y * 0.047 - key * 2.13);
+    float c = sin(y * 0.0065 + key * 0.37);
+    return (a * 0.46 + b * 0.19 + c * 0.35) * width * 0.72 * randomness;
+}
+
+float runner_width_noise(float y, float key) {
+    return 1.0
+        + 0.24 * sin(y * 0.053 + key)
+        + 0.11 * sin(y * 0.137 - key * 2.0);
+}
+
+float retained_trail(float age, float holdTime, float recoveryTime) {
+    return 1.0 - smoothstep(holdTime, holdTime + max(recoveryTime, 0.01), age);
+}
+
+float4 drop_field(float2 px, float cellSize, float radiusScale, float density, float rate, float layerSeed) {
+    float2 cell = floor(px / cellSize);
+    float bestMask = 0.0;
+    float bestRim = 0.0;
+    float2 bestNormal = float2(0.0, 0.0);
+
+    [unroll] for (int oy = -1; oy <= 1; ++oy) {
+        [unroll] for (int ox = -1; ox <= 1; ++ox) {
+            float2 g = cell + float2((float)ox, (float)oy);
+            float enabled = step(hash12(g + layerSeed), density)
+                * step(0.0001, density);
+
+            float rawLife = c0.z * rate * lerp(0.72, 1.33, hash12(g + layerSeed + 19.0))
+                + hash12(g + layerSeed + 7.0);
+            float epoch = floor(rawLife);
+            float life = frac(rawLife);
+            float2 key = g + layerSeed + epoch * float2(37.17, 91.73);
+            float2 jitter = hash22(key + 2.0);
+
+            float sizeRnd = hash12(key + 11.0);
+            sizeRnd *= sizeRnd;
+            float radius = max(1.25, radiusScale * lerp(0.22, 1.72, sizeRnd));
+            float2 center = (g + 0.12 + jitter * 0.76) * cellSize;
+
+            float shape = (hash12(key + 23.0) - 0.5) * clamp(c4.x / 125.0, 0.0, 1.6);
+            float2 aspect = float2(1.0 + shape * 0.32, 1.0 - shape * 0.16);
+            float2 q = (px - center) / max(radius * aspect, 0.5);
+
+            // Slightly bottom-heavy bead, as seen in both references.
+            float d0 = length(q);
+            float2 lower = float2(q.x / 0.88, (q.y - 0.18) / 1.08);
+            float d = min(d0, length(lower));
+            float aa = 1.35 / max(radius, 1.5);
+            float visibility = smoothstep(0.0, 0.055, life)
+                * (1.0 - smoothstep(0.88, 1.0, life));
+            float m = (1.0 - smoothstep(1.0 - aa, 1.0 + aa, d))
+                * visibility * enabled;
+            float rim = smoothstep(0.68, 0.96, d)
+                * (1.0 - smoothstep(0.98, 1.0 + aa, d)) * m;
+
+            if (m > bestMask) {
+                bestMask = m;
+                bestRim = rim;
+                bestNormal = normalize(float2(q.x / aspect.x, q.y / aspect.y) + 0.0001);
+            }
+        }
+    }
+    return float4(bestMask, bestRim, bestNormal.x, bestNormal.y);
+}
+
+float4 rain_on_pane(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float2 canvas = max(c0.xy, 1.0);
+    float2 screenPx = uv * canvas;
+    float3 screenPoint = float3(screenPx, 1.0);
+    float paneZ = dot(c10.xyz, screenPoint);
+    paneZ = (abs(paneZ) < 0.00001) ? 0.00001 : paneZ;
+    float2 transformedUV = float2(
+        dot(c8.xyz, screenPoint),
+        dot(c9.xyz, screenPoint)
+    ) / paneZ;
+    float transformAmount = step(0.5, c8.w);
+    float2 paneUV = lerp(uv, transformedUV, transformAmount);
+    float edgeDistance = min(
+        min(paneUV.x, paneUV.y),
+        min(1.0 - paneUV.x, 1.0 - paneUV.y)
+    );
+    float hardPane = step(0.0, edgeDistance);
+    float softPane = smoothstep(0.0, max(c9.w, 0.00001), edgeDistance);
+    float paneMask = lerp(
+        1.0,
+        lerp(hardPane, softPane, step(0.00001, c9.w)),
+        transformAmount
+    );
+    float2 px = paneUV * canvas;
+    float natural = clamp(c4.x / 125.0, 0.0, 1.6);
+    float density = (c1.x <= 165.0)
+        ? c1.x / 220.0
+        : ((c1.x <= 300.0)
+            ? lerp(0.75, 1.0, (c1.x - 165.0) / 135.0)
+            : lerp(1.0, 1.25, (c1.x - 300.0) / 200.0));
+
+    // Dense mist beads and a second, much sparser attached-drop layer.
+    float microCell = lerp(38.0, 13.0, density);
+    float microRadius = c1.y * 0.026;
+    float attachedCell = microCell * 3.35;
+    float attachedRadius = c1.y * 0.105;
+    float dropRate = c1.z * 0.000203;
+
+    float4 micro = drop_field(px, microCell, microRadius, density * 0.92, dropRate * 0.42, 13.0);
+    float4 attached = drop_field(px, attachedCell, attachedRadius, density * 0.70, dropRate, 417.0);
+    float useAttached = step(micro.x, attached.x);
+    float dropMask = max(micro.x, attached.x);
+    float dropRim = lerp(micro.y, attached.y, useAttached);
+    float2 dropNormal = normalize(lerp(micro.zw, attached.zw, useAttached) + 0.0001);
+
+    float runnerMask = 0.0;
+    float runnerEdge = 0.0;
+    float vaporClear = 0.0;
+    float dropClear = 0.0;
+    float2 runnerNormal = float2(0.0, 0.0);
+    float runnerProbability = (c2.x <= 42.0)
+        ? c2.x / 70.0
+        : lerp(0.60, 1.0, (c2.x - 42.0) / 58.0);
+    float runnerMotion = step(0.001, c2.w);
+
+    // Keep the large nested loops rolled to reduce shader compilation work.
+    [loop] for (int i = 0; i < 14; ++i) {
+        float id = 1000.0 + (float)i;
+        float baseSpeed = lerp(0.58, 1.55, hash1(id + 8.0));
+        float nominalTravel = canvas.y + c2.y + 500.0;
+        float rawPhase = hash1(id + 4.0)
+            + c0.z * (45.0 + c2.w * 3.1) * baseSpeed
+                * runnerMotion / max(nominalTravel, 1.0);
+        float epoch = floor(rawPhase);
+        float phase = frac(rawPhase);
+        float key = id + epoch * 173.317;
+        float enabled = step(hash1(key + 90.0), runnerProbability)
+            * step(0.0001, runnerProbability) * runnerMotion;
+
+        // Wide, deliberately asymmetric length distribution: occasional
+        // very short tears and occasional near-full-height water channels.
+        float lengthRnd = hash1(key + 2.0);
+        lengthRnd = lengthRnd * lengthRnd;
+        float lengthValue = max(30.0, c2.y * lerp(0.12, 2.65, lengthRnd));
+        float halfLen = lengthValue * 0.5;
+        float widthRnd = lerp(0.45, 1.90, hash1(key + 5.0));
+        float baseWidth = max(2.0, c2.z * widthRnd);
+        float x = lerp(-0.08, 1.08, hash1(key + 3.0)) * canvas.x;
+        float travel = canvas.y + lengthValue + 500.0;
+        float centerY = phase * travel - halfLen - 250.0;
+
+        // One fixed irregular path per fall. Time only advances the head;
+        // it never swings the complete stream from side to side.
+        float pathOffset = runner_path(px.y, key, baseWidth, natural);
+
+        float localY = px.y - centerY;
+        float clampedY = clamp(localY, -halfLen, halfLen);
+        float along = saturate((clampedY + halfLen) / max(lengthValue, 1.0));
+        float taper = lerp(0.16, 1.0, smoothstep(0.0, 0.80, along));
+        float widthNoise = runner_width_noise(clampedY, key);
+        float localWidth = max(1.5, baseWidth * taper * widthNoise);
+        float dx = (px.x - x - pathOffset) / localWidth;
+        float dy = (localY - clampedY) / max(baseWidth, 1.0);
+        float dist = length(float2(dx, dy));
+        float aa = 1.4 / max(localWidth, 2.0);
+        float m = (1.0 - smoothstep(1.0 - aa, 1.0 + aa, dist)) * enabled;
+        float edge = smoothstep(0.54, 0.96, abs(dx)) * m;
+
+        if (m > runnerMask) {
+            runnerMask = m;
+            runnerEdge = edge;
+            runnerNormal = normalize(float2(dx, dy * 0.12) + 0.0001);
+        }
+
+        // Clearing follows the descending leading edge. The cleared interval
+        // always begins at the pane's top edge and grows only downward, so a
+        // long runner cannot make the mask expand upward from the screen floor.
+        float headY = centerY + halfLen;
+        float clearScale = c5.z / 100.0;
+        float capture = saturate(c6.y / 100.0);
+        // Trail width is independent of the visible stream's end taper.
+        // This is the same formula used by reconstructed history, so the
+        // lane cannot widen abruptly when the cycle changes generations.
+        float trailWidth = max(
+            1.5,
+            baseWidth * runner_width_noise(px.y, key)
+        );
+        float vaporWidth = trailWidth * clearScale;
+        float dropWidth = vaporWidth * (1.0 + capture * 0.35);
+        float feather = 3.0 + trailWidth * capture;
+        float laneDistance = abs(px.x - x - pathOffset);
+        float vaporLane = 1.0 - smoothstep(vaporWidth, vaporWidth + feather, laneDistance);
+        float dropLane = 1.0 - smoothstep(dropWidth, dropWidth + feather, laneDistance);
+        float progressFeather = max(8.0, trailWidth * 1.6);
+        float clearUpperY = 0.0;
+        float afterUpper = smoothstep(
+            clearUpperY - progressFeather,
+            clearUpperY + progressFeather,
+            px.y
+        );
+        float behindHead = 1.0 - smoothstep(
+            headY - progressFeather,
+            headY + progressFeather,
+            px.y
+        );
+        float passed = afterUpper * behindHead;
+        vaporClear = max(vaporClear, vaporLane * passed * enabled * saturate(c5.w / 100.0));
+        dropClear = max(dropClear, dropLane * passed * enabled * saturate(c6.x / 100.0));
+
+        // Reconstruct the previous twelve completed paths analytically. This
+        // creates persistent, scrub-safe history without a temporal buffer.
+        float cycleDuration = nominalTravel
+            / max((45.0 + c2.w * 3.1) * baseSpeed, 0.01);
+        [loop] for (int history = 1; history <= 12; ++history) {
+            float historyKey = id + (epoch - (float)history) * 173.317;
+            float historyEnabled = step(hash1(historyKey + 90.0), runnerProbability)
+                * step(0.0001, runnerProbability) * runnerMotion;
+            float age = (phase + (float)history - 1.0) * cycleDuration;
+            // Fade the oldest reconstructed generation to zero before it
+            // leaves the fixed history window, preventing a hard deletion.
+            float historyWindow = 1.0 - smoothstep(
+                cycleDuration * 11.0,
+                cycleDuration * 12.0,
+                age
+            );
+            float vaporMemory = retained_trail(age, c6.z, c6.w) * historyWindow;
+            float dropMemory = retained_trail(age, c6.z, c7.x) * historyWindow;
+
+            float historyWidthRnd = lerp(0.45, 1.90, hash1(historyKey + 5.0));
+            float historyWidth = max(2.0, c2.z * historyWidthRnd);
+            float historyX = lerp(-0.08, 1.08, hash1(historyKey + 3.0)) * canvas.x;
+            float historyPath = runner_path(px.y, historyKey, historyWidth, natural);
+            float historyNoise = runner_width_noise(px.y, historyKey);
+            float historyTrailWidth = max(1.5, historyWidth * historyNoise);
+            float historyVaporWidth = historyTrailWidth * clearScale;
+            float historyDropWidth = historyVaporWidth * (1.0 + capture * 0.35);
+            float historyFeather = 3.0 + historyTrailWidth * capture;
+            float historyDistance = abs(px.x - historyX - historyPath);
+            float historyVaporLane = 1.0 - smoothstep(
+                historyVaporWidth,
+                historyVaporWidth + historyFeather,
+                historyDistance
+            );
+            float historyDropLane = 1.0 - smoothstep(
+                historyDropWidth,
+                historyDropWidth + historyFeather,
+                historyDistance
+            );
+
+            vaporClear = max(
+                vaporClear,
+                historyVaporLane * historyEnabled
+                    * vaporMemory * saturate(c5.w / 100.0)
+            );
+            dropClear = max(
+                dropClear,
+                historyDropLane * historyEnabled
+                    * dropMemory * saturate(c6.x / 100.0)
+            );
+        }
+    }
+
+    float dropRemain = 1.0 - saturate(dropClear);
+    dropMask *= dropRemain * paneMask;
+    dropRim *= dropRemain * paneMask;
+    runnerMask *= paneMask;
+    runnerEdge *= paneMask;
+
+    float opacityValue = saturate(c4.y / 100.0);
+    float wet = clamp(c3.y / 100.0, 0.0, 2.0);
+    float dropStrength = c1.w * 0.095 * wet;
+    float runnerStrength = c3.x * 0.22 * wet;
+    float2 offsetPx = dropNormal * dropMask * dropStrength
+        + runnerNormal * runnerMask * runnerStrength;
+
+    // Very broad, low-amplitude wet-film distortion prevents untouched areas
+    // from looking digitally perfect while remaining much weaker than runners.
+    float film = sin(px.y * 0.009 + sin(px.x * 0.006 + c0.w) * 2.0);
+    offsetPx.x += film * wet * 1.15 * (1.0 - runnerMask) * dropMask;
+
+    float2 displacedPaneUV = saturate((px + offsetPx) / canvas);
+    float2 displacedScreenPx = lerp(
+        screenPx + offsetPx,
+        pane_to_screen(displacedPaneUV),
+        transformAmount
+    );
+    float2 displacedUV = saturate(displacedScreenPx / canvas);
+    float4 base = frame_tex.Sample(smp, uv);
+
+    // Frosted background: a wide nine-tap filter. Water masks later replace
+    // this softened glass with the clear refracted image.
+    float frostRadius = max(c4.z, 0.0) * max(1.0, c4.w / 100.0);
+    float frostMix = saturate(c4.w / 100.0) * step(0.01, frostRadius) * paneMask;
+    float4 dryGlass = base;
+    [branch] if (frostMix > 0.0001) {
+        float2 frostX = float2(frostRadius / canvas.x, 0.0);
+        float2 frostY = float2(0.0, frostRadius / canvas.y);
+        float4 frostA = frame_tex.Sample(smp, saturate(uv + frostX));
+        float4 frostB = frame_tex.Sample(smp, saturate(uv - frostX));
+        float4 frostC = frame_tex.Sample(smp, saturate(uv + frostY));
+        float4 frostD = frame_tex.Sample(smp, saturate(uv - frostY));
+        float4 frostE = frame_tex.Sample(smp, saturate(uv + frostX + frostY));
+        float4 frostF = frame_tex.Sample(smp, saturate(uv + frostX - frostY));
+        float4 frostG = frame_tex.Sample(smp, saturate(uv - frostX + frostY));
+        float4 frostH = frame_tex.Sample(smp, saturate(uv - frostX - frostY));
+        float4 frosted = base * 0.12
+            + (frostA + frostB + frostC + frostD) * 0.12
+            + (frostE + frostF + frostG + frostH) * 0.10;
+        dryGlass = lerp(base, frosted, frostMix);
+    }
+
+    // Vapor was already blurred in two separable 13-tap passes by Lua.
+    float vaporMix = saturate(c5.y / 100.0)
+        * step(0.01, c5.x)
+        * (1.0 - saturate(vaporClear)) * paneMask;
+    [branch] if (vaporMix > 0.0001) {
+        dryGlass = lerp(dryGlass, vapor_tex.Sample(smp, uv), vaporMix);
+    }
+    float4 refracted = frame_tex.Sample(smp, displacedUV);
+
+    float waterCoverage = saturate(max(dropMask, runnerMask));
+    float blurPx = c3.w * 0.12 * waterCoverage;
+    float4 water = refracted;
+    [branch] if (blurPx > 0.0001) {
+        float2 blurX = float2(blurPx / canvas.x, 0.0);
+        float2 blurY = float2(0.0, blurPx / canvas.y);
+        float4 softA = frame_tex.Sample(smp, saturate(displacedUV + blurX));
+        float4 softB = frame_tex.Sample(smp, saturate(displacedUV - blurX));
+        float4 softC = frame_tex.Sample(smp, saturate(displacedUV + blurY));
+        float4 softD = frame_tex.Sample(smp, saturate(displacedUV - blurY));
+        water = refracted * 0.44 + (softA + softB + softC + softD) * 0.14;
+    }
+
+    float effectVisibility = saturate(wet);
+    float waterMask = saturate(waterCoverage * opacityValue * effectVisibility);
+    // Dry glass is frosted; droplets and runners become clear lens windows.
+    float3 rgb = lerp(dryGlass.rgb, water.rgb, waterMask);
+
+    // Real reference droplets are mostly dark refractive rims with only a
+    // restrained highlight, especially against blurred night backgrounds.
+    float depthValue = c3.z / 100.0;
+    rgb *= 1.0 - dropRim * depthValue * opacityValue * effectVisibility * 0.24;
+    rgb *= 1.0 - runnerEdge * depthValue * opacityValue * effectVisibility * 0.12;
+    float lowerLight = dropMask * saturate(dropNormal.y) * 0.035 * depthValue;
+    rgb += lowerLight * opacityValue * effectVisibility;
+
+    return float4(saturate(rgb), base.a);
+}
+]]
+
+local w = math.max(math.floor(obj.screen_w or 0), 1)
+local h = math.max(math.floor(obj.screen_h or 0), 1)
+if w <= 1 or h <= 1 then return end
+
+if transform_enabled and obj.getoption("gui") then
+    obj.setanchor("tlx,tly", 0, "screen", "small", "offset", -w * 0.5, -h * 0.5)
+    obj.setanchor("trx,try_", 0, "screen", "small", "offset", w * 0.5, -h * 0.5)
+    obj.setanchor("brx,bry", 0, "screen", "small", "offset", w * 0.5, h * 0.5)
+    obj.setanchor("blx,bly", 0, "screen", "small", "offset", -w * 0.5, h * 0.5)
+end
+
+if not obj.copybuffer("object", "framebuffer") then return end
+
+if transform_enabled and light_preview then
+    obj.setoption("draw_state", false)
+    return
+end
+
+local function quad_homography(points)
+    local x0, y0 = points[1] + w * 0.5, points[2] + h * 0.5
+    local x1, y1 = points[3] + w * 0.5, points[4] + h * 0.5
+    local x2, y2 = points[5] + w * 0.5, points[6] + h * 0.5
+    local x3, y3 = points[7] + w * 0.5, points[8] + h * 0.5
+    local dx1, dx2 = x1 - x2, x3 - x2
+    local dy1, dy2 = y1 - y2, y3 - y2
+    local dx3 = x0 - x1 + x2 - x3
+    local dy3 = y0 - y1 + y2 - y3
+    local denominator = dx1 * dy2 - dx2 * dy1
+    if math.abs(denominator) < 0.000001 then return nil end
+    local g = (dx3 * dy2 - dx2 * dy3) / denominator
+    local k = (dx1 * dy3 - dx3 * dy1) / denominator
+    return {
+        x1 - x0 + g * x1, x3 - x0 + k * x3, x0,
+        y1 - y0 + g * y1, y3 - y0 + k * y3, y0,
+        g, k, 1
+    }
+end
+
+local function inverse_matrix3(m)
+    local a, b, c = m[1], m[2], m[3]
+    local d, e, f = m[4], m[5], m[6]
+    local g, k, i = m[7], m[8], m[9]
+    local determinant = a * (e * i - f * k)
+        - b * (d * i - f * g)
+        + c * (d * k - e * g)
+    if math.abs(determinant) < 0.000001 then return nil end
+    local r = 1 / determinant
+    return {
+        (e * i - f * k) * r, (c * k - b * i) * r, (b * f - c * e) * r,
+        (f * g - d * i) * r, (a * i - c * g) * r, (c * d - a * f) * r,
+        (d * k - e * g) * r, (b * g - a * k) * r, (a * e - b * d) * r
+    }
+end
+
+local full_frame = {
+    -w * 0.5, -h * 0.5,
+    w * 0.5, -h * 0.5,
+    w * 0.5, h * 0.5,
+    -w * 0.5, h * 0.5
+}
+local anchor_points = {
+    -w * 0.5 + tlx, -h * 0.5 + tly,
+    w * 0.5 + trx, -h * 0.5 + try_,
+    w * 0.5 + brx, h * 0.5 + bry,
+    -w * 0.5 + blx, h * 0.5 + bly
+}
+local function valid_quad(points)
+    local sign = 0
+    for index = 0, 3 do
+        local next_index = (index + 1) % 4
+        local after_index = (index + 2) % 4
+        local ax = points[next_index * 2 + 1] - points[index * 2 + 1]
+        local ay = points[next_index * 2 + 2] - points[index * 2 + 2]
+        local bx = points[after_index * 2 + 1] - points[next_index * 2 + 1]
+        local by = points[after_index * 2 + 2] - points[next_index * 2 + 2]
+        local cross = ax * by - ay * bx
+        if math.abs(cross) < 1 then return false end
+        local current_sign = cross > 0 and 1 or -1
+        if sign ~= 0 and current_sign ~= sign then return false end
+        sign = current_sign
+    end
+    return true
+end
+
+local quad_valid = not transform_enabled or valid_quad(anchor_points)
+local forward = transform_enabled and quad_valid and quad_homography(anchor_points)
+    or quad_homography(full_frame)
+local inverse = forward and inverse_matrix3(forward) or nil
+local transform_active = transform_enabled and quad_valid
+    and forward ~= nil and inverse ~= nil
+if transform_enabled and not transform_active then
+    obj.setoption("draw_state", false)
+    return
+end
+if not inverse then
+    forward = quad_homography(full_frame)
+    inverse = inverse_matrix3(forward)
+end
+local feather_normalized = transform_feather / math.max(math.min(w, h), 1)
+
+-- Keep an untouched full-frame source for rain refraction.
+obj.copybuffer("cache:rain_on_pane_original", "object")
+
+-- True separable Gaussian: horizontal 13 taps, then vertical 13 taps.
+-- When either vapor control is zero, no blur pass is executed.
+local vapor_enabled = vapor_blur > 0 and vapor_strength > 0
+local vapor_radius = vapor_blur * math.max(vapor_strength / 100, 1)
+local vapor_source = "cache:rain_on_pane_original"
+if vapor_enabled then
+    obj.pixelshader(
+        "rain_on_pane_gaussian", "object", {"object"},
+        {w, h, vapor_radius, 0}, "copy", "clamp"
+    )
+    obj.pixelshader(
+        "rain_on_pane_gaussian", "object", {"object"},
+        {w, h, vapor_radius, 1}, "copy", "clamp"
+    )
+    obj.copybuffer("cache:rain_on_pane_fog", "object")
+    vapor_source = "cache:rain_on_pane_fog"
+    obj.copybuffer("object", "cache:rain_on_pane_original")
+end
+
+obj.pixelshader(
+    "rain_on_pane", "object", {"object", vapor_source},
+    {
+        w, h, obj.time or 0, seed,
+        drop_density, drop_size, drop_motion, drop_refraction,
+        runner_count, runner_length, runner_width, runner_speed,
+        runner_refraction, wetness, depth, softness,
+        randomness, opacity, frost_blur, frost_strength,
+        vapor_radius, vapor_strength,
+        clear_width, vapor_removal, drop_removal, edge_capture,
+        trail_hold, vapor_recovery, drop_regen, 0, 0, 0,
+        inverse[1], inverse[2], inverse[3], transform_active and 1 or 0,
+        inverse[4], inverse[5], inverse[6], feather_normalized,
+        inverse[7], inverse[8], inverse[9], 0,
+        forward[1], forward[2], forward[3], 0,
+        forward[4], forward[5], forward[6], 0,
+        forward[7], forward[8], forward[9], 0
+    },
+    "copy", "clamp"
+)
+obj.setoption("draw_state", false)

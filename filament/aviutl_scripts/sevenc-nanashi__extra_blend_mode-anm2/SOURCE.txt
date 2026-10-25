@@ -1,0 +1,6 @@
+extra_blend_mode.anm2 by Nanashi.
+licence: MIT
+from: https://github.com/sevenc-nanashi/extra_blend_mode.anm2/releases/download/0.1.0/sevenc-nanashi.extra_blend_mode-anm2-v0.1.0.au2pkg.zip (tag 0.1.0, commit 97f3683dd709)
+page: https://github.com/sevenc-nanashi/extra_blend_mode.anm2
+licence/README from: https://github.com/sevenc-nanashi/extra_blend_mode.anm2 at 0.1.0
+Put here unchanged for Motolii (filament/aviutl_scripts).

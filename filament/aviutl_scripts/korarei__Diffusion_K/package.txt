@@ -1,0 +1,18 @@
+[ Diffusion_K ]
+
+拡散系エフェクト
+
+Version: 1.2.3
+License: MIT
+Author: Korarei
+Website: https://github.com/korarei/AviUtl2_Diffusion_K_Script
+Report Issue: https://github.com/korarei/AviUtl2_Diffusion_K_Script/issues
+
+以下の機能が追加される
+- 光効果 -> Orton: オートン効果
+- ぼかし -> GaussianBlur: ガウシアンブラー
+- ぼかし -> ChannelBlur: チャンネル別ガウシアンブラー
+- 加工 -> Dissolve: ディザ合成
+- 加工 -> Scatter: ピクセル拡散
+- 加工 -> Noise: ノイズ
+- 加工 -> Noise(HSLA): HSLAノイズ

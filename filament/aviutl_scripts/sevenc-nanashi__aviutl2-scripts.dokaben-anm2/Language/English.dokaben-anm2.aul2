@@ -1,0 +1,15 @@
+[Language]
+Information=English Language for sevenc-nanashi/aviutl2-scripts / https://github.com/sevenc-nanashi/aviutl2-scripts
+[ドカベン]
+ドカベン=Dokaben
+再生速度=Playback speed
+固定=Fixed
+自動で倒れる=Auto fall
+直立時間=Upright duration
+Yオフセット=Y offset
+コマ落ち=Frame dropping
+PI=PI
+
+[Tips.ドカベン]
+effect.name=A Dokaben-style rising and falling animation.
+PI=- `speed`: Playback speed (%, 0 freezes the animation)\n- `auto_fall`: Auto fall (true / false)\n- `upright`: Upright duration (non-negative frame count, affected by playback speed)\n- `y_offset`: Y offset\n- `drop_frame`: Frame dropping (true / false)\n- `divisions_override`: Horizontal subdivisions (integer, at least 1; defaults to 1–32 based on width)\n

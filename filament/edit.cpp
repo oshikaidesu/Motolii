@@ -16,7 +16,7 @@ static const char* const calls =
     "  add film <file> | add picture <an After Effects file, a .jpg, a .png> | add text <font.ttf> | add solid <file.glb>|ring|gem|cube   (say N fill glass: it is glass)\n"
     "  pen <thing, 0: new> <x> <y> [<handle x> <handle y>] (points of the picture) | points <thing> | handles <thing> | hold <thing> | carry <by> <a> <b> | let_go 1|0 | remove <thing> | set <thing> <name> <number> | say <thing> <name> <word> | key <thing> <name> <at> <number> | unkey <thing> <name> <at>\n"
     "  way <thing> <name> <at> <a way, and its numbers> | ways | define <a way's name> <its expression> | value <thing> <name> <at>\n"
-    "  make <recipe> | recipes | effect <thing> <name> | effects | together on|off | undo | redo | list | at <seconds> | still <file.png> | write <file.mp4> | time [pictures]\n";
+    "  make <recipe> | recipes | effect <thing> <name> | effects | shelf | together on|off | undo | redo | list | at <seconds> | still <file.png> | write <file.mp4> | time [pictures]\n";
 
 int main(int argc, char** argv) {
     if (argc < 2) return std::printf("FAIL edit <document>\n"), 1;
@@ -61,6 +61,7 @@ int main(int argc, char** argv) {
         else if (call == "make" && w.size() >= 2) ok = motolii_make(m, rest(1).c_str()) != 0;
         else if (call == "effect" && w.size() >= 3) { const int n = thing(); if (numbers) ok = motolii_effect(m, n, rest(2).c_str(), motolii_now(m)); }   // (an effect's name may have spaces)
         else if (call == "effects" && w.size() == 1) { std::printf("%s\n", motolii_effect_names(m)); continue; }
+        else if (call == "shelf" && w.size() == 1) { std::printf("%s\n", motolii_effects(m)); continue; }   // (the effect files on the shelf, AviUtl2's scripts too)
         else if (call == "recipes" && w.size() == 1) { std::printf("  %s\n", motolii_recipes(m)); continue; }
         else if (call == "together" && w.size() == 2) ok = motolii_together(m, w[1] == "on" ? 1 : 0) || w[1] == "on";   // (the calls between are one step, the stage matched once at the end)
         else if (call == "undo" && w.size() == 1) ok = motolii_undo(m);

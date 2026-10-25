@@ -1,0 +1,306 @@
+--information:ベクトルブラー_H v1.10 by HexBrowns
+--label:HexScript
+--filter
+
+--group:ぼかし
+--track@blur_len:長さ,0,500,20,0.1
+--track@blur_angle:角度,-360,360,0,0.01
+--select@blur_mode:種類=0,平均=0,最大値=1,最小値=2
+--select@len_mode:長さの決め方=0,一定=0,勾配に比例=1
+--select@blur_weight:重み=0,一様=0,三角=1,ガウス=2,片側に減衰=3
+--select@tail_dir:尾の向き=0,前=0,後=1
+--hide@tail_dir:blur_weight~=3
+--group
+
+--group:ベクトルマップ
+--select@map_mode:マップ=0,自分=0,レイヤー=1
+--track@map_layer:マップのレイヤー,1,1000,1,1
+--hide@map_layer:map_mode==0
+--select@map_prop:プロパティ=0,輝度=0,赤=1,緑=2,青=3,アルファ=4
+--track@map_soft:マップのぼかし,0,100,2,0.1
+--track@ridge:リッジの滑らかさ,0,100,4,0.1
+--group
+
+--[[
+After Effects の「ベクトルブラー」に近い効果。ベクトルマップ（自分か別のレイヤー）の明るさの勾配から
+画素ごとの向きを求め、その向きの流れに沿って画像を引き延ばす。
+
+1. マップのプロパティ（輝度など）を値にする。別のレイヤーはオブジェクトの大きさに引き伸ばして使う
+2. 値を「マップのぼかし」でガウスぼかしする
+3. 勾配（Sobel）から構造テンソル (gx², gy², gx·gy) を作り、「リッジの滑らかさ」でガウスぼかしする。
+   テンソルは向きの正負を持たないので、勾配が反対向きの所（尾根・谷）でも向きが打ち消し合わない
+4. テンソルの第 1 固有ベクトル（勾配の向き）に直交する向き＝輪郭に沿う向きを 0 度とし、「角度」だけ回す。
+   画素から両側へ、その向きの場をたどって（流線に沿って）長さの分だけ標本を取り、平均・最大値・最小値をとる
+
+v1.10: 線に沿って読んだ標本の「重み」を選べる。画素からの道のりを u、読む範囲を R とする（両側なら長さの半分、片側なら長さ）。
+  一様        どの標本も 1（v1.00 と同じ。既定）
+  三角        1 - u / (R + 1 歩)。筆跡の中央が濃い柔らかい筋になる
+  ガウス      exp(-2 (u / R)²)（σ = R / 2）。三角より裾が滑らか
+  片側に減衰  片側だけを長さいっぱいまで読み、重みは三角と同じく直線で減る。尾が片側にだけ伸びる（彗星の尾・スピード線）
+  平均は重み付きの平均。最大値・最小値は、各標本を重みの分だけ元の画素の色へ寄せた色 lerp(元, 標本, 重み) で比べる
+  （一様なら v1.00 と同じ。三角・ガウス・片側は、遠い標本ほど元の色に近づくので、太りや尾が先細りになる）。
+  尾の向き（片側に減衰のときだけ）: マップの勾配の符号で向きを揃える。角度 90 のとき、前はマップの明るい側へ、後は暗い側へ尾が伸びる
+  （角度 0 は、そこから 90 度回した輪郭に沿う向き。勾配の無い所は、角度 0 で前が右）。
+  勾配の符号はテンソルのバッファのアルファに入れた値（マップの値。リッジの滑らかさで一緒にぼける）の差で決める。
+  尾根の真上など、符号付きの勾配が打ち消し合う所では向きが定まらない（固有ベクトルの向きのまま）。
+
+オブジェクトの大きさと変数は変えない（フィルタオブジェクトでもそのまま使える）。
+中間のバッファは cache:vbh/ の 2 枚（オブジェクトと同じ大きさ。マップがレイヤーなら読む間だけ元の画像の退避 1 枚）。
+v1.01: 4K・横長の巨大素材で cache と tempbuffer の枠（1600 万ドット）を超えないように、元の画像を退避しない（マップがレイヤーのときだけ読む間だけ退避）。
+2 枚が枠に収まらなければマップの解像度を下げる（値に倍率を掛けて、1px あたりの勾配を元の解像度と同じにする）。
+AI/scripts/issues/20261013_cache_budget_4k_wide_materials.md
+
+机上検証: AI/scripts/ベクトルブラー_H/verify_vector_blur.py
+]]
+
+--[[pixelshader@ps_vbh_value:
+cbuffer P : register(b0) {
+    float2 size;    // 0-1 出力の大きさ（px）
+    float prop;     // 2   0 輝度 / 1 赤 / 2 緑 / 3 青 / 4 アルファ
+    float gain;     // 3   値に掛ける倍率（作業の解像度の倍率。v1.01）
+};
+Texture2D map_tex : register(t0);
+SamplerState smp : register(s0);
+
+float4 ps_vbh_value(float4 pos : SV_Position) : SV_Target {
+    // マップは大きさが違っても出力の大きさに引き伸ばして読む（乗算済みのまま）
+    float4 m = map_tex.SampleLevel(smp, pos.xy / size, 0);
+    float v = dot(m.rgb, float3(0.2126, 0.7152, 0.0722));
+    if (prop > 3.5) v = m.a;
+    else if (prop > 2.5) v = m.b;
+    else if (prop > 1.5) v = m.g;
+    else if (prop > 0.5) v = m.r;
+    v *= gain;
+    return float4(v, v, v, 1.0);
+}
+]]
+
+--[[pixelshader@ps_vbh_gauss:
+cbuffer P : register(b0) {
+    float2 size;    // 0-1 大きさ（px）
+    float2 dir;     // 2-3 (1, 0) で横、(0, 1) で縦
+    float sigma;    // 4   標準偏差（px）
+};
+Texture2D src : register(t0);
+SamplerState smp : register(s0);
+
+float4 ps_vbh_gauss(float4 pos : SV_Position) : SV_Target {
+    // 半径 3σ。タップが 48 を超えるときは間隔を広げてバイリニアで拾う
+    float radius = ceil(sigma * 3.0);
+    float stride = max(1.0, ceil(radius / 48.0));
+    float n = ceil(radius / stride);
+    float4 acc = float4(0.0, 0.0, 0.0, 0.0);
+    float wsum = 0.0;
+    [loop] for (float i = -n; i <= n; i += 1.0) {
+        float x = i * stride;
+        float w = exp(-0.5 * x * x / (sigma * sigma));
+        acc += w * src.SampleLevel(smp, (pos.xy + dir * x) / size, 0);
+        wsum += w;
+    }
+    return acc / wsum;
+}
+]]
+
+--[[pixelshader@ps_vbh_tensor:
+cbuffer P : register(b0) {
+    float2 size;    // 0-1 大きさ（px）
+};
+Texture2D val : register(t0);
+
+float4 ps_vbh_tensor(float4 pos : SV_Position) : SV_Target {
+    int2 p = int2(pos.xy);
+    int2 hi = int2(size) - 1;
+    // 端は端の画素で埋める（Load は範囲外が 0 になるので座標を詰める）
+    float tl = val.Load(int3(clamp(p + int2(-1, -1), 0, hi), 0)).r;
+    float tc = val.Load(int3(clamp(p + int2( 0, -1), 0, hi), 0)).r;
+    float tr = val.Load(int3(clamp(p + int2( 1, -1), 0, hi), 0)).r;
+    float ml = val.Load(int3(clamp(p + int2(-1,  0), 0, hi), 0)).r;
+    float mr = val.Load(int3(clamp(p + int2( 1,  0), 0, hi), 0)).r;
+    float bl = val.Load(int3(clamp(p + int2(-1,  1), 0, hi), 0)).r;
+    float bc = val.Load(int3(clamp(p + int2( 0,  1), 0, hi), 0)).r;
+    float br = val.Load(int3(clamp(p + int2( 1,  1), 0, hi), 0)).r;
+    // Sobel を 8 で割ると、1px あたりの変化量になる。16bit float の桁落ちを避けるため 4 倍してから二乗する
+    float gx = ((tr + 2.0 * mr + br) - (tl + 2.0 * ml + bl)) * 0.5;
+    float gy = ((bl + 2.0 * bc + br) - (tl + 2.0 * tc + tr)) * 0.5;
+    // アルファにはマップの値そのものを入れる（v1.10。片側に減衰で勾配の符号を決めるのに使う。テンソルの 3 つには触れない）
+    float mc = val.Load(int3(clamp(p, int2(0, 0), hi), 0)).r;
+    return float4(gx * gx, gy * gy, gx * gy, mc);
+}
+]]
+
+--[[pixelshader@ps_vbh_blur:
+cbuffer P : register(b0) {
+    float2 size;    // 0-1 大きさ（px）
+    float len;      // 2   長さ（px。両側の合計）
+    float ang;      // 3   角度（ラジアン）。0 で輪郭に沿う
+    float mode;     // 4   0 平均 / 1 最大値 / 2 最小値
+    float natural;  // 5   1 で長さを勾配に比例させる
+    float weight;   // 6   0 一様 / 1 三角 / 2 ガウス / 3 片側に減衰（v1.10）
+    float tail;     // 7   片側に減衰の尾の向き 0 前 / 1 後（v1.10）
+};
+Texture2D src : register(t0);
+Texture2D tensor : register(t1);
+SamplerState smp : register(s0);
+
+static const float GRAD_REF = 0.1;      // 勾配に比例: 1px あたり 0.1 変わる所で長さいっぱい
+static const float MAX_SAMPLES = 96.0;  // 標本の上限（両側の合計。片側に減衰でも同じ数）
+
+float4 ps_vbh_blur(float4 pos : SV_Position) : SV_Target {
+    float4 t0 = tensor.SampleLevel(smp, pos.xy / size, 0);
+    float jxx = t0.r;
+    float jyy = t0.g;
+    float jxy = t0.b;
+    float mag = sqrt(max(jxx + jyy, 0.0)) * 0.25;   // テンソルは 4 倍の勾配で作ってある
+    float l = len;
+    if (natural > 0.5) l *= saturate(mag / GRAD_REF);
+    float4 orig = src.SampleLevel(smp, pos.xy / size, 0);
+    if (l < 0.5) return orig;
+
+    // 両側なら長さの半分ずつ、片側に減衰なら片側だけを長さいっぱいまで読む
+    bool one_side = weight > 2.5;
+    int nside = one_side ? 1 : 2;
+    float reach = one_side ? l : l * 0.5;
+    float n = min(ceil(reach), MAX_SAMPLES / float(nside));
+    float step_len = reach / n;
+    float ca = cos(ang);
+    float sa = sin(ang);
+    float wr = reach + step_len;               // 三角・片側: 重みが 0 になる道のり（最後の標本も 0 より大きい）
+    float gk = 2.0 / max(reach * reach, 1e-6); // ガウス: σ = reach / 2 → exp(-u² / 2σ²) = exp(-gk u²)
+
+    // 片側に減衰: マップの値（テンソルのアルファ）の差で勾配の符号を取る。前は尾が +向き へ伸びる＝-向き へ読む
+    float2 gsig = float2(0.0, 0.0);
+    if (one_side) {
+        gsig.x = tensor.SampleLevel(smp, (pos.xy + float2(2.0, 0.0)) / size, 0).a
+               - tensor.SampleLevel(smp, (pos.xy - float2(2.0, 0.0)) / size, 0).a;
+        gsig.y = tensor.SampleLevel(smp, (pos.xy + float2(0.0, 2.0)) / size, 0).a
+               - tensor.SampleLevel(smp, (pos.xy - float2(0.0, 2.0)) / size, 0).a;
+    }
+    float read_sign = (tail > 0.5) ? 1.0 : -1.0;
+
+    float4 acc = orig;
+    float cnt = 1.0;
+    float4 best = orig;
+    float best_lum = dot(orig.rgb, float3(0.2126, 0.7152, 0.0722));
+
+    [loop] for (int side = 0; side < nside; side++) {
+        float2 p = pos.xy;
+        float2 prev = float2(0.0, 0.0);
+        [loop] for (float i = 0.0; i < n; i += 1.0) {
+            // 向きは前の一歩の向きで半歩先へ進んだ点で読む（読み出しは 1 歩 1 回のまま、曲がった輪郭で外へずれにくい）
+            float4 t = tensor.SampleLevel(smp, (p + prev * (step_len * 0.5)) / size, 0);
+            // 勾配の向き θ は (cos 2θ, sin 2θ) ∝ (Jxx - Jyy, 2Jxy)。半角の公式で三角関数を使わずに θ に戻す
+            // （θ の正負は向きを揃えるときに決めるので、sin θ は 0 以上にとる）
+            float2 dbl = float2(t.r - t.g, 2.0 * t.b);
+            float dl = length(dbl);
+            float2 cs2 = (dl > 1e-12) ? dbl / dl : float2(1.0, 0.0);
+            float ct = sqrt(saturate(0.5 + 0.5 * cs2.x));
+            float st = sqrt(saturate(0.5 - 0.5 * cs2.x));
+            if (cs2.y < 0.0) st = -st;
+            // 輪郭の向きは θ に 90 度足したもの (-sin θ, cos θ)。一様な所（勾配なし）は (1, 0)
+            float2 d = float2(-st, ct);
+            if (t.r + t.g < 1e-10) {
+                d = float2(1.0, 0.0);
+            } else if (one_side && i < 0.5) {
+                // 符号付きの勾配と同じ向きの固有ベクトル s(cos θ, sin θ) を -90 度回した向き = -s d。
+                // 角度 90 でちょうど勾配の向き（明るい側）になる
+                d = (dot(gsig, float2(ct, st)) < 0.0) ? d : -d;
+            }
+            d = float2(d.x * ca - d.y * sa, d.x * sa + d.y * ca);
+            // 向きは正負を持たないので、前の一歩と揃える。最初の一歩は side（片側に減衰なら尾の向き）で向きを決める
+            if (i < 0.5) {
+                if (one_side) d *= read_sign;
+                else if (side == 1) d = -d;
+            } else if (dot(d, prev) < 0.0) {
+                d = -d;
+            }
+            prev = d;
+            p += d * step_len;
+            float4 c = src.SampleLevel(smp, p / size, 0);
+            // 重み（v1.10）。一様は 1 のまま（v1.00 と同じ計算）
+            float u = (i + 1.0) * step_len;
+            float w = 1.0;
+            if (weight > 1.5 && weight < 2.5) w = exp(-gk * u * u);
+            else if (weight > 0.5) w = 1.0 - u / wr;
+            acc += c * w;
+            cnt += w;
+            // 最大値・最小値は、標本を重みの分だけ元の色へ寄せてから比べる（一様ならそのまま）
+            float4 cand = (weight > 0.5) ? lerp(orig, c, w) : c;
+            float lum = dot(cand.rgb, float3(0.2126, 0.7152, 0.0722));
+            if (mode > 1.5) {
+                if (lum < best_lum) { best = cand; best_lum = lum; }
+            } else if (mode > 0.5) {
+                if (lum > best_lum) { best = cand; best_lum = lum; }
+            }
+        }
+    }
+    return (mode > 0.5) ? best : acc / cnt;
+}
+]]
+
+local function num(v, d)
+  v = tonumber(v)
+  if v == nil or v ~= v then return d end
+  return v
+end
+
+local W, H = obj.w, obj.h
+local L = math.max(num(blur_len, 20), 0)
+if W <= 0 or H <= 0 or L <= 0 then return end
+
+local SRC, A, B = "cache:vbh/src", "cache:vbh/a", "cache:vbh/b"
+local layer = math.floor(num(map_layer, 1) + 0.5)
+local layer_mode = math.floor(num(map_mode, 0) + 0.5) == 1 and layer ~= obj.layer
+local prop = math.floor(num(map_prop, 0) + 0.5)
+
+-- 作業の解像度の倍率 s。A・B の 2 枚と、マップがレイヤーなら読む間の元の画像の退避（1 枚）と A が枠に収まるように決める
+local budget = require("EffectUtils_Budget")
+local s = budget.scale(0, 2 * W * H)
+if s and layer_mode then
+  local s2 = budget.scale(W * H, W * H)
+  s = s2 and math.min(s, s2) or nil
+end
+if not s then
+  budget.refuse("ベクトルブラー_H", W, H)
+  return
+end
+local aw, ah = math.max(1, math.ceil(W * s)), math.max(1, math.ceil(H * s))
+
+-- マップの値を A へ。別のレイヤーは読み込んだまま値にし、自分の画像と変数を戻す（読み込みで上書きされる）
+local made = false
+if layer_mode then
+  obj.copybuffer(SRC, "object")
+  local saved = {
+    obj.ox, obj.oy, obj.oz, obj.rx, obj.ry, obj.rz,
+    obj.cx, obj.cy, obj.cz, obj.sx, obj.sy, obj.sz, obj.alpha, obj.zoom, obj.aspect,
+  }
+  if obj.load("layer", layer, true) and obj.w > 0 and obj.h > 0 then
+    obj.clearbuffer(A, aw, ah)
+    obj.pixelshader("ps_vbh_value", A, {"object"}, {aw, ah, prop, s}, "copy", "clamp")
+    made = true
+  end
+  obj.copybuffer("object", SRC)
+  obj.clearbuffer(SRC, 1, 1)   -- 戻したら要らない（枠を空ける）
+  obj.ox, obj.oy, obj.oz, obj.rx, obj.ry, obj.rz,
+  obj.cx, obj.cy, obj.cz, obj.sx, obj.sy, obj.sz, obj.alpha, obj.zoom, obj.aspect = unpack(saved)
+end
+if not made then
+  obj.clearbuffer(A, aw, ah)
+  obj.pixelshader("ps_vbh_value", A, {"object"}, {aw, ah, prop, s}, "copy", "clamp")
+end
+obj.clearbuffer(B, aw, ah)
+local soft = math.max(num(map_soft, 2), 0) * s
+if soft > 0 then
+  obj.pixelshader("ps_vbh_gauss", B, {A}, {aw, ah, 1, 0, soft}, "copy", "clamp")
+  obj.pixelshader("ps_vbh_gauss", A, {B}, {aw, ah, 0, 1, soft}, "copy", "clamp")
+end
+obj.pixelshader("ps_vbh_tensor", B, {A}, {aw, ah}, "copy")
+local ridge_s = math.max(num(ridge, 4), 0) * s
+if ridge_s > 0 then
+  obj.pixelshader("ps_vbh_gauss", A, {B}, {aw, ah, 1, 0, ridge_s}, "copy", "clamp")
+  obj.pixelshader("ps_vbh_gauss", B, {A}, {aw, ah, 0, 1, ridge_s}, "copy", "clamp")
+end
+obj.pixelshader("ps_vbh_blur", "object", {"object", B}, {
+  W, H, L, math.rad(num(blur_angle, 0)),
+  math.floor(num(blur_mode, 0) + 0.5), math.floor(num(len_mode, 0) + 0.5),
+  math.floor(num(blur_weight, 0) + 0.5), math.floor(num(tail_dir, 0) + 0.5),
+}, "copy", "clamp")

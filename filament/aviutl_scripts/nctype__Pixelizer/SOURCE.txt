@@ -1,0 +1,6 @@
+Pixelizer by nctype
+licence: MIT
+from: https://github.com/nctype/aviutl2_script_Pixelizer/releases/download/v1.0.0/Pixelizer_v1.0.0.au2pkg.zip (tag v1.0.0, commit 8b31f96243fa)
+page: https://github.com/nctype/aviutl2_script_Pixelizer
+licence/README from: https://github.com/nctype/aviutl2_script_Pixelizer at v1.0.0
+Put here unchanged for Motolii (filament/aviutl_scripts).

@@ -1,0 +1,5 @@
+AutoClipping_S by σ軸
+licence: MIT
+from: https://github.com/sigma-axis/aviutl2_script_AutoClipping_S/releases/download/v1.20/aviutl2_script_AutoClipping_S-v1.20.au2pkg.zip (tag v1.20, commit d0dc9a8564d9)
+page: https://github.com/sigma-axis/aviutl2_script_AutoClipping_S
+Put here unchanged for Motolii (filament/aviutl_scripts).

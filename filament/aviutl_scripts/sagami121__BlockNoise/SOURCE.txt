@@ -1,0 +1,5 @@
+BlockNoise by 3aGaM1
+licence: MIT
+from: https://github.com/sagami121/Aviutl2-BlockNoise/releases/download/1.0/BlockNoise.zip (tag 1.0, commit 80f76968e15f)
+page: https://github.com/sagami121/Aviutl2-BlockNoise
+Put here unchanged for Motolii (filament/aviutl_scripts).
