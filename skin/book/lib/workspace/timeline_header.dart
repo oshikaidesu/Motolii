@@ -165,6 +165,7 @@ class _ZoomSlider extends StatelessWidget {
     return MouseRegion(
       cursor: SystemMouseCursors.resizeLeftRight,
       child: GestureDetector(
+        supportedDevices: wsPressing,
         key: const ValueKey('ws-tl-zoom'),
         behavior: HitTestBehavior.opaque,
         onPanDown: (d) => at(d.localPosition),

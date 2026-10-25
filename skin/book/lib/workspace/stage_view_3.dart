@@ -44,6 +44,7 @@ class _RelationMarks extends StatelessWidget {
           left: at.dx - 7,
           top: at.dy - 7,
           child: GestureDetector(
+            supportedDevices: wsPressing,
             key: ValueKey('ws-relation-$key'),
             onPanStart: (_) => m.take(rel),
             onPanUpdate: (d) {

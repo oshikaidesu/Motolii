@@ -9,6 +9,7 @@ import 'package:lab_book/sets/inspector/inspector_param_controls_gauge.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
 import 'package:lab_book/sets/inspector/inspector_value_marks.dart';
 import 'package:lab_book/tokens.dart';
+import '../../workspace/two_fingers.dart';
 
 /// One parameter as a block: the name on top, the number large under it, a picture of the value in the top-right corner.
 /// contract: every block still shows the number and takes typing, scrubbing and the sideways slide; the picture is added, never a replacement.
@@ -314,6 +315,7 @@ class _HeightsState extends State<_Heights> {
 
           // (up and down, as the bars go: the panel's own scrolling does not take the hand away; a tap sets a bar too)
           return GestureDetector(
+            supportedDevices: wsPressing,
             behavior: HitTestBehavior.opaque,
             onVerticalDragStart: widget.on ? (d) => start(d.localPosition) : null,
             onVerticalDragUpdate: widget.on ? (d) => _at(d.localPosition, size) : null,

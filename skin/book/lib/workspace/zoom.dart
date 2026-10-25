@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../tokens.dart';
 import '../window_file.dart';
+import 'two_fingers.dart';
 
 abstract final class WsZoom {
   /// The zoom a window opens at and a double tap returns to: at 100% the parts read too large (user, 2026-10-20).
@@ -36,6 +37,7 @@ class _WsZoomReadoutState extends State<WsZoomReadout> {
     builder: (context, z, _) => MouseRegion(
       cursor: SystemMouseCursors.resizeLeftRight,
       child: GestureDetector(
+        supportedDevices: wsPressing,
         key: const ValueKey('ws-zoom'),
         behavior: HitTestBehavior.opaque,
         onHorizontalDragStart: (_) {

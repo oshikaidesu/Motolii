@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import '../tokens.dart';
 import 'desk_kit.dart';
 import 'ws.dart';
+import 'two_fingers.dart';
 
 
 const _zMax = 3000.0;
@@ -254,6 +255,7 @@ class _DiagramState extends State<_Diagram> {
             if (_hot) setState(() => _hot = false);
           },
           child: GestureDetector(
+            supportedDevices: wsPressing,
             behavior: HitTestBehavior.opaque,
             onTapUp: (e) {
               final id = hit(e.localPosition);

@@ -17,6 +17,7 @@ class _OverviewState extends State<_Overview> {
     onEnter: (_) => setState(() => _h = true),
     onExit: (_) => setState(() => _h = false),
     child: GestureDetector(
+      supportedDevices: wsPressing,
       behavior: HitTestBehavior.opaque,
       onPanDown: (d) => widget.onDrag(d.localPosition),
       onPanUpdate: (d) => widget.onDrag(d.localPosition),

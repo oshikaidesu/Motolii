@@ -17,6 +17,7 @@ import 'dock_parts.dart';
 import 'dock_tags.dart';
 import 'create_preview.dart';
 import 'ws.dart';
+import 'two_fingers.dart';
 part 'dock_make_2.dart';
 part 'dock_make_3.dart';
 

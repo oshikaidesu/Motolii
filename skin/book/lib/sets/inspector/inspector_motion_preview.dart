@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
 import 'package:lab_book/tokens.dart';
+import '../../workspace/two_fingers.dart';
 
 /// A hand anywhere on a card (its name, its preview, its tiles): the card's preview plays while it is there.
 class CardOver extends StatefulWidget {
@@ -128,6 +129,7 @@ class _MotionPreviewState extends State<MotionPreview> with SingleTickerProvider
     _over = CardOver.of(context)?.value ?? false; // (a hand on the card, anywhere: it plays)
     _play();
     return GestureDetector(
+      supportedDevices: wsPressing,
       behavior: HitTestBehavior.opaque,
       onPanStart: (d) {
         final box = context.size;

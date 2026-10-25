@@ -7,6 +7,7 @@ import 'package:lab_book/tokens.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/desk_kit.dart';
 import 'package:lab_book/workspace/ws.dart';
+import 'two_fingers.dart';
 
 /// The graph: value up, time across. Handles are dragged; only a drag or hover repaints it.
 class EaseGraph extends StatefulWidget {
@@ -56,6 +57,7 @@ class _EaseGraphState extends State<EaseGraph> {
           if (_hot != null) setState(() => _hot = null);
         },
         child: GestureDetector(
+          supportedDevices: wsPressing,
           behavior: HitTestBehavior.opaque,
           onPanDown: (d) {
             _drag = _near(g, d.localPosition);

@@ -20,6 +20,7 @@ class _CopiesPanel extends StatelessWidget {
                   if (picked) _lay(c);
                 });
                 return GestureDetector(
+                  supportedDevices: wsPressing,
                   behavior: HitTestBehavior.opaque,
                   onPanDown: (d) {
                     if (picked) m?.later('together', number: 1);

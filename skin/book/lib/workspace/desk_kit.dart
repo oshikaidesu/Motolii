@@ -8,6 +8,7 @@ import '../tokens.dart';
 import 'desk_align.dart';
 import 'desk_blend.dart';
 import 'ws.dart';
+import 'two_fingers.dart';
 
 /// One tool the desk can hold. [acts] is what it works on, said in two words.
 /// A tool of the desk: its name, its hue, what it acts on, and what the desk holds while it is open (none yet: a card
@@ -244,6 +245,7 @@ class _DeskScrubState extends State<DeskScrub> {
       onEnter: (_) => setState(() => _hot = true),
       onExit: (_) => setState(() => _hot = false),
       child: GestureDetector(
+        supportedDevices: wsPressing,
         behavior: HitTestBehavior.opaque,
         onHorizontalDragStart: w.enabled ? (_) => setState(() => _drag = true) : null,
         onHorizontalDragUpdate: w.enabled ? (d) => w.onChanged((w.value + d.delta.dx * w.perPx).clamp(w.min, w.max)) : null,

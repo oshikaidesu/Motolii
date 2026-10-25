@@ -6,6 +6,7 @@ import 'package:lab_book/sets/inspector/inspector_value_marks.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_midi.dart';
 import 'package:lab_book/tokens.dart';
+import '../../workspace/two_fingers.dart';
 
 /// One property: label, its value cells, the key mark, the reset mark. The columns are the same on every row (B1) so X/Y/Z line up.
 /// contract: right-click a row for Key this frame / Remove key / Remove animation / Keys from MIDI (om_midi's panel, where
@@ -316,6 +317,7 @@ class _Scrub extends StatelessWidget {
     return MouseRegion(
       cursor: SystemMouseCursors.resizeLeftRight,
       child: GestureDetector(
+        supportedDevices: wsPressing,
         behavior: HitTestBehavior.opaque,
         onHorizontalDragStart: (_) => doc.beginGesture(),
         onHorizontalDragUpdate: (d) {

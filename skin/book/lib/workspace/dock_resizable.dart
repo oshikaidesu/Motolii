@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import '../tokens.dart';
 import 'dock_parts.dart';
 import 'ws.dart';
+import 'two_fingers.dart';
 
 /// A band whose height the user sets: the grip on its lower edge drags it up or down (clamped to [min]..[max]);
 /// a double-click on the grip returns to the default.
@@ -50,6 +51,7 @@ class _DockResizableState extends State<DockResizable> {
           onEnter: (_) => setState(() => _hover = true),
           onExit: (_) => setState(() => _hover = false),
           child: GestureDetector(
+            supportedDevices: wsPressing,
             key: widget.gripKey,
             behavior: HitTestBehavior.opaque,
             dragStartBehavior: DragStartBehavior.down,

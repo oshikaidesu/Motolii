@@ -12,6 +12,7 @@ import '../theme.dart';
 import '../tokens.dart';
 import 'stage_art.dart' show WsArt;
 import 'ws.dart';
+import 'two_fingers.dart';
 part 'top_bar_2.dart';
 
 class WsTopBar extends StatelessWidget {
@@ -417,6 +418,7 @@ class _SizeChipState extends State<_SizeChip> {
     return MouseRegion(
       cursor: SystemMouseCursors.resizeLeftRight,
       child: GestureDetector(
+        supportedDevices: wsPressing,
         key: const ValueKey('ws-top-size'),
         behavior: HitTestBehavior.opaque,
         onDoubleTap: ws.onSize == null
