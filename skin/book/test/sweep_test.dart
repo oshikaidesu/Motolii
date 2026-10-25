@@ -118,7 +118,7 @@ void main() {
       expect(handles, isNotEmpty, reason: 'the picked thing shows its handles');
       for (final MapEntry(key: name, value: at0) in handles.entries) {
         final want = _handleFor[name.split(' ').first]!, before = _all(m, at);
-        await t.dragFrom(origin + at0, const Offset(30, 20));
+        await handDrag(t, origin + at0, const Offset(30, 20));   // (in steps, as a hand drags: in real time one jump is not always taken)
         await t.pumpAndSettle();
         final moved = _moved(before, _all(m, at));
         if (moved.isEmpty || !want.containsAll(moved)) wrong.add('$name moved ${moved.isEmpty ? 'nothing' : moved.join(', ')} (drawn for ${want.join(', ')})');

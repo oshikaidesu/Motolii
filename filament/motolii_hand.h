@@ -76,6 +76,7 @@ struct Motolii {
     // The window's pictures of the document (picture.h, skin/BRIDGE.md), set down by the hand, read under their own lock.
     std::mutex pictureLock;
     std::map<int, std::pair<long, std::string>> pictured;   // (each thing's part of the document's picture, and the version it was made at)
+    long picturedRows = -1;                                      // (the document's changes, by SQLite's count, the document's picture was last made after)
     std::string pictureAll, momentPicture;                  // (the document's own part; the moment's picture)
     long pictureVersion = 0, momentVersion = 0;
     int pictureTold = 0;                                     // (which are new since the window was told: 1 the document's, 2 the moment's)
@@ -132,11 +133,7 @@ template <class Does> static auto by_hand(Motolii* m, Does does, const char* who
         const auto now = [m] { return m->d ? (long)sqlite3_total_changes(m->d->file) : 0L; };
         const long rows = now();
         auto out = does();
-        if (now() != rows) {   // (the pictures new before the asker hears the answer: the stage's own reads, not the asker's, so they leave why it was refused as it was, as SQLite's "error-code preserving interfaces" do: sqlite.org/c3ref/errcode.html)
-            const std::string why = m->d->trouble;
-            m->revision.fetch_add(1, std::memory_order_release), picture_update(m), picture_moment(m);
-            m->d->trouble = why;
-        }
+        if (now() != rows) m->revision.fetch_add(1, std::memory_order_release), picture_update(m), picture_moment(m);   // (the pictures new before the asker hears the answer: they leave why it was refused as it was, picture.h)
         return out;
     }, true, who);
 }
@@ -246,7 +243,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             for (auto& does : todo) does();
             if (!todo.empty()) ++m->writes_on_beat;
             lap(6);
-            if (sqlite3_total_changes(m->d->file) != rows) picture_update(m);   // (the window's picture of the document, where it changed)
+            if (sqlite3_total_changes(m->d->file) != m->picturedRows) picture_update(m);   // (the window's picture of the document, where it changed since it was last made: a call that made it already is not made again, its list of what changed kept)
             if (sqlite3_total_changes(m->d->file) != rows || m->d->held.tried != held)
                 (sqlite3_total_changes(m->d->file) != rows ? m->revision : m->carried).fetch_add(1, std::memory_order_release);   // (the document changed, or only what a hand carries: the kept pictures go by these)
         }

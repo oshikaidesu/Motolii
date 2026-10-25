@@ -98,11 +98,20 @@ static void picture_thing(Motolii* m, int thing, PictureWriter& w) {
     w.EndObject();
 }
 
+// The pictures are the stage's own reads, never the asker's: why its last call was refused is left as it was, whatever
+// these reads ask on the way (SQLite's "error-code preserving interfaces": sqlite.org/c3ref/errcode.html), kept and put
+// back however they end (C++'s scope guard, RAII).
+struct PictureKeepsWhy {
+    Doc& d;
+    std::string why = d.trouble;
+    ~PictureKeepsWhy() { d.trouble = why; }
+};
 // The document's picture made again where it changed (on the hand, the document held): the things whose facts changed
 // (all of them when a thing came or went, or one was named again: a name is a choice of others' cards), and the
 // document's own. Each thing's part keeps the version it was made at, so a window asks for what is newer than it has.
 static void picture_update(Motolii* m) {
     Doc& d = *m->d;
+    const PictureKeepsWhy keep{d};
     std::set<int> again;
     bool all = d.things_changed || m->pictured.empty();
     std::string changes = d.things_changed ? "things\n" : "";
@@ -112,6 +121,7 @@ static void picture_update(Motolii* m) {
         again.insert(thing);
     }
     d.changed.clear(), d.things_changed = false;
+    m->picturedRows = sqlite3_total_changes(d.file);
     int things[1024];
     const int n = std::min(motolii_things(m, things, 1024), 1024);
     std::map<int, std::string> made;
@@ -176,6 +186,7 @@ static void picture_update(Motolii* m) {
 // turned, as the stage shows it; and the picked thing's moving values, which of its values have keys there, its points.
 static void picture_moment(Motolii* m) {
     Doc& d = *m->d;
+    const PictureKeepsWhy keep{d};
     const double at = m->now;
     rapidjson::StringBuffer out;
     PictureWriter w(out);
