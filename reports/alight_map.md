@@ -4,6 +4,8 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 
 出典：Alight Motion の公式の効果ガイド（guide.alightmotion.com/effects、169 本、各ページの最初の一文）、公式ヘルプ（support.alightmotion.com：Camera Objects Guide、Layer Parenting and Null Objects、Elements: The Complete Guide、Retiming Marks、Animation Easing Curves、Preview Pan and Zoom、copy and paste effects、existing project settings）、alightcreative.com、App Store（6.2.60）。Motolii は `filament/doc_kinds.h` の値、`filament/effects/`（ISF 33・WGSL 18・点群 4）、`filament/recipes/`（45）、ASSETS.md。
 
+自走用の箱つき一覧：[alight_checklist.md](alight_checklist.md)（201 箱）。
+
 ## 答え：効果が足りないのか
 
 | | 数 |
