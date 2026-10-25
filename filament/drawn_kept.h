@@ -52,6 +52,7 @@ struct Drawn {
     std::set<int> ahead;               // (frames being put onto disk only, while the hand rests: picture_ahead; main thread)
     std::string keyBase;               // (what its frames are known by on disk: its file as it is; none, not kept on disk)
     std::string slots;                 // (an After Effects file's slots as last told: lottie_slots.h)
+    std::vector<float> lit;            // (a MIDI roll's notes, how lit each is as last told: midi_roll.cpp)
     uint32_t slotsId = 0;              // (ThorVG's for them, driver thread only)
     std::atomic<int> keepAge{0};       // (one more each time its kept frames are thrown away: a copy made before is not kept)
     tvg::Animation* film = nullptr;    // (the same)
@@ -169,6 +170,25 @@ static void slots_at(Stage& s, Drawn* d, const std::string& slots) {
         if (d->slotsId) d->lottie->del(d->slotsId), d->slotsId = 0;
         if (!slots.empty() && (d->slotsId = d->lottie->gen(slots.c_str()))) d->lottie->apply(d->slotsId);
         d->madeAt = -1;   // (its frame drawn again)
+    });
+}
+// A MIDI roll's notes lit as they are now (0 its colour, 1 ALMaMPlayer's +0.3 of it: note.gd's modulate), drawn again
+// for the frame that comes next, as slots_at does; nothing is done if they are as they were. Note i is the SVG's
+// "note<i>" (midi_roll.cpp), found by ThorVG's own id of it (Accessor::id).
+static void lit_at(Stage& s, Drawn* d, const std::vector<float>& lit, float3 colour) {
+    if (!d->film || lit == d->lit) return;
+    d->lit = lit;
+    kept_drop(s, d);
+    door::on_driver(s.engine, [d, lit, colour] {
+        for (size_t i = 0; i < lit.size(); ++i)
+            if (auto* note = const_cast<tvg::Paint*>(d->film->picture()->paint(tvg::Accessor::id(("note" + std::to_string(i)).c_str()))); note && note->type() == tvg::Type::Shape) {
+                const float3 c = min(colour + 0.3f * lit[i], float3{1.f});
+                static_cast<tvg::Shape*>(note)->fill((uint8_t)std::lround(c.x * 255.f), (uint8_t)std::lround(c.y * 255.f), (uint8_t)std::lround(c.z * 255.f));
+            }
+        d->film->picture()->opacity(254), d->film->picture()->opacity(255);   // (ThorVG redraws a picture only if it is marked changed itself, not its parts: tvgPicture.h update; Paint::opacity marks it)
+        d->canvas->update();   // (a picture that does not move is drawn now, as fx_at draws it)
+        d->canvas->draw(true);
+        d->canvas->sync();
     });
 }
 // A flat thing's effects as they are now (lengths in shares of its height, as it was made), drawn again for the frame

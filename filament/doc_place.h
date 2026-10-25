@@ -84,7 +84,13 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
     if (const std::string notes = member ? doc_literal_word(d, thing, "script") : std::string(); std::filesystem::path(notes).extension() == ".mid") {   // (a MIDI file's notes, copies: midi.h)
         Doc::Scripted& kept = d.scripted[thing];
         if (kept.at != said || (int)kept.copies.size() != n)   // (its speed: the file's beats faster or slower, as a film's)
-            kept.at = said, kept.copies = midi_copies(midi_of(notes), n, (said - doc_literal(d, thing, "start", 0, 0)) * doc_literal(d, thing, "speed", 0, 1), doc_number(d, 0, "high", 0, 1080) / 1080.0 * (double)d.stage->h / std::max(1.0, doc_number(d, 0, "high", 0, 1080) * doc_point(d, thing, said)));
+        {   // (its highest row where the roll of the same file at the same speed has it, put at the same place: midi_roll.cpp, its top row the file's highest note)
+            const double speed = doc_literal(d, thing, "speed", 0, 1);
+            std::string why;
+            double w = 0, h = 0;
+            midi_roll_box(midi_roll_file(notes, speed == 1.0 ? 0.0 : midi_bpm(notes.c_str()) * speed, why), w, h);
+            kept.at = said, kept.copies = midi_copies(midi_of(notes), n, (said - doc_literal(d, thing, "start", 0, 0)) * speed, doc_number(d, 0, "high", 0, 1080) / 1080.0 * (double)d.stage->h / std::max(1.0, doc_number(d, 0, "high", 0, 1080) * doc_point(d, thing, said)), h);
+        }
         const ScriptCopy c = copy < n ? kept.copies[(size_t)copy] : ScriptCopy{};
         shift += math::double3{c.x, c.y, c.z};
         own = own * math::mat4::scaling(c.size);

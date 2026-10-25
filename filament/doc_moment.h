@@ -145,6 +145,21 @@ static void doc_moment(Doc& d, double now) {
                 for (size_t k = 0; k < sc->knobs.size(); ++k) v.push_back(doc_number(d, thing, sc->names[k].c_str(), now, sc->knobs[k].usual));
                 slots_at(s, t.drawn, lottie_slots_json(sc->knobs, v));
             }
+        if (t.drawn && std::filesystem::path(doc_word(d, thing, "file")).extension() == ".mid") {   // (a MIDI roll's notes lit while they sound, as ALMaMPlayer's note.gd: up over 0.17 s, held as long as the note (0.2 s longer if it is 0.4 s or less), down over 0.27 s, sine in and out)
+            const std::string file = doc_word(d, thing, "file");
+            const double speed = doc_number(d, thing, "speed", 0, 1), now_in = lies[i].since;
+            std::string why;
+            static std::map<std::string, std::vector<std::pair<double, double>>> read;
+            const std::string roll = midi_roll_file(file, speed == 1.0 ? 0.0 : midi_bpm(file.c_str()) * speed, why);
+            if (!read.count(roll)) read[roll] = midi_roll_notes(roll);
+            const auto ease = [](double x) { x = std::clamp(x, 0.0, 1.0); return 0.5 - 0.5 * std::cos(x * 3.14159265358979); };
+            std::vector<float> lit;
+            for (const auto& [on, off] : read[roll]) {
+                const double hold = off - on > 0.4 ? off - on : off - on + 0.2;
+                lit.push_back((float)(now_in < on ? 0.0 : now_in < on + hold ? ease((now_in - on) / 0.17) : 1.0 - ease((now_in - on - hold) / 0.27)));
+            }
+            lit_at(s, t.drawn, lit, float3{0xed, 0x9e, 0x85} / 255.f);
+        }
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)lies[i].since, t.drawn->seconds));
         if (t.drawn && !t.drawn->effects.empty()) {   // (its effects as they are now: those that move are drawn again)
             DrawnFx fx;
