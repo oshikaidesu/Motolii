@@ -172,6 +172,7 @@ struct ScreenStack {
     std::map<std::string, ScreenFx*> made;   // every effect made so far, by its file, kept (a shader is made once: making one takes a picture's time or ten)
     Texture* shot = nullptr;
     Texture* depth = nullptr;
+    Texture* clear = nullptr;   // (a transition's end with none chosen: nothing, as After Effects' Transition effects (Linear Wipe, Radial Wipe) reveal; made once, kept)
     RenderTarget* target = nullptr;
     Texture* between[2] = {nullptr, nullptr};
     RenderTarget* betweenTarget[2] = {nullptr, nullptr};
@@ -309,7 +310,14 @@ static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, 
         const size_t own = read.size() - fx.others.size();
         for (size_t k = 1; k < own; ++k)
             read[k] = (fx.layered >> k) & 1u ? fx.history : target < fx.targets.size() ? fx.targets[target].picture[fx.targets[target].front] : from, target += !((fx.layered >> k) & 1u);
-        for (size_t k = own; k < read.size(); ++k) read[k] = k - own < fx.othersNow.size() && fx.othersNow[k - own] ? fx.othersNow[k - own] : from;   // (another thing's picture; none chosen yet, its own)
+        for (size_t k = own; k < read.size(); ++k) {   // (another thing's picture; none chosen yet, its own, but a transition's end nothing (ISF_Spec: a transition's endImage))
+            const bool end = fx.others[k - own] == "endImage";
+            if (end && !st.clear) {
+                st.clear = Texture::Builder().width(1).height(1).levels(1).format(Texture::InternalFormat::RGBA8).build(*s.engine);
+                st.clear->setImage(*s.engine, 0, backend::PixelBufferDescriptor(new uint32_t(0), 4, backend::PixelDataFormat::RGBA, backend::PixelDataType::UBYTE, [](void* p, size_t, void*) { delete (uint32_t*)p; }));
+            }
+            read[k] = k - own < fx.othersNow.size() && fx.othersNow[k - own] ? fx.othersNow[k - own] : end ? st.clear : from;
+        }
     };
     if (fx.passes.empty()) {
         gather();

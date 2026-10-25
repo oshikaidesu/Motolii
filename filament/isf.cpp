@@ -18,6 +18,7 @@
 #include <sstream>
 #include <vector>
 #include "rapidjson/document.h"
+#include <sqlite3.h>
 #include "glslang/Public/ShaderLang.h"
 #include "SPIRV/GlslangToSpv.h"
 #include "sca/builtinResource.h"
@@ -45,7 +46,25 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
         if (std::regex_match(e, m, std::regex(std::string(R"((?:floor\()?\$)") + side + R"((?:/([\d.]+))?(?:\*([\d.]+))?\)?)")))
             return std::snprintf(out, sizeof out, "s%g", (m[1].matched ? 1 / std::stod(m[1]) : 1) * (m[2].matched ? std::stod(m[2]) : 1)), said = out, true;
         if (std::regex_match(e, std::regex(R"([\d.]+)"))) return said = "a" + std::to_string((int)std::stod(e)), true;
-        return false;
+        // (any other: the spec's expression worked out by SQLite, $WIDTH and $HEIGHT bound as its parameters are; at 1000
+        //  points a share of the stage's when it reads the stage's size, so many points when not, none when it reads a knob)
+        sqlite3* db = nullptr;
+        sqlite3_stmt* q = nullptr;
+        double v = -1;
+        if (sqlite3_open(":memory:", &db) == SQLITE_OK && sqlite3_prepare_v2(db, ("SELECT " + e).c_str(), -1, &q, nullptr) == SQLITE_OK) {
+            bool known = true;
+            for (int i = 1; i <= sqlite3_bind_parameter_count(q); ++i) {
+                const std::string n = sqlite3_bind_parameter_name(q, i) ? sqlite3_bind_parameter_name(q, i) : "";
+                if (n == "$WIDTH" || n == "$HEIGHT") sqlite3_bind_double(q, i, 1000);
+                else known = false;
+            }
+            if (known && sqlite3_step(q) == SQLITE_ROW && sqlite3_column_type(q, 0) != SQLITE_NULL) v = sqlite3_column_double(q, 0);
+        }
+        sqlite3_finalize(q);
+        sqlite3_close(db);
+        if (v <= 0) return false;
+        if (e.find('$') != std::string::npos) return std::snprintf(out, sizeof out, "s%g", v / 1000), said = out, true;
+        return said = "a" + std::to_string((int)v), true;
     };
     std::vector<std::string> targets, passLines;
     if (head.HasMember("PASSES") && head["PASSES"].IsArray())
@@ -80,13 +99,14 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
     for (size_t k = 0; k < others.size(); ++k)
         glsl += "layout(set = 0, binding = " + std::to_string(2 * (read.size() + k)) + ") uniform texture2D isf_tex_" + others[k] + ";\nlayout(set = 0, binding = " + std::to_string(2 * (read.size() + k) + 1) + ") uniform sampler isf_smp_" + others[k] + ";\n";
     glsl += "layout(set = 0, binding = " + std::to_string(2 * (read.size() + others.size())) + ") uniform Knobs {\n  float time;\n  vec2 resolution;\n  float frame;\n  float passindex;\n";
-    std::string switches, lines;
+    std::vector<std::string> switches;   // (an on/off knob: an int, as WGSL keeps no bool in a uniform, read as a bool where the shader names it, not where a colour's .r is)
+    std::string lines;
     for (const auto& k : inputs.GetArray()) {
         const std::string t = str(k, "TYPE"), n = str(k, "NAME");
         if (!kinds.count(t)) continue;
         const bool onoff = t == "bool" || t == "event";
         glsl += "  " + kinds.at(t) + " " + n + (onoff ? "_on" : "") + ";\n";
-        if (onoff) switches += "#define " + n + " (" + n + "_on != 0)\n";
+        if (onoff) switches.push_back(n);
         std::string label = str(k, "LABEL", n);
         std::replace(label.begin(), label.end(), ',', ' ');
         const auto at = [&](const char* key, int i, double fallback) {
@@ -97,12 +117,21 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
         char line[256];
         if (onoff) std::snprintf(line, sizeof line, "// --check@%s_on:%s,%d\n", n.c_str(), label.c_str(), (int)at("DEFAULT", 0, 0)), lines += line;
         else if (t == "float" || t == "long")
-            std::snprintf(line, sizeof line, "// --track@%s:%s,%g,%g,%g,%g\n", n.c_str(), label.c_str(), at("MIN", 0, 0), at("MAX", 0, 1), at("DEFAULT", 0, 0), t == "long" ? 1.0 : 0.001), lines += line;
+        {   // (a long's choices are its VALUES (ISF_Spec), its range from the least to the most of them)
+            double lo = at("MIN", 0, 0), hi = at("MAX", 0, 1);
+            if (t == "long" && k.HasMember("VALUES") && k["VALUES"].IsArray() && !k["VALUES"].Empty()) {
+                lo = hi = num(k["VALUES"][0], 0);
+                for (const auto& v : k["VALUES"].GetArray()) lo = std::min(lo, num(v, lo)), hi = std::max(hi, num(v, hi));
+            }
+            std::snprintf(line, sizeof line, "// --track@%s:%s,%g,%g,%g,%g\n", n.c_str(), label.c_str(), lo, hi, at("DEFAULT", 0, 0), t == "long" ? 1.0 : 0.001), lines += line;
+        }
         else
             for (int i = 0; i < (t == "point2D" ? 2 : 4); ++i)
                 std::snprintf(line, sizeof line, "// --track@%s_%c:%s %c,%g,%g,%g,0.001\n", n.c_str(), "xyzw"[i], label.c_str(), (t == "point2D" ? "xyzw" : "rgba")[i], at("MIN", i, 0), at("MAX", i, 1), at("DEFAULT", i, 0)), lines += line;
     }
-    glsl += "};\n" + switches;
+    glsl += "};\n";
+    for (const std::string& n : switches)
+        for (std::string* t : {&body, &vertex}) *t = std::regex_replace(*t, std::regex("(^|[^.\\w])" + n + "\\b"), "$1(" + n + "_on != 0)");
     glsl += "layout(location = 0) in vec2 isf_FragNormCoord;\nlayout(location = 0) out vec4 isf_FragColor;\n";
     for (const std::string& n : others) {
         std::string label = n;
@@ -116,7 +145,8 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
     for (const std::string& n : others) glsl += "#define " + n + " sampler2D(isf_tex_" + n + ", isf_smp_" + n + ")\n";
     glsl += "#define " + picture + " sampler2D(isf_tex_" + picture + ", isf_smp_" + picture + ")\n";
     glsl += "#define TIME time\n#define RENDERSIZE resolution\n#define TIMEDELTA (1.0 / 60.0)\n#define FRAMEINDEX int(frame)\n#define PASSINDEX int(passindex)\n#define DATE vec4(0.0)\n";
-    for (const std::string& n : read) glsl += "#define isf_img_" + n + " sampler2D(isf_tex_" + n + ", isf_smp_" + n + ")\n";
+    for (const std::string& n : read) glsl += "#define isf_img_" + n + " sampler2D(isf_tex_" + n + ", isf_smp_" + n + ")\n#define _" + n + "_imgRect vec4(0.0, 0.0, RENDERSIZE)\n#define _" + n + "_imgSize RENDERSIZE\n#define _" + n + "_flip false\n";   // (VVISF's own words for a picture's place and size: each as large as the stage here)
+    glsl += "#define vv_FragNormCoord isf_FragNormCoord\n";   // (ISF 1's name for it, as VVISF still says)
     glsl += "#define IMG_NORM_PIXEL(i, c) texture(i, c)\n#define IMG_PIXEL(i, c) texture(i, (c) / RENDERSIZE)\n";
     glsl += "#define IMG_THIS_NORM_PIXEL(i) texture(i, isf_FragNormCoord)\n#define IMG_THIS_PIXEL(i) texture(i, isf_FragNormCoord)\n#define IMG_SIZE(i) RENDERSIZE\n";
     body = std::regex_replace(body, std::regex(R"((\bIMG_(?:NORM_PIXEL|PIXEL|THIS_PIXEL|THIS_NORM_PIXEL|SIZE)\s*\(\s*)(\w+))"), "$1isf_img_$2");
