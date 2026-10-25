@@ -145,20 +145,31 @@ static void doc_moment(Doc& d, double now) {
                 for (size_t k = 0; k < sc->knobs.size(); ++k) v.push_back(doc_number(d, thing, sc->names[k].c_str(), now, sc->knobs[k].usual));
                 slots_at(s, t.drawn, lottie_slots_json(sc->knobs, v));
             }
-        if (t.drawn && std::filesystem::path(doc_word(d, thing, "file")).extension() == ".mid") {   // (a MIDI roll's notes lit while they sound, as ALMaMPlayer's note.gd: up over 0.17 s, held as long as the note (0.2 s longer if it is 0.4 s or less), down over 0.27 s, sine in and out)
+        if (t.drawn && std::filesystem::path(doc_word(d, thing, "file")).extension() == ".mid") {   // (a MIDI roll's notes struck as ALMaMPlayer's note.gd strikes them: lit up over 0.17 s, held as long as the note (0.2 s longer if it is 0.4 s or less), down over 0.27 s; grown to 1.03 over 0.2 s and left so; dipped 0.25 + its velocity x 0.2 x 0.7 over 0.17 s, back over 0.27 s once held; sine in and out)
             const std::string file = doc_word(d, thing, "file");
-            const double speed = doc_number(d, thing, "speed", 0, 1), now_in = lies[i].since;
+            const double speed = doc_number(d, thing, "speed", 0, 1), now_in = lies[i].since, by = speed == 1.0 ? 1.0 : 1.0 / speed;
             std::string why;
-            static std::map<std::string, std::vector<std::pair<double, double>>> read;
+            static std::map<std::string, std::vector<MidiRollNote>> read;
             const std::string roll = midi_roll_file(file, speed == 1.0 ? 0.0 : midi_bpm(file.c_str()) * speed, why);
             if (!read.count(roll)) read[roll] = midi_roll_notes(roll);
+            const std::vector<MidiNote>& heard = midi_of(file);
+            int high = 0;
+            for (const MidiNote& m : heard) high = std::max(high, m.pitch);
             const auto ease = [](double x) { x = std::clamp(x, 0.0, 1.0); return 0.5 - 0.5 * std::cos(x * 3.14159265358979); };
             std::vector<float> lit;
-            for (const auto& [on, off] : read[roll]) {
-                const double hold = off - on > 0.4 ? off - on : off - on + 0.2;
-                lit.push_back((float)(now_in < on ? 0.0 : now_in < on + hold ? ease((now_in - on) / 0.17) : 1.0 - ease((now_in - on - hold) / 0.27)));
+            std::vector<tvg::Matrix> moves;
+            for (const MidiRollNote& n : read[roll]) {
+                const double hold = n.off - n.on > 0.4 ? n.off - n.on : n.off - n.on + 0.2;
+                const double up = now_in < n.on ? 0.0 : now_in < n.on + hold ? ease((now_in - n.on) / 0.17) : 1.0 - ease((now_in - n.on - hold) / 0.27);
+                double velocity = 100;   // (its own: the note heard that comes on then at its pitch, read from its row)
+                const int pitch = high - (int)std::lround((n.y - 0.5) / std::max(1e-3, n.high));
+                for (const MidiNote& m : heard) if (m.pitch == pitch && std::fabs(m.on * by - n.on) < 0.01) { velocity = m.velocity; break; }
+                const float grow = (float)(1.0 + 0.03 * (now_in < n.on ? 0.0 : ease((now_in - n.on) / 0.2))), dip = (float)(up * (0.25 + velocity * 0.2 * 0.7));
+                const float x0 = (float)n.x, y0 = (float)(n.y + 0.5 * n.high);   // (grown about its left end's middle: where ALMaMPlayer's note is)
+                lit.push_back((float)up);
+                moves.push_back(tvg::Matrix{grow, 0.f, x0 * (1.f - grow), 0.f, grow, y0 * (1.f - grow) + dip, 0.f, 0.f, 1.f});
             }
-            lit_at(s, t.drawn, lit, float3{0xed, 0x9e, 0x85} / 255.f);
+            lit_at(s, t.drawn, lit, moves, float3{0xed, 0x9e, 0x85} / 255.f);
         }
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)lies[i].since, t.drawn->seconds));
         if (t.drawn && !t.drawn->effects.empty()) {   // (its effects as they are now: those that move are drawn again)

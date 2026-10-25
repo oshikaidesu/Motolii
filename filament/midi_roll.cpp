@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <cstring>
 
 std::string midi_roll(const std::string& file, double bpm, std::string& why) {
     std::vector<MidiEvent> events = midi_events(file.c_str());
@@ -91,17 +92,18 @@ bool midi_roll_box(const std::string& svg, double& w, double& h) {   // (its vie
     return at != std::string::npos && std::sscanf(head.c_str() + at + 9, "%*f %*f %lf %lf", &w, &h) == 2 && w > 0 && h > 0;
 }
 
-std::vector<std::pair<double, double>> midi_roll_notes(const std::string& svg) {   // (each note's x and width, 300 a second: bladeSk's x is a moment, its width a length, + 0.5)
+std::vector<MidiRollNote> midi_roll_notes(const std::string& svg) {   // (each note's x, y, width and height, 300 a second: bladeSk's x is a moment, its width a length, + 0.5)
     std::ifstream in(svg);
     std::stringstream all;
     all << in.rdbuf();
     const std::string text = all.str();
-    std::vector<std::pair<double, double>> notes;
+    std::vector<MidiRollNote> notes;
+    const auto number = [&](size_t from, const char* name) { const size_t at = text.find(name, from); return at == std::string::npos ? 0.0 : std::atof(text.c_str() + at + std::strlen(name)); };
     for (size_t at = 0; (at = text.find("id=\"note", at)) != std::string::npos; ++at) {
-        const size_t x = text.find(" x=\"", at), w = text.find(" width=\"", at);
-        if (x == std::string::npos || w == std::string::npos) break;
-        const double on = (std::atof(text.c_str() + x + 4) - 0.5) / 300.0;
-        notes.push_back({on, on + std::atof(text.c_str() + w + 8) / 300.0});
+        MidiRollNote n;
+        n.x = number(at, " x=\""), n.y = number(at, " y=\""), n.high = number(at, " height=\"");
+        n.on = (n.x - 0.5) / 300.0, n.off = n.on + number(at, " width=\"") / 300.0;
+        notes.push_back(n);
     }
     return notes;
 }
