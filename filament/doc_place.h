@@ -75,9 +75,9 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
               math::mat4::scaling(std::max(0.0, 1.0 + w * doc_literal(d, thing, "wave_size", said, 0)));
     }
     if (member)   // (a recipe as code: each copy where the thing's script says, on top of what its copies' values say)
-        if (DocScript* sc = doc_script_of(doc_literal_word(d, thing, "script")); sc && sc->run && sc->run->ok()) {
+        if (DocScript* sc = doc_script_of(d, doc_literal_word(d, thing, "script")); sc && sc->run && sc->run->ok()) {
             Doc::Scripted& kept = d.scripted[thing];
-            if (kept.at != said || kept.made != doc_scripts_made() || (int)kept.copies.size() != n) {   // (every copy at once, the knobs read once)
+            if (kept.at != said || kept.made != doc_scripts_made(d) || (int)kept.copies.size() != n) {   // (every copy at once, the knobs read once)
                 std::map<std::string, double> numbers;
                 std::map<std::string, std::string> words;
                 for (size_t i = 0; i < sc->knobs.size(); ++i) {
@@ -87,7 +87,7 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
                     }
                     else numbers[sc->knobs[i].name] = doc_number(d, thing, sc->names[i].c_str(), said, sc->knobs[i].usual);
                 }
-                kept.at = said, kept.made = doc_scripts_made();
+                kept.at = said, kept.made = doc_scripts_made(d);
                 const double begins = doc_literal(d, thing, "start", 0, 0);
                 numbers["duration"] = doc_literal(d, thing, "duration", 0, -1);   // (how long the thing lasts: an Out ends before it)
                 kept.copies = sc->run->copies(n, said - begins, numbers, words, (double)d.stage->h / std::max(1.0, doc_number(d, 0, "high", 0, 1080) * doc_point(d, thing, said)));   // (a pixel of the document, where the thing stands)

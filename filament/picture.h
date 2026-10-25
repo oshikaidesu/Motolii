@@ -156,7 +156,7 @@ static void picture_update(Motolii* m) {
     w.EndObject();
     w.Key("changes"), w.String(changes.c_str());
     w.Key("usual"), w.StartObject();   // (each value as it comes, said nowhere)
-    for (const DocValue& v : doc_values) if (!v.words) w.Key(v.name), w.Double(doc_usual(v.name)), w.Key((std::string(v.name) + "_by").c_str()), w.Double(0);
+    for (const DocValue& v : doc_values) if (!v.words) w.Key(v.name), w.Double(doc_usual(*m->d, v.name)), w.Key((std::string(v.name) + "_by").c_str()), w.Double(0);
     w.EndObject();
     w.Key("knows"), w.StartObject();   // (the values each kind of thing has, said or not: as doc_knows answers)
     for (const char* kind : {"film", "picture", "text", "solid", "shape", "camera", "light", "behaviour", "stage"}) {

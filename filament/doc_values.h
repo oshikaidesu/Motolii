@@ -211,11 +211,16 @@ struct DocScript {
     std::unique_ptr<Script> run;
     bool clears = false;   // (its copies may each be as clear as it says: its text says opacity; drawn each of its own, not in one go)
 };
-static std::map<std::string, DocScript>& doc_scripts() { static std::map<std::string, DocScript> all; return all; }
-static int& doc_scripts_made() { static int made = 0; return made; }
-static const DocShown* doc_shown_of(const char* name) {
+// Each document its own: a script runs in a QuickJS runtime of its own, and "inside a given runtime, no
+// multi-threading is supported" (QuickJS's documentation, 3.4.1 Runtime and contexts): two documents' hands (the
+// window's and the recipes' previews) each run theirs, under their document's lock.
+struct DocScripts { std::map<std::string, DocScript> all; int made = 0; };
+static DocScripts& doc_scripts_kept(Doc& d) { if (!d.scripts) d.scripts = std::make_shared<DocScripts>(); return *d.scripts; }
+static std::map<std::string, DocScript>& doc_scripts(Doc& d) { return doc_scripts_kept(d).all; }
+static int& doc_scripts_made(Doc& d) { return doc_scripts_kept(d).made; }
+static const DocShown* doc_shown_of(Doc& d, const char* name) {
     for (const DocShown& one : doc_shown) if (!strcmp(one.name, name)) return &one;
-    for (const auto& [file, script] : doc_scripts())
+    for (const auto& [file, script] : doc_scripts(d))
         for (const DocShown& one : script.shown) if (!strcmp(one.name, name)) return &one;
     return nullptr;
 }
@@ -233,11 +238,11 @@ static char doc_thor_letter(const std::string& w) {
     for (int i = 0; i < 4; ++i) if (w == doc_thor_names[i]) return "trsb"[i];
     return 0;
 }
-static DocScript* doc_script_of(const std::string& file) {
+static DocScript* doc_script_of(Doc& d, const std::string& file) {
     if (file.empty() || file == "none") return nullptr;
     const std::string ext = std::filesystem::path(file).extension().string();
     const bool screen = ext == ".wgsl" || ext == ".fs" || ext == ".mjs";   // (.mjs: a PlayCanvas splat effect, its knobs its attributes: splatfx.h)   // (a whole-screen effect's knobs: named by the effect too)
-    DocScript& s = doc_scripts()[file];
+    DocScript& s = doc_scripts(d)[file];
     const auto now = std::chrono::steady_clock::now();
     if (s.stamp >= 0 && now - s.looked < std::chrono::milliseconds(250)) return &s;
     s.looked = now;
@@ -247,7 +252,7 @@ static DocScript* doc_script_of(const std::string& file) {
     if (s.stamp != stamp) {
         s = DocScript{};
         s.stamp = stamp, s.looked = now, s.knobs = ext == ".mjs" ? SplatEffect(file).knobs() : script_knobs(screen ? isf_file(file) : file);
-        doc_scripts_made()++;   // (what was worked out from the old one is forgotten)
+        doc_scripts_made(d)++;   // (what was worked out from the old one is forgotten)
         for (const ScriptKnob& k : s.knobs) s.names.push_back(screen ? doc_screen_knob(file, k.name) : "js_" + k.name);
         for (size_t i = 0; i < s.knobs.size(); ++i) {   // (the names are all made first: what points into them stays put)
             const ScriptKnob& k = s.knobs[i];
@@ -266,11 +271,11 @@ static std::vector<DocScript*> doc_scripts_on(Doc& d, int thing) {
     const std::string said = doc_word(d, thing, "script");
     std::vector<DocScript*> all;
     if (thing != 0) {
-        if (DocScript* sc = doc_script_of(said)) all.push_back(sc);
-        for (const std::string& file : script_files(doc_word(d, thing, "fx"))) if (!doc_thor_letter(file)) if (DocScript* sc = doc_script_of(file)) all.push_back(sc);
+        if (DocScript* sc = doc_script_of(d, said)) all.push_back(sc);
+        for (const std::string& file : script_files(doc_word(d, thing, "fx"))) if (!doc_thor_letter(file)) if (DocScript* sc = doc_script_of(d, file)) all.push_back(sc);
         return all;
     }
-    for (const std::string& file : script_files(said)) if (DocScript* sc = doc_script_of(file)) all.push_back(sc);
+    for (const std::string& file : script_files(said)) if (DocScript* sc = doc_script_of(d, file)) all.push_back(sc);
     return all;
 }
 static const DocCard doc_cards[] = {

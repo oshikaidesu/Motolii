@@ -184,7 +184,7 @@ const char* motolii_animators(Motolii* m) { return by_look(m, [=] { return (said
 int motolii_make(Motolii* m, const char* recipe) { return by_hand(m, [=] { return changes(m, doc_make(doc(m), recipe)); }); }
 const char* motolii_shown(Motolii* m, const char* name) {
     return by_look(m, [=] {
-        const DocShown* s = doc_shown_of(name);
+        const DocShown* s = doc_shown_of(*m->d, name);
         char line[512] = "";
         if (s) std::snprintf(line, sizeof line, "%s\t%s\t%s\t%g\t%g\t%s", s->look, s->unit, s->label, s->low, s->high, s->fold ? s->fold : "");
         return (said_word() = line).c_str();
@@ -349,7 +349,7 @@ const char* motolii_reading(Motolii* m, int thing, const char* name) {
         else if (n == "anchor_z") times = -50;
         else if (n == "distance") times = 6 * p;
         else if (n == "size") times = p;
-        else if (const DocShown* s = doc_shown_of(name)) {
+        else if (const DocShown* s = doc_shown_of(*m->d, name)) {
             const std::string look = s->look;
             times = look == "stage" ? p : look == "down" ? -p : look == "share" ? 100 : 1;
         }

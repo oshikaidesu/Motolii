@@ -135,9 +135,9 @@ static int doc_outline(Doc& d, int thing, double now, double* xy) {
     return n;
 }
 
-static double doc_usual(const char* name) {
+static double doc_usual(Doc& d, const char* name) {
     if (!strncmp(name, "js_", 3))   // (a knob of a script: as its head says it comes)
-        for (const auto& [file, sc] : doc_scripts())
+        for (const auto& [file, sc] : doc_scripts(d))
             for (size_t i = 0; i < sc.names.size(); ++i)
                 if (sc.names[i] == name) return sc.knobs[i].usual;
     return doc_among("scale_x scale_y scale_z size speed opacity wide tall visible distance zoom copies copy_size copy_wide blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed slope power strength spread", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
@@ -147,7 +147,7 @@ static double doc_usual(const char* name) {
          : !strcmp(name, "bounce") ? 0.3 : !strcmp(name, "friction") ? 0.5 : !strcmp(name, "gravity") ? 9.81   // (what falls and strikes, as it comes)
          : !strcmp(name, "ior") ? 1.5 : !strcmp(name, "dispersion") ? 0.1 : !strcmp(name, "swim") ? 0.5 : !strcmp(name, "dark") ? 4.0 : !strcmp(name, "vivid") ? 1.3 : 0.0;   // (the kit's glass as it comes)
 }
-static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }
+static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(d, name)), true); }
 // A thing held by a hand, carried, and let go: the one form of everything a hand drags (a thing on the stage, its bar
 // on the timeline, a number). What is carried shows at once and is not the document's until it is let go, and then
 // it is one step; let go without keeping, nothing happened. The reckoning is here, once: a shell says where the hand
@@ -172,7 +172,7 @@ static bool doc_carry(Doc& d, const char* by, double a, double b) {
     const double now = d.stage->now;
     const auto was = [&](const char* name) {   // (as it was when the hand first carried it)
         auto found = h.from.find(name);
-        if (found == h.from.end()) found = h.from.emplace(name, doc_number(d, h.thing, name, now, doc_usual(name))).first;
+        if (found == h.from.end()) found = h.from.emplace(name, doc_number(d, h.thing, name, now, doc_usual(d, name))).first;
         return found->second;
     };
     const auto tries = [&](const char* name, double is) { return doc_knows(d, h.thing, name, &is) && (h.tried[name] = is, true); };

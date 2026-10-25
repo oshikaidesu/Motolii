@@ -25,9 +25,9 @@ static std::string doc_recipe_names() {
 // over since it was read: a stage that is not drawing is woken by it (a file saved shows at once).
 static bool doc_files_moved(Doc& d) {
     bool moved = screen_moved(d.screen);
-    const int before = doc_scripts_made();
+    const int before = doc_scripts_made(d);
     for (int t : doc_laid(d)) doc_scripts_on(d, t);   // (each looks at its file's time and reads it again if it changed)
-    if (doc_scripts_made() != before) moved = true, d.scripted.clear();
+    if (doc_scripts_made(d) != before) moved = true, d.scripted.clear();
     return moved;
 }
 // The files of a kind in its folders (doc_folders) ("name\tpath\tlabel\tpicture", one to a line): the whole-screen effects (effects/*.wgsl),
@@ -116,7 +116,7 @@ static int doc_make(Doc& d, const char* name) {
     return doc_acted(d) && now ? first : 0;
 }
 static bool doc_stay(Doc& d, int thing, const char* name, double at) {   // (its keys go: it stays what it is at that moment)
-    return doc_knows(d, thing, name) && (!doc_keys(d, thing, name) || doc_set(d, thing, name, doc_number(d, thing, name, at, doc_usual(name))));
+    return doc_knows(d, thing, name) && (!doc_keys(d, thing, name) || doc_set(d, thing, name, doc_number(d, thing, name, at, doc_usual(d, name))));
 }
 static int doc_keyed(Doc& d, int thing, const char* name, double at) { return !doc_keys(d, thing, name) ? 0 : doc_keys(d, thing, name, at) ? 2 : 1; }
 // The words a value of a thing may be (a blend's, a solid's shape), with spaces between ("": any word, or not a word).
@@ -233,7 +233,7 @@ static std::string doc_cards_of(Doc& d, int thing) {
         for (const std::string& w : doc_fx_list(d, thing)) {
             std::string card;
             if (doc_thor_letter(w)) { if (const auto at = effects.find(w); at != effects.end()) card = at->second; }
-            else if (const DocScript* sc = doc_script_of(w)) {
+            else if (const DocScript* sc = doc_script_of(d, w)) {
                 for (const DocValue& one : sc->values) card += (card.empty() ? "" : " ") + std::string(one.name);
                 if (!card.empty()) card = doc_fx_title(w) + ": " + card;
             }
@@ -243,7 +243,7 @@ static std::string doc_cards_of(Doc& d, int thing) {
         if (const std::vector<DocScript*> scs = doc_scripts_on(d, thing); !scs.empty()) {
             std::string names = thing == 0 ? "script follow" : "script";
             for (const DocScript* sc : scs)
-                if (thing == 0 || sc == doc_script_of(doc_word(d, thing, "script")))   // (a thing's effect files have cards of their own, above)
+                if (thing == 0 || sc == doc_script_of(d, doc_word(d, thing, "script")))   // (a thing's effect files have cards of their own, above)
                 for (const DocValue& one : sc->values)
                     if ((" " + names + " ").find(" " + std::string(one.name) + " ") == std::string::npos) names += std::string(" ") + one.name;   // (a knob two effects share is one)
             if (names != "script") all += (all.empty() ? "" : "; ") + std::string("Script: ") + names;   // (none of them with knobs: no card)

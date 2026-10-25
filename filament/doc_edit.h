@@ -373,7 +373,7 @@ static int doc_keys(Doc& d, int thing, const char* name, double at = -1.0) {   /
 // stay: its keys are taken away, and it stays what it is at that moment.
 // keyed: 0 the value has no keys, 1 it has keys but none at that moment, 2 it has a key at that moment.
 // moving: the names of the values of a thing that can take keys.
-static double doc_usual(const char* name);
+static double doc_usual(Doc& d, const char* name);
 static bool doc_set(Doc& d, int thing, const char* name, double is);
 static bool doc_put(Doc& d, int thing, const char* name, double at, double is) {   // (After Effects' rule; the past repository moved a keyed value whole: motolii-edit, place_checked)
     if (!doc_knows(d, thing, name, &is)) return false;
@@ -381,7 +381,7 @@ static bool doc_put(Doc& d, int thing, const char* name, double at, double is) {
     if (keyed) return doc_key(d, thing, name, at, is);   // (a value with keys: a key there, whether every change is keyed or not)
     if (!d.keying) return doc_set(d, thing, name, is);
     // (its first key while every change is keyed: what it was stays, as a key where the keying began, so it travels from there)
-    const double was = doc_number(d, thing, name, d.keying_from, doc_usual(name));
+    const double was = doc_number(d, thing, name, d.keying_from, doc_usual(d, name));
     doc_act(d);
     if (d.keying_from != at) doc_key(d, thing, name, d.keying_from, was);
     doc_key(d, thing, name, at, is);
@@ -429,7 +429,7 @@ static bool doc_parent(Doc& d, int thing, double to) {
 }
 static bool doc_key_here(Doc& d, int thing, const char* name, double at) {
     if (!doc_knows(d, thing, name, nullptr, nullptr, true)) return false;
-    return doc_keys(d, thing, name, at) && doc_keys(d, thing, name) ? true : doc_key(d, thing, name, at, doc_number(d, thing, name, at, doc_usual(name)));
+    return doc_keys(d, thing, name, at) && doc_keys(d, thing, name) ? true : doc_key(d, thing, name, at, doc_number(d, thing, name, at, doc_usual(d, name)));
 }
 // raise: a thing brought `places` places nearer among the things (below 0: further back): each thing is told where it
 // lies now, as one change.
