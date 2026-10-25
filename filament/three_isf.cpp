@@ -105,6 +105,7 @@ std::string three_isf(const std::string& file, std::string& why) {
         if (taken) defines += "#define " + own + " " + n + "\n";
         const auto range = [&](double v) { w.Key("MIN"), w.Double(v < 0 ? 4 * v : 0), w.Key("MAX"), w.Double(std::max(1.0, 4 * std::fabs(v))); };
         if (n == "time" && type == "float") { defines += "#define time TIME\n"; continue; }
+        if ((n == "width" || n == "height") && type == "float") { defines += "#define " + n + " RENDERSIZE." + (n == "width" ? "x" : "y") + "\n"; continue; }   // (the picture's size, as three's passes set them (HalftonePass.setSize))
         if (type != "vec3") w.StartObject();
         if (type == "sampler2D") {   // (the first its picture in; any other another thing's picture)
             const std::string as = first ? "inputImage" : n;
