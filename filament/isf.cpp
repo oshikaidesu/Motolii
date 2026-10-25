@@ -7,6 +7,7 @@
 // Made once into ~/Library/Caches/Motolii/isf/<hash>.wgsl, named by the file as it is. Its other images are
 // other things' pictures (screen.h others), its audio inputs other things' sound; its own vertex shader is worked out at each pixel.
 #include "isf.h"
+#include "three_isf.h"
 #include <sys/stat.h>
 #include <cstdio>
 #include <filesystem>
@@ -175,7 +176,7 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
 }
 
 std::string isf_file(const std::string& file) {
-    if (std::filesystem::path(file).extension() != ".fs") return file;
+    if (std::filesystem::path(file).extension() != ".fs" && !three_is(file)) return file;   // (a three.js effect: made ISF first, three_isf.cpp)
     struct stat st {};
     if (stat(file.c_str(), &st) != 0) return "";
     const std::string key = "isf 6|" + file + "|" + std::to_string(st.st_mtimespec.tv_sec) + "." + std::to_string(st.st_mtimespec.tv_nsec) + "|" + std::to_string(st.st_size);
@@ -196,6 +197,14 @@ std::string isf_file(const std::string& file) {
     std::stringstream text;
     text << in.rdbuf();
     std::string why;
+    if (std::filesystem::path(file).extension() == ".js") {
+        const std::string isf = three_isf(file, why);
+        if (isf.empty()) {
+            std::fprintf(stderr, "the three.js effect %s is not taken: %s\n", file.c_str(), why.substr(0, 600).c_str());
+            return made[key] = "";
+        }
+        text.str(isf);
+    }
     const std::string stem = std::filesystem::path(file).stem().string();
     std::stringstream vertex;   // (its own vertex shader, if it has one beside it)
     if (std::ifstream vs(std::filesystem::path(file).replace_extension(".vs")); vs) vertex << vs.rdbuf();
