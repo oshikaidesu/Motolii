@@ -294,8 +294,17 @@ void main() {
     malloc
       ..free(name)
       ..free(path);
+    addTearDown(() {   // (and as it was after: the tests after this one are not in its folder)
+      final unsetenv = DynamicLibrary.process().lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>('unsetenv');
+      final n = 'MOTOLII_OWN'.toNativeUtf8();
+      unsetenv(n);
+      malloc.free(n);
+    });
     final ws = await _pump(t), m = ws.inside!;
-    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 600))); // (the folders are looked at again twice a second)
+    for (var i = 0; i < 60 && !m.wayNames.contains('Brisk'); i++) {   // (the folders are looked at again twice a second: waited for till it is seen, in real time)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump();
+    }
     expect(m.wayNames, containsAll(['Brisk', 'Snappy']), reason: 'the maker\'s own and the one the program comes with');
     expect(unseated(ws).map((e) => e.name), contains('Brisk'));
     await expectSameAfterReopen(t);
