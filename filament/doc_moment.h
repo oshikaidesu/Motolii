@@ -152,7 +152,7 @@ static void doc_moment(Doc& d, double now) {
             static std::map<std::string, std::vector<MidiRollNote>> read;
             const std::string roll = midi_roll_file(file, speed == 1.0 ? 0.0 : midi_bpm(file.c_str()) * speed, why);
             if (!read.count(roll)) read[roll] = midi_roll_notes(roll);
-            const auto ease = [](double x) { x = std::clamp(x, 0.0, 1.0); return 0.5 - 0.5 * std::cos(x * 3.14159265358979); };
+            const auto ease = [](double x) { return godot::Sine::in_out(std::clamp(x, 0.0, 1.0), 0.0, 1.0, 1.0); };   // (Godot's Tween's TRANS_SINE, EASE_IN_OUT; a tweener stops at its end: tween.cpp)
             std::vector<float> lit;
             std::vector<tvg::Matrix> moves;
             for (const MidiRollNote& n : read[roll]) {

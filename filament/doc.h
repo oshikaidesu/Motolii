@@ -34,6 +34,7 @@
 #include "doc_relations.h"   // (behaviours, falloffs, relations, physics)
 #include "doc_place.h"   // (where a thing lies, its look, its effects)
 #include "doc_moment_fx.h"   // (a thing with effects of its own, told a moment)
+#include "godot_easing.h"   // (Godot's Tween's easing, for a MIDI roll's notes)
 #include "doc_moment.h"   // (the stage told a moment)
 #include "doc_match.h"   // (the stage made again as the document says; its file opened, changed, undone)
 #include "doc_edit.h"   // (things added, freed, related, led; keys and values put)
