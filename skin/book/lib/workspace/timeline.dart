@@ -16,8 +16,13 @@ import 'timeline_kept.dart';
 import 'timeline_paint.dart';
 import 'relate.dart';
 import 'ws.dart';
-part 'timeline_2.dart';
-part 'timeline_3.dart';
+part 'timeline_view.dart';
+part 'timeline_hand.dart';
+part 'timeline_rows.dart';
+part 'timeline_ruler.dart';
+part 'timeline_header.dart';
+part 'timeline_labels.dart';
+part 'timeline_overview.dart';
 
 class WsTimeline extends StatefulWidget {
   const WsTimeline({super.key});
