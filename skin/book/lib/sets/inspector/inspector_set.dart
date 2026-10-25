@@ -53,6 +53,7 @@ Cfg _cfg(BuildContext c, {bool lockedKnob = false}) => Cfg(
       ResetRule.del => 'Delete key',
       ResetRule.arrow => 'reset arrow',
       ResetRule.both => 'double-click + arrow',
+      ResetRule.live => 'Ableton: Delete or double-click, type to start',
     },
   ),
   tabs: c.knobs.object.dropdown<bool>(
@@ -116,7 +117,7 @@ class _Rules extends StatelessWidget {
         ResetRule.del => 'Delete key',
         ResetRule.arrow => 'arrow at row end',
         ResetRule.both => 'double-click or arrow',
-      }}',
+       ResetRule.live => 'Delete or double-click (Ableton)',}}',
     );
   }
 }
