@@ -61,8 +61,9 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
     const rapidjson::Value& inputs = head.HasMember("INPUTS") && head["INPUTS"].IsArray() ? head["INPUTS"] : none;
     std::vector<std::string> pictures;
     for (const auto& i : inputs.GetArray()) if (str(i, "TYPE") == "image") pictures.push_back(str(i, "NAME"));
-    if (pictures.empty()) return why = "makes a picture of its own (no image in): not an effect over the stage", "";
-    const std::string picture = std::find(pictures.begin(), pictures.end(), "inputImage") != pictures.end() ? "inputImage" : pictures[0];
+    // (none: a generator, ISF's "source" (ISF_Spec: sources, filters, transitions): on a thing it paints only where the thing
+    //  is, After Effects' Preserve Underlying Transparency; the thing's own picture is still at binding 0, the door's form)
+    const std::string picture = pictures.empty() ? "inputImage" : std::find(pictures.begin(), pictures.end(), "inputImage") != pictures.end() ? "inputImage" : pictures[0];
     std::vector<std::string> others;   // (its other images: each another thing's picture, chosen on its card, bound after the passes' pictures)
     for (const std::string& other : pictures) if (other != picture) others.push_back(other);
 
@@ -129,6 +130,8 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
         vertex = std::regex_replace(vertex, std::regex(R"(\b(IMG_(?:NORM_PIXEL|PIXEL|THIS_PIXEL|THIS_NORM_PIXEL|SIZE)\s*\(\s*)(\w+))"), "$1isf_img_$2");
         body = std::regex_replace(vertex, std::regex(R"(^[ \t]*#version.*$)"), "") + "\n" + body + "\nvoid main() { isf_vs_main(); isf_fs_main(); }\n";
     }
+    if (pictures.empty())   // (a generator: its last pass as clear as the thing under it is, Preserve Underlying Transparency)
+        body = std::regex_replace(body, std::regex(R"(\bvoid\s+main\s*\()"), "void isf_source_main(") + "\nvoid main() { isf_source_main(); if (PASSINDEX == " + std::to_string(std::max<int>((int)passLines.size() - 1, 0)) + ") isf_FragColor.a *= texture(" + picture + ", isf_FragNormCoord).a; }\n";
     glsl += "#line 1\n" + std::regex_replace(body, std::regex(R"(^[ \t]*#version.*$)"), "");
 
     static std::once_flag once;
