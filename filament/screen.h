@@ -218,8 +218,8 @@ static void screen_knobs(Stage& s, ScreenFx& fx, const ScreenNumbers& numbers, i
         if (f.name == "time") v[0] = (float)s.now;
         else if (f.name == "aspect") v[0] = (float)(w / h);
         else if (f.name == "resolution") v[0] = (float)w, v[1] = (float)h;
-        else if ((f.name == "width" || f.name == "height") && std::none_of(fx.knobs.begin(), fx.knobs.end(), [&](const ScriptKnob& one) { return one.name == f.name; }))
-            v[0] = (float)(f.name == "width" ? w : h);   // (three's way of saying it; a knob of the effect's own by that name is its own (ISF Checkerboard's width))
+        else if ((f.name == "width" || f.name == "height") && !(fx.file.ends_with(".fs") && std::any_of(fx.knobs.begin(), fx.knobs.end(), [&](const ScriptKnob& one) { return one.name == f.name; })))
+            v[0] = (float)(f.name == "width" ? w : h);   // (three's way of saying it, in its .wgsl too (halftone.wgsl); an ISF file's knob by that name is its own (Checkerboard's width))
         else if (f.name == "frame") v[0] = (float)std::lround(s.now * 60.0);   // (ISF's FRAMEINDEX: the picture's number at sixty a second)
         else if (f.name == "passindex") v[0] = (float)pass;   // (ISF's PASSINDEX: `pass` is a word WGSL keeps for itself)
         else if (f.name == "history_head") v[0] = (float)std::max(0, fx.head);
