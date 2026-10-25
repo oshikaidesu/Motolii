@@ -9,6 +9,7 @@ import 'package:docking/docking.dart';
 import 'package:flutter/widgets.dart';
 import '../parts/skin_parts.dart';
 import 'zoom.dart';
+import 'ableton.dart';
 import 'package:lab_book/sets/inspector/inspector_parts_insp_host.dart';
 
 import '../sets/inspector/inspector_parts.dart';
@@ -169,10 +170,7 @@ class _WorkspaceState extends State<Workspace> {
       },
       'layers.sequence': () => ws.after(m.later('sequence')),   // (After Effects' Keyframe Assistant: one after another, from the top)
       'play.toggle': () => ws.playing = !ws.playing,
-      'frame.previous': () => step(-1),
-      'frame.next': () => step(1),
-      'frame.back10': () => step(-10),
-      'frame.forward10': () => step(10),
+      ...wsAbletonCommands(ws),   // (Ableton Live's keys: ableton.dart)
       'frame.first': () => step(-ws.frame),
       'frame.last': () => step(Ws.duration - ws.frame),
     };
@@ -197,7 +195,7 @@ class _WorkspaceState extends State<Workspace> {
               PlatformMenu(label: 'Open', menus: [for (final f in _beside) PlatformMenuItem(label: f.split('/').last, onSelected: f == _doc ? null : () => _open(f))]),
             ],
           ),
-          item('Render', 'file.render'),
+          item('Export Video…', 'file.render'),   // (Live's File menu: Export Audio/Video)
         ],
       ),
       PlatformMenu(
@@ -218,13 +216,36 @@ class _WorkspaceState extends State<Workspace> {
               item('Select All', 'edit.selectAll'),
             ],
           ),
-          item('Duplicate', 'thing.duplicate'),
-          item('Remove', 'thing.remove'),
+          PlatformMenuItemGroup(
+            members: [
+              item('Duplicate', 'thing.duplicate'),
+              item('Rename', 'thing.rename'),
+              item('Remove', 'thing.remove'),
+            ],
+          ),
+          item('Solo', 'thing.solo'),
+          item('Deactivate', 'thing.deactivate'),
         ],
       ),
       PlatformMenu(
         label: 'View',
         menus: [
+          PlatformMenuItemGroup(   // (Live's View menu: the arrangement's zoom)
+            members: [
+              item('Zoom In', 'zoom.in'),
+              item('Zoom Out', 'zoom.out'),
+              item('Zoom to Selection', 'zoom.selection'),
+              item('Zoom Back', 'zoom.back'),
+              item('Optimize Width', 'zoom.width'),
+            ],
+          ),
+          PlatformMenuItemGroup(
+            members: [
+              item('Play / Stop', 'play.fromStart'),
+              item('Continue Play', 'play.continue'),
+              item('Loop', 'loop.toggle'),
+            ],
+          ),
           PlatformMenu(
             label: 'Skin',
             menus: [

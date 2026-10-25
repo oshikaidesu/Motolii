@@ -70,6 +70,8 @@ extension _WsTimelineRows on _WsTimelineState {
                           ),
                         ),
                       ),
+                    for (var i = 0; i < rows.length; i++)
+                      if (_renameField(i, ws.layers[i].id, i * WtM.row - top) case final f?) f,   // (its name written over it: Cmd+R)
                   ],
                 );
               },

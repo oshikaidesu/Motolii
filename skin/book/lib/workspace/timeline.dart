@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 
 import '../forms/forms.dart';
 import 'two_fingers.dart';
+import 'ableton.dart' show wsTimelineAsk, wsAskRename;
 import '../sets/panels/timeline_parts_parts.dart' show TpGlyph, TpGlyphPainter;
 import '../tokens.dart';
 import 'key_drag.dart';
@@ -17,6 +18,7 @@ import 'timeline_kept.dart';
 import 'timeline_paint.dart';
 import 'relate.dart';
 import 'ws.dart';
+part 'timeline_asked.dart';
 part 'timeline_view.dart';
 part 'timeline_hand.dart';
 part 'timeline_rows.dart';
@@ -31,15 +33,19 @@ class WsTimeline extends StatefulWidget {
   State<WsTimeline> createState() => _WsTimelineState();
 }
 
-class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateMixin {
+class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateMixin, _TimelineAsked {
   late final Ticker _ticker = createTicker(_tick);
   final _focus = FocusNode(debugLabel: 'timeline');
   Ws? _ws;
-
   double _zoom = 1, _scroll = 0, _vscroll = 0, _trackW = 1000, _rowsH = 200;
   int _workIn = 12, _workOut = 228;
-
   int _last = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    _hearAsks();   // (the window's keys heard: timeline_asked.dart)
+  }
 
   @override
   void didChangeDependencies() {
@@ -60,6 +66,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     _ws?.moment.removeListener(_changed);
     _ticker.dispose();
     _focus.dispose();
+    _stopAsks();
     _markWords.dispose();
     _markFocus.dispose();
     super.dispose();

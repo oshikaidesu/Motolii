@@ -8,26 +8,43 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-/// The window's own keys (After Effects' where it has one: Space plays, Home and End go to the ends).
+/// The window's own keys: Ableton Live 12's (its manual, chapter 42; ableton.dart says where each comes from), the
+/// standard Mac ones (New, Undo, Cut, Copy, Paste, Select All), and the stage's tools.
 const defaultKeys = <(String, String)>[
   ('cmd+n', 'file.new'),
-  ('cmd+r', 'file.render'),
+  ('cmd+shift+r', 'file.render'),   // (Live 42.3: Export Audio/Video)
   ('cmd+z', 'edit.undo'),
   ('cmd+shift+z', 'edit.redo'),
   ('cmd+x', 'edit.cut'),
   ('cmd+c', 'edit.copy'),
   ('cmd+v', 'edit.paste'),
   ('cmd+a', 'edit.selectAll'),
-  ('cmd+d', 'thing.duplicate'),
-  ('0', 'thing.deactivate'),   // (Ableton's: 0 switches a clip off and on; here the eye)
+  ('cmd+d', 'thing.duplicate'),   // (Live 42.5)
+  ('cmd+r', 'thing.rename'),   // (Live 42.5, 42.19)
+  ('0', 'thing.deactivate'),   // (Live 42.15/42.16/42.19: 0 switches a clip off and on; here the eye)
+  ('s', 'thing.solo'),   // (Live 42.15/42.19)
   ('backspace', 'thing.remove'),
   ('delete', 'thing.remove'),
-  ('space', 'play.toggle'),
-  ('left', 'frame.previous'),
-  ('right', 'frame.next'),
-  ('shift+left', 'frame.back10'),
-  ('shift+right', 'frame.forward10'),
-  ('home', 'frame.first'),
+  ('space', 'play.fromStart'),   // (Live 42.20)
+  ('shift+space', 'play.continue'),   // (Live 42.20)
+  ('left', 'nudge.left'),   // (Live 42.16: nudge selection)
+  ('right', 'nudge.right'),
+  ('shift+left', 'nudge.left10'),
+  ('shift+right', 'nudge.right10'),
+  ('up', 'layer.previous'),   // (Live: the arrow keys go between tracks)
+  ('down', 'layer.next'),
+  ('cmd+l', 'loop.toggle'),   // (Live 42.16)
+  ('=', 'zoom.in'),   // (Live 42.9: + and -, the + without shift)
+  ('shift+=', 'zoom.in'),
+  ('-', 'zoom.out'),
+  ('z', 'zoom.selection'),   // (Live 42.16)
+  ('x', 'zoom.back'),
+  ('w', 'zoom.width'),
+  (',', 'frame.previous'),   // (Live has none: Rive's and Jitter's)
+  ('.', 'frame.next'),
+  ('shift+,', 'frame.back10'),
+  ('shift+.', 'frame.forward10'),
+  ('home', 'frame.first'),   // (Live 42.20: move insert marker to beginning)
   ('end', 'frame.last'),
 ];
 
