@@ -140,6 +140,8 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         onValues: (changed, {required live}) => _write(ws, l?.id, changed, live: live),
         onDrop: () => ws.after(m.later('let_go')),   // (put down unchanged, without waiting)
         onKey: (prop, mark) => _mark(ws, l?.id, prop, mark),
+        onMidi: (prop, file, kind, channel, bpm) => _midi(ws, l?.id, prop, file, kind, channel, bpm),
+        midiBpm: m.midiBpm,
         together: (tells) { // (one step, asked without waiting: begun and ended in the inside's queue around what is told)
           m.later('together', number: 1);
           tells();

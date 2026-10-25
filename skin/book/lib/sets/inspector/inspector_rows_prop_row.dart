@@ -4,10 +4,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_value_marks.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
+import 'package:lab_book/sets/inspector/inspector_rows_midi.dart';
 import 'package:lab_book/tokens.dart';
 
 /// One property: label, its value cells, the key mark, the reset mark. The columns are the same on every row (B1) so X/Y/Z line up.
-/// contract: right-click a row for Key this frame / Remove key / Remove animation; unavailable ones say why (D3).
+/// contract: right-click a row for Key this frame / Remove key / Remove animation / Keys from MIDI (om_midi's panel, where
+/// the host keys from MIDI); unavailable ones say why (D3).
 class PropRow extends StatefulWidget {
   const PropRow({
     super.key,
@@ -36,7 +38,7 @@ class PropRow extends StatefulWidget {
 }
 
 class _PropRowState extends State<PropRow> {
-  bool _menu = false;
+  bool _menu = false, _midi = false;
 
   // (its key mark and whether it differs from as it comes, at a new moment: told alone, as its fields are)
   final _watching = <ValueListenable<int>>[];
@@ -270,9 +272,20 @@ class _PropRowState extends State<PropRow> {
                       item('Key this frame', ks != KeyS.at, 'Already keyed', () => doc.setKey(widget.id, KeyS.at)),
                       item('Remove key', ks == KeyS.at, 'No key here', () => doc.setKey(widget.id, KeyS.anim)),
                       item('Remove animation', ks != KeyS.off, 'Not animated', () => doc.setKey(widget.id, KeyS.off)),
+                      if (doc.onMidi != null) item('Keys from MIDI…', true, '', () => setState(() => _midi = true)),
                       if (cfg.maybe) item('Relate…', true, '', () {}),
                     ],
                   ),
+                ),
+              if (_midi)
+                Container(
+                  margin: EdgeInsets.only(top: Shape.s(2), bottom: Shape.s(4)),
+                  decoration: BoxDecoration(
+                    color: Grey.g13,
+                    borderRadius: BorderRadius.all(Shape.r(4)),
+                    border: Border.all(color: ed.rule),
+                  ),
+                  child: MidiKeys(prop: widget.id, onDone: () => setState(() => _midi = false)),
                 ),
             ],
           ),

@@ -10,6 +10,7 @@ dependencies:
   auto_size_text: ^3.0.0
   docking: ^1.16.2
   ffi: ^2.1.0
+  file_selector: ^1.1.0
   flutter:
     sdk: flutter
   flutter_colorpicker: ^1.1.0
@@ -28,6 +29,8 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   ffigen: ^23.0.0
+  file_selector_platform_interface: ^2.7.0
+  plugin_platform_interface: ^2.1.8
 
 flutter:
   uses-material-design: true

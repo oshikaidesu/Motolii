@@ -41,3 +41,11 @@ void _mark(Ws ws, String? id, String prop, KeyS mark) {
   }
   ws.after(m.later('together'));
 }
+
+/// Joined: a property keyed from a MIDI file's notes (om_midi's panel in the row's menu): each of its values, one step.
+bool _midi(Ws ws, String? id, String prop, String file, String kind, int channel, double bpm) {
+  final m = ws.inside!, t = id == null ? 0 : int.tryParse(id);
+  if (t == null) return false;
+  final has = m.values(t).toSet(), names = [for (final MapEntry(:key, :value) in _keyable(ws, t).entries) if (key == prop || propOf(key) == prop) value].where(has.contains);
+  return names.isNotEmpty && m.together(() => names.fold(true, (ok, n) => m.midi(t, n, file, kind, channel, bpm) && ok));
+}

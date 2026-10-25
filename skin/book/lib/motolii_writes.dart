@@ -51,6 +51,14 @@ extension MotoliiWrites on Motolii {
     return _took(ok);
   }
 
+  /// A MIDI file's notes as keys of a value, as om_midi keys them (motolii.h): [kind] velocity, pitch, count, on or
+  /// bool; [channel] -1 any; [bpm] the file's beats played at it (0: the file's own). Its keys before go; one step.
+  bool midi(int thing, String name, String file, String kind, int channel, double bpm) =>
+      _took(_with([name, file, kind], (s) => _midi(_m, thing, s[0], s[1], s[2], channel, bpm)) != 0);
+
+  /// The BPM a MIDI file says (120 if it says none): om_midi's BPM box as it first is.
+  double midiBpm(String file) => _with([file], (s) => _midiBpm(s[0]));
+
   bool unkey(int thing, String name, double at) => _took(_with([name], (s) => _unkey(_m, thing, s[0], at)) != 0);
 
   bool way(int thing, String name, double at, String way) => _took(_with([name, way], (s) => _way(_m, thing, s[0], at, s[1])) != 0);

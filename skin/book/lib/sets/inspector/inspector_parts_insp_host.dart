@@ -18,6 +18,8 @@ class InspHost extends StatefulWidget {
     this.kindWord,
     this.seats,
     this.onFxRemove,
+    this.onMidi,
+    this.midiBpm,
     this.onFxMove,
     this.movable = const [],
     this.onCardMove,
@@ -60,6 +62,10 @@ class InspHost extends StatefulWidget {
 
   /// The host's say on an effect taken off, and on their order (see [Doc.onFxRemove]).
   final bool Function(String id)? onFxRemove;
+
+  /// The host's MIDI keys and a file's BPM (see [Doc.onMidi]).
+  final bool Function(String prop, String file, String kind, int channel, double bpm)? onMidi;
+  final double Function(String file)? midiBpm;
   final bool Function()? onFxMove;
 
   /// The host's effects as cards that move up or down its stack (see [Doc.movable]).
@@ -130,6 +136,8 @@ class _InspHostState extends State<InspHost> {
       ..kindWord = widget.kindWord
       ..seats = widget.seats
       ..onFxRemove = widget.onFxRemove
+      ..onMidi = widget.onMidi
+      ..midiBpm = widget.midiBpm
       ..onFxMove = widget.onFxMove
       ..movable = widget.movable
       ..onCardMove = widget.onCardMove
@@ -272,6 +280,8 @@ class _InspHostState extends State<InspHost> {
       ..kindWord = widget.kindWord
       ..seats = widget.seats
       ..onFxRemove = widget.onFxRemove
+      ..onMidi = widget.onMidi
+      ..midiBpm = widget.midiBpm
       ..onFxMove = widget.onFxMove
       ..movable = widget.movable
       ..onCardMove = widget.onCardMove

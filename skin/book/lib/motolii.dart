@@ -144,6 +144,9 @@ class Motolii {
 
   late final _keyMany = _b.motolii_key_many;
 
+  late final _midi = _b.motolii_midi;
+  late final _midiBpm = _b.motolii_midi_bpm;
+
   final _unaskedSaid = <String>{};
 
   late final _shaping = _b.motolii_shaping;

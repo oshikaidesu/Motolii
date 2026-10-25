@@ -359,6 +359,11 @@ class Doc extends ChangeNotifier {
   bool Function(String id)? onFxRemove;
   bool Function()? onFxMove;
 
+  /// The host's MIDI keys (om_midi's panel, a row's menu): a property keyed from a file's notes (false: not taken), and
+  /// the BPM a file says. Null: the menu has no MIDI.
+  bool Function(String prop, String file, String kind, int channel, double bpm)? onMidi;
+  double Function(String file)? midiBpm;
+
   /// The host's cards that may be moved up or down (its effects, by their titles), and what moves one so many places.
   List<String> movable = const [];
   void Function(String title, int by)? onCardMove;
