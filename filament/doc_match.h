@@ -343,6 +343,7 @@ static bool doc_size_is(sqlite3* file, int wide, int high) {
     return ok;
 }
 
+static std::vector<std::filesystem::path> doc_folders(const char* folder);   // (doc_edit.h)
 // The document in `path` (made if it is not there), on the stage. nullptr: the file is not a document.
 static Doc* doc_open(Stage& s, const char* path) {
     Doc* d = new Doc;
@@ -351,6 +352,14 @@ static Doc* doc_open(Stage& s, const char* path) {
     //  Bezier goes: bezier(u, x1, y1, x2, y2))
     sqlite3_create_function(d->file, "bezier", 5, SQLITE_UTF8 | SQLITE_DETERMINISTIC, nullptr, [](sqlite3_context* c, int, sqlite3_value** v) {
         sqlite3_result_double(c, interp_bezier(interp_clamp(sqlite3_value_double(v[1]), 0.0, 1.0), sqlite3_value_double(v[2]), interp_clamp(sqlite3_value_double(v[3]), 0.0, 1.0), sqlite3_value_double(v[4]), sqlite3_value_double(v[0])));
+    }, nullptr, nullptr);
+    // (and how far an ease of anime.js has gone at u, as anime.js says it: anime('outElastic(1, .3)', u), script.h)
+    sqlite3_create_function(d->file, "anime", 2, SQLITE_UTF8 | SQLITE_DETERMINISTIC, nullptr, [](sqlite3_context* c, int, sqlite3_value** v) {
+        static const std::string bundle = (doc_folders("third_party/anime").front() / "anime.umd.min.js").string();
+        std::string trouble;
+        const double went = anime_ease(bundle, (const char*)sqlite3_value_text(v[0]), sqlite3_value_double(v[1]), &trouble);
+        if (trouble.empty()) sqlite3_result_double(c, went);
+        else sqlite3_result_error(c, trouble.c_str(), -1);
     }, nullptr, nullptr);
     sqlite3_busy_timeout(d->file, 2000);   // (another program at the same document is waited for)
     // (a key's `way` is how the stretch from it to the next key goes; `way` the table holds the ways defined in this document)

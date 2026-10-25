@@ -36,6 +36,11 @@ inline std::vector<std::string> script_files(const std::string& word) {
 // The knobs a file declares (read from its head; empty if it has none or cannot be read).
 std::vector<ScriptKnob> script_knobs(const std::string& file);
 
+// How far an ease of anime.js (third_party/anime, MIT) has gone at u, 0 to 1: `said` as anime.js says it ("outElastic(1, .3)",
+// "spring({ bounce: .5 })", "linear(0, '0.25 75%', 1)", "steps(4)", "irregular(10, 1)"); `bundle` is where its file is.
+// Not an ease, or anime.js not there: u, and `trouble` says why.
+double anime_ease(const std::string& bundle, const std::string& said, double u, std::string* trouble);
+
 class Script {
 public:
     explicit Script(const std::string& file);   // made once a file: its code run, its each() kept

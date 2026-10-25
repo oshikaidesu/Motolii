@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <fstream>
+#include <mutex>
 #include <sstream>
 
 static std::vector<std::string> split(const std::string& s, char by) {
@@ -200,4 +201,59 @@ ScriptCopy Script::ask(int i, int n, double t) {   // (each(), the knobs as last
     read("x", c.x), read("y", c.y), read("z", c.z), read("size", c.size), read("rotate", c.rotate), read("rotate_x", c.rotate_x), read("rotate_y", c.rotate_y), read("opacity", c.opacity);
     JS_FreeValue(cx, out);
     return c;
+}
+
+// anime.js's easings (third_party/anime, MIT) run as they are: one QuickJS context for the whole library, the bundle
+// read once from where the library keeps it, and each ease said made once and kept by what it says. irregular() draws
+// its points with Math.random: while an ease is made, anime.js's own seeded one stands in, its seed from the words, so
+// the same words give the same curve every time.
+static const char anime_kept[] = R"(
+var __eases = {};
+function __ease(said) {
+  var made = __eases[said];
+  if (made) return made;
+  var seed = 0;
+  for (var i = 0; i < said.length; i++) seed = (seed * 31 + said.charCodeAt(i)) | 0;
+  var r = anime.utils.createSeededRandom(seed), kept = Math.random;
+  Math.random = function () { return r(0, 1, 6); };
+  try { with (anime.eases) { with (anime) { made = eval('(' + said + ')'); } } } finally { Math.random = kept; }   // (anime's own linear(), steps()... before eases.linear)
+  if (made && typeof made.ease === 'function') made = made.ease;   // (a spring: its ease)
+  if (typeof made !== 'function') throw new Error(said + ': not an ease of anime.js');
+  return __eases[said] = made;
+}
+function __ease_at(said, u) { return __ease(said)(Math.min(1, Math.max(0, u))); }
+)";
+double anime_ease(const std::string& bundle, const std::string& said, double u, std::string* trouble) {
+    static std::mutex one;
+    static JSRuntime* rt = nullptr;
+    static JSContext* cx = nullptr;
+    static JSValue at = JS_UNDEFINED;
+    static std::string why;
+    std::lock_guard<std::mutex> held(one);
+    if (!rt) {
+        rt = JS_NewRuntime(), cx = JS_NewContext(rt);
+        std::ifstream in(bundle);
+        std::stringstream code;
+        code << "globalThis.setImmediate = function () { return 0; }; globalThis.clearImmediate = function () {};\n" << in.rdbuf() << anime_kept;
+        const std::string src = code.str();
+        JSValue ran = JS_Eval(cx, src.c_str(), src.size(), "anime", JS_EVAL_TYPE_GLOBAL);
+        if (!in || JS_IsException(ran)) why = "anime.js is not where it is kept: " + bundle;
+        JS_FreeValue(cx, ran);
+        JSValue g = JS_GetGlobalObject(cx);
+        at = JS_GetPropertyStr(cx, g, "__ease_at");
+        JS_FreeValue(cx, g);
+    }
+    if (!why.empty()) { if (trouble) *trouble = why; return u; }
+    JSValue args[2] = {JS_NewStringLen(cx, said.c_str(), said.size()), JS_NewFloat64(cx, u)};
+    JSValue out = JS_Call(cx, at, JS_UNDEFINED, 2, args);
+    JS_FreeValue(cx, args[0]);
+    double v = u;
+    if (JS_IsException(out)) {
+        JSValue e = JS_GetException(cx);
+        const char* s = JS_ToCString(cx, e);
+        if (trouble) *trouble = s ? s : "?";
+        JS_FreeCString(cx, s), JS_FreeValue(cx, e);
+    } else JS_ToFloat64(cx, &v, out);
+    JS_FreeValue(cx, out);
+    return v;
 }
