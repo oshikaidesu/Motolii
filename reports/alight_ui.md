@@ -1,6 +1,6 @@
 # Alight Motion を実機で開いて見た記録（10/25）
 
-Alight Motion 6.2.60（Android）を、エミュレーターで 1 画面ずつ開いて記録した。画面ごとに「何がある・UI の形・良い所・悪い所・Motolii ではどうか」を書き、スクショは [alight_ui/](alight_ui/) に入れた（70 枚）。Alight Motion は**下限**で、ゴールではない。
+Alight Motion 6.2.60（Android）を、エミュレーターで 1 画面ずつ開いて記録した。画面ごとに「何がある・UI の形・良い所・悪い所・Motolii ではどうか」を書き、スクショは [alight_ui/](alight_ui/) に入れた（81 枚）。Alight Motion は**下限**で、ゴールではない。
 
 - 見た所：Android Studio のエミュレーター（Pixel Tablet、Android 15）と BlueStacks Air（スマホ）。adb で画面の部品を文字で読み、絵を撮った。
 - **見られなかった所**：有料の機能の中身（カメラは「まず試す」で見た）、書き出しの実行、クラウド、iPad の横の並べ方。
@@ -22,7 +22,7 @@ Alight Motion 6.2.60（Android）を、エミュレーターで 1 画面ずつ�
 1. **有料の壁が操作の途中に出る**：プロジェクトを作る・閉じるたびに課金の画面と広告。カメラ・親・イーズの弾み系・一部の効果は TRY／鍵（[60](alight_ui/60_pro_gate.jpg)）。試験用の広告は閉じるボタンが無く、アプリを止めるしかなかった。
 2. **横に並べ直していない**：Android のタブレットでも縦固定。無理に横にすると、効果の見本の「足す」ボタンが画面の外に出て押せない（[73](alight_ui/73_effect_preview_cut.jpg)）。
 3. **深い**：値を変えるのに「レイヤーを選ぶ → パネル → タブ → 値」と 3〜4 段。同時に見られる値は 1 パネル分だけ。
-4. **見つけにくい操作がある**：複数選ぶのは「コピー貼り付けのメニュー → Select All Layers」か左の丸の印。長押しは何も起きなかった。
+4. **隠れた操作がある**：複数選ぶ・帯をずらす・アンカーポイント・Element の印は長押しの中にあり、案内が無い（下の「隠れた操作」）。
 5. **キーボード・右クリック・メニューバーが無い**：全部タップ。
 
 ## 画面ごと
@@ -186,6 +186,30 @@ Alight Motion 6.2.60（Android）を、エミュレーターで 1 画面ずつ�
 - **最初の値**：多くは足した瞬間に掛かって見える値（Gaussian Blur の Strength 0.150、Glass の Radius 50・光の角度 45°・屈折 0.25、Lens Flare の明るさ 3.0・光 6 本・Screen で重ねる）。ただし Brightness / Contrast は +0% で何も変わらず、その代わりにプリセット「Brighten」がある。
 - **Motolii**：効果の既定値は効果ごとのファイル（ISF・WGSL の頭のつまみ）任せ。「掛かって見える既定値」を決まりにはしていない。効果ごとのプリセットは無い。
 - **タイムラインの絵**：Alight Motion は写真・動画の帯にコマの絵、音の帯に波形（[44](alight_ui/44_image_layer.jpg)、[47](alight_ui/47_video_layer.jpg)、[58](alight_ui/58_audio_layer.jpg)）。Motolii のタイムラインには絵も波形も無い（絵はメディアの棚だけ）。
+
+### 隠れた操作（長押し）とタイムライン・キー（[90](alight_ui/90_hidden_multiselect.jpg)〜[95](alight_ui/95_hidden_drag_layer_time.jpg)）
+長押しで出る操作は、画面のどこにも案内が無い。**隠れている時点で分かりにくく、Alight Motion の悪い所**。
+
+| どこを | どうする | 何が起きる | 案内 |
+|---|---|---|---|
+| タイムラインの左の小さな絵 | 長押し | 複数選ぶモード（「1 layer selected」、ほかの行を足していく、グループ・マスク・抜く・消す・揃え） | 無い |
+| タイムラインの帯 | 長押しして横にずらす | レイヤーの時間が動く | 無い |
+| 時刻の表示 | 長押し | Set thumbnail frame（プロジェクトの絵にするコマ）。Element の中では Mark end of intro・Mark start of outro も | 無い |
+| 移動と変形の右の「移動」のタブ | 長押し | 帯が「Swipe here to move pivot point」になり、アンカーポイントを動かす | 無い |
+| 移動と変形の Z の数字 | 押す | 帯が「Swipe here to adjust Z position」になる | 押せば分かる |
+| 帯・ルーラー・再生のボタン・空き | 長押し | 何も起きない（ルーラーの長押しは複数選ぶモードのまま） | — |
+
+- **キー**：レイヤーの画面では帯にキーが出ず、値のパネル（移動と変形など）を開いたときだけ帯にひし形が出る（[94](alight_ui/94_keys_on_band.jpg)）。最初のキーを打った後は、値を動かすだけで次のキーが自動で入る。パネルを開いたまま帯を押すとパネルが閉じ、キーを選んだりずらしたりする操作はまだ見つけていない。
+- **書き出しの鍵**：有料の機能（カメラ・鍵の効果）を使うと、上の書き出しのボタンが鍵の印に変わる（[100](alight_ui/100_export_locked.jpg)）。
+- **Motolii**：Ableton どおり、帯はドラッグで時間が動く・キーはタイムラインに常に出る・右クリックとキーで操作が見える。アンカーポイントの値（anchor_x・y・z）はインスペクタにそのまま並ぶ。
+
+### Element（[96](alight_ui/96_element_marks_menu.jpg)〜[99](alight_ui/99_element_retiming.jpg)）
+- **作る**：新しいプロジェクトの箱で ELEMENT を選ぶ（CREATE ELEMENT、背景は既定で透明）。
+- **伸ばし方の印**：Element の中で時刻を長押し → Mark end of intro・Mark start of outro。ルーラーの上に黄色い小さな印。
+- **設定**：縦横比・解像度・fps・背景・Precompose（Dynamic / Fixed Resolution）・Re-timing（Freeze・Stretch・Loop・Loop & Stretch・Blank）、編集した時間。
+- **良い**：長さを変えたときにイントロとアウトロは守り、真ん中だけ止める・伸ばす・繰り返すを選べる。
+- **悪い**：印の打ち方が長押しに隠れている。
+- **Motolii**：部品（使い回しと元とのつながり）と伸ばし方は無い。AE のファイル（Lottie）のマーカーごとに繰り返す仕組みはある。
 
 ## デザイン（見た目）の良い所・悪い所
 
