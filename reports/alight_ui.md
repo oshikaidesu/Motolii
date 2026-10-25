@@ -1,6 +1,6 @@
 # Alight Motion を実機で開いて見た記録（10/25）
 
-Alight Motion 6.2.60（Android）を、エミュレーターで 1 画面ずつ開いて記録した。画面ごとに「何がある・UI の形・良い所・悪い所・Motolii ではどうか」を書き、スクショは [alight_ui/](alight_ui/) に入れた（68 枚）。Alight Motion は**下限**で、ゴールではない。
+Alight Motion 6.2.60（Android）を、エミュレーターで 1 画面ずつ開いて記録した。画面ごとに「何がある・UI の形・良い所・悪い所・Motolii ではどうか」を書き、スクショは [alight_ui/](alight_ui/) に入れた（70 枚）。Alight Motion は**下限**で、ゴールではない。
 
 - 見た所：Android Studio のエミュレーター（Pixel Tablet、Android 15）と BlueStacks Air（スマホ）。adb で画面の部品を文字で読み、絵を撮った。
 - **見られなかった所**：有料の機能の中身（カメラは「まず試す」で見た）、書き出しの実行、クラウド、iPad の横の並べ方。
@@ -178,6 +178,14 @@ Alight Motion 6.2.60（Android）を、エミュレーターで 1 画面ずつ�
 - **良い**：帯に波形。足す前に試しに鳴らせる。
 - **悪い**：**音に掛ける効果が無い**（EQ・リバーブ・フェードの札が無い。フェードは音量のキーで作る）。古い WAV（MS ADPCM）は「この端末では読めない」で足せなかった。音の形で動かす仕組み（拍・音量で値を動かす）が見当たらない。
 - **Motolii**：音は動画と同じ film。拍（sound.h の level）で値を動かせる。音量の値・音の効果は無い。
+
+### 効果のつまみ（[76](alight_ui/76_effect_card.jpg)、[78](alight_ui/78_effect_list.jpg)、[79](alight_ui/79_effect_groups.jpg)）
+- **形**：どの効果も「名前を選ぶ → 目盛りをこする → 数字」の繰り返しと、畳んだ小見出し（Glass の Light Source・Material など）。凝った作りは無いので、184 個すべては開いていない（4 個を機械で読んだ）。
+- **効果が 2 つ以上**：畳んだ札の一覧になり、札ごとに見える目（入り切り）と ≡（並べ替え）。鍵つきの効果も足せて、札に鍵の印が付き、畳んだまま入る。
+- **効果ごとのプリセット**：Standard Settings のほかに、Brightness / Contrast は「Brighten」、Lens Flare は「Vertical Slide」（動きつき）。
+- **最初の値**：多くは足した瞬間に掛かって見える値（Gaussian Blur の Strength 0.150、Glass の Radius 50・光の角度 45°・屈折 0.25、Lens Flare の明るさ 3.0・光 6 本・Screen で重ねる）。ただし Brightness / Contrast は +0% で何も変わらず、その代わりにプリセット「Brighten」がある。
+- **Motolii**：効果の既定値は効果ごとのファイル（ISF・WGSL の頭のつまみ）任せ。「掛かって見える既定値」を決まりにはしていない。効果ごとのプリセットは無い。
+- **タイムラインの絵**：Alight Motion は写真・動画の帯にコマの絵、音の帯に波形（[44](alight_ui/44_image_layer.jpg)、[47](alight_ui/47_video_layer.jpg)、[58](alight_ui/58_audio_layer.jpg)）。Motolii のタイムラインには絵も波形も無い（絵はメディアの棚だけ）。
 
 ## デザイン（見た目）の良い所・悪い所
 
