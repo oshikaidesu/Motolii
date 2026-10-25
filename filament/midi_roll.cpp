@@ -15,7 +15,7 @@
 #include <sstream>
 #include <cstring>
 
-std::string midi_roll(const std::string& file, double bpm, std::string& why) {
+std::string midi_roll(const std::string& file, double bpm, std::string& why, std::string* notes) {
     std::vector<MidiEvent> events = midi_events(file.c_str());
     if (events.empty()) return why = "no notes in " + file, "";
     const double by = bpm > 0 ? midi_bpm(file.c_str()) / bpm : 1.0;   // (the file's beats at another tempo: midi.h)
@@ -36,8 +36,10 @@ std::string midi_roll(const std::string& file, double bpm, std::string& why) {
     source << in.rdbuf();
     if (source.str().empty()) return why = "PianoRollSvg.js is not there", "";
     const std::string run = "var module = { exports: {} };\nvar MidiParser = { parse: () => (" + song.str() + ") };\n" + source.str() +
-        "\nglobalThis.__said = new module.exports('').render({ barsPerRow: " + std::to_string(seconds) + ", barSubdivisions: 1, timeDivision: 1000, width: " +
-        std::to_string(seconds * 300) + ", lineHeight: " + std::to_string(spacing) + ", staggered: false, removeShorterThan: 0, tracksToRender: Object.fromEntries([...Array(16).keys()].map(i => [i, true])) });\n";
+        "\nvar roll = new module.exports('');\nglobalThis.__said = roll.render({ barsPerRow: " + std::to_string(seconds) + ", barSubdivisions: 1, timeDivision: 1000, width: " +
+        std::to_string(seconds * 300) + ", lineHeight: " + std::to_string(spacing) + ", staggered: false, removeShorterThan: 0, tracksToRender: Object.fromEntries([...Array(16).keys()].map(i => [i, true])) });\n"
+        // (its own notes, in the order it drew them: render's rows and their notes, _renderContent)
+        "globalThis.__notes = roll._sliceTrackToRows(roll._trimTrack(roll._getMergedTracks())).flatMap(r => r.notes).map(n => n.note + ' ' + n.velOn + ' ' + n.time + ' ' + n.duration).join('\\n');\n";
     JSRuntime* rt = JS_NewRuntime();
     JSContext* cx = JS_NewContext(rt);
     std::string out;
@@ -50,7 +52,10 @@ std::string midi_roll(const std::string& file, double bpm, std::string& why) {
     } else {
         JSValue g = JS_GetGlobalObject(cx), s = JS_GetPropertyStr(cx, g, "__said");
         if (const char* c = JS_ToCString(cx, s)) out = c, JS_FreeCString(cx, c);
-        JS_FreeValue(cx, s), JS_FreeValue(cx, g);
+        JSValue n = JS_GetPropertyStr(cx, g, "__notes");
+        if (const char* c = JS_ToCString(cx, n); c && notes) *notes = c, JS_FreeCString(cx, c);
+        else if (c) JS_FreeCString(cx, c);
+        JS_FreeValue(cx, n), JS_FreeValue(cx, s), JS_FreeValue(cx, g);
     }
     JS_FreeValue(cx, ran);
     JS_FreeContext(cx), JS_FreeRuntime(rt);
@@ -76,11 +81,13 @@ std::string midi_roll_file(const std::string& file, double bpm, std::string& why
     char name[40];
     std::snprintf(name, sizeof name, "%016llx.svg", (unsigned long long)hash);
     const std::string out = (dir / name).string();
-    if (std::filesystem::exists(out, e)) return out;
-    const std::string svg = midi_roll(file, bpm, why);
+    if (std::filesystem::exists(out, e) && std::filesystem::exists(std::filesystem::path(out).replace_extension(".notes"), e)) return out;
+    std::string notes;
+    const std::string svg = midi_roll(file, bpm, why, &notes);
     if (svg.empty()) return "";
     std::filesystem::create_directories(dir, e);
     std::ofstream(out) << svg;
+    std::ofstream(std::filesystem::path(out).replace_extension(".notes")) << notes;   // (beside it: bladeSk's own notes, in the order it drew them)
     return out;
 }
 
@@ -92,17 +99,20 @@ bool midi_roll_box(const std::string& svg, double& w, double& h) {   // (its vie
     return at != std::string::npos && std::sscanf(head.c_str() + at + 9, "%*f %*f %lf %lf", &w, &h) == 2 && w > 0 && h > 0;
 }
 
-std::vector<MidiRollNote> midi_roll_notes(const std::string& svg) {   // (each note's x, y, width and height, 300 a second: bladeSk's x is a moment, its width a length, + 0.5)
+std::vector<MidiRollNote> midi_roll_notes(const std::string& svg) {   // (where each note's rect is, from the SVG; what it is, from bladeSk's own notes beside it)
     std::ifstream in(svg);
     std::stringstream all;
     all << in.rdbuf();
     const std::string text = all.str();
     std::vector<MidiRollNote> notes;
+    std::ifstream said(std::filesystem::path(svg).replace_extension(".notes"));
     const auto number = [&](size_t from, const char* name) { const size_t at = text.find(name, from); return at == std::string::npos ? 0.0 : std::atof(text.c_str() + at + std::strlen(name)); };
     for (size_t at = 0; (at = text.find("id=\"note", at)) != std::string::npos; ++at) {
         MidiRollNote n;
         n.x = number(at, " x=\""), n.y = number(at, " y=\""), n.high = number(at, " height=\"");
-        n.on = (n.x - 0.5) / 300.0, n.off = n.on + number(at, " width=\"") / 300.0;
+        double time = 0, length = 0;   // (bladeSk's, in ticks: a millisecond each, midi_roll)
+        said >> n.pitch >> n.velocity >> time >> length;
+        n.on = time / 1000.0, n.off = (time + length) / 1000.0;
         notes.push_back(n);
     }
     return notes;
