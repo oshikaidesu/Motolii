@@ -51,6 +51,8 @@ struct Drawn {
     int madeAt = -1;                   // (the frame its own texture holds; driver thread only)
     std::set<int> ahead;               // (frames being put onto disk only, while the hand rests: picture_ahead; main thread)
     std::string keyBase;               // (what its frames are known by on disk: its file as it is; none, not kept on disk)
+    std::string slots;                 // (an After Effects file's slots as last told: lottie_slots.h)
+    uint32_t slotsId = 0;              // (ThorVG's for them, driver thread only)
     std::atomic<int> keepAge{0};       // (one more each time its kept frames are thrown away: a copy made before is not kept)
     tvg::Animation* film = nullptr;    // (the same)
     Texture* texture = nullptr;        // what Filament reads
@@ -157,6 +159,18 @@ static void bend_at(Stage& s, Drawn* d, float round, float bloat, float zigzag, 
     });
 }
 
+// An After Effects file's slots as they are now (lottie_slots_json), drawn again for the frame that comes next, as fx_at
+// does for its effects; nothing is done if they are as they were. ThorVG's own way: the slots made, then applied.
+static void slots_at(Stage& s, Drawn* d, const std::string& slots) {
+    if (!d->lottie || slots == d->slots) return;
+    d->slots = slots;
+    kept_drop(s, d);
+    door::on_driver(s.engine, [d, slots] {
+        if (d->slotsId) d->lottie->del(d->slotsId), d->slotsId = 0;
+        if (!slots.empty() && (d->slotsId = d->lottie->gen(slots.c_str()))) d->lottie->apply(d->slotsId);
+        d->madeAt = -1;   // (its frame drawn again)
+    });
+}
 // A flat thing's effects as they are now (lengths in shares of its height, as it was made), drawn again for the frame
 // that comes next; nothing is done if they are as they were. They reach no further than they did at their most.
 static void fx_at(Stage& s, Drawn* d, const DrawnFx& told) {
@@ -221,6 +235,7 @@ static std::filesystem::path kept_file(const Drawn* d, int at) {
     for (const float3& c : f.tints) add(c.x), add(c.y), add(c.z);
     for (const float3& c : f.tones) add(c.x), add(c.y), add(c.z);
     for (uint32_t id : d->deep) add((float)id);
+    all += "|" + d->slots;
     uint64_t hash = 1469598103934665603ull;   // (FNV-1a)
     for (unsigned char c : all) hash = (hash ^ c) * 1099511628211ull;
     char name[64];

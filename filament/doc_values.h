@@ -241,7 +241,8 @@ static char doc_thor_letter(const std::string& w) {
 static DocScript* doc_script_of(Doc& d, const std::string& file) {
     if (file.empty() || file == "none") return nullptr;
     const std::string ext = std::filesystem::path(file).extension().string();
-    const bool screen = ext == ".wgsl" || ext == ".fs" || ext == ".mjs";   // (.mjs: a PlayCanvas splat effect, its knobs its attributes: splatfx.h)   // (a whole-screen effect's knobs: named by the effect too)
+    const bool screen = ext == ".wgsl" || ext == ".fs" || ext == ".mjs";
+    const bool lottie = ext == ".json" || ext == ".lot";   // (an After Effects file: its slots its knobs, lottie_slots.h)   // (.mjs: a PlayCanvas splat effect, its knobs its attributes: splatfx.h)   // (a whole-screen effect's knobs: named by the effect too)
     DocScript& s = doc_scripts(d)[file];
     const auto now = std::chrono::steady_clock::now();
     if (s.stamp >= 0 && now - s.looked < std::chrono::milliseconds(250)) return &s;
@@ -251,14 +252,15 @@ static DocScript* doc_script_of(Doc& d, const std::string& file) {
     if (wrong) return s.stamp >= 0 ? &s : nullptr;
     if (s.stamp != stamp) {
         s = DocScript{};
-        s.stamp = stamp, s.looked = now, s.knobs = ext == ".mjs" ? SplatEffect(file).knobs() : script_knobs(screen ? isf_file(file) : file);
+        s.stamp = stamp, s.looked = now, s.knobs = ext == ".mjs" ? SplatEffect(file).knobs() : lottie ? lottie_knobs(file) : script_knobs(screen ? isf_file(file) : file);
         doc_scripts_made(d)++;   // (what was worked out from the old one is forgotten)
-        for (const ScriptKnob& k : s.knobs) s.names.push_back(screen ? doc_screen_knob(file, k.name) : "js_" + k.name);
+        for (const ScriptKnob& k : s.knobs) s.names.push_back(screen || lottie ? doc_screen_knob(file, k.name) : "js_" + k.name);
         for (size_t i = 0; i < s.knobs.size(); ++i) {   // (the names are all made first: what points into them stays put)
             const ScriptKnob& k = s.knobs[i];
             s.values.push_back(DocValue{s.names[i].c_str(), "film picture text shape solid stage", k.kind == "select" ? 0.0 : k.low, k.kind == "select" ? 0.0 : k.high, k.kind == "track", k.kind == "select" ? k.words.c_str() : nullptr});
             s.shown.push_back(DocShown{s.names[i].c_str(), k.kind == "check" ? "onoff" : k.kind == "picture" || k.kind == "sound" ? "thing" : "", "", k.label.c_str(), k.low, k.high, nullptr});
         }
+        if (lottie) return &s;   // (read, not run)
         if (!screen) s.run = std::make_unique<Script>(file);   // (a .wgsl or an ISF .fs is drawn, not run: screen.h)
         { std::ifstream in(screen ? isf_file(file) : file); std::stringstream text; text << in.rdbuf(); s.clears = text.str().find("opacity") != std::string::npos; }
     }
@@ -273,6 +275,9 @@ static std::vector<DocScript*> doc_scripts_on(Doc& d, int thing) {
     if (thing != 0) {
         if (DocScript* sc = doc_script_of(d, said)) all.push_back(sc);
         for (const std::string& file : script_files(doc_word(d, thing, "fx"))) if (!doc_thor_letter(file)) if (DocScript* sc = doc_script_of(d, file)) all.push_back(sc);
+        if (const std::string file = doc_word(d, thing, "file"); doc_word(d, thing, "kind") == "picture")   // (an After Effects file's slots)
+            if (const std::string ext = std::filesystem::path(file).extension().string(); ext == ".json" || ext == ".lot")
+                if (DocScript* sc = doc_script_of(d, file); sc && !sc->knobs.empty()) all.push_back(sc);
         return all;
     }
     for (const std::string& file : script_files(said)) if (DocScript* sc = doc_script_of(d, file)) all.push_back(sc);

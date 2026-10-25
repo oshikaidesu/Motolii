@@ -139,6 +139,12 @@ static void doc_moment(Doc& d, double now) {
             t.film->look->setParameter("grade", grade, 6);
         }
         if (t.solid && !t.solid->moves.empty()) solid_at(t.solid, doc_word(d, thing, "animation"), lies[i].since * doc_number(d, thing, "speed", 0, 1));   // (its own movement, from when it comes on)
+        if (t.drawn && t.drawn->lottie)   // (its slots as their knobs are now)
+            if (DocScript* sc = doc_script_of(d, doc_word(d, thing, "file")); sc && !sc->knobs.empty()) {
+                std::vector<double> v;
+                for (size_t k = 0; k < sc->knobs.size(); ++k) v.push_back(doc_number(d, thing, sc->names[k].c_str(), now, sc->knobs[k].usual));
+                slots_at(s, t.drawn, lottie_slots_json(sc->knobs, v));
+            }
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)lies[i].since, t.drawn->seconds));
         if (t.drawn && !t.drawn->effects.empty()) {   // (its effects as they are now: those that move are drawn again)
             DrawnFx fx;

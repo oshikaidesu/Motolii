@@ -7,6 +7,7 @@
 #include "interp.h"
 #include "physics.h"
 #include "script.h"
+#include "lottie_slots.h"
 #include "isf.h"
 #include "ways.h"
 #include "screen.h"
