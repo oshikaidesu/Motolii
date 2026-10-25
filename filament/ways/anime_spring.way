@@ -1,0 +1,2 @@
+// anime.spring: anime.js's own ease, as it says it (third_party/anime, MIT; made from its list of eases)
+a + (b - a) * anime('spring({ bounce: .5, duration: 600 })', u)

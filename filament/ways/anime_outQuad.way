@@ -1,0 +1,2 @@
+// anime.outQuad: anime.js's own ease, as it says it (third_party/anime, MIT; made from its list of eases)
+a + (b - a) * anime('outQuad', u)
