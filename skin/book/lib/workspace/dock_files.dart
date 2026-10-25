@@ -13,8 +13,10 @@ import 'dock_glyphs.dart';
 import 'dock_parts.dart';
 import 'dock_tags.dart';
 import 'ws.dart';
-part 'dock_files_2.dart';
-part 'dock_files_3.dart';
+part 'dock_files_read.dart';
+part 'dock_files_used.dart';
+part 'dock_files_browser.dart';
+part 'dock_files_contents.dart';
 
 /// The tree band's height when the shelf is narrow (double-click on its grip comes back here).
 const dockTreeHeight = 132.0;
