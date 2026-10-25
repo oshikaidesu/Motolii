@@ -233,6 +233,21 @@ static void doc_unshape(Stage& s, const std::function<bool(const Stage::Made&)>&
 // otherwise; the glow, flare, darkened corners and fog on the stage's own view; the room's light and the colour behind.
 static bool doc_knows(Doc& d, int thing, const char* name, const double* number, const char* word, bool key);
 static bool doc_frame(Doc& d, int thing, double now, double* frame);
+// An ISF audio input's values now (screen.h sounds): the sound of the thing its knob names (by number, on the card as
+// a picture's is), at that thing's own moment as its film shows it (from its start, from where it begins, at its
+// speed: motolii_loudness_over's way), read once aside (sound.h); none named, or not read yet: none (silence).
+static std::vector<float> doc_sound_now(Doc& d, int thing, const std::string& file, const std::string& name, bool fft, int wide) {
+    std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn)
+    const double now = d.stage->now;
+    const int t = (int)doc_number(d, thing, doc_screen_knob(file, name).c_str(), now, 0);
+    if (t <= 0 || !doc_knows(d, t, nullptr, nullptr, nullptr, false)) return {};
+    const std::string heard = doc_word(d, t, "file");
+    if (heard.empty()) return {};
+    const auto read = sound_of(heard);
+    if (!read) return {};
+    const double start = doc_number(d, t, "start", 0, 0), begin = doc_number(d, t, "begin", 0, 0), speed = doc_number(d, t, "speed", 0, 1);
+    return sound_at(read.get(), fft, wide > 0 ? wide : fft ? sound_bands : sound_rate / sound_rows, now < start ? -1.0 : begin + (now - start) * speed);
+}
 static void doc_look(Doc& d) {
     Stage& s = *d.stage;
     const auto hex = [&](const char* name, float3 otherwise) { const std::string w = doc_word(d, 0, name); return w.size() == 6 ? float3{(float)((std::strtol(w.c_str(), nullptr, 16) >> 16) & 255), (float)((std::strtol(w.c_str(), nullptr, 16) >> 8) & 255), (float)(std::strtol(w.c_str(), nullptr, 16) & 255)} / 255.f : otherwise; };
@@ -297,6 +312,7 @@ static void doc_look(Doc& d) {
         room->setIntensity(d.roomLight * (float)doc_number(d, 0, "environment", 0, 1));
         room->setRotation(math::mat3f::rotation((float)(doc_number(d, 0, "environment_rotate", 0, 0) * (double)TAU / 360.0), math::float3{0, 1, 0}));
     }
+    d.screen.sounds = [&d](const std::string& file, const std::string& name, bool fft, int wide) { return doc_sound_now(d, 0, file, name, fft, wide); };
     screen_effects(s, d.screen, doc_word(d, 0, "script"), [&d](const std::string& file, const std::string& name, double usual) {
         std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn, when the hand does not hold it)
         // (a mouse's knob, where the followed thing is on the picture: pointer as the web says it, -1 to 1 and up; the

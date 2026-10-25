@@ -9,6 +9,7 @@
 #include "script.h"
 #include "isf.h"
 #include "dawn_probe/screen_door.h"
+#include <math/half.h>
 #include <fstream>
 #include <regex>
 #include <sstream>
@@ -43,6 +44,11 @@ struct ScreenFx {
     // sees it, the thing chosen on its card: read last, after the passes' pictures and the past frames.
     std::vector<std::string> others;
     std::vector<Texture*> othersNow;   // (what each is this time: given before it is drawn; none, its own picture)
+    // Its audio inputs (// --sound@name: ISF's audio and audioFFT), among the others in their places: each another
+    // thing's sound at this moment, a row of `wide` values (ISF_Spec: an image a row a channel), half floats as the spec
+    // asks for high precision (32- or 16-bit float textures; a 16-bit one is filtered by WebGPU as it is).
+    struct Sound { bool is = false, fft = false; int wide = 0; Texture* picture = nullptr; };
+    std::vector<Sound> sounds;
     uint32_t hw = 0, hh = 0;
     std::filesystem::file_time_type stamp{};       // (the file's time when it was made: written over, it is made again)
     std::chrono::steady_clock::time_point looked{};
@@ -127,7 +133,12 @@ static bool screen_read(ScreenFx& fx, std::string& code) {
         fx.passes.push_back(target);
     }
     fx.others.clear();
-    for (const ScriptKnob& k : script_knobs(file)) if (k.kind == "picture") fx.others.push_back(k.name);
+    fx.sounds.clear();
+    for (const ScriptKnob& k : script_knobs(file))
+        if (k.kind == "picture" || k.kind == "sound") {
+            fx.others.push_back(k.name), fx.sounds.push_back({});
+            if (k.kind == "sound") fx.sounds.back() = {true, k.words.rfind("fft", 0) == 0, std::atoi(k.words.c_str() + k.words.find(' ') + 1)};
+        }
     if ((!fx.targets.empty() || !fx.others.empty()) && (int)fx.targets.size() + 1 + (int)__builtin_popcount(fx.layered) + (int)fx.others.size() != pictures) return fx.trouble = "its passes' pictures, its other images and the pictures it reads do not agree", false;
     if (fx.layered && !fx.historyFrames) return fx.trouble = "it reads an array of past frames and its head does not ask for them (--history@frames:share)", false;
     code = std::regex_replace(out, std::regex(R"(\bfn\s+fs_main\s*\()"), "fn main(");
@@ -173,7 +184,27 @@ struct ScreenStack {
     tvg::WgCanvas* thor[2] = {nullptr, nullptr};    // (ThorVG drawing into each picture between)
     Texture* seen = nullptr;                        // (its picture as the camera sees it, its effects on, this time)
     double pw = 0, ph = 0;                          // (its pictures' size in points of the stage, ISF's RENDERSIZE: a thing's box; 0: the stage's)
+    // (an audio input's values now: the effect's file, the input's name, fft or the wave, how many (0: as many as are
+    //  read); none given, or none back: silence)
+    std::function<std::vector<float>(const std::string& file, const std::string& name, bool fft, int wide)> sounds;
 };
+// Each audio input's picture made its values now, and given as that input's picture (Filament's setImage; the
+// values handed over to be let go of when sent, Filament's PixelBufferDescriptor callback).
+static void screen_sounds(Stage& s, ScreenStack& st, ScreenFx& fx) {
+    fx.othersNow.resize(fx.others.size(), nullptr);
+    for (size_t k = 0; k < fx.sounds.size(); ++k) {
+        ScreenFx::Sound& one = fx.sounds[k];
+        if (!one.is) continue;
+        std::vector<float> v = st.sounds ? st.sounds(fx.file, fx.others[k], one.fft, one.wide) : std::vector<float>();
+        if (v.empty()) v.assign((size_t)std::max(one.wide, 1), one.fft ? 0.f : 0.5f);
+        if (one.picture && one.picture->getWidth() != v.size()) s.engine->destroy(one.picture), one.picture = nullptr;
+        if (!one.picture) one.picture = Texture::Builder().width((uint32_t)v.size()).height(1).levels(1).format(Texture::InternalFormat::R16F).build(*s.engine);
+        auto* halves = new std::vector<math::half>(v.begin(), v.end());
+        one.picture->setImage(*s.engine, 0, backend::PixelBufferDescriptor(halves->data(), halves->size() * sizeof(math::half), backend::PixelDataFormat::R, backend::PixelDataType::HALF,
+            [](void*, size_t, void* user) { delete (std::vector<math::half>*)user; }, halves));
+        fx.othersNow[k] = one.picture;
+    }
+}
 static Texture* screen_picture(Stage& s) {
     return Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).format(Texture::InternalFormat::RGBA8)
         .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).build(*s.engine);
@@ -271,6 +302,7 @@ static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, 
         fx.head = (fx.head + 1) % fx.historyFrames;
         door::draw(s.engine, screen_copy(s, st), from, fx.historyInto[(size_t)fx.head], fx.hw, fx.hh);
     }
+    screen_sounds(s, st, fx);
     std::vector<Texture*> read((size_t)fx.pictures, from);
     const auto gather = [&] {
         size_t target = 0;

@@ -36,6 +36,8 @@ std::vector<ScriptKnob> script_knobs(const std::string& file) {
             k.low = 0, k.high = 1, k.usual = said.size() >= 2 ? std::atof(said[1].c_str()) : 0, k.step = 1;
         } else if (k.kind == "picture") {   // (another thing's picture read as one of its images: the thing, by its number)
             k.low = 0, k.high = 1e9, k.usual = 0, k.step = 1;
+        } else if (k.kind == "sound" && said.size() >= 3) {   // (another thing's sound read as an ISF audio input: the thing, by its number; fft or wave, how many)
+            k.low = 0, k.high = 1e9, k.usual = 0, k.step = 1, k.words = said[1] + " " + said[2];
         } else if (k.kind == "select" && said.size() >= 2) {
             for (size_t i = 1; i < said.size(); ++i) k.words += (i > 1 ? " " : "") + said[i];
         } else continue;

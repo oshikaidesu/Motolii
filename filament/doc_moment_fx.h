@@ -5,6 +5,7 @@ static void doc_things_fx(Doc& d) {
     s.before.clear();
     for (auto& [thing, e] : d.thingFx) {   // (each drawn alone into a picture, its effects run on it, before the stage's own view: thing_fx.h)
         thing_effects(s, e.st, doc_fx_join(doc_fx_list(d, thing)));
+        e.st.sounds = [&d, thing = thing](const std::string& file, const std::string& name, bool fft, int wide) { return doc_sound_now(d, thing, file, name, fft, wide); };
         const ScreenNumbers numbers = [&d, thing = thing, &e = e](const std::string& file, const std::string& name, double usual) {
             std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn)
             if (name == "origin_x" || name == "origin_y" || name == "turn" || name == "extent") {   // (where the thing is on the picture now, how turned, how large: an effect's pattern stuck to it)

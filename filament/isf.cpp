@@ -5,7 +5,7 @@
 // isf_FragNormCoord, TIME, RENDERSIZE...) are said in plain GLSL, each picture split into a texture and a sampler, the
 // knobs gathered into one struct and written in the head (script.h: // --track@...), its passes too (// --pass@...).
 // Made once into ~/Library/Caches/Motolii/isf/<hash>.wgsl, named by the file as it is. Its other images are
-// other things' pictures (screen.h others); its own vertex shader is worked out at each pixel. Not taken: audio.
+// other things' pictures (screen.h others), its audio inputs other things' sound; its own vertex shader is worked out at each pixel.
 #include "isf.h"
 #include <sys/stat.h>
 #include <cstdio>
@@ -66,6 +66,7 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
     const std::string picture = pictures.empty() ? "inputImage" : std::find(pictures.begin(), pictures.end(), "inputImage") != pictures.end() ? "inputImage" : pictures[0];
     std::vector<std::string> others;   // (its other images: each another thing's picture, chosen on its card, bound after the passes' pictures)
     for (const std::string& other : pictures) if (other != picture) others.push_back(other);
+    for (const auto& i : inputs.GetArray()) if (str(i, "TYPE") == "audio" || str(i, "TYPE") == "audioFFT") others.push_back(str(i, "NAME"));   // (its sound: an image as the spec says, bound after its other images)
 
     const std::map<std::string, std::string> kinds = {{"float", "float"}, {"bool", "int"}, {"long", "int"}, {"event", "int"}, {"point2D", "vec2"}, {"color", "vec4"}};
     std::string glsl = "#version 450\n";
@@ -104,9 +105,11 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
     glsl += "layout(location = 0) in vec2 isf_FragNormCoord;\nlayout(location = 0) out vec4 isf_FragColor;\n";
     for (const std::string& n : others) {
         std::string label = n;
-        for (const auto& i : inputs.GetArray()) if (str(i, "NAME") == n) label = str(i, "LABEL", n);
+        std::string sound;   // (an audio input: which, and how many it wants (MAX; none said, as many as are read))
+        for (const auto& i : inputs.GetArray())
+            if (str(i, "NAME") == n) label = str(i, "LABEL", n), sound = str(i, "TYPE") == "audioFFT" ? ",fft," : str(i, "TYPE") == "audio" ? ",wave," : "", sound += sound.empty() ? "" : std::to_string((int)(i.HasMember("MAX") ? num(i["MAX"], 0) : 0));
         std::replace(label.begin(), label.end(), ',', ' ');
-        lines += "// --picture@" + n + ":" + label + "\n";
+        lines += (sound.empty() ? "// --picture@" : "// --sound@") + n + ":" + label + sound + "\n";
         read.push_back(n);   // (read through ISF's words as the others are)
     }
     for (const std::string& n : others) glsl += "#define " + n + " sampler2D(isf_tex_" + n + ", isf_smp_" + n + ")\n";

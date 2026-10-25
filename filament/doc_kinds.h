@@ -19,6 +19,7 @@
 #include <fstream>
 #include "solid.h"
 #include "video.h"
+#include "sound.h"
 #include <filament/Skybox.h>
 #include <set>
 #include <sstream>
