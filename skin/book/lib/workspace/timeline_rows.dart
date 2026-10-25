@@ -31,6 +31,8 @@ extension _WsTimelineRows on _WsTimelineState {
       Expanded(
         child: Listener(
           onPointerSignal: _wheel,
+          child: WsTwoFingers(
+          onPan: (by, _) => _scrollBy(Offset(0, -by.dy)),   // (the labels go up and down with the tracks' rows)
           child: ClipRect(
             child: LayoutBuilder(
               builder: (context, box) {
@@ -46,6 +48,7 @@ extension _WsTimelineRows on _WsTimelineState {
                         height: WtM.row,
                         // Joined: a row carried up or down is the thing brought nearer or further back, by as many rows as it was carried.
                         child: GestureDetector(
+                          supportedDevices: wsPressing,
                           dragStartBehavior: DragStartBehavior.down, // (all of the way it was carried counts, from where the hand came down)
                           onVerticalDragStart: (_) => _lift = 0,
                           onVerticalDragUpdate: (d) => _lift += d.delta.dy,
@@ -71,6 +74,7 @@ extension _WsTimelineRows on _WsTimelineState {
                 );
               },
             ),
+          ),
           ),
         ),
       ),

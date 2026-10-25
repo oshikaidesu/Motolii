@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../forms/forms.dart';
+import 'two_fingers.dart';
 import '../sets/panels/timeline_parts_parts.dart' show TpGlyph, TpGlyphPainter;
 import '../tokens.dart';
 import 'key_drag.dart';
@@ -82,8 +83,16 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   }
 
   void _wheel(PointerSignalEvent e) {
-    if (e is! PointerScrollEvent) return;
-    final d = e.scrollDelta, sideways = HardwareKeyboard.instance.isShiftPressed || d.dx.abs() > d.dy.abs();
+    if (e is PointerScrollEvent) _scrollBy(e.scrollDelta);
+  }
+
+  /// A trackpad's two fingers: they carry the tracks as a wheel does, the other way (the content goes with the fingers);
+  /// a pinch zooms about the frame under them (Final Cut's, Cavalry's, Theatre.js's).
+  void _fingers(Offset by, Offset _) => _scrollBy(-by);
+  void _pinch(double by, Offset at) => _setZoom(_zoom * by, anchor: _view.frameAt(at.dx).round().clamp(0, Ws.duration));
+
+  void _scrollBy(Offset d) {
+    final sideways = HardwareKeyboard.instance.isShiftPressed || d.dx.abs() > d.dy.abs();
     if (HardwareKeyboard.instance.isMetaPressed || HardwareKeyboard.instance.isControlPressed) {
       _setZoom(_zoom * math.pow(1.0015, -d.dy));
     } else if (sideways) {
@@ -378,6 +387,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
               GestureDetector(
                 key: const ValueKey('ws-tl-ruler'),
                 behavior: HitTestBehavior.opaque,
+                supportedDevices: wsPressing,
                 onDoubleTapDown: (d) => _rulerTwice(d.localPosition),
                 onDoubleTap: () {},
                 onPanDown: (d) => _rulerDown(d.localPosition),
@@ -401,9 +411,13 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                   },
                   child: Listener(
                   onPointerSignal: _wheel,
+                  child: WsTwoFingers(
+                  onPan: _fingers,
+                  onPinch: _pinch,
                   child: GestureDetector(
                     key: const ValueKey('ws-tl-tracks'),
                     behavior: HitTestBehavior.opaque,
+                    supportedDevices: wsPressing,
                     dragStartBehavior: DragStartBehavior.down,
                     onTapDown: (d) => _trackDown(d.localPosition),
                     onPanStart: (d) => _barDown(d.localPosition),
@@ -416,6 +430,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                         painter: WtTracksPainter(rows: rows, view: v, fps: Ws.fps, vscroll: _vscroll),
                       ),
                     ),
+                  ),
                   ),
                 ),
                 ),

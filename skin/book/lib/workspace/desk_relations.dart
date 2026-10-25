@@ -10,6 +10,7 @@ import '../tokens.dart';
 import 'desk_kit.dart';
 import 'relate.dart';
 import 'stage_art.dart';
+import 'two_fingers.dart';
 import 'ws.dart';
 
 class DeskRelations extends StatefulWidget {
@@ -87,6 +88,9 @@ class _DeskRelationsState extends State<DeskRelations> {
                   onPointerSignal: (e) {
                     if (e is PointerScrollEvent) setState(() => _zoom = (_zoom * math.exp(-e.scrollDelta.dy / 300)).clamp(.3, 8.0));
                   },
+                  // (a trackpad's two fingers turn the view, as Blender's do: the drag below takes them; a pinch comes nearer)
+                  child: WsTwoFingers(
+                  onPinch: (by, _) => setState(() => _zoom = (_zoom * by).clamp(.3, 8.0)),
                   child: GestureDetector(
                   key: const ValueKey('ws-relations-map'),
                   behavior: HitTestBehavior.opaque,
@@ -105,7 +109,7 @@ class _DeskRelationsState extends State<DeskRelations> {
                     if (view.hit(d.localPosition) case final id?) ws.select(id);
                   },
                   child: CustomPaint(size: box.biggest, painter: _Map(view, ws.selected, {if (_pathsOf(ws)[ws.selected] case final w?) ws.selected!: w}, _stationsOf(ws))),
-                ));
+                )));
               }),
             ),
           ),

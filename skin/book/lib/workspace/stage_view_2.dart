@@ -356,9 +356,14 @@ class _StageViewState extends State<StageView> implements StageHandles {
   }
 
   void _scroll(PointerSignalEvent e, _View v) {
-    if (e is! PointerScrollEvent || widget.zoom == 0) return;
+    if (e is PointerScrollEvent) _panBy(-e.scrollDelta, v);
+  }
+
+  /// Panned by (a trackpad's two fingers as they go, a wheel the other way), when zoomed in; at Fit there is nowhere to go.
+  void _panBy(Offset by, _View v) {
+    if (widget.zoom == 0) return;
     final lim = Offset(WsArt.comp.width * v.s / 2 + v.area.width / 2 - 60, WsArt.comp.height * v.s / 2 + v.area.height / 2 - 60);
-    final p = _pan - e.scrollDelta;
+    final p = _pan + by;
     setState(() => _pan = Offset(p.dx.clamp(-lim.dx, lim.dx), p.dy.clamp(-lim.dy, lim.dy)));
   }
 
@@ -370,6 +375,8 @@ class _StageViewState extends State<StageView> implements StageHandles {
       _pickTo();
       return Listener(
         onPointerSignal: (e) => _scroll(e, v),
+        child: WsTwoFingers(
+        onPan: (by, _) => _panBy(by, v),
         child: MouseRegion(
           onHover: (e) {
             widget.cursor.value = v.toComp(e.localPosition);
@@ -382,6 +389,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
           },
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
+            supportedDevices: wsPressing,
             onTapUp: (d) {
               widget.onPoke?.call();
               if (widget.make == 'pen') return _pen(v, d.localPosition, d.localPosition); // (a tap: a corner)
@@ -459,6 +467,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
               ],
             ),
           ),
+        ),
         ),
       );
     },
