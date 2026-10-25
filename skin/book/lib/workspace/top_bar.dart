@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import '../forms/forms.dart';
 import '../parts/skin_parts.dart';
@@ -300,7 +301,10 @@ class _RenderState extends State<_Render> {
           child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [SizedBox(width: Shape.z(70), child: Text(k, style: T.label(Grey.g56))), Expanded(child: v)]),
         );
         Text fact(String v) => Text(v, style: T.value(Grey.g91));
-        return Stack(
+        // (Esc and ⌘. cancel, as a Mac dialog's Cancel does: Apple's; the keys reach here from the name field it holds)
+        return CallbackShortcuts(
+          bindings: {const SingleActivator(LogicalKeyboardKey.escape): _open.hide, const SingleActivator(LogicalKeyboardKey.period, meta: true): _open.hide},
+          child: Stack(
           children: [
             Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _open.hide, child: const ColoredBox(color: Color(0x88000000)))),
             Center(
@@ -354,6 +358,7 @@ class _RenderState extends State<_Render> {
               ),
             ),
           ],
+          ),
         );
       },
       child: Forms.worn.action(context, ActionSpec('Render', _ask)), // (as the skin's forms draw it)
