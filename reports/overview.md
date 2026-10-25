@@ -13,6 +13,7 @@
 | [trackpad_map.md](trackpad_map.md) | トラックパッド（Apple の決まり、13 本） | 7 | 3 | 5 |
 | [export_map.md](export_map.md) | 書き出しの画面（12 本） | 2 | 4（決め打ち） | 61 |
 | [file_screens_map.md](file_screens_map.md) | 始める画面・ファイル・読み込み・履歴・ヘルプ・確認（10 本） | — | — | ほぼ全部 |
+| [alight_map.md](alight_map.md) | Alight Motion（効果 169・機能 32。下限として） | 有る 33＋14 | 一部 56＋4 | 無い 80＋13 |
 | [settings_screens_map.md](settings_screens_map.md) | 新しい文書・文書の設定・環境設定（10 本） | — | — | ほぼ全部 |
 | **操作の表の計（上の 5 つ）** | | **88** | **154** | **407** |
 

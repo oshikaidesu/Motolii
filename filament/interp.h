@@ -1,5 +1,6 @@
-// interp.h: how a value goes through the stretch between two keys. Motolii's own nine kinds, brought as they are from
-// the past repository (rust_ae/Motolii, motolii/crates/motolii-doc/src/eval/track.rs and bezier.rs): the same names,
+// interp.h: how a value goes through the stretch between two keys. Alight Motion's nine kinds (its help center,
+// "Animation Easing Curves": Cubic Bezier, Bounce, Elastic, Cyclic, Random, Steps, Elastic Steps, with hold and linear),
+// as the past repository made them after it, brought as they are from there (rust_ae/Motolii, motolii/crates/motolii-doc/src/eval/track.rs and bezier.rs): the same names,
 // the same numbers in the same order, the same formulas, the same numbers refused. `interp_ease` is told u (how far
 // through the stretch, 0 to 1) and gives how far the value has gone from the one key's to the other's: 0 at the
 // start, 1 at the end (Cyclic ends where its wave is), and on the way it may pass the end and come back.
