@@ -70,7 +70,7 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
 // What kind of thing a file makes, by its name's end ("": none): the one place that says so.
 static const char* doc_kind_of(const char* file) {
     static const struct { const char* kind; const char* ends; } made[] = {
-        {"film", "mp4 mov m4v webm mkv"}, {"picture", "png jpg jpeg webp svg json lot"}, {"solid", "glb gltf ply"}, {"text", "ttf otf ttc"}};
+        {"film", "mp4 mov m4v webm mkv mp3 wav m4a aac flac ogg opus"}, {"picture", "png jpg jpeg webp svg json lot"}, {"solid", "glb gltf ply"}, {"text", "ttf otf ttc"}};
     std::string end = std::filesystem::path(file).extension().string();
     for (char& c : end) c = (char)std::tolower((unsigned char)c);
     if (doc_among(doc_shapes, file)) return "solid";

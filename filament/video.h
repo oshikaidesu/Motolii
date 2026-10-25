@@ -34,6 +34,7 @@ struct Video {
     float starts = 0.f;                // how far into its cut it is when the stage's time is 0
     float from = 0.f, to = 0.f, speed = 1.f;   // the cut of the file that is shown, in the file's seconds, and how fast (below 0: backwards)
     std::atomic<bool> sound{false};    // the file has sound too
+    bool heard = false;                // the file is sound alone: its picture GStreamer's own wavescope, as playbin draws a visualisation where there is no video (GST_PLAY_FLAG_VIS)
     std::atomic<bool> ended{false};    // the reader has read to the cut's end: the mark of it has come down the stream of pictures, after the last of them
     float4 key{0.f};                   // its green screen, if it has one (green); until its first picture is on the sheet the sheet is all clear
     float2 keySoft{0.f};
@@ -263,7 +264,7 @@ static void video_at(Stage& s, Video* v, float seconds);
 // then gave no picture at all: so GStreamer alone, 1.28.8, with both streams taken.)
 static gint video_wanted(GstElement*, GstStreamCollection*, GstStream* stream, gpointer film) {
     if (gst_stream_get_stream_type(stream) & GST_STREAM_TYPE_AUDIO) ((Video*)film)->sound = true;   // (it has sound: heard in a written film, kit.h)
-    return (gst_stream_get_stream_type(stream) & GST_STREAM_TYPE_VIDEO) ? 1 : 0;
+    return (gst_stream_get_stream_type(stream) & (((Video*)film)->heard ? GST_STREAM_TYPE_AUDIO : GST_STREAM_TYPE_VIDEO)) ? 1 : 0;
 }
 
 // The stream of pictures the reader found in the file goes to `out`.
@@ -281,6 +282,11 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
     static const bool started = (gst_init(nullptr, nullptr), true);
     (void)started;
     Video* v = new Video;
+    {
+        std::string end = std::filesystem::path(file).extension().string();
+        for (char& c : end) c = (char)std::tolower((unsigned char)c);
+        v->heard = std::string(" .mp3 .wav .m4a .aac .flac .ogg .opus ").find(" " + end + " ") != std::string::npos;
+    }
     // (read by the machine's decoder; where it has no room (59 films at once on an M4) by a decoder of the CPU, the
     //  pictures then copied up: decodebin, told to pass the machine's decoders over, and a converter to NV12)
     for (int cpu = 0; cpu < 2; ++cpu) {
@@ -288,7 +294,7 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
         v->reader = gst_pipeline_new(nullptr);
         GstElement* opens = gst_element_factory_make("filesrc", nullptr);
         GstElement* reads = gst_element_factory_make(cpu ? "decodebin" : "decodebin3", nullptr);   // (chooses the parts for whatever the file is)
-        GstElement* turn = cpu ? gst_element_factory_make("videoconvert", nullptr) : nullptr;
+        GstElement* turn = cpu && !v->heard ? gst_element_factory_make("videoconvert", nullptr) : nullptr;
         v->out = GST_APP_SINK(gst_element_factory_make("appsink", nullptr));
         if (!opens || !reads || !v->out || (cpu && !turn)) return video_trouble = "GStreamer lacks a part (filesrc, decodebin3, decodebin, videoconvert or appsink)", nullptr;
         GstCaps* wanted = gst_caps_from_string("video/x-raw,format=NV12");   // (light and colour apart, eight bits: what video.h shares)
@@ -299,6 +305,16 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
         gst_element_link(opens, reads);
         if (turn) gst_bin_add(GST_BIN(v->reader), turn), gst_element_link(turn, GST_ELEMENT(v->out));
         v->into = turn ? turn : GST_ELEMENT(v->out);
+        if (v->heard) {   // (its sound drawn as a wave: audioconvert ! wavescope ! a 1280 by 720 picture ! videoconvert, into `out`)
+            GstElement* a = gst_element_factory_make("audioconvert", nullptr), *scope = gst_element_factory_make("wavescope", nullptr), *size = gst_element_factory_make("capsfilter", nullptr), *c = gst_element_factory_make("videoconvert", nullptr);
+            if (!a || !scope || !size || !c) return video_trouble = "GStreamer lacks a part (audioconvert, wavescope, capsfilter or videoconvert)", nullptr;
+            GstCaps* big = gst_caps_from_string("video/x-raw,width=1280,height=720,framerate=30/1");
+            g_object_set(size, "caps", big, nullptr), gst_caps_unref(big);
+            gst_bin_add_many(GST_BIN(v->reader), a, scope, size, c, nullptr);
+            gst_element_link_many(a, scope, size, c, GST_ELEMENT(v->out), nullptr);
+            v->into = a;
+            v->sound = true;
+        }
         if (cpu) g_signal_connect(reads, "autoplug-select", G_CALLBACK(+[](GstElement*, GstPad*, GstCaps*, GstElementFactory* part, gpointer) {
             return g_str_has_prefix(GST_OBJECT_NAME(part), "vtdec") ? 2 /* GST_AUTOPLUG_SELECT_SKIP */ : 0 /* TRY */; }), nullptr);
         else g_signal_connect(reads, "select-stream", G_CALLBACK(video_wanted), v);
