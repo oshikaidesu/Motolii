@@ -10,7 +10,7 @@ import 'package:flutter/widgets.dart';
 
 import '../tokens.dart';
 import 'stage_art.dart';
-import '../motolii.dart' show Motolii, MotoliiReads;
+import '../motolii.dart' show Motolii, MotoliiDocument, MotoliiMoment, MotoliiWrites, MotoliiQuestions, MotoliiShelves, MotoliiWatch;
 import '../sets/panels/timeline_parts_parts.dart' show TpGlyph, TpGlyphView;
 import 'relate.dart';
 import 'ws.dart';

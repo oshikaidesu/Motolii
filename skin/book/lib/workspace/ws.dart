@@ -9,7 +9,7 @@ import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/widgets.dart';
 
 import '../motolii.dart';
-export '../motolii.dart' show MotoliiReads;   // (the inside's reads, an extension of Motolii: whoever holds the window's Ws.inside can call them)
+export '../motolii.dart' show MotoliiDocument, MotoliiMoment, MotoliiWrites, MotoliiQuestions, MotoliiShelves, MotoliiWatch;   // (the inside's reads, an extension of Motolii: whoever holds the window's Ws.inside can call them)
 import '../theme.dart';
 import '../tokens.dart';
 import 'desk_kit.dart' show DeskTool, deskTools;
