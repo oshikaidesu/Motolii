@@ -54,7 +54,7 @@ void main() {
     expect([mv.end['x'], mv.end['size'], mv.over], [closeTo(-.35, 1e-6), closeTo(1, 1e-6), closeTo(samples[pop].over, 1e-3)]);   // (its ease kept: the Ease desk's)
 
     final lag = mv.lag;
-    await t.dragFrom(box.topLeft + lay.pulls[0].center, const Offset(80, 0));
+    await t.timedDragFrom(box.topLeft + lay.pulls[0].center, const Offset(80, 0), const Duration(milliseconds: 300));   // (Flutter's own drag in steps, as a hand drags: in real time one jump is not always taken)
     await rest();
     mv = wsMoves(ws).single;
     expect(mv.lag, greaterThan(lag + .1));

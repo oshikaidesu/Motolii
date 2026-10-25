@@ -85,7 +85,8 @@ void main() {
         final before = _all(m, at), shown = wsTransform(ws, ws.selected);
         var moved = <String>{};
         for (final by in const [Offset(40, -40), Offset(-80, 80)]) {
-          await handDrag(t, t.getCenter(knob), by);   // (in steps, as a hand drags: in real time one jump is not always taken)
+          await t.timedDragFrom(t.getCenter(knob), by, const Duration(milliseconds: 300));   // (Flutter's own drag in steps, as a hand drags: in real time one jump is not always taken)
+          await settled(t, wsOf(t));
           moved = _moved(before, _all(m, at));
           if (moved.isNotEmpty) break;
         }
@@ -118,7 +119,8 @@ void main() {
       expect(handles, isNotEmpty, reason: 'the picked thing shows its handles');
       for (final MapEntry(key: name, value: at0) in handles.entries) {
         final want = _handleFor[name.split(' ').first]!, before = _all(m, at);
-        await handDrag(t, origin + at0, const Offset(30, 20));   // (in steps, as a hand drags: in real time one jump is not always taken)
+        await t.timedDragFrom(origin + at0, const Offset(30, 20), const Duration(milliseconds: 300));   // (Flutter's own drag in steps, as a hand drags: in real time one jump is not always taken)
+        await settled(t, wsOf(t));
         await t.pumpAndSettle();
         final moved = _moved(before, _all(m, at));
         if (moved.isEmpty || !want.containsAll(moved)) wrong.add('$name moved ${moved.isEmpty ? 'nothing' : moved.join(', ')} (drawn for ${want.join(', ')})');

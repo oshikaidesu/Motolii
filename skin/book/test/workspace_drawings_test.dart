@@ -18,7 +18,8 @@ void main() {
     final drawing = find.byType(ShadowDrawing);
     await seen(t, drawing);
     final box = t.getRect(drawing), was = (m.value(rect, 'shadow_distance', 0) ?? 0, m.value(rect, 'shadow_blur', 0) ?? 0);
-    await handDrag(t, box.center, Offset(box.height * .35, -box.height * .3)); // (from the thing's middle: the shadow lies under it when near)
+    await t.timedDragFrom(box.center, Offset(box.height * .35, -box.height * .3), const Duration(milliseconds: 300)); // (from the thing's middle: the shadow lies under it when near)
+    await settled(t, wsOf(t));
     final angle = m.value(rect, 'shadow_angle', 0)!;
     expect(angle, inInclusiveRange(0, 90), reason: 'up and to the right (ThorVG, as After Effects: 0 up, 90 right): $angle');
     expect(m.value(rect, 'shadow_distance', 0)!, greaterThan(was.$1), reason: 'further');
