@@ -14,6 +14,7 @@ struct DocPlane {
     math::double2 at(double fx, double fy) const { return o + ex * fx - ey * fy; }
 };
 int sk_svg_anchors(const char* data, std::vector<float>& xy);
+int sk_svg_ends(const char* data, float& fx, float& fy, int& stretches);
 bool sk_svg_move(const char* data, int nth, float dx, float dy, std::string& out);
 int sk_svg_handles(const char* data, std::vector<float>& xy, std::vector<float>* of = nullptr);
 bool sk_svg_move_handle(const char* data, int nth, float dx, float dy, std::string& out);
@@ -43,7 +44,7 @@ static int doc_pen(Doc& d, int thing, double x, double y, double hx, double hy) 
     const double now = d.stage->now;
     doc_act(d);
     if (thing && (!doc_knows(d, thing) || doc_word(d, thing, "shape") != "path")) thing = 0;   // (not a path: the pen begins one)
-    if (const std::string was = thing ? doc_word(d, thing, "path") : ""; !was.empty() && was.back() == 'Z') {   // (closed: on one of its points, it is taken away; on its outline, one is put there; else the pen begins another)
+    if (const std::string was = thing ? doc_word(d, thing, "path") : ""; [&] { float fx, fy; int n; return sk_svg_ends(was.c_str(), fx, fy, n) == 4; }()) {   // (closed: on one of its points, it is taken away; on its outline, one is put there; else the pen begins another)
         const DocPlane plane(d, thing, now);
         const math::double2 p = plane.own(x, y);
         std::string edited;
@@ -62,11 +63,12 @@ static int doc_pen(Doc& d, int thing, double x, double y, double hx, double hy) 
     char said[200] = "";
     if (thing) {
         const math::double2 p = own(x, y), in = own(x - hx, y - hy);
-        double fx = 0.0, fy = 0.0;
-        const size_t last = path.find_last_of("MLSCZ");
-        const bool smooth = last != std::string::npos && (path[last] == 'S' || path[last] == 'C'), handle = hx != 0.0 || hy != 0.0;
-        const bool closes = std::sscanf(path.c_str(), "M%lf %lf", &fx, &fy) == 2 && path.find_first_of("LSC") != std::string::npos && last != std::string::npos && path[last] != 'Z' &&
-                            length(o + ex * fx - ey * fy - math::double2{x, y}) < 8.0;   // (back on its first point, as the hand sees it)
+        float first_x = 0.f, first_y = 0.f;
+        int stretches = 0;
+        const int last = sk_svg_ends(path.c_str(), first_x, first_y, stretches);   // (Skia's reading of it: skpath.cpp)
+        const double fx = first_x, fy = first_y;
+        const bool smooth = last == 3, handle = hx != 0.0 || hy != 0.0;
+        const bool closes = stretches > 0 && last != 4 && length(o + ex * fx - ey * fy - math::double2{x, y}) < 8.0;   // (back on its first point, as the hand sees it)
         if (path.empty()) std::snprintf(said, sizeof said, "M%.4f %.4f", p.x, p.y);
         else if (closes) std::snprintf(said, sizeof said, smooth || handle ? " S%.4f %.4f %.4f %.4f Z" : " Z", handle ? own(o.x + ex.x * fx - ey.x * fy - hx, o.y + ex.y * fx - ey.y * fy - hy).x : fx,
                                        handle ? own(o.x + ex.x * fx - ey.x * fy - hx, o.y + ex.y * fx - ey.y * fy - hy).y : fy, fx, fy);

@@ -95,6 +95,24 @@ int sk_svg_anchors(const char* data, std::vector<float>& xy) {
     return (int)xy.size() / 2;
 }
 
+// What a pen asks of a path before it puts a point on: its first point, and how it ends (Skia's verbs: 0 not read or
+// empty, 1 a move alone, 2 a line, 3 a curve, 4 closed); how many stretches it has.
+int sk_svg_ends(const char* data, float& fx, float& fy, int& stretches) {
+    fx = fy = 0.f, stretches = 0;
+    const std::optional<SkPath> made = SkParsePath::FromSVGString(data);
+    if (!made || made->isEmpty()) return 0;
+    const SkPoint first = made->getPoint(0);
+    fx = first.fX, fy = first.fY;
+    int last = 1;
+    SkPathIter it = made->iter();
+    while (const std::optional<SkPathIter::Rec> r = it.next()) {
+        if (r->fVerb == SkPathVerb::kMove) continue;
+        if (r->fVerb != SkPathVerb::kClose) ++stretches;
+        last = r->fVerb == SkPathVerb::kClose ? 4 : r->fVerb == SkPathVerb::kLine ? 2 : 3;
+    }
+    return last;
+}
+
 // A path with its nth point (and any point lying where it does: a closed path's first and last) moved by dx, dy, its
 // handles on either side going with it, as a pen tool moves a point; written again as SVG's path data (Skia's own).
 bool sk_svg_move(const char* data, int nth, float dx, float dy, std::string& out) {
