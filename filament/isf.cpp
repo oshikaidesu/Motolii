@@ -132,7 +132,10 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
     glsl += "};\n";
     for (const std::string& n : switches)
         for (std::string* t : {&body, &vertex}) *t = std::regex_replace(*t, std::regex("(^|[^.\\w])" + n + "\\b"), "$1(" + n + "_on != 0)");
-    glsl += "layout(location = 0) in vec2 isf_FragNormCoord;\nlayout(location = 0) out vec4 isf_FragColor;\n";
+    // (ISF's place runs up from the bottom left, as WebGL's does (ISF_Spec); WebGPU's runs down from the top left: the place,
+    //  the pixel's own and every picture read turned over alike, so a picture read where it is stays as it was)
+    glsl += "layout(location = 0) in vec2 isf_FragNormCoord_down;\nlayout(location = 0) out vec4 isf_FragColor;\n";
+    glsl += "#define isf_FragNormCoord vec2(isf_FragNormCoord_down.x, 1.0 - isf_FragNormCoord_down.y)\n#define isf_up(c) vec2((c).x, 1.0 - (c).y)\n";
     for (const std::string& n : others) {
         std::string label = n;
         std::string sound;   // (an audio input: which, and how many it wants (MAX; none said, as many as are read))
@@ -144,14 +147,14 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
     }
     for (const std::string& n : others) glsl += "#define " + n + " sampler2D(isf_tex_" + n + ", isf_smp_" + n + ")\n";
     glsl += "#define " + picture + " sampler2D(isf_tex_" + picture + ", isf_smp_" + picture + ")\n";
-    glsl += "#define TIME time\n#define RENDERSIZE resolution\n#define TIMEDELTA (1.0 / 60.0)\n#define FRAMEINDEX int(frame)\n#define PASSINDEX int(passindex)\n#define DATE vec4(0.0)\n";
+    glsl += "#define TIME time\n#define RENDERSIZE resolution\n#define TIMEDELTA (1.0 / 60.0)\n#define FRAMEINDEX int(frame)\n#define PASSINDEX int(passindex)\n#define DATE vec4(0.0, 0.0, 0.0, TIME)\n";   // (ISF_Spec: DATE.w the seconds of the day; here the document's own time, a clock that runs as the video does (Alight Motion's Timecode))
     for (const std::string& n : read) glsl += "#define isf_img_" + n + " sampler2D(isf_tex_" + n + ", isf_smp_" + n + ")\n#define _" + n + "_imgRect vec4(0.0, 0.0, RENDERSIZE)\n#define _" + n + "_imgSize RENDERSIZE\n#define _" + n + "_flip false\n";   // (VVISF's own words for a picture's place and size: each as large as the stage here)
     glsl += "#define vv_FragNormCoord isf_FragNormCoord\n";   // (ISF 1's name for it, as VVISF still says)
     glsl += "#define IMG_NORM_PIXEL(i, c) texture(i, c)\n#define IMG_PIXEL(i, c) texture(i, (c) / RENDERSIZE)\n";
     glsl += "#define IMG_THIS_NORM_PIXEL(i) texture(i, isf_FragNormCoord)\n#define IMG_THIS_PIXEL(i) texture(i, isf_FragNormCoord)\n#define IMG_SIZE(i) RENDERSIZE\n";
     body = std::regex_replace(body, std::regex(R"((\bIMG_(?:NORM_PIXEL|PIXEL|THIS_PIXEL|THIS_NORM_PIXEL|SIZE)\s*\(\s*)(\w+))"), "$1isf_img_$2");
     glsl += "#define gl_FragColor isf_FragColor\n#define texture2D texture\n#define varying //\n";
-    glsl += "#define texture(i, c) textureLod(i, c, 0.0)\n";   // (WGSL samples with derivatives only where every pixel goes the same way: these read the top level anywhere)
+    glsl += "#define texture(i, c) textureLod(i, isf_up(c), 0.0)\n#define gl_FragCoord vec4(gl_FragCoord.x, RENDERSIZE.y - gl_FragCoord.y, gl_FragCoord.zw)\n";   // (WGSL samples with derivatives only where every pixel goes the same way: these read the top level anywhere)
     if (!vertex.empty()) {   // (its own vertex shader: what it hands on (neighbours' places, mostly) worked out at each pixel instead, before the pixel's own work: the same, being straight in the place)
         const std::regex said(R"(^[ \t]*(?:varying|out|in)[ \t]+(\w+)[ \t]+(\w+)([ \t]*\[[^\]]*\])?[ \t]*;)", std::regex::multiline);
         std::map<std::string, std::string> handed;   // (each by its name: its type, and how many when it is a row of them)
@@ -209,7 +212,7 @@ std::string isf_file(const std::string& file) {
     if (std::filesystem::path(file).extension() != ".fs" && !three_is(file)) return file;   // (a three.js effect: made ISF first, three_isf.cpp)
     struct stat st {};
     if (stat(file.c_str(), &st) != 0) return "";
-    const std::string key = "isf 6|" + file + "|" + std::to_string(st.st_mtimespec.tv_sec) + "." + std::to_string(st.st_mtimespec.tv_nsec) + "|" + std::to_string(st.st_size);
+    const std::string key = "isf 8|" + file + "|" + std::to_string(st.st_mtimespec.tv_sec) + "." + std::to_string(st.st_mtimespec.tv_nsec) + "|" + std::to_string(st.st_size);
     static std::mutex lock;
     static std::map<std::string, std::string> made;   // (what each file as it is became: "" could not be)
     std::lock_guard<std::mutex> hold(lock);
