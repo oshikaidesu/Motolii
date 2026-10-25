@@ -34,9 +34,33 @@
 5. **端の扱いを選べる**：段々の跳び方（jump-*）、0〜1 に収めるか（clamp）。Alight Motion の「最後に跳ぶ」「はみ出したまま」はここで直る。
 6. **値の型に合わせる**：大きさは指数で（ExpoScale）。
 
+## 借りる先（中身とライセンスを確かめた）
+
+| 測り方 | 借りる先 | ライセンス | 中身 |
+|---|---|---|---|
+| 式の族＋つまみ（Power・Quad〜Quint・Sine・Circ・Expo・Bounce・Back(overshoot)・Elastic(amplitude, period)、in / out / inOut / outIn） | anime.js `src/easings/eases/parser.js` | MIT | Penner（2001）の式。outIn まである |
+| 点で描く `linear()`（% で時間の位置） | anime.js `src/easings/linear/index.js` | MIT | CSS `linear()` と同じ書き方 |
+| 段々 | anime.js `src/easings/steps/index.js` | MIT | `steps(n, fromStart)`（跳び方は 2 つだけ。jump-none・jump-both は CSS Easing 2 の定義から足す） |
+| ばらつき | anime.js `src/easings/irregular/index.js` | MIT | `irregular(length, randomness)`：0〜1 に収めたまま増え続ける点を `linear()` で結ぶ（RoughEase の代わり） |
+| ばね | anime.js `src/easings/spring/index.js`、Motion `packages/motion-dom/src/animation/generators/spring.ts` | MIT | bounce（−1〜1、SwiftUI と同じ減衰比への写し方）・知覚の長さ、または stiffness・damping・mass・velocity |
+| ベジェ | gre/bezier-easing `src/index.js` | MIT | 3 次式を閉じた形で解く（Baranovskiy の解き方） |
+| 速さ・影響度（AE） | bodymovin-extension `bundle/jsx/utils/keyframeHelper.jsx` | MIT | 出る側：x＝影響度/100、y＝速さ/平均の速さ×影響度/100。入る側：x＝1−影響度/100、y＝1−速さ/平均の速さ×影響度/100（AE のキーを Lottie のベジェに直す所） |
+| GSAP（RoughEase・CustomWiggle・CustomBounce・SlowMo・ExpoScale） | 借りない | 独自（「All rights reserved」、OSI でない） | 考え方だけ表に残す。ばらつきは anime.js の irregular、揺れ・跳ねは Penner と spring で作る |
+
+## Motolii の区間の持ち方と、入れ方
+- 今：区間ごとに「型＋数字 5 つ」（`filament/interp.h` の 9 型）か「名前の付いた道」（`filament/ways.h`、Cavalry の Magic Easing の名前、SQLite の式）か「利用者の式」（ways/ の 1 ファイル＝1 式、`bezier()` が使える）。式は SQLite とスクリプト（QuickJS）の両方で同じ文字が動く。
+- **anime.js をそのまま QuickJS で動かす**のが一番借りる形（Motolii は QuickJS をもう持っている）。式を写さず、区間の型の名前とつまみで anime.js の関数を呼ぶ。
+- 写すなら、SQLite の 1 式に収まる物（Penner の族、Back、Elastic、steps、ばねの閉じた形）は `ways.h` に出典つきで。点の並び（`linear()`・irregular）は 1 式に収まらないので QuickJS 側。
+- Alight Motion の 6 種は、この上で「既定の数字の組」として持つ（`alight_ease/` の曲線に合わせる）。
+
 ## 出典
 - [CSS Easing Functions Level 2（W3C）](https://www.w3.org/TR/css-easing-2/)
 - [GSAP Eases](https://gsap.com/docs/v3/Eases/)
 - [Motion spring](https://motion.dev/docs/spring)
 - [Blender Manual: F-Curve Properties](https://docs.blender.org/manual/en/latest/editors/graph_editor/fcurves/properties.html)
 - [Adobe: Speed between keyframes](https://helpx.adobe.com/ca/after-effects/desktop/animate-in-after-effects/speed-between-keyframes/speed.html)
+- [anime.js（MIT）](https://github.com/juliangarnier/anime)
+- [Motion（MIT）](https://github.com/motiondivision/motion)
+- [bezier-easing（MIT）](https://github.com/gre/bezier-easing)
+- [bodymovin-extension（MIT）](https://github.com/bodymovin/bodymovin-extension)
+- [GSAP の README（独自ライセンス）](https://github.com/greensock/GSAP)
