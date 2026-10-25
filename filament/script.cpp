@@ -1,5 +1,6 @@
 // script.h's door: the head read for knobs, QuickJS-ng behind each().
 #include "script.h"
+#include "aviutl.h"
 #include "ways.h"
 #include <quickjs.h>
 #include <algorithm>
@@ -19,6 +20,7 @@ static std::vector<std::string> split(const std::string& s, char by) {
 }
 
 std::vector<ScriptKnob> script_knobs(const std::string& file) {
+    if (aviutl_is(file)) return aviutl_knobs(file);   // (an AviUtl2 script's head: aviutl.cpp)
     std::vector<ScriptKnob> knobs;
     std::ifstream in(file);
     for (std::string line; std::getline(in, line);) {

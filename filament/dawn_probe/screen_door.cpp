@@ -41,7 +41,7 @@ struct Screen {
     ProgramHandle program;
     DescriptorSetLayoutHandle layout;
     int pictures = 1;
-    struct Set { std::vector<TextureHandle> read; int pass = 0; DescriptorSetHandle handle; };
+    struct Set { std::vector<TextureHandle> read; int pass = 0, sampler = 0; DescriptorSetHandle handle; };
     std::vector<Set> sets;   // one for each pictures read and pass: a set once used is not told otherwise (Filament's WebGPU keeps what it made of it)
     std::vector<BufferObjectHandle> knobs;   // a pass's own (written several times in one frame, one buffer would show its last)
     uint32_t knobBytes = 0;
@@ -129,20 +129,20 @@ void knobs(Engine* engine, Screen* s, const void* data, uint32_t bytes, int pass
     driver(engine).updateBufferObject(to, BufferDescriptor(copy, s->knobBytes, [](void* p, size_t, void*) { std::free(p); }), 0);
 }
 
-void draw(Engine* engine, Screen* s, Texture* const* from, RenderTarget* to, uint32_t w, uint32_t h, int pass, const int* at, bool over) {
+void draw(Engine* engine, Screen* s, Texture* const* from, RenderTarget* to, uint32_t w, uint32_t h, int pass, const int* at, bool over, int blend, int sampler) {
     DriverApi& d = driver(engine);
     std::vector<TextureHandle> read;
     for (int i = 0; i < s->pictures; ++i) read.push_back(downcast(from[i])->getHwHandle());
     DescriptorSetHandle set;
-    for (const Screen::Set& one : s->sets) if (one.read == read && one.pass == pass) set = one.handle;
+    for (const Screen::Set& one : s->sets) if (one.read == read && one.pass == pass && one.sampler == sampler) set = one.handle;
     if (!set) {   // (pictures not read so before: a set of their own, made once)
         SamplerParams linear{};
-        linear.filterMag = SamplerMagFilter::LINEAR, linear.filterMin = SamplerMinFilter::LINEAR;
-        linear.wrapS = SamplerWrapMode::CLAMP_TO_EDGE, linear.wrapT = SamplerWrapMode::CLAMP_TO_EDGE;
+        linear.filterMag = sampler == 1 ? SamplerMagFilter::NEAREST : SamplerMagFilter::LINEAR, linear.filterMin = sampler == 1 ? SamplerMinFilter::NEAREST : SamplerMinFilter::LINEAR;
+        linear.wrapS = linear.wrapT = sampler == 2 ? SamplerWrapMode::REPEAT : sampler == 3 ? SamplerWrapMode::MIRRORED_REPEAT : SamplerWrapMode::CLAMP_TO_EDGE;
         set = d.createDescriptorSet(s->layout, utils::ImmutableCString{"screen"});
         for (int i = 0; i < s->pictures; ++i) d.updateDescriptorSetTexture(set, descriptor_binding_t(i), read[(size_t)i], linear);
         if (s->knobBytes) d.updateDescriptorSetBuffer(set, descriptor_binding_t(s->pictures), knobsOf(engine, s, pass), 0, s->knobBytes);
-        s->sets.push_back({read, pass, set});
+        s->sets.push_back({read, pass, sampler, set});
     }
     RenderPassParams params{};
     params.viewport = at ? backend::Viewport{at[0], at[1], (uint32_t)at[2], (uint32_t)at[3]} : backend::Viewport{0, 0, w, h};
@@ -158,6 +158,8 @@ void draw(Engine* engine, Screen* s, Texture* const* from, RenderTarget* to, uin
     if (over) {   // (Filament's own way of laying a translucent picture over: premultiplied, the one on top over what is under)
         pipeline.rasterState.blendFunctionSrcRGB = BlendFunction::ONE, pipeline.rasterState.blendFunctionSrcAlpha = BlendFunction::ONE;
         pipeline.rasterState.blendFunctionDstRGB = BlendFunction::ONE_MINUS_SRC_ALPHA, pipeline.rasterState.blendFunctionDstAlpha = BlendFunction::ONE_MINUS_SRC_ALPHA;
+        if (blend == 1) pipeline.rasterState.blendFunctionDstRGB = pipeline.rasterState.blendFunctionDstAlpha = BlendFunction::ONE;
+        if (blend == 2) pipeline.rasterState.blendFunctionSrcRGB = pipeline.rasterState.blendFunctionSrcAlpha = BlendFunction::ZERO, pipeline.rasterState.blendFunctionDstRGB = pipeline.rasterState.blendFunctionDstAlpha = BlendFunction::SRC_ALPHA;
     }
     d.bindDescriptorSet(set, 0, {});
     d.beginRenderPass(to ? downcast(to)->getHwHandle() : downcast(engine)->getDefaultRenderTarget(), params);   // (none: the screen, as the frame's swap chain is)

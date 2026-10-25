@@ -241,14 +241,14 @@ static char doc_thor_letter(const std::string& w) {
 static DocScript* doc_script_of(Doc& d, const std::string& file) {
     if (file.empty() || file == "none" || std::filesystem::path(file).extension() == ".mid") return nullptr;   // (a MIDI file's notes are copies, not a script: midi.h)
     const std::string ext = std::filesystem::path(file).extension().string();
-    const bool screen = ext == ".wgsl" || ext == ".fs" || ext == ".mjs" || three_is(file) || solid_is(file);   // (a three.js effect: as an ISF one, three_isf.cpp; a solid's shape: its knobs named by it too, not run as a script, solid_three.cpp)
+    const bool screen = ext == ".wgsl" || ext == ".fs" || ext == ".mjs" || three_is(file) || solid_is(file) || aviutl_is(file);   // (a three.js effect: as an ISF one, three_isf.cpp; a solid's shape: its knobs named by it too, not run as a script, solid_three.cpp; an AviUtl2 script: run by its own Lua, aviutl_fx.h)
     const bool lottie = ext == ".json" || ext == ".lot";   // (an After Effects file: its slots its knobs, lottie_slots.h)   // (.mjs: a PlayCanvas splat effect, its knobs its attributes: splatfx.h)   // (a whole-screen effect's knobs: named by the effect too)
     DocScript& s = doc_scripts(d)[file];
     const auto now = std::chrono::steady_clock::now();
     if (s.stamp >= 0 && now - s.looked < std::chrono::milliseconds(250)) return &s;
     s.looked = now;
     std::error_code wrong;
-    const long long stamp = (long long)std::filesystem::last_write_time(file, wrong).time_since_epoch().count();
+    const long long stamp = (long long)std::filesystem::last_write_time(aviutl_is(file) ? aviutl_path(file) : file, wrong).time_since_epoch().count();
     if (wrong) return s.stamp >= 0 ? &s : nullptr;
     if (s.stamp != stamp) {
         s = DocScript{};

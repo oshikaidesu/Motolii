@@ -29,7 +29,9 @@ struct Screen;
 // `layered`: which pictures are arrays of layers (bit k: picture k is a `texture_2d_array<f32>`, a stage's past frames).
 Screen* screen(filament::Engine*, const char* name, const char* fragment, uint32_t knobBytes, std::string* why = nullptr, int pictures = 1, unsigned layered = 0);
 void knobs(filament::Engine*, Screen*, const void* data, uint32_t bytes, int pass = 0);
-void draw(filament::Engine*, Screen*, filament::Texture* const* from, filament::RenderTarget* to, uint32_t w, uint32_t h, int pass = 0, const int* at = nullptr, bool over = false);   // to null: the screen; at: only there (left, bottom, wide, high), the rest cleared; over: laid over what `to` holds (its alpha premultiplied, as Filament's own pictures are), not drawn in its place
+void draw(filament::Engine*, Screen*, filament::Texture* const* from, filament::RenderTarget* to, uint32_t w, uint32_t h, int pass = 0, const int* at = nullptr, bool over = false, int blend = 0, int sampler = 0);   // to null: the screen; at: only there (left, bottom, wide, high), the rest cleared; over: laid over what `to` holds (its alpha premultiplied, as Filament's own pictures are), not drawn in its place
+// (blend, with over: 1 added to what is there, 2 what is there times the alpha drawn (AviUtl2's "add" and "mask");
+//  sampler: 0 linear and clamped, 1 nearest, 2 repeated, 3 mirrored (its SamplerState's ways))
 inline void draw(filament::Engine* e, Screen* s, filament::Texture* from, filament::RenderTarget* to, uint32_t w, uint32_t h, const int* at = nullptr) { draw(e, s, &from, to, w, h, 0, at); }
 void drop(filament::Engine*, Screen*);
 }  // namespace door

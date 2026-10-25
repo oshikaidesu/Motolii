@@ -181,6 +181,7 @@ struct ScreenStack {
     // Filament), else one of ThorVG's own by its letter (DrawnFx::order), drawn by ThorVG reading the picture the step
     // before made. So the pictures are the device's own, given to both: Filament draws into them, ThorVG reads and draws.
     std::vector<char> steps;
+    std::vector<std::shared_ptr<struct AviutlRun>> aviutl;   // (its AviUtl2 scripts in turn, step 'a': aviutl_fx.h)
     void* device[3] = {nullptr, nullptr, nullptr};  // (the WGPUTextures of shot, between[0], between[1])
     tvg::WgCanvas* thor[2] = {nullptr, nullptr};    // (ThorVG drawing into each picture between)
     Texture* seen = nullptr;                        // (its picture as the camera sees it, its effects on, this time)

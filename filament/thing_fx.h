@@ -6,14 +6,21 @@
 // picture over the screen.
 #pragma once
 #include "solid_three.h"
+#include "aviutl_fx.h"
 static char doc_thor_letter(const std::string& w);
 static void thing_effects(Stage& s, ScreenStack& st, const std::string& files) {
     if (st.files == files) return;
     st.files = files;
     st.fx.clear();
     st.steps.clear();
+    std::vector<std::shared_ptr<AviutlRun>> scripts;
     for (const std::string& file : script_files(files)) {
         if (file == "none") continue;
+        if (aviutl_is(file)) {   // (an AviUtl2 script: run each frame on its picture, the one already made kept)
+            const auto kept = std::find_if(st.aviutl.begin(), st.aviutl.end(), [&](const auto& r) { return r->file == file; });
+            scripts.push_back(kept != st.aviutl.end() ? *kept : aviutl_made(s, file)), st.steps.push_back('a');
+            continue;
+        }
         if (const char k = doc_thor_letter(file)) { st.steps.push_back(k); continue; }   // (one of ThorVG's own: drawn by ThorVG, in its place)
         if (std::filesystem::path(file).extension() == ".mjs") continue;   // (a splat effect: in the cloud's own look, points.h)
         if (solid_is(file)) continue;   // (a solid's shape: its picture laid on it, not an effect on its picture: thing_fx_solid)
@@ -29,6 +36,7 @@ static void thing_effects(Stage& s, ScreenStack& st, const std::string& files) {
         }
         if (made->door) st.fx.push_back(made), st.steps.push_back(0);
     }
+    st.aviutl = scripts;
 }
 // One of ThorVG's own effects as a step (k: its letter), on the picture `from` (the device's) drawn into picture
 // between `into` (0 or 1): a picture of the one before put in a scene of ThorVG's, the effect on the scene, drawn on the
@@ -96,9 +104,10 @@ static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenN
     st.seen = st.shot;
     if (st.steps.empty()) return;   // (quiet with no effects: only its picture, for another's)
     const float ppp = (float)s.view->getViewport().width / (float)std::max(1, s.w);   // (pixels of its picture a point of the stage, as the stage's view draws: the desk's are fewer)
-    const DrawnFx thor = thorFx && std::any_of(st.steps.begin(), st.steps.end(), [](char k) { return k != 0; }) ? thorFx() : DrawnFx{};
-    for (size_t i = 0, f = 0; i < st.steps.size(); ++i) {   // (each into a picture between: the effects take the whole picture as theirs, and fill what is clear)
+    const DrawnFx thor = thorFx && std::any_of(st.steps.begin(), st.steps.end(), [](char k) { return k != 0 && k != 'a'; }) ? thorFx() : DrawnFx{};
+    for (size_t i = 0, f = 0, a = 0; i < st.steps.size(); ++i) {   // (each into a picture between: the effects take the whole picture as theirs, and fill what is clear)
         Texture* from = i == 0 ? st.shot : st.between[(i - 1) % 2];
+        if (st.steps[i] == 'a') { aviutl_draw_step(s, *st.aviutl[a++], from, st.betweenTarget[i % 2], numbers, w, h); continue; }   // (an AviUtl2 script)
         if (st.steps[i]) { thing_thor(s, st, st.steps[i], st.device[i == 0 ? 0 : 1 + (i - 1) % 2], (int)(i % 2), w, h, thor, ppp); continue; }   // (one of ThorVG's own)
         screen_fresh(s, *st.fx[f]);
         ScreenFx& one = *st.fx[f++];

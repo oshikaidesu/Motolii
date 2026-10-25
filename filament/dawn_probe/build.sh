@@ -10,7 +10,7 @@ HERE="$PWD"
 SRC="$HERE/../third_party/filament_src"
 if [ ! -d "$SRC" ]; then
     git clone --depth 1 --branch v1.77.2 https://github.com/google/filament.git "$SRC"
-    (cd "$SRC" && git apply "$HERE/filament_dawn_compute.patch")
+    (cd "$SRC" && git apply "$HERE/filament_dawn_compute.patch" && git apply "$HERE/glslang_hlsl.patch")   # (glslang_hlsl: its HLSL front end built in, AviUtl2's shaders: ../aviutl.cpp)
 fi
 mkdir -p "$SRC/out/wgpu" out/shots
 cd "$SRC/out/wgpu"

@@ -1,0 +1,39 @@
+add picture /Users/motolii_maker/motolii/filament/fx_sample.jpg
+still out/base.png
+say 1 fx <pkgs>/IZUisMe.OpenGlow/y_aviutl2_script_OpenGlow-r3.au2pkg/Script/OpenGlow.anm2
+set 1 js_OpenGlow_strength 250
+set 1 js_OpenGlow_threshold 55
+set 1 js_OpenGlow_radius 200
+still out/e0.png
+say 1 fx <pkgs>/seilor0.twinkle_sl/@twinkle_sl.obj2#直線
+still out/e1.png
+say 1 fx <pkgs>/seilor0.twinkle_sl/@twinkle_sl.obj2#カーブ
+still out/e2.png
+say 1 fx <pkgs>/azurite.PointZoom/y_PointZoom-v2.0.1.au2pkg/Script/ポイントズーム.anm2
+set 1 js_______________________zoom 160
+set 1 js_______________________x 60
+set 1 js_______________________y -80
+set 1 js_______________________sampler 1
+still out/e3.png
+say 1 fx <pkgs>/korarei.Stylize_K/y_@Stylize_K/@Stylize_K/@Stylize_K.anm2#Threshold
+still out/e4.png
+say 1 fx <pkgs>/korarei.Diffusion_K/y_Diffusion_K.au2pkg/Script/Diffusion_K/@Diffusion_K.anm2#Noise
+set 1 js__Diffusion_K_amount 50
+still out/e5.png
+say 1 fx <pkgs>/korarei.Stylize_K/y_@Stylize_K/@Stylize_K/@Stylize_K.anm2#Mosaic
+set 1 js__Stylize_K_track0 24
+set 1 js__Stylize_K_track1 24
+still out/e6.png
+say 1 fx <pkgs>/korarei.Stylize_K/y_@Stylize_K/@Stylize_K/@Stylize_K.anm2#Posterize
+still out/e7.png
+say 1 fx <pkgs>/korarei.Kaleidoscope_K/y_Kaleidoscope_K/Kaleidoscope_K/Kaleidoscope_K.anm2
+set 1 js_Kaleidoscope_K_track2 60
+still out/e8.png
+say 1 fx <pkgs>/CatWithNeko.Halftone/Halftone.anm2
+set 1 js_Halftone_size 14
+still out/e9.png
+say 1 fx <pkgs>/Karoterra.OilPainting/y_Karoterra.OilPainting-v1.1.0.au2pkg/Script/Karoterra.OilPainting/油絵KR.anm2
+set 1 js_______KR_blurSize 8
+still out/e10.png
+say 1 fx <pkgs>/zopty.BlindLoop/BlindLoop.anm2
+still out/e11.png

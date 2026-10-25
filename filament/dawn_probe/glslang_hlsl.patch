@@ -1,0 +1,49 @@
+diff --git a/libs/filamat/CMakeLists.txt b/libs/filamat/CMakeLists.txt
+index 706ca0ce3..c9dede7c8 100644
+--- a/libs/filamat/CMakeLists.txt
++++ b/libs/filamat/CMakeLists.txt
+@@ -84,6 +84,7 @@ include_directories(${CMAKE_BINARY_DIR})
+ 
+ # Filamat
+ add_library(${TARGET} STATIC ${HDRS} ${PRIVATE_HDRS} ${SRCS})
++target_compile_definitions(${TARGET} PRIVATE ENABLE_HLSL)   # motolii: glslang's headers as glslang itself is built (HLSL on)
+ target_include_directories(${TARGET} PUBLIC ${PUBLIC_HDR_DIR})
+ set_target_properties(${TARGET} PROPERTIES FOLDER Libs)
+ target_link_libraries(${TARGET} backend_headers shaders filabridge utils smol-v zstd)
+diff --git a/third_party/glslang/glslang/tnt/CMakeLists.txt b/third_party/glslang/glslang/tnt/CMakeLists.txt
+index 00442cfd7..59cf7fc1d 100644
+--- a/third_party/glslang/glslang/tnt/CMakeLists.txt
++++ b/third_party/glslang/glslang/tnt/CMakeLists.txt
+@@ -37,7 +37,15 @@ set(SOURCES
+         ../MachineIndependent/preprocessor/PpTokens.cpp
+         ../MachineIndependent/propagateNoContraction.cpp
+         ../GenericCodeGen/CodeGen.cpp
+-        ../GenericCodeGen/Link.cpp)
++        ../GenericCodeGen/Link.cpp
++        # motolii: glslang's own HLSL front end (as glslang/CMakeLists.txt lists it under ENABLE_HLSL)
++        ../HLSL/hlslAttributes.cpp
++        ../HLSL/hlslParseHelper.cpp
++        ../HLSL/hlslScanContext.cpp
++        ../HLSL/hlslOpMap.cpp
++        ../HLSL/hlslTokenStream.cpp
++        ../HLSL/hlslGrammar.cpp
++        ../HLSL/hlslParseables.cpp)
+ 
+ set(HEADERS
+         ../Public/ShaderLang.h
+diff --git a/third_party/glslang/tnt/CMakeLists.txt b/third_party/glslang/tnt/CMakeLists.txt
+index 3e1718797..053399a01 100644
+--- a/third_party/glslang/tnt/CMakeLists.txt
++++ b/third_party/glslang/tnt/CMakeLists.txt
+@@ -30,9 +30,8 @@ if(ENABLE_NV_EXTENSIONS)
+     add_definitions(-DNV_EXTENSIONS)
+ endif(ENABLE_NV_EXTENSIONS)
+ 
+-#if(ENABLE_HLSL)
+-#    add_definitions(-DENABLE_HLSL)
+-#endif(ENABLE_HLSL)
++# motolii: HLSL read too (AviUtl2's pixel shaders, motolii/filament/aviutl.cpp)
++add_definitions(-DENABLE_HLSL)
+ 
+ if(WIN32)
+     set(CMAKE_DEBUG_POSTFIX "d")
