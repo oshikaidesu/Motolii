@@ -49,12 +49,12 @@ class CameraGroup extends StatelessWidget {
           first: first,
           trailing: const GroupKey('Target', ['v_position']),
           children: [
-            const PropRow(
+            PropRow(
               id: 'v_parent',
               label: 'Layer',
               keyable: false,
               cells: [
-                Chooser(id: 'v_parent', options: layers, searchable: true),
+                Chooser(id: 'v_parent', options: doc.choices['v_parent'] ?? layers, searchable: true),   // (the document's layers, as the Parent row's: the samples only where there is no document)
               ],
             ),
             PropRow(
