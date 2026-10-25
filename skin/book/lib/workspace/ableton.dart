@@ -14,6 +14,10 @@ void wsAskTimeline(String what) => wsTimelineAsk.value = (what, wsTimelineAsk.va
 /// The picked thing's name asked for, in its row (Live: Cmd+R renames, 42.5 and 42.19).
 final wsAskRename = ValueNotifier<int>(0);
 
+/// The mark (locator) picked by a click on its flag: Cmd+R names it, Delete takes it away (Live 6.4: a locator is
+/// selected, then renamed or deleted like anything else).
+final wsMarkPicked = ValueNotifier<(double, String)?>(null);
+
 /// Where playing began (Live 42.20: Space plays from the start marker and stops back there; Shift+Space goes on from
 /// where it stopped).
 int? _playFrom;
@@ -68,7 +72,7 @@ Map<String, void Function()> wsAbletonCommands(Ws ws) {
     'nudge.right10': () => nudge(10),
     'layer.previous': () => row(-1),
     'layer.next': () => row(1),
-    'thing.rename': () => ws.selected == null ? null : wsAskRename.value++,   // (Live 42.5/42.19 Cmd+R)
+    'thing.rename': () => ws.selected == null && wsMarkPicked.value == null ? null : wsAskRename.value++,   // (Live 42.5/42.19 Cmd+R: the picked track, or the picked locator)
     'thing.solo': () {   // (Live 42.15/42.19 S: solo selected tracks)
       final t = int.tryParse(ws.selected ?? ''), m = ws.inside;
       if (t == null || m == null) return;

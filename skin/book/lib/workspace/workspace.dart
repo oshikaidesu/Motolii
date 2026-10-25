@@ -152,6 +152,10 @@ class _WorkspaceState extends State<Workspace> {
         ws.after(m.later('set', thing: t, name: 'visible', number: hidden ? 1 : 0));
       },
       'thing.remove': () {
+        if (wsMarkPicked.value case (final at, _)?) {   // (a picked mark first: Live's locator, deleted like a clip)
+          wsMarkPicked.value = null;
+          return ws.after(m.later('mark', number: at));
+        }
         if (ws.keys.isNotEmpty) return wsRemoveKeys(ws, ws.keys.toList());   // (keys picked: those, not the thing)
         final all = ws.many.isNotEmpty ? ws.many.toList() : [if (ws.selected != null) ws.selected!];   // (things picked together: all of them, one step)
         final ts = [for (final id in all) if (int.tryParse(id) case final t?) t];

@@ -10,7 +10,7 @@ import 'package:flutter/widgets.dart';
 
 import '../forms/forms.dart';
 import 'two_fingers.dart';
-import 'ableton.dart' show wsTimelineAsk, wsAskRename;
+import 'ableton.dart' show wsTimelineAsk, wsAskRename, wsAskTimeline, wsMarkPicked;
 import '../sets/panels/timeline_parts_parts.dart' show TpGlyph, TpGlyphPainter;
 import '../tokens.dart';
 import 'key_drag.dart';
@@ -188,33 +188,15 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   int? _workDrag; // 0 in, 1 out, 2 both, null scrub
   double _workGrab = 0;
 
-  // The document's marks on the ruler, as After Effects' composition markers: a double click where there is none puts
-  // one there (named by its order), on one names it; one is carried along by its flag (its name kept), and carried off
-  // the ruler, up or down, it is taken away. Each one step.
+  // The document's marks on the ruler, as Ableton Live's locators (timeline_asked.dart: a right click puts one, a click
+  // picks and goes to one, Cmd+R names it); one is carried along by its flag (its name kept), and carried off the
+  // ruler, up or down, it is taken away. Each one step.
   (double, String)? _markHeld;
   int _markTo = 0;
   bool _markOff = false;
   (double, String)? _naming;
   final _markWords = TextEditingController();
   late final FocusNode _markFocus = FocusNode()..addListener(() => _markFocus.hasFocus ? null : _named());   // (the field left: the name said)
-
-  void _rulerTwice(Offset p) {
-    final ws = _ws!, m = ws.inside;
-    if (m == null) return;
-    if (_flagAt(p) case final flag?) {
-      setState(() => _naming = flag);
-      _markWords.text = flag.$2;
-      _markFocus.requestFocus();
-      return;
-    }
-    final at = _view.frameAt(p.dx).round().clamp(0, Ws.duration) / Ws.fps, marks = ws.marks;
-    if (marks.any((k) => (k.$1 - at).abs() < 0.5 / Ws.fps)) return;
-    var n = marks.length + 1;
-    while (marks.any((k) => k.$2 == 'M$n')) {
-      n++;
-    }
-    ws.after(m.later('mark', number: at, word: 'M$n'));
-  }
 
   void _named() {
     final was = _naming, ws = _ws!, words = _markWords.text.trim();
@@ -395,8 +377,10 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                 key: const ValueKey('ws-tl-ruler'),
                 behavior: HitTestBehavior.opaque,
                 supportedDevices: wsPressing,
-                onDoubleTapDown: (d) => _rulerTwice(d.localPosition),
+                onTapUp: (d) => _rulerTap(d.localPosition),   // (Live's scrub area: timeline_asked.dart)
+                onDoubleTapDown: (d) => _rulerDouble(d.localPosition),
                 onDoubleTap: () {},
+                onSecondaryTapDown: (d) => _rulerRight(d.localPosition),
                 onPanDown: (d) => _rulerDown(d.localPosition),
                 onPanUpdate: (d) => _rulerMove(d.localPosition),
                 onPanEnd: (_) => _workLetGo(),

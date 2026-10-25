@@ -48,10 +48,16 @@ Future<void> _fingers(WidgetTester t, Offset at, {Offset by = Offset.zero, doubl
 
 const _tl = Size(1226, 300);
 
-/// The frame a click on the ruler at x lands on.
+/// The frame the ruler is at, at x: a hand comes down there and drags a little away and back (a drag scrubs; a click
+/// would play, as Live's scrub area does).
 Future<int> _frameAt(WidgetTester t, Ws ws, double x) async {
-  await t.tapAt(Offset(x, WtM.header + WtM.ruler - 6));
+  final g = await t.startGesture(Offset(x, WtM.header + WtM.ruler - 6));
+  await g.moveBy(const Offset(30, 0));
   await t.pump();
+  await g.moveBy(const Offset(-30, 0));
+  await t.pump();
+  await g.up();
+  await t.pump(const Duration(milliseconds: 400));
   return ws.frame;
 }
 

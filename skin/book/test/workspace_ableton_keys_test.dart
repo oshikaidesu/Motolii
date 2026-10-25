@@ -3,6 +3,7 @@
 // between rows; Cmd+R renames in the row; Cmd+L loops; + and - zoom, Z zooms to what is picked and X goes back.
 import 'dart:io';
 
+import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -37,16 +38,22 @@ Future<void> _pump(WidgetTester t, Ws ws) async {
   await t.pumpAndSettle();
 }
 
-/// How many frames lie across the ruler between x = 400 and x = 1000.
-Future<int> _across(WidgetTester t, Ws ws) async {
+/// The frame the ruler is at, at x: a hand comes down there and drags a little away and back (a drag scrubs; a click
+/// would play, as Live's scrub area does, and the test's clock does not move).
+Future<int> _scrubAt(WidgetTester t, Ws ws, double x) async {
   final y = WtM.header + WtM.ruler - 6;
-  await t.pump(const Duration(seconds: 1));   // (taps a second apart: never a double-click, which marks)
-  await t.tapAt(Offset(400, y));
-  final a = ws.frame;
-  await t.pump(const Duration(seconds: 1));
-  await t.tapAt(Offset(1000, y));
-  return ws.frame - a;
+  final g = await t.startGesture(Offset(x, y));
+  await g.moveBy(const Offset(30, 0));
+  await t.pump();
+  await g.moveBy(const Offset(-30, 0));
+  await t.pump();
+  await g.up();
+  await t.pump(const Duration(milliseconds: 400));
+  return ws.frame;
 }
+
+/// How many frames lie across the ruler between x = 400 and x = 1000.
+Future<int> _across(WidgetTester t, Ws ws) async => await _scrubAt(t, ws, 1000) - await _scrubAt(t, ws, 400);
 
 void main() {
   test('the keys are Live\'s: Cmd+R renames, Cmd+Shift+R exports, Space plays from the start, the arrows nudge', () {
@@ -155,6 +162,34 @@ void main() {
     does['loop.toggle']!();
     await t.pumpAndSettle();
     expect(ws.inside!.looping, !looping);
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
+  testWidgets('locators as Live\'s: a right click puts one, a click goes to it and picks it, Cmd+R names it', (t) async {
+    final j = _joined(), ws = j.ws, does = wsAbletonCommands(ws);
+    await _pump(t, ws);
+    final y = WtM.header + WtM.ruler - 6;
+    await t.tapAt(Offset(600, WtM.header + WtM.ruler - 6), buttons: kSecondaryButton);
+    await t.pumpAndSettle();
+    ws.reread();
+    expect(ws.marks.length, 1, reason: 'a right click adds a locator');
+    final (at, name) = ws.marks.single;
+    expect(name, 'M1');
+    ws.frame = 0;
+    final flagX = 600.0 + 3;   // (on its flag, just right of where it stands)
+    await t.pump(const Duration(seconds: 1));
+    await t.tapAt(Offset(flagX, WtM.header + WtM.band + 6));
+    await t.pump(const Duration(milliseconds: 400));
+    expect(ws.frame, (at * Ws.fps).round(), reason: 'a click on the flag goes there');
+    expect(wsMarkPicked.value, isNotNull, reason: 'and picks it');
+    does['thing.rename']!();
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const ValueKey('ws-tl-mark-name')), 'Drop');
+    await t.testTextInput.receiveAction(TextInputAction.done);
+    await t.pumpAndSettle();
+    ws.reread();
+    expect(ws.marks.single.$2, 'Drop', reason: 'Cmd+R names the picked locator');
+    expect(y, greaterThan(0));
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 }

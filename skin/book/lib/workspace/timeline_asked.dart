@@ -1,5 +1,6 @@
 // timeline_asked.dart: what the window's keys ask of how the timeline looks (ableton.dart: Ableton Live's zoom,
-// loop and rename), which the timeline keeps itself.
+// loop and rename), which the timeline keeps itself; and the ruler as Live's scrub area and locators (Live 12 manual,
+// chapter 6 "Arrangement View": 6.3 and 6.4).
 part of 'timeline.dart';
 
 mixin _TimelineAsked on State<WsTimeline> {
@@ -50,11 +51,67 @@ mixin _TimelineAsked on State<WsTimeline> {
     }
   }
 
+  /// Played from where it now is (stopped first if playing: the clock goes where the playhead is put).
+  void _playAt(int f) {
+    final ws = _t._ws!;
+    ws.playing = false;
+    ws.frame = f;
+    ws.playing = true;
+  }
+
+  /// A click on the ruler: on a locator, it is picked and the playhead goes there (6.4); elsewhere play starts there
+  /// (6.3: "Clicking anywhere in the scrub area makes play jump to that point"); the work area's band is the work area's.
+  void _rulerTap(Offset p) {
+    final t = _t, ws = t._ws;
+    if (ws == null) return;
+    if (t._flagAt(p) case final flag?) {
+      wsMarkPicked.value = flag;
+      final f = (flag.$1 * Ws.fps).round();
+      if (ws.playing) return _playAt(f);
+      ws.frame = f;
+      return;
+    }
+    wsMarkPicked.value = null;
+    if (p.dy <= WtM.band + 2) return;
+    _playAt(t._view.frameAt(p.dx).round().clamp(0, Ws.duration));
+  }
+
+  /// A double click: on a locator, play from it (6.4); elsewhere, zoom to what is picked, else to the whole (6.1).
+  void _rulerDouble(Offset p) {
+    if (_t._flagAt(p) case final flag?) return _playAt((flag.$1 * Ws.fps).round());
+    final ws = _t._ws;
+    if (ws != null && (ws.keys.isNotEmpty || ws.layer != null)) return wsAskTimeline('selection');
+    _t._setZoom(1);
+  }
+
+  /// A right click: a locator put there, named by its order (6.4: Add Locator); on one, it is picked.
+  void _rulerRight(Offset p) {
+    final ws = _t._ws, m = ws?.inside;
+    if (ws == null || m == null) return;
+    if (_t._flagAt(p) case final flag?) {
+      wsMarkPicked.value = flag;
+      return;
+    }
+    final at = _t._view.frameAt(p.dx).round().clamp(0, Ws.duration) / Ws.fps, marks = ws.marks;
+    if (marks.any((k) => (k.$1 - at).abs() < 0.5 / Ws.fps)) return;
+    var n = marks.length + 1;
+    while (marks.any((k) => k.$2 == 'M$n')) {
+      n++;
+    }
+    ws.after(m.later('mark', number: at, word: 'M$n'));
+  }
+
   void _rename() {
     final ws = _t._ws;
-    if (!mounted || ws?.layer == null) return;
-    setState(() => _renaming = ws!.layer!.id);
-    _renameWords.text = ws!.layer!.name;
+    if (!mounted || ws == null) return;
+    if (wsMarkPicked.value case final flag?) {   // (a picked locator is named, in its flag)
+      setState(() => _t._naming = flag);
+      _t._markWords.text = flag.$2;
+      return _t._markFocus.requestFocus();
+    }
+    if (ws.layer == null) return;
+    setState(() => _renaming = ws.layer!.id);
+    _renameWords.text = ws.layer!.name;
     _renameWords.selection = TextSelection(baseOffset: 0, extentOffset: _renameWords.text.length);
     _renameFocus.requestFocus();
   }
