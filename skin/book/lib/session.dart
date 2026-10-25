@@ -9,7 +9,12 @@ import 'package:flutter/widgets.dart';
 
 import 'sets/inspector_gui_set.dart' show GDoc;
 import 'tokens.dart';
-part 'session_2.dart';
+part 'session_layers.dart';
+part 'session_picking.dart';
+part 'session_playhead.dart';
+part 'session_carry.dart';
+part 'session_timeline.dart';
+part 'session_undo.dart';
 
 /// A phenomenon attached to a layer (the shelf's Wave): it sways the layer along y, evaluated at the playhead. Amplitude in comp px, frequency in Hz.
 class Wave {
@@ -90,7 +95,6 @@ class _Step {
 }
 
 class Session extends ChangeNotifier {
-  void _changed() => notifyListeners();   // (told from its calls kept in the extension beside it: session_2.dart)
   Session({bool seedKeys = false, bool empty = false}) {
     if (empty) layers.clear();
     for (final l in layers) {
@@ -118,116 +122,17 @@ class Session extends ChangeNotifier {
 
   int _made = 0;
 
-  /// A new layer at a position on the stage (comp px, centre origin), selected. One undo step (undo removes it). null when the six rows are full.
-  LayerM? addLayer(String kind, String name, double x, double y, {int start = 0, int end = 90}) {
-    if (layers.length >= 6) return null;
-    final l = LayerM('n${_made++}', name, Fam.all[(_made + 1) % Fam.all.length], start.toDouble(), end.toDouble(), x: x, y: y)..kind = kind;
-    if (kind == 'text') l.text = name;
-    l.doc.addListener(() => _onDoc(l));
-    layers.add(l);
-    _undo.add(_Step.fn(() {
-      layers.remove(l);
-      _sel.remove(l.id);
-    }));
-    select(l.id);
-    return l;
-  }
-
-  // ---- behaviour shelf: a phenomenon is picked from the shelf, attached to a layer, and its numbers are read and edited in the Inspector ----
-
-  /// Where the layer is drawn relative to where it sits (comp px): the attached wave at the playhead.
-  Offset waveShift(LayerM l) {
-    final w = l.wave;
-    return w == null ? Offset.zero : Offset(0, w.amp * math.sin(2 * math.pi * w.freq * frame / fps));
-  }
-
-  /// Attach a Wave to a layer (one undo step). Attaching again keeps the numbers it has.
-  void attachWave(LayerM l) {
-    if (l.wave != null) {
-      select(l.id);
-      return;
-    }
-    l.wave = const Wave(80, 1);
-    _undo.add(_Step.fn(() => l.wave = null));
-    select(l.id);
-    notifyListeners();
-  }
-
   _Step? _waveRun;
-
-  /// Edit the attached wave's numbers; one scrub is one undo step.
-  void setWave(LayerM l, {double? amp, double? freq}) {
-    final old = l.wave;
-    if (old == null) return;
-    if (_undo.isEmpty || !identical(_undo.last, _waveRun)) {
-      _waveRun = _Step.fn(() => l.wave = old);
-      _undo.add(_waveRun!);
-    }
-    l.wave = Wave(amp ?? old.amp, freq ?? old.freq);
-    notifyListeners();
-  }
-
-  void removeWave(LayerM l) {
-    final old = l.wave;
-    if (old == null) return;
-    l.wave = null;
-    _undo.add(_Step.fn(() => l.wave = old));
-    notifyListeners();
-  }
-
-  /// Change what kind of layer this is (text / shape): one undo step.
-  void setKind(LayerM l, String kind) {
-    final old = l.kind;
-    if (old == kind) return;
-    l.kind = kind;
-    _undo.add(_Step.fn(() => l.kind = old));
-    notifyListeners();
-  }
 
   /// Show a value on a layer without writing it (no history, nothing to undo): the hover try-on and the hot-swap.
   String? trialLayer;
   final trial = <String, double>{};
-  double val(LayerM l, String id) => trialLayer == l.id && trial.containsKey(id) ? trial[id]! : l.doc[id];
-
-  void tryOn(LayerM l, String id, double v) {
-    if (trialLayer != null && trialLayer != l.id) trial.clear();
-    trialLayer = l.id;
-    trial[id] = v;
-    notifyListeners();
-  }
-
-  void tryOff() {
-    if (trialLayer == null) return;
-    trialLayer = null;
-    trial.clear();
-    notifyListeners();
-  }
-
-  /// Write what is being tried: one undo step.
-  void useTrial() {
-    final l = trialLayer == null ? null : byId(trialLayer!);
-    if (l == null) return;
-    final t = Map.of(trial);
-    tryOff();
-    setProp(l, t);
-  }
-
-  /// Write values on a layer outside a drag: one undo step (the layer's document does the bookkeeping).
-  void setProp(LayerM l, Map<String, double> vals) {
-    l.doc.v.addAll(vals);
-    l.doc.poke();
-  }
 
   /// What the Inspector edits while several layers are selected (W5): the primary's values, a value that differs across the selection marked mixed.
   final group = GDoc();
   Map<String, double> _gPrev = {}, _pPrev = {};
   Set<String> _gMixedPrev = {};
   String? note; // a short readout of the drag in progress (shown under the Stage)
-  void say(String? t) {
-    if (note == t) return;
-    note = t;
-    notifyListeners();
-  }
 
   final layers = <LayerM>[
     LayerM('l0', 'Scatter', Fam.scatter, 10, 92, x: -620, y: -180),
@@ -253,7 +158,6 @@ class Session extends ChangeNotifier {
   Map<LayerM, TlBase>? _tlBase;
   Set<String> _tlKeySel = {};
   static String kid(LayerM l, int f) => '${l.id}:$f';
-  bool keyOn(LayerM l, int f) => keySel.contains(kid(l, f));
   Timer? _timer;
   final _clock = Stopwatch();
   int _from = 0;
@@ -262,143 +166,6 @@ class Session extends ChangeNotifier {
   bool keyRing = false;
   LayerM? _moving;
   Offset _moveLast = Offset.zero;
-
-  List<String> get selected => List.unmodifiable(_sel);
-  bool isSelected(String id) => _sel.contains(id);
-  LayerM? get primary => _sel.isEmpty ? null : byId(_sel.last);
-  int get undoSteps => _undo.length;
-  LayerM byId(String id) => layers.firstWhere((l) => l.id == id);
-  int indexOf(String id) => layers.indexWhere((l) => l.id == id);
-
-  // ---- verbs ---------------------------------------------------------------------------------------------------------------
-
-  /// A plain click picks one; with [add] (Shift / Cmd / Ctrl) it adds or removes one.
-  void select(String id, {bool add = false, bool key = false}) {
-    if (!add) keySel.clear();
-    if (add) {
-      _sel.contains(id) ? _sel.remove(id) : _sel.add(id);
-    } else {
-      _sel
-        ..clear()
-        ..add(id);
-    }
-    keyRing = key;
-    _syncGroup();
-    notifyListeners();
-  }
-
-  /// Esc or a click on empty ground.
-  void clear() {
-    keySel.clear();
-    if (_sel.isEmpty) {
-      notifyListeners();
-      return;
-    }
-    _sel.clear();
-    keyRing = false;
-    _syncGroup();
-    notifyListeners();
-  }
-
-  void hover(String? id) {
-    if (id == hovered) return;
-    hovered = id;
-    notifyListeners();
-  }
-
-  /// Tab / Shift-Tab / arrows: the next layer, wrapping; with nothing selected the first (or the last going back).
-  void step(int by) {
-    final i = primary == null ? (by > 0 ? -1 : 0) : indexOf(primary!.id), n = layers.length;
-    select(layers[(i + by) % n].id, key: true);
-  }
-
-  /// A press on a box that is not selected yet: select it and carry on as a drag, one gesture (the doc keeps the snapshot).
-  void beginMove(LayerM l, Offset at) {
-    if (isSelected(l.id) && _sel.length > 1) {
-      // a press on a box that is already in the selection drags the whole selection (it becomes the primary, the others follow)
-      _sel
-        ..remove(l.id)
-        ..add(l.id);
-      keyRing = false;
-      _syncGroup();
-      notifyListeners();
-    } else {
-      select(l.id);
-    }
-    _moving = l;
-    _moveLast = at;
-    l.doc.begin();
-  }
-
-  /// [k] = composition px per canvas px; Shift is fine (x0.1), the same rule as every other hand.
-  void moveTo(Offset at, double k, bool fine) {
-    final l = _moving;
-    if (l == null) return;
-    final dd = (at - _moveLast) * k * (fine ? Gui.fine : 1);
-    _moveLast = at;
-    l.doc
-      ..add('pos.x', dd.dx)
-      ..add('pos.y', dd.dy);
-  }
-
-  void endMove() {
-    _moving?.doc.end();
-    _moving = null;
-  }
-
-  /// Esc during a drag: everything is where the gesture found it.
-  bool cancelMove() {
-    if (tlCancel()) return true;
-    final l = _moving;
-    if (l == null) return false;
-    l.doc.cancel();
-    _moving = null;
-    return true;
-  }
-
-  bool get moving => _moving != null;
-
-  // ---- W3: playhead, play, keys ---------------------------------------------------------------------------------------------------
-
-  void seek(int f) {
-    frame = f.clamp(0, lastFrame);
-    _applyAll();
-    notifyListeners();
-  }
-
-  void toggle() {
-    playing = !playing;
-    _timer?.cancel();
-    if (playing) {
-      _from = frame;
-      _clock
-        ..reset()
-        ..start();
-      _timer = Timer.periodic(const Duration(milliseconds: 16), (_) {
-        frame = (_from + _clock.elapsedMilliseconds * fps ~/ 1000) % (lastFrame + 1); // loops
-        _applyAll();
-        notifyListeners();
-      });
-    } else {
-      _clock.stop();
-    }
-    notifyListeners();
-  }
-
-  bool get keyAtHead => primary?.pk.containsKey(frame) ?? false;
-
-  /// The key mark: no key here adds one at the playhead (the layer's current position); a key here removes it. One undo step.
-  void toggleKey() {
-    final l = primary;
-    if (l == null) return;
-    _edit(l, () {
-      if (l.pk.containsKey(frame)) {
-        l.pk.remove(frame);
-      } else {
-        l.pk[frame] = Offset(l.doc['pos.x'], l.doc['pos.y']);
-      }
-    });
-  }
 
   static bool _sameKeys(Map<int, Offset> a, Map<int, Offset> b) => a.length == b.length && a.entries.every((e) => b[e.key] == e.value);
 
@@ -411,6 +178,8 @@ class Session extends ChangeNotifier {
   static bool _near(double a, double b) => (a - b).abs() < 1e-9;
 
   static bool _differs(Map<String, double> a, Map<String, double> b) => a.entries.any((e) => b[e.key] != e.value);
+
+  void _changed() => notifyListeners();   // (told from its calls kept in the extension beside it: session_2.dart)
 }
 
 class SessionScope extends InheritedNotifier<Session> {
