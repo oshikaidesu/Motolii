@@ -207,17 +207,19 @@ static void screen_knobs(Stage& s, ScreenFx& fx, const ScreenNumbers& numbers, i
 }
 // An effect's own pictures (its passes' targets), made when first drawn, as large as the stage says, two each (one
 // read while the other is drawn into, then turned round: a kept one is the last frame's when read before it is drawn).
-static void screen_targets(Stage& s, ScreenFx& fx, bool drop = false) {
+static void screen_targets(Stage& s, ScreenFx& fx, bool drop = false, uint32_t pw = 0, uint32_t ph = 0) {
+    const double W = pw ? pw : s.w, H = ph ? ph : s.h;   // (a share of the picture it is given, as ISF's PASSES say it: a thing's box, or the stage)
     for (ScreenFx::Target& t : fx.targets)
         for (int k = 0; k < 2; ++k) {
-            if (drop) {
+            const uint32_t w = t.points[0] ? (uint32_t)t.points[0] : (uint32_t)std::max(1L, std::lround(W * t.share[0]));
+            const uint32_t h = t.points[1] ? (uint32_t)t.points[1] : (uint32_t)std::max(1L, std::lround(H * t.share[1]));
+            if (drop || (t.picture[k] && (t.w != w || t.h != h))) {   // (dropped, or the picture it is for is another size now: made again)
                 if (t.into[k]) s.engine->destroy(t.into[k]), t.into[k] = nullptr;
                 if (t.picture[k]) s.engine->destroy(t.picture[k]), t.picture[k] = nullptr;
-                continue;
+                if (drop) continue;
             }
             if (t.picture[k]) continue;
-            t.w = t.points[0] ? (uint32_t)t.points[0] : (uint32_t)std::max(1L, std::lround(s.w * t.share[0]));
-            t.h = t.points[1] ? (uint32_t)t.points[1] : (uint32_t)std::max(1L, std::lround(s.h * t.share[1]));
+            t.w = w, t.h = h;
             t.picture[k] = Texture::Builder().width(t.w).height(t.h).levels(1).format(t.fine ? Texture::InternalFormat::RGBA16F : Texture::InternalFormat::RGBA8)
                                .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).build(*s.engine);
             t.into[k] = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, t.picture[k]).build(*s.engine);
@@ -251,10 +253,16 @@ static void screen_place(Stage& s, Texture* from, RenderTarget* to, uint32_t w, 
 // what `to` holds (a thing's effects, over what is under the thing), not drawn in its place.
 static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, RenderTarget* to, const ScreenNumbers& numbers, uint32_t w = 0, uint32_t h = 0, bool over = false) {
     if (!w) w = (uint32_t)s.w, h = (uint32_t)s.h;
-    screen_targets(s, fx);
+    screen_targets(s, fx, false, w, h);
     if (fx.historyFrames) {   // (this frame written into the next layer of the past frames, before it is read)
+        const uint32_t hw = (uint32_t)std::max(2L, std::lround(w * fx.historyShare)), hh = (uint32_t)std::max(2L, std::lround(h * fx.historyShare));   // (as large as the picture it keeps)
+        if (fx.history && (fx.hw != hw || fx.hh != hh)) {   // (the picture another size now: its past begun again)
+            for (RenderTarget* r : fx.historyInto) s.engine->destroy(r);
+            fx.historyInto.clear();
+            s.engine->destroy(fx.history), fx.history = nullptr;
+        }
         if (!fx.history) {
-            fx.hw = (uint32_t)std::max(2L, std::lround(s.w * fx.historyShare)), fx.hh = (uint32_t)std::max(2L, std::lround(s.h * fx.historyShare));
+            fx.hw = hw, fx.hh = hh;
             fx.history = Texture::Builder().width(fx.hw).height(fx.hh).depth((uint32_t)fx.historyFrames).levels(1).sampler(Texture::Sampler::SAMPLER_2D_ARRAY)
                              .format(Texture::InternalFormat::RGBA8).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).build(*s.engine);
             for (int k = 0; k < fx.historyFrames; ++k)
