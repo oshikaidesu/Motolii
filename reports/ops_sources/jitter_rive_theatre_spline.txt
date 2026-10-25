@@ -1,0 +1,165 @@
+Jitter | 全体 | モード | M（またはプロパティパネルのタブ）→ Design（止まった見た目）と Animate（時間の動き）を切り替える | https://help.jitter.video/en/articles/16414495-design-and-animate-modes | 公式
+Jitter | キー | 考え方 | キーフレームは無い。レイヤーに「操作（終わりの値を決める指示）」を足す。タイムラインの行はレイヤーではなく操作 | https://help.jitter.video/en/articles/16415500-understand-operations-vs-keyframes | 公式
+Jitter | キー | 操作を足す | Animate タブで New animation → In（出す）/ Out（消す）/ Custom を選ぶ → 時刻カーソルの位置から始まる操作がタイムラインに入る | https://help.jitter.video/en/articles/14111550-make-your-first-animation | 公式
+Jitter | キー | Custom の種類 | New animation → Custom → Move・Scale・Rotate・Opacity・Color・Shadow・Layer Blur・Background Blur・Glass・Hide/Show・Resize・Corner Radius・Stroke（文字は Change Text・Letter Spacing・Line Height・Counter、形は Morph・Arc・Star）から選ぶ | https://help.jitter.video/en/articles/14136797-create-custom-animations | 公式
+Jitter | 記録 | キャンバス | Move・Rotate・Scale を足した後にキャンバスで物を動かす・取っ手を引く → その操作の値が書き換わる（記録に近い） | https://jitter.video/changelog/2020-09-18-create--edit-animations-graphically/ | 公式
+Jitter | キー | ゴースト | 動きの途中の姿が半透明の「ゴースト」で出る。物を動かすと終わりの位置が始めの位置に吸着する | https://jitter.video/changelog/2020-10-02-snapping-layers/ | 公式
+Jitter | キー | 始めの値 | 操作の欄の上の + → Initial value（From）が使える。To 欄で ⌫ → Design の値に戻す | https://jitter.video/changelog/2021-05-03-animations-with-initial-value/ | 公式
+Jitter | キー | 操作を分解 | プリセットの区間を右クリック → Convert to actions → 単体の操作に分かれる | https://help.jitter.video/en/articles/14136797-create-custom-animations | 公式
+Jitter | タイムライン | 区間 | クリック → 選択。左右にドラッグ → 始まる時刻を動かす（前の区間の終わりより前に置けば重なる） | https://help.jitter.video/en/articles/14111802-work-with-the-timeline | 公式
+Jitter | タイムライン | 区間 | ← → → 区間を少しずつ動かす（記事は「1ms ずつ」、更新履歴は ±10ms、⇧ で ±100ms） | https://help.jitter.video/en/articles/14111802-work-with-the-timeline , https://jitter.video/changelog/2023-11-15-keyboard-shortcuts/ | 公式（食い違い）
+Jitter | タイムライン | 区間の端 | 端にホバー → ドラッグで長さを変える。複数選んで引くと比例で伸び縮み。Animate タブで秒を打ってもよい | https://help.jitter.video/en/articles/14111802-work-with-the-timeline | 公式
+Jitter | タイムライン | 吸着 | 区間を動かす・伸ばすと他の区間の端に吸い付く | https://jitter.video/changelog/2021-09-09-animation-snapping/ | 公式
+Jitter | タイムライン | 複数選択 | ⇧クリック → 範囲、⌘クリック → 1つずつ足す（キャンバス・レイヤー一覧でも同じ） | https://jitter.video/changelog/2023-03-09-select-multiple-objects/ | 公式
+Jitter | タイムライン | 囲み選択 | タイムラインの空き所からドラッグ → 触れた区間を選ぶ。⇧ を押して囲むと追加、既に選んでいたものは外れる | https://jitter.video/changelog/2023-06-07-timeline-selection-rectangle/ | 公式
+Jitter | タイムライン | 全選択 | ⌘A → 全レイヤー、またはタイムラインなら全操作を選ぶ | https://jitter.video/changelog/2024-04-04-gradient-shortcuts/ | 公式
+Jitter | タイムライン | 一括編集 | 複数の区間を選ぶ → 右パネルに共通の値が出て、1回の変更で全部に入る | https://jitter.video/changelog/2021-06-09-edit-multiple-layers-or-animations-simultaneously/ | 公式
+Jitter | タイムライン | ずらし | ⌘クリックで複数選ぶ → 右クリック → Stagger → 間の秒（Delay）を入れる → 始まりが等間隔にずれる | https://help.jitter.video/en/articles/14111802-work-with-the-timeline | 公式
+Jitter | タイムライン | まとめ | 選んで右クリック → Group、または ⌘G。⇧⌘G で解く。まとめを動かすと中身も同じだけ動き、端を引くと中身が比例で伸びる。名前も付けられる | https://help.jitter.video/en/articles/14111802-work-with-the-timeline , https://jitter.video/changelog/2020-12-19-group-animations-in-the-timeline/ | 公式
+Jitter | タイムライン | 隠す | 操作やまとめの横の目のアイコン → 再生から外す | https://jitter.video/changelog/2026-07-17-letter-spacing-animations/ | 公式
+Jitter | タイムライン | 行の移動 | Enter → まとめの子へ、⇧Enter → 親へ。Tab / ⇧Tab → 兄弟へ（レイヤー一覧とタイムライン） | https://jitter.video/changelog/2025-03-18-css-easing-export/ , https://jitter.video/changelog/2025-02-18-custom-easings/ | 公式
+Jitter | タイムライン | 行 | ⌥L → 選んでいない行をたたむ | https://help.jitter.video/en/articles/5940995-use-jitter-s-keyboard-shortcuts | 公式
+Jitter | タイムライン | 再生 | Space → 再生/停止。数値欄を触っている時も Space でプレビュー | https://help.jitter.video/en/articles/5940995-use-jitter-s-keyboard-shortcuts , https://jitter.video/changelog/2020-11-13-animate--design-modes/ | 公式
+Jitter | タイムライン | 時刻カーソル | , / . → 10ms、⇧ , / . → 100ms、⌥ , / . → 前/次（記事は「キーフレーム」、更新履歴は「アニメーション」）、⇧⌥ , / . → シーンの頭/お尻。QWERTY なら < > でも可 | https://help.jitter.video/en/articles/5940995-use-jitter-s-keyboard-shortcuts , https://jitter.video/changelog/2023-04-14-timeline-keyboard-navigation/ | 公式
+Jitter | タイムライン | 時刻カーソル | タイムラインをクリック → カーソルが動き、選んでいた操作は外れる（物の選択は残る） | https://jitter.video/changelog/2020-11-13-animate--design-modes/ | 公式
+Jitter | タイムライン | ズーム | ⌘＋スクロール（または ⌃）、トラックパッドならピンチ | https://help.jitter.video/en/articles/14111802-work-with-the-timeline , https://jitter.video/changelog/2021-05-13-timeline-zoom/ | 公式
+Jitter | タイムライン | 横スクロール | ⇧＋スクロール、または中ボタン | https://help.jitter.video/en/articles/5940995-use-jitter-s-keyboard-shortcuts | 公式
+Jitter | タイムライン | シーンの長さ | 白と灰色の境目にホバー（両矢印）→ ドラッグ。またはシーンを選んで Animate タブで秒。既定 4 秒、最大 120 秒。外の操作は書き出されない | https://help.jitter.video/en/articles/5362528-change-the-scene-duration | 公式
+Jitter | タイムライン | ループ再生 | プレビューを繰り返す（シーン全体か、選んだ操作だけ）。押す場所は書かれていない | https://jitter.video/changelog/2021-09-20-loop-playback-preview/ | 公式
+Jitter | タイムライン | 音 | 上のツールバーの 🎵 → 音を足す（時刻カーソルの位置に入る、波形が出る）。音の区間を選んで音量・ミュート | https://help.jitter.video/en/articles/15444208-add-audio-to-your-file , https://jitter.video/changelog/2025-05-27-bezier-controls-for-curved-paths/ | 公式
+Jitter | コピー | 操作 | 区間を選ぶ → ⌘C → 時刻カーソルを動かす → 相手のレイヤーを選ぶ → ⌘V（一番早い操作がカーソルに来る。複数レイヤーを選んでいれば全部に入る。合わない種類は入らない） | https://help.jitter.video/en/articles/5367931-copy-animations-between-layers | 公式
+Jitter | コピー | イージング | 右パネル Animation の ⋯ → Copy easing、または ⌘⇧C → 相手を選んで ⌘V | https://help.jitter.video/en/articles/5367931-copy-animations-between-layers | 公式
+Jitter | コピー | レイヤー | キャンバスで ⌥ドラッグ → 操作ごと複製 | https://jitter.video/changelog/2021-07-01-duplicate-layers-by-holding-kbdaltkbd-while-dragging/ | 公式
+Jitter | イージング | プリセット | Easing 欄の値をクリック → Smooth（既定）・Natural・Slow down・Accelerate・Elastic・Bounce・Overshoot・Impulse・Swing・None（等速）を選び、強さ（intensity）スライダーで調整 | https://jitter.video/changelog/2023-11-08-easings-intensity/ , https://help.jitter.video/en/articles/16072578-bm-03-fix-robotic-animations-with-the-right-easing-curve | 公式
+Jitter | イージング | 自作 | Easing の値 → Custom → グラフの取っ手 2 つをドラッグ、または下の数値を入れる | https://jitter.video/changelog/2025-02-18-custom-easings/ | 公式
+Jitter | イージング | 書き出し | Easing 横の設定アイコン → 右上の … → Copy as CSS | https://jitter.video/changelog/2025-03-18-css-easing-export/ | 公式
+Jitter | イージング | プレビュー | イージングを変えると自動で動きを見せる | https://jitter.video/changelog/2020-11-13-animate--design-modes/ | 公式
+Jitter | 動きの道 | Move | Custom → Move → 道の点を動かして曲げる。Bezier controls にチェック → 取っ手をドラッグ | https://jitter.video/changelog/2024-12-17-curved-paths/ , https://jitter.video/changelog/2025-05-27-bezier-controls-for-curved-paths/ | 公式
+Jitter | 効果の重ね | Effects | Animate タブ → Effects → Distortion / Post FX / Utility から選ぶ → 設定。上の AI effect で作らせる | https://jitter.video/changelog/2026-06-30-effects-shaders/ | 公式
+Jitter | 効果の重ね | 3D Orbit | Add animation → Effects → 3D Orbit → 始めの Rotate X/Y/Z・Pivot Z・Perspective・Camera Distance と To の値、Show Front / Show Back、長さとイージング | https://help.jitter.video/en/articles/15552625-apply-a-3d-orbit-effect | 公式
+Jitter | 効果の重ね | Displacement | Add animation → Custom → Displacement → 始めと終わりの Amplitude・Offset・Repeat、向き | https://help.jitter.video/en/articles/14999523-apply-a-displacement-effect | 公式
+Jitter | 効果の重ね | まとめの上の動き | 2 つを動かしてからまとめ（グループ）にし、そのまとめにも操作を足す → 動きが重なる | https://jitter.video/changelog/2020-10-16-grouping-layers/ | 公式
+Jitter | 効果の重ね | AI | Animate タブ → Animate with AI → 文で頼む → 効果ができ、数値は手で直せる | https://jitter.video/changelog/2026-05-13-animate-with-ai/ | 公式
+Jitter | つながり | コンポーネント | 物かシーンを右クリック → Create component（または ❖ ボタン）→ コピーして貼ると分身。元を直すと分身も全部変わる | https://help.jitter.video/en/articles/15342977-build-reusable-animated-components | 公式
+Jitter | つながり | 分身 | 分身の一部を直接変える → その分身だけの上書き。レイヤー一覧で右クリック → Reset instance で戻す。右クリック → Detach instance で縁を切る | https://jitter.video/changelog/2026-08-18-component-overrides/ , https://help.jitter.video/en/articles/15342977-build-reusable-animated-components | 公式
+Jitter | つながり | ループ | 分身を時間に並べてつなぐ → 繰り返しに見せる | https://help.jitter.video/en/articles/15463556-create-looping-animations | 公式
+Jitter | 見る場所 | キャンバス | + か = で拡大、- で縮小、⇧0 で 100%、⇧1 で全体、⇧2 で選択物 | https://help.jitter.video/en/articles/5940995-use-jitter-s-keyboard-shortcuts | 公式
+Jitter | 見る場所 | キャンバス | H を押したままドラッグ、または中ボタン → パン | https://help.jitter.video/en/articles/5940995-use-jitter-s-keyboard-shortcuts , https://jitter.video/changelog/2021-03-10-grouping-layers/ | 公式
+Jitter | 値 | 数値欄 | 右パネルの数値欄をクリックしてドラッグ → 値が変わる | https://jitter.video/changelog/2026-06-02-components/ | 公式
+Jitter | 値 | 物 | 矢印 → 1px、⇧矢印 → 10px | https://help.jitter.video/en/articles/5940995-use-jitter-s-keyboard-shortcuts | 公式
+Rive | 記録 | モード | Tab → Design / Animate 切り替え。Animate でタイムラインを選んでいると、動かす・大きさ・回転・色などの変更が自動でキーになる | https://rive.app/docs/editor/fundamentals/design-vs-animate-mode | 公式
+Rive | キー | Stage | 物を Stage で直接動かす → 位置・回転・拡大のキーが付く | https://rive.app/docs/editor/animate-mode/keys | 公式
+Rive | キー | Inspector | プロパティの値を変える → キーが付く | https://rive.app/docs/editor/animate-mode/keys | 公式
+Rive | キー | キーボタン | プロパティ横のキーボタンをクリック → 今の値でキー。灰色の縁＝キー無し、青い縁＝動きあり、青塗り＝今の時刻にキー | https://rive.app/docs/editor/animate-mode/keys | 公式
+Rive | キー | 1 つのキー（青） | ドラッグ → そのプロパティのキーだけ時間を動かす | https://rive.app/docs/editor/animate-mode/keys | 公式
+Rive | キー | まとめのキー（灰） | 行をたたんだ時の灰色のキーをドラッグ → 物の全プロパティのキーを一緒に動かす | https://rive.app/docs/editor/animate-mode/keys | 公式
+Rive | キー | 選んだキー | ⌥＋選択の頭か尻をドラッグ → キーの間隔を縮める/伸ばす | https://rive.app/docs/editor/animate-mode/keys , https://rive.app/docs/editor/keyboard-shortcuts | 公式
+Rive | キー | 選んだキー | ⌥ , / ⌥ . → 1 コマ動かす、⇧ も足すと 10 コマ | https://rive.app/docs/editor/keyboard-shortcuts | 公式
+Rive | キー | 選んだキー | ⌘⌥ を押したまま → キーをずらして並べる（Stagger。押しながら何をするかは書かれていない） | https://rive.app/docs/editor/keyboard-shortcuts | 公式
+Rive | キー | コピー | 動いている物のプロパティのキーをコピー → 別の物に貼る → 同じキーが付く | https://rive.app/docs/editor/animate-mode/keys | 公式
+Rive | キー | 頂点 | ⇧K → 全頂点にキー | https://rive.app/docs/editor/keyboard-shortcuts | 公式
+Rive | キー | 描画順 | Animate で Draw Order 欄のラジオボタン → 描く順のキー（必ず Hold） | https://rive.app/docs/editor/animate-mode/animating-draw-order | 公式
+Rive | キー | 選択 | ⌫ → 選んだものを消す。⌘A 全選択、⌘C/⌘X/⌘V、⌘D 複製、⌘Z/⌘⇧Z | https://rive.app/docs/editor/keyboard-shortcuts | 公式
+Rive | キー | 行の表示 | U → 選んだ物のキーを見せる。T・P・S・R・O → Transform・Position・Scale・Rotation・Opacity の行だけ（⇧ で足す。物を選んでいる時だけ、選んでいなければツールの切替になる） | https://rive.app/docs/editor/keyboard-shortcuts | 公式
+Rive | キー | 行の表示 | X → 階層とタイムラインを選んだ物までスクロール | https://rive.app/docs/editor/keyboard-shortcuts | 公式
+Rive | 補間 | パネル | キーを選ぶ → タイムライン右に Interpolation パネル → 上のアイコンで Linear（既定）・Cubic・Hold・Elastic | https://rive.app/docs/editor/animate-mode/interpolation-easing | 公式
+Rive | 補間 | Cubic | パネルのグラフの取っ手 2 つをドラッグ（縦は枠の外まで引ける、枠が追う） | https://rive.app/docs/editor/animate-mode/interpolation-easing | 公式
+Rive | 補間 | 数値欄 | グラフ下の欄に 4 つの数（カンマか空白区切り）を打つ・コピペ | https://rive.app/docs/editor/animate-mode/interpolation-easing | 公式
+Rive | 補間 | Elastic | Amplitude（行き過ぎの大きさ）と Period（収まる速さ）を入れる | https://rive.app/docs/editor/animate-mode/interpolation-easing | 公式
+Rive | 補間 | 既定 | キーを選んで Inspector の Set as default、または何も選ばずに Inspector で新しいキーの既定を選ぶ | https://rive.app/docs/editor/animate-mode/interpolation-easing | 公式
+Rive | 補間 | キー | F6 Hold、F7 Linear、F8 Cubic の Ease In Out、⇧F8 Ease In、⌘⇧F8 Ease Out | https://rive.app/docs/editor/keyboard-shortcuts | 公式
+Rive | 補間 | キー | F9 Cubic Value の Ease In Out、⇧F9 Ease In、⌘⇧F9 Ease Out、F10 Elastic | https://rive.app/docs/editor/keyboard-shortcuts | 公式
+Rive | グラフ | 開く | タイムラインの Graph Editor ボタン、または ⇧F3 → タイムラインがグラフに替わる（選んだ物だけ出る） | https://rive.app/docs/editor/animate-mode/interpolation-easing , https://rive.app/docs/editor/keyboard-shortcuts | 公式
+Rive | グラフ | 表示 | ⇧G → グラフの種類を切り替え、⇧F → 高さを自動で合わせる | https://rive.app/docs/editor/keyboard-shortcuts | 公式
+Rive | グラフ | Cubic Value | グラフ上のベジェ取っ手を直接ドラッグ → 値を行き過ぎて戻る動きも作れる（Cubic はグラフで見えるが直すのはパネル） | https://rive.app/docs/editor/animate-mode/interpolation-easing | 公式
+Rive | タイムライン | 再生 | Space → 再生、⇧Space → 既定の State Machine を再生 | https://rive.app/docs/editor/keyboard-shortcuts | 公式
+Rive | タイムライン | 再生ヘッド | , / . → 1 コマ、⇧ を足すと 10 コマ、⌘⇧ , / . → 頭/お尻、⌘ , / . → 前/次のキー（選んだ行、無ければ全部） | https://rive.app/docs/editor/keyboard-shortcuts | 公式
+Rive | タイムライン | アニメーション | PageUp / PageDown → 前/次のアニメーション | https://rive.app/docs/editor/keyboard-shortcuts | 公式
+Rive | タイムライン | ズーム | 上端の横スクロールバー（両端に掴み）をドラッグ → 動かすとスクロール、端を引くとズーム | https://rive.app/docs/editor/animate-mode/timeline | 公式
+Rive | タイムライン | パン | 右ドラッグ、または Space＋ドラッグ | https://rive.app/docs/editor/animate-mode/timeline | 公式
+Rive | タイムライン | メニュー | Navigate Timeline メニュー → 移動の近道の一覧（中身はページに無い） | https://rive.app/docs/editor/animate-mode/timeline | 公式
+Rive | タイムライン | 絞り込み | Show Only Selected トグル → 選んだ物の行だけ出す | https://rive.app/docs/editor/animate-mode/timeline | 公式
+Rive | タイムライン | 設定 | Timeline Options に Current（今の時刻）・Duration・Playback Speed（負で逆再生）・Snap Keys（既定 1 秒 60 分割）を入れる | https://rive.app/docs/editor/animate-mode/timeline | 公式
+Rive | タイムライン | 再生の種類 / 範囲 | One-Shot・Ping-Pong・Loop を選ぶ。Work Area を入れる → 再生する範囲を絞る（イン/アウトに当たる） | https://rive.app/docs/editor/animate-mode/timeline | 公式
+Rive | タイムライン | イベント | タイムラインを選んで Inspector の Report Event / キーボタン → その時刻でイベント（音のイベントなら鳴る）。⇧E でイベントを置く | https://rive.app/docs/editor/events/overview , https://rive.app/docs/editor/events/audio-events | 公式
+Rive | 見る場所 | Stage | 右ドラッグ、Space＋ドラッグ、トラックパッドの横スクロール → パン | https://rive.app/docs/editor/interface-overview/selection-and-navigation | 公式
+Rive | 見る場所 | Stage | ⌘＋スクロール → ズーム、+ / - 、⌘0 → 100%、Z を押したまま → 囲んでズーム、F → 選択物（か画板）に合わせる | https://rive.app/docs/editor/interface-overview/selection-and-navigation , https://rive.app/docs/editor/keyboard-shortcuts | 公式
+Rive | 選ぶ | Stage | クリック、範囲ドラッグ、⇧ で足す/外す。ダブルクリック → まとめの一段下。⌘クリック → 奥の物を直接。⌥ → 重なりを順に縁取り | https://rive.app/docs/editor/interface-overview/selection-and-navigation | 公式
+Rive | 選ぶ | 階層 | Enter → 最初の子、Esc → 親 | https://rive.app/docs/editor/interface-overview/selection-and-navigation | 公式
+Rive | つながり | 親子 | Hierarchy で項目を別の項目にドラッグ → 子になり親の動きを受け継ぐ。外へドラッグで解く | https://rive.app/docs/editor/interface-overview/hierarchy | 公式
+Rive | 効果の重ね | 拘束 | Inspector の Constraints 欄で追加（IK・Distance・Transform・Translation・Scale・Rotation など）→ 出てくるメニューで相手（target）を選ぶ → Strength で効き具合 | https://rive.app/docs/editor/constraints/transform-constraint , https://rive.app/docs/editor/constraints/constraints-overview | 公式
+Rive | 効果の重ね | 変換器 | Assets パネル + → Converter → Group → 右の + で変換器を足す → 上下にドラッグ → 実行の順番 | https://rive.app/docs/editor/data-binding/converters | 公式
+Rive | つながり | データ | プロパティ欄を右クリック → Data Bind → Property で View Model の値を選ぶ。右クリック → Update Bind / Unbind | https://rive.app/docs/editor/data-binding/binding-data | 公式
+Rive | つながり | 向き | Target to Source をオン → 物の変化が元の値に返る。Bidirectional を押すたび「target 優先」と「source 優先」が替わる | https://rive.app/docs/editor/data-binding/binding-data | 公式
+Rive | つながり | キーの値 | キーを右クリック → Data Bind → プロパティを選ぶ → その時刻の値がデータから来る | https://rive.app/docs/editor/animate-mode/keys | 公式
+Rive | つながり | View Model | Data パネル + → View Model。Add View Model Property → 型を選ぶ。インスタンスの + / - 、名前はダブルクリック、Open Table Data で一覧 | https://rive.app/docs/editor/data-binding/view-models | 公式
+Rive | つながり | 確認 | ツールバーの Data Binding Preview トグル → 編集中もバインドの値を見る。⌘B → Show Bound Values | https://rive.app/docs/editor/interface-overview/toolbar , https://rive.app/docs/editor/keyboard-shortcuts | 公式
+Rive | 状態 | State Machine | Animations 一覧の + → State Machine | https://rive.app/docs/editor/state-machine/state-machine | 公式
+Rive | 状態 | State | アニメーションを一覧から Graph にドラッグ → 1 つのアニメの State。Graph を右クリック → 空の State（種類を選ぶ） | https://rive.app/docs/editor/state-machine/states | 公式
+Rive | 状態 | 遷移 | State の近くにカーソル → 円が出る → 別の State までドラッグ → 遷移（矢印付き） | https://rive.app/docs/editor/state-machine/transitions | 公式
+Rive | 状態 | 条件 | 遷移を選ぶ → Conditions の + → 比べ方と値（値はデータにつなげてもよい）。複数は全部満たした時 | https://rive.app/docs/editor/state-machine/transitions | 公式
+Rive | 状態 | 遷移の補間 | 遷移パネルの下で補間（既定 Linear、Cubic など） | https://rive.app/docs/editor/state-machine/transitions | 公式
+Rive | 状態 | 遷移の入切 | 遷移を右クリック → Disable / Enable transition、またはパネルのアイコン | https://rive.app/docs/editor/state-machine/transitions | 公式
+Rive | 状態 | アクション | State を選んで名前右の + 、遷移なら Actions タブの + → アクションの種類 | https://rive.app/docs/editor/state-machine/states , https://rive.app/docs/editor/state-machine/transitions | 公式
+Rive | 状態 | ブレンド | 1D Blend の State → Inspector で数のプロパティを選ぶ → + でタイムラインを足す → 数を変えると混ざり方が変わる | https://rive.app/docs/editor/state-machine/states | 公式
+Rive | 状態 | レイヤー | Layers タブの + → 層。上下ドラッグ → 順番。… → Delete・Duplicate・Disable・Snapping。⌘M → 層を無効 | https://rive.app/docs/editor/state-machine/layers , https://rive.app/docs/editor/keyboard-shortcuts | 公式
+Rive | 入力 | Listener | Animations パネルのアイコンで表示 → + → Target と Listen to（Pointer Enter/Down/Drag、Click、Keyboard、Gamepad、Text Input、View Model Change など）と使うマウスボタン | https://rive.app/docs/editor/state-machine/listeners | 公式
+Rive | 入力 | 試す | ⌥Space → キーボードを作品側に渡して再生（Toggle Keyboard Capture でも）。再生中も右ドラッグはパン | https://rive.app/docs/editor/state-machine/listeners | 公式
+Rive | 入力 | Joystick | J → Stage をクリックで置く → 軸にタイムラインを割り当て → 取っ手を動かすとタイムラインが進む/戻る。Invert トグル、Handle Source で他の物の位置につなぐ | https://rive.app/docs/editor/manipulating-shapes/joysticks | 公式
+Rive | 骨 | 作る | B → クリックで始点、クリックで長さと向き、続けてクリックで連ねる → Esc か V で終わり | https://rive.app/docs/editor/manipulating-shapes/bones | 公式
+Rive | 骨 | つなぐ | Hierarchy で物を骨へドラッグ → 子。Bind Bones の + → ⌘⇧ を押して骨を選ぶ → Done | https://rive.app/docs/editor/manipulating-shapes/bones | 公式
+Rive | 骨 | 重み | 頂点を選ぶ → 骨を選ぶ → 頂点を上下ドラッグ → その骨の効きを増減 | https://rive.app/docs/editor/manipulating-shapes/bones | 公式
+Theatre.js | キー | 動かせるようにする | Details パネルでプロパティ名を右クリック → Sequence → Sequence Editor に行が出る | https://www.theatrejs.com/docs/latest/manual/sequences | 公式
+Theatre.js | キー | まとめのプロパティ | 名前を右クリック → Sequence all → 中身を全部 | https://www.theatrejs.com/docs/latest/manual/sequences | 公式
+Theatre.js | キー | 外す | 同じメニューの Make static / Make all static → 行もキーも全部消える | https://www.theatrejs.com/docs/latest/manual/sequences | 公式
+Theatre.js | 記録 | キーを付ける | Sequence Editor をクリックして再生ヘッドを移す → ビューポートで物をドラッグするか値を変える → その時刻にキーができる（自動キー） | https://www.theatrejs.com/docs/latest/getting-started/with-react-three-fiber | 公式
+Theatre.js | キー | 消す | キーを右クリック → Delete | https://www.theatrejs.com/docs/latest/manual/sequences | 公式
+Theatre.js | キー | 値を直す | キーを左クリック → 小さな編集窓で値を変える（全ての型で） | https://www.theatrejs.com/docs/latest/manual/sequences | 公式
+Theatre.js | キー | まとめのキー | 物や複合プロパティの行に自動でできるキーを動かす → 同じ時刻の子のキーも動く。つなぎ線を動かすと子のつなぎ線も。消す・コピー・貼るも子ごと | https://www.theatrejs.com/docs/latest/manual/sequences | 公式
+Theatre.js | キー | コピー | キーを右クリック → Copy → 再生ヘッドを動かす → 行の空き所を右クリック → Paste | https://www.theatrejs.com/docs/latest/manual/sequences | 公式
+Theatre.js | キー | 右クリック | 右クリック → コピー・貼り付け・削除のメニュー | https://www.theatrejs.com/docs/latest/manual/keyboard-shortcuts | 公式
+Theatre.js | キー | 選ぶ | Sequence Editor で ⇧＋ドラッグ → 四角で囲んだキーを選ぶ → まとめて動かす・消す | https://www.theatrejs.com/docs/latest/manual/sequences , https://www.theatrejs.com/docs/latest/manual/keyboard-shortcuts | 公式
+Theatre.js | タイムライン | 範囲 | Sequence Editor 上端のバーで ⇧＋ドラッグ → Focus Range。範囲の中から再生すると範囲を繰り返す。新しく作ると古いのは消える。一時的に切る・消すもできる（その手順は動画だけ） | https://www.theatrejs.com/docs/latest/manual/sequences | 公式
+Theatre.js | 補間 | Tween | 2 つのキーの間のつなぎ線をクリック → Tween エディタ → 名前であいまい検索（linear、quad-in-out など）か、自作の cubic Bezier | https://www.theatrejs.com/docs/latest/manual/sequences | 公式
+Theatre.js | 補間 | Tween の窓 | 矢印キー → プリセットの中を移動、Enter → 曲線を保存して閉じる、Esc → 保存せず閉じる | https://www.theatrejs.com/docs/latest/manual/keyboard-shortcuts | 公式
+Theatre.js | グラフ | 複数行の曲線 | 行の名前の横のアイコンをクリック → 複数行の曲線エディタ → 取っ手を動かして速さの曲線を直す（曲線の色＝行のアイコンの色） | https://www.theatrejs.com/docs/latest/manual/sequences | 公式
+Theatre.js | タイムライン | マーカー | 再生ヘッドを右クリック → その位置にマーカー | https://www.theatrejs.com/docs/latest/manual/keyboard-shortcuts | 公式
+Theatre.js | タイムライン | ズーム | ⌃＋スクロール、またはピンチ → Dope Sheet を拡大縮小 | https://www.theatrejs.com/docs/latest/manual/keyboard-shortcuts | 公式
+Theatre.js | タイムライン | パン | ⇧＋スクロール、またはトラックパッドの横スクロール | https://www.theatrejs.com/docs/latest/manual/keyboard-shortcuts | 公式
+Theatre.js | タイムライン | 再生 | Studio にフォーカスがある時 Space → 再生/停止 | https://www.theatrejs.com/docs/latest/manual/keyboard-shortcuts | 公式
+Theatre.js | 全体 | Studio | ⌥\ → Studio を出す/隠す。⌘Z / ⌘⇧Z → 元に戻す/やり直す | https://www.theatrejs.com/docs/latest/manual/keyboard-shortcuts | 公式
+Theatre.js | 値 | 数のプロパティ | Details パネルの数をドラッグかクリック → 値を変える。⌥＋ドラッグ → ゆっくり変える | https://www.theatrejs.com/docs/latest/getting-started/with-html-svg , https://www.theatrejs.com/docs/latest/manual/keyboard-shortcuts | 公式
+Theatre.js | 値 | ドラッグの量 | 数をドラッグした時の変わり方は作る側が nudgeMultiplier / nudgeFn で決める（range は目安で制限ではない） | https://www.theatrejs.com/docs/latest/manual/prop-types | 公式
+Theatre.js | 値 | 色 | 色ピッカーで矢印キー → ポインタを動かして色を変える | https://www.theatrejs.com/docs/latest/manual/keyboard-shortcuts | 公式
+Theatre.js | 3D | シーン編集 | （r3f 拡張）左上のボタン → スナップショットエディタが開く → 物をクリックで選ぶ、ドラッグで動かす | https://www.theatrejs.com/docs/latest/getting-started/with-react-three-fiber | 公式
+Theatre.js | 全体 | 画面 | Outline パネル（Project・Sheet・物の階層を選ぶ）、Details パネル、Sequence Editor（右側が Dope Sheet）、Global Toolbar（拡張のボタン）、Extension Panes | https://www.theatrejs.com/docs/latest/manual/Studio | 公式
+Theatre.js | 全体 | 書き出し | Outline で Project をクリック → 右の Export … to JSON → state.json | https://www.theatrejs.com/docs/latest/getting-started/with-html-svg | 公式
+Spline | タイムライン | 開く | ツールバーのタイムライン トグル → 下にタイムラインのパネル | https://docs.spline.design/designing-in-3-d/animation/timeline-animation | 公式
+Spline | キー | 載せる | 物を選ぶ → タイムラインの Animate ボタン → 動かすプロパティを足す、またはプリセットを選ぶ | https://docs.spline.design/designing-in-3-d/animation/timeline-animation | 公式
+Spline | 記録 | 自動キー | 物がタイムラインに載った後、ビューポートか Properties で変える → キーが自動で入る | https://docs.spline.design/designing-in-3-d/animation/timeline-animation | 公式
+Spline | グラフ | Graph Editor | 曲線を直して速さとイージングを変える（開き方や取っ手の操作は文に無い） | https://docs.spline.design/designing-in-3-d/animation/timeline-animation | 公式
+Spline | タイムライン | 複数 | タイムラインのパネルの + → タイムラインを足す | https://docs.spline.design/designing-in-3-d/animation/timeline-animation | 公式
+Spline | タイムライン | 再生 | Start などのイベントに Timeline Animation アクションを付ける → Play Mode で流れる | https://docs.spline.design/designing-in-3-d/animation/timeline-animation | 公式
+Spline | タイムライン | 書き出し | 右上 Export → Timeline を選ぶ → 長さ・FPS・解像度 | https://docs.spline.design/designing-in-3-d/animation/timeline-animation | 公式
+Spline | 状態 | State | 物を選ぶ → States パネルの + → Base State と State ができ、State が選ばれる → 変える → パネルで 2 つを押して見比べる | https://docs.spline.design/interaction-states-events-and-actions/concepts/how-state-based-animation-works | 公式
+Spline | 状態 | Event | 物を選ぶ → Events パネルの + → 開く → 上のドロップダウンで種類 → アクションを選ぶ → Target → Transitions に状態の順番 | https://docs.spline.design/interaction-states-events-and-actions/concepts/events-interactivity | 公式
+Spline | イージング | 遷移 | 状態の間の曲線を押す → Transition Curve（Linear・Ease・Ease In・Ease Out・Ease In Out・Bezier・Spring）、Duration・Delay・Loop・Cycle | https://docs.spline.design/interaction-states-events-and-actions/actions/transition-action | 公式
+Spline | 状態 | 並び | Sequence 欄の Delay・Loop（回数か無限）・Cycle（戻るか）→ 並び全体に効く | https://docs.spline.design/interaction-states-events-and-actions/actions/transition-action | 公式
+Spline | 状態 | 取り込んだ動き | Animation アクション → Interaction（Play・Pause・Stop）、Object、Animation、Start/End で切り詰め、Delay、Loop、Cycle（Ping Pong） | https://docs.spline.design/interaction-states-events-and-actions/actions/animation-action | 公式
+Spline | カメラ | 切り替え | Switch Camera アクション → Target のカメラ、Mode（1 回か往復）、Delay、Animate（曲線と長さ） | https://docs.spline.design/interaction-states-events-and-actions/actions/switch-camera-action | 公式
+Spline | つながり | 変数 | 何も選ばない → 右の変数表 → 型（Number など）→ 値 → 名前をダブルクリックで変更 → 右クリック → duplicate | https://docs.spline.design/interaction-states-events-and-actions/variables-and-data/variables | 公式
+Spline | つながり | 変数を割り当て | プロパティ（例 Position X）にホバー → 右上の小さな点をクリック → 変数を選ぶ | https://docs.spline.design/interaction-states-events-and-actions/variables-and-data/variables | 公式
+Spline | つながり | 変数を変える | Set Variable アクション → > で開く → 変数 → To の Add expression に式か変数 | https://docs.spline.design/interaction-states-events-and-actions/variables-and-data/variables | 公式
+Spline | 効果の重ね | 素材の層 | 物を選ぶ → Material パネルの + → 層を縦に積む（既定は Color と Lighting）。各層に Opacity と Blending。並べ替えはできると書くが手順は無い | https://docs.spline.design/materials-shading/basics/creating-material-layers | 公式
+Spline | 効果の重ね | 後処理 | 何も選ばない → Scene の Effects パネル → 目のアイコンで入/切、設定アイコンで値 | https://docs.spline.design/cameras/effects-post-processing | 公式
+Spline | カメラ | 回す | ⌥＋ドラッグ（トラックパッドは ⌥＋タップしてドラッグ）→ オービット | https://docs.spline.design/cameras/working-with-cameras , https://docs.spline.design/basics/keyboard-shortcuts | 公式
+Spline | カメラ | 寄る | スクロールか ⌘＋スクロール、トラックパッドはピンチか ⌘＋2 本指スワイプ。⌘+ / ⌘- でも | https://docs.spline.design/cameras/working-with-cameras , https://docs.spline.design/basics/keyboard-shortcuts | 公式
+Spline | カメラ | 平行移動 | Space＋ドラッグ、トラックパッドは 2 本指ドラッグ | https://docs.spline.design/cameras/working-with-cameras | 公式
+Spline | カメラ | 視点 | ⌥R → 視点/カメラを戻す。⇧1 → 100%。S → 物に寄る。⇧S → 物の向きに合わせる | https://docs.spline.design/basics/keyboard-shortcuts | 公式
+Spline | カメラ | 投影 | M（またはビューヘルパーの下）→ 透視 / 平行 | https://docs.spline.design/cameras/working-with-cameras | 公式
+Spline | カメラ | ビューヘルパー | 画面下中央の軸の点を押す → その向きから見る。ホバー → 視点を戻す / Isometric。ツールバーのズーム値を押す → ズームの選択肢 | https://docs.spline.design/cameras/working-with-cameras | 公式
+Spline | カメラ | Play Mode | Play Mode で ⌥＋ドラッグなどでカメラを回す・動かす・寄る。サイズ変更プレビュー トグル | https://docs.spline.design/exporting-your-scene/play-mode | 公式
+Spline | 値 | 変形 | L → ローカル/ワールド。⌘＋ドラッグ → 複製。⌥ → 鏡に、⇧ → 比率固定、⇧⌥ → 両方 | https://docs.spline.design/basics/keyboard-shortcuts | 公式
+Spline | 選ぶ | Outliner | ⇧クリック → 子ごと範囲、⌘クリック → 子ごと 1 つずつ、⌥⌘クリック → 子なしで 1 つ、⌥⌘⇧クリック → 子なしで 1 つずつ | https://docs.spline.design/basics/keyboard-shortcuts | 公式
+Spline | 選ぶ | ビューポート | ⇧クリック / ⇧ドラッグ → 子ごと、⌥⌘クリック / ⌥⌘ドラッグ → 子なし、⌥⌘⇧クリック / ドラッグ → 子なしで足す | https://docs.spline.design/basics/keyboard-shortcuts | 公式
+Spline | 全体 | 基本 | ⌘Z/⌘⇧Z、⌘C/⌘X/⌘V、⌘⇧V（同じ場所に貼る）、⌘D、⌘A、Esc（選択解除）、⌃R（名前）、Delete、⌘\（UI を隠す）、⌘⇧F（全画面） | https://docs.spline.design/basics/keyboard-shortcuts | 公式
