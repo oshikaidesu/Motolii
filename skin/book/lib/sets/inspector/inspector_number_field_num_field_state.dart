@@ -176,6 +176,8 @@ class NumFieldState extends State<NumField> {
       } else {
         _startEdit();
       }
+    } else if (cfg.typesOn) {
+      // (Ableton Live's: a click picks the field and no more; a digit or Enter starts the number: typesOn)
     } else if (cfg.resetDbl) {
       // contract: with double-click = reset, a single click types only after the double-click window, so no editor flashes (do-not-repeat 5).
       _pending = Timer(dblParts, () {
@@ -254,14 +256,18 @@ class NumFieldState extends State<NumField> {
       _reset();
       return KeyEventResult.handled;
     }
+    if (_x.cfg.typesOn && RegExp(r'^[0-9.\-]$').hasMatch(e.character ?? '')) {
+      _startEdit(e.character);
+      return KeyEventResult.handled;
+    }
     return KeyEventResult.ignored;
   }
 
-  void _startEdit() {
+  void _startEdit([String? typed]) {   // (typed: the number begun with that character)
     if (!mounted || _editing || !_on) return;
     final v = _x.doc.get(widget.id);
-    _ctl.text = v == null ? '' : fmt(v, widget.decimals);
-    _ctl.selection = TextSelection(baseOffset: 0, extentOffset: _ctl.text.length);
+    _ctl.text = typed ?? (v == null ? '' : fmt(v, widget.decimals));
+    _ctl.selection = typed != null ? TextSelection.collapsed(offset: _ctl.text.length) : TextSelection(baseOffset: 0, extentOffset: _ctl.text.length);
     setState(() {
       _editing = true;
       _err = false;
@@ -269,7 +275,7 @@ class NumFieldState extends State<NumField> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_editing) return;
       _ef.requestFocus();
-      _ctl.selection = TextSelection(baseOffset: 0, extentOffset: _ctl.text.length);
+      _ctl.selection = typed != null ? TextSelection.collapsed(offset: _ctl.text.length) : TextSelection(baseOffset: 0, extentOffset: _ctl.text.length);
     });
   }
 

@@ -12,7 +12,7 @@ enum Editorial { a, b, c }
 
 enum ModRule { shiftBig, shiftFine }
 
-enum ResetRule { dbl, del, arrow, both }
+enum ResetRule { dbl, del, arrow, both, live }   // (live: Ableton Live's, Delete or double-click: its manual 42.4, 42.6)
 
 enum KeyS { off, anim, at }
 
@@ -45,8 +45,9 @@ class Cfg {
   final ResetRule reset;
   final Look look;
 
-  bool get resetDbl => reset == ResetRule.dbl || reset == ResetRule.both;
-  bool get resetDel => reset == ResetRule.del;
+  bool get resetDbl => reset == ResetRule.dbl || reset == ResetRule.both || reset == ResetRule.live;
+  bool get resetDel => reset == ResetRule.del || reset == ResetRule.live;
+  bool get typesOn => reset == ResetRule.live;   // (a digit typed on a field starts its number: Live 42.6 "Type In Value 0…9")
   bool get resetArrow => reset == ResetRule.arrow || reset == ResetRule.both;
 
   /// One rule for scrub, wheel and arrows (C4): the same keys mean the same thing in every control.
