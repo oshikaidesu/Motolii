@@ -4,6 +4,7 @@
 #pragma once
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
+#include "gst_read.h"
 
 #include <algorithm>
 #include <map>
@@ -19,14 +20,13 @@ static std::vector<float> sound_loudness(const char* file, double rate) {
     static const bool started = (gst_init(nullptr, nullptr), true);
     (void)started;
     std::vector<float> db;
-    gchar* path = g_strescape(file, nullptr);
-    const std::string said = std::string("filesrc location=\"") + path + "\" ! decodebin ! audioconvert ! audio/x-raw ! level name=level post-messages=true interval=" +
+    const std::string said = std::string("filesrc name=in ! decodebin ! audioconvert ! audio/x-raw ! level name=level post-messages=true interval=") +
                              std::to_string((guint64)(1e9 / rate)) + " ! fakesink sync=false";
-    g_free(path);
     GError* wrong = nullptr;
     GstElement* reads = gst_parse_launch(said.c_str(), &wrong);
     if (wrong) g_error_free(wrong);
     if (!reads) return db;
+    gst_read_from(reads, file);
     GstBus* bus = gst_element_get_bus(reads);
     gst_element_set_state(reads, GST_STATE_PLAYING);
     for (bool going = true; going;) {
@@ -83,13 +83,12 @@ static SoundRead sound_read(const std::string& file) {
     static const bool started = (gst_init(nullptr, nullptr), true);
     (void)started;
     SoundRead r;
-    gchar* path = g_strescape(file.c_str(), nullptr);
-    const std::string from = std::string("filesrc location=\"") + path + "\" ! decodebin ! audioconvert ! audioresample ! audio/x-raw,format=F32LE,channels=1,rate=" + std::to_string(sound_rate);
-    g_free(path);
+    const std::string from = std::string("filesrc name=in ! decodebin ! audioconvert ! audioresample ! audio/x-raw,format=F32LE,channels=1,rate=") + std::to_string(sound_rate);
     const double low = -100.0, high = -30.0, tau = 0.8;   // (AnalyserOptions' defaults)
     {
         GstElement* reads = gst_parse_launch((from + " ! spectrum name=s bands=" + std::to_string(sound_bands) + " threshold=" + std::to_string((int)low) + " interval=" + std::to_string((guint64)(1e9 / sound_rows)) + " post-messages=true message-magnitude=true ! fakesink sync=false").c_str(), nullptr);
         if (!reads) return r;
+        gst_read_from(reads, file.c_str());
         GstBus* bus = gst_element_get_bus(reads);
         gst_element_set_state(reads, GST_STATE_PLAYING);
         std::vector<double> smooth((size_t)sound_bands, 0.0);   // (the previous block's: zeros at first)
@@ -112,9 +111,10 @@ static SoundRead sound_read(const std::string& file) {
     }
     GstElement* reads = gst_parse_launch((from + " ! appsink name=out sync=false").c_str(), nullptr);
     if (!reads) return r;
+    gst_read_from(reads, file.c_str());
     GstElement* out = gst_bin_get_by_name(GST_BIN(reads), "out");
-    gst_element_set_state(reads, GST_STATE_PLAYING);
-    while (GstSample* got = gst_app_sink_pull_sample(GST_APP_SINK(out))) {
+    const bool pulling = gst_element_set_state(reads, GST_STATE_PLAYING) != GST_STATE_CHANGE_FAILURE;   // (no such file: no end would come)
+    while (GstSample* got = pulling ? gst_app_sink_pull_sample(GST_APP_SINK(out)) : nullptr) {
         GstMapInfo map;
         if (GstBuffer* b = gst_sample_get_buffer(got); b && gst_buffer_map(b, &map, GST_MAP_READ)) {
             const float* f = (const float*)map.data;

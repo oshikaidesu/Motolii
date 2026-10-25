@@ -500,8 +500,12 @@ int motolii_key_many(Motolii* m, int thing, const char* name, int n, const doubl
 }
 // A MIDI file's notes made keys of a value, as om_midi makes them in After Effects (midi.h): where a note of the channel
 // (-1: any) comes on, its velocity (0 to 1), where it goes off 0, each held till the next; one step.
-int motolii_midi(Motolii* m, int thing, const char* name, const char* file, int channel) {
-    const std::vector<MidiNote> notes = midi_notes(file);
+int motolii_midi(Motolii* m, int thing, const char* name, const char* file, int channel, double bpm) {
+    std::vector<MidiNote> notes = midi_notes(file);
+    if (bpm > 0) {   // (the file's beats at another tempo, as om_midi's BPM box: a time is its beats times 60 / BPM)
+        const double by = midi_bpm(file) / bpm;
+        for (MidiNote& n : notes) n.on *= by, n.off = n.off < 0 ? n.off : n.off * by;
+    }
     std::map<double, double> keys;
     for (const MidiNote& n : notes) {
         if (channel >= 0 && n.channel != channel) continue;
@@ -513,5 +517,6 @@ int motolii_midi(Motolii* m, int thing, const char* name, const char* file, int 
     if (at.empty()) return by_hand(m, [=] { return (doc(m).trouble = std::string("no notes in ") + file, 0); });
     return by_hand(m, [=] { return changes(m, (int)doc_key_many(doc(m), thing, name, (int)at.size(), at.data(), is.data(), "Hold")); });
 }
+double motolii_midi_bpm(const char* file) { return midi_bpm(file); }
 int motolii_unkey(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)(doc_unkey(doc(m), thing, name, at))); }); }
 int motolii_keys(Motolii* m, int thing, const char* name) { return by_look(m, [=] { return (int)(doc_keys(doc(m), thing, name)); }); }

@@ -981,6 +981,53 @@ class MotoliiBindings {
   late final _motolii_marks = _motolii_marksPtr
       .asFunction<ffi.Pointer<pkg_ffi.Utf8> Function(ffi.Pointer<Motolii>)>();
 
+  int motolii_midi(
+    ffi.Pointer<Motolii> m,
+    int thing,
+    ffi.Pointer<pkg_ffi.Utf8> name,
+    ffi.Pointer<pkg_ffi.Utf8> file,
+    int channel,
+    double bpm,
+  ) {
+    return _motolii_midi(m, thing, name, file, channel, bpm);
+  }
+
+  late final _motolii_midiPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int Function(
+            ffi.Pointer<Motolii>,
+            ffi.Int,
+            ffi.Pointer<pkg_ffi.Utf8>,
+            ffi.Pointer<pkg_ffi.Utf8>,
+            ffi.Int,
+            ffi.Double,
+          )
+        >
+      >('motolii_midi');
+  late final _motolii_midi = _motolii_midiPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<Motolii>,
+          int,
+          ffi.Pointer<pkg_ffi.Utf8>,
+          ffi.Pointer<pkg_ffi.Utf8>,
+          int,
+          double,
+        )
+      >();
+
+  double motolii_midi_bpm(ffi.Pointer<pkg_ffi.Utf8> file) {
+    return _motolii_midi_bpm(file);
+  }
+
+  late final _motolii_midi_bpmPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Double Function(ffi.Pointer<pkg_ffi.Utf8>)>
+      >('motolii_midi_bpm');
+  late final _motolii_midi_bpm = _motolii_midi_bpmPtr
+      .asFunction<double Function(ffi.Pointer<pkg_ffi.Utf8>)>();
+
   ffi.Pointer<pkg_ffi.Utf8> motolii_moving(ffi.Pointer<Motolii> m, int thing) {
     return _motolii_moving(m, thing);
   }
