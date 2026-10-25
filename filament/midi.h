@@ -104,36 +104,29 @@ static const std::vector<MidiNote>& midi_of(const std::string& file) {
     return read.emplace(file, std::move(notes)).first->second;
 }
 
-// Its notes as a thing's copies, as ALMaMPlayer shows them with a picture for a note (github.com/almam72/ALMAMPlayer,
-// GPL-3: its numbers, not its code; a 1920 x 1080 screen, `unit` a pixel of it in the stage's lengths). Copy 2i is note
-// i: going left 300 a second (speed), struck in the middle; its pitch up from the lowest, the whole range 688 high
-// (vertical_offset + top_margin), the middle of it the screen's; struck it grows to 1.03 over 0.2 s, back over 0.27 s
-// once it goes off (note.gd's tweens). Copy 2i + 1 is its burst where it was struck (note_effect.tscn): 0.8, 1.16 at
-// 0.027 s, 1 at 0.096 s; from 0.025 s before it goes off, smaller to none by 0.167 s and gone between 0.083 and 0.146 s.
+// Its notes' bursts as a thing's copies, as ALMaMPlayer plays them where a note is struck (github.com/almam72/ALMAMPlayer,
+// note_effect.gd and .tscn, GPL-3: its numbers, not its code; `unit` a pixel of its 1920 x 1080 screen in the stage's
+// lengths). Copy i is note i's: at the thing (the line notes are struck on), the highest note at it and each lower one
+// 18 lower (a note's height: its picture's, and the rows of the piano roll it goes with, bladeSk's lineHeight); 0.8,
+// 1.16 at 0.027 s, 1 at 0.096 s; from 0.025 s before it goes off, smaller to none by 0.167 s, gone between 0.083 and
+// 0.146 s. Not yet struck: not seen.
 static std::vector<ScriptCopy> midi_copies(const std::vector<MidiNote>& notes, int n, double t, double unit) {
     std::vector<ScriptCopy> all((size_t)std::max(n, 0));
-    for (ScriptCopy& c : all) c.opacity = 0.0;   // (more copies than notes: not seen)
-    if (notes.empty()) return all;
-    int low = 127, high = 0;
-    for (const MidiNote& m : notes) low = std::min(low, m.pitch), high = std::max(high, m.pitch);
-    const double speed = 300.0, spacing = 688.0 / std::max(1, high - low);
-    const auto ease = [](double a, double b, double x) { x = std::clamp(x, 0.0, 1.0); return a + (b - a) * (0.5 - 0.5 * std::cos(x * 3.14159265358979)); };   // (Tween.TRANS_SINE, EASE_IN_OUT)
+    for (ScriptCopy& c : all) c.opacity = 0.0;
+    int high = 0;
+    for (const MidiNote& m : notes) high = std::max(high, m.pitch);
     const auto keys = [](const std::vector<std::pair<double, double>>& k, double x) {   // (Godot's animation track: linear between its keys)
         if (x <= k.front().first) return k.front().second;
         for (size_t i = 1; i < k.size(); ++i)
             if (x <= k[i].first) return k[i - 1].second + (k[i].second - k[i - 1].second) * (x - k[i - 1].first) / (k[i].first - k[i - 1].first);
         return k.back().second;
     };
-    for (int i = 0; i < (int)notes.size() && 2 * i < n; ++i) {
+    for (int i = 0; i < (int)notes.size() && i < n; ++i) {
         const MidiNote& m = notes[(size_t)i];
-        const double y = (m.pitch - low - 0.5 * (high - low)) * spacing * unit;
-        ScriptCopy& note = all[(size_t)(2 * i)];
-        note.x = (m.on - t) * speed * unit, note.y = y, note.opacity = 1.0;
-        note.size = t < m.on ? 1.0 : t < m.off ? ease(1.0, 1.03, (t - m.on) / 0.2) : ease(1.03, 1.0, (t - m.off) / 0.27);
-        if (2 * i + 1 >= n || t < m.on) continue;
-        ScriptCopy& burst = all[(size_t)(2 * i + 1)];
+        if (t < m.on) continue;
+        ScriptCopy& burst = all[(size_t)i];
         const double end = m.off - m.on > 0.09 ? m.off - 0.025 : m.on + 0.065;   // (note_effect.gd's Timer)
-        burst.y = y;
+        burst.y = (m.pitch - high) * 18.0 * unit;
         if (t < end) burst.size = keys({{0, 0.8}, {0.0268592, 1.16}, {0.0956246, 1.0}}, t - m.on), burst.opacity = 1.0;
         else burst.size = keys({{0, 1.0}, {0.166667, 0.0}}, t - end), burst.opacity = keys({{0.0833333, 1.0}, {0.145833, 0.0}}, t - end);
     }
