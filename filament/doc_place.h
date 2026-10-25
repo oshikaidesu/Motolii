@@ -243,10 +243,10 @@ static std::vector<float> doc_sound_now(Doc& d, int thing, const std::string& fi
     if (t <= 0 || !doc_knows(d, t, nullptr, nullptr, nullptr, false)) return {};
     const std::string heard = doc_word(d, t, "file");
     if (heard.empty()) return {};
-    const auto read = sound_of(heard);
+    const SoundRead* read = sound_of(heard);
     if (!read) return {};
     const double start = doc_number(d, t, "start", 0, 0), begin = doc_number(d, t, "begin", 0, 0), speed = doc_number(d, t, "speed", 0, 1);
-    return sound_at(read.get(), fft, wide > 0 ? wide : fft ? sound_bands : sound_rate / sound_rows, now < start ? -1.0 : begin + (now - start) * speed);
+    return sound_at(read, fft, wide, now < start ? -1.0 : begin + (now - start) * speed);
 }
 static void doc_look(Doc& d) {
     Stage& s = *d.stage;
