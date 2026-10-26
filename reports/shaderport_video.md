@@ -111,3 +111,17 @@ shaderport（quizzyjoy/shaderport、Apache-2.0）は、shader-effects-inc/shader
 - なので、作者の WGSL をそのまま描けるのは Filament の描く係の外（gpu_door、ThorVG と同じ生の Dawn の道）だけ。そこで段を回す既存の実行役は無い（前の節）。
 - さらに、作者の効果のいくつかは WGSL の段だけでは動かない：Surface3D は compute を使い（定義の中に compute が 30 か所）、TimeTrail は前のコマを残し、Shatter はマウスの動きを読む。書き出し（shaderport）も自作の再生役もこれを持たない。持っているのは作者のレンダラー（`packages/core/src/gpu/index.ts`）だけ。
 - 切り直し：作者の効果を作者どおりに毎コマ回す既存の実装は、作者のレンダラーそのもの。前に測った通り、作者の JS が毎コマ命令を出す時間は 1 ms 未満（Shader Lab で）。残る問題は、作者のレンダラーを Motolii と同じ Dawn の装置で動かすこと（dawn.node は自分で装置を作る：まだ渡す口が無い）と、JS を動かす土台。
+
+## 作者のレンダラーを丸ごと取り寄せた（10/26）
+
+- 作者は、他の道具と組むための口を用意していた：`createRendererFromJSON(preset, { gpu: { device, adapter } })` → `initialize(canvas)` → `renderFrame({ deltaSeconds })`（`packages/core/src/presetRenderer.ts:103-201`）。`gpu` で持ち主の装置を使い（説明：「同じ装置を使う別の WebGPU のレンダラーと一緒に」、`packages/js/src/createSharedDevice.ts`）、`deltaSeconds` で時計を持ち主に渡して 1 コマずつ描く（作者の言葉で「コマに合わせた書き出し」、`gpu/index.ts:3276-3300`）。
+- 作者の組み立て済みの配布物 `shaders@4.0.5`（npm、MIT）を丸ごと取り寄せた（`filament/tsl/package.json`）。中身の `'use gpu'` 関数は作者の組み立て（unplugin-typegpu）を通さないと空になるので、自分で組み立てない。
+- 確かめ：`filament/tsl/check_node/shaders_check.mjs`（Node と Motolii の dawn.node、確かめの台本で Motolii の一部ではない）。canvas は作者が求める物だけの代役（大きさと、テクスチャがこちらの物の WebGPU の context）、`window` は作者が読む物だけ（大きさ、画素比、イベントの口、`matchMedia`）。
+- 結果（640×360、120 コマ、子は Plasma）：
+  - Glitch：1 コマ 1.77 ms（作者自身の GPU 待ちを含む）、色の帯の乱れまで出る。
+  - 自作の再生役で壊れていた物が全部描けた：Crystal（屈折する水晶玉、前は白い円）5.92 ms、Surface3D（前は真っ黒）7.60 ms、Form3D（絵を 3D のリボンにねじる作りで、帯になるのが正しかった）4.07 ms、TimeTrail 4.62 ms。
+  - 金属：LiquidMetal 3.14 ms、Chrome 2.52 ms（作者の初期の形の円に金属が出る）。
+  - 絵：`reports/shaders_author_renderer.jpg`（上：Surface3D、TimeTrail、Crystal／下：Form3D、LiquidMetal、Chrome）。
+- まだの事：
+  - 動画を入れること（作者の VideoTexture は `<video>` と `device.importExternalTexture` を使う。dawn.node には無い）。
+  - Motolii の中で動かすこと：JS の土台と、dawn.node に Filament の装置を渡す口。今は Node の確かめだけ。
