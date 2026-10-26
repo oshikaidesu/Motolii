@@ -101,3 +101,13 @@ shaderport（quizzyjoy/shaderport、Apache-2.0）は、shader-effects-inc/shader
   - shaders.com の効果をブラウザの外で動かす物は fframes（MIT）だけ。手で SkSL に書き直した物で、WebGPU ではない。
 - 分かった事：Motolii の Dawn の装置の上で作者の段の一式を回してくれる既存の物は無い。形として一番近いのは Wisp の段の書き方で、Motolii の ISF の段（`filament/isf.cpp`、`screen.h` の `// --pass@`）とも同じ考え方。
 - Motolii の段の仕組み（screen.h → screen_door）が作者の WGSL を受け取れないのは、screen_door が Filament の描く係を通るため。入力の並びを group 0 に決めうち（vgpu の形）にしていて、入口の名前も `main` に決めうちしている。作者の並び（group 0・1・2）を受け取るには、文字の書き換え（翻訳）か、screen_door をシェーダー自身の並び（layout auto、gpu_door の道）に替えるかになる。
+
+## screen_door を「シェーダー自身の並び」に替えられるか（10/26）：Filament の描く係の中ではできない
+
+- screen_door は Filament の描く係（Driver の Program と DescriptorSetLayout）を通る。そこで作者の WGSL をそのまま描けない理由は Filament の側に 3 つある：
+  1. 入口の名前が `"main"` に決めうち（`filament/backend/src/webgpu/WebGPUPipelineCache.cpp:287、358`）。作者は `final_1`、`rtt_rtt_0`。
+  2. 1 つの descriptor の番号から、テクスチャを ×2、サンプラーを ×2+1 として同じ set に作る（`WebGPUDescriptorSetLayout.cpp:94-127`）。作者の「テクスチャは group 1、サンプラーは group 2」は書けない。
+  3. `texture_external` が無い（`WebGPUDriver.cpp:657-678`、`WebGPUDescriptorSetLayout.cpp:160-162`）。
+- なので、作者の WGSL をそのまま描けるのは Filament の描く係の外（gpu_door、ThorVG と同じ生の Dawn の道）だけ。そこで段を回す既存の実行役は無い（前の節）。
+- さらに、作者の効果のいくつかは WGSL の段だけでは動かない：Surface3D は compute を使い（定義の中に compute が 30 か所）、TimeTrail は前のコマを残し、Shatter はマウスの動きを読む。書き出し（shaderport）も自作の再生役もこれを持たない。持っているのは作者のレンダラー（`packages/core/src/gpu/index.ts`）だけ。
+- 切り直し：作者の効果を作者どおりに毎コマ回す既存の実装は、作者のレンダラーそのもの。前に測った通り、作者の JS が毎コマ命令を出す時間は 1 ms 未満（Shader Lab で）。残る問題は、作者のレンダラーを Motolii と同じ Dawn の装置で動かすこと（dawn.node は自分で装置を作る：まだ渡す口が無い）と、JS を動かす土台。
