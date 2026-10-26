@@ -267,7 +267,8 @@ static int aviutl_effect(lua_State* L) {   // (a built-in effect by its name: on
         aviutl_lay(r, from, to.rt, to.w, to.h, (l - rt) / 2, (t - b) / 2, 1, 1, 0, 1, 0, 0, -1, 1);
         return 0;
     }
-    return aviutl_no(L, "obj.effect" + (n.empty() ? std::string("()") : " " + n));
+    if (n.empty()) return 0;   // (no name: lua.txt says the filters after the script, which run after it here anyway; YMM4-LuaScript native/worker.lua and sashimono-edit objapi.py lua_effect return the same)
+    return aviutl_no(L, "obj.effect " + n);
 }
 
 static const char* const aviutl_globals = R"(

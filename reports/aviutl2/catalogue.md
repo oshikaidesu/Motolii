@@ -22,3 +22,4 @@
 - 10/26 入れなかった物：
   - `obj.interpolation`（12 本）：AviUtl2 の lua.txt（1161-1166 行）に決まりはある（4 つの点から p1・p2 の間、y・z は省略可）。ただ、そのまま持ち込める Lua の実装が無い。YMM4 は持たない。sashimono（`compat/aviutl/objapi.py` の `_catmull_rom`）は点の組を 1 列の数として扱い、仕様と合わない。Lua の数学の部品（cpml・lume）にも Catmull-Rom は無い。本物の AviUtl の中身は公開されていない。**出典なし**として書かない。
   - 図形「円」など（12 本）：sashimono は図形の名前を自分の図形に当てて描く（`FIGURE_NAMES`、線は内側、図形より太い線は塗りつぶし）。YMM4 は本体（C#）に頼むだけ。Motolii では ThorVG で変換器の絵に描くつなぎが要る。決まりは sashimono のとおりにできるが、つなぐ所を書くので、次に回す。
+- 10/26 名前の無い `obj.effect()` を、2 つの手本どおり何もせずに戻すようにした（lua.txt 312-314 行は「スクリプト以降のフィルタ効果を実行」、Motolii ではそれらはスクリプトの後に必ず掛かる。YMM4-LuaScript の native/worker.lua と sashimono-edit の objapi.py `lua_effect` も何もせず戻る）。365 → **371 本**（新しく止まった本は 0）。
