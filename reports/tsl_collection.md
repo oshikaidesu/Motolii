@@ -117,3 +117,25 @@ singularity と tornado（MisterPrada）、hologram-particles、three.js-tsl-san
 - まだ：
   - Magnify Lens と Pixel Trail はマウスで動かす効果で、マウスを渡していない。
   - これは Node の上の確かめ。Motolii の中で回すには、同じ口（Dawn の JS の口と `@napi-rs/canvas`、どちらも Node-API で書かれている）を Motolii の Dawn から組み立て、Hermes の Node-API（Hermes の本家に入っている、Node-API 第 10 版）に載せる。
+
+## 問題を切り直した：作者の JS の部分は何をしているか（10/26）
+
+- 何段も描く効果を Motolii の中で動かすために、「Web の作品を丸ごと動かす場所」を探し続けた（Mystral → Node を組み込む → Hermes → CEF）。どれも足りない所を自作で埋める形になった。既存の物が見つからなかった時点で、切り方を疑うべきだった。
+- 切り直した：Shader Lab の 44 種について、作者の JS の部分が実際にしていることを、作者のコードから数えた（各 `*-pass.ts` の描き先の作成、描く呼び出し、Canvas、読み戻し、マウスの扱い）。
+
+| JS の部分がしていること | 本数 | 効果 |
+|---|---|---|
+| つまみの値を渡すだけ（シェーダー 1 回。値から作る小さなデータの絵を含む） | 25 | chromatic-aberration、circuit-bent、directional-blur、displaced-rings、displacement-map、dithering、dot-grid、edge-detect、erosion、fluted-glass、gradient-map、gradient、grain、halftone、lumen-print、photographic-cells、pixelation、posterize、relief、shape、signal-rot、slice、smear、threshold、voxel |
+| シェーダーを何段も回す（描き先を作って順に描く） | 12 | bloom、crt、connected-dots、flares、ink、outline、particle-grid、pixel-sorting、plotter、focus-blur、glass、photocopy |
+| Canvas で文字や模様の絵を作る | 4 | ascii、pattern、annotations、blob-tracking |
+| CPU で読み戻して計算する | 2 | blob-tracking（追跡）、annotations |
+| マウスで動かす | 3 | fluid、magnify-lens、pixel-trail |
+
+（blob-tracking と annotations は 2 つの欄に入る。halftone は、ブルームのつまみを入れた時だけ何段も描く。）
+
+- **25 本（57%）は外の実行環境が要らない。** three.js の変換器で WGSL にし、Motolii の Dawn で描ける（この報告の前半）。
+- 残りの 19 本が要るのは、Web の場の全部ではなく、作者の JS が three.js の描く仕組みを通してする 4 種類だけ。
+  - 描き先を作る
+  - 順に描く
+  - Canvas で絵を作る
+  - 読み戻す
