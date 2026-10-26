@@ -7,7 +7,7 @@ import * as std from "qjs:std"
 import * as os from "qjs:os"
 import { createRendererFromJSON } from "shaders/core"
 
-const [presetFile, W, H, FRAMES, outFile] = scriptArgs.slice(1)
+const [presetFile, W, H, FRAMES, outFile] = (globalThis as any).motolii?.args ?? scriptArgs.slice(1)
 const w = +W, h = +H, frames = +FRAMES
 const dawn = (globalThis as any).loadAddon(std.getenv("DAWN_NODE"))
 Object.assign(globalThis, dawn.globals)
@@ -19,9 +19,13 @@ Object.assign(globalThis, {
 Object.assign(globalThis, { window: Object.assign(globalThis, { innerWidth: w, innerHeight: h, devicePixelRatio: 1, addEventListener() {}, removeEventListener() {},
   matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }) }) })
 
-const adapter = await gpu.requestAdapter()
-const device = await adapter.requestDevice({ requiredFeatures: [...adapter.features] })   // (as the authors' createSharedDevice asks)
-const target = device.createTexture({ size: [w, h], format: "rgba8unorm", usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC | GPUTextureUsage.TEXTURE_BINDING })
+// Inside Motolii (dawn_probe/js_effects.cpp sets globalThis.motolii): Filament's own device and a texture of it, lent
+// to Dawn's binding (dawn_lend.patch: wrapDevice, wrapTexture); otherwise a device of our own
+const lent = (globalThis as any).motolii
+const own = lent ? null : await gpu.requestAdapter()
+const device = lent ? dawn.wrapDevice(lent.device, lent.instance) : await own.requestDevice({ requiredFeatures: [...own.features] })   // (as the authors' createSharedDevice asks)
+const adapter = own ?? { features: device.features, limits: device.limits, info: {} }
+const target = lent ? dawn.wrapTexture(lent.device, lent.texture) : device.createTexture({ size: [w, h], format: "rgba8unorm", usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC | GPUTextureUsage.TEXTURE_BINDING })
 const context = { configure() {}, unconfigure() {}, getConfiguration() { return { format: "rgba8unorm" } }, getCurrentTexture: () => target }
 const canvas = { width: w, height: h, style: { width: `${w}px`, height: `${h}px` }, parentElement: null, getBoundingClientRect: () => ({ x: 0, y: 0, left: 0, top: 0, width: w, height: h, right: w, bottom: h }),
   addEventListener() {}, removeEventListener() {}, getContext: (kind: string) => (kind === "webgpu" ? context : null) }
@@ -44,4 +48,4 @@ for (let y = 0; y < h; y++) out.write(got.buffer, y * stride, w * 4)
 out.close()
 print(`drawn ${frames} frames ${w}x${h} in QuickJS, ${ms.toFixed(2)} ms a frame (the renderer's own wait for the GPU included)`)
 renderer.dispose()
-device.destroy()
+if (!lent) device.destroy()

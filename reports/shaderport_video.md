@@ -159,3 +159,10 @@ shaderport（quizzyjoy/shaderport、Apache-2.0）は、shader-effects-inc/shader
   - 60 コマ目の絵は、Node で同じく描いた絵と 1 バイトも違わない。
   - 1 コマ（作者自身の GPU 待ちを含む）：QuickJS で 5.54 ms（120 コマ）、5.31 ms（300 コマ）。Node（V8）は 1.95 ms。QuickJS は JS を機械語にせず読みながら動かすので遅いが、60fps の枠（16.7 ms）の 3 分の 1。
 - まだの事：Filament と同じ装置で描くこと（dawn_lend.patch の wrapDevice・wrapTexture）。今は dawn.node が自分で装置を作っている。
+
+## 作者のレンダラーが Filament と同じ装置で描いた（10/26）
+
+- `filament/dawn_probe/js_effects.cpp`（`js_effects.sh`）：Filament のエンジンを作り、その Dawn の装置・インスタンスと描き先のテクスチャを用意し、Motolii の QuickJS に JsRuntimeHost の Node-API を付けて（`jsrh_napi/host.cc` と同じ立て方）、作者のレンダラー（`jsrh_napi/shaders.ts`）を回す。dawn.node は `dawn_lend.patch` で Filament の Dawn の呼び先の表（`motolii_dawn_procs`）を使い、Filament の装置とテクスチャを `wrapDevice`・`wrapTexture` で包む。描き終わったら外側が同じ装置で読み戻す。
+- 結果（Plasma の上に Glitch、640×360、60 コマ）：PASS、Filament の装置で読み戻した絵は Node で描いた絵と 1 バイトも違わない。1 コマ 4.50 ms（作者自身の GPU 待ちを含む）。
+- これで、作者の効果を作者のレンダラーのまま、Motolii の JS の土台（QuickJS 0.17）と Motolii の装置で描ける。自作の再生役（`video_external.cpp`）が要るのは、残り「動画を入れる」所だけ（作者の VideoTexture は `device.importExternalTexture` を使い、dawn.node には無い）。
+- 注意：Filament は自分の描く糸（driver thread）で同じ装置を使う。今回は Filament の仕事を終わらせて（flushAndWait）から JS を回した。Motolii の画面の中で毎コマ回すときは、`door::on_driver`（ThorVG と同じ）で Filament の描く糸の順番に入れる必要がある。
