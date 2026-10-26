@@ -89,3 +89,15 @@ shaderport（quizzyjoy/shaderport、Apache-2.0）は、shader-effects-inc/shader
 - まだの事：
   - Surface3D は真っ黒、Crystal は白い円、Form3D は波の帯。原因はまだ調べていない。
   - 相関が 1.00 の物（Glitch、PixelSort、DataMosh、Stone、Watercolor、Glow、Shatter、Sparkle、TimeTrail など）は、作者の初期設定のままだと 3 秒目では元とほとんど同じ。効き方がまばらな物（Glitch など）と、効いていない物の見分けは、作者の絵と比べるまで付けない。TimeTrail は前のコマを使う作りなのに、再生役が毎コマ描き先を消している。
+
+## 作者の段を毎コマ回す既存のネイティブの実行役を探した（10/26）：無い
+
+- `filament/dawn_probe/video_external.cpp`（約 330 行）は、段を順に回し、WGSL の宣言の名前で入力を繋ぎ、描き先を管理する再生役で、自作だった。前の節で「並べただけ」と書いたのは誤り。書く前に既存の実行役を探していなかった。
+- 後から探した（手下の調べ、URL は開いて確かめた物）：
+  - shaderport 自身の HarmonyOS の描き役（`harmony/entry/src/main/cpp/renderer.cpp`、806 行、`SetEffect` で段を順に描く）：OpenGL ES 3.0 と HarmonyOS の窓の上。Dawn では動かない。
+  - Wisp（https://github.com/nannou-org/wisp、nannou_isf の後継、MIT/Apache-2.0）：WGSL の段・`@pass(target, persistent, float)`・つまみを毎コマ書き換える、と形は一番近い。Bevy と wgpu の中だけ、C の口なし。
+  - wgpu-compute-toy（MIT、compute のみ）、cuneus（MIT、段の組み立ては Rust のコード）、pygfx/shadertoy（BSD-2、Python、Shadertoy の決まった uniform）：どれも wgpu の上で、他人の Dawn の装置は使えない。
+  - librashader（MPL-2.0、C の口あり）：受け取るのは slang（GLSL）で WGSL ではない。
+  - shaders.com の効果をブラウザの外で動かす物は fframes（MIT）だけ。手で SkSL に書き直した物で、WebGPU ではない。
+- 分かった事：Motolii の Dawn の装置の上で作者の段の一式を回してくれる既存の物は無い。形として一番近いのは Wisp の段の書き方で、Motolii の ISF の段（`filament/isf.cpp`、`screen.h` の `// --pass@`）とも同じ考え方。
+- Motolii の段の仕組み（screen.h → screen_door）が作者の WGSL を受け取れないのは、screen_door が Filament の描く係を通るため。入力の並びを group 0 に決めうち（vgpu の形）にしていて、入口の名前も `main` に決めうちしている。作者の並び（group 0・1・2）を受け取るには、文字の書き換え（翻訳）か、screen_door をシェーダー自身の並び（layout auto、gpu_door の道）に替えるかになる。
