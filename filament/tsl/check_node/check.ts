@@ -11,7 +11,9 @@ import { createRequire } from "node:module"
 const dawn: any = process.env.DAWN_NODE ? createRequire(import.meta.url)(process.env.DAWN_NODE) : { create: npmCreate, globals: npmGlobals }
 const create = dawn.create
 Object.assign(globalThis, dawn.globals)
-Object.defineProperty(globalThis, "navigator", { value: { gpu: create([]) }, configurable: true })
+// DAWN_FLAGS=backend=webgpu,capture=<path>: dawn.node's own flags (src/dawn/node/README.md); capture is
+// dawn_capture.patch, recording the whole run for Dawn's replay (dawn_capture.sh builds that dawn.node)
+Object.defineProperty(globalThis, "navigator", { value: { gpu: create(process.env.DAWN_FLAGS?.split(",") ?? []) }, configurable: true })
 // three's renderer takes its frame loop from the browser's self.requestAnimationFrame; Node has none: a 60 Hz timer
 Object.assign(globalThis, { self: globalThis, requestAnimationFrame: (f: any) => setTimeout(() => f(performance.now()), 16), cancelAnimationFrame: clearTimeout })
 // Canvas 2D for the effects that draw their own pictures (ASCII glyphs, annotations, labels): @napi-rs/canvas (MIT, Skia)
@@ -81,6 +83,7 @@ for (let i = 1; i <= 40; i++) {
 }
 
 const target = new THREE.RenderTarget(w, h, { type: THREE.UnsignedByteType })
+target.texture.name = "motolii_out"   // three gives the GPU texture this as its label (three.webgpu.js 76623): replay finds it by it
 const material = new THREE.MeshBasicNodeMaterial()
 material.colorNode = TSL.renderOutput(TSL.texture(out), THREE.NoToneMapping, THREE.SRGBColorSpace)
 const quad = new THREE.QuadMesh(material)
@@ -106,4 +109,5 @@ if (n > 0) {
   console.log(`${n} frames: ${((performance.now() - t0) / n).toFixed(1)} ms each (worst ${worst.toFixed(1)})`)
 }
 console.log("drawn", w, h)
+renderer.backend.device.destroy()   // (ends a capture: Dawn's webgpu backend DestroyImpl)
 process.exit(0)

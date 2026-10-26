@@ -175,3 +175,37 @@ singularity と tornado（MisterPrada）、hologram-particles、three.js-tsl-san
   - Go は Homebrew の 1.27.3（Dawn の指定は 1.26.6）。
 - 確かめ：確かめの台本（`check_node`）で、npm の組み立て済みの口の代わりにこれを使った（`DAWN_NODE=<path>`）。Displaced Rings と Bloom で、絵は 1 バイトも違わない（640×360、違う画素 0）。
 - これで、効果を描く装置が Motolii と同じ Dawn から作られる。まだ、Motolii の Filament が使っている装置そのものは渡していない（Dawn の口の `create()` は自分で装置を作る）。
+
+## Node をやめて QuickJS の上の Node-API をもう一度試した（10/26）：途中で止めた
+
+- 分かった事（数字は全部この Mac で動かして見た物）：
+  - NativeScript の約束の不具合は、JsRuntimeHost の形（resolve と reject を 1 つの JS の入れ物に入れて、参照で持つ：`js_native_api_quickjs.cc:2314-2391`、980cfb0）に直すと、`requestAdapter()` が通った（apple、metal-3）。
+  - 入口を NativeScript の `napi_run_script` と同じく「JS の中にいる」と数える形にしないと、Node-API の呼び出しの途中で後回しの処理が走る（`quickjs-api.c` の `js_enter`/`js_exit`）。
+  - `requestDevice()` で 2 つ目の NativeScript の不具合に当たった：後片付けの関数が 2 回呼ばれる（FinalizationRegistry の後片付けと、入れ物そのものの後片付け）。AddressSanitizer で「二重に解放」と出た。同じ不具合の直しが NativeScript の Windows 版にある（NativeScript/windows af3a904、`packages/windows-quickjs/vendor/napi/quickjs/quickjs-api.c` の JSFinalizeValueCallback）。約束の不具合は NativeScript/runtimes（5b697b3、iOS/macOS 版）の方で直っている。直った所が木ごとにばらばら。
+  - QuickJS-ng 0.17 のままにできるか：NativeScript の木は 3 つとも、NativeScript が手を入れた古い QuickJS-ng（0.8 か 0.11）と組む。Windows 版は 0.15 を横に置いても、Node-API の部分は 0.11 で組んでいる（`build.rs`）。0.17 の見出しで組むと誤り 19（`JS_IsArrayBuffer2` 8、`JS_WeakRef_Deref` 2、`JS_NewString16` 1、引数の数 4 など）。0.17 のままにするには書き換え（移植）が要る。
+- 止めた理由：TSL を毎コマ JS で動かす必要がないため（下の節）。作者の JS は取り込む時に 1 回だけ動かし、その時は Node の確かめの台本（`check_node`）で足りる。試しの外側（`host.c` など）と直しのファイルは消した。
+
+## 取り込みは 1 回、再生は three.js なし：Dawn の記録と流し直し（10/26）
+
+- 考え方：TSL は JS でシェーダーの組み立てを作り、WGSL にする仕組み。なので、作者の three.js を取り込みの時に 1 回だけ動かし、GPU にした事を全部取っておけば、再生の時に three.js は要らない。取っておくのは WGSL だけでなく、入力の繋ぎ方（bind group）、頂点、描き先、何段描くかの順番の一式。
+- 一式を取る仕組みは Dawn 自身が持っていた。
+  - 記録：Dawn の上の WebGPU 層（`src/dawn/native/webgpu`、内側は同じ Dawn の Metal）が、通った呼び出しを全部、命令と中身の 2 本に書く（`CaptureContext`、`StartCapture`）。
+  - 流し直し：Dawn の replay（`src/dawn/replay`、`Capture::Create` → `Replay::Create` → `Play`）。名前（label）で描き先を取り出せる（`GetObjectByLabel`）。
+  - 手本：Dawn の試験 `DawnTest.cpp` の Recorder（184-230 行）と `CaptureAndReplayTests.cpp`（52 個の試験）。
+- 組み立て：`filament/tsl/dawn_capture.sh` が、記録できる dawn.node を Motolii の out/wgpu とは別の場所（`out/wgpu_capture`）に組む（4 分 44 秒）。Motolii の Dawn は触らない。
+  - 足したのは dawn.node の `capture=<path>` の合図だけ（`filament/tsl/dawn_capture.patch`、Dawn のコードに 2 か所、`MOTOLII_DAWN_CAPTURE` の時だけ）。アダプタの頼み方は DawnTest.cpp:708-713、記録の始め方は Recorder::CreateAndStart のとおり。
+  - 確かめの台本 `check_node/check.ts` は 3 か所だけ変えた：dawn.node の設定を `DAWN_FLAGS` で渡す、最後の描き先に名前 `motolii_out` を付ける（three.js は名前を GPU の label にそのまま渡す：three.webgpu.js 76623）、最後に装置を閉じる（記録が終わる）。
+- 再生：`filament/dawn_probe/replay_on_dawn.sh <記録> motolii_out 640 360 <出力>`。Motolii の Dawn（out/wgpu）に元からある replay の部品（`libreplay.a`）で流し直し、描き先を読み戻す。three.js も JS も使わない。
+- 結果（640×360、ユーザーの写真）：
+
+| 効果 | 記録（命令＋中身） | 流し直した絵と Node の絵 |
+|---|---|---|
+| Displaced Rings（1 段） | 65 KB ＋ 924 KB | 1 バイトも違わない、装置の誤り 0 |
+| Bloom（何段も） | 158 KB ＋ 924 KB | 1 バイトも違わない、装置の誤り 0 |
+
+  - 記録用の層を通しても、Node の絵は前（`own_*.rgba`）と 1 バイトも違わない。
+  - 絵：`reports/tsl/replay_no_three.jpg`（左から写真、Displaced Rings、Bloom。どちらも流し直した物）。
+- まだの事：
+  - 今の記録は「その時の 41 コマ」をそのまま流す。時間・つまみ・写真を変えるには、記録の中の uniform の入れ物と写真の描き先を、名前で取り出して書き換える（`GetObjectByLabel`）。three.js がどの名前を付けるかを数えるのが次。
+  - JS が毎コマ描く段や作りを変える作品（追跡、流体など）は、記録をそのまま流すだけでは足りない。44 種のうちどれがそうかは、まだ数えていない。
+  - Motolii の Filament の装置の上で流し直すこと（今は replay_on_dawn が自分で装置を作る）。
