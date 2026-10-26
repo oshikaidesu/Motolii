@@ -1,6 +1,6 @@
 #!/bin/zsh
-# out/jsrh_napi/qjs_napi: Motolii's QuickJS-ng 0.17 (Homebrew's libqjs) with BabylonJS/JsRuntimeHost's Node-API for
-# QuickJS (fetched at 980cfb0 into third_party/napi/jsruntimehost), jsrh_qjs017_dawn.patch applied to a copy, and host.cc.
+# out/jsrh_napi/src: BabylonJS/JsRuntimeHost's Node-API for QuickJS (fetched at 980cfb0 into third_party/napi/jsruntimehost)
+# with jsrh_qjs017_dawn.patch applied to a copy, for Motolii's QuickJS-ng 0.17 (Homebrew's libqjs): dawn_probe/js_effects.sh builds it in.
 set -e
 cd "$(dirname "$0")"
 R=../../third_party/napi/jsruntimehost
@@ -12,9 +12,4 @@ fi
 O=../out/jsrh_napi
 rm -rf $O/src && mkdir -p $O/src && cp -R $R/Core/Node-API $O/src/
 (cd $O/src && patch -s -p2 < ../../../jsrh_napi/jsrh_qjs017_dawn.patch)
-Q=/opt/homebrew/opt/quickjs-ng
-S=$O/src/Node-API
-clang++ -std=c++17 -O2 -w -DNAPI_VERSION=8 -I $Q/include -I $S/Include/Shared -I $S/Include/Engine/QuickJS -I $S/Source host.cc \
-  $S/Source/js_native_api_quickjs.cc $S/Source/js_native_api_shared.cc $S/Source/env_quickjs.cc \
-  -L $Q/lib -lqjs -Wl,-rpath,$Q/lib -Wl,-export_dynamic -o $O/qjs_napi
-echo built $O/qjs_napi
+echo patched $O/src

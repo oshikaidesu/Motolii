@@ -1,6 +1,6 @@
 // js_effects.cpp: a web effect's own renderer (shader-effects-inc/shaders, npm shaders 4.0.5) drawing inside this
-// process on Filament's own Dawn device. JS runs on Motolii's QuickJS with JsRuntimeHost's Node-API (as
-// tsl/jsrh_napi/host.cc runs it); Dawn's JS binding (dawn.node with dawn_lend.patch) is given Filament's Dawn proc
+// process on Filament's own Dawn device. JS runs on Motolii's QuickJS (QuickJS-ng 0.17, Homebrew's libqjs) with
+// BabylonJS/JsRuntimeHost's Node-API attached (Napi::Attach; tsl/jsrh_napi/build.sh); Dawn's JS binding (dawn.node with dawn_lend.patch) is given Filament's Dawn proc
 // table (motolii_dawn_procs) and lent Filament's device and a texture of it (wrapDevice, wrapTexture); the effect is
 // drawn by tsl/jsrh_napi/shaders.ts. After it, the texture is read back here, on the same device.
 //   ./dawn_probe/js_effects.sh <preset.json> <w> <h> <frames> <out.rgba>
@@ -22,7 +22,8 @@
 // Filament's Dawn as Dawn's JS binding should call it (dawn_lend.patch, Module.cpp)
 extern "C" __attribute__((visibility("default"))) const DawnProcTable* motolii_dawn_procs() { return &dawn::native::GetProcs(); }
 
-// (as tsl/jsrh_napi/host.cc)
+// A module run as QuickJS's own qjs.c runs one; an addon loaded as Node's process.dlopen does (dlopen,
+// napi_register_module_v1); napi_fatal_error as Node's src/node_api.cc says it.
 extern "C" __attribute__((noreturn)) void napi_fatal_error(const char* location, size_t location_len, const char* message, size_t message_len) {
   std::fprintf(stderr, "FATAL ERROR: %.*s %.*s\n", (int)(location_len == NAPI_AUTO_LENGTH ? std::strlen(location) : location_len), location,
                (int)(message_len == NAPI_AUTO_LENGTH ? std::strlen(message) : message_len), message);

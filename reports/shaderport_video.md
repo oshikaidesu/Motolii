@@ -166,3 +166,13 @@ shaderport（quizzyjoy/shaderport、Apache-2.0）は、shader-effects-inc/shader
 - 結果（Plasma の上に Glitch、640×360、60 コマ）：PASS、Filament の装置で読み戻した絵は Node で描いた絵と 1 バイトも違わない。1 コマ 4.50 ms（作者自身の GPU 待ちを含む）。
 - これで、作者の効果を作者のレンダラーのまま、Motolii の JS の土台（QuickJS 0.17）と Motolii の装置で描ける。自作の再生役（`video_external.cpp`）が要るのは、残り「動画を入れる」所だけ（作者の VideoTexture は `device.importExternalTexture` を使い、dawn.node には無い）。
 - 注意：Filament は自分の描く糸（driver thread）で同じ装置を使う。今回は Filament の仕事を終わらせて（flushAndWait）から JS を回した。Motolii の画面の中で毎コマ回すときは、`door::on_driver`（ThorVG と同じ）で Filament の描く糸の順番に入れる必要がある。
+
+## 自分で書いて使わなくなった物を捨てた（10/26）
+
+- 今の道（作者のレンダラー ＋ Motolii の QuickJS ＋ Filament の装置）に要らない自作を消した（約 900 行）：
+  - Dawn の記録の道：`dawn_probe/capture_list.cpp`・`.sh`、`dawn_probe/replay_on_dawn.cpp`・`.sh`、`tsl/dawn_capture.sh`・`.patch`、`check_node/check.ts` の記録用の足し（Dawn の木に当てていた記録の直しも外した）。Replay は本番に使えないと分かった（前の節）。
+  - 作者の WGSL を書き出して自作の再生役で回す道：`dawn_probe/video_external.cpp`・`.sh`（自作の再生役 331 行）、`tsl/shaderport_export.sh`・`shaderport_frames.patch`、取り寄せた shaderport。作者のレンダラーに替えた。
+  - 二重：`tsl/jsrh_napi/host.cc`・`smoke.ts`（`js_effects.cpp` に同じ立て方がある）、`check_node/shaders_check.mjs`（Node での確かめ、QuickJS で同じ絵になると分かった）、`shaders.ts` の自分で装置を作る分岐。
+- 残した物：`tsl/jsrh_napi/build.sh`（直しを当てた JsRuntimeHost の Node-API を用意するだけ）、`jsrh_qjs017_dawn.patch`、`shaders.ts`、`web_globals.ts`、`tsl/dawn_lend.patch`、`dawn_probe/js_effects.cpp`・`.sh`。
+- 確かめ：消した後に組み直して、Filament の装置で描いた Plasma の上の Glitch が前と 1 バイトも違わない（1 コマ 3.42 ms）。
+- 上の節に出てくる消したファイルは、その時の記録として残す（git の歴史にある）。動画を作者の効果に入れる道は、dawn.node の外部テクスチャ（Dawn 自身の TODO、crbug.com/dawn/1129）を埋めてから、作者の VideoTexture で通す。
