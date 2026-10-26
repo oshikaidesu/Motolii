@@ -1,0 +1,31 @@
+diff --git a/src/PointerManager.ts b/src/PointerManager.ts
+index 079242f..827c4c2 100644
+--- a/src/PointerManager.ts
++++ b/src/PointerManager.ts
+@@ -31,6 +31,14 @@ export class PointerManager extends EventTarget {
+     this.prevPointer.copy(this.pointer);
+   }
+ 
++  // A host's point (0..1 across the picture) instead of the mouse. Width and height are the picture's, in pixels.
++  public readHost(width: number, height: number) {
++    const host = (globalThis as { motoliiTarget?: { x?: number; y?: number } }).motoliiTarget
++    if (!host || typeof host.x !== "number" || typeof host.y !== "number") return
++    this.isPointerDown = true
++    this.pointer.set(host.x * width, host.y * height)
++  }
++
+   private onPointerDown = (event: MouseEvent) => {
+     if (!this.hasInteracted) {
+       this.hasInteracted = true;
+diff --git a/src/demo3.ts b/src/demo3.ts
+index d88a5e0..55956f5 100644
+--- a/src/demo3.ts
++++ b/src/demo3.ts
+@@ -234,6 +234,7 @@ function getImageScale(
+  */
+ function frame(time: number) {
+   const deltaT = (time - previousTime) / 1000;
++  pointerManager.readHost(dataWidth, dataHeight);
+ 
+   if (pointerManager.isPointerDown) {
+     // 外力の注入

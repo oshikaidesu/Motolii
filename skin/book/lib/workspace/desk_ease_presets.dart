@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show Hov;
 import 'package:lab_book/tokens.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
+import 'package:lab_book/workspace/desk_ease_library.dart';
 import 'package:lab_book/workspace/ws.dart';
 
 /// The presets, each a tiny curve; the one in use is lit in the accent.
@@ -26,7 +27,7 @@ class Presets extends StatelessWidget {
         for (final (i, p) in tiles.indexed) ...[
           if (i > 0) SizedBox(width: Shape.s(3)),
           Expanded(
-            child: _PresetTile(p, key: ValueKey('ease.${p.name}'), on: on(p), onTap: () => on(p) ? null : onPick(p)),   // (the one it is already: its own numbers kept)
+            child: PresetTile(p, key: ValueKey('ease.${p.name}'), on: on(p), onTap: () => on(p) ? null : onPick(p)),   // (the one it is already: its own numbers kept)
           ),
         ],
       ],
@@ -38,14 +39,17 @@ class Presets extends StatelessWidget {
     mainAxisSize: MainAxisSize.min,
     children: [
       _row(easePresets, (p) => p == ease && !easeOther(ease)),
-      if (more.isNotEmpty) _row(more, (p) => ease.name == p.name || (ease.name?.startsWith('${p.name} ') ?? false)),
+      if (more.isNotEmpty) EaseLibrary(ease: ease, more: more, onPick: onPick),
     ],
   );
 }
 
-class _PresetTile extends StatelessWidget {
-  const _PresetTile(this.ease, {super.key, required this.on, required this.onTap});
+class PresetTile extends StatelessWidget {
+  const PresetTile(this.ease, {super.key, required this.on, required this.onTap, this.label});
   final Ease ease;
+
+  /// What it is called on its tile, where that is less than its name (anime.js's Elastic, its way picked beside).
+  final String? label;
   final bool on;
   final VoidCallback onTap;
   @override
@@ -65,7 +69,7 @@ class _PresetTile extends StatelessWidget {
             FittedBox( // (a name wider than its tile is drawn smaller, never cut)
               fit: BoxFit.scaleDown,
               child: Text(
-                ease.name ?? '',
+                label ?? ease.name ?? '',
                 maxLines: 1,
                 style: T.micro(ink).copyWith(fontSize: T.px(9.5), fontWeight: on ? FontWeight.w700 : FontWeight.w500),
               ),

@@ -59,6 +59,28 @@ picture.colorSpace = THREE.SRGBColorSpace
 picture.flipY = false
 picture.needsUpdate = true
 
+// ICS tilt-shift (webgpu-tiltshift.ts tiltShiftColor): their mix, fed this picture instead of the cube scene.
+// TARGET's y is the sharp line.
+if (layersFile === "tilt-shift") {
+  const { tiltShiftColor } = await import("../../third_party/tsl/ics-creative__250423_vite_threejs_tsl/src/tilt-shift-color.ts")
+  const focus = process.env.TARGET ? +process.env.TARGET.split(",")[1] : 0.5
+  const target = new THREE.RenderTarget(w, h, { type: THREE.UnsignedByteType })
+  const material = new THREE.MeshBasicNodeMaterial()
+  material.colorNode = TSL.renderOutput(tiltShiftColor(TSL.texture(picture), focus), THREE.NoToneMapping, THREE.SRGBColorSpace)
+  const quad = new THREE.QuadMesh(material)
+  for (let i = 0; i < 8; i++) {
+    renderer.setRenderTarget(target)
+    quad.render(renderer)
+    await new Promise(r => setTimeout(r, 30))
+  }
+  const pixels = await renderer.readRenderTargetPixelsAsync(target, 0, 0, w, h)
+  const stride = Math.ceil(w * 4 / 256) * 256, rows = Buffer.alloc(w * h * 4), got = Buffer.from(pixels.buffer, pixels.byteOffset, pixels.byteLength)
+  for (let y = 0; y < h; y++) got.copy(rows, y * w * 4, y * stride, y * stride + w * 4)
+  fs.writeFileSync(outFile, rows)
+  console.log("drawn", w, h)
+  process.exit(0)
+}
+
 // a list of types ("bloom,ascii") makes each a new layer with its definition's own defaults, as createLayer does
 const { getLayerDefinition } = await import("../../third_party/tsl/basementstudio__shader-lab/src/lib/editor/config/layer-registry")
 const { buildParameterValues } = await import("../../third_party/tsl/basementstudio__shader-lab/src/lib/editor/parameter-schema")
@@ -67,6 +89,12 @@ const layers = layersFile.endsWith(".json") ? JSON.parse(fs.readFileSync(layersF
   return { id: type, type, kind: d.kind, name: type, visible: true, opacity: 1, blendMode: "normal", compositeMode: "filter", hue: 0, saturation: 1, params: buildParameterValues(d.params) }
 })
 const config = { composition: { width: 1920, height: 1080 }, layers, timeline: { duration: 6, loop: true, tracks: [] } }
+// TARGET=x,y (0..1 on the picture) is a thing's place. The passes that follow a pointer read globalThis.motoliiTarget.
+const hostPoint = process.env.TARGET
+if (hostPoint) {
+  const [x, y] = hostPoint.split(",").map(Number)
+  ;(globalThis as any).motoliiTarget = { x, y }
+}
 const headless = createHeadlessRenderer({ renderer, size: { width: w, height: h } })
 await headless.initialize()
 headless.resize({ width: w, height: h }, 1)
@@ -77,6 +105,11 @@ let out = headless.render(frame, picture)
 // (and its clock running at 60 a second, as the browser's: some passes step only when the time moves, blob tracking's tracker)
 for (let i = 1; i <= 40; i++) {
   await new Promise(r => setTimeout(r, 50))
+  if (hostPoint) {
+    const [x, y] = hostPoint.split(",").map(Number)
+    const t = i / 40
+    ;(globalThis as any).motoliiTarget = { x: 0.5 + (x - 0.5) * t, y: 0.5 + (y - 0.5) * t }
+  }
   out = headless.render(buildRendererFrame(config as any, i / 60, 1 / 60, 1, { width: w, height: h }, { logicalSize: { width: 1920, height: 1080 } }), picture)
 }
 

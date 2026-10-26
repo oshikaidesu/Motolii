@@ -308,3 +308,109 @@ Lua の `{a,b,c,...}` は、float の並びのまま `b0` に入る。HLSL の c
 - 数えた結果：`/private/tmp/claude-501/-Users-motolii-maker-motolii/b7181a2a-2e86-4cec-b8cc-9c0117b390ea/scratchpad/aviutl2/scan.json`、カタログ：`/private/tmp/claude-501/-Users-motolii-maker-motolii/b7181a2a-2e86-4cec-b8cc-9c0117b390ea/scratchpad/aviutl2/catalog/index.json`
 - シェーダー 141 本と、その SPIR-V と WGSL：`/private/tmp/claude-501/-Users-motolii-maker-motolii/b7181a2a-2e86-4cec-b8cc-9c0117b390ea/scratchpad/hlsl_test/`、Tint の試験：`/private/tmp/claude-501/-Users-motolii-maker-motolii/b7181a2a-2e86-4cec-b8cc-9c0117b390ea/scratchpad/tintprobe/`
 - 数えた道具（Python）：`/private/tmp/claude-501/-Users-motolii-maker-motolii/b7181a2a-2e86-4cec-b8cc-9c0117b390ea/scratchpad/tools/`
+
+---
+
+## 11. 追いの調べ（2026-10-26）：DLL 10 本、Wine、Slang
+
+### 11.0 要点
+
+- **DLL 10 本は、10 本とも元ソースが公開されている（すべて MIT）。** そのうち 5 本は Rust、2 本は C++ のスクリプトモジュール（.mod2）で、中身は CPU の計算だけ。Mac 向けに作り直せる（判定「作り直す」が 7 本）。
+- ただし Rust の 5 本と VariableFont・AdjustPivot_A は、どれも共通の部品 **aviutl2-rs**（sevenc-nanashi、MIT）を使っている。この部品は `windows` という部品に頼っていて、`windows` は Windows 以外では中身が空になる（`#![cfg(windows)]`）。だから Mac で組むには **aviutl2-rs の側に数か所の手直しが要る**。プラグイン本体のソースは変えなくてよい。
+- **Windows 版の Motolii なら、配られている .mod2 をそのまま読み込める。** 本体の側がスクリプトモジュールの受け渡し表（36 個の関数）を用意すればよい。
+- **残り 3 本は Mac ではそのままでは無理。**
+  - FlowType_K：直せば組める。
+  - VariableFont：DirectWrite が中心なので Wine が要る。
+  - AdjustPivot_A：DLL は設定画面だけで、**スクリプトは DLL なしで動く**。
+  - → DLL なしで動く数の天井は 40 本から **41 本（82%）** に上がる。
+- **Wine は、同じプロセスの中で読み込むのは無理。** arm64 のプロセスに x86_64 の DLL は入らない。別の x86_64 プロセスを Rosetta 2 で動かすことになるが、Rosetta 2 は macOS 27 を最後に一般向けの提供が終わる。
+- **Slang は glslang に負けた。**
+  - そのまま WGSL を出させると、Tint が受け付けたのは 106/141 本（75%）。glslang→Tint の道は 133/141 本（94%）。
+  - 定数の並びの問題も直らない。既定では 9 本が黙ってずれる。FXC の詰め方を真似るオプション（`-fvk-use-dx-layout`）を付けると、2 本は WGSL として不正な形になり、7 本はまだ黙ってずれる。
+- 定数の並びのずれは、正しく数え直すと **127 本中 16 本、7 包**（5 章の「12〜21 本・6〜8 包」の範囲に入る）。glslang の Offset と WGSL の並べ方の決まりを、機械で 1 本ずつ突き合わせた。
+
+### 11.1 DLL ごとの判定
+
+| # | DLL（包） | 元ソース・許諾 | 言語と頼る物 | Windows だけの物 | 判定 |
+|---|---|---|---|---|---|
+| 1 | ntsc-rs.mod2（sevenc-nanashi.ntsc-rs） | github.com/sevenc-nanashi/ntsc-rs.anm2 、MIT。中の ntscrs は MIT/ISC/Apache | Rust、aviutl2 0.20.1、ntscrs、serde | 本体には無い（aviutl2-rs だけ） | **作り直す** |
+| 2 | tim2.mod2（ported_tim。スクリプトから 43 回呼ぶ） | github.com/sevenc-nanashi/ported_tim 、MIT | Rust、aviutl2 0.27、image（webp）、rayon、include_dir | 同上 | **作り直す** |
+| 3 | disassembler.mod2 | github.com/sevenc-nanashi/disassembler.anm2 、MIT | Rust、aviutl2 0.21、dashmap | 同上 | **作り直す** |
+| 4 | transform_specific_chars.mod2 | github.com/sevenc-nanashi/transform_specific_chars.anm2 、MIT | Rust、aviutl2 0.20.2、regex、cached | 同上 | **作り直す** |
+| 5 | TypingEffect.mod2 | github.com/vandojapan/TypingEffect.obj2 （source/）、MIT | Rust、aviutl2 =0.40、lindera（IPADIC を中に持つ）、pinyin | 同上 | **作り直す** |
+| 6 | PixelSorter_K.mod2 | github.com/korarei/AviUtl2_PixelSorter_K_Script （dll_src/main.cpp、約 70 行）、MIT | C++20、`<windows.h>` は型のためだけ、`std::execution::par/unseq` | MSVC の並列 std::sort。Apple の libc++ では `-fexperimental-library` が要るか、ただの逐次になる | **作り直す**（小さな手直し） |
+| 7 | CameraTransform_K.mod2 | github.com/korarei/AviUtl2_CameraTransform_K_Script （modules/）、MIT | C++、Eigen（vcpkg）、`<windows.h>` は型だけ | 無い | **作り直す** |
+| 8 | FlowType_K.aux2（モジュール 7 つ、フィルタ、メニューを登録） | github.com/korarei/AviUtl2_FlowType_K_Script （plugins/）、MIT | C++23、Eigen、freetype、harfbuzz、re2、toml++、utfcpp（どれも他の OS でも使える） | 字体のファイル探しに DirectWrite と COM（font.cpp、266 行）。MultiByteToWideChar。フィルタは fxc で DXBC にしたシェーダーを `exec_pixelshader_data` で本体に渡す。メニューは EDIT_SECTION を使う | **直せば作り直せる**（字体探し・DXBC・メニュー）。そのままなら Wine |
+| 9 | VariableFont.aux2 ＋ VariableFontModule.mod2 | github.com/rokujyushi/Variable-Font-Plug-ins 、MIT | Rust（crates/）、`windows` 部品 | DirectWrite が中心（IDWriteFactory、TextLayout、FontSetBuilder、独自の TextRenderer で文字を描く） | **Mac では無理**（Wine が要り、それでも Wine の dwrite が可変字体をどこまで扱えるか分からない） |
+| 10 | 中心ずらし_A.aux2（AdjustPivot_A） | github.com/azurite581/AviUtl2-AdjustPivot_A 、MIT | Rust、aviutl2-eframe（egui と winit を AviUtl2 の窓に埋める） | Win32 の窓と鍵盤（MapVirtualKeyExW、PostMessageW など） | **DLL は要らない**（.anm2 は `obj.module` を呼ばず、`--value@PI` の値を読むだけ）。設定画面は Mac では無理 |
+
+まとめ：作り直す 7 本、直せば作り直せる 1 本、DLL 不要 1 本、Mac では無理 1 本。どの Rust のものも `cargo build` は回していない。組み立ての途中で入ってきた部品のコードが走るため。判定はソースを読んで決めた。
+
+### 11.2 AviUtl2 プラグイン SDK — 本体が用意する物
+
+SDK は MIT（aviutl2_sdk.zip の license.txt）。見出しのファイルは 8 本、計 3,018 行、文字コードは SJIS。
+
+- **DLL が出す入口**
+  - 共通：`InitializePlugin(DWORD version)`、`UninitializePlugin()`。
+  - 必要に応じて：`RequiredVersion()`、`InitializeLogger(LOG_HANDLE*)`、`InitializeConfig(CONFIG_HANDLE*)`、`InitializeCache`。
+  - 種類ごと：.mod2 は `GetScriptModuleTable()`、.auf2 は `GetFilterPluginTable()`、.aui2 / .auo2 は `GetInputPluginTable()` / `GetOutputPluginTable()`、.aux2 は `RegisterPlugin(HOST_APP_TABLE*)`。
+- **.mod2（10 本のうち 8 本はこれだけで足りる）**
+  - DLL は `SCRIPT_MODULE_TABLE { 情報, {名前, 関数}[] }` を返す。
+  - 本体は呼ぶたびに `SCRIPT_MODULE_PARAM*` を渡す。中身は 36 個の関数で、引数を読む get_param_* が 16、結果を返す push_result_* が 15、ほかに set_error、関数やメタ表を返す物、get_param_type。
+  - ほとんど Lua の C API の言い換えなので、本体の側は小さく済む。`get_param_data` は `obj.getpixeldata` のポインタをそのまま渡す。
+- **.aux2**
+  - HOST_APP_TABLE の 29 個の登録関数（メニュー、窓、ファイルを落とした時、イベント、`register_script_module_name`、`register_font_collection` など）。
+  - EDIT_HANDLE が約 28 個、EDIT_SECTION が約 84 個（オブジェクトを作る・動かす・値を書く）、PROJECT_FILE。
+  - つまり編集ソフトの API が丸ごと要る。大きい。
+- **.auf2（フィルタ）**
+  - 設定項目の型が 15 種。
+  - 画は CPU で読み書きするか、D3D11 のテクスチャ（`get_image_texture2d`）で触る。
+  - `exec_pixelshader_file/data` と `exec_computeshader_file/data` は .cso（DXBC）を本体に走らせる。ブレンドとサンプラーも ID3D11 の物を返す。
+- **見出しに出る Windows の型**：LPCWSTR 226、LPCSTR 45、DWORD 12、ID3D11* 23、HWND 5、HINSTANCE 3、BITMAPINFOHEADER、WAVEFORMATEX。型の名前を置き換える小さな見出しを Motolii が用意すれば、.mod2 の C++ は組める。
+- **注意（Mac の wchar_t）**：Mac の wchar_t は 4 バイトで、Windows は 2 バイト。aviutl2-rs は文字を u16 で扱うので、C++ のプラグインは `-fshort-wchar` を付けて 2 バイトにそろえないと、Rust と C++ で文字の受け渡しの形が違ってしまう。
+
+### 11.3 Wine の道（短く）
+
+- 今の Mac 向け Wine（本家、CrossOver、Whisky の流れ）は x86_64 のプロセスで、Rosetta 2 の上で動く。**arm64 の Motolii のプロセスに x86_64 の DLL を入れることはできない。** Rosetta 2 は 1 つのプロセスの中で 2 つの設計を混ぜられない。
+- だから作るなら「Wine で動く x86_64 の手伝いプロセス」になる。その場合に要る物：
+  - `SCRIPT_MODULE_PARAM` の 36 個の呼び出しを、プロセスの外とのやり取りに直す。
+  - 画素は共有メモリで渡す。
+  - Wine 一式（数百 MB）を同梱する。
+- D3D11 が要る物（今回は FlowType のフィルタだけ）は、wined3d（OpenGL 経由）、DXMT（CodeWeavers の Feifan He、D3D11→Metal、LGPL-2.1+、github.com/3Shain/dxmt）、DXVK＋MoltenVK のどれか。Apple の D3DMetal は配れない。
+- 許諾：Wine と DXMT は LGPL-2.1+。別プロセスで動かし、元ソースを示せば同梱できる。CrossOver は有料なので同梱できない。
+- 時限：報道によれば、Apple は WWDC 2025 で「Rosetta 2 の一般向けは macOS 27 まで。その後は古いゲーム向けの一部だけ」と言った（Apple 自身の文書では確かめていない）。Wine の Mac 版は Rosetta に頼っているので、先が無い。
+- **判定：同じプロセスでは無理。別プロセスはできるが、救えるのは VariableFont 1 本（と FlowType をそのまま動かす場合）だけで、重さに見合わない。**
+
+### 11.4 Slang と glslang の比べ（141 本、同じシェーダー）
+
+Slang は公式の配布 v2026.20、macOS arm64 版（Apache-2.0 WITH LLVM-exception、62.8MB）を scratchpad に入れた。Homebrew は使っていない。register の番号のずらし方は glslang と同じ（t→0、s→16、b→32、u→48）。判定には Tint の WGSL 読み手（Dawn が使う物。scratchpad で組んだ試験 `wgslcheck`）と naga を使った。
+
+| | glslang（HLSL）→ SPIR-V → Tint | Slang → WGSL（既定） | Slang → WGSL（`-fvk-use-dx-layout`） | Slang → SPIR-V 1.3 → Tint |
+|---|---|---|---|---|
+| 翻訳できた | **137** | 113 | 113 | 116 |
+| Tint が受け付けた WGSL | **133（94%）** | 106（75%）。derivative_uniformity を切れば 108 | 104 | 104（74%） |
+| naga が受け付けた | 133/133 | 108/113 | — | — |
+| 定数の並びが黙ってずれる | 16（127 本を測れた中で） | 9 | 7 ＋ 2 本は WGSL として不正 | — |
+
+- **Slang で落ちた理由**
+  - cbuffer の値で `static const` を初期化している（FXC は通す）：21。sigma-axis の物に多い。
+  - 入口の名前が組み込み関数と同じ（`saturate`、`transpose`）：2。
+  - `RWTexture2D<half4>` は WGSL では作れない：3。
+  - float で switch：1。
+  - Tint で落ちたのは、テクスチャの配列（WGSL そのものに無い）4、Slang が予約語 `meta` を名前のまま出した不具合 1、微分の一様性 2。
+- **Slang の SPIR-V**：既定は 1.5 で、Tint（Vulkan 1.1 / SPIR-V 1.3）が受け付けない。1.3 にしても、f16 の拡張 4、SPV_KHR_integer_dot_product 4、ループの形 1、テクスチャの配列 3 で落ちる。
+- **Slang だけが通した物**：1 本（PageRoll の apply。glslang の「知らない変数」の誤り）。両方の道を足すと 134/141 本。
+- **定数の並び**
+  - 既定の Slang は std140 の並びで出す。float2 が 36 バイト目に来る例（Halftone）は、glslang→Tint と同じく 40 になる。
+  - `-fvk-use-dx-layout` を付けると、Slang は FXC の詰め方を知っていて `@align(4) resolution : vec2<f32>` を出す。でも WGSL の uniform では vec2 は 8 の倍数に並べる決まりなので、Tint が止める（Halftone と noiseGradation）。
+  - `float3x3`、`float2x2` の後ろの物（Basic_S の 4 本、Diffusion_K、Kaleidoscope_K、Basic_S の tile）は、WGSL の側で大きさが合わず、黙ってずれたまま（例：by_xyz で HLSL は 0,44,48,52、Slang は 0,48,64,68）。
+  - つまり WGSL ではそもそも HLSL の詰め方を書き表せない。**どの翻訳器でも、上げる時に並べ替える手間は残る。**
+- **判定：glslang→Tint のままにする。** 数で 133 対 106。Slang は 62.8MB の新しい部品になるのに、並びの問題も解かない。Slang を使う価値は、glslang が落とす 1 本を拾う予備くらい。
+
+### 11.5 追いで残した物（scratchpad）
+
+- DLL の元ソース：`/private/tmp/claude-501/-Users-motolii-maker-motolii/b7181a2a-2e86-4cec-b8cc-9c0117b390ea/scratchpad/aviutl2/repos/`（aviutl2-rs も同じ場所）
+- SDK の見出しを UTF-8 に直した物：`/private/tmp/claude-501/-Users-motolii-maker-motolii/b7181a2a-2e86-4cec-b8cc-9c0117b390ea/scratchpad/aviutl2/release/sdk_u8/`
+- Slang 本体：`/private/tmp/claude-501/-Users-motolii-maker-motolii/b7181a2a-2e86-4cec-b8cc-9c0117b390ea/scratchpad/slang/`、出した物：`/private/tmp/claude-501/-Users-motolii-maker-motolii/b7181a2a-2e86-4cec-b8cc-9c0117b390ea/scratchpad/slang_test/`
+- Tint の WGSL 判定：`/private/tmp/claude-501/-Users-motolii-maker-motolii/b7181a2a-2e86-4cec-b8cc-9c0117b390ea/scratchpad/tintprobe/wgslcheck`
+- 並びの突き合わせ：`/private/tmp/claude-501/-Users-motolii-maker-motolii/b7181a2a-2e86-4cec-b8cc-9c0117b390ea/scratchpad/tools/wgsllayout.py`

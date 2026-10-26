@@ -1,0 +1,64 @@
+diff --git a/src/tilt-shift-color.ts b/src/tilt-shift-color.ts
+new file mode 100644
+index 0000000..dc2a3b2
+--- /dev/null
++++ b/src/tilt-shift-color.ts
+@@ -0,0 +1,19 @@
++import type { Node } from "three/webgpu"
++import { abs, mix, smoothstep, uniform, vec2, viewportUV } from "three/tsl"
++import { gaussianBlur } from "three/examples/jsm/tsl/display/GaussianBlurNode.js"
++
++// The mix from webgpu-tiltshift.ts. sceneColor is the picture already in hand; the cube scene stays in that file.
++export function tiltShiftColor(sceneColor: Node, focus = 0.5, blurAmount = 1, gradientRadius = 0.1): Node {
++  const focusPosUniform = uniform(focus)
++  const blurAmountUniform = uniform(blurAmount)
++  const gradientRadiusUniform = uniform(gradientRadius)
++
++  const blurDirection = vec2(blurAmountUniform, blurAmountUniform)
++  const blurredScene = gaussianBlur(sceneColor, blurDirection, 4)
++
++  const uv = viewportUV
++  const dist = abs(uv.y.sub(focusPosUniform))
++  const blurStrength = smoothstep(gradientRadiusUniform, gradientRadiusUniform.add(0.2), dist)
++
++  return mix(sceneColor, blurredScene, blurStrength) as Node
++}
+diff --git a/src/webgpu-tiltshift.ts b/src/webgpu-tiltshift.ts
+index 8cbe46d..463f07a 100644
+--- a/src/webgpu-tiltshift.ts
++++ b/src/webgpu-tiltshift.ts
+@@ -1,7 +1,7 @@
+ import * as THREE from "three";
+ import { RenderPipeline, WebGPURenderer, type Node } from "three/webgpu";
+-import { abs, mix, pass, smoothstep, uniform, vec2, viewportUV } from "three/tsl";
+-import { gaussianBlur } from "three/examples/jsm/tsl/display/GaussianBlurNode.js";
++import { pass } from "three/tsl";
++import { tiltShiftColor } from "./tilt-shift-color";
+ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+ import Stats from "stats-gl";
+ 
+@@ -53,23 +53,8 @@ window.addEventListener("resize", handleResize);
+ 
+ // --- Function to create TSL Node Graph (Restore tilt-shift logic) ---
+ function createTiltShiftNodeGraph(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Node {
+-  const focusPosUniform = uniform(0.5);
+-  const blurAmountUniform = uniform(1.0);
+-  const gradientRadiusUniform = uniform(0.1);
+-
+   const scenePass = pass(scene, camera);
+-  const sceneColor = scenePass.getTextureNode();
+-
+-  const blurDirection = vec2(blurAmountUniform, blurAmountUniform);
+-  const blurredScene = gaussianBlur(sceneColor, blurDirection, 4);
+-
+-  const uv = viewportUV;
+-  const dist = abs(uv.y.sub(focusPosUniform));
+-  const blurStrength = smoothstep(gradientRadiusUniform, gradientRadiusUniform.add(0.2), dist);
+-
+-  const finalNode = mix(sceneColor, blurredScene, blurStrength) as Node;
+-
+-  return finalNode;
++  return tiltShiftColor(scenePass.getTextureNode());
+ }
+ 
+ function tick() {

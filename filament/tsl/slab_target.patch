@@ -1,0 +1,81 @@
+diff --git a/packages/shader-lab-react/src/renderer/fluid-pass.ts b/packages/shader-lab-react/src/renderer/fluid-pass.ts
+index 8410e0e..14d4ef7 100644
+--- a/packages/shader-lab-react/src/renderer/fluid-pass.ts
++++ b/packages/shader-lab-react/src/renderer/fluid-pass.ts
+@@ -21,6 +21,8 @@ export class FluidPass extends PassNode {
+   private readonly onPointerLeave: (() => void) | null
+   private lastPointerX: number | null = null
+   private lastPointerY: number | null = null
++  private hostX: number | null = null
++  private hostY: number | null = null
+ 
+   constructor(layerId: string, renderer: THREE.WebGPURenderer) {
+     super(layerId)
+@@ -76,6 +78,20 @@ export class FluidPass extends PassNode {
+     this.runtime.resize(width, height)
+   }
+ 
++  protected override beforeRender(_time: number, _delta: number): void {
++    // Same numbers handlePointerMove gives runtime.splat. The host's point stands in for the pointer.
++    const host = (globalThis as { motoliiTarget?: { x?: number; y?: number } }).motoliiTarget
++    if (!host || typeof host.x !== "number" || typeof host.y !== "number") return
++    if (this.hostX !== null && this.hostY !== null) {
++      const force = this.runtime.currentControls.splatForce
++      const dx = (host.x - this.hostX) * force
++      const dy = (host.y - this.hostY) * force
++      if (dx !== 0 || dy !== 0) this.runtime.splat(host.x, host.y, dx, dy)
++    }
++    this.hostX = host.x
++    this.hostY = host.y
++  }
++
+   override needsContinuousRender(): boolean {
+     return (
+       this.initPromise !== null ||
+diff --git a/packages/shader-lab-react/src/renderer/magnify-lens-pass.ts b/packages/shader-lab-react/src/renderer/magnify-lens-pass.ts
+index bab5d27..f09a479 100644
+--- a/packages/shader-lab-react/src/renderer/magnify-lens-pass.ts
++++ b/packages/shader-lab-react/src/renderer/magnify-lens-pass.ts
+@@ -126,6 +126,12 @@ export class MagnifyLensPass extends PassNode {
+   }
+ 
+   protected override beforeRender(_time: number, delta: number): void {
++    // A host may name a point (Motolii: a thing's place, 0..1). The pointer listener above is the browser's hand.
++    const host = (globalThis as { motoliiTarget?: { x?: number; y?: number } }).motoliiTarget
++    if (host && typeof host.x === "number" && typeof host.y === "number") {
++      this.targetX = host.x
++      this.targetY = host.y
++    }
+     const tau = Math.max(0.0001, this.followLag * 0.5)
+     const t = this.followLag <= 0 ? 1 : 1 - Math.exp(-delta / tau)
+     this.smoothedX += (this.targetX - this.smoothedX) * t
+diff --git a/packages/shader-lab-react/src/renderer/pixel-trail-pass.ts b/packages/shader-lab-react/src/renderer/pixel-trail-pass.ts
+index a34cd83..95cc72a 100644
+--- a/packages/shader-lab-react/src/renderer/pixel-trail-pass.ts
++++ b/packages/shader-lab-react/src/renderer/pixel-trail-pass.ts
+@@ -233,7 +233,25 @@ export class PixelTrailPass extends PassNode {
+     }
+   }
+ 
++  private placeHost(): void {
++    // handlePointerMove's ux, uy, without a canvas. A still point does not append; a point that moves does.
++    const host = (globalThis as { motoliiTarget?: { x?: number; y?: number } }).motoliiTarget
++    if (!host || typeof host.x !== "number" || typeof host.y !== "number") return
++    let dx = 0
++    let dy = 0
++    if (this.pointerX !== null && this.pointerY !== null) {
++      dx = host.x - this.pointerX
++      dy = host.y - this.pointerY
++    }
++    this.pointerX = host.x
++    this.pointerY = host.y
++    this.pointerVx = dx
++    this.pointerVy = dy
++    if (dx !== 0 || dy !== 0) this.pointerDirty = true
++  }
++
+   private stepTrail(delta: number): void {
++    this.placeHost()
+     const dt = Math.max(0, Math.min(delta, 0.1))
+     const maxAge = this.computeMaxAge()
+     for (let i = 0; i < this.pathSize; i++) {
