@@ -267,6 +267,17 @@ static int aviutl_effect(lua_State* L) {   // (a built-in effect by its name: on
         aviutl_lay(r, from, to.rt, to.w, to.h, (l - rt) / 2, (t - b) / 2, 1, 1, 0, 1, 0, 0, -1, 1);
         return 0;
     }
+    if (n == "リサイズ") {   // (sashimono-edit objapi.py _resize: "ドット数でサイズ指定" then X, Y in pixels, else 拡大率 times X %, Y %; "補間なし" the nearest pixel; no larger than its MAX_FIGURE_SIZE, 4096)
+        aviutl_copy(r, "~resize", "object");
+        const AviutlBuf from = r.bufs["~resize"];
+        const bool dots = at("ドット数でサイズ指定", 0) != 0;
+        const double zoom = at("拡大率", 100) / 100, w = dots ? at("X", from.w) : from.w * zoom * at("X", 100) / 100, h = dots ? at("Y", from.h) : from.h * zoom * at("Y", 100) / 100;
+        if (!std::isfinite(w) || !std::isfinite(h)) return aviutl_no(L, "obj.effect リサイズ of no number");
+        const AviutlBuf& to = aviutl_buf(r, "object", (uint32_t)std::clamp(std::round(w), 1.0, 4096.0), (uint32_t)std::clamp(std::round(h), 1.0, 4096.0));
+        aviutl_lay(r, from, to.rt, to.w, to.h, 0, 0, (double)to.w / from.w, (double)to.h / from.h, 0, 1, 0, 0, -1, at("補間なし", 0) != 0 ? 1 : 0);
+        return 0;
+    }
+    if (n == "オフスクリーン描画") return 0;   // (sashimono-edit objapi.py _offscreen: the effects laid up so far made into the picture; here each is made at once, so none wait)
     if (n.empty()) return 0;   // (no name: lua.txt says the filters after the script, which run after it here anyway; YMM4-LuaScript native/worker.lua and sashimono-edit objapi.py lua_effect return the same)
     return aviutl_no(L, "obj.effect " + n);
 }
