@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "description": "A check, not part of Motolii: Shader Lab's effects drawn by their author's own runtime on Dawn (Dawn's own JS binding, npm webgpu), with Canvas 2D from @napi-rs/canvas, in Node (check.ts).",
+  "dependencies": {
+    "@napi-rs/canvas": "0.1.80",
+    "three": "0.185.1",
+    "webgpu": "0.6.2"
+  }
+}

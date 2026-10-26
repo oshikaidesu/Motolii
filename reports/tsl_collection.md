@@ -94,3 +94,26 @@ singularity と tornado（MisterPrada）、hologram-particles、three.js-tsl-san
 - `dawn_probe/tsl_on_dawn.cpp`：
   - 頂点の入力を、three.js の変換器の並び（`builder.attributes`）で渡すようにした。前は「0 番が UV、1 番が位置」と決め打ちしていて、模様がマスの 1/4 にしか描かれなかった。
   - サンプラーを、three.js がテクスチャに持たせている読み方のまま作るようにした。
+
+## 何段も描く効果を正しくした：作者の render() ごと Dawn で回す（10/26）
+
+- 何段も描く効果（Bloom、ASCII、Annotations、Blob Tracking など）は、途中の絵を作る JS の部分（作者の `render()`）も要る。そこで、three.js の描く仕組み（WebGPURenderer）と Shader Lab の作者の「画面無しで描く口」（`createHeadlessRenderer`）を、そのまま Dawn の上で回した。
+- JS から Dawn を呼ぶ口は、Dawn の作者が出している組み立て済みの物（npm の `webgpu` 0.6.2 = dawn.node、MIT）。まず Node の上で確かめた（`filament/tsl/check_node/check.ts`、Node は確かめにだけ使う）。
+- 足した物（どれも、ブラウザなら最初からある物）：
+  - Canvas 2D：`@napi-rs/canvas`（MIT、Skia）
+  - 字形：作者の部品に同梱の 3 つ（Geist Sans・Geist Mono・BSMNT Grotesque）を、作者の `fonts.css` の名前で登録
+  - `copyExternalImageToTexture`：Dawn の JS の口では「未実装」（`GPUQueue.cpp:120-125`）。Mystral と同じ手順（画素を読む → 上下反転 → α の掛け算 → `writeTexture`）で渡した
+  - 描く繰り返し（`requestAnimationFrame`）：60 Hz の時計
+- 作者の作りに合わせた所：
+  - 効果の描く手順は裏で用意され、用意ができてから効く。なので、待ちを挟んで 40 回描く。
+  - 時計を 1/60 秒ずつ進める。追跡は時刻が進んだコマだけ 1 歩進む。
+  - 模様の画像は、作者の公開版の置き方（`dist/src/renderer`）からの住所で読む。
+- **結果：Shader Lab の 44 種が全部描けた**（`reports/tsl/sheet_shader-lab_author-render.jpg`、順は `.names.txt`）。前は作れなかった流体（Fluid）と、上限を超えた Halftone も描けた。
+- **ブラウザとの見比べ**（使う人がサイトに入れたのと同じ画像で、同じ効果をブラウザに足して比べた）：
+  - Displaced Rings：大きく違う画素 15.7%、平均の色 74/64/51 に対して 73/62/45。WGSL だけで描いた時と同じ数字で、残りはブラウザの画面を撮った時の縮め方の差。
+  - Bloom：Bloom が足した明るさ（Bloom 有り − 無し）が、ブラウザ +6.2、Dawn +6.2 で同じ。場所の一致（相関）0.85。残りは、ブラウザの画像の層が奥行きで画像を少し動かしている分（`parallaxMotion: orbit`）。
+  - Photographic Cells：ブラウザでも初めの値では「ほとんど黒で、左と右下に少し写真が見える」。こちらも同じ。
+  - ASCII、Annotations、Blob Tracking（枠・線・座標の札）、Pattern：作者の字形・模様で描けた。数字での見比べはしていない。
+- まだ：
+  - Magnify Lens と Pixel Trail はマウスで動かす効果で、マウスを渡していない。
+  - これは Node の上の確かめ。Motolii の中で回すには、同じ口（Dawn の JS の口と `@napi-rs/canvas`、どちらも Node-API で書かれている）を Motolii の Dawn から組み立て、Hermes の Node-API（Hermes の本家に入っている、Node-API 第 10 版）に載せる。
