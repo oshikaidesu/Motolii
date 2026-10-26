@@ -66,6 +66,8 @@ AwemeLike（https://github.com/ZZZZou/AwemeLike 、MIT と書いてある）の 
 ## Tracery 級の追跡オーバーレイの出典（10/26、ゴール 2）
 - **blob-tracey**（Batkixni、MIT、https://github.com/Batkixni/blob-tracey 、TypeScript 約 3,900 行、外の部品はアイコンだけ）：AE Blob Tracker を真似た Web の道具。枠（四角・角かっこ・十字・輪郭・凸包・六角）、中心の印、座標のラベル（16 進・百分率ほか）、点のつなぎ方（ドロネー・最小全域木・近い K 個・星形・全部）、枠の中だけの画素の崩し、ちらつきの抑え、設定の JSON。
 - 見つける所（BlobDetector）も描く所（OverlayRenderer）もブラウザの Canvas（`document.createElement('canvas')`・`getImageData`）に頼る。手を入れずに動かすには本物のブラウザが要る。
+- **リアルタイムの元：basementstudio/shader-lab**（Apache-2.0、https://github.com/basementstudio/shader-lab 、星 713）。GPU で絵を 128×72 の格子（R＝前のコマとの差、G＝明るさ、B＝薄れていく動きの量）にして読み戻し、CPU の `src/lib/blob-tracking/tracker.ts`（518 行、ブラウザの部品を使わない）が塗りつぶしで塊を出し、前のコマと距離で結んで番号を保つ。10/26、tracker.ts を esbuild で型だけ外し（368 行、中身はそのまま）QuickJS-ng 0.17 で回した：14 秒の見本の動画 430 コマ、1 コマ平均 2.0 ミリ秒（最大 3）、番号 19 本、動く猫に枠が付く。格子は試しに ffmpeg（tblend の差・lagfun）で作った代わりの物で、大きい枠が猫より少し上にずれる。原因は確かめていない。
+- Shader Lab の効果は約 50 本（21,896 行）で、どれも three.js の WebGPU と TSL。DOM は使わないので、JS から WebGPU を呼べれば手を入れずに動くはず。その口の既存の物：**mystralengine/mystralnative**（MIT、星 415、v0.1.6）。ブラウザ無しで JS に WebGPU（Dawn）・Canvas 2D（Skia）・音・fetch を出す。QuickJS も選べ、Mac・Windows がある。three.js の WebGPU と PixiJS v8 の手引きがあり、C++ に組み込む口（`include/mystral/runtime.h`、`getWGPUDevice`）もある。まだ動かしていない。
 - p5.js を動かすのと同じ道（AviUtl2Browser_H の約束）。手本は oov の aviutl_browser（MIT、中身は CEF）。次はそのソースを読み、要る物を出す。
 
 ## 高級側の見本の置き場：Codrops（10/26）
