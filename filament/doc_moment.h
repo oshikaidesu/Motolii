@@ -343,7 +343,8 @@ static void doc_moment(Doc& d, double now) {
             const auto scripted = d.scripted.find(thing);   // (a script's copies each as clear as it says)
             const bool clears = scripted != d.scripted.end() && std::any_of(scripted->second.copies.begin(), scripted->second.copies.end(), [](const ScriptCopy& c) { return c.opacity != 1.0; });
             const bool clearEach = doc_driven_by(d, thing, "opacity") != 0, pickEach = doc_driven_by(d, thing, "copy_fill_at") != 0;   // (given each copy by a behaviour)
-            if (ramp.size() < 2 && letters.empty() && !clears && !t.drivenLooks && !clearEach && !pickEach) doc_copy_looks_off(d, m, main);
+            const double fadeTo = std::clamp(doc_number(d, thing, "copy_opacity_end", now, 1), 0.0, 1.0);   // (the last copy as clear as this, the first as the thing: After Effects' Repeater, End Opacity)
+            if (ramp.size() < 2 && letters.empty() && !clears && !t.drivenLooks && !clearEach && !pickEach && fadeTo == 1) doc_copy_looks_off(d, m, main);
             else {
                 auto& faces = s.engine->getRenderableManager();
                 const int n = doc_members(d, thing);
@@ -357,6 +358,7 @@ static void doc_moment(Doc& d, double now) {
                         own->setParameter("ramp", colours, 8);
                         own->setParameter("rampOf", ramp.size() >= 2 ? float4{(float)made.nth, (float)n, (float)std::min<size_t>(ramp.size(), 8), doc_word(d, thing, "copy_fill_way") == "cycle" ? 1.f : 0.f} : float4{0.f});
                         if (ramp.size() < 2) own->setParameter("wash", t.drawn ? t.drawn->wash : float4{0.f});
+                        own->setParameter("copyFade", float4{(float)fadeTo, (float)n, (float)made.nth, fadeTo != 1 ? 1.f : 0.f});
                     }
                     else if (ramp.size() >= 2 && doc_word(d, thing, "copy_fill_way") == "cycle") own->setParameter("wash", float4{ramp[(size_t)made.nth % ramp.size()], 1.f});   // (one each in turn)
                     else if (ramp.size() >= 2) {   // (along the ramp in their order; or where a behaviour says, copy_fill_at, 0 its first colour, 1 its last)
@@ -374,7 +376,8 @@ static void doc_moment(Doc& d, double now) {
                     const double opacity = !clearEach ? doc_number(d, thing, "opacity", now, 1)
                                          : doc_among(doc_relations, doc_word(d, clearBy, "file")) ? std::clamp(doc_literal(d, thing, "opacity", now, 1), 0.0, 1.0)   // (a relation's: by the thing's place among its things)
                                          : std::clamp(doc_given(d, clearBy, made.nth, n, now, doc_number(d, thing, "opacity", now, 1), &here), 0.0, 1.0);
-                    own->setParameter("opacity", (float)(opacity * std::clamp(clear, 0.0, 1.0)));
+                    const double fade = n > 1 ? 1 + (fadeTo - 1) * (double)made.nth / (double)(n - 1) : 1.0;
+                    own->setParameter("opacity", (float)(opacity * std::clamp(clear, 0.0, 1.0) * fade));
                     if (t.drawn && t.drawn->edgeLook && !made.many) {   // (its edge's own look: a frame alone (filled with nothing) coloured each as its fill would be; each as clear)
                         const auto one = faces.getInstance(made.thing);
                         if (faces.getPrimitiveCount(one) > 1) {

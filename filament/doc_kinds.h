@@ -244,6 +244,7 @@ static const DocValue doc_values[] = {
     {"tall", "picture text shape", 0, 1e3, true, nullptr},   // (how many times as tall as it is, its anchor staying where it is: a bar growing up from its foot)
     {"copy_tall", "picture text shape", 0, 0, false, ""},
     {"copy_fill_at", "picture text shape", 0, 1, true, nullptr},   // (where along copy_fill each copy's colour is, given by a behaviour (copy_fill_at_by): 0 its first, 1 its last; not given, their order)   // (and its copies each so many times as tall again, in their order, going round: numbers, a bar chart's data; none: all as tall)
+    {"copy_opacity_end", "picture text shape", 0, 1, true, nullptr},   // (the last copy as clear as this, the first as the thing: After Effects' Repeater, End Opacity)
     // (its copies laid on another shape's outline, each turned the way it goes, Cavalry's Duplicator on a shape; and slid along it, a share of its length)
     {"copy_on", "picture text shape", 0, 1e9, false, nullptr},
     {"copy_on_offset", "picture text shape", -1e4, 1e4, true, nullptr},

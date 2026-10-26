@@ -57,6 +57,7 @@ static const DocShown doc_shown[] = {
     {"copy_rotate_y", "angle", "°", "Swing", -180, 180, "Each copy"},
     {"copy_rotate", "angle", "°", "Turn", -180, 180, "Each copy"},
     {"copy_size", "", "×", "Grow", 0.5, 1.5, "Each copy"},
+    {"copy_opacity_end", "", "", "Last opacity", 0, 1, "Each copy"},
     {"copy_wide", "", "×", "Wider", 0.2, 5, "Each copy"},
     {"tall", "", "×", "Height", 0, 3, "Each copy"},
     {"copy_tall", "numbers", "", "Heights", 0, 0, "Each copy"},
@@ -291,7 +292,7 @@ static const DocCard doc_cards[] = {
     {"Blending", "blend clip"},   // (After Effects' layer mode and its track matte, in its simplest: drawn over what lies below as it says, or only inside the one before it)
     {"Type", "split letter_spacing line_spacing italic wrap wrap_at"},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ "},
-    {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_rotate_x copy_rotate_y copy_turn copy_size copy_wide copy_z tall copy_tall stagger stagger_from copy_fill copy_fill_way"},
+    {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_rotate_x copy_rotate_y copy_turn copy_size copy_opacity_end copy_wide copy_z tall copy_tall stagger stagger_from copy_fill copy_fill_way"},
     {"Wave", "wave_x wave_y wave_z wave_rotate wave_size wave_speed wave_phase wave_noise noise_scale"},
     {"Field", "field_x field_y field_z field_radius field_band field_size field_rotate field_push"},
     {"Scatter", "scatter_x scatter_y scatter_z scatter_rotate scatter_size seed drift_x drift_y"},
