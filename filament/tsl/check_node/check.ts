@@ -4,8 +4,13 @@ process.on("unhandledRejection", (e: any) => console.error("unhandled:", e?.mess
 // sets it up), in Node. Out: the picture as the browser would show it (three's renderOutput with the author's settings,
 // create-webgpu-renderer.ts: SRGBColorSpace, NoToneMapping), raw RGBA.
 //   node out.mjs <layers.json> <picture.rgba> <w> <h> <out.rgba>
-import { create, globals } from "webgpu"
-Object.assign(globalThis, globals)
+import { create as npmCreate, globals as npmGlobals } from "webgpu"
+import { createRequire } from "node:module"
+// DAWN_NODE=<path>: Dawn's binding built from Motolii's own Dawn (filament_src/out/wgpu/third_party/dawn/dawn.node)
+// instead of npm's, loaded as Dawn's src/dawn/node/README.md loads it (require)
+const dawn: any = process.env.DAWN_NODE ? createRequire(import.meta.url)(process.env.DAWN_NODE) : { create: npmCreate, globals: npmGlobals }
+const create = dawn.create
+Object.assign(globalThis, dawn.globals)
 Object.defineProperty(globalThis, "navigator", { value: { gpu: create([]) }, configurable: true })
 // three's renderer takes its frame loop from the browser's self.requestAnimationFrame; Node has none: a 60 Hz timer
 Object.assign(globalThis, { self: globalThis, requestAnimationFrame: (f: any) => setTimeout(() => f(performance.now()), 16), cancelAnimationFrame: clearTimeout })

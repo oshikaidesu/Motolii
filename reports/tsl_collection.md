@@ -167,3 +167,11 @@ singularity と tornado（MisterPrada）、hologram-particles、three.js-tsl-san
   - **wasmerio/napi**：星 2、ライセンスが書かれていないので使えない。
 - どれも、足りない所を自作で埋めることになる。Node-API の本家は Node で、Dawn の口と `@napi-rs/canvas` が前提にしている物（`setImmediate`、`Event`、`EventTarget`、`DOMException`、`structuredClone`、`URL`）を全部持つ。保守・検証する範囲が一番小さく、責任元もはっきりするので、Node を部品として組み込む（Node の組み込みの口と公式の見本 `test/embedding/embedtest.cc`）。
 - 試しに書いた QuickJS 用の外側（`host.c`、約 90 行）は消した。
+
+## Dawn の WebGPU の口を Motolii の Dawn から組み立てた（10/26）
+
+- Dawn 自身の JS の口（dawn.node）を、Motolii の Dawn の組み立て（Filament の `out/wgpu`）に `DAWN_BUILD_NODE_BINDINGS=ON` を足して組み立てた（`filament/tsl/dawn_node.sh`）。44 秒、13 MB。
+  - 材料 3 つ（node-api-headers、node-addon-api、gpuweb の `webgpu.idl`）は、Dawn の `DEPS` が決めた版で取った。
+  - Go は Homebrew の 1.27.3（Dawn の指定は 1.26.6）。
+- 確かめ：確かめの台本（`check_node`）で、npm の組み立て済みの口の代わりにこれを使った（`DAWN_NODE=<path>`）。Displaced Rings と Bloom で、絵は 1 バイトも違わない（640×360、違う画素 0）。
+- これで、効果を描く装置が Motolii と同じ Dawn から作られる。まだ、Motolii の Filament が使っている装置そのものは渡していない（Dawn の口の `create()` は自分で装置を作る）。
