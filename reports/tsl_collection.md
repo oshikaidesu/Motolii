@@ -209,3 +209,12 @@ singularity と tornado（MisterPrada）、hologram-particles、three.js-tsl-san
   - 今の記録は「その時の 41 コマ」をそのまま流す。時間・つまみ・写真を変えるには、記録の中の uniform の入れ物と写真の描き先を、名前で取り出して書き換える（`GetObjectByLabel`）。three.js がどの名前を付けるかを数えるのが次。
   - JS が毎コマ描く段や作りを変える作品（追跡、流体など）は、記録をそのまま流すだけでは足りない。44 種のうちどれがそうかは、まだ数えていない。
   - Motolii の Filament の装置の上で流し直すこと（今は replay_on_dawn が自分で装置を作る）。
+
+### Replay を本番の再生に使えるか（10/26）：使えない
+
+- 確かめた事：`PlayFrame()` で 1 コマずつ流せるか。
+  - 結果：Displaced Rings も Bloom も、`PlayFrame()` は 1 回で記録の最後まで流れた（絵は Node と同じ）。
+  - 理由（Dawn のコード）：Replay の「1 コマ」の区切りは、画面に出す瞬間（`surface.Present()`、Replay.cpp:1510-1515）だけ。画面なしの記録には区切りが無い。
+- 仮に画面つきで記録して区切りを入れても、Replay は読み位置を前に進めるだけ（`PlayFrameImpl`、Replay.cpp:1594-1602）。同じコマを、時間を変えてもう一度流す口は無い。しかも各コマには、記録した時の時間を書く命令（writeBuffer）がそのまま入っている。
+- なので、時間を変えて動かすこと、毎コマの時間を測ることは、Replay ではできない。Replay は「取り込んだ一式が正しいか」を確かめる道具として使い、本番の再生には使わない。
+- Motolii が既に持っている「何段も描く・毎コマ時間を渡す」仕組みは ISF の PASSES（`filament/isf.cpp`：TARGET、PERSISTENT、FLOAT、大きさ。WGSL にして Motolii の画面で描く）。TSL の何段も描く効果をこの形に載せられるかは、まだ確かめていない。

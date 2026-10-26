@@ -54,7 +54,11 @@ int main(int argc, char** argv) {
     auto recorded = dawn::replay::Capture::Create(command_stream, commands.size(), content_stream, contents.size());
     if (!recorded) { std::printf("FAIL capture not read\n"); return 1; }
     auto replay = dawn::replay::Replay::Create(device, std::move(recorded));
-    if (!replay || !replay->Play()) { std::printf("FAIL replay\n"); return 1; }
+    if (!replay) { std::printf("FAIL replay\n"); return 1; }
+    // PlayFrame(): up to the next frame boundary, which is a surface's Present (Replay.cpp:1510-1515)
+    int frames = 0;
+    for (dawn::replay::ReplayStatus s; (s = replay->PlayFrame()) == dawn::replay::ReplayStatus::Continuing;) ++frames;
+    std::printf("PlayFrame returned Continuing %d times\n", frames);
 
     // the picture it drew, read back (a row copied to a buffer takes a multiple of 256 bytes: WebGPU's copy rule)
     wgpu::Texture drawn = replay->GetObjectByLabel<wgpu::Texture>(label);
