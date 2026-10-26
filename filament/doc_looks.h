@@ -4,7 +4,7 @@
 // (x, y, z) and what it hangs on (parent), and its size and turn unless they move (keyed). Kept with SQLite's own
 // copying across two files (ATTACH, insert ... select), given back the same way inside one act: the changes SQLite's
 // session records, one step of undo as any other. A file it names in the library's folders or the maker's own is kept
-// as {motolii}/... or {own}/... (doc_folders), so a look made on one machine finds its effects on another.
+// as {motolii}/... or {own}/... (doc_folders), so a look made on one machine finds its effects on another (words only: a number stays a number).
 // After Effects' animation presets (.ffx: effects and their keys), Alight Motion's Save as Preset and Paste Style.
 static const char* const doc_look_kept_out = "'kind','file','text','x','y','z','parent'";
 static const char* const doc_look_placed = "'size','scale_x','scale_y','rotate','rotate_x','rotate_y','orient'";   // (kept only when keyed: a pulse is a look, a size is not)
@@ -27,12 +27,29 @@ static bool doc_look_save(Doc& d, int thing, const char* path) {
         "create table look.fact(thing integer, name text, at numeric, value, way text, primary key(thing, name, at)) without rowid;"
         "create table look.way(name text primary key, goes text) without rowid;"
         "create table look.thing(id integer primary key autoincrement); insert into look.thing(id) values(1);"
-        "insert into look.fact select 1, name, at, replace(replace(value, %Q, '{motolii}/'), %Q, '{own}/'), way from main.fact as f where thing = %d and name not in (%s)"
+        "insert into look.fact select 1, name, at, case typeof(value) when 'text' then replace(replace(value, %Q, '{motolii}/'), %Q, '{own}/') else value end, way from main.fact as f where thing = %d and name not in (%s)"
         " and not (name in (%s) and (select count(*) from main.fact where thing = f.thing and name = f.name) = 1);"
         "insert into look.way select * from main.way where name in (select way from look.fact);", roots.first.c_str(), roots.second.c_str(), thing, doc_look_kept_out, doc_look_placed);
     ok = sqlite3_exec(d.file, copy, nullptr, nullptr, nullptr) == SQLITE_OK;
     sqlite3_free(copy);
     if (!ok) d.trouble = sqlite3_errmsg(d.file);
+    // (the behaviours moving it, a wave, a noise, a random, a stagger, carried with it as things 2, 3, ...; a relation,
+    //  which ties it to others, is not: its _by left out)
+    std::vector<int> by;
+    sqlite3_stmt* q = nullptr;
+    sqlite3_prepare_v2(d.file, "select distinct cast(value as integer) from look.fact where thing = 1 and name like '%\\_by' escape '\\'", -1, &q, nullptr);
+    while (q && sqlite3_step(q) == SQLITE_ROW) by.push_back(sqlite3_column_int(q, 0));
+    sqlite3_finalize(q);
+    int next = 2;
+    for (const int b : by) {
+        const bool carried = b && doc_word(d, b, "kind") == "behaviour" && doc_among("stagger oscillator noise random", doc_word(d, b, "file"));
+        char* move = carried ? sqlite3_mprintf("insert into look.fact select %d, name, at, value, way from main.fact where thing = %d; insert into look.thing(id) values(%d);"
+                                               "update look.fact set value = %d where thing = 1 and name like '%%\\_by' escape '\\' and value = %d;", next, b, next, next, b)
+                             : sqlite3_mprintf("delete from look.fact where thing = 1 and name like '%%\\_by' escape '\\' and value = %d;", b);
+        ok = ok && sqlite3_exec(d.file, move, nullptr, nullptr, nullptr) == SQLITE_OK;
+        sqlite3_free(move);
+        next += carried;
+    }
     sqlite3_exec(d.file, "detach database look", nullptr, nullptr, nullptr);
     return ok;
 }
@@ -45,10 +62,21 @@ static bool doc_look_put(Doc& d, int thing, const char* path) {
     const bool attached = sqlite3_exec(d.file, attach, nullptr, nullptr, nullptr) == SQLITE_OK;
     sqlite3_free(attach);
     if (!attached) return d.trouble = sqlite3_errmsg(d.file), false;
+    std::string carried;   // (each behaviour the look carries made anew here, its own thing, and the thing's _by of it told the new one)
+    sqlite3_stmt* q = nullptr;
+    sqlite3_prepare_v2(d.file, "select distinct thing from look.fact where thing != 1", -1, &q, nullptr);
+    while (q && sqlite3_step(q) == SQLITE_ROW) {
+        const int k = sqlite3_column_int(q, 0);
+        char* one = sqlite3_mprintf("insert into thing default values; insert into fact select last_insert_rowid(), name, at, value, way from look.fact where thing = %d;"
+                                    "update fact set value = (select max(id) from thing) where thing = %d and name in (select name from look.fact where thing = 1 and name like '%%\\_by' escape '\\' and value = %d);", k, thing, k);
+        carried += one;
+        sqlite3_free(one);
+    }
+    sqlite3_finalize(q);
     const bool ok = doc_change(d, sqlite3_mprintf(
-        "delete from fact where thing = %d and name in (select name from look.fact) and name not in (%s);"
-        "insert or replace into fact select %d, name, at, replace(replace(value, '{motolii}/', %Q), '{own}/', %Q), way from look.fact where name not in (%s);"
-        "insert or ignore into way select * from look.way;", thing, doc_look_kept_out, thing, roots.first.c_str(), roots.second.c_str(), doc_look_kept_out));
+        "delete from fact where thing = %d and name in (select name from look.fact where thing = 1) and name not in (%s);"
+        "insert or replace into fact select %d, name, at, case typeof(value) when 'text' then replace(replace(value, '{motolii}/', %Q), '{own}/', %Q) else value end, way from look.fact where thing = 1 and name not in (%s);"
+        "insert or ignore into way select * from look.way;%s", thing, doc_look_kept_out, thing, roots.first.c_str(), roots.second.c_str(), doc_look_kept_out, carried.c_str()));
     sqlite3_exec(d.file, "detach database look", nullptr, nullptr, nullptr);
     return ok;
 }
