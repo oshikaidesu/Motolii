@@ -157,16 +157,17 @@ int main(int argc, char** argv) {
     pass.DrawIndexed((uint32_t)(index.size() / 2));
     pass.End();
 
-    // read the texture back
+    // read the texture back (a row copied to a buffer takes a multiple of 256 bytes: WebGPU's copy rule)
+    const uint32_t stride = (W * 4 + 255) & ~255u;
     wgpu::BufferDescriptor room{};
-    room.size = W * H * 4;
+    room.size = stride * H;
     room.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead;
     wgpu::Buffer back = device.CreateBuffer(&room);
     wgpu::TexelCopyTextureInfo from{};
     from.texture = drawn;
     wgpu::TexelCopyBufferInfo to{};
     to.buffer = back;
-    to.layout.bytesPerRow = W * 4;
+    to.layout.bytesPerRow = stride;
     to.layout.rowsPerImage = H;
     coder.CopyTextureToBuffer(&from, &to, &all);
     wgpu::CommandBuffer commands = coder.Finish();
@@ -175,7 +176,9 @@ int main(int argc, char** argv) {
     instance.WaitAny(back.MapAsync(wgpu::MapMode::Read, 0, room.size, wgpu::CallbackMode::WaitAnyOnly,
                              [&](wgpu::MapAsyncStatus how, wgpu::StringView) { mapped = how == wgpu::MapAsyncStatus::Success; }), UINT64_MAX);
     if (!mapped) { std::printf("FAIL read back\n"); return 1; }
-    std::ofstream(dir + "drawn.rgba", std::ios::binary).write((const char*)back.GetConstMappedRange(0, room.size), room.size);
+    const char* got = (const char*)back.GetConstMappedRange(0, room.size);
+    std::ofstream drawn_file(dir + "drawn.rgba", std::ios::binary);
+    for (uint32_t y = 0; y < H; ++y) drawn_file.write(got + (size_t)y * stride, W * 4);
     std::printf("%s: %u x %u drawn, device errors %d\n", errors ? "FAIL" : "PASS", W, H, errors);
     return errors ? 1 : 0;
 }

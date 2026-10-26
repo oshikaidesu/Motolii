@@ -124,3 +124,26 @@ Shader Lab（basementstudio/shader-lab、Apache-2.0）の効果を、外にあ�
   - Shader Lab がブラウザで描く絵と同じかは、見比べていない。サイトは空から始まり写真を落とし込む作りで、内蔵のブラウザからは手元の写真を渡せなかった。
   - 色の空間：Shader Lab は小数の線形の絵を渡すが、ここでは 8 ビットの写真をそのまま渡した。
   - 描いたのは Motolii の Dawn の部品を使った単体の試しで、Motolii の画面（Filament の装置）の中ではない。前例の ThorVG と同じく、同じ装置を借りて描き、Filament が取り込む形にすれば入る（`gpu_door.h`）。
+
+## ブラウザの Shader Lab と見比べた：Displaced Rings（10/26）
+
+- Fluted Glass は、作者がもう打ち切っていた（`src/lib/community/scene-effect-filter.ts:8-13`、Glass に置き換え）。公開中のサイトに無いので見比べられない。代わりに、TSL にしか無くサイトにも今ある Displaced Rings で見比べた。
+- 使った物：
+  - 画像：使う人がサイトに入れたのと同じファイル（1920×1080、Downloads にあったバイト数まで同じ物）
+  - つまみ：サイトが IndexedDB に保存していた層の値そのまま
+  - 大きさ：サイトの描き先と同じ 790×443
+- **1 回目は外側の輪が違った**（`reports/tsl/displaced_rings_before_layer_state.jpg`、上がブラウザ、下が Motolii の Dawn）。
+  - 原因：作者は効果の部品を作ったあと、`pipeline-manager.ts` の `applyLayerState` で層の設定を渡している。Displaced Rings のような絵を動かす効果には、重ね方「transform」を設定する（573-585 行）。私は部品を作っただけで、これを通していなかった。
+  - そのため、初めの値の重ね方（effect）のまま描いた。輪が絵の外を指した所（式では黒・透明、`displaced-rings-pass.ts:345-350`）に、下の写真が透けていた。
+  - 1 画素だけ式を手で追い、ブラウザの黒が式どおりだと確かめた。公開中のサイトの JavaScript の該当する式（`at`、`bandLocal`、半円、絵の外の判定）も、GitHub の最新と同じだった。
+- **作者の `applyLayerState` をそのまま呼ぶように直すと、揃った**（`reports/tsl/displaced_rings_browser_vs_dawn.jpg`）。
+  - 輪の形、黒くなる所、各輪に入る絵が一致した。
+  - 大きく違う画素は 24.9% → 15.7%。
+  - 残りの差：
+    - 輪の縁で、縮め方による 1 画素ほどのずれ
+    - 色の小さな違い。平均の色はブラウザ 74, 64, 51 に対して Motolii の Dawn 73, 62, 45。明るさの対応は 16→13、112→113、240→240 で、明るい中間（208→190）だけずれる。
+  - 色の違いの原因は確かめていない。候補は、ブラウザ側の色の管理か、色を整える仕上げか、画面を撮った時の色の扱い。
+- 試しも直した：
+  - `filament/dawn_probe/tsl_dump.ts` を、作者の `applyLayerState` を通す形にした。
+  - `tsl_on_dawn.cpp` は、読み戻しの 1 行を 256 バイトの倍数にそろえた（WebGPU の決まり。前の試しは幅 256 だったので当たらなかった）。
+- 分かったこと：TSL の変換も描く手順も、three.js と Dawn のまま合っていた。ずれたのは、作者がすること（層の設定）を私が飛ばした所だけ。

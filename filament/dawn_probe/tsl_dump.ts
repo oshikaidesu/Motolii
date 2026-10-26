@@ -1,12 +1,18 @@
-// Shader Lab's Fluted Glass made ready to draw as three.js would draw it, all by three's own code, written out for a
+// Shader Lab's Displaced Rings made ready to draw as three.js would draw it, all by three's own code, written out for a
 // plain WebGPU draw: the WGSL (WGSLNodeBuilder), each bind group's uniforms as three packs them (binding.update ->
 // binding.buffer, three.webgpu.js 32983-32987, after its NodeFrame update, 55980-55995 and 56124-56134), the plane's arrays.
 import "core-js/actual/url"   // QuickJS has no URL or structuredClone: core-js's (MIT), the usual ones
 import "core-js/actual/structured-clone"
 import * as std from "qjs:std"
 import * as THREE from "three/webgpu"
-import { FlutedGlassPass } from "/Users/motolii_maker/motolii/research_notes/tracking/shader-lab/packages/shader-lab-react/src/renderer/fluted-glass-pass"
-const pass: any = new FlutedGlassPass("fluted"); pass.updateParams({}); pass.flushColorNode()
+import { DisplacedRingsPass } from "/Users/motolii_maker/motolii/research_notes/tracking/shader-lab/packages/shader-lab-react/src/renderer/displaced-rings-pass"
+import { PipelineManager } from "/Users/motolii_maker/motolii/research_notes/tracking/shader-lab/packages/shader-lab-react/src/renderer/pipeline-manager"
+const pass: any = new DisplacedRingsPass("rings")
+// the layer as the browser's Shader Lab saved it, set on the pass by its author's own applyLayerState (pipeline-manager.ts:567)
+const layer = { id: "rings", type: "displaced-rings", kind: "effect", visible: true, mask: null, hue: 0, saturation: 1, opacity: 1, blendMode: "normal", compositeMode: "filter", params: JSON.parse(std.loadFile("tsl_draw/params.json")) }
+;(PipelineManager.prototype as any).applyLayerState.call({}, pass, layer)
+// as its author's pipeline-manager.ts:312-313 does: the target's size, and the composition's
+pass.resize(790, 443); pass.updateLogicalSize(1920, 1080)
 const renderer: any = new THREE.WebGPURenderer({ canvas: { getContext() { return null }, style: {}, addEventListener() {} } as any })
 // The two things the builder asks the GPU (reports/shaderlab_origins.md): plain WebGPU, no optional features.
 renderer._initialized = true
@@ -28,7 +34,6 @@ const bin = (name: string, a: ArrayBufferView) => { const f = std.open("tsl_draw
 out("vert.wgsl", b.vertexShader); out("frag.wgsl", b.fragmentShader)
 let plan = ""
 b.getBindings().forEach((g: any, gi: number) => g.bindings.forEach((x: any, bi: number) => {
-  if (x.isUniformsGroup) { x.update(); bin(`g${gi}b${bi}.bin`, x.buffer); plan += `${gi} ${bi} uniform ${x.buffer.byteLength}\n` }
   else if (x.isSampledTexture) plan += `${gi} ${bi} texture 0\n`
   else if (x.isSampler) plan += `${gi} ${bi} sampler 0\n`
 }))
