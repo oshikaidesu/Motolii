@@ -145,6 +145,12 @@ const char* motolii_shown(Motolii* m, const char* name);
 /* Pictures in one call: motolii_recipes says each recipe's name and what it makes ("name\twhat", one to a line, until
    the next call); motolii_make makes one at the stage's present moment, as one step, and says the new thing (0: not). */
 const char* motolii_recipes(Motolii* m);
+/* A thing's look (its values, effects and keys, all but what it is, holds and where it lies) kept as a file of its
+   own (motolii_look_save), given to another thing as one step (motolii_look_put); motolii_looks says the shelf's
+   ("name\tpath\tlabel\tpicture", one to a line, until the next call). */
+int motolii_look_save(Motolii* m, int thing, const char* path);
+int motolii_look_put(Motolii* m, int thing, const char* path);
+const char* motolii_looks(Motolii* m);
 int motolii_make(Motolii* m, const char* recipe);
 /* The whole-screen effects on the shelf ("name\tpath\tlabel", one to a line, label as the file's "// --label:" says, until the next call): the stage's script is the
    paths of those on it, with spaces between, the first nearest the picture. AviUtl2's scripts after them (aviutl_scripts/,

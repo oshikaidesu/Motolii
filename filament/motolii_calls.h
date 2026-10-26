@@ -186,6 +186,9 @@ const char* motolii_effects(Motolii* m) {   // (the effects folder's, then AviUt
         return (said_word() = files + (files.empty() || aviutl.empty() ? "" : "\n") + aviutl).c_str();
     });
 }
+int motolii_look_save(Motolii* m, int thing, const char* path) { return by_look(m, [=] { return (int)doc_look_save(*m->d, thing, path); }); }
+int motolii_look_put(Motolii* m, int thing, const char* path) { return by_hand(m, [=] { return changes(m, doc_look_put(doc(m), thing, path)); }); }
+const char* motolii_looks(Motolii* m) { return by_look(m, [=] { return (said_word() = doc_look_names()).c_str(); }); }
 const char* motolii_animators(Motolii* m) { return by_look(m, [=] { return (said_word() = doc_folder_names("animators", ".js")).c_str(); }); }
 int motolii_make(Motolii* m, const char* recipe) { return by_hand(m, [=] { return changes(m, doc_make(doc(m), recipe)); }); }
 const char* motolii_shown(Motolii* m, const char* name) {
