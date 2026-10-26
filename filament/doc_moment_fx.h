@@ -77,6 +77,10 @@ static void doc_things_fx(Doc& d) {
             thing_fx_aim(s, e, box);
             thing_effects_draw(s, e.st, e.view, numbers, thorFx);
             if (e.st.seen && e.look) e.look->setParameter("image", e.st.seen, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
+            if (e.look) {   // (its glow over what its effects made: the stage's bloom, as a thing without effects glows (doc_moment))
+                std::lock_guard<std::recursive_timed_mutex> hold(d.lock);
+                e.look->setParameter("glowing", (float)doc_number(d, thing, "emissive", d.stage->now, 0) + (doc_word(d, thing, "glow").empty() ? 0.f : 0.35f * (float)doc_number(d, thing, "glow_opacity", d.stage->now, 1)));
+            }
         });
     }
 }
