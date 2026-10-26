@@ -86,5 +86,19 @@ const pixels = await renderer.readRenderTargetPixelsAsync(target, 0, 0, w, h)
 const stride = Math.ceil(w * 4 / 256) * 256, rows = Buffer.alloc(w * h * 4), got = Buffer.from(pixels.buffer, pixels.byteOffset, pixels.byteLength)
 for (let y = 0; y < h; y++) got.copy(rows, y * w * 4, y * stride, y * stride + w * 4)
 fs.writeFileSync(outFile, rows)
+// timing (TIME_FRAMES=n): n more pictures, each drawn by the effects and read back, as Motolii would take each frame
+const n = +(process.env.TIME_FRAMES ?? 0)
+if (n > 0) {
+  const t0 = performance.now(); let worst = 0
+  for (let i = 0; i < n; i++) {
+    const a = performance.now()
+    out = headless.render(buildRendererFrame(config as any, (41 + i) / 60, 1 / 60, 1, { width: w, height: h }, { logicalSize: { width: 1920, height: 1080 } }), picture)
+    material.colorNode = TSL.renderOutput(TSL.texture(out), THREE.NoToneMapping, THREE.SRGBColorSpace)
+    renderer.setRenderTarget(target); quad.render(renderer)
+    await renderer.readRenderTargetPixelsAsync(target, 0, 0, w, h)
+    worst = Math.max(worst, performance.now() - a)
+  }
+  console.log(`${n} frames: ${((performance.now() - t0) / n).toFixed(1)} ms each (worst ${worst.toFixed(1)})`)
+}
 console.log("drawn", w, h)
 process.exit(0)

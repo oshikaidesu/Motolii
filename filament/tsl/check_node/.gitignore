@@ -1,0 +1,9 @@
+# outputs of the check (pictures as raw bytes, sheets)
+all/
+*.rgba
+*.16x9
+*.fp
+out.mjs
+*.json
+!package.json
+!package-lock.json
