@@ -60,3 +60,21 @@ shaderport（quizzyjoy/shaderport、Apache-2.0）は、shader-effects-inc/shader
   - 絵：`reports/shaderport_on_video.mp4`（4×3、6 秒）と `reports/shaderport_on_video.jpg`。左上から 元の動画、Glitch、VHS、CRTScreen、Halftone、ChromaticAberration、PixelSort、DataMosh、Glass、Pixelate、Kaleidoscope、VideoTexture。
 - 向き：2 段の物は上下が正しい（子の段と最後の段で 1 回ずつ uv をひっくり返して戻る：作者の説明 `composer.ts:241-247` の「書いて読む行き来が合う」）。1 段の物（VideoTexture、Kaleidoscope）は上下が逆になる。ブラウザで作者がこれをどう扱っているかは、まだ確かめていない。
 - まだの事：Motolii の画面（段の絵、Filament の世界）に入れること。今は確かめの道具が自分で描き先を作り、絵を読み戻して ffmpeg に渡している。
+
+## 石・彫り・3D の 16 本（10/26）
+
+- 同じ道（`SP_BASE=VideoTexture`、360 コマ）で 16 本を描いた。16 本とも装置の誤り 0、1 コマ平均 0.83〜9.64 ms（Form3D 9.64、Crystal 5.08、Stone 4.75、ほかは 1.3〜3.6）。
+- 絵：`reports/shaderport_stone_mask.mp4`（4×4、6 秒）、`reports/shaderport_stone_mask.jpg`。左上から Stone、Emboss、Engraving、Crystal／Form3D、Surface3D、Shatter、ObjectTracker／TimeTrail、Watercolor、Chalkboard、ContourLines／Sparkle、Glow、LightLeak、ReflectivePlane。
+- 目で見た分け方（作者の絵とはまだ比べていない）：
+  - 効いている：Engraving、ObjectTracker（追跡の照準）、Chalkboard、Sparkle、ReflectivePlane、ContourLines と LightLeak（1 段なので上下逆）。
+  - このコマでは元とほぼ同じ：Stone、Watercolor、Glow、Shatter（マウスで割る作り）、TimeTrail（前のコマを使う作りだが、再生役が毎コマ描き先を消している）。
+  - 形の中だけ：Emboss は作者の初期の形（弧）の中、Crystal は白い円。どちらも「Shape Effects」の仲間。
+  - 崩れている：Surface3D は真っ黒、Form3D は帯状。原因はまだ調べていない。
+- 装置の誤りが 0 でも、作者どおりの絵とは限らない。
+
+## 金属系は動画を受け取れるか（10/26）
+
+- LiquidMetal・Chrome・Obsidian・BrushedMetal は `role: 'shapeEffect'`。子の絵は取らず、形の距離の絵（SDF）の上に金属を流す。形は作者の数式の 14 種（`gpu/kit/sdf.ts:692-705`）か、前もって作った SDF の `.bin`（`shapeSdfUrl`）。
+- `.bin` の形式は分かっている：512×512、距離を [-1, 1] に Uint16 で詰めた物（`sdf.ts:447-471`）。読んだ距離は `r16float` の絵になる（`sdf.ts:474-530`）。ただし作者は `.bin` を自分のサーバー（`/api/plugin/sdf/generate`、`packages/partner/src/index.ts:161-220`）で SVG から作っていて、作り方は公開されていない。
+- 作者のライブラリは、絵から距離の絵を作る部品を別の効果の中に持っている：Irradiance のシルエットの種まきと JFA の飛び石（`std/paint/radiance.ts:417-441`、`silhouetteSeedKernel`・`silhouetteStepKernel`）。
+- なので、動画を金属にする道は「動画の切り抜き（どこが形の内側か）→ 作者の JFA で毎コマ距離の絵 → LiquidMetal の SDF の絵として差し込む」。切り抜きは、Motolii の video.h のキー（グリーンバックなど）か、別の既存の切り抜きが要る。まだ作っていない。
