@@ -13,7 +13,10 @@ WIDE, HIGH, POINT = 1920, 1080, 335.885
 film, start, seconds = sys.argv[1], float(sys.argv[2]), float(sys.argv[3])
 info = probe(film)
 W, H, fps = info['width'], info['height'], info['fps']
-bt = BlobTracker(W, H)
+class Tracker(BlobTracker):   # (its process as it is, but its overlay not drawn: only last_tracks is read here; draw was 8 of its 14 ms a picture)
+    def draw(self, rgb, tracks, pts, frame_no):
+        return None
+bt = Tracker(W, H)
 seen = {}   # (a track's id: [(t, x, y, w, h), ...])
 with closing(read_frames(film, info, start=start, duration=seconds)) as frames:
     for n, rgb in enumerate(frames):
@@ -23,24 +26,38 @@ with closing(read_frames(film, info, start=start, duration=seconds)) as frames:
 
 print('together on')   # (all of it one step, the stage matched once at the end: 4 minutes otherwise, 38 s so, for 162 tracks of 3 s)
 print(f'add film {os.path.abspath(film)}\nset 1 size {HIGH / POINT:.4f}')
-for i, (tid, at) in enumerate(sorted(seen.items())):
-    thing = i + 2
-    big = max(math.sqrt(w / W * WIDE * h / H * HIGH) for _, _, _, w, h in at) > 230   # (its width once: it is not keyed)
-    print(f'add shape rect\nsay {thing} fill none\nsay {thing} stroke ffffff\nset {thing} stroke_width {3 if big else 2}\nsay {thing} name track {tid}')
-    print(f'key {thing} opacity 0 0\nway {thing} opacity 0 Hold')
-    last, keys = None, {}
-    for t, x, y, w, h in at:
-        if last is not None and t - last > 1.5 / fps:   # (lost for a while: unseen between)
-            print(f'key {thing} opacity {last + 1 / fps:.4f} 0\nway {thing} opacity {last + 1 / fps:.4f} Hold')
-        if last is None or t - last > 1.5 / fps:
-            print(f'key {thing} opacity {t:.4f} {235 / 255:.4f}\nway {thing} opacity {t:.4f} Hold')
-        u, v = (x + w / 2) / W * WIDE, (y + h / 2) / H * HIGH
-        tall, wide = max(h / H * HIGH, 1.0), max(w / W * WIDE, 1.0)
-        for name, value in (('x', (u - WIDE / 2) / POINT), ('y', (HIGH / 2 - v) / POINT), ('size', tall / POINT), ('scale_x', wide / tall)):
-            keys.setdefault(name, []).append(f'{t:.4f} {value:.4f}')
-        last = t
-    for name, said in keys.items():   # (each value's keys in one call: motolii_key_many, one statement made ready once)
-        print(f'keys {thing} {name} ' + ' '.join(said))
-    print(f'key {thing} opacity {last + 1 / fps:.4f} 0\nway {thing} opacity {last + 1 / fps:.4f} Hold')
+# (each track cut where it was lost, and the pieces dealt to as few shapes as are ever seen at once, the earliest first
+#  to the first shape free (an interval graph coloured greedily): 750 tracks of the 14 s film, 750 shapes and 32 pictures
+#  a second otherwise; the large ones apart, their edge wider and not keyed)
+pieces = []
+for tid, at in seen.items():
+    run = [at[0]]
+    for p in at[1:]:
+        if p[0] - run[-1][0] > 1.5 / fps: pieces.append(run); run = [p]
+        else: run.append(p)
+    pieces.append(run)
+shapes = {False: [], True: []}
+for piece in sorted(pieces, key=lambda r: r[0][0]):
+    big = max(math.sqrt(w / W * WIDE * h / H * HIGH) for _, _, _, w, h in piece) > 230
+    free = next((one for one in shapes[big] if one[-1][-1][0] + 1.5 / fps < piece[0][0]), None)
+    (free.append(piece) if free is not None else shapes[big].append([piece]))
+thing = 1
+for big, ones in shapes.items():
+    for one in ones:
+        thing += 1
+        print(f'add shape rect\nsay {thing} fill none\nsay {thing} stroke ffffff\nset {thing} stroke_width {3 if big else 2}')
+        print(f'key {thing} opacity 0 0\nway {thing} opacity 0 Hold')
+        keys = {}
+        for piece in one:
+            print(f'key {thing} opacity {piece[0][0]:.4f} {235 / 255:.4f}\nway {thing} opacity {piece[0][0]:.4f} Hold')
+            for t, x, y, w, h in piece:
+                u, v = (x + w / 2) / W * WIDE, (y + h / 2) / H * HIGH
+                tall, wide = max(h / H * HIGH, 1.0), max(w / W * WIDE, 1.0)
+                for name, value in (('x', (u - WIDE / 2) / POINT), ('y', (HIGH / 2 - v) / POINT), ('size', tall / POINT), ('scale_x', wide / tall)):
+                    keys.setdefault(name, []).append(f'{t:.4f} {value:.4f}')
+            off = piece[-1][0] + 1 / fps
+            print(f'key {thing} opacity {off:.4f} 0\nway {thing} opacity {off:.4f} Hold')
+        for name, said in keys.items():   # (each value's keys in one call: motolii_key_many, one statement made ready once)
+            print(f'keys {thing} {name} ' + ' '.join(said))
 print('together off')
-print(f'# {len(seen)} tracks', file=sys.stderr)
+print(f'# {len(seen)} tracks, {len(pieces)} pieces, {thing - 1} shapes', file=sys.stderr)
