@@ -28,7 +28,7 @@ for i, (tid, at) in enumerate(sorted(seen.items())):
     big = max(math.sqrt(w / W * WIDE * h / H * HIGH) for _, _, _, w, h in at) > 230   # (its width once: it is not keyed)
     print(f'add shape rect\nsay {thing} fill none\nsay {thing} stroke ffffff\nset {thing} stroke_width {3 if big else 2}\nsay {thing} name track {tid}')
     print(f'key {thing} opacity 0 0\nway {thing} opacity 0 Hold')
-    last = None
+    last, keys = None, {}
     for t, x, y, w, h in at:
         if last is not None and t - last > 1.5 / fps:   # (lost for a while: unseen between)
             print(f'key {thing} opacity {last + 1 / fps:.4f} 0\nway {thing} opacity {last + 1 / fps:.4f} Hold')
@@ -36,9 +36,11 @@ for i, (tid, at) in enumerate(sorted(seen.items())):
             print(f'key {thing} opacity {t:.4f} {235 / 255:.4f}\nway {thing} opacity {t:.4f} Hold')
         u, v = (x + w / 2) / W * WIDE, (y + h / 2) / H * HIGH
         tall, wide = max(h / H * HIGH, 1.0), max(w / W * WIDE, 1.0)
-        print(f'key {thing} x {t:.4f} {(u - WIDE / 2) / POINT:.4f}\nkey {thing} y {t:.4f} {(HIGH / 2 - v) / POINT:.4f}')
-        print(f'key {thing} size {t:.4f} {tall / POINT:.4f}\nkey {thing} scale_x {t:.4f} {wide / tall:.4f}')
+        for name, value in (('x', (u - WIDE / 2) / POINT), ('y', (HIGH / 2 - v) / POINT), ('size', tall / POINT), ('scale_x', wide / tall)):
+            keys.setdefault(name, []).append(f'{t:.4f} {value:.4f}')
         last = t
+    for name, said in keys.items():   # (each value's keys in one call: motolii_key_many, one statement made ready once)
+        print(f'keys {thing} {name} ' + ' '.join(said))
     print(f'key {thing} opacity {last + 1 / fps:.4f} 0\nway {thing} opacity {last + 1 / fps:.4f} Hold')
 print('together off')
 print(f'# {len(seen)} tracks', file=sys.stderr)

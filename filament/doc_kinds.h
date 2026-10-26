@@ -58,6 +58,7 @@ struct Doc {
     int act = 0;                        // how many acts are open, one within another
     bool act_ok = true;                 // no change of the open act has been refused
     bool act_unmatched = false;         // a change within a larger act not yet shown: the stage is matched once, when the act ends
+    bool act_together = false;          // the outermost act is motolii_together's: every change within it is matched once, when it ends (as a key is)
     std::unique_ptr<PhysWorld> phys;    // the things that fall and strike (Jolt): made when first asked, made again when what it is made of changes
     std::vector<int> phys_of;           // which thing each of its bodies is
     std::vector<int> phys_copy;         // and which of its copies (a split text's letter; -1: the thing whole)

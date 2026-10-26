@@ -449,7 +449,7 @@ static bool doc_change(Doc& d, char* change, bool later) {
     if (ok && d.writing) ok = false, d.trouble = "the document is being written as a film: it is not changed until that is done";
     if (ok && !(ok = sqlite3_exec(d.file, change, nullptr, nullptr, nullptr) == SQLITE_OK)) d.trouble = sqlite3_errmsg(d.file);
     sqlite3_free(change);
-    if (ok && later && d.act > 1) d.act_unmatched = true;   // (a key within a larger act, one of a thousand: matched once when the act ends)
+    if (ok && (later || d.act_together) && d.act > 1) d.act_unmatched = true;   // (a key within a larger act, one of a thousand, or any change within motolii_together's: matched once when the act ends)
     else if (ok) {
         doc_forget(d);
         ok = doc_match(d);

@@ -135,7 +135,10 @@ template <class Does> static auto by_hand(Motolii* m, Does does, const char* who
         const auto now = [m] { return m->d ? (long)sqlite3_total_changes(m->d->file) : 0L; };
         const long rows = now();
         auto out = does();
-        if (now() != rows) m->revision.fetch_add(1, std::memory_order_release), picture_update(m), picture_moment(m);   // (the pictures new before the asker hears the answer: they leave why it was refused as it was, picture.h)
+        if (now() != rows) {   // (the pictures new before the asker hears the answer: they leave why it was refused as it was, picture.h)
+            m->revision.fetch_add(1, std::memory_order_release);
+            if (!m->d->act) picture_update(m), picture_moment(m);   // (within motolii_together's act, made once when it ends, as the stage is)
+        }
         return out;
     }, true, who);
 }

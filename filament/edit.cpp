@@ -53,6 +53,12 @@ int main(int argc, char** argv) {
         else if (call == "say" && w.size() >= 3) { const int n = thing(); if (numbers) ok = motolii_say(m, n, w[2].c_str(), w.size() > 3 ? rest(3).c_str() : ""); }   // (a text's words are the rest of the line; none: said empty)
         else if (call == "midi" && w.size() >= 7) { const int n = thing(); const int ch = (int)number(4); const double bpm = number(5); if (numbers) ok = motolii_midi(m, n, w[2].c_str(), rest(6).c_str(), w[3].c_str(), ch, bpm); }   // (midi <thing> <name> <kind> <channel, -1: any> <bpm, 0: the file's> <file.mid>)
         else if (call == "key" && w.size() == 5) { const int n = thing(); const double at = number(3), is = number(4); if (numbers) ok = motolii_key(m, n, w[2].c_str(), at, is); }
+        else if (call == "keys" && w.size() >= 5 && w.size() % 2 == 1) {   // (keys <thing> <name> <at> <value> <at> <value> ...: motolii_key_many, one statement made ready once)
+            const int n = thing();
+            std::vector<double> at, is;
+            for (size_t i = 3; i + 1 < w.size(); i += 2) at.push_back(number(i)), is.push_back(number(i + 1));
+            if (numbers) ok = motolii_key_many(m, n, w[2].c_str(), (int)at.size(), at.data(), is.data());
+        }
         else if (call == "unkey" && w.size() == 4) { const int n = thing(); const double at = number(3); if (numbers) ok = motolii_unkey(m, n, w[2].c_str(), at); }
         else if (call == "way" && w.size() >= 5) { const int n = thing(); const double at = number(3); if (numbers) ok = motolii_way(m, n, w[2].c_str(), at, rest(4).c_str()); }   // (the stretch from that key on)
         else if (call == "define" && w.size() >= 3) ok = motolii_define(m, w[1].c_str(), rest(2).c_str());

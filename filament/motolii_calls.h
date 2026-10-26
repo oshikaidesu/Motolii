@@ -313,7 +313,15 @@ const char* motolii_font_tags(const char* path) {
     if (!out.empty()) out.pop_back();
     return out.c_str();
 }
-int motolii_together(Motolii* m, int on) { return by_hand(m, [=] { return on ? (doc_act(*m->d), 1) : (m->d->act ? (int)doc_acted(*m->d) : 0); }); }
+int motolii_together(Motolii* m, int on) {
+    return by_hand(m, [=] {
+        if (on) return doc_act(*m->d), m->d->act_together = true, 1;
+        const int done = m->d->act ? (int)doc_acted(*m->d) : 0;
+        if (!m->d->act) m->d->act_together = false;
+        picture_update(m), picture_moment(m);   // (the pictures put off while the act was open, made once)
+        return done;
+    });
+}
 // Every stretch of a thing's keyed values, a line each: from, to, its way ("from\tto\tway\n"): a timeline draws how each
 // goes between its two keys (the stretch is the inside's own: the window only draws what it says).
 const char* motolii_thing_stretches(Motolii* m, int thing) {
@@ -392,7 +400,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "let_go") ok = changes(m, (int)doc_let_go(doc(m), number != 0.0));
             else if (c == "undo") ok = (int)doc_undo(doc(m));
             else if (c == "redo") ok = (int)doc_redo(doc(m));
-            else if (c == "together") ok = number != 0.0 ? (doc_act(*m->d), 1) : (m->d->act ? (int)doc_acted(*m->d) : 0);
+            else if (c == "together") { ok = number != 0.0 ? (doc_act(*m->d), m->d->act_together = true, 1) : (m->d->act ? (int)doc_acted(*m->d) : 0); if (!m->d->act) m->d->act_together = false; }
             else if (c == "add") ok = m->made = changes(m, doc_add(doc(m), n.c_str(), w.c_str()));   // (name: the kind, word: the file; the answer is the new thing)
             else if (c == "make") ok = m->made = changes(m, doc_make(doc(m), w.c_str()));
             else if (c == "duplicate") ok = m->made = changes(m, doc_duplicate(doc(m), thing));   // (the answer is the new thing)
