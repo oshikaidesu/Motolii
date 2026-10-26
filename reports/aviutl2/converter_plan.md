@@ -56,6 +56,7 @@
 - AviUtl で p5.js が動くのは、oov の aviutl_browser（MIT、無印用）と、その AviUtl2 版の HexBrowns の AviUtl2Browser_H（MIT）。中は CEF（Chromium を部品にした物）で、HTML・CSS・JavaScript を毎コマ物の絵にする。Windows 専用の exe と DLL なので、今の変換器では止まる。
 - 約束はとても小さい：スクリプトは `require("browser").execute({abc|dir, param, tabid, userfile})`、コンテンツの index.html は `AviUtlBrowser.registerRenderer(async params => 文字列)`。左上の 1 画素は書き終わりの合図に使われる。
 - 10/26 oov の aviutl_browser（MIT、https://github.com/oov/aviutl_browser ）を読んだ。本体は約 1,300 行で、ほとんどが CEF の呼び出し。CEF を画面に出さずに描く形（`src/exe/app.cc:41` の `SetAsWindowless`）。ページへの頼みは `ExecuteJavaScript` で `registerRenderer` の関数を呼ぶ（`client.cc:399`、`app.cc:129`）。描き終わりは、ページが左上の 1 画素に「何回目か」を表す色を置き、受け取り側の `OnPaint` がその色を確かめてから絵を受け取る（`client.cc:139-175`）。AviUtl とは別の exe で動く。同じ作者の中身の例：aviutl_browser_glb（3D の物）、_minecraft_skin、_emoji、_markdown。
+- 10/26 確かめ：CEF 156（Chromium 156.0.8078.48、Mac の Apple シリコン版、BSD、https://cef-builds.spotifycdn.com/ の標準配布）を README の手順どおり `cmake -G Ninja -DPROJECT_ARCH=arm64` で組み立て、見本 cefsimple・cefclient と検査 ceftests が手を入れずにできた（36 秒と 80 秒）。CEF 自身の「画面に出さずに描く」検査 `ceftests --gtest_filter='OSRTest.*'` が **93 本すべて通った**（画素の確かめを含む）。注意：cefclient を動かすと macOS の通知の許可を求める知らせが出る。
 - 同じ道で、Tracery 級の追跡オーバーレイ（blob-tracey、MIT、ブラウザの Canvas に頼る）と p5.js のスケッチが手を入れずに動く。
 - Mac での手順（手本どおり）：(1) CEF の Mac 版（BSD）を、CEF 公式の見本 cefsimple のまま動かす。(2) oov の client.cc の受け渡しをそのまま当てた別アプリにする。(3) 変換器の `require("browser")` からそれを呼ぶ。
 - Motolii では、変換器に `require("browser")` の代役を足し、同じ約束でブラウザに描かせる。そうすれば aviutl_browser 用のコンテンツ（.abc・フォルダ、p5.js のスケッチを含む）がそのまま動く。
