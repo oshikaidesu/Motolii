@@ -18,3 +18,4 @@
   | `obj.computeshader` | 5 | 5 |
   | シェーダーが変換できない | 10 | 8 |
 - 次に足す順は `converter_plan.md` のとおり：効果の名前の当て先 → 3D（drawpoly）→ rand・図形 → 文字。
+- 10/26 その後：`obj.rand`・`obj.rand1` を足した（YMM4-LuaScript の `aviutl_rand` をそのまま）。同じ判定で数え直して 594 本中 354 → **365 本**。増えたのは HexScript のフィルター 9 本、AutoLyricAnimation_K、BlockNoise、RandomObject。止まるようになった 1 本（Resize_S のボックスリサイズσ）は乱数ではなく、箱の余白が 128 画素になって別のスクリプトを名前で呼ぶ道に入ったため（名前で呼ぶのは未対応）。止まる理由の上位は `obj.module` 42、`obj.drawpoly` 28、`obj.effect`（名前なし）12、図形「円」12、`obj.interpolation` 12、`obj.getpixeldata` 11。

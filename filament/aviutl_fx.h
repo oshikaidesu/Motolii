@@ -286,6 +286,44 @@ function HSV() error("not yet: HSV") end
 function rotation() error("not yet: rotation") end
 debug_print = print
 global = {}
+-- obj.rand: YMM4-LuaScript's, as it is (native/shim.lua 4-14, 310-328; native/worker.lua 445-447).
+-- MIT License, Copyright (c) 2026 routersys (https://github.com/routersys/YMM4-LuaScript).
+local i64 = ffi.typeof("int64_t")
+local u32 = ffi.typeof("uint32_t")
+local u64 = ffi.typeof("uint64_t")
+
+local function tou(d)
+    return tonumber(u32(i64(d)))
+end
+
+local function umul32(a, b)
+    return tonumber(u32(u64(a) * u64(b)))
+end
+local floor = math.floor
+function aviutl_rand(a, b, seed, frame)
+    local ps = ffi.new("double[1]", seed)
+    local ws = ffi.cast("uint32_t*", ps)
+    local s = tou(bit.bxor(ws[0], ws[1]))
+    local pf = ffi.new("double[1]", frame)
+    local wf = ffi.cast("uint32_t*", pf)
+    local f = tou(bit.bxor(wf[0], wf[1]))
+    local h = tou(umul32(s, 374761393) + umul32(f, 668265263))
+    h = umul32(tou(bit.bxor(h, bit.rshift(h, 13))), 1274126177)
+    h = tou(bit.bxor(h, bit.rshift(h, 16)))
+    local r = h / 4294967295.0
+    local lo = floor(math.min(a, b))
+    local hi = floor(math.max(a, b))
+    local span = hi - lo + 1
+    if span <= 1 then return lo end
+    local v = lo + floor(r * span)
+    if v > hi then return hi end
+    return v
+end
+function rand(a, b, seed, frame)
+    return aviutl_rand(a or 0, b or 0, seed or 0, frame or obj.frame or 0)
+end
+-- obj.rand1: lua.txt's 0.0 up to (not) 1.0, from the same
+function rand1(seed, frame) return aviutl_rand(0, 4294967294, seed or 0, frame or obj.frame or 0) / 4294967295 end
 )";
 
 // Made once a file: its Lua state (the libraries lua.txt leaves, require from its own folder), obj, its knobs' first
@@ -309,6 +347,7 @@ static std::shared_ptr<AviutlRun> aviutl_made(Stage& s, const std::string& file)
     luaL_dostring(L, "return { __index = function(_, k) error('not yet: obj.' .. tostring(k), 2) end }");   // (any other name of obj)
     lua_setmetatable(L, -2);
     lua_setglobal(L, "obj");
+    luaL_dostring(L, "obj.rand, obj.rand1 = rand, rand1");   // (lua.txt: obj. or not)
     std::string text = r->own.rfind("\xEF\xBB\xBF", 0) == 0 ? r->own.substr(3) : r->own;
     if (luaL_loadbuffer(L, text.data(), text.size(), ("@" + std::filesystem::path(file).filename().string()).c_str())) r->trouble = lua_tostring(L, -1);
     else r->chunk = luaL_ref(L, LUA_REGISTRYINDEX);
