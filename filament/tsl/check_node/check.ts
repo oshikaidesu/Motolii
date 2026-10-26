@@ -97,16 +97,18 @@ fs.writeFileSync(outFile, rows)
 // timing (TIME_FRAMES=n): n more pictures, each drawn by the effects and read back, as Motolii would take each frame
 const n = +(process.env.TIME_FRAMES ?? 0)
 if (n > 0) {
-  const t0 = performance.now(); let worst = 0
+  const t0 = performance.now(); let worst = 0, js = 0
   for (let i = 0; i < n; i++) {
     const a = performance.now()
     out = headless.render(buildRendererFrame(config as any, (41 + i) / 60, 1 / 60, 1, { width: w, height: h }, { logicalSize: { width: 1920, height: 1080 } }), picture)
     material.colorNode = TSL.renderOutput(TSL.texture(out), THREE.NoToneMapping, THREE.SRGBColorSpace)
     renderer.setRenderTarget(target); quad.render(renderer)
+    js += performance.now() - a
     await renderer.readRenderTargetPixelsAsync(target, 0, 0, w, h)
     worst = Math.max(worst, performance.now() - a)
   }
-  console.log(`${n} frames: ${((performance.now() - t0) / n).toFixed(1)} ms each (worst ${worst.toFixed(1)})`)
+  console.log(`${n} frames: ${((performance.now() - t0) / n).toFixed(1)} ms each with reading back (worst ${worst.toFixed(1)}); ` +
+    `of it, the author's JS giving the commands ${(js / n).toFixed(1)} ms`)
 }
 console.log("drawn", w, h)
 renderer.backend.device.destroy()   // (ends a capture: Dawn's webgpu backend DestroyImpl)
