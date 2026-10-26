@@ -272,6 +272,7 @@ static const DocValue doc_values[] = {
     {"stagger", "behaviour", -1e6, 1e6, true, nullptr},
     {"seed", "behaviour", 0, 1e9, false, nullptr},
     {"step", "behaviour", 0, 1e6, true, nullptr},   // (what it gives rounded to so many: 90, a quarter turn at a time; 0 not)
+    {"address", "behaviour", 0, 0, false, ""},   // (an osc behaviour's: the OSC address it gives the last number of, "/track/3/x")
     // (where it works, Cavalry's falloff: inside a shape (any shape, seen or not, moving or not) all of it, outside none, between over
     //  falloff_soft units of the stage; inverted, the other way: elsewhere, the value is the thing's own)
     {"falloff", "behaviour", 0, 1e9, false, nullptr},

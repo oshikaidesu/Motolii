@@ -23,6 +23,7 @@ static double doc_behaviour_at(Doc& d, int by, int copy, int n, double t) {
         u = hash((int64_t)f) * (1.0 - e) + hash((int64_t)f + 1) * e;
     }
     else if (type == "random") u = hash(copy + 1);
+    else if (type == "osc") u = osc_value(doc_word(d, by, "address"));   // (the last number sent to its address: osc_in.h)
     const double step = knob("step", 0), v = lo + (hi - lo) * u;
     return step > 0.0 ? std::round(v / step) * step : v;
 }

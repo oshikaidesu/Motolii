@@ -31,6 +31,7 @@
 // In parts, read in this order (each a piece of the one before it, none alone):
 #include "doc_kinds.h"   // (the document and the names its values go by)
 #include "doc_values.h"   // (a value read at a moment, its keys and ways)
+#include "osc_in.h"   // (numbers sent as OSC, for a behaviour of the kind osc)
 #include "doc_relations.h"   // (behaviours, falloffs, relations, physics)
 #include "doc_place.h"   // (where a thing lies, its look, its effects)
 #include "doc_moment_fx.h"   // (a thing with effects of its own, told a moment)
