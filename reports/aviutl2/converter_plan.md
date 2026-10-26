@@ -67,3 +67,4 @@
 - 作り（AE の PreRender と同じ）：スクリプトには広げる前の物の絵を渡し（`obj.w`・`obj.h` は物の大きさ）、返った絵が広がった分だけ物の箱を広げる。`image_max` は画面の画素の大きさ（sashimono-edit の決まり）。言った量が前の回と違えば、同じコマで箱を合わせ直して描き直す。ISF は広げる量を言わないので `fx_margin`（AE の Grow Bounds にあたる）を残す。
 - 試した結果（MV の文字、拡散 300 の Open Glow）：光は画面いっぱいまで広がったが、光った絵が左上に小さく出て元の場所には光の無い文字が出た。グロー → エッジ → グローでは絵が上にずれて二重になった。Long Shadow は箱が広がらず影が切れた。
 - 次に読む物：同じコマで物の View を大きさを変えて 2 回描いてよいか（Filament の View・RenderTarget の決まり）、`thing_fx_aim` の板の置き方と絵の大きさの合わせ方。読んでから直す。
+- 10/26 その後：手で決める余白 `fx_margin` は消し、sashimono-edit の `BAKE_MARGIN`（128 画素、`engine/render/script_bake.py`）に替えた。sashimono-edit の `image_max` は画面の大きさ（`compat/aviutl/objapi.py` の `lua_getinfo`）、領域拡張は物の絵そのものを広げる（同 `_expand`、上限 4096）。`image_max` を画面の大きさにすると、Open Glow を使うルック（Neon Edges・Glow Contours）の光が斜めにずれて二重になり、文字の中の線が消えた。値は出典どおりなので、ずれは変換器の不具合。原因は確かめていない。`image_max` は物の箱の大きさのまま残した。

@@ -67,8 +67,9 @@ static void doc_things_fx(Doc& d) {
             {
                 std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn)
                 if (doc_seen_box(d, thing, d.stage->now, seen)) {   // (where it is seen, as much of it as is on the stage: its picture, After Effects' layer;
-                    //  with room around it for what its effects draw outside it: a glow, a shadow, streaks)
-                    const double m = doc_number(d, thing, "fx_margin", d.stage->now, 0) * std::max(seen[2] - seen[0], seen[3] - seen[1]);
+                    //  with room around it for what its effects draw outside it, sashimono-edit's BAKE_MARGIN: 128 pixels,
+                    //  engine/render/script_bake.py; its effects' own reach read from their knobs is not, ISF's not in pixels)
+                    const double m = 128.0 * s.w / std::max(1u, s.view->getViewport().width);
                     box[0] = std::max(0.0, seen[0] - m), box[1] = std::max(0.0, seen[1] - m), box[2] = std::min((double)s.w, seen[2] + m), box[3] = std::min((double)s.h, seen[3] + m);
                 }
                 if (box[2] - box[0] < 1 || box[3] - box[1] < 1) box[0] = box[1] = 0, box[2] = s.w, box[3] = s.h;   // (none of it on the stage: the whole)
