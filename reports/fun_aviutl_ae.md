@@ -5,7 +5,7 @@
 ## 要約
 - **AE のプラグイン**：一覧 7 本から、絵を作る物 30 種。3 本以上に出たのは Element 3D・Trapcode Particular・Optical Flares・Saber・Plexus・Newton の 6 つ。
 - **AviUtl 無印**：有名 89 包（一覧 24 本、前の下調べ `aviutl1_survey.md`）から、絵を作る物 40 包。Motolii では無印のスクリプトはまだ動かない（読み込み自体が未実装）。
-- **AviUtl2 の変わり種**：同梱の 193 包から、一覧には出ないが面白い物 30 包。今そのまま動くのは 11 包。
+- **AviUtl2 の変わり種**：同梱の 193 包から、一覧には出ないが面白い物 30 包。今そのまま動くのは 10 包（初め 11 と書いたが、ブラウザ表示は空で終わっただけだった）。
 - **流行りたての物が漏れた**：Tracery などの追跡の HUD（ブロブ追跡）は、定番の一覧に出ないので拾えていなかった（4 章）。
 - **共通の穴**：粒子（Particular・Stardust・拡張パーティクル・GParticle）、点と線の網（Plexus）、光る線（Saber）、レンズフレア（Optical Flares・カスタムフレア）。どれも AE でも AviUtl でも人気だが、Motolii には仕組みが無い。
 - **AviUtl2 で止まる理由の上位**（下の 30 包の中）：`obj.module`（Windows の DLL）8 包、`obj.computeshader` 4 包、`obj.rand` 3 包、本体の効果を名前で 4 包、図形の読み込み 2 包。
@@ -100,7 +100,7 @@
 
 | 名前（作者） | 作る物 | Motolii で |
 |---|---|---|
-| AviUtl2Browser_H（HexBrowns） | ブラウザで描く（p5.js のスケッチなど） | 動く（約束の代役。中のブラウザ表示はまだ） |
+| AviUtl2Browser_H（HexBrowns） | ブラウザで描く（p5.js のスケッチなど） | **動かない**：テストでは「コンテンツ」が空で、何もせずに終わったので「動く」と数えていた（10/26 訂正）。`require("browser")` の代役もブラウザ表示も Motolii にはまだ無い |
 | VRM_Toolkit（nove-nove） | VRM のキャラを出して動かす | 止まる：`obj.module` |
 | GameOfLife（sigma-axis） | ライフゲーム | 止まる：本体の「単色化」 |
 | PenroseTile_S（sigma-axis） | ペンローズの敷き詰め | 止まる：ほかのスクリプト（ぼかしσ など）が見つからない |

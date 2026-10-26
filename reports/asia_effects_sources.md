@@ -62,3 +62,8 @@ AwemeLike（https://github.com/ZZZZou/AwemeLike 、MIT と書いてある）の 
 1. CapCut のテンプレートの数が何の数かを確かめ、上位のテンプレートが使う効果を並べる。
 2. 抖音の一覧の 1 つずつに、Motolii の近い物が本当に近いかを絵で確かめる。
 3. MediaDemo（MIT）の GLSL を、手を入れずに Motolii で動かせるか（Motolii が読めるのは ISF・WGSL・three.js の効果。生の GLSL ES の断片を読む口は無い）。
+
+## Tracery 級の追跡オーバーレイの出典（10/26、ゴール 2）
+- **blob-tracey**（Batkixni、MIT、https://github.com/Batkixni/blob-tracey 、TypeScript 約 3,900 行、外の部品はアイコンだけ）：AE Blob Tracker を真似た Web の道具。枠（四角・角かっこ・十字・輪郭・凸包・六角）、中心の印、座標のラベル（16 進・百分率ほか）、点のつなぎ方（ドロネー・最小全域木・近い K 個・星形・全部）、枠の中だけの画素の崩し、ちらつきの抑え、設定の JSON。
+- 見つける所（BlobDetector）も描く所（OverlayRenderer）もブラウザの Canvas（`document.createElement('canvas')`・`getImageData`）に頼る。手を入れずに動かすには本物のブラウザが要る。
+- p5.js を動かすのと同じ道（AviUtl2Browser_H の約束）。手本は oov の aviutl_browser（MIT、中身は CEF）。次はそのソースを読み、要る物を出す。
