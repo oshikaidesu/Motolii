@@ -21,6 +21,7 @@ with closing(read_frames(film, info, start=start, duration=seconds)) as frames:
         for tr in bt.last_tracks:
             seen.setdefault(tr['id'], []).append((n / fps, tr['x'], tr['y'], tr['w'], tr['h']))
 
+print('together on')   # (all of it one step, the stage matched once at the end: 4 minutes otherwise, 38 s so, for 162 tracks of 3 s)
 print(f'add film {os.path.abspath(film)}\nset 1 size {HIGH / POINT:.4f}')
 for i, (tid, at) in enumerate(sorted(seen.items())):
     thing = i + 2
@@ -39,4 +40,5 @@ for i, (tid, at) in enumerate(sorted(seen.items())):
         print(f'key {thing} size {t:.4f} {tall / POINT:.4f}\nkey {thing} scale_x {t:.4f} {wide / tall:.4f}')
         last = t
     print(f'key {thing} opacity {last + 1 / fps:.4f} 0\nway {thing} opacity {last + 1 / fps:.4f} Hold')
+print('together off')
 print(f'# {len(seen)} tracks', file=sys.stderr)
