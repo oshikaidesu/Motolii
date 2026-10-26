@@ -156,3 +156,14 @@ singularity と tornado（MisterPrada）、hologram-particles、three.js-tsl-san
   - `quickjs-api.c` は、NativeScript が手を入れた QuickJS-ng 0.11.0 に合わせてある。足された関数 3 つ（`JS_IsArrayBuffer2`、`JS_NewString16`、`JS_WeakRef_Deref`、`quickjs.h:1273-1276`）を使うので、Motolii の 0.17.0 の見出しでは組み立てられない（誤り 18）。0.17 に書き換えると移植になるので、NativeScript の QuickJS-ng（`source_ng`）とひと組で借りる。
   - Node-API の関数の数：NativeScript は 130 を持つ。Dawn の口が要るのは 72 で、足りないのは `napi_fatal_error` の 1 つ。`@napi-rs/canvas` が要るのは 67 で、足りないのは裏の糸の仕事（async work と threadsafe function）の 7 つ。どれも組み立て済みの部品の中身（`nm -u`）から数えた。
   - NativeScript の組は、`.node` の部品を読み込む所を持たない。読み込みは `dlopen` して `napi_register_module_v1` を呼ぶだけで、Hermes（`hermes_napi_load_module`）と Node に手本がある。
+
+## 効果を動かす JS の土台：QuickJS の上の Node-API を試して、Node にした（10/26）
+
+- 作者の JS（three.js の描く仕組み、Canvas 2D）を Motolii の中で動かすには、Node-API を持つ JS の土台が要る。Dawn の WebGPU の口も、`@napi-rs/canvas` も、Node-API で書かれているため。
+- Motolii の QuickJS で済ませたかったので、QuickJS の上の Node-API の既存の物を試した。
+  - **NativeScript（napi-android の `quickjs-api.c`、130 関数）**：NativeScript が手を入れた QuickJS-ng 0.11 とひと組で組み立てられ、Dawn の口の読み込みと `create()` まで通った。ただし `napi_create_promise` が、約束を果たす関数を関数の中の一時的な置き場に入れて、その場所を覚えている（`quickjs-api.c:3674-3678`）。関数が終わると消える場所なので、`requestAdapter` の約束を果たす所で「関数でない」と止まった（lldb で `napi_resolve_deferred` の中と確かめた）。NativeScript の不具合。
+    - 途中で、Dawn の口が読み込み時に Node の `Event`・`EventTarget`・`DOMException` を前提にしていることも分かった（`ManualConstructors.cpp:30-77`）。
+  - **BabylonJS/JsRuntimeHost（MIT、QuickJS の Node-API は 107 関数）**：約束は正しく作る（果たす関数を JS の入れ物に入れる）が、Dawn の口に 4 つ、`@napi-rs/canvas` に 13 足りない。ループ（`AppRuntime`）と Web の部品の補い（時計、URL、Fetch など）は持つ。
+  - **wasmerio/napi**：星 2、ライセンスが書かれていないので使えない。
+- どれも、足りない所を自作で埋めることになる。Node-API の本家は Node で、Dawn の口と `@napi-rs/canvas` が前提にしている物（`setImmediate`、`Event`、`EventTarget`、`DOMException`、`structuredClone`、`URL`）を全部持つ。保守・検証する範囲が一番小さく、責任元もはっきりするので、Node を部品として組み込む（Node の組み込みの口と公式の見本 `test/embedding/embedtest.cc`）。
+- 試しに書いた QuickJS 用の外側（`host.c`、約 90 行）は消した。
