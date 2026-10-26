@@ -104,3 +104,23 @@ Shader Lab（basementstudio/shader-lab、Apache-2.0）の効果を、外にあ�
 - **変換器は、描く先の GPU に問いを出す。** 出す WGSL が GPU の性能で変わるため。44 本で 2 種類だけ：`float32-filterable` を持つか（1 回）、テクスチャの重ね描きの数（1,970 回）。今回の答えは、機能の追加なしの WebGPU の初めの値（持たない、1 枚）。本番は Motolii の Dawn の装置の本当の答えを渡す。
 - 変わるのはシェーダーだけ。効果の JS の部分（つまみ → uniform、何段も描く順番）は TSL ではなく普通の JS なので、そのまま QuickJS で回せる。
 - 試しの台本は `research_notes/hosts/play/all-build.ts`（git の外）。
+
+## Motolii の Dawn で 1 本描いた：Fluted Glass（10/26）
+
+- TSL にしか無い Fluted Glass を、Motolii が組み立てた Dawn（`libwebgpu_dawn`、Filament の WebGPU と同じ物）で描いた。デバイスのエラーは 0。
+  - 絵：`reports/tsl/fluted_glass_on_dawn.jpg`（左が元の写真、右が描いた絵）、`fluted_glass_on_dawn_zoom.jpg`（上が元、下が描いた絵の一部を原寸で）。
+  - 写真は Shader Lab 自身の最初の場面の物（`public/scenes/default/editorial/flora.webp`、1280×770 に縮めた）。元の写真にある横の切れ目は、写真そのもの。
+- 渡した物は、全部 three.js 自身のコードで作った：
+  - シェーダー（`WGSLNodeBuilder`）
+  - uniform のバイト（`binding.update()` → `binding.buffer`）
+  - 板の形の数
+  - 作り方は `filament/dawn_probe/tsl_dump.ts`（QuickJS で回す）。three.js が描く前にすることを、同じ順でしている：カメラを WebGPU の座標の決まりにする（three.webgpu.js 62657）、`NodeFrame` で値を更新する。
+- 描く側は `filament/dawn_probe/tsl_on_dawn.cpp`。
+  - 装置と読み戻しは `tvg_on_dawn.cpp` と同じ。
+  - 描く手順は Dawn の `samples/HelloTriangle.cpp` と同じ。
+  - シェーダーが宣言した並びのまま描く（`layout` を指定せず、Dawn に任せる）。Filament の決まりを通らない。
+- 写真の 35% の画素が変わった（間引いて数えた）。縦の筋ごとにずれて、雲の縁が波打ち、茎の切れ目が横にずれる。つまみは初めの値（周波数 20、振れ幅 0.02、ゆがみ 0.28、ばらつき 0.35）。
+- **確かめていない所**：
+  - Shader Lab がブラウザで描く絵と同じかは、見比べていない。サイトは空から始まり写真を落とし込む作りで、内蔵のブラウザからは手元の写真を渡せなかった。
+  - 色の空間：Shader Lab は小数の線形の絵を渡すが、ここでは 8 ビットの写真をそのまま渡した。
+  - 描いたのは Motolii の Dawn の部品を使った単体の試しで、Motolii の画面（Filament の装置）の中ではない。前例の ThorVG と同じく、同じ装置を借りて描き、Filament が取り込む形にすれば入る（`gpu_door.h`）。
