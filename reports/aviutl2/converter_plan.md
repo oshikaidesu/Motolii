@@ -57,6 +57,10 @@
 - 約束はとても小さい：スクリプトは `require("browser").execute({abc|dir, param, tabid, userfile})`、コンテンツの index.html は `AviUtlBrowser.registerRenderer(async params => 文字列)`。左上の 1 画素は書き終わりの合図に使われる。
 - 10/26 oov の aviutl_browser（MIT、https://github.com/oov/aviutl_browser ）を読んだ。本体は約 1,300 行で、ほとんどが CEF の呼び出し。CEF を画面に出さずに描く形（`src/exe/app.cc:41` の `SetAsWindowless`）。ページへの頼みは `ExecuteJavaScript` で `registerRenderer` の関数を呼ぶ（`client.cc:399`、`app.cc:129`）。描き終わりは、ページが左上の 1 画素に「何回目か」を表す色を置き、受け取り側の `OnPaint` がその色を確かめてから絵を受け取る（`client.cc:139-175`）。AviUtl とは別の exe で動く。同じ作者の中身の例：aviutl_browser_glb（3D の物）、_minecraft_skin、_emoji、_markdown。
 - 10/26 確かめ：CEF 156（Chromium 156.0.8078.48、Mac の Apple シリコン版、BSD、https://cef-builds.spotifycdn.com/ の標準配布）を README の手順どおり `cmake -G Ninja -DPROJECT_ARCH=arm64` で組み立て、見本 cefsimple・cefclient と検査 ceftests が手を入れずにできた（36 秒と 80 秒）。CEF 自身の「画面に出さずに描く」検査 `ceftests --gtest_filter='OSRTest.*'` が **93 本すべて通った**（画素の確かめを含む）。注意：cefclient を動かすと macOS の通知の許可を求める知らせが出る。
+- 10/26 Mac での 2 つの道：
+  - **(A) CEF ＋ oov の受け渡し**：その場で描ける。ただ oov の受け渡し（標準入出力と Windows の共有メモリ、`aviutl_browser_win.cc`・`client_win.cc` ほか 5 つ）は Windows 専用で、作者の Mac 版は無い。Mac 用に書き直すことになる（手本の無い移植）。
+  - **(B) timesnap（tungs、BSD-3、Node.js と puppeteer の Chromium）で先に絵にして、動画として再生する**：ページの中の時計を差し替えて 1 コマずつ描くので、何度描いても同じ絵。Mac でも Windows でも同じ。Motolii の Datamosh の「裏で作ってから再生する」と同じ形。`npx timesnap <URL> --fps=30 --duration=1` が手を入れずに動き、blob-tracey の公開デモ 30 コマに 36 秒（ページを開く時間込み）。
+  - どちらでも、blob-tracey は道具の画面（画像を落とし込む）なので、動画とつまみの値を渡す小さなページが要る（blob-tracey の部品 `src/core`・`src/render` を呼ぶ）。
 - 同じ道で、Tracery 級の追跡オーバーレイ（blob-tracey、MIT、ブラウザの Canvas に頼る）と p5.js のスケッチが手を入れずに動く。
 - Mac での手順（手本どおり）：(1) CEF の Mac 版（BSD）を、CEF 公式の見本 cefsimple のまま動かす。(2) oov の client.cc の受け渡しをそのまま当てた別アプリにする。(3) 変換器の `require("browser")` からそれを呼ぶ。
 - Motolii では、変換器に `require("browser")` の代役を足し、同じ約束でブラウザに描かせる。そうすれば aviutl_browser 用のコンテンツ（.abc・フォルダ、p5.js のスケッチを含む）がそのまま動く。
