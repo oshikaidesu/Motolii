@@ -159,7 +159,9 @@
 | 3D キャラ | VRM_Toolkit、YMM4 の 3D モデル読み込みプラグイン | Filament の glTF（VRM は glTF の拡張） |
 | 追跡の HUD | Tracery・AE Blob Tracker・TrackingラインEasy | OpenCV（今使っている）で物を見つけ、ThorVG で四角と線を描く。TouchDesigner の Blob Track と同じ組み方 |
 
-前に話に出た「YMM4 でマイクラを動かせる物」は見つからなかった。近い物は YMM4 3D モデル読み込みプラグイン（BOOTH、OBJ・PMX・GLB など）。
+前に話に出た「YMM4 でマイクラを動かせる物」は **YMM4Craft**（いるかぁぁ、MIT、Java、https://github.com/Dolphin-kun/YMM4Craft 、紹介 https://ymm4-info.net/plugin/1792142745633371 ）。Minecraft Java 版の Mod（Fabric）と YMM4 のプラグインの 2 つで、YMM4 のタイムラインからマイクラの世界のカメラ・時刻・天気を動かし、プレイヤーや Mob を置き、遊んだ様子を好きな視点で再生し直す。世界を動画に畳まずに編集の中で使う形。初めの検索（米国の検索、言葉を詰め込みすぎ）では見つけられず、ユーザーが「ymm4 マイクラ」で見つけた。同じ作者の YMM43D（3D）・YMM4Physics2D（2D の物理）も MIT。
+
+見落とし：YMM4 のプラグインの目録 ymm4-info.net を目録ごと見ていない。日本語の物は、アプリ内のブラウザで日本の検索と各目録を直接引いて探し直す。
 
 ## 出典
 - School of Motion「The Best After Effects Plugins and Effect Packs You NEED in 2026」 https://www.schoolofmotion.com/blog/best-after-effects-plugins-and-effect-packs-you-need-in-2026
