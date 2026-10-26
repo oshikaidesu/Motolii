@@ -91,3 +91,9 @@ AwemeLike（https://github.com/ZZZZou/AwemeLike 、MIT と書いてある）の 
   - 物差しに合う：KineticTypePageTransition、GlitchyGrid、TypographyMotion、ScrollBlurTypography、TextClipScroll、OnScrollTypographyAnimations、RepetitiveTypography、TextDistortionEffects（雑誌やポスターの文字組み、色を絞る）。GlitchPerspective は強いがデザインされている。
   - 止め絵では分からない：CrosshairDistortion（マウスで動く）、WebGLBlobs（点だけ）。
   - 気を付ける点：ほとんどがスクロールやマウスで動き、時間では動かない。動画にするには時間に合わせてスクロールを進める必要がある（timesnap の `preparePageForScreenshot` で 1 コマごとにページを動かせる）。見本のページには Codrops の見出しや広告（hotjar、HIRED など）が入るので、効果の部分だけを使う手間がある。
+
+## 映画の仕上げ系：three.js と pmndrs/postprocessing（10/26）
+- three.js の効果（`examples/jsm/shaders`、MIT）は、Motolii がもう 52 本中 30 本をそのまま読める（ASSETS.md の three.js の行）。
+- **pmndrs/postprocessing**（https://github.com/pmndrs/postprocessing 、Zlib、星 2,899）：効果 30 種余り（ASCII、Bloom、Bokeh、BrightnessContrast、ChromaticAberration、ColorAverage、ColorDepth、DepthOfField、DotScreen、Glitch、GodRays、Grid、HueSaturation、LUT1D・LUT3D、LensDistortion、Noise、Outline、Pixelation、RealisticBokeh、Scanline、Sepia、ShockWave、TiltShift、ToneMapping、Vignette ほか）。書き方は `mainImage(inputColor, uv, out outputColor)` の形で、three.js の効果ファイル（uniforms と fragmentShader）とは違う。今の Motolii の読み口（`filament/three_isf.cpp`）ではそのまま読めない。
+- 物差しで見ると、この系統は「薄く掛けた時だけ高級」：粒子状のノイズ、周辺減光、ごく弱い色収差、ティルトシフト、走査線、グリッド、ASCII、色の段数を落とす（ColorDepth）。強く掛けると安っぽい側に落ちる。
+- 絵はまだ撮っていない。
