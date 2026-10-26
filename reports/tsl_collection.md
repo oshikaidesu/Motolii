@@ -251,3 +251,26 @@ singularity と tornado（MisterPrada）、hologram-particles、three.js-tsl-san
 - GPU だけの時間は測れていない。three.js の `trackTimestamp` は、全体（13.0 ms）より長い 75.3 ms を返したので信用できず、外した。上の表の 1 コマには、Motolii では要らない毎コマの読み戻し（1920×1080 で 8 MB）が入っている。
 - 一番遅いコマは、平均を大きく超えることがある（CRT で 32.2 ms）。原因はまだ分けていない。
 - Dawn の記録と流し直し（dawn_capture.sh、replay_on_dawn、capture_list）は、取り込んだ物が正しいかを確かめる道具として残す。
+
+## 取り込み時の変換をしている既存の物：ChatGPT に幅広く聞いた（10/26）
+
+- 前提：取り込みの時は多少遅くてよい。つまり「変換」。作者の three.js を 1 回動かして、WGSL・入力の繋ぎ方・段の形を取り出し、再生は Motolii の 1 つの世界で値だけ変える。
+- 聞き方：codex CLI（`codex --search exec -m gpt-6-chat-thinking`、ウェブ検索つき）。質問は `reports/tsl/chatgpt_conversion_survey_prompt.md`、答えはそのまま `reports/tsl/chatgpt_conversion_survey.md`（53 KB、英・日・中・韓）。
+- ChatGPT の結論：任意の TSL の何段も描く効果を「意味のある段の形＋時間やつまみの置き場所」まで自動で変換する OSS は見つからない。近い 3 つは WebGPUReconstruct、WebGPU Recorder、ISF＋ISFMSLKit。
+- 実際の倉庫で確かめた（gh api と README）：
+
+| 名前 | ライセンス・最終更新 | 確かめた事 |
+|---|---|---|
+| Chainsawkitten/WebGPUReconstruct | MIT、2026-10-26 | ブラウザの WebGPU を記録してネイティブの Dawn・wgpu で流し直す。目的はデバッグと再現（README）。Motolii が既に持つ Dawn の記録・流し直しと同じ種類で、時間を変えて繰り返さない |
+| brendan-duncan/webgpu_recorder | MIT、2026-06-08 | .wgpu は JSON の `init`（1 回）・`frames`（コマごとの命令の並び）・`data`（中身）に分かれる（README の Binary Recording Format）。再生役は JS（webgpu_player.js）で、記録したコマを順に流す |
+| mrRay/ISF_Spec | MIT、2025-03-20 | 何段も描く・前のコマを残す・時間・つまみをデータで書く形式。Motolii は既に読んでいる（`filament/isf.cpp`） |
+| mrRay/ISFMSLKit | GitHub では NOASSERTION（ChatGPT は BSD と言うが未確認）、2026-09-16 | ISF を Metal で動かす |
+| takahirox/tsl-node-editor | MIT、2026-10-16 | TSL のノード編集。出すのは TSL と three.js のコード |
+| dfranx/SHADERed | MIT、2023-09-22 | シェーダーの IDE、Shadertoy を取り込むプラグイン |
+| vinay/ShaderToyX | 無い（404） | ChatGPT の誤り |
+
+- 分かった事：
+  - 「記録して流し直す」道具（Dawn、WebGPUReconstruct、WebGPU Recorder、wgpu、GFXReconstruct、RenderDoc）は、どれも記録した値のまま前に流す。時間やつまみを差し替えて同じコマを繰り返す道具は無い。
+  - 「段の形を値ごとデータで書いて、ネイティブで毎コマ回す」形は ISF が既に持ち、Motolii も既に読める。
+  - 二つを繋ぐ所（記録や three.js の段の組み立てから、ISF のような段の形を作る所）は、既存の物が無い。
+- ChatGPT が挙げた、動画編集ならではの注意：前のコマの絵を使う効果（CRT など）は、時間を戻したり飛ばしたりすると、手前のコマから計算し直す必要がある。
