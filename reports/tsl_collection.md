@@ -139,3 +139,20 @@ singularity と tornado（MisterPrada）、hologram-particles、three.js-tsl-san
   - 順に描く
   - Canvas で絵を作る
   - 読み戻す
+
+## 4 種類を誰が受け持つか（10/26）
+
+- 何段も描く 19 本の作者の JS が、three.js の描く仕組みを通してしているのは、4 種類（描き先を作る・順に描く・Canvas で絵を作る・読み戻す）。それぞれ Motolii に同じ働きの物はある。ただ、作者の JS が呼ぶのは Web の決まりの呼び出しなので、そのままでは届かない。
+  - 描き先・順に描く：Motolii の画面の効果の口（`screen_door`）は、Filament の決まり（絵とサンプラーを組にして `@group(0)`、頂点は自前、`screen_door.h:27-32`）。three.js の WGSL（テクスチャは `@group(1)`、頂点も three.js の物）は載らない。そのまま描けるのは、装置を借りて描く口（`gpu_door`、`tsl_on_dawn` で確かめ済み）。
+  - Canvas の絵：ThorVG は Canvas 2D の決まりを持たない（形・文字・絵の自前の部品だけ）。Shader Lab は Canvas 2D の呼び出しを 19 種類使う。ThorVG で受けると、1 つずつ訳すことになる。
+  - 読み戻し：`thing_fx_cover` は Filament の物を読む口。作者の JS が呼ぶのは three.js の `readRenderTargetPixelsAsync`、その先は WebGPU の `mapAsync`。
+  - 追跡の計算：`tracker.ts` は QuickJS でそのまま動く（済み）。
+- なので、作者の JS から見える口を、Web の決まりの形で出す。中身は、どれも既存の物。
+  - JS エンジン：Motolii の QuickJS-ng のまま
+  - Node-API：NativeScript の `quickjs-api.c`（napi-android、OpenJS の MIT）
+  - WebGPU：Dawn 自身の口（dawn.node、Node-API で書かれている）
+  - Canvas 2D：`@napi-rs/canvas`（Node-API）
+- 確かめた事実：
+  - `quickjs-api.c` は、NativeScript が手を入れた QuickJS-ng 0.11.0 に合わせてある。足された関数 3 つ（`JS_IsArrayBuffer2`、`JS_NewString16`、`JS_WeakRef_Deref`、`quickjs.h:1273-1276`）を使うので、Motolii の 0.17.0 の見出しでは組み立てられない（誤り 18）。0.17 に書き換えると移植になるので、NativeScript の QuickJS-ng（`source_ng`）とひと組で借りる。
+  - Node-API の関数の数：NativeScript は 130 を持つ。Dawn の口が要るのは 72 で、足りないのは `napi_fatal_error` の 1 つ。`@napi-rs/canvas` が要るのは 67 で、足りないのは裏の糸の仕事（async work と threadsafe function）の 7 つ。どれも組み立て済みの部品の中身（`nm -u`）から数えた。
+  - NativeScript の組は、`.node` の部品を読み込む所を持たない。読み込みは `dlopen` して `napi_register_module_v1` を呼ぶだけで、Hermes（`hermes_napi_load_module`）と Node に手本がある。
