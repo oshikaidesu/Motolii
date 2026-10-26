@@ -87,4 +87,7 @@ AwemeLike（https://github.com/ZZZZou/AwemeLike 、MIT と書いてある）の 
   | RainEffect | 1,785 | 表記なし（同） | 窓の雨粒（WebGL） |
   | LiquidDistortion | 474 | 表記なし（同） | 液体の歪み（PixiJS） |
   | WebGLBlobs | 94 | MIT | 球の変形と色（three.js） |
-- 絵（見本の画面）はまだ撮っていない。物差しで本当に高級かは、絵を見てから決める。
+- 10/26 絵を撮った（`reports/codrops_sheet.jpg`）。tympanus.net は画面に出さないブラウザを 403 で弾く（ロボット避け。回り込まない）ので、GitHub のソース（MIT）を手元に取り、この Mac の中で開いて撮った。13 個のうち 12 個が組み立て無しで開けた（RainEffect だけ組み立てが要る）。
+  - 物差しに合う：KineticTypePageTransition、GlitchyGrid、TypographyMotion、ScrollBlurTypography、TextClipScroll、OnScrollTypographyAnimations、RepetitiveTypography、TextDistortionEffects（雑誌やポスターの文字組み、色を絞る）。GlitchPerspective は強いがデザインされている。
+  - 止め絵では分からない：CrosshairDistortion（マウスで動く）、WebGLBlobs（点だけ）。
+  - 気を付ける点：ほとんどがスクロールやマウスで動き、時間では動かない。動画にするには時間に合わせてスクロールを進める必要がある（timesnap の `preparePageForScreenshot` で 1 コマごとにページを動かせる）。見本のページには Codrops の見出しや広告（hotjar、HIRED など）が入るので、効果の部分だけを使う手間がある。
