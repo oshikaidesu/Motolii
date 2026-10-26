@@ -150,3 +150,12 @@ shaderport（quizzyjoy/shaderport、Apache-2.0）は、shader-effects-inc/shader
 - 外側：`filament/tsl/jsrh_napi/host.cc`（QuickJS の qjs.c の形、Node の process.dlopen の形）、`build.sh`。
 - 確かめ：Motolii の dawn.node で requestAdapter・requestDevice・createBuffer・writeBuffer・mapAsync が通り、`1,2,3,4` と読み戻せた（`jsrh_napi/smoke.ts`）。dawn.node が求める Node-API 72 個は全部そろった（nm で突き合わせ）。NativeScript の土台（前の節、穴 4 つ）は消した。
 - dawn.node に持ち主の装置を渡す直し `filament/tsl/dawn_lend.patch`（呼び先の表を持ち主の Dawn に向ける `motolii_dawn_procs`、後回し処理を持ち主のインスタンスで回す、`wrapDevice`・`wrapTexture`、借りた装置は壊さない `Lent`）は組めたが、まだ動かして確かめていない。
+
+## 作者のレンダラーが Motolii の QuickJS で動いた（10/26）
+
+- `filament/tsl/jsrh_napi/shaders.ts`：Node の確かめ（`check_node/shaders_check.mjs`）と同じ中身を QuickJS 用に包んだ物。作者の組み立て済み `shaders@4.0.5` を esbuild で 1 本にまとめる（`--define:process.env.NODE_ENV="production"`、配布物を束ねるときの普通のやり方。作者の配布物の `process.emit` と `getBuiltinModule` は「あれば使う」形なので、そのまま）。
+- QuickJS に無くて作者の配布物が触る物は、既存の物で埋めた（`jsrh_napi/web_globals.ts`）：URL・URLSearchParams・structuredClone（core-js）、AbortController（abort-controller 3.0.0、MIT）、TextEncoder・TextDecoder（fast-text-encoding 1.0.6、Apache-2.0、Google）、setTimeout などは QuickJS 自身の `qjs:os` の時計。
+- 結果（Plasma の上に Glitch、640×360、Motolii の dawn.node）：
+  - 60 コマ目の絵は、Node で同じく描いた絵と 1 バイトも違わない。
+  - 1 コマ（作者自身の GPU 待ちを含む）：QuickJS で 5.54 ms（120 コマ）、5.31 ms（300 コマ）。Node（V8）は 1.95 ms。QuickJS は JS を機械語にせず読みながら動かすので遅いが、60fps の枠（16.7 ms）の 3 分の 1。
+- まだの事：Filament と同じ装置で描くこと（dawn_lend.patch の wrapDevice・wrapTexture）。今は dawn.node が自分で装置を作っている。

@@ -2,8 +2,10 @@
   "private": true,
   "description": "TSL effects found on the net, turned to WGSL by three.js's own builder (see convert.ts). Versions pinned: three.js as Shader Lab and the converted collections use it.",
   "dependencies": {
+    "abort-controller": "^3.0.0",
     "core-js": "3.45.1",
     "event-target-shim": "^6.0.2",
+    "fast-text-encoding": "^1.0.6",
     "shaders": "^4.0.5",
     "three": "0.185.1"
   },
