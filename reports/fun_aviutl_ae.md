@@ -6,6 +6,7 @@
 - **AE のプラグイン**：一覧 7 本から、絵を作る物 30 種。3 本以上に出たのは Element 3D・Trapcode Particular・Optical Flares・Saber・Plexus・Newton の 6 つ。
 - **AviUtl 無印**：有名 89 包（一覧 24 本、前の下調べ `aviutl1_survey.md`）から、絵を作る物 40 包。Motolii では無印のスクリプトはまだ動かない（読み込み自体が未実装）。
 - **AviUtl2 の変わり種**：同梱の 193 包から、一覧には出ないが面白い物 30 包。今そのまま動くのは 11 包。
+- **流行りたての物が漏れた**：Tracery などの追跡の HUD（ブロブ追跡）は、定番の一覧に出ないので拾えていなかった（4 章）。
 - **共通の穴**：粒子（Particular・Stardust・拡張パーティクル・GParticle）、点と線の網（Plexus）、光る線（Saber）、レンズフレア（Optical Flares・カスタムフレア）。どれも AE でも AviUtl でも人気だが、Motolii には仕組みが無い。
 - **AviUtl2 で止まる理由の上位**（下の 30 包の中）：`obj.module`（Windows の DLL）8 包、`obj.computeshader` 4 包、`obj.rand` 3 包、本体の効果を名前で 4 包、図形の読み込み 2 包。
 
@@ -130,7 +131,21 @@
 | twinkle_sl（seilor0） | きらめき | 動く |
 | VectorCanvas（mogesystem） | ベクター図形 | 23 本すべて動く |
 
-## 4. 共通の穴と借り元の候補
+## 4. 流行りたての物（定番の一覧にはまだ出ない）
+
+定番の一覧は何年も前からある物が並ぶので、流行りたての物が漏れる。10/26 にユーザーが Tracery を挙げて気付いた。漏れた種類と、その探し方の穴をここに書く。
+
+| 名前（作者） | 作る絵 | 出典 | Motolii で |
+|---|---|---|---|
+| Tracery（Pseudo Effects、aescripts） | 色で物を追い、四角・中心の印・文字・矢印を重ね、追った点を線でつなぐ（順番・星形・全部・最小全域木） | aescripts の製品ページ（403 で読めず、検索の要約から） | **無い** |
+| AE Blob Tracker（Kyle Sullivan、無料） | 明るさ・色・動きでブロブを見つけ、HUD 風の四角と座標を重ねる | https://github.com/KyleSullivan321/AE-Blob-Tracker （ライセンスの書類なし、星 95） | 借りられない（ライセンスなし） |
+| blob-tracey（Batkixni） | 上の物を真似た Web 版 | https://github.com/Batkixni/blob-tracey （MIT、TypeScript、星 0、中身は未読） | 候補（未確認） |
+| TouchDesigner の Blob Track | 同じ見た目の定番の作り方 | https://docs.derivative.ca/Blob_Track_CHOP （中身は OpenCV） | 候補：Motolii は OpenCV を使っている（緑を抜いた動画の輪郭、ASSETS.md） |
+| TrackingラインEasy（ティム、AviUtl 無印） | 追跡の線 | 有名 89 包の 84 番（34,885 回再生）。2 章の表から落としていた | 無印は未対応 |
+
+探し方の穴：aescripts の新着、TikTok・Instagram で流行っている見た目の名前（blob tracking など）、TouchDesigner のチュートリアルの流行りを見ていない。
+
+## 5. 共通の穴と借り元の候補
 
 どれも「候補（未確認）」。中身を読んでから決める。
 
@@ -142,6 +157,7 @@
 | レンズフレア | Optical Flares・カスタムフレア | ISF の `Lens Flare.fs`（今ある）より作り込める物は未調査 |
 | Windows の DLL | VRM・ntsc-rs・budoux・JPEGCrush など 8 包 | DLL の元ソースがある物（ntsc-rs は Rust で公開）は Mac 向けに作り直す道（`aviutl1_survey.md` 4 章と同じ） |
 | 3D キャラ | VRM_Toolkit、YMM4 の 3D モデル読み込みプラグイン | Filament の glTF（VRM は glTF の拡張） |
+| 追跡の HUD | Tracery・AE Blob Tracker・TrackingラインEasy | OpenCV（今使っている）で物を見つけ、ThorVG で四角と線を描く。TouchDesigner の Blob Track と同じ組み方 |
 
 前に話に出た「YMM4 でマイクラを動かせる物」は見つからなかった。近い物は YMM4 3D モデル読み込みプラグイン（BOOTH、OBJ・PMX・GLB など）。
 
