@@ -85,3 +85,11 @@ Shader Lab（basementstudio/shader-lab、Apache-2.0）の効果を、外にあ�
 - 半分足らず（20 本）は、昔からある効き方の書き直しだった。TSL を殺しても、元の形で手に入る。
 - TSL にしか無い 11 本は、照準の飾り、plexus、追跡の枠、日光写真、筋ガラスなど、Shader Lab らしい「今っぽい」見た目に集中している。TSL を殺して失うのは、ここ。
 - 追跡の「見つける所」は TSL ではなく、普通の JS（`tracker.ts`）だった。
+
+## 10/26 の直し：照らした先が間違っていた
+
+- **EffectCraft は手本にしない。** 自分で「つまみの名前・順番・初めの値まで After Effects に合わせた」と書いている（`docs/effects.md` の頭）。AE の古い技を、古いまま写した物。
+- **Noisemaker の多くも同じ。** `filter/hatch`（Graphic Pen、Charcoal…）や `filter/relief`（Bas Relief、Plaster、Note Paper）は、Photoshop の古いフィルタの名前をそのまま並べている。
+- なので「同じ効き方の物が外にある 20 本」の多くは、古い技の代わりが見つかっただけ。新しい表現の元ではない。
+- **数え方が逆だった。** Motolii が欲しいのは、ネットで見つかる新しい表現。それは TSL にしか無い 11 本の側と、Shader Lab が古い技を広げた 13 本の側にある。TSL を殺すと、ちょうどその新しい所を失う。
+- 新しい表現が TSL で書かれて出てくる以上、殺すべきなのは TSL ではない。TSL から GPU までの間に Motolii 自身が足している翻訳の層（WGSL の口の決まり、Filament）の方。
