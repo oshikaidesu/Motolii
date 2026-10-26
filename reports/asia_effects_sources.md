@@ -67,3 +67,24 @@ AwemeLike（https://github.com/ZZZZou/AwemeLike 、MIT と書いてある）の 
 - **blob-tracey**（Batkixni、MIT、https://github.com/Batkixni/blob-tracey 、TypeScript 約 3,900 行、外の部品はアイコンだけ）：AE Blob Tracker を真似た Web の道具。枠（四角・角かっこ・十字・輪郭・凸包・六角）、中心の印、座標のラベル（16 進・百分率ほか）、点のつなぎ方（ドロネー・最小全域木・近い K 個・星形・全部）、枠の中だけの画素の崩し、ちらつきの抑え、設定の JSON。
 - 見つける所（BlobDetector）も描く所（OverlayRenderer）もブラウザの Canvas（`document.createElement('canvas')`・`getImageData`）に頼る。手を入れずに動かすには本物のブラウザが要る。
 - p5.js を動かすのと同じ道（AviUtl2Browser_H の約束）。手本は oov の aviutl_browser（MIT、中身は CEF）。次はそのソースを読み、要る物を出す。
+
+## 高級側の見本の置き場：Codrops（10/26）
+- Codrops（tympanus.net）の見本は「特に書いていなければ MIT」（https://tympanus.net/codrops/licensing/ ）。「再配布・販売はだめ」はデザインの素材の方の決まりで、見本のコードには当たらない（前にこれを取り違えていた）。GitHub に 349 個。
+- どれもブラウザで動く（DOM・CSS・SVG・WebGL）。ブラウザ表示の道ができれば、blob-tracey・p5.js と同じく手を入れずに動く。
+- 物差しに合いそうな物（文字の動きが多い。MV の文字に直結する）：
+  | 見本 | 星 | ライセンス表記 | 中身 |
+  |---|---|---|---|
+  | OnScrollTypographyAnimations | 349 | MIT | 文字の動きの案の集まり |
+  | ScrollBlurTypography | 149 | MIT | ぼけた文字が現れる |
+  | KineticTypePageTransition | 127 | MIT | キネティックタイポの場面転換 |
+  | TypographyMotion | 85 | MIT | Thibaud Allie の文字のずらし（の作り直し） |
+  | RepetitiveTypography | 43 | MIT | Domagoj Štrok のキネティックタイプ（の作り直し） |
+  | TextClipScroll | 73 | MIT | SVG の切り抜きで文字 |
+  | LetterEffects | 207 | 表記なし（サイトの決まりで MIT） | anime.js の文字の動き |
+  | TextDistortionEffects | 100 | 表記なし（同） | Blotter.js の文字の歪み |
+  | GlitchPerspective・GlitchyGrid | 51・41 | MIT | 抑えたグリッチ |
+  | CrosshairDistortion | 47 | MIT | 十字の照準の歪み |
+  | RainEffect | 1,785 | 表記なし（同） | 窓の雨粒（WebGL） |
+  | LiquidDistortion | 474 | 表記なし（同） | 液体の歪み（PixiJS） |
+  | WebGLBlobs | 94 | MIT | 球の変形と色（three.js） |
+- 絵（見本の画面）はまだ撮っていない。物差しで本当に高級かは、絵を見てから決める。
