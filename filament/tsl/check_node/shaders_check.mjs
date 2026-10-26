@@ -7,9 +7,9 @@
 import { createRequire } from "node:module"
 import * as fs from "node:fs"
 
-const [presetFile, W, H, FRAMES, outFile] = process.argv.slice(2)
+const [presetFile, W, H, FRAMES, outFile] = globalThis.motolii?.args ?? process.argv.slice(2)
 const w = +W, h = +H, frames = +FRAMES
-const dawn = createRequire(import.meta.url)(process.env.DAWN_NODE)
+const dawn = createRequire(import.meta.url)(globalThis.motolii?.dawnNode ?? process.env.DAWN_NODE)
 Object.assign(globalThis, dawn.globals)
 const gpu = dawn.create([])
 Object.defineProperty(globalThis, "navigator", { value: { gpu: Object.assign(gpu, { getPreferredCanvasFormat: () => "rgba8unorm" }) }, configurable: true })
@@ -17,9 +17,12 @@ Object.assign(globalThis, { self: globalThis, requestAnimationFrame: (f) => setT
 // (what the renderer reads of a browser window: the page's size and pixel ratio, its events, media queries; nothing happens there)
 Object.assign(globalThis, { window: Object.assign(globalThis, { innerWidth: w, innerHeight: h, devicePixelRatio: 1, addEventListener() {}, removeEventListener() {}, matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }) }) })
 
-const adapter = await gpu.requestAdapter()
-const device = await adapter.requestDevice({ requiredFeatures: [...adapter.features] })   // (as the authors' createSharedDevice asks)
-const target = device.createTexture({ size: [w, h], format: "rgba8unorm", usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC | GPUTextureUsage.TEXTURE_BINDING })
+// Inside Motolii (dawn_probe/node_effects.cpp sets globalThis.motolii): Filament's own device and a texture of it, lent
+// to Dawn's binding (dawn_lend.patch: wrapDevice, wrapTexture); otherwise a device of our own
+const lent = globalThis.motolii
+const adapter = lent ? { features: new Set(), info: {} } : await gpu.requestAdapter()
+const device = lent ? dawn.wrapDevice(lent.device, lent.instance) : await adapter.requestDevice({ requiredFeatures: [...adapter.features] })   // (as the authors' createSharedDevice asks)
+const target = lent ? dawn.wrapTexture(lent.device, lent.texture) : device.createTexture({ size: [w, h], format: "rgba8unorm", usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC | GPUTextureUsage.TEXTURE_BINDING })
 const context = { configure() {}, unconfigure() {}, getConfiguration() { return { format: "rgba8unorm" } }, getCurrentTexture: () => target }
 const canvas = { width: w, height: h, style: { width: `${w}px`, height: `${h}px` }, parentElement: null, getBoundingClientRect: () => ({ x: 0, y: 0, left: 0, top: 0, width: w, height: h, right: w, bottom: h }),
   addEventListener() {}, removeEventListener() {}, getContext: (kind) => (kind === "webgpu" ? context : null) }
@@ -43,4 +46,4 @@ for (let y = 0; y < h; y++) got.copy(rows, y * w * 4, y * stride, y * stride + w
 fs.writeFileSync(outFile, rows)
 console.log(`drawn ${frames} frames ${w}x${h}, ${ms.toFixed(2)} ms a frame (the renderer's own wait for the GPU included)`)
 renderer.dispose()
-process.exit(0)
+if (!lent) process.exit(0)

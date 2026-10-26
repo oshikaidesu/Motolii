@@ -138,3 +138,15 @@ shaderport（quizzyjoy/shaderport、Apache-2.0）は、shader-effects-inc/shader
   - 約束の不具合は runtimes では直っていた。
 - 通った所：`requestAdapter`、`requestDevice`、`createBuffer`。通らない所：`writeBuffer`。
 - 切り直し：NativeScript の QuickJS の Node-API は、dawn.node の使い方に対して穴が多く、直しのファイルを積み上げることになる。Node-API の本家は Node。Node を部品として埋め込む libnode は Homebrew に無い。組み立て済みの物は個人の倉庫（alshdavid-misc/libnode-prebuilt、v22.18.0、macOS arm64 43 MB）にあるが、出所を確かめずには使わない。公式の材料から組むと大きい（前の試しで材料だけ 7.9 GB）。
+
+## JS の土台は Motolii の QuickJS のまま：JsRuntimeHost の Node-API を取り付けた（10/26）
+
+- Node（libnode）は止めた：作者のレンダラー 1 つのために、V8 という JS の土台をもう 1 つ（材料だけで 4.4 GB、組み立て途中で止めた）抱え込むのは大きすぎる（ユーザー）。
+- BabylonJS/JsRuntimeHost（980cfb0、MIT）の QuickJS の Node-API は、手を入れた QuickJS ではなく本家の quickjs-ng（93d3f7d、2026-06-30、0.16 と 0.17 の間）と組む作りで、すでにある JSContext に取り付ける口 `Napi::Attach(JSContext*)` を持つ（`Core/Node-API/Source/env_quickjs.cc`）。なので Motolii が script.cpp で使っている Homebrew の QuickJS-ng 0.17（libqjs）にそのまま付く。JS の土台は 1 つのまま。
+- 直しのファイル 1 枚（`filament/tsl/jsrh_napi/jsrh_qjs017_dawn.patch`、108 行）：
+  - 0.17 で `JS_NewArrayBuffer` が解放の関数から realloc の関数に替わった所を、0.17 の quickjs.h の決まり（大きさ 0 なら解放して NULL）どおりに包む。0.17 で組んだときの誤りはこの 1 つだけ（NativeScript の物は 18〜19）。
+  - JsRuntimeHost に無い 3 つ：`napi_add_finalizer`（JsRuntimeHost の `napi_create_external` と同じ ExternalData を、物にだけ見える Symbol で持たせる）、`napi_set_instance_data` と `napi_get_instance_data`（NativeScript と同じく env に置き場）。`napi_fatal_error` は外側（Node と同じ文言）。
+  - NAPI_VERSION=8 で組む（dawn.node と同じ版。版が低いと `napi_detach_arraybuffer` などが C の名前にならない）。
+- 外側：`filament/tsl/jsrh_napi/host.cc`（QuickJS の qjs.c の形、Node の process.dlopen の形）、`build.sh`。
+- 確かめ：Motolii の dawn.node で requestAdapter・requestDevice・createBuffer・writeBuffer・mapAsync が通り、`1,2,3,4` と読み戻せた（`jsrh_napi/smoke.ts`）。dawn.node が求める Node-API 72 個は全部そろった（nm で突き合わせ）。NativeScript の土台（前の節、穴 4 つ）は消した。
+- dawn.node に持ち主の装置を渡す直し `filament/tsl/dawn_lend.patch`（呼び先の表を持ち主の Dawn に向ける `motolii_dawn_procs`、後回し処理を持ち主のインスタンスで回す、`wrapDevice`・`wrapTexture`、借りた装置は壊さない `Lent`）は組めたが、まだ動かして確かめていない。

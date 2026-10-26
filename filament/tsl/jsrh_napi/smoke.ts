@@ -1,4 +1,4 @@
-// requestAdapter, requestDevice, a buffer written and read back, on Motolii's dawn.node in QuickJS.
+// requestAdapter, requestDevice, a buffer written and read back, on Motolii's dawn.node in Motolii's QuickJS (jsrh_napi).
 import "./web_globals"
 import * as std from "qjs:std"
 const dawn = (globalThis as any).loadAddon(std.getenv("DAWN_NODE"))

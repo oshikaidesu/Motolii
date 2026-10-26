@@ -1,0 +1,168 @@
+diff --git a/third_party/dawn/src/dawn/node/Module.cpp b/third_party/dawn/src/dawn/node/Module.cpp
+index cb70833c7..794b3ea89 100644
+--- a/third_party/dawn/src/dawn/node/Module.cpp
++++ b/third_party/dawn/src/dawn/node/Module.cpp
+@@ -25,6 +25,8 @@
+ // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
++#include <dlfcn.h>
++
+ #include <filesystem>
+ #include <string>
+ #include <tuple>
+@@ -33,7 +35,10 @@
+ 
+ #include "dawn/dawn_proc.h"
+ #include "src/dawn/node/binding/Flags.h"
++#include "src/dawn/node/binding/AsyncRunner.h"
+ #include "src/dawn/node/binding/GPU.h"
++#include "src/dawn/node/binding/GPUDevice.h"
++#include "src/dawn/node/binding/GPUTexture.h"
+ 
+ #ifdef DAWN_EMIT_COVERAGE
+ extern "C" {
+@@ -71,6 +76,33 @@ Napi::Value CreateGPU(const Napi::CallbackInfo& info) {
+     return wgpu::interop::GPU::Create<wgpu::binding::GPU>(env, std::move(flags));
+ }
+ 
++// wrapDevice(device, instance): an embedder's WGPUDevice and the WGPUInstance it came from (addresses as BigInts)
++// as a GPUDevice, made as GPUAdapter::requestDevice makes one (GPUAdapter.cpp:250-255), lent (GPUDevice::Lent).
++Napi::Value WrapDevice(const Napi::CallbackInfo& info) {
++    Napi::Env env = info.Env();
++    bool exact = false;
++    auto device = reinterpret_cast<WGPUDevice>(info[0].As<Napi::BigInt>().Uint64Value(&exact));
++    auto instance = reinterpret_cast<WGPUInstance>(info[1].As<Napi::BigInt>().Uint64Value(&exact));
++    wgpu::DeviceDescriptor desc{};
++    wgpu::interop::Promise<wgpu::interop::Interface<wgpu::interop::GPUDeviceLostInfo>> lost(env, PROMISE_INFO);
++    auto gpu_device = std::make_unique<wgpu::binding::GPUDevice>(env, desc, wgpu::Device(device), lost,
++                                                                 wgpu::binding::AsyncRunner::Create(instance));
++    gpu_device->Lent();
++    return wgpu::interop::GPUDevice::Bind(env, std::move(gpu_device));
++}
++
++// wrapTexture(device, texture): an embedder's WGPUTexture of that device as a GPUTexture, made as
++// GPUDevice::createTexture makes one (GPUDevice.cpp:369).
++Napi::Value WrapTexture(const Napi::CallbackInfo& info) {
++    Napi::Env env = info.Env();
++    bool exact = false;
++    auto device = reinterpret_cast<WGPUDevice>(info[0].As<Napi::BigInt>().Uint64Value(&exact));
++    auto texture = reinterpret_cast<WGPUTexture>(info[1].As<Napi::BigInt>().Uint64Value(&exact));
++    wgpu::TextureDescriptor desc{};
++    return wgpu::interop::GPUTexture::Create<wgpu::binding::GPUTexture>(env, wgpu::Device(device), desc,
++                                                                        wgpu::Texture(texture));
++}
++
+ #ifdef DAWN_EMIT_COVERAGE
+ struct Coverage {
+     Coverage() : output_path_{GetOutputPath()} {
+@@ -104,13 +136,19 @@ struct Coverage {
+ // object.
+ NAPI_MODULE_EXPORT Napi::Object Initialize(Napi::Env env, Napi::Object exports) {
+     // Set all the Dawn procedure function pointers.
+-    dawnProcSetProcs(&dawn::native::GetProcs());
++    // An embedder that already runs Dawn (the same version) may give its own proc table, so that what this module
++    // does reaches that Dawn and its devices (Motolii: Filament's): a C function `motolii_dawn_procs` it exports.
++    using HostProcs = const DawnProcTable* (*)();
++    auto hostProcs = reinterpret_cast<HostProcs>(dlsym(RTLD_DEFAULT, "motolii_dawn_procs"));
++    dawnProcSetProcs(hostProcs ? hostProcs() : &dawn::native::GetProcs());
+ 
+     // Register all the interop types
+     exports.Set(Napi::String::New(env, "globals"), wgpu::interop::Initialize(env));
+ 
+     // Export function that creates and returns the wgpu::interop::GPU interface
+     exports.Set(Napi::String::New(env, "create"), Napi::Function::New<CreateGPU>(env));
++    exports.Set(Napi::String::New(env, "wrapDevice"), Napi::Function::New<WrapDevice>(env));
++    exports.Set(Napi::String::New(env, "wrapTexture"), Napi::Function::New<WrapTexture>(env));
+ 
+ #ifdef DAWN_EMIT_COVERAGE
+     Coverage* coverage = new Coverage();
+diff --git a/third_party/dawn/src/dawn/node/binding/AsyncRunner.cpp b/third_party/dawn/src/dawn/node/binding/AsyncRunner.cpp
+index 9c16028b5..869156410 100644
+--- a/third_party/dawn/src/dawn/node/binding/AsyncRunner.cpp
++++ b/third_party/dawn/src/dawn/node/binding/AsyncRunner.cpp
+@@ -33,13 +33,13 @@
+ namespace wgpu::binding {
+ 
+ // static
+-std::shared_ptr<AsyncRunner> AsyncRunner::Create(dawn::native::Instance* instance) {
++std::shared_ptr<AsyncRunner> AsyncRunner::Create(WGPUInstance instance) {
+     auto runner = std::make_shared<AsyncRunner>(instance);
+     runner->weak_this_ = runner;
+     return runner;
+ }
+ 
+-AsyncRunner::AsyncRunner(dawn::native::Instance* instance) : instance_(instance) {}
++AsyncRunner::AsyncRunner(WGPUInstance instance) : instance_(instance) {}
+ 
+ void AsyncRunner::Begin(Napi::Env env) {
+     assert(tasks_waiting_ != std::numeric_limits<decltype(tasks_waiting_)>::max());
+@@ -78,7 +78,7 @@ void AsyncRunner::ScheduleProcessEvents(Napi::Env env) {
+                                     }
+ 
+                                     self->process_events_queued_ = false;
+-                                    wgpuInstanceProcessEvents(self->instance_->Get());
++                                    wgpuInstanceProcessEvents(self->instance_);
+                                     self->ScheduleProcessEvents(env);
+                                 }),
+         });
+diff --git a/third_party/dawn/src/dawn/node/binding/AsyncRunner.h b/third_party/dawn/src/dawn/node/binding/AsyncRunner.h
+index f61660b01..e1cc76e5f 100644
+--- a/third_party/dawn/src/dawn/node/binding/AsyncRunner.h
++++ b/third_party/dawn/src/dawn/node/binding/AsyncRunner.h
+@@ -45,7 +45,7 @@ namespace wgpu::binding {
+ class AsyncRunner {
+   public:
+     // Creates an AsyncRunner to use to process events on the instance.
+-    static std::shared_ptr<AsyncRunner> Create(dawn::native::Instance* instance);
++    static std::shared_ptr<AsyncRunner> Create(WGPUInstance instance);
+ 
+     // Begin() should be called when a new asynchronous task is started.
+     // If the number of executing asynchronous tasks transitions from 0 to 1, then a function
+@@ -65,13 +65,14 @@ class AsyncRunner {
+     void Reject(Napi::Env env, interop::Promise<void> promise, Napi::Error error);
+ 
+     // Use AsyncRunner::Create instead of this constructor.
+-    explicit AsyncRunner(dawn::native::Instance* instance);
++    explicit AsyncRunner(WGPUInstance instance);
+ 
+   private:
+     void ScheduleProcessEvents(Napi::Env env);
+ 
+     std::weak_ptr<AsyncRunner> weak_this_;
+-    const dawn::native::Instance* const instance_;
++    // (only its events are processed, through the proc table: an embedder's own instance does as well as ours)
++    const WGPUInstance instance_;
+     uint64_t tasks_waiting_ = 0;
+     bool process_events_queued_ = false;
+ };
+diff --git a/third_party/dawn/src/dawn/node/binding/GPUDevice.h b/third_party/dawn/src/dawn/node/binding/GPUDevice.h
+index 5e048d595..634adb6ab 100644
+--- a/third_party/dawn/src/dawn/node/binding/GPUDevice.h
++++ b/third_party/dawn/src/dawn/node/binding/GPUDevice.h
+@@ -62,6 +62,12 @@ class GPUDevice final : public interop::GPUDevice, EventTarget {
+               std::shared_ptr<AsyncRunner> async);
+     ~GPUDevice() override;
+ 
++    // An embedder's device, lent (Module.cpp wrapDevice): never destroyed from here, its loss never told.
++    void Lent() {
++        lost_promise_.Discard();
++        destroyed_ = true;
++    }
++
+     void ForceLoss(wgpu::DeviceLostReason reason, const char* message);
+ 
+     // interop::GPUDevice interface compliance
+diff --git a/third_party/dawn/src/dawn/node/binding/GPU.cpp b/third_party/dawn/src/dawn/node/binding/GPU.cpp
+index 8bb24a52e..72597707d 100644
+--- a/third_party/dawn/src/dawn/node/binding/GPU.cpp
++++ b/third_party/dawn/src/dawn/node/binding/GPU.cpp
+@@ -122,7 +122,7 @@ GPU::GPU(Flags flags) : flags_(std::move(flags)) {
+     desc.nextInChain = &togglesDesc;
+     instance_ = std::make_unique<dawn::native::Instance>(
+         reinterpret_cast<const WGPUInstanceDescriptor*>(&desc));
+-    async_ = AsyncRunner::Create(instance_.get());
++    async_ = AsyncRunner::Create(instance_->Get());
+ }
+ 
+ interop::Promise<std::optional<interop::Interface<interop::GPUAdapter>>> GPU::requestAdapter(
