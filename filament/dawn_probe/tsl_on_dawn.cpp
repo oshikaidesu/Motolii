@@ -75,7 +75,6 @@ int main(int argc, char** argv) {
     like.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc;
     wgpu::Texture drawn = device.CreateTexture(&like);
 
-    // the plane's arrays: uv at location 0, position at location 1 (the vertex shader's own inputs)
     const auto buffer = [&](const std::string& bytes, wgpu::BufferUsage usage) {
         wgpu::BufferDescriptor room{};
         room.size = (bytes.size() + 3) & ~size_t(3);
@@ -86,17 +85,28 @@ int main(int argc, char** argv) {
         queue.WriteBuffer(b, 0, padded.data(), padded.size());
         return b;
     };
-    const std::string uv = slurp(dir + "uv.f32"), position = slurp(dir + "position.f32"), index = slurp(dir + "index.u16");
-    wgpu::Buffer uvs = buffer(uv, wgpu::BufferUsage::Vertex), positions = buffer(position, wgpu::BufferUsage::Vertex), indices = buffer(index, wgpu::BufferUsage::Index);
-    wgpu::VertexAttribute uv_at{};
-    uv_at.format = wgpu::VertexFormat::Float32x2;
-    uv_at.shaderLocation = 0;
-    wgpu::VertexAttribute position_at{};
-    position_at.format = wgpu::VertexFormat::Float32x3;
-    position_at.shaderLocation = 1;
-    wgpu::VertexBufferLayout layouts[2]{};
-    layouts[0].arrayStride = 8, layouts[0].attributeCount = 1, layouts[0].attributes = &uv_at;
-    layouts[1].arrayStride = 12, layouts[1].attributeCount = 1, layouts[1].attributes = &position_at;
+    // the mesh's arrays, one per vertex input in the order the builder gave them locations: attributes.txt, "<name> <type>"
+    // a line, each array in <name>.f32
+    const std::string index = slurp(dir + "index.u16");
+    wgpu::Buffer indices = buffer(index, wgpu::BufferUsage::Index);
+    std::vector<wgpu::Buffer> arrays;
+    std::vector<wgpu::VertexAttribute> ats;
+    std::vector<wgpu::VertexBufferLayout> layouts;
+    std::istringstream inputs(slurp(dir + "attributes.txt"));
+    for (std::string name, type; inputs >> name >> type;) {
+        const uint32_t n = type == "vec4" ? 4 : type == "vec3" ? 3 : type == "vec2" ? 2 : 1;
+        arrays.push_back(buffer(slurp(dir + name + ".f32"), wgpu::BufferUsage::Vertex));
+        wgpu::VertexAttribute at{};
+        at.format = n == 4 ? wgpu::VertexFormat::Float32x4 : n == 3 ? wgpu::VertexFormat::Float32x3 : n == 2 ? wgpu::VertexFormat::Float32x2 : wgpu::VertexFormat::Float32;
+        at.shaderLocation = (uint32_t)ats.size();
+        ats.push_back(at);
+    }
+    for (size_t i = 0; i < ats.size(); ++i) {
+        wgpu::VertexBufferLayout l{};
+        l.arrayStride = 4 * (ats[i].format == wgpu::VertexFormat::Float32x4 ? 4 : ats[i].format == wgpu::VertexFormat::Float32x3 ? 3 : ats[i].format == wgpu::VertexFormat::Float32x2 ? 2 : 1);
+        l.attributeCount = 1, l.attributes = &ats[i];
+        layouts.push_back(l);
+    }
 
     wgpu::ColorTargetState target{};
     target.format = wgpu::TextureFormat::RGBA8Unorm;
@@ -106,8 +116,8 @@ int main(int argc, char** argv) {
     fragment.targets = &target;
     wgpu::RenderPipelineDescriptor descriptor{};
     descriptor.vertex.module = vs;
-    descriptor.vertex.bufferCount = 2;
-    descriptor.vertex.buffers = layouts;
+    descriptor.vertex.bufferCount = layouts.size();
+    descriptor.vertex.buffers = layouts.data();
     descriptor.fragment = &fragment;
     wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&descriptor);
 
@@ -127,6 +137,14 @@ int main(int argc, char** argv) {
             e.buffer = keep.back();
         } else if (kind == "texture") {
             e.textureView = picture.CreateView();
+        } else if (kind == "sampler") {   // "<mag> <min> <wrapS> <wrapT>" as three.js's constants: 1003 nearest, 1006 linear; 1000 repeat, 1001 clamp, 1002 mirror
+            int mag, min, ws, wt;
+            plan >> mag >> min >> ws >> wt;
+            const auto filter = [](int f) { return f == 1003 || f == 1004 || f == 1005 ? wgpu::FilterMode::Nearest : wgpu::FilterMode::Linear; };
+            const auto wrap = [](int w) { return w == 1000 ? wgpu::AddressMode::Repeat : w == 1002 ? wgpu::AddressMode::MirrorRepeat : wgpu::AddressMode::ClampToEdge; };
+            wgpu::SamplerDescriptor how{};
+            how.magFilter = filter(mag), how.minFilter = filter(min), how.addressModeU = wrap(ws), how.addressModeV = wrap(wt);
+            e.sampler = device.CreateSampler(&how);
         } else { std::printf("FAIL a binding of kind %s\n", kind.c_str()); return 1; }
         groups[g].push_back(e);
     }
@@ -151,8 +169,7 @@ int main(int argc, char** argv) {
     wgpu::RenderPassEncoder pass = coder.BeginRenderPass(&pass_wish);
     pass.SetPipeline(pipeline);
     for (uint32_t g = 0; g < made.size(); ++g) pass.SetBindGroup(g, made[g]);
-    pass.SetVertexBuffer(0, uvs);
-    pass.SetVertexBuffer(1, positions);
+    for (uint32_t i = 0; i < arrays.size(); ++i) pass.SetVertexBuffer(i, arrays[i]);
     pass.SetIndexBuffer(indices, wgpu::IndexFormat::Uint16);
     pass.DrawIndexed((uint32_t)(index.size() / 2));
     pass.End();

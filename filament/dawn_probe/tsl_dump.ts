@@ -39,5 +39,7 @@ b.getBindings().forEach((g: any, gi: number) => g.bindings.forEach((x: any, bi: 
 }))
 out("bindings.txt", plan)
 const g = mesh.geometry
-bin("position.f32", g.attributes.position.array); bin("uv.f32", g.attributes.uv.array); bin("index.u16", new Uint16Array(g.index.array))
+out("attributes.txt", b.attributes.map((a: any) => `${a.name} ${a.type}\n`).join(""))   // (the vertex inputs in their locations' order)
+for (const a of b.attributes) bin(`${a.name}.f32`, new Float32Array(g.attributes[a.name].array))
+bin("index.u16", new Uint16Array(g.index.array))
 console.log(plan + "vertices " + g.attributes.position.count + ", indices " + g.index.count)

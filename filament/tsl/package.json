@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "description": "TSL effects found on the net, turned to WGSL by three.js's own builder (see convert.ts). Versions pinned: three.js as Shader Lab and the converted collections use it.",
+  "dependencies": {
+    "three": "0.185.1",
+    "core-js": "3.45.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.0"
+  }
+}
