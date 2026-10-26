@@ -1,7 +1,7 @@
 #!/bin/zsh
 # (libraries: the list dawn_probe/kit_wgpu.sh links)
-# A film's picture read by a web effect's own texture_external WGSL on Filament's Dawn device (video_external.cpp).
-#   ./dawn_probe/video_external.sh <film> <effect.wgsl> <out folder>
+# A film through a web effect as its authors wrote it, frame after frame, on Filament's Dawn device (video_external.cpp).
+#   ./dawn_probe/video_external.sh <film> <export folder> <effect> <frames> <out.mp4>
 set -e
 cd "$(dirname "$0")/.."
 SRC=third_party/filament_src

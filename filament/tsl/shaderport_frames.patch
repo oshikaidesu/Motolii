@@ -1,0 +1,85 @@
+--- a/tools/export-wgsl/export.test.ts
++++ b/tools/export-wgsl/export.test.ts
+@@ -13,6 +13,7 @@
+ import {mkdirSync, writeFileSync} from 'node:fs'
+ import {join} from 'node:path'
+ import {describe, it, vi} from 'vitest'
++import {writeToArrayBuffer} from 'typegpu'
+ import {d, tgpu} from '@coreroot/gpu/kit'
+ import {composeNodeTree} from '@coreroot/gpu/composer'
+ import {getAllShaders, getShaderByName} from '@coreroot/shaderRegistry'
+@@ -189,7 +190,7 @@
+               {id: 'n', def, parentId: 'root', metadata: {renderOrder: 0}, animTime: referenceTime},
+           ]
+ 
+-    const {registry, handlesById} = buildRegistryWithHandles(specs as never)
++    const {registry, store, handlesById} = buildRegistryWithHandles(specs as never)
+ 
+     // Route params.setExtraField(...) into the corresponding store handle so the per-frame
+     // writers (scatteredAnchors, preconverted colours) leave their computed values behind.
+@@ -222,6 +223,44 @@
+         {key: 'final', entry: ir.finalPass.entry},
+         ...ir.rttPasses.map((p, i) => ({key: `rtt_${p.textureKey ?? i}`, entry: p.fragment.entry})),
+     ]
++
++    // Motolii: the uniform bytes of SP_FRAMES frames at SP_FPS, SP_W x SP_H, packed by TypeGPU itself from the
++    // store (writeToArrayBuffer), one after another in <name>__frames.bin. Each frame as the upstream renderer steps
++    // it (gpu/index.ts updateAnimatedTime: _animTime advances by deltaTime * the node's speed prop; the system time
++    // is the clock), then the shader-registered per-frame writers.
++    if (process.env.SP_FRAMES) {
++        const frames = Number(process.env.SP_FRAMES), fps = Number(process.env.SP_FPS ?? 30)
++        const w = Number(process.env.SP_W ?? 1280), h = Number(process.env.SP_H ?? 720)
++        store.systemHandles.viewportSize.value = d.vec2f(w, h)
++        store.systemHandles.logicalViewportSize.value = d.vec2f(w, h)
++        store.systemHandles.aspect.value = w / h
++        const stride = d.sizeOf(store.schema!)
++        const all = Buffer.alloc(stride * frames)
++        const clocks: Array<[string, GpuShaderDefinition]> = base ? [['n', def], ['base', base]] : [['n', def]]
++        for (let f = 0; f < frames; ++f) {
++            const t = f / fps
++            if (store.systemHandles.time) store.systemHandles.time.value = t
++            for (const [id, nodeDef] of clocks) {
++                const at = nodeDef.animatedTime
++                const clock = handlesById[id]?._animTime as {value: number} | undefined
++                const speed = at ? Number((handlesById[id]?.[at.speed] as {value?: unknown} | undefined)?.value) || 0 : 0
++                if (clock) clock.value = t * speed
++            }
++            for (const callback of ir.onBeforeRender ?? []) {
++                try {
++                    callback({})
++                } catch {
++                    // (as above)
++                }
++            }
++            store.writeAll()
++            const tree = (store.buffer.write as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0]
++            const bytes = new ArrayBuffer(stride)
++            writeToArrayBuffer(bytes, store.schema!, tree)
++            Buffer.from(bytes).copy(all, f * stride)
++        }
++        writeFileSync(join(OUT as string, `${name}__frames.bin`), all)
++    }
+ 
+     const resolved = collectResolved(handlesById, base ? ['n', 'base'] : ['n'])
+ 
+@@ -240,7 +279,7 @@
+     it('exports every registered effect', () => {
+         mkdirSync(OUT as string, {recursive: true})
+ 
+-        const base = getShaderByName('Plasma')?.definition as GpuShaderDefinition | undefined
++        const base = getShaderByName(process.env.SP_BASE ?? 'Plasma')?.definition as GpuShaderDefinition | undefined
+         if (!base) throw new Error('Plasma is required as the composite base but was not found')
+ 
+         const shaders = getAllShaders()
+@@ -248,9 +287,10 @@
+         const failures: Array<{name: string; error: string}> = []
+ 
+         for (const entry of shaders) {
++            if (process.env.SP_PICK && !process.env.SP_PICK.split(',').includes(entry.name)) continue
+             const def = entry.definition as GpuShaderDefinition
+             const d = def as unknown as {requiresRTT?: boolean; requiresChild?: boolean; role?: string; category?: string}
+-            const composite = needsChild(def) && entry.name !== 'Plasma'
++            const composite = needsChild(def) && entry.name !== 'Plasma' && entry.name !== process.env.SP_BASE
+ 
+             try {
+                 const {passes, resolved} = exportPasses(def, entry.name, composite ? base : undefined)

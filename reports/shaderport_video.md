@@ -33,3 +33,30 @@ shaderport（quizzyjoy/shaderport、Apache-2.0）は、shader-effects-inc/shader
   - 絵：`reports/shaderport_video_external.jpg`（左から GStreamer の答え、作者の WGSL で描いたそのまま、それを上下逆にした物）。
 - まだ分からない事：上下の向き。書き出された WGSL は `1.0 - in.uv.y` で uv を 1 回ひっくり返す（作者の composer の flipY、初期値 true、`composer.ts:241-247`）。作者の頂点で描くと上下逆になった。一方、作者のメモ（`gpu/kit/media.ts:13-15`）は「composer の uv なら `1 - y` なしで自然な向き」と書く。ブラウザでの作者の向きの合わせ方は、まだ確かめていない。
 - まだの事：VideoTexture の上に効果（Blur など）を重ねること。作者の効果は子の絵（rtt）を読むので、重ねるには作者の組み合わせ（composition）の形で描く必要がある。
+
+## 動画に作者の効果を掛けて、毎コマ動かした（10/26）
+
+- 子を VideoTexture にした組み合わせを、作者の composer（`composeNodeTree`）自身に作らせた。道具は shaderport の書き出し（`tools/export-wgsl/export.test.ts`、Apache-2.0）をそのまま使い、変える所だけ直しのファイルにした（`filament/tsl/shaderport_frames.patch`：子を `SP_BASE` で選ぶ、`SP_PICK` の効果だけ書き出す、`SP_FRAMES` コマ分のつまみの値を作者の値の置き場から TypeGPU 自身に詰めさせる）。毎コマの `_animTime` は作者のレンダラーと同じく「dt × 速さのつまみ」で進める（`gpu/index.ts` の updateAnimatedTime）。動かし方も shaderport の `run.mjs` と同じ（作者の試験の場所に置いて vitest）。`filament/tsl/shaderport_export.sh`。
+- 借りた 2 つは版を固定して取り寄せる（`filament/tsl/sources.tsv`：shader-effects-inc/shaders 81fd4ec MIT、quizzyjoy/shaderport ab89086 Apache-2.0）。
+- 作者の composer が作った形：Glitch・VHS・Halftone・CRTScreen・PixelSort・DataMosh・Glass・Pixelate・ChromaticAberration は 2 段（動画を `rtt_0` に描き、`rtt_0` に効果）、Kaleidoscope は 1 段（ゆがみなので動画を直接ゆがめて読む）。
+- 再生役：`filament/dawn_probe/video_external.sh <動画> <書き出し> <効果> <コマ数> <出力.mp4>`。毎コマ、GStreamer の次のコマ → `texture_external` → そのコマのつまみの値 → 作者の段を作者の順に描く。入力の繋ぎ方は WGSL の宣言の名前のまま（uniforms、video_N、rtt_N、作者の 4 つのサンプラー）。子の描き先は作者と同じ `rgba16float`。
+- 結果（`reports/splat_orbit.mp4`、1280×720、60fps、360 コマ）：11 本とも装置の誤り 0。
+
+| 効果 | 最初に作る分 | 1 コマ（命令を作り始めて GPU が終わるまで）平均 | 一番遅いコマ |
+|---|---|---|---|
+| VideoTexture | 9.8 ms | 1.84 ms | 19.63 ms |
+| Glitch | 343.9 ms | 2.34 ms | 29.63 ms |
+| VHS | 167.9 ms | 2.30 ms | 22.06 ms |
+| Halftone | 274.2 ms | 1.55 ms | 10.98 ms |
+| ChromaticAberration | 135.6 ms | 1.73 ms | 8.64 ms |
+| Kaleidoscope | 191.7 ms | 1.51 ms | 9.21 ms |
+| PixelSort | 131.4 ms | 1.76 ms | 30.77 ms |
+| CRTScreen | 281.4 ms | 1.80 ms | 21.19 ms |
+| DataMosh | 7.6 ms | 1.40 ms | 8.76 ms |
+| Glass | 312.5 ms | 2.29 ms | 8.16 ms |
+| Pixelate | 291.1 ms | 1.56 ms | 22.39 ms |
+
+  - 平均は 60fps の枠（16.7 ms）の 1/7〜1/12。一番遅いコマが平均を大きく超える原因（最初のコマの組み立てか、解読器を待つ間か）は、まだ分けていない。読み戻し（動画にするため）は時間に入れていない。
+  - 絵：`reports/shaderport_on_video.mp4`（4×3、6 秒）と `reports/shaderport_on_video.jpg`。左上から 元の動画、Glitch、VHS、CRTScreen、Halftone、ChromaticAberration、PixelSort、DataMosh、Glass、Pixelate、Kaleidoscope、VideoTexture。
+- 向き：2 段の物は上下が正しい（子の段と最後の段で 1 回ずつ uv をひっくり返して戻る：作者の説明 `composer.ts:241-247` の「書いて読む行き来が合う」）。1 段の物（VideoTexture、Kaleidoscope）は上下が逆になる。ブラウザで作者がこれをどう扱っているかは、まだ確かめていない。
+- まだの事：Motolii の画面（段の絵、Filament の世界）に入れること。今は確かめの道具が自分で描き先を作り、絵を読み戻して ffmpeg に渡している。
