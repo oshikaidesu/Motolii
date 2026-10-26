@@ -66,8 +66,11 @@ static void doc_things_fx(Doc& d) {
             double box[4] = {0, 0, (double)s.w, (double)s.h}, seen[4];
             {
                 std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn)
-                if (doc_seen_box(d, thing, d.stage->now, seen))   // (where it is seen, as much of it as is on the stage: its picture, After Effects' layer)
-                    box[0] = std::max(0.0, seen[0]), box[1] = std::max(0.0, seen[1]), box[2] = std::min((double)s.w, seen[2]), box[3] = std::min((double)s.h, seen[3]);
+                if (doc_seen_box(d, thing, d.stage->now, seen)) {   // (where it is seen, as much of it as is on the stage: its picture, After Effects' layer;
+                    //  with room around it for what its effects draw outside it: a glow, a shadow, streaks)
+                    const double m = doc_number(d, thing, "fx_margin", d.stage->now, 0) * std::max(seen[2] - seen[0], seen[3] - seen[1]);
+                    box[0] = std::max(0.0, seen[0] - m), box[1] = std::max(0.0, seen[1] - m), box[2] = std::min((double)s.w, seen[2] + m), box[3] = std::min((double)s.h, seen[3] + m);
+                }
                 if (box[2] - box[0] < 1 || box[3] - box[1] < 1) box[0] = box[1] = 0, box[2] = s.w, box[3] = s.h;   // (none of it on the stage: the whole)
             }
             if (!e.solidFile.empty()) return doc_thing_solid(d, thing, e, numbers, thorFx);

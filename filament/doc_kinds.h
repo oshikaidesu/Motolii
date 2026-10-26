@@ -134,6 +134,7 @@ static const DocValue doc_values[] = {
     {"script", "picture text shape stage", 0, 0, false, ""},   // (the stage's: a whole-screen effect, a .wgsl file: screen.h)
     // (a thing's own effects, After Effects' effects on a layer: the whole-screen ones' .wgsl files, one over another, on the thing as the camera sees it)
     {"fx", "film picture text shape solid", 0, 0, false, ""},
+    {"fx_margin", "film picture text shape", 0, 2, true, nullptr},   // (room around it its effects may draw in, a share of its larger side: After Effects grows a layer's bounds for its glow, AviUtl's Area Expansion)
     {"bounce", doc_drawn, 0, 1, false, nullptr},
     {"friction", doc_drawn, 0, 2, false, nullptr},
     {"gravity", "stage", -100, 100, false, nullptr},
