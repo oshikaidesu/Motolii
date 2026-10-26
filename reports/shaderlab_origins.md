@@ -93,3 +93,14 @@ Shader Lab（basementstudio/shader-lab、Apache-2.0）の効果を、外にあ�
 - なので「同じ効き方の物が外にある 20 本」の多くは、古い技の代わりが見つかっただけ。新しい表現の元ではない。
 - **数え方が逆だった。** Motolii が欲しいのは、ネットで見つかる新しい表現。それは TSL にしか無い 11 本の側と、Shader Lab が古い技を広げた 13 本の側にある。TSL を殺すと、ちょうどその新しい所を失う。
 - 新しい表現が TSL で書かれて出てくる以上、殺すべきなのは TSL ではない。TSL から GPU までの間に Motolii 自身が足している翻訳の層（WGSL の口の決まり、Filament）の方。
+
+## TSL はそのまま WGSL に変えられる（10/26）
+
+- 変えるのは three.js 自身の変換器（`WGSLNodeBuilder`、`GLSLNodeBuilder`、どちらも `three/webgpu` から外に出ている）。three.js が描く時と同じ渡し方（`Nodes._createNodeBuilder`、three.webgpu.js 55300-55310：scene・material・camera を渡して `build()`）で呼ぶだけ。変換は 1 行も書いていない。
+- GPU 無しで動く。Motolii と同じ QuickJS-ng 0.17 でも動き、Node と 1 文字も違わない WGSL が出る。
+- Shader Lab の 44 本：作者の効果の部品（`new XxxPass(id)`、`pipeline-manager.ts:706-823` の作り方どおり）を作り、中の材質 84 本を全部 WGSL にした。QuickJS で 3.5 秒。
+  - 足した物：QuickJS に無い `URL` と `structuredClone` を core-js（MIT）で補っただけ。
+- naga 30.0.1（wgpu の WGSL の検査）：168 本中 166 本が通る。CRT と Ink の絵の側の 2 本は「抽象型は定数の式の中だけ」と断られる（`mix(1.0, 1.12, 0.0)` のような数だけの呼び出し）。WGSL の決まりでは正しいはずで、naga の未対応に見える。Dawn（Tint）では未確認。
+- **変換器は、描く先の GPU に問いを出す。** 出す WGSL が GPU の性能で変わるため。44 本で 2 種類だけ：`float32-filterable` を持つか（1 回）、テクスチャの重ね描きの数（1,970 回）。今回の答えは、機能の追加なしの WebGPU の初めの値（持たない、1 枚）。本番は Motolii の Dawn の装置の本当の答えを渡す。
+- 変わるのはシェーダーだけ。効果の JS の部分（つまみ → uniform、何段も描く順番）は TSL ではなく普通の JS なので、そのまま QuickJS で回せる。
+- 試しの台本は `research_notes/hosts/play/all-build.ts`（git の外）。
