@@ -3,6 +3,7 @@
   "description": "TSL effects found on the net, turned to WGSL by three.js's own builder (see convert.ts). Versions pinned: three.js as Shader Lab and the converted collections use it.",
   "dependencies": {
     "core-js": "3.45.1",
+    "event-target-shim": "^6.0.2",
     "shaders": "^4.0.5",
     "three": "0.185.1"
   },

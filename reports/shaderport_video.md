@@ -125,3 +125,16 @@ shaderport（quizzyjoy/shaderport、Apache-2.0）は、shader-effects-inc/shader
 - まだの事：
   - 動画を入れること（作者の VideoTexture は `<video>` と `device.importExternalTexture` を使う。dawn.node には無い）。
   - Motolii の中で動かすこと：JS の土台と、dawn.node に Filament の装置を渡す口。今は Node の確かめだけ。
+
+## 作者のレンダラーを Motolii の中で動かす JS の土台（10/26）：NativeScript の QuickJS の Node-API は穴が多い
+
+- 目標：作者のレンダラー（JS）を Motolii の中で、Filament と同じ Dawn の装置で動かす。要るのは Node-API を持つ JS の土台と、dawn.node に装置を渡す口。
+- 土台は NativeScript/runtimes（5b697b3、iOS/macOS 版、Apache-2.0）の QuickJS の Node-API を使い、外側（`filament/tsl/qjs_napi/host.c`：QuickJS の qjs.c の形、Node の process.dlopen の形、Node の napi_fatal_error の文言）で組んだ（`filament/tsl/qjs_napi/build.sh`、mimalloc は runtimes が持つ物）。dawn.node が求める Node-API 72 個のうち、runtimes に無いのは `napi_fatal_error` だけ。
+- 当たった穴（Motolii の dawn.node の一番小さな試しを通すまで）：
+  1. 後片付けが 2 回走る → NativeScript/windows（af3a904）の直しを写した（`qjs_napi/ns_finalize_once.patch`）。
+  2. `napi_coerce_to_object` が空っぽ（結果を入れずに成功を返す、NativeScript の 3 つの木とも同じ）→ BabylonJS/JsRuntimeHost（980cfb0、js_native_api_quickjs.cc:868-889）の書き方を借りた（`qjs_napi/ns_coerce_to_object.patch`）。これで `createBuffer` が通った。
+  3. `napi_get_typedarray_info` が中身の場所を配列の始まりでなく ArrayBuffer の頭で返す → JsRuntimeHost（2185-2235）の書き方を借りた（`qjs_napi/ns_typedarray_info.patch`）。
+  4. `napi_get_arraybuffer_info` が、ある条件で中身の場所を入れずに失敗を返す（quickjs-api.c:1521-1546）→ `queue.writeBuffer` で Dawn が空の場所を読んで落ちる。ここで止めた。
+  - 約束の不具合は runtimes では直っていた。
+- 通った所：`requestAdapter`、`requestDevice`、`createBuffer`。通らない所：`writeBuffer`。
+- 切り直し：NativeScript の QuickJS の Node-API は、dawn.node の使い方に対して穴が多く、直しのファイルを積み上げることになる。Node-API の本家は Node。Node を部品として埋め込む libnode は Homebrew に無い。組み立て済みの物は個人の倉庫（alshdavid-misc/libnode-prebuilt、v22.18.0、macOS arm64 43 MB）にあるが、出所を確かめずには使わない。公式の材料から組むと大きい（前の試しで材料だけ 7.9 GB）。
