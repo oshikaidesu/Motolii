@@ -17,7 +17,18 @@
  
      // Route params.setExtraField(...) into the corresponding store handle so the per-frame
      // writers (scatteredAnchors, preconverted colours) leave their computed values behind.
-@@ -222,6 +223,44 @@
+@@ -203,7 +204,9 @@
+         }
+     }
+ 
+-    const ir = composeNodeTree(registry, {writeExtraField}) as unknown as {
++    // Motolii: composed as the upstream renderer composes for the screen (gpu/index.ts composeOptions, 1268-1275):
++    // no Y flip, premultiplied alpha at the tail (tone mapping 'linear' is the default on both sides).
++    const ir = composeNodeTree(registry, {writeExtraField, flipY: false, premultiplyAlpha: true}) as unknown as {
+         finalPass: {entry: unknown}
+         rttPasses: Array<{textureKey?: string; fragment: {entry: unknown}}>
+         onBeforeRender?: Array<(params?: unknown) => void>
+@@ -222,6 +225,44 @@
          {key: 'final', entry: ir.finalPass.entry},
          ...ir.rttPasses.map((p, i) => ({key: `rtt_${p.textureKey ?? i}`, entry: p.fragment.entry})),
      ]
@@ -62,7 +73,7 @@
  
      const resolved = collectResolved(handlesById, base ? ['n', 'base'] : ['n'])
  
-@@ -240,7 +279,7 @@
+@@ -240,7 +281,7 @@
      it('exports every registered effect', () => {
          mkdirSync(OUT as string, {recursive: true})
  
@@ -71,7 +82,7 @@
          if (!base) throw new Error('Plasma is required as the composite base but was not found')
  
          const shaders = getAllShaders()
-@@ -248,9 +287,10 @@
+@@ -248,9 +289,10 @@
          const failures: Array<{name: string; error: string}> = []
  
          for (const entry of shaders) {

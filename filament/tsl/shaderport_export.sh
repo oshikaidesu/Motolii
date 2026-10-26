@@ -2,7 +2,8 @@
 # shader-effects-inc/shaders effects written out as WGSL by shaderport's own exporter (tools/export-wgsl), the way its
 # run.mjs runs it (the test copied into the upstream's tests, vitest), with shaderport_frames.patch: the child under
 # each effect chosen (SP_BASE, e.g. VideoTexture), only the picked effects (SP_PICK), and each frame's uniform bytes
-# (SP_FRAMES at SP_FPS, SP_W x SP_H) packed by TypeGPU from the upstream's own store.
+# (SP_FRAMES at SP_FPS, SP_W x SP_H) packed by TypeGPU from the upstream's own store; composed as the upstream renderer
+# composes for the screen (no Y flip, premultiplied tail).
 #   SP_BASE=VideoTexture SP_PICK=Glitch,VHS SP_FRAMES=120 ./tsl/shaderport_export.sh <out folder>
 set -e
 cd "$(dirname "$0")/.."

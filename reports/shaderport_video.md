@@ -78,3 +78,14 @@ shaderport（quizzyjoy/shaderport、Apache-2.0）は、shader-effects-inc/shader
 - `.bin` の形式は分かっている：512×512、距離を [-1, 1] に Uint16 で詰めた物（`sdf.ts:447-471`）。読んだ距離は `r16float` の絵になる（`sdf.ts:474-530`）。ただし作者は `.bin` を自分のサーバー（`/api/plugin/sdf/generate`、`packages/partner/src/index.ts:161-220`）で SVG から作っていて、作り方は公開されていない。
 - 作者のライブラリは、絵から距離の絵を作る部品を別の効果の中に持っている：Irradiance のシルエットの種まきと JFA の飛び石（`std/paint/radiance.ts:417-441`、`silhouetteSeedKernel`・`silhouetteStepKernel`）。
 - なので、動画を金属にする道は「動画の切り抜き（どこが形の内側か）→ 作者の JFA で毎コマ距離の絵 → LiquidMetal の SDF の絵として差し込む」。切り抜きは、Motolii の video.h のキー（グリーンバックなど）か、別の既存の切り抜きが要る。まだ作っていない。
+
+## 上下の向きを直した（10/26）
+
+- 原因：作者の本番のレンダラーは composer を `flipY: false`・`premultiplyAlpha: true` で呼ぶ（`packages/core/src/gpu/index.ts` の composeOptions、1268-1275）。shaderport の書き出しは何も渡さないので、composer の初期値 `flipY: true`（`composer.ts:241-247、349`）で組まれ、uv が 1 回ひっくり返っていた。2 段の効果は子の段と最後の段で 2 回ひっくり返って元に戻るが、1 段の効果は逆さまのままだった。
+- 直し：`filament/tsl/shaderport_frames.patch` で、書き出しも作者の本番と同じ設定で composer を呼ぶ（トーンマップは両方とも初期値の `'linear'`、`gpu/index.ts:463`）。書き出した WGSL から `1.0 - in.uv.y` は無くなった。
+- 確かめ：27 本を書き出し直して描き直した（装置の誤り 0、1 コマ平均 0.79〜7.06 ms）。3 秒目のコマを元の動画と比べた相関で、24 本が「そのまま」の向き（+0.42〜+1.00、上下逆にすると -0.30〜-0.73）。Form3D・Kaleidoscope・Surface3D は絵が大きく変わる（または真っ黒）ので数字では判定できない。Kaleidoscope は目で見て向きが合っている。
+  - 上の「向き」の節の、1 段の効果が上下逆という結果は、この直しで無くなった。
+- 並べた動画も描き直した（`reports/shaderport_on_video.mp4`、`reports/shaderport_stone_mask.mp4`）。
+- まだの事：
+  - Surface3D は真っ黒、Crystal は白い円、Form3D は波の帯。原因はまだ調べていない。
+  - 相関が 1.00 の物（Glitch、PixelSort、DataMosh、Stone、Watercolor、Glow、Shatter、Sparkle、TimeTrail など）は、作者の初期設定のままだと 3 秒目では元とほとんど同じ。効き方がまばらな物（Glitch など）と、効いていない物の見分けは、作者の絵と比べるまで付けない。TimeTrail は前のコマを使う作りなのに、再生役が毎コマ描き先を消している。
