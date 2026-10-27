@@ -39,6 +39,8 @@ names = {os.path.basename(f) for f in files} | set(files)
 def there(p):
     if '/out/' in '/' + p + '/':
         return True   # (build output and footage put there by hand: made or placed when asked for)
+    if not p.startswith('~') and subprocess.run(['git', 'check-ignore', '-q', p.rstrip('/')], stderr=subprocess.DEVNULL).returncode == 0:
+        return True   # (kept out of git on purpose, here only on this machine: pictures and films of the reports, fetched sources)
     return bool(glob.glob(os.path.expanduser(p)))
 gone = sorted({p for p in places if not there(p)})
 if missing:

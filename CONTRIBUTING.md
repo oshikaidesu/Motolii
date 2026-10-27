@@ -10,7 +10,7 @@
 
 ## 組み立て
 
-[`README.md`](README.md) の「組み立て」のとおり。クローンした所で一度だけ `git lfs install` と `git config core.hooksPath .githooks` をしてください。
+[`README.md`](README.md) の「組み立て」のとおり。クローンした所で一度だけ `git config core.hooksPath .githooks` をしてください。
 
 ## 決まり
 

@@ -3,4 +3,5 @@ licence: MIT
 from: https://github.com/korarei/AviUtl2_CameraTransform_K_Script/releases (the release file matching CameraTransform_K.*\.zip$) (version v2.0.1 in the catalog on 2026-10-27)
 page: https://github.com/korarei/AviUtl2_CameraTransform_K_Script
 catalog entry: korarei.CameraTransform_K in https://github.com/Neosku/aviutl2-catalog-data
+left out (2026-10-27): 1 Windows binaries (.mod2); Motolii runs on macOS. Get them from the author's page above.
 Put here unchanged for Motolii (filament/aviutl_scripts).

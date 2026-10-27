@@ -5,7 +5,8 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 - 同梱した物はそれぞれの作者の物で、それぞれのライセンスに従います。Motolii のリポジトリのライセンスはこれらには掛かりません。
 - 各作品の隣に、作者のライセンスの文書（`LICENSE` など）と、取ってきた所（`SOURCE.txt` や `README.md`）を置いています。
 - 手を入れて使っている物は、元に当てる差分（`.patch`）として分けて置き、元のソースは組み立ての時に作者の配布元から取ってきます（下の「組み立ての時に取ってくる物」）。
-- 配ってよいと書かれていない作品は同梱していません。ただし AviUtl2 の 8 パッケージ（下の一覧の ※）は、作者の配布元にライセンスの文書が無く、カタログ aviutl2-catalog-data に載ったライセンスだけが根拠です。作者の確認が取れるまでの扱いです。
+- 配ってよいと書かれていない作品は同梱していません。作者の配布元にライセンスの文書が無く、カタログに載ったライセンスだけが根拠の AviUtl2 の 8 パッケージは、同梱から外しました（2026-10-27）。
+- AviUtl2 のパッケージに入っていた Windows のバイナリ（.mod2・.aux2・.exe・.dll、Chromium Embedded Framework 一式）は同梱していません。Motolii は macOS で動くためです。外した物は各フォルダの `SOURCE.txt` の「left out」にあり、作者の配布元から取れます。
 - 同梱した物のうち、手を入れて使っている物（three.js などのシェーダーを WGSL に書き換えた物）は、各ファイルの 1 行目に元と改変を書いています。
 - **作者の方へ**：載せ方に問題があれば、Issue でお知らせください。すぐに直すか、外します。
 
@@ -15,13 +16,14 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 
 | 物 | 作者・出所 | ライセンス | 置き場所 |
 |---|---|---|---|
-| AviUtl2 のスクリプト 180 パッケージ（一覧は下） | 各作者。集め方は [Neosku/aviutl2-catalog-data](https://github.com/Neosku/aviutl2-catalog-data) の入れ方の手順どおり | MIT 139・CC0 27・Unlicense 6・BSD-3-Clause 5・MIT-0 2・Apache-2.0 1 | `filament/aviutl_scripts/<作者>__<名前>/`（各フォルダに LICENSE と SOURCE.txt） |
+| AviUtl2 のスクリプト 172 パッケージ（一覧は下） | 各作者。集め方は [Neosku/aviutl2-catalog-data](https://github.com/Neosku/aviutl2-catalog-data) の入れ方の手順どおり | MIT 133・CC0 26・Unlicense 6・BSD-3-Clause 4・MIT-0 2・Apache-2.0 1 | `filament/aviutl_scripts/<作者>__<名前>/`（各フォルダに LICENSE と SOURCE.txt） |
 | ISF の効果 | [Vidvox/ISF-Files](https://github.com/Vidvox/ISF-Files) ほか（各 .fs の `CREDIT` に作者） | MIT | `filament/effects/*.fs`、`ISF-Files-LICENSE.txt` |
 | ossia score の ISF | [ossia/score-user-library](https://github.com/ossia/score-user-library) | MIT・CC BY-SA 4.0 | `filament/effects/`、`ossia-LICENSE-ISF.txt`、`ossia-score-user-library-LICENSE.txt` |
 | three.js の画面の効果（WGSL にした物） | [mrdoob/three.js](https://github.com/mrdoob/three.js) の examples/jsm/shaders | MIT | `filament/effects/*.wgsl`（各ファイルの 1 行目に出所） |
 | CRT の仕上げ（WGSL に改変） | [vercel-labs/vgpu](https://github.com/vercel-labs/vgpu) の post.wgsl | MIT | `filament/effects/crt_finish.wgsl`、`vgpu-LICENSE.txt` |
 | データモッシュ（WGSL に改変） | [newomp4/phosphor](https://github.com/newomp4/phosphor) | MIT | `filament/effects/datamosh.wgsl`、`phosphor-LICENSE.txt` |
 | 時間のずらし（WGSL に改変） | [keijiro/SlitScanCam](https://github.com/keijiro/SlitScanCam) | Unlicense | `filament/effects/time_displacement.wgsl`、`SlitScanCam-LICENSE.txt` |
+| 効果の見本の写真（熱気球） | Wikimedia Commons「Mid-Hudson balloon festival 15」（Juliancolton 撮影） | パブリックドメイン（PD-self） | `filament/fx_sample.jpg`（正方形に切った物）、効果の見本 `filament/effects/*.png` はこれに掛けた物 |
 | 点群の効果 4 本 | [playcanvas/engine](https://github.com/playcanvas/engine) の scripts/esm/gsplat | MIT | `filament/effects/*.mjs`、`playcanvas-LICENSE.txt` |
 | three.js（形を作る部品） | [mrdoob/three.js](https://github.com/mrdoob/three.js) r186 | MIT | `filament/third_party/js/three/` |
 | d3-contour・d3-array | [d3](https://github.com/d3) | ISC | `filament/third_party/js/d3-contour/`、`d3-array/` |
@@ -46,9 +48,7 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 | [BabylonJS/JsRuntimeHost](https://github.com/BabylonJS/JsRuntimeHost) の Node-API | 980cfb0 | MIT | `filament/tsl/jsrh_napi/build.sh` | `jsrh_qjs017_dawn.patch` |
 | TSL の表現 48 か所 | `filament/tsl/sources.tsv` のとおり | 各作者 | `filament/tsl/fetch.sh` | `filament/tsl/*_target.patch`、`ics_tilt.patch` |
 
-## 3. AviUtl2 のスクリプトの一覧（180）
-
-※ 作者の配布元にライセンスの文書が無く、カタログに載ったライセンスだけが根拠の物。
+## 3. AviUtl2 のスクリプトの一覧（172）
 
 | 名前 | 作者 | ライセンス | 配布元 | 置き場所 |
 |---|---|---|---|---|
@@ -88,8 +88,6 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 | 曲げKR | かろてら | MIT | https://github.com/karoterra/aviutl2-Bend | `Karoterra__Bend` |
 | 色覚シミュレーションKR | かろてら | Unlicense | https://github.com/karoterra/aviutl2-ColorVisionSimulation | `Karoterra__ColorVisionSimulation` |
 | 油絵KR | かろてら | MIT | https://github.com/karoterra/aviutl2-OilPainting | `Karoterra__OilPainting` |
-| Constraint | Korarei | CC0-1.0 ※ | https://gist.github.com/korarei/d5b089a69e0c8ba5903d641d677c89e8 | `Korarei__Constraint` |
-| TextBackplate | なたのこ | MIT ※ | https://github.com/Natadecoco2539/AviUtl2-TextBackplate | `Natadecoco2539__TextBackplate` |
 | SoftAnchorBone | なたのこ | MIT | https://github.com/Natadecoco2539/AviUtl2-SoftAnchorBone | `Natadecoco__SoftAnchorBone` |
 | 無印ノイズ | 猫愛 | MIT | https://github.com/nea-c/aviutl2_script_AviUtlNoise | `NeAc__AviUtlNoise` |
 | BezierPath | 猫愛 | MIT | https://github.com/nea-c/aviutl2_script_BezierPath | `NeAc__BezierPath` |
@@ -107,7 +105,6 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 | JpegNoise_for_AviUtl2 | サ行 | MIT | https://github.com/SagyouDarui900/JPEGNoise_AviUtl2 | `Sagyou__JpegNoise` |
 | OpticsCompensation_s_for_AviUtl2 | サ行 | MIT | https://github.com/SagyouDarui900/OpticsCompensation_s_for_AviUtl2 | `Sagyou__OpticsCompensation_s_for_AviUtl2` |
 | Mathy_Su | Suzukeh | MIT | https://github.com/Suzukeh/Mathy_Su | `Suzukeh__Mathy_Su` |
-| NCS風音声波形 (NCSAudioVisualizer) | tettu0530 | MIT ※ | https://github.com/Tettu0530/NCSAudioVisualizer | `Tettu0530__NCS風音声波形__NCSAudioVisualizer_` |
 | uta-resources | UtaUtaUtau | MIT | https://github.com/UtaUtaUtau/uta-resources | `UtaUtaUtau__uta-resources` |
 | グランジ背景を生成 | arcana | MIT | https://github.com/ar-ca-na/aviutl2-grunge-bg | `ar-ca-na__grunge-bg` |
 | 波形ライン | arcana | MIT | https://github.com/ar-ca-na/aviutl2-waveform-line | `ar-ca-na__waveform-line` |
@@ -226,9 +223,4 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 | PerceptualColor.anm2 | zopty | BSD-3-Clause | https://github.com/zopty/PerceptualColor.anm2 | `zopty__PerceptualColor.anm2` |
 | SmoothNoise | zopty | MIT | https://github.com/zopty/SmoothNoise | `zopty__SmoothNoise` |
 | ブラインドループ | zopty | BSD-3-Clause | https://gist.github.com/zopty/ff3439d79fe609c7714d6db4ef1a39a6 | `zopty__ブラインドループ` |
-| 光学モーションブラー | zopty | BSD-3-Clause ※ | https://gist.github.com/zopty/51deda495876451c1dcfb09ceb05345d | `zopty__光学モーションブラー` |
 | JPEGCrush | しけもち | MIT | https://note.com/sikemoti/n/n7017a0e6eabf | `しけもち__JPEGCrush` |
-| ウェーブクリッピング | もも猫 | MIT ※ | https://x.com/momo_neeeko/status/2037491184260784191 | `もも猫__ウェーブクリッピング` |
-| スカラップ円 | もも猫 | MIT ※ | https://x.com/momo_neeeko/status/2040680596410941589 | `もも猫__スカラップ円` |
-| ルーローの多角形 | もも猫 | MIT ※ | https://drive.google.com/file/d/1X7q80FYOqJINB2CIKaJ5A9nHXAusRX0r/view?usp=drive_link | `もも猫__ルーローの多角形` |
-| SliceGlitch | 暘 弥涼 | MIT ※ | https://note.com/isuzu_hinode/n/n3a7d7b761b98 | `暘_弥涼__SliceGlitch` |

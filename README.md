@@ -25,14 +25,14 @@ Motolii は MV（絵が主役のモーショングラフィックス）を作る
 | 場所 | 中身 |
 |---|---|
 | `filament/` | 中身（エンジン）：描く・動かす・書類（SQLite）・動画（GStreamer）・効果・物理。C++ / Objective-C++。組み立てのスクリプトもここ |
-| `filament/aviutl_scripts/` | 同梱した AviUtl2 のスクリプト 180 パッケージ（作者ごと、手を入れずに） |
+| `filament/aviutl_scripts/` | 同梱した AviUtl2 のスクリプト 172 パッケージ（作者ごと、手を入れずに） |
 | `filament/effects/` | 効果のファイル（ISF・WGSL・PlayCanvas の点群の効果） |
 | `filament/third_party/` | 取ってくる依存の置き場（git の外）。一部の小さい物だけ同梱 |
 | `skin/book/` | 窓（Flutter、macOS）。操作だけで、絵は中身が描く |
-| `reports/` | 調べた記録・測った数字・見本の絵と動画 |
+| `reports/` | 調べた記録と測った数字（文書だけ。見本の絵と動画は他の人のアプリや素材が映る物が多いので git に入れていない） |
 | `thorvg/` | ThorVG を wgpu に載せた前の結合（組み立てのスクリプトが一部を使う） |
 | `old/` | 前の土台の実験（今の作りからは使っていない） |
-| `.githooks/` | コミットの前に `ASSETS.md` が正しいか確かめる見張り、Git LFS のフック |
+| `.githooks/` | コミットの前に `ASSETS.md` が正しいか確かめる見張り |
 
 ## 組み立て（macOS）
 
@@ -43,7 +43,6 @@ Motolii は MV（絵が主役のモーショングラフィックス）を作る
 2. Flutter 3.47.2（stable）を入れて PATH に置く（別の場所なら `FLUTTER=…/bin/flutter`）。
 3. クローンした所で一度だけ：
    ```bash
-   git lfs install
    git config core.hooksPath .githooks
    ```
 4. Filament（WebGPU）を組む。初回は Filament を取ってきて差分を当て、組んで入れる（M4 で約 5 分）。

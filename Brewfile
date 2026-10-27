@@ -4,7 +4,6 @@ brew "cmake"
 brew "ninja"
 brew "meson"
 brew "pkgconf"
-brew "git-lfs"
 # What the editor links: films (GStreamer), the document (SQLite), AviUtl's scripts (LuaJIT), effects and recipes (QuickJS-ng)
 brew "gstreamer"
 brew "sqlite"
