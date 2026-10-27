@@ -456,7 +456,11 @@ void _tests2() {
     await t.tap(find.byKey(const ValueKey('ws-tool-2')));
     await t.pumpAndSettle();
     await t.dragFrom(stage.center, Offset(stage.width * .1, stage.height * .1));
-    await t.pumpAndSettle();
+    await settled(t, ws);
+    for (var i = 0; i < 200 && ws.selected == null; i++) {   // (made by the inside, picked once it is there)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
     final rect = int.parse(ws.selected!);
     expect(m.word(rect, 'fill'), ws.ink, reason: 'drawn in the ink');
     await t.tap(find.byKey(const ValueKey('ws-tool-1')));

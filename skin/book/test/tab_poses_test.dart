@@ -36,6 +36,10 @@ void main() {
 
     // WHO: swept over the whole of HOME
     final home = part('home'), m = ws.inside!;
+    for (var i = 0; i < 200 && ws.layers.length < m.things.length; i++) {   // (the things the sweep takes are the window's layers: read once the document's picture has come)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
     final hit = HitTestResult();   // (what the hand first lands on there: the pane's HOME, or something over it)
     WidgetsBinding.instance.hitTestInView(hit, home.topLeft + const Offset(2, 2), t.view.viewId);
     final under = [for (final e in hit.path.take(8)) e.target.runtimeType.toString()];
