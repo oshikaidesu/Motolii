@@ -1,12 +1,12 @@
 # 関わり方
 
-*English is fine for issues. The notes below are in Japanese; the short version: build with the README, add a line to ASSETS.md for every new file, and say in each commit what you borrowed from where.*
+*English is fine for issues and pull requests. Contributions are dual licensed under Apache-2.0 or MIT, as the project is. The notes below are in Japanese; the short version: build with the README, add a line to ASSETS.md for every new file, and say in each commit what you borrowed from where.*
 
 ## 今できること
 
 - **Issue**：不具合、組み立てで止まった所、「この表現を使いたい」という見本（URL と、何が良いのか）。
 - **同梱した作品の作者の方**：載せ方の直し・外してほしい時は Issue で。すぐ直すか外します（[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)）。
-- **Pull Request は、まだ受けられません。** Motolii 自身のコードのライセンスが決まっていないためです。決まったら、PR は同じライセンスで受ける（inbound = outbound）形にします。
+- **Pull Request**：受けます。Motolii は Apache-2.0 と MIT のダブルライセンスで、送ってもらった物も、特に断りが無ければ同じ二つのライセンスで受けます（[`README.md`](README.md) の「ライセンス」）。
 
 ## 組み立て
 

@@ -20,7 +20,7 @@ for line in ledger.split('\n'):
         if '/' not in token and not whole and folder:
             token = folder + '/' + token
         else:
-            folder = token if whole or not re.search(r'\.[A-Za-z0-9*]{1,6}$', os.path.basename(token)) else os.path.dirname(token)
+            folder = token if whole or not (re.search(r'\.[A-Za-z0-9*]{1,6}$', os.path.basename(token)) or os.path.isfile(token)) else os.path.dirname(token)
         places.append(token)
 files = subprocess.run(['git', 'ls-files', '--cached', '--others', '--exclude-standard'], capture_output=True, text=True).stdout.split('\n')
 # (not things one would look for: pictures and films, other people's sources, build output, the reports themselves)

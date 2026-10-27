@@ -135,6 +135,7 @@
 | AEのファイル103本、AEの動き | `filament/ae_test.sh`、`ae_ref.cpp`、`motion_test.sh`、`motion_test.mm`、`motion_test.json`、`motion_test3d.json`、`motion_test3d.inc` | 今の土台で動く |
 | 採点表と採点4回 | `AE_RUBRIC.md`、`reports/ae_rubric/round_0*.md`、`evidence.md`、`try.md` | — |
 | タスク表 | `TASKS.md` | — |
+| Motolii 自身のライセンス（Apache-2.0 か MIT を選べる、過去の倉庫 rust_ae と同じ文書） | `LICENSE-APACHE`、`LICENSE-MIT` | 決めた（10/27） |
 | 関わり方（Issue・PR・台帳と出典の決まり・知っている穴） | `CONTRIBUTING.md` | 書いた（10/27） |
 | 組み立てに要る Homebrew の物の一覧（Homebrew Bundle の書き方、`brew bundle` で入る） | `Brewfile` | 新しいクローンで組んで確かめた（10/27） |
 | 同梱した他の人の作品の一覧と断り書き（AviUtl2 の 180、ISF・three.js・PlayCanvas の効果、取ってくる依存）。PlayCanvas の効果のライセンスの文書 | `THIRD_PARTY_NOTICES.md`、`filament/effects/playcanvas-LICENSE.txt`、`vgpu-LICENSE.txt`、`phosphor-LICENSE.txt`、`SlitScanCam-LICENSE.txt` | 書いた（10/27） |
