@@ -63,4 +63,27 @@ void main() {
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, skip: !insideBuilt);
+
+  testWidgets('a curve copied in the Ease desk, then pasted to every key of the layer (Alight Motion: Copy, Paste to All Keyframes)', (t) async {
+    final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    expect(m.key(cube, 'x', 0, 0) && m.key(cube, 'x', 1, 1) && m.key(cube, 'x', 2, 0) && m.key(cube, 'y', 1, 0) && m.key(cube, 'y', 2, 1), isTrue, reason: m.trouble);
+    expect(m.way(cube, 'x', 0, 'Bounce'), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..pickKey((layer: '$cube', frame: 0))
+      ..front('Ease');
+    await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ease-paste-all')), findsNothing, reason: 'nothing copied yet');
+    await t.tap(find.byKey(const ValueKey('ease-copy')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('ease-paste-all')));
+    await settled(t, ws);
+    for (final (n, at) in [('x', 1.0), ('y', 1.0)]) {
+      expect(m.wayOf(cube, n, at).split(' ').first, 'Bounce', reason: 'the stretch of $n after $at s goes by it too');
+    }
+    expect(m.wayOf(cube, 'x', 0).split(' ').first, 'Bounce');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  });
 }

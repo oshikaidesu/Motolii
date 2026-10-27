@@ -8,11 +8,13 @@ import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/desk_kit.dart';
 import 'package:lab_book/workspace/ws.dart';
 
-/// Which keys: the layer (in its hue), from and to frames, the span's length, and Reverse.
+/// Which keys: the layer (in its hue), from and to frames, the span's length, and Reverse; the curve copied, pasted on
+/// the picked keys, or on every key of the layer (Alight Motion's Copy, Paste and Paste to All Keyframes).
 class SpanStrip extends StatelessWidget {
-  const SpanStrip({super.key, required this.span, required this.onReverse});
+  const SpanStrip({super.key, required this.span, required this.onReverse, this.onCopy, this.onPaste, this.onPasteAll});
   final EaseSpan? span;
   final VoidCallback onReverse;
+  final VoidCallback? onCopy, onPaste, onPasteAll;
   @override
   Widget build(BuildContext context) {
     final s = span, ws = WsScope.of(context, {WsAspect.document});
@@ -39,6 +41,8 @@ class SpanStrip extends StatelessWidget {
       ],
       right: [
         if (s != null) ...[DeskChip(label: ws.timecode(s.from)), SizedBox(width: WsT.gap)],
+        for (final (label, tap) in [('Copy', onCopy), ('Paste', onPaste), ('Paste All', onPasteAll)])
+          if (s != null && tap != null) ...[DeskChip(key: ValueKey('ease-${label.toLowerCase().replaceAll(' ', '-')}'), label: label, onTap: tap), SizedBox(width: WsT.gap)],
         DeskIconButton(size: Shape.z(18), glyph: (ink) => _ReverseGlyph(ink), onTap: onReverse),
       ],
     );

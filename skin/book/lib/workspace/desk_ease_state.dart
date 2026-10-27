@@ -9,6 +9,9 @@ import 'package:lab_book/workspace/desk_ease_presets.dart';
 import 'package:lab_book/workspace/desk_ease_span_strip.dart';
 import 'package:lab_book/workspace/ws.dart';
 
+/// The curve copied in the Ease desk, kept while the window is open (Alight Motion's Copy of a curve).
+Ease? easeCopied;
+
 class DeskEaseState extends State<DeskEase> {
   // Joined: while a hand is down the ease is told to the document as it goes (the stage and the bars follow), the newest
   // one at a time (one still on its way: the next waits, those between are skipped); all of it one step of undo.
@@ -77,6 +80,20 @@ class DeskEaseState extends State<DeskEase> {
     ws.after(m.later('together'), (done, why) => mounted ? setState(() => _trouble = done ? null : why) : null);
   }
 
+  // (the curve after every key of each picked key's layer, every value keyed there: one step)
+  void _onEveryKey(Ws ws, Ease e) {
+    final m = ws.inside!, layers = {for (final k in ws.keys) k.layer};
+    m.later('together', number: 1);
+    for (final l in ws.layers.where((l) => layers.contains(l.id))) {
+      for (final f in l.keys) {
+        for (final at in keysAt(ws, (layer: l, from: f, to: f, picked: f)).entries) {
+          m.later('way', thing: int.parse(l.id), name: at.key, number: at.value, word: said(e));
+        }
+      }
+    }
+    ws.after(m.later('together'), (done, why) => mounted ? setState(() => _trouble = done ? null : why) : null);
+  }
+
   @override
   Widget build(BuildContext context) {
     final ws = WsScope.of(context, {WsAspect.document, WsAspect.picked}), span = easeSpan(ws), store = eases[ws] ??= {}, id = spanId(span);
@@ -113,7 +130,13 @@ class DeskEaseState extends State<DeskEase> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SpanStrip(span: span, onReverse: () => set(ease.reversed())),
+        SpanStrip(
+          span: span,
+          onReverse: () => set(ease.reversed()),
+          onCopy: () => setState(() => easeCopied = ease),
+          onPaste: easeCopied == null ? null : () => set(easeCopied!),
+          onPasteAll: easeCopied == null || ws.inside == null ? null : () => _onEveryKey(ws, easeCopied!),
+        ),
         if (_trouble case final why?) Text(why, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63)),
         const SizedBox(height: WsT.gutter),
         Expanded(
