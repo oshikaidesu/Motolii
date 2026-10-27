@@ -24,7 +24,7 @@ struct AviutlRun {
     std::multimap<std::pair<uint32_t, uint32_t>, AviutlBuf> spare;   // (pictures let go, kept by size for the next asked: a buffer made and let go each frame takes the same ones)
     std::map<std::string, door::Screen*> doors;     // (each shader made, by its name and way of sampling)
     std::map<door::Screen*, int> draws;             // (draws of each this frame: each its own constants, the door's pass)
-    door::Screen *place = nullptr, *poly = nullptr;
+    door::Screen *place = nullptr, *poly = nullptr, *blur = nullptr;
     Texture *none = nullptr, *random = nullptr;
     std::set<std::string> said;
     Stage* s = nullptr;                             // (this frame's)
@@ -61,6 +61,28 @@ struct K { alpha: f32 }
 @group(0) @binding(2) var<uniform> k: K;
 @fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f {
   return textureSampleLevel(picture, near, uv, 0.0) * k.alpha;
+}
+)";
+// obj.effect ぼかし's: sashimono-edit's blur1d (MIT, effects/builtin.py), one way a pass: the pixel and `radius` either
+// side (96 at most) weighed by a Gaussian of half the radius; the buffer premultiplied already, as its premul makes it.
+static const char* const aviutl_blur = R"(
+struct K { step: vec2f, radius: f32, unused: f32 }
+@group(0) @binding(0) var picture: texture_2d<f32>;
+@group(0) @binding(1) var near: sampler;
+@group(0) @binding(2) var<uniform> k: K;
+@fragment fn main(@builtin(position) frag: vec4f, @location(0) uv: vec2f) -> @location(0) vec4f {
+  let at = frag.xy / vec2f(textureDimensions(picture));
+  let sigma = max(k.radius * 0.5, 0.5);
+  var sum = textureSampleLevel(picture, near, at, 0.0);
+  var total = 1.0;
+  let taps = i32(min(k.radius, 96.0));
+  for (var i = 1; i <= taps; i++) {
+    let o = f32(i);
+    let w = exp(-0.5 * o * o / (sigma * sigma));
+    sum += (textureSampleLevel(picture, near, at + k.step * o, 0.0) + textureSampleLevel(picture, near, at - k.step * o, 0.0)) * w;
+    total += 2.0 * w;
+  }
+  return sum / total;
 }
 )";
 
@@ -330,13 +352,35 @@ static int aviutl_drawpoly(lua_State* L) {
     if (own) r.drew = true;
     return 0;
 }
-static int aviutl_effect(lua_State* L) {   // (a built-in effect by its name: only where it is the picture as it is, or Area Expansion's margins)
+static int aviutl_effect(lua_State* L) {   // (a built-in effect by its name: these, as sashimono-edit makes them)
     AviutlRun& r = aviutl_of(L);
     const std::string n = aviutl_str(L, 1);
     std::map<std::string, double> said;
     for (int i = 2; i + 1 <= lua_gettop(L); i += 2) said[aviutl_str(L, i)] = aviutl_num(L, i + 1);
     const auto at = [&](const char* k, double otherwise) { return said.count(k) ? said[k] : otherwise; };
     if (n == "ぼかし" && at("範囲", 0) == 0) return 0;
+    if (n == "ぼかし" && said.count("範囲") && at("縦横比", 0) == 0 && at("光の強さ", 0) == 0) {   // (sashimono-edit's blur, effects/builtin.py _BLUR: across, then down; サイズ固定 reads no further than the picture (the sampler's clamp), else the picture grows by the radius each side, as far as it reaches: strokes.py pixel_reach)
+        const double radius = std::min(at("範囲", 0), 4096.0);
+        if (!(radius > 0)) return 0;
+        if (!r.blur) return aviutl_no(L, "obj.effect ぼかし: " + r.trouble);
+        if (at("サイズ固定", 0) == 0) {
+            const double grow = std::ceil(radius);
+            aviutl_copy(r, "~blur", "object");
+            const AviutlBuf from = r.bufs["~blur"];
+            const AviutlBuf& to = aviutl_buf(r, "object", (uint32_t)std::min(8192.0, from.w + 2 * grow), (uint32_t)std::min(8192.0, from.h + 2 * grow));
+            aviutl_lay(r, from, to.rt, to.w, to.h, 0, 0, 1, 1, 0, 1, 0, 0, -1, 1);
+        }
+        const AviutlBuf object = r.bufs["object"];
+        const AviutlBuf& across = aviutl_buf(r, "~blur", object.w, object.h);
+        for (const auto& [from, to, x] : {std::tuple{object, across, true}, std::tuple{across, object, false}}) {
+            const float k[4] = {x ? 1.f / from.w : 0.f, x ? 0.f : 1.f / from.h, (float)radius, 0};
+            const int pass = r.draws[r.blur]++;
+            door::knobs(r.s->engine, r.blur, k, sizeof k, pass);
+            Texture* picture = from.t;
+            door::draw(r.s->engine, r.blur, &picture, to.rt, to.w, to.h, pass);
+        }
+        return 0;
+    }
     if (n == "リサイズ" && at("拡大率", 100) == 100 && at("X", 100) == 100 && at("Y", 100) == 100) return 0;
     if (n == "領域拡張" && !at("塗りつぶし", 0)) {   // (margins of nothing round it)
         const double t = at("上", 0), b = at("下", 0), l = at("左", 0), rt = at("右", 0);
@@ -477,6 +521,7 @@ static std::shared_ptr<AviutlRun> aviutl_made(Stage& s, const std::string& file)
     std::string why;
     if (!(r->place = door::screen(s.engine, "aviutl place", aviutl_placing, 64, &why))) r->trouble = "its placing shader: " + why;
     if (!(r->poly = door::screen(s.engine, "aviutl drawpoly", aviutl_poly, 16, &why, 1, 0, true))) r->trouble = "its drawpoly shader: " + why;
+    if (!(r->blur = door::screen(s.engine, "aviutl blur", aviutl_blur, 16, &why))) r->trouble = "its blur shader: " + why;
     r->none = Texture::Builder().width(1).height(1).levels(1).format(Texture::InternalFormat::RGBA8).build(*s.engine);
     r->none->setImage(*s.engine, 0, backend::PixelBufferDescriptor(new uint32_t(0), 4, backend::PixelDataFormat::RGBA, backend::PixelDataType::UBYTE, [](void* p, size_t, void*) { delete (uint32_t*)p; }));
     auto* noise = new std::vector<math::half>(256 * 256);   // ("random": 256 x 256 of 0 to 1 (R32F there; a half float here, as a door's picture is filtered))
