@@ -136,6 +136,7 @@
 | 採点表と採点4回 | `AE_RUBRIC.md`、`reports/ae_rubric/round_0*.md`、`evidence.md`、`try.md` | — |
 | タスク表 | `TASKS.md` | — |
 | この台帳と、その見張り（コミットの前に走る） | `ASSETS.md`、`.githooks/assets_check.py`、`.githooks/pre-commit` | 今の土台で動く |
+| GitHub の上限 100MB を超える物（libcef.dll 290MB）を載せる Git LFS の決まりと、git-lfs 3.7.1 が書いたままのフック（push の時に LFS の中身を送る） | `.gitattributes`、`.githooks/pre-push`、`.githooks/post-checkout`、`.githooks/post-commit`、`.githooks/post-merge` | 今の土台で動く |
 | 入口の紙 | `README.md` | — |
 
 ## 7. 実験と調べ物（結果だけ使う。作り直さない）
