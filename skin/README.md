@@ -1,27 +1,21 @@
-# design-sense-lab
+# skin — Motolii の窓
 
-Motolii とは別の、隔離した作業場。デザインの知識を LLM が読める形にして、実画面で試すための場所。
-
-> **これは Motolii の製品ではない。** 見た目の見本。製品の窓は Motolii の `motolii/ui`(`scripts/motolii-ui.sh dev`)だけ。見本の Stage は代用の絵で、作品は保存されない。
-> 見本どうしで今の形は Widgetbook の `Workspace › Window`([`book/lib/workspace/README.md`](book/lib/workspace/README.md))。製品の窓とは呼ばない。
+Motolii の窓（Flutter、macOS）と、その見た目の決まり。窓は操作だけで、絵は中身（`../filament/`）が描く。
 
 ## 中身
-- `DESIGN.md` — Motolii の Timeline から始めたデザインシステム(awesome-design-md の 9 節書式)。値に出所の印(`[code]` `[concept]` `[decided]` `[open]`)。選択状態の決まり(部品の種類ごと)も入っている。
-- `preview-dark.html` — DESIGN.md の値だけで描いた Timeline の静的な見本。
-- `book/` — Flutter の Widgetbook。126 個の use case(16 コンポーネント)。
-- `research/precedents.md` — Adobe Spectrum、Blender、Radix、Linear などの先例調査。
-- `research/open-decisions.md` — 先例との差 10 項目と、あなたが決める項目 A〜I。
+- `book/` — 窓そのもの。Flutter の Widgetbook として組んであり、`Workspace › Workspace › Live` が本物の窓（[`book/lib/workspace/README.md`](book/lib/workspace/README.md)）。試験は `book/test/`・`book/integration_test/`。
+- `book/skins/` — 窓の着せ替え（色・部品の絵）。`preview.png` は `book/skins/shoot.sh` で撮った窓の絵。
+- `BRIDGE.md` — 窓と中身の境目の決まり（窓が中身を呼ぶ所）。
+- `DESIGN.md` — 見た目の決まり（値に出所の印つき）。
+- `OVERVIEW.md`・`PROCESS.md` — 窓を別の作業場（design-sense-lab）で作っていた 10 月初めの記録。今の形は上の `book/`。
 
-## 起動(macOS)
+## 開く（macOS）
 ```bash
-cd book
-flutter run -d macos --pid-file /tmp/lab-book.pid
-# 反映: kill -USR1 $(cat /tmp/lab-book.pid)   (const のクラスを変えた時は -USR2)
+book/live.sh
 ```
-- ウィンドウは「Window > Fill」で広げる。
-- 各 use case の右パネルに knob。`Look`(quiet / concept / glow)、`Timeline > Six layers` は行の高さ・縞・キーの縁・格子。
+- `.dart` を保存すると開いている窓にすぐ出る（Flutter の hot reload）。窓を閉じると終わる。
+- 中身の場所は `live.sh` が自分の置き場所から求める（別の所なら `MOTOLII_DIR=/path/to/filament`）。
 
-## 作り方のルール
+## 作り方の決まり
 - 新しく作る前に、リポジトリとネットで既存を探す。見つからない時だけ作る。
-- 値は `book/lib/tokens.dart`(DESIGN.md から)。部品は数値を直書きしない。
-- 見た目の判断は、先例と数値の差で並べる。決めるのは利用者。
+- 値は `book/lib/tokens.dart`（`DESIGN.md` から）。部品は数値を直書きしない。

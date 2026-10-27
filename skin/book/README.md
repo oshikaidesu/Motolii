@@ -1,13 +1,13 @@
-# lab_book
+# lab_book — Motolii の窓
 
-design-sense-lab の Widgetbook。
+Motolii の窓を Flutter の Widgetbook として組んだ物。`Workspace › Workspace › Live` が本物の窓（[`lib/workspace/README.md`](lib/workspace/README.md)）。開くのは `./live.sh`。
 
-- **見本は Workspace の窓**(製品ではない): [`lib/workspace/README.md`](lib/workspace/README.md)。製品の窓は Motolii の `scripts/motolii-ui.sh dev`。
+- 名前の lab_book は、窓を別の作業場（design-sense-lab）で作っていた頃の名残。
 
 ## Widgetbook の棚(`lib/main.dart`)
 | 棚 | 中身 |
 |---|---|
-| `Workspace` | 今の見本の窓(製品ではない) |
+| `Workspace` | Motolii の窓（Live が本物、ほかは同じ窓の見本） |
 | `Parts` | Workspace が使っている席ごとの部品(Inspector は `Parts › Inspector › Inspector Pop`、Timeline / Stage / Media / Transport / Relation の部品) |
 | `Foundations` | トークンと基礎部品(Controls / Inputs / Navigation / Feedback) |
 | `Workflows` | 操作の通し(Workflow / Dose) |

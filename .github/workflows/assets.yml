@@ -1,0 +1,11 @@
+# The ledger check of every commit (CONTRIBUTING.md, rule 2), the same one the pre-commit hook runs.
+name: ledger
+on: [push, pull_request]
+jobs:
+  assets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # (the check asks git whether a place it misses was ever held)
+      - run: python3 .githooks/assets_check.py
