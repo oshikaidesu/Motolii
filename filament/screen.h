@@ -160,6 +160,7 @@ static bool screen_read(ScreenFx& fx, std::string& code) {
         fx.bytes = (end + most - 1) / most * most;
     }
     fx.knobs = script_knobs(file);
+    script_first(fx.file, fx.knobs);   // (the values it comes with, where its own show nothing: fx_first.sh)
     return true;
 }
 

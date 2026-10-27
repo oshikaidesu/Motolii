@@ -37,14 +37,17 @@ static bool doc_files_moved(Doc& d) {
 // An effect's tile on the shelf, "\tpicture\thome\tsame": its picture (the one drawn for it in
 // ~/Library/Caches/Motolii/tiles, with its moving frames beside it, home_0..7.png, as Alight Motion's tiles move; until
 // then a .png beside it, as fx_tiles.sh writes the library's; "" none yet), where one drawn for it goes, named by the
-// file and when it was last written, as midi_roll_file names its rolls (an @ file's script by "file#name"): written
-// over, it is drawn again; and "same" when none of its frames is seen to differ from the sample (home.same; the window
+// file and when it and the first.tsv beside it were last written, and how the window draws them, as midi_roll_file names
+// its rolls (an @ file's script by "file#name"): any of them changed, it is drawn again; and "same" when none of its frames is seen to differ from the sample (home.same; the window
 // draws and measures them: skin/book/lib/workspace/effect_tiles.dart).
 static std::string doc_tile(const std::string& ref, const std::filesystem::path& beside) {
     std::error_code wrong;
     const std::string file = ref.substr(0, ref.find('#'));
     std::string key = ref;
     if (auto at = std::filesystem::last_write_time(file, wrong); !wrong) key += "|" + std::to_string((long long)at.time_since_epoch().count());
+    if (auto at = std::filesystem::last_write_time(std::filesystem::path(file).parent_path() / "first.tsv", wrong); !wrong) key += "|first " + std::to_string((long long)at.time_since_epoch().count());   // (the values it comes with: script_first)
+    wrong.clear();
+    key += "|tiles 2";   // (how the window draws them, effect_tiles.dart: made again when that changes)
     uint64_t hash = 1469598103934665603ull;
     for (unsigned char c : key) hash = (hash ^ c) * 1099511628211ull;
     const char* home = std::getenv("HOME");

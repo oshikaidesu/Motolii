@@ -35,6 +35,10 @@ inline std::vector<std::string> script_files(const std::string& word) {
 
 // The knobs a file declares (read from its head; empty if it has none or cannot be read).
 std::vector<ScriptKnob> script_knobs(const std::string& file);
+// The values an effect comes with where its own show nothing on a picture (Alight Motion's rule: an effect is seen as it
+// is put on, reports/alight_ui.md "最初の値"): first.tsv beside it, "file<TAB>knob<TAB>value" a line, measured by
+// fx_first.sh, laid over its knobs' usual values. The author's file is left as it is.
+void script_first(const std::string& file, std::vector<ScriptKnob>& knobs);
 
 // How far an ease of anime.js (third_party/anime, MIT) has gone at u, 0 to 1: `said` as anime.js says it ("outElastic(1, .3)",
 // "spring({ bounce: .5 })", "linear(0, '0.25 75%', 1)", "steps(4)", "irregular(10, 1)"); `bundle` is where its file is.

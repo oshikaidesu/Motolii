@@ -1,0 +1,18 @@
+# fx_first.sh: the values these come with, where their own show nothing (file, knob, value)
+Bloom.fs	intensity	0.4
+Color Controls.fs	bright	0.1
+Color Replacement.fs	threshold	0.75
+Diagonal Blur.fs	width	0.1
+Dilate.fs	intensity	0.4
+Displace.fs	uDisplaceAmt	0.2
+Erode.fs	intensity	0.4
+Gamma Correction.fs	gamma	0.55
+Gloom.fs	intensity	0.4
+LGG.fs	saturation	1.3
+Luma Key.fs	threshold	0.2
+Multi Hue Shift.fs	shiftLow	0.1
+Noise Displace.fs	displaceX	0.01
+Side Scroller And Flip.fs	slide	0.2
+Twirl.fs	amount	1
+Vibrance.fs	vibrance	0.42
+Zoom.fs	level	1.9

@@ -8,6 +8,7 @@
 #include <fstream>
 #include <mutex>
 #include <sstream>
+#include <sys/stat.h>
 
 static std::vector<std::string> split(const std::string& s, char by) {
     std::vector<std::string> out;
@@ -47,6 +48,30 @@ std::vector<ScriptKnob> script_knobs(const std::string& file) {
         knobs.push_back(k);
     }
     return knobs;
+}
+
+void script_first(const std::string& file, std::vector<ScriptKnob>& knobs) {
+    static std::mutex hold;
+    static std::map<std::string, std::pair<long long, std::map<std::string, std::map<std::string, double>>>> read;   // (each folder's first.tsv, as it was when last written)
+    const size_t slash = file.find_last_of('/');
+    if (slash == std::string::npos) return;
+    const std::string table = file.substr(0, slash) + "/first.tsv", name = file.substr(slash + 1);
+    struct stat st{};
+    const long long when = stat(table.c_str(), &st) == 0 ? (long long)st.st_mtimespec.tv_sec * 1000000000LL + st.st_mtimespec.tv_nsec : -1;
+    std::lock_guard<std::mutex> one(hold);
+    auto& [stamp, values] = read[table];
+    if (stamp != when) {
+        stamp = when, values.clear();
+        std::ifstream in(table);
+        for (std::string line; std::getline(in, line);) {
+            const std::vector<std::string> w = split(line, '\t');
+            if (w.size() >= 3 && !w[0].empty() && w[0][0] != '#') values[w[0]][w[1]] = std::atof(w[2].c_str());
+        }
+    }
+    const auto own = values.find(name);
+    if (own == values.end()) return;
+    for (ScriptKnob& k : knobs)
+        if (const auto v = own->second.find(k.name); v != own->second.end()) k.usual = v->second;
 }
 
 // What a Canvalry distribution asks of Cavalry's JavaScript (the four names its 26 files use), so one runs as it is.

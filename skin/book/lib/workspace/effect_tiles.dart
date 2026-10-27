@@ -1,6 +1,7 @@
 // Every effect on the shelf has a tile that moves, as Alight Motion's do (reports/alight_ui.md, 71 and 72): the sample
 // filament/fx_tiles.sh draws the bundled ones on (the balloon, fx_sample.jpg, drifting, a white Aa over it) with the
-// effect on, eight pictures from 0.1 to 1.9 seconds, played in the tile as the media shelf plays a film's
+// effect on, eight pictures from 0.1 to 1.9 seconds (a transition's progress going from 0 to 1 across them), played in
+// the tile as the media shelf plays a film's
 // (dock_files_contents.dart); its still the one at 1.4 seconds, fx_tiles.sh's moment. Drawn on a document of its own in
 // another isolate (as create_preview.dart reckons the recipes), where the inside says one drawn for it goes (its home in
 // ~/Library/Caches/Motolii/tiles, named by the file and when it was written: doc_recipes.h doc_tile), then shown at once.
@@ -123,6 +124,12 @@ abstract final class EffectTiles {
       }
       final whole = (f.endsWith('.fs') || f.endsWith('.wgsl')) && m.say(0, 'script', f);   // (a screen effect; the stage takes an AviUtl2 script too, but draws none of it: motolii.h, a thing's)
       final onIt = !whole && m.say(photo, 'fx', f);   // (as a thing's: as edit.sh says it)
+      if (whole) {   // (a transition, ISF's progress, seen going from 0 to 1 across its pictures; a file without one has no such value: nothing)
+        final progress = 'js_${f.split('/').last.replaceFirst(RegExp(r'\.[^.]*$'), '').replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_')}_progress';   // (doc_values.h doc_screen_knob)
+        m
+          ..key(0, progress, moments.first, 0)
+          ..key(0, progress, moments.last, 1);
+      }
       var made = shoot(home);
       if (whole) m.say(0, 'script', 'none');
       if (onIt) m.say(photo, 'fx', 'none');

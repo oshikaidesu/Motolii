@@ -254,6 +254,7 @@ static DocScript* doc_script_of(Doc& d, const std::string& file) {
     if (s.stamp != stamp) {
         s = DocScript{};
         s.stamp = stamp, s.looked = now, s.knobs = ext == ".mjs" ? SplatEffect(file).knobs() : lottie ? lottie_knobs(file) : script_knobs(screen ? isf_file(file) : file);
+        if (screen) script_first(file, s.knobs);   // (the values it comes with, where its own show nothing: fx_first.sh)
         doc_scripts_made(d)++;   // (what was worked out from the old one is forgotten)
         for (const ScriptKnob& k : s.knobs) s.names.push_back(screen || lottie ? doc_screen_knob(file, k.name) : "js_" + k.name);
         for (size_t i = 0; i < s.knobs.size(); ++i) {   // (the names are all made first: what points into them stays put)
