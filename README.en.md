@@ -58,7 +58,7 @@ Also: keyframes and easing (anime.js eases work as they are), physics (Jolt), re
 
 **Where Motolii is behind**: stability and breadth of features as a finished tool (every tool above is ahead), no app to hand out, no Windows, and no thought yet for performing live.
 
-**Why Alight Motion is the model for its handling**: people who make MVs on their phones already know how it feels; Motolii copies all of it first, then goes further. Of Alight Motion's 201 effects and features, Motolii has 101, 37 in part and 62 not at all (counted on 2026-10-28, [`reports/alight_map.md`](reports/alight_map.md)).
+**Why Alight Motion is the model for its handling**: people who make MVs on their phones already know how it feels; Motolii copies all of it first, then goes further. Of Alight Motion's 201 effects and features, Motolii has 101, 39 in part and 60 not at all (counted on 2026-10-28, [`reports/alight_map.md`](reports/alight_map.md)).
 
 ## How it is built
 

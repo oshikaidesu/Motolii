@@ -58,7 +58,7 @@ Motolii は MV（絵が主役のモーショングラフィックス）を作る
 
 **Motolii がまだ負けている所**：出来上がった道具としての安定と機能の数（どれも上の道具が上）、配れるアプリが無い事、Windows で動かない事、ライブで演奏する使い方は考えていない事。
 
-**操作の手本が Alight Motion な訳**：スマホで MV を作る人が慣れている触り方を、まず全部なぞってから、その先へ行くため。Alight Motion の効果と機能 201 のうち、Motolii に有るのは 101、一部が 37、無いのが 62（2026-10-28 の数え、[`reports/alight_map.md`](reports/alight_map.md)）。
+**操作の手本が Alight Motion な訳**：スマホで MV を作る人が慣れている触り方を、まず全部なぞってから、その先へ行くため。Alight Motion の効果と機能 201 のうち、Motolii に有るのは 101、一部が 39、無いのが 60（2026-10-28 の数え、[`reports/alight_map.md`](reports/alight_map.md)）。
 
 ## 作り
 
