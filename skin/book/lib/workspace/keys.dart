@@ -20,6 +20,7 @@ const defaultKeys = <(String, String)>[
   ('cmd+v', 'edit.paste'),
   ('cmd+a', 'edit.selectAll'),
   ('cmd+d', 'thing.duplicate'),   // (Live 42.5)
+  ('cmd+e', 'thing.split'),   // (Live 42.5: Split)
   ('cmd+r', 'thing.rename'),   // (Live 42.5, 42.19)
   ('0', 'thing.deactivate'),   // (Live 42.15/42.16/42.19: 0 switches a clip off and on; here the eye)
   ('s', 'thing.solo'),   // (Live 42.15/42.19)

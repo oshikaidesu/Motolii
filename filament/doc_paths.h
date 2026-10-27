@@ -257,6 +257,19 @@ static bool doc_keys_by(Doc& d, int thing, double by) {
                                          "update fact set at = at - 1e7 where thing = %d and at >= 5e6", 1e7 + by, thing, thing, thing));   // (by way of far off: no key lands on one not yet moved)
 }
 static double doc_lasts(Doc& d, int thing);
+// A thing cut in two at a moment (Ableton Live's Split, Cmd+E; AbsentMotion's Scene.splitAt): it ends there, and a copy
+// of it (every fact, its keys staying where they are on the stage) begins there, a film's copy as far on in the film as
+// the head's trim takes it (above). One step to undo; the answer is the copy, as duplicate's.
+static int doc_split(Doc& d, int thing, double at) {
+    if (doc_knows(d, thing) && doc_number(d, thing, "lock", 0, 0) > 0.5) return d.trouble = "it is locked", 0;
+    const double start = doc_number(d, thing, "start", 0, 0), lasts = doc_number(d, thing, "duration", 0, -1), end = lasts > 0.0 ? start + lasts : doc_seconds(d);
+    if (!(at > start + 1e-3 && at < end - 1e-3)) return d.trouble = "the moment is not inside it", 0;
+    doc_act(d);
+    const int made = doc_duplicate(d, thing);
+    bool ok = made && doc_set(d, thing, "duration", at - start) && doc_set(d, made, "start", at) && doc_set(d, made, "duration", end - at);
+    if (ok && doc_word(d, thing, "kind") == "film") ok = doc_set(d, made, "begin", doc_number(d, thing, "begin", 0, 0) + (at - start) * std::fabs(doc_number(d, thing, "speed", 0, 1)));
+    return doc_acted(d) && ok ? made : 0;
+}
 static bool doc_let_go(Doc& d, bool keep) {
     const Doc::Held h = d.held;
     d.held = Doc::Held{};

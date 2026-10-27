@@ -208,6 +208,32 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Cmd+E cuts the picked film at the playhead: it ends there, and the part after begins there, as far on in the film', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final film = m.add('', '$motoliiDir/out/vid/check_film.mp4');
+    expect(m.set(film, 'start', .5) && m.set(film, 'duration', 3) && m.set(film, 'begin', .25), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$film')
+      ..frame = 2 * Ws.fps;
+    await t.pumpAndSettle();
+    await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await t.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await settled(t, ws);
+    for (var i = 0; i < 200 && ws.selected == '$film'; i++) {   // (the part after is picked once the inside has made it)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    final after = int.parse(ws.selected!);
+    expect(after, isNot(film), reason: m.trouble);
+    expect([m.value(film, 'start', 0), m.value(film, 'duration', 0)], [.5, closeTo(1.5, 1e-9)], reason: 'the first ends at the playhead');
+    expect([m.value(after, 'start', 0), m.value(after, 'duration', 0), m.value(after, 'begin', 0)], [closeTo(2, 1e-9), closeTo(1.5, 1e-9), closeTo(1.75, 1e-9)], reason: 'the part after: from the playhead to where it ended, 1.5 s further on in the film');
+    expect(m.word(after, 'file'), m.word(film, 'file'));
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('the inspector says what a thing is in the document\'s word, and shows only the cards of values it has', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final film = m.add('', '$motoliiDir/out/vid/check_film.mp4'), cube = m.add('solid', 'cube');

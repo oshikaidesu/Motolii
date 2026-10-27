@@ -174,6 +174,11 @@ class _WorkspaceState extends State<Workspace> {
         if (t == null) return;
         ws.after(m.later('duplicate', thing: t), null, (made) => ws.select('$made'));   // (the new one picked, as After Effects does)
       },
+      'thing.split': () {
+        final t = int.tryParse(ws.selected ?? '');
+        if (t == null) return;
+        ws.after(m.later('split', thing: t, number: ws.frame / Ws.fps), null, (made) => ws.select('$made'));   // (the part after the playhead picked, as Live does)
+      },
       'layers.sequence': () => ws.after(m.later('sequence')),   // (After Effects' Keyframe Assistant: one after another, from the top)
       'play.toggle': () => ws.playing = !ws.playing,
       ...wsAbletonCommands(ws),   // (Ableton Live's keys: ableton.dart)
@@ -225,6 +230,7 @@ class _WorkspaceState extends State<Workspace> {
           PlatformMenuItemGroup(
             members: [
               item('Duplicate', 'thing.duplicate'),
+              item('Split', 'thing.split'),
               item('Rename', 'thing.rename'),
               item('Remove', 'thing.remove'),
             ],
