@@ -17,8 +17,6 @@ node_modules/
 /research_notes/
 
 # made from their sources by lottie3d.py (filament/led.sh, filament/motion_test.sh)
-/filament/led.json
-/filament/motion_test3d.json
 __pycache__/
 # Kept on this machine only, not in git: the reports' pictures and films (many show other people's apps or footage),
 # Windows binaries inside the AviUtl2 packages (Motolii runs on macOS), and packages whose author gives no licence text.
@@ -41,3 +39,4 @@ __pycache__/
 /filament/aviutl_scripts/もも猫__スカラップ円/
 /filament/aviutl_scripts/もも猫__ルーローの多角形/
 /filament/aviutl_scripts/暘_弥涼__SliceGlitch/
+/reports/user_panels/sheets/youtube/

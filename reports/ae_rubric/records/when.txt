@@ -1,4 +1,4 @@
 2026-10-14 02:26
-881403e motolii.h: the editing inside as C calls (eighteen, one shared library): all a shell on a screen calls; edit.cpp is now a shell over it and nothing else, check/api.c calls it from plain C; the fourth round and what followed in the morning report
+d545612 motolii.h: the editing inside as C calls (eighteen, one shared library): all a shell on a screen calls; edit.cpp is now a shell over it and nothing else, check/api.c calls it from plain C; the fourth round and what followed in the morning report
 15.5
 Apple M4

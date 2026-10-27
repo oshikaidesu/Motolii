@@ -172,7 +172,7 @@ EOF
 
 | 外向け | 作者の作業メモ（日本語、そのまま公開） |
 |---|---|
-| `README.md`・`README.en.md`・`CONTRIBUTING.md`・`THIRD_PARTY_NOTICES.md` | `ASSETS.md`（在る物の台帳）・`TASKS.md`（やること）・`AE_RUBRIC.md`（採点表）・`reports/`（調べた記録。絵と動画は他の人のアプリや素材が映る物が多いので git に入れていない） |
+| `README.md`・`README.en.md`・`CONTRIBUTING.md`・`THIRD_PARTY_NOTICES.md` | `ASSETS.md`（在る物の台帳）・`docs/notes/TASKS.md`（やること）・`docs/notes/AE_RUBRIC.md`（採点表）・`reports/`（調べた記録。絵と動画は他の人のアプリや素材が映る物が多いので git に入れていない） |
 
 ## ライセンス
 

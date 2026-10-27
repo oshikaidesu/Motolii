@@ -11,9 +11,11 @@
   3 kind at 0.0: solid
   4 file at 0.0: ../../../reports/ae_rubric/stills/lay_v1.jpg
   4 kind at 0.0: picture
+  4 speed at 0.0: -1.0
   5 file at 0.0: ../arial_black.ttf
   5 fill at 0.0: ff3366
   5 kind at 0.0: text
   5 size at 0.0: 0.5
+  5 speed at 0.0: 2.0
   5 text at 0.0: two words  and a gap
   (the document runs 14.35 seconds)

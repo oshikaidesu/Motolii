@@ -22,7 +22,7 @@ for line in ledger.split('\n'):
         else:
             folder = token if whole or not (re.search(r'\.[A-Za-z0-9*]{1,6}$', os.path.basename(token)) or os.path.isfile(token)) else os.path.dirname(token)
         places.append(token)
-files = subprocess.run(['git', 'ls-files', '--cached', '--others', '--exclude-standard'], capture_output=True, text=True).stdout.split('\n')
+files = subprocess.run(['git', 'ls-files', '--cached'], capture_output=True, text=True).stdout.split('\n')   # (what git holds or is about to: a file of one's own not added is not asked about)
 # (not things one would look for: pictures and films, other people's sources, build output, the reports themselves)
 skip = re.compile(r'(^|/)(third_party|target|build|out|\.dart_tool|Pods|ephemeral)/|^reports/|^research_notes/|\.(png|jpe?g|mp4|ico|icns|lock|g\.dart)$|(^|/)\.[^/]+$')
 files = [f for f in files if f and not skip.search(f) and os.path.exists(f)]

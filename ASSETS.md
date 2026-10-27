@@ -133,14 +133,14 @@
 | 文書（置く・取り消し・間違い35個・間の行き方・開き直し・色） | `filament/check/doc.sh`、`doc_calls.txt`、`doc_wrong.txt`、`doc_ways.txt` | 今の土台で動く |
 | 音、動画の色、動画の時間、C からの呼び出し、間の式の突き合わせ | `filament/check/`（`sound.sh`、`video_colour.sh`、`video_time.mm`、`api.c`、`interp_twin.sh`、`solid_probe.mm`） | 今の土台で動く |
 | AEのファイル103本、AEの動き | `filament/ae_test.sh`、`ae_ref.cpp`、`motion_test.sh`、`motion_test.mm`、`motion_test.json`、`motion_test3d.json`、`motion_test3d.inc` | 今の土台で動く |
-| 採点表と採点4回 | `AE_RUBRIC.md`、`reports/ae_rubric/round_0*.md`、`evidence.md`、`try.md` | — |
-| タスク表 | `TASKS.md` | — |
+| 採点表と採点4回 | `docs/notes/AE_RUBRIC.md`、`reports/ae_rubric/round_0*.md`、`evidence.md`、`try.md` | — |
+| タスク表 | `docs/notes/TASKS.md` | — |
 | Motolii 自身のライセンス（Apache-2.0 か MIT を選べる、過去の倉庫 rust_ae と同じ文書） | `LICENSE-APACHE`、`LICENSE-MIT` | 決めた（10/27） |
 | 関わり方（Issue・PR・台帳と出典の決まり・知っている穴） | `CONTRIBUTING.md` | 書いた（10/27） |
 | 取ってくる物の小さなスクリプト：Filament の組み立て済み SDK（前の試しのスクリプトが使う）、MIDI ビューの PianoRollSvg.js | `filament/sdk.sh`、`filament/midi_roll.sh` | 空の所から取れることを確かめた（10/27） |
-| 外向けの文書：英語の README、Issue と PR のひな型、台帳の確かめを GitHub Actions で毎回走らせる設定、README の絵（Motolii で作った物と、パブリックドメインの写真に掛けた物） | `README.en.md`、`.github/ISSUE_TEMPLATE/`、`.github/PULL_REQUEST_TEMPLATE.md`、`.github/workflows/assets.yml`、`docs/media/` | 書いた（10/27）。最初の 1 本のコマンドは書いたとおりに走らせて確かめた |
+| 外向けの文書：英語の README、Issue と PR のひな型、台帳の確かめを GitHub Actions で毎回走らせる設定、README の絵（Motolii で作った物と、パブリックドメインの写真に掛けた物） | `README.en.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`.github/ISSUE_TEMPLATE/`、`.github/PULL_REQUEST_TEMPLATE.md`、`.github/workflows/assets.yml`、`docs/media/` | 書いた（10/27）。最初の 1 本のコマンドは書いたとおりに走らせて確かめた |
 | 組み立てに要る Homebrew の物の一覧（Homebrew Bundle の書き方、`brew bundle` で入る） | `Brewfile` | 新しいクローンで組んで確かめた（10/27） |
-| 同梱した他の人の作品の一覧と断り書き（AviUtl2 の 172、ISF・three.js・PlayCanvas の効果、取ってくる依存）。PlayCanvas の効果のライセンスの文書 | `THIRD_PARTY_NOTICES.md`、`filament/effects/playcanvas-LICENSE.txt`、`vgpu-LICENSE.txt`、`phosphor-LICENSE.txt`、`SlitScanCam-LICENSE.txt` | 書いた（10/27） |
+| 同梱した他の人の作品の一覧と断り書き（AviUtl2 の 172、ISF・three.js・PlayCanvas の効果、取ってくる依存）。PlayCanvas の効果のライセンスの文書 | `THIRD_PARTY_NOTICES.md`、`filament/effects/playcanvas-LICENSE.txt`、`vgpu-LICENSE.txt`、`phosphor-LICENSE.txt`、`SlitScanCam-LICENSE.txt`、`three-LICENSE.txt` | 書いた（10/27） |
 | この台帳と、その見張り（コミットの前に走る） | `ASSETS.md`、`.githooks/assets_check.py`、`.githooks/pre-commit` | 今の土台で動く |
 | 入口の紙 | `README.md` | — |
 

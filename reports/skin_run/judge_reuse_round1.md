@@ -1,6 +1,6 @@
 # Judge of re-makes, round 1 (item G only)
 
-Read: `ASSETS.md`, `~/rust_ae/HANDOFF.md`, the past repository (read only), `git diff 8a0a35e..HEAD` (11 commits, 54 files, +1781 / -172). Nothing was built, run or changed.
+Read: `ASSETS.md`, `~/rust_ae/HANDOFF.md`, the past repository (read only), `git diff 05c2005..HEAD` (11 commits, 54 files, +1781 / -172). Nothing was built, run or changed.
 
 ## G = 0
 

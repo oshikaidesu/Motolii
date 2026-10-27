@@ -14,8 +14,8 @@
 
 ## 今の状態
 **コミット済み**
-- `36ee473`：SQLite の関数 `anime(式, u)`。区間の式（`define` や `filament/ways/*.way`）から anime.js（`filament/third_party/anime/`、MIT、v4.5.0 をそのまま）のイーズを呼べる。QuickJS で動く（`filament/script.cpp` の `anime_ease`、`filament/doc_match.h`）。検査 `filament/check/anime_ways.sh`（yes）。これは「点で好きな形を描く `linear()`」などの道具として残す。
-- `8138bed`：anime.js の見本 46 本（`filament/ways/anime_*.way`）。**これは足してはいけない物だった**。
+- `8fa40d2`：SQLite の関数 `anime(式, u)`。区間の式（`define` や `filament/ways/*.way`）から anime.js（`filament/third_party/anime/`、MIT、v4.5.0 をそのまま）のイーズを呼べる。QuickJS で動く（`filament/script.cpp` の `anime_ease`、`filament/doc_match.h`）。検査 `filament/check/anime_ways.sh`（yes）。これは「点で好きな形を描く `linear()`」などの道具として残す。
+- `f8d60ad`：anime.js の見本 46 本（`filament/ways/anime_*.way`）。**これは足してはいけない物だった**。
 
 **まだコミットしていない変更**（作業の途中。見直してから扱う）
 - `filament/ways/anime_*.way` 46 本を消した（上の誤りを戻す）。

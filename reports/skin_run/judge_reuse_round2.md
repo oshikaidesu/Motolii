@@ -1,6 +1,6 @@
 # Judge of re-makes, round 2 (item G only)
 
-Read: `sheet.md` (G), `judge_reuse_round1.md`, `ASSETS.md`, `~/rust_ae/HANDOFF.md`, the past repository (read only), `git diff 8a0a35e..HEAD` (19 commits, 70 files, +2850 / -262), and the main files whole as they are at `a0038ab`. Nothing was built, run or changed. I have not seen this project before.
+Read: `sheet.md` (G), `judge_reuse_round1.md`, `ASSETS.md`, `~/rust_ae/HANDOFF.md`, the past repository (read only), `git diff 05c2005..HEAD` (19 commits, 70 files, +2850 / -262), and the main files whole as they are at `e0f654c`. Nothing was built, run or changed. I have not seen this project before.
 
 ## G = 0
 
@@ -47,7 +47,7 @@ The pattern has not changed, it has moved. Round 1 found the document's rules ty
 ### B5. A revision counted by the shell (likely, small)
 - Today: `Ws.rev`, `reread()`, `shown()` (`skin/book/lib/workspace/ws.dart:115-153`), bumped by hand at 16 places in 7 files; read by the dock's cache (`dock_files.dart:163-175`) and the stage's scene (`skin/book/lib/workspace/stage_art.dart:46`, `:69`).
 - Existing: the document's own `revision()` and `display_revision()` (`crates/motolii-edit/src/document.rs:392-404`; the second is exactly "what is shown changed and the document did not", today's `shown()`), handed out as `documentRevision` (`ui/native/src/snapshot.rs:317`).
-- `rev` was there at round 1 (56cbfe9), `shown()` came after it (e1234af). A call site that forgets it shows a stale window; the inside knows when it changed and is not asked.
+- `rev` was there at round 1 (490b137), `shown()` came after it (f34ef96). A call site that forgets it shows a stale window; the inside knows when it changed and is not asked.
 
 ## Seen, not counted
 

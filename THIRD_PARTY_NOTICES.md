@@ -20,7 +20,8 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 | ISF の効果 | [Vidvox/ISF-Files](https://github.com/Vidvox/ISF-Files) ほか（各 .fs の `CREDIT` に作者） | MIT | `filament/effects/*.fs`、`ISF-Files-LICENSE.txt` |
 | ossia score の ISF：Directional Blur・Polar Coordinates・Radial Blur | [ossia/score-user-library](https://github.com/ossia/score-user-library) | CC BY-SA 4.0（この 3 本と、その改変だけに掛かる） | `filament/effects/Directional Blur.fs`・`Polar Coordinates.fs`・`Radial Blur.fs`、`ossia-score-user-library-LICENSE.txt` |
 | ossia score の ISF：Luma Key（IMIMOT、memo.tv から移植） | [ossia/score-user-library](https://github.com/ossia/score-user-library) | MIT | `filament/effects/Luma Key.fs`、`ossia-LICENSE-ISF.txt` |
-| three.js の画面の効果（WGSL にした物） | [mrdoob/three.js](https://github.com/mrdoob/three.js) の examples/jsm/shaders | MIT | `filament/effects/*.wgsl`（各ファイルの 1 行目に出所） |
+| three.js の画面の効果（WGSL にした物） | [mrdoob/three.js](https://github.com/mrdoob/three.js) の examples/jsm/shaders | MIT | `filament/effects/*.wgsl`（各ファイルの 1 行目に出所）、`three-LICENSE.txt` |
+| 場面転換の効果 13 本（ISF-Files が ISF にした物） | [gl-transitions](https://github.com/gl-transitions/gl-transitions)（各 .fs の頭に作者：gre、Jake Nelson、Fernando Kuteken、bobylito、Hewlett-Packard ほか） | 各ファイルの頭のとおり：MIT 12 本、BSD 1 本（Inverted Page Curl、Hewlett-Packard。元のファイルにも「license: BSD」の 1 行しか無い） | `filament/effects/Fade.fs`・`Wipe *.fs` など、`CREDIT` に gl-transitions の URL |
 | CRT の仕上げ（WGSL に改変） | [vercel-labs/vgpu](https://github.com/vercel-labs/vgpu) の post.wgsl | MIT | `filament/effects/crt_finish.wgsl`、`vgpu-LICENSE.txt` |
 | データモッシュ（WGSL に改変） | [newomp4/phosphor](https://github.com/newomp4/phosphor) | MIT | `filament/effects/datamosh.wgsl`、`phosphor-LICENSE.txt` |
 | 時間のずらし（WGSL に改変） | [keijiro/SlitScanCam](https://github.com/keijiro/SlitScanCam) | Unlicense | `filament/effects/time_displacement.wgsl`、`SlitScanCam-LICENSE.txt` |

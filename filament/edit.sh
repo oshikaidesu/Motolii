@@ -3,9 +3,9 @@
 # Two parts: the editing inside as a library with C calls (motolii.h, motolii.mm: films by GStreamer, the document's
 # file, its undo and the working out of a stretch between keys by SQLite, 3D files by Filament's gltfio), and a shell that calls it
 # (edit.cpp), as a shell on a screen would.
+doc=${1:a}; shift   # (the document's place as the caller said it, before this goes into filament/)
 cd "$(dirname "$0")"
 HB=${HOMEBREW_PREFIX:-$(brew --prefix)}   # (where Homebrew is: /opt/homebrew on Apple silicon)
-doc=${1:a}; shift
 # (built again only if something it is made of has changed since)
 if [ ! -x out/edit_wgpu ] || [ -n "$(find . dawn_probe check -maxdepth 1 \( -name '*.c' -o -name '*.h' -o -name '*.mm' -o -name '*.cpp' -o -name '*.mat' -o -name '*.glsl' -o -name '*.sh' \) -newer out/edit_wgpu | head -1)" ]; then
     F=third_party/filament_src   # (an ISF effect made WGSL by Filament's own glslang and Dawn's Tint: isf.cpp, its headers heavy, built apart)
