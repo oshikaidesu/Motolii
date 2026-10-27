@@ -30,22 +30,22 @@
 
 ## C. レイヤーの絵を立体の面に貼る（faux-3D）（16）
 
-- [ ] **Box**（一部）：Renders a faux-3D box using the layer as a surface texture. — いま：立体 cube（キットの形）。物の絵を面に貼るのは無い
-- [ ] **Cube**（一部）：Renders a faux-3D cube using the layer as a surface texture. — いま：立体 cube。絵を面に貼るのは無い — ISF：cube
-- [ ] **Cylinder**（無い）：Renders a faux-3D cylinder using the layer as a surface texture.
-- [ ] **Ellipsoid**（一部）：Renders a faux-3D ellipsoid using the layer as a surface texture. — いま：立体 ball。絵を面に貼るのは無い
-- [ ] **Heart**（無い）：Renders a faux-3D heart using the layer as a surface texture.
-- [ ] **Hexagonal Prism**（無い）：Renders a faux-3D hexagonal prism using the layer as a surface texture.
-- [ ] **Hollow Box**（無い）：Renders a faux-3D hollow box, using the layer as a surface texture, with sides that can be turned on or off, punched out with preset shapes, or offset outward.
-- [ ] **Octahedron**（無い）：Renders a faux-3D regular octahedron using the layer as a surface texture.
-- [ ] **Pyramid**（無い）：Renders a faux-3D regular pyramid with a square base, using the layer as a surface texture.
+- [x] **Box**（一部）：Renders a faux-3D box using the layer as a surface texture. — いま：立体 cube（キットの形）。物の絵を面に貼るのは無い — 済（10/28）：物の fx に `filament/solids/Box.js`（物の絵を立体の面に、three.js の形：各ファイルの頭）。窓で写真 2 枚の左を少し傾けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=C）
+- [x] **Cube**（一部）：Renders a faux-3D cube using the layer as a surface texture. — いま：立体 cube。絵を面に貼るのは無い — ISF：cube — 済（10/28）：物の fx に `filament/solids/Cube.js`（物の絵を立体の面に、three.js の形：各ファイルの頭）。窓で写真 2 枚の左を少し傾けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=C）
+- [x] **Cylinder**（無い）：Renders a faux-3D cylinder using the layer as a surface texture. — 済（10/28）：物の fx に `filament/solids/Cylinder.js`（物の絵を立体の面に、three.js の形：各ファイルの頭）。窓で写真 2 枚の左を少し傾けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=C）
+- [x] **Ellipsoid**（一部）：Renders a faux-3D ellipsoid using the layer as a surface texture. — いま：立体 ball。絵を面に貼るのは無い — 済（10/28）：物の fx に `filament/solids/Ellipsoid.js`（物の絵を立体の面に、three.js の形：各ファイルの頭）。窓で写真 2 枚の左を少し傾けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=C）
+- [x] **Heart**（無い）：Renders a faux-3D heart using the layer as a surface texture. — 済（10/28）：物の fx に `filament/solids/Heart.js`（物の絵を立体の面に、three.js の形：各ファイルの頭）。窓で写真 2 枚の左を少し傾けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=C）
+- [x] **Hexagonal Prism**（無い）：Renders a faux-3D hexagonal prism using the layer as a surface texture. — 済（10/28）：物の fx に `filament/solids/Hexagonal_Prism.js`（物の絵を立体の面に、three.js の形：各ファイルの頭）。窓で写真 2 枚の左を少し傾けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=C）
+- [x] **Hollow Box**（無い）：Renders a faux-3D hollow box, using the layer as a surface texture, with sides that can be turned on or off, punched out with preset shapes, or offset outward. — 済（10/28）：物の fx に `filament/solids/Hollow_Box.js`（物の絵を立体の面に、three.js の形：各ファイルの頭）。窓で写真 2 枚の左を少し傾けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=C）
+- [x] **Octahedron**（無い）：Renders a faux-3D regular octahedron using the layer as a surface texture. — 済（10/28）：物の fx に `filament/solids/Octahedron.js`（物の絵を立体の面に、three.js の形：各ファイルの頭）。窓で写真 2 枚の左を少し傾けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=C）
+- [x] **Pyramid**（無い）：Renders a faux-3D regular pyramid with a square base, using the layer as a surface texture. — 済（10/28）：物の fx に `filament/solids/Pyramid.js`（物の絵を立体の面に、three.js の形：各ファイルの頭）。窓で写真 2 枚の左を少し傾けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=C）
 - [ ] **Raster Extrude**（無い）：Renders a faux-3D raster extrusion of the layer based on the opaque and transparent pixels within the layer, using the opaque parts of the layer as a surface texture for the front and back of the extr
-- [ ] **Spherize**（一部）：Renders a faux-3D sphere, interpreting the layer as an equirectangular projection and using it as a surface texture for the sphere. — いま：ISF Sphere Map
+- [x] **Spherize**（一部）：Renders a faux-3D sphere, interpreting the layer as an equirectangular projection and using it as a surface texture for the sphere. — いま：ISF Sphere Map — 済（10/28）：物の fx に `filament/solids/Spherize.js`（物の絵を立体の面に、three.js の形：各ファイルの頭）。窓で写真 2 枚の左を少し傾けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=C）
 - [ ] **Star Polyhedron**（無い）：Renders a faux-3D star polyhedron using the layer as a surface texture.
-- [ ] **Star Prism**（無い）：Renders a faux-3D star prism using the layer as a surface texture.
-- [ ] **Three-axis Cross**（無い）：Renders a faux-3D three-axis cross using the layer as a surface texture.
-- [ ] **Torus**（一部）：Renders a faux-3D torus using the layer as a surface texture. — いま：立体 ring（絵を面に貼るのは無い）
-- [ ] **Tunnel**（無い）：Renders a round faux-3D tunnel using the layer as the interior surface texture.
+- [x] **Star Prism**（無い）：Renders a faux-3D star prism using the layer as a surface texture. — 済（10/28）：物の fx に `filament/solids/Star_Prism.js`（物の絵を立体の面に、three.js の形：各ファイルの頭）。窓で写真 2 枚の左を少し傾けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=C）
+- [x] **Three-axis Cross**（無い）：Renders a faux-3D three-axis cross using the layer as a surface texture. — 済（10/28）：物の fx に `filament/solids/Three-axis_Cross.js`（物の絵を立体の面に、three.js の形：各ファイルの頭）。窓で写真 2 枚の左を少し傾けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=C）
+- [x] **Torus**（一部）：Renders a faux-3D torus using the layer as a surface texture. — いま：立体 ring（絵を面に貼るのは無い） — 済（10/28）：物の fx に `filament/solids/Torus.js`（物の絵を立体の面に、three.js の形：各ファイルの頭）。窓で写真 2 枚の左を少し傾けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=C）
+- [x] **Tunnel**（無い）：Renders a round faux-3D tunnel using the layer as the interior surface texture. — 済（10/28）：物の fx に `filament/solids/Tunnel.js`（物の絵を立体の面に、three.js の形：各ファイルの頭）。窓で写真 2 枚の左を少し傾けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=C）
 
 ## D. 手元の ISF-Files（MIT）に近いものがある：置いて確かめる（55）
 

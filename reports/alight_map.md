@@ -11,9 +11,9 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | | 数 |
 |---|---|
 | Alight Motion の効果 | 169 |
-| Motolii に有る | **71**（42%） |
-| 一部 | **38**（22%） |
-| 無い | **60**（36%） |
+| Motolii に有る | **85**（50%） |
+| 一部 | **33**（20%） |
+| 無い | **51**（30%） |
 | 無いもののうち、手元の ISF-Files（`research_notes/isf/ISF-Files`、327 本、MIT）に近いものがある | 36 |
 | 一部のもののうち、同じく ISF-Files に近いものがある | 31 |
 
@@ -36,7 +36,7 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Blink](https://guide.alightmotion.com/effects/blink) | Automatically adjusts the opacity of the layer, alternating between its normal value and zero over time. | 一部 | ふるまい oscillator を opacity に＋間 Steps |  |
 | [Block Dissolve](https://guide.alightmotion.com/effects/block-dissolve) | Randomly removes grid-aligned rectangular pieces from the layer by making them transparent. Keyframe animation can be applied to remove progressively more and more rectangles over time. | 有る | 物の fx に ISF の Random Squares Mask.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Random Squares Mask |
 | [Block Noise](https://guide.alightmotion.com/effects/block-noise) | Multiplies randomly generated rectangular blocks of noise with the existing colors of opaque parts of the layer. | 有る | 物の fx に ISF の JPEG Block Corruption.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | JPEG Block Corruption |
-| [Box](https://guide.alightmotion.com/effects/box) | Renders a faux-3D box using the layer as a surface texture. | 一部 | 立体 cube（キットの形）。物の絵を面に貼るのは無い |  |
+| [Box](https://guide.alightmotion.com/effects/box) | Renders a faux-3D box using the layer as a surface texture. | 有る | 物の fx に solids/Box.js（物の絵を面に、10/28、窓で確かめた） |  |
 | [Box Blur](https://guide.alightmotion.com/effects/box-blur) | Blurs the layer by averaging the colors of nearby pixels in a surrounding rectangular area (hence "box" blur). | 有る | 物の fx に ISF の Fast Blur.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Fast Blur |
 | [Brightness / Contrast](https://guide.alightmotion.com/effects/brightness-contrast) | Adjusts the brightness or contrast of the layer. | 有る | 物の fx に ISF の Color Controls.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Color Controls |
 | [Bump Map](https://guide.alightmotion.com/effects/bump-map) | Uses a height map to model bumps or perturbations in the surface of the layer, then applies simulated lighting and shading. | 有る | 物の fx に ISF の Emboss.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Emboss |
@@ -55,9 +55,9 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Contour Strips](https://guide.alightmotion.com/effects/contour-strips) | Renders strips of thin paper-like material, layered front to back, using the layer luminance or opacity as a height map for each strip. | 無い |  |  |
 | [Copy Background](https://guide.alightmotion.com/effects/copy-background) | Copies the background into the layer, effectively turning the layer into an adjustment layer. Effects applied to the layer after this will apply to the background pixels covered by the opaque parts of | 一部 | 段の script（画面全体に .wgsl）。下だけに掛ける調整レイヤーは無い |  |
 | [Count Up/Down](https://guide.alightmotion.com/effects/count-up-down) | Replaces existing numbers in a text layer with the same number added to or multiplied with a fixed value. Useful for creating animations that count up or down. | 無い |  |  |
-| [Cube](https://guide.alightmotion.com/effects/cube) | Renders a faux-3D cube using the layer as a surface texture. | 一部 | 立体 cube。絵を面に貼るのは無い | cube |
+| [Cube](https://guide.alightmotion.com/effects/cube) | Renders a faux-3D cube using the layer as a surface texture. | 有る | 物の fx に solids/Cube.js（物の絵を面に、10/28、窓で確かめた） | cube |
 | [Curl](https://guide.alightmotion.com/effects/curl) | Deforms the layer by curling it into a circular shape from one end. | 有る | 物の fx に ISF の Inverted Page Curl.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Inverted Page Curl |
-| [Cylinder](https://guide.alightmotion.com/effects/cylinder) | Renders a faux-3D cylinder using the layer as a surface texture. | 無い |  |  |
+| [Cylinder](https://guide.alightmotion.com/effects/cylinder) | Renders a faux-3D cylinder using the layer as a surface texture. | 有る | 物の fx に solids/Cylinder.js（物の絵を面に、10/28、窓で確かめた） |  |
 | [Dark Glow](https://guide.alightmotion.com/effects/dark-glow) | Creates dark blooms around darker areas within a photo or video layer based on a luminance threshold. | 無い |  |  |
 | [Directional Blur](https://guide.alightmotion.com/effects/directional-blur) | Blurs the layer by averaging nearby pixel colors along a specified angle, similar to the blur caused by motion in a fixed direction. | 一部 | 物の blur の向き（横・縦だけ、角度は無い） | Linear Blur |
 | [Displacement Map](https://guide.alightmotion.com/effects/displacement-map) | Displaces pixels in the background based on the color of pixels in the layer. | 無い |  | Displace |
@@ -67,7 +67,7 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Echo Keyframes](https://guide.alightmotion.com/effects/echo-keyframes) | Creates one or more copies or "echoes" of the layer as it appeared or will appear at different points in time, based only on keyframe animation applied to the layer. | 一部 | 形の trail・ISF Echo Trace・RGB Trails |  |
 | [Edge Glow](https://guide.alightmotion.com/effects/edge-glow) | Detects edges in a photo or video and creates a glow around them. | 有る | 物の fx に ISF の Edges.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Edges |
 | [Electric Edges](https://guide.alightmotion.com/effects/electric-edges) | Creates a glowing energy-like outline and optional contour lines around the opaque parts of the layer, which can be animated to look like arcs of electricity. | 無い |  |  |
-| [Ellipsoid](https://guide.alightmotion.com/effects/ellipsoid) | Renders a faux-3D ellipsoid using the layer as a surface texture. | 一部 | 立体 ball。絵を面に貼るのは無い |  |
+| [Ellipsoid](https://guide.alightmotion.com/effects/ellipsoid) | Renders a faux-3D ellipsoid using the layer as a surface texture. | 有る | 物の fx に solids/Ellipsoid.js（物の絵を面に、10/28、窓で確かめた） |  |
 | [Exposure / Gamma](https://guide.alightmotion.com/effects/exposure-gamma) | Adjusts the exposure, gamma curve, and luminance offset of photo and video layers. | 有る | 物の fx に ISF の Exposure Adjust.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Exposure Adjust / Gamma Correction |
 | [Fade In/Out](https://guide.alightmotion.com/effects/fade-in-out) | Automatically animates the layer opacity to fade the layer in at its beginning, and out again at its end. | 一部 | キーで。出入りに自動で付くのは無い | Fade |
 | [Feather](https://guide.alightmotion.com/effects/feather) | Softens the edges of the opaque part of the layer by blurring the alpha channel. | 一部 | クリップの clip_feather（切り抜きの縁だけ） |  |
@@ -88,14 +88,14 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Grid Repeat](https://guide.alightmotion.com/effects/grid-repeat) | Dynamically generates multiple copies of the layer, arranged in a grid. | 有る | copies＋copy_columns |  |
 | [Halftone Dots](https://guide.alightmotion.com/effects/halftone-dots) | Replaces continuous tones in the layer with a pattern of monochrome dots of varying sizes, similar to the process used in newspaper or comic book printing. | 有る | 効果 halftone・dot_screen | Dot Screen |
 | [Halftone Lines](https://guide.alightmotion.com/effects/halftone-lines) | Replaces continuous tones in the layer with a pattern of monochrome lines of varying thickness, a variation of the process used in newspaper or comic book printing. | 有る | 物の fx に ISF の Line Screen.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Line Screen |
-| [Heart](https://guide.alightmotion.com/effects/heart) | Renders a faux-3D heart using the layer as a surface texture. | 無い |  |  |
+| [Heart](https://guide.alightmotion.com/effects/heart) | Renders a faux-3D heart using the layer as a surface texture. | 有る | 物の fx に solids/Heart.js（物の絵を面に、10/28、窓で確かめた） |  |
 | [Hexagon Array](https://guide.alightmotion.com/effects/hexagon-array) | Covers opaque parts of the layer in an array of hexagons. | 有る | 物の fx に ISF の Hexagonalize.fs（10/28、窓で確かめた） |  |
 | [Hexagon Tile Rotate](https://guide.alightmotion.com/effects/hexagon-tile-rotate) | Divides the layer into a grid of hexagonal tiles and rotates the pixels in each tile independently. | 無い |  |  |
 | [Hexagon Tile Shift](https://guide.alightmotion.com/effects/hexagon-tile-shift) | Divides the layer into a grid of hexagonal tiles and shifts the contents of each tile in a random direction. | 無い |  |  |
 | [Hexagon Tiling](https://guide.alightmotion.com/effects/hexagon-tiling) | Repeats the layer in a pattern of hexagonal tiles, filling the screen. | 無い |  | Hexagonalize |
-| [Hexagonal Prism](https://guide.alightmotion.com/effects/hexagonal-prism) | Renders a faux-3D hexagonal prism using the layer as a surface texture. | 無い |  |  |
+| [Hexagonal Prism](https://guide.alightmotion.com/effects/hexagonal-prism) | Renders a faux-3D hexagonal prism using the layer as a surface texture. | 有る | 物の fx に solids/Hexagonal_Prism.js（物の絵を面に、10/28、窓で確かめた） |  |
 | [Highlights and Shadows](https://guide.alightmotion.com/effects/highlights-and-shadows) | Independently adjusts the intensity of the lightest and darkest parts of the layer. | 一部 | 段の影・明るい所の色（全体だけ） | Color Levels |
-| [Hollow Box](https://guide.alightmotion.com/effects/hollow-box) | Renders a faux-3D hollow box, using the layer as a surface texture, with sides that can be turned on or off, punched out with preset shapes, or offset outward. | 無い |  |  |
+| [Hollow Box](https://guide.alightmotion.com/effects/hollow-box) | Renders a faux-3D hollow box, using the layer as a surface texture, with sides that can be turned on or off, punched out with preset shapes, or offset outward. | 有る | 物の fx に solids/Hollow_Box.js（物の絵を面に、10/28、窓で確かめた） |  |
 | [Hot Color](https://guide.alightmotion.com/effects/hot-color) | Remaps a grayscale image (or luminance values of a color image) into an intense color ramp based on two selected hues. | 一部 | ISF False Color | Thermal Camera |
 | [Hue Shift](https://guide.alightmotion.com/effects/hue-shift) | Rotates the color hues in the layer. | 有る | 物の fx に ISF の Multi Hue Shift.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Multi Hue Shift |
 | [Inner Blur](https://guide.alightmotion.com/effects/inner-blur) | Blurs the opaque parts of the layer without blurring the opacity. | 無い |  |  |
@@ -120,7 +120,7 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Motion Blur](https://guide.alightmotion.com/effects/motion-blur) | Simulates motion blur by blurring the layer based on position, rotation, and scale keyframe animation from the layer's Move & Transform settings, as well as motion from certain other effects that are  | 無い |  | VVMotionBlur 3.0 |
 | [Move Along Path](https://guide.alightmotion.com/effects/move-along-path) | Positions the layer at a point partway way along the outline path of the layer immediately beneath. | 一部 | copy_on（写しを別の物の輪郭に）。1 個を道に沿わせて動かすのは写し 1 個で |  |
 | [Noise](https://guide.alightmotion.com/effects/noise) | Blends random noise with the opaque parts of the layer. | 有る | 効果 grain・fine_grain | Noise |
-| [Octahedron](https://guide.alightmotion.com/effects/octahedron) | Renders a faux-3D regular octahedron using the layer as a surface texture. | 無い |  |  |
+| [Octahedron](https://guide.alightmotion.com/effects/octahedron) | Renders a faux-3D regular octahedron using the layer as a surface texture. | 有る | 物の fx に solids/Octahedron.js（物の絵を面に、10/28、窓で確かめた） |  |
 | [Offset](https://guide.alightmotion.com/effects/offset) | Offsets the layer content, wrapping at the edges of the bounding box of the layer. | 無い |  | Side Scroller And Flip |
 | [Omino Diffusion+](https://guide.alightmotion.com/effects/omino-diffusion) | Renders a photo or video layer with a limited palette using error diffusion, but damping or exaggerating the quantization errors to create intentional distortions. Individual images become unrecogniza | 一部 | ISF Dither-Bayer（並べた点のディザ、誤差拡散は無い） |  |
 | [Omino Glass](https://guide.alightmotion.com/effects/omino-glass) | Renders the layer as though it were made of glass, with refraction and a glossy contour, and chromatic aberration based on segmentation of the visible spectrum into seven regions. The layer luminance  | 無い |  |  |
@@ -134,7 +134,7 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Precise Box Blur](https://guide.alightmotion.com/effects/precise-box-blur) | Performs a slow but precise box blur of the layer. | 一部 | 物の blur |  |
 | [Pulse Opacity](https://guide.alightmotion.com/effects/pulse-opacity) | Automatically pulses the layer opacity over time, based on a sine wave or triangular wave. | 有る | ふるまい oscillator を opacity に |  |
 | [Pulse Size](https://guide.alightmotion.com/effects/pulse-size) | Automatically grows and shrinks the layer repeatedly over time, based on a sine wave or triangular wave. | 有る | ふるまい oscillator を size に |  |
-| [Pyramid](https://guide.alightmotion.com/effects/pyramid) | Renders a faux-3D regular pyramid with a square base, using the layer as a surface texture. | 無い |  |  |
+| [Pyramid](https://guide.alightmotion.com/effects/pyramid) | Renders a faux-3D regular pyramid with a square base, using the layer as a surface texture. | 有る | 物の fx に solids/Pyramid.js（物の絵を面に、10/28、窓で確かめた） |  |
 | [Radial Rays](https://guide.alightmotion.com/effects/radial-rays) | Overlays multiple solid-color radial rays in the opaque parts of the layer. | 無い |  |  |
 | [Radial Repeat](https://guide.alightmotion.com/effects/radial-repeat) | Dynamically generates multiple copies of the layer, arranged in a circular pattern. | 有る | copies＋copy_rotate | Radial Replicate |
 | [Radial Shadow](https://guide.alightmotion.com/effects/radial-shadow) | Renders long shadows radiating away from a point, based on the opaque parts of the layer. | 無い |  |  |
@@ -159,7 +159,7 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Solid Color](https://guide.alightmotion.com/effects/solid-color) | Fills the opaque parts of the layer with a solid color. | 有る | 物の tint・fill | Solid Color |
 | [Solid Matte](https://guide.alightmotion.com/effects/solid-matte) | Composites the layer on a solid color matte, filling transparent parts of the layer with a solid background color. | 一部 | 段の background（全体だけ） |  |
 | [Spectral Map](https://guide.alightmotion.com/effects/spectral-map) | Maps each color in the layer into a custom spectrum of colors based on the brightness of the original color. | 無い |  | Color Scales |
-| [Spherize](https://guide.alightmotion.com/effects/spherize) | Renders a faux-3D sphere, interpreting the layer as an equirectangular projection and using it as a surface texture for the sphere. | 一部 | ISF Sphere Map |  |
+| [Spherize](https://guide.alightmotion.com/effects/spherize) | Renders a faux-3D sphere, interpreting the layer as an equirectangular projection and using it as a surface texture for the sphere. | 有る | 物の fx に solids/Spherize.js（物の絵を面に、10/28、窓で確かめた） |  |
 | [Spin](https://guide.alightmotion.com/effects/spin) | Automatically spins the layer at a given speed. | 一部 | rotate のキー（ずっと回り続けるふるまいは無い） | Rotate |
 | [Spin Blur](https://guide.alightmotion.com/effects/spin-blur) | Applies an angular blur to the layer, as though it were spinning. | 無い |  |  |
 | [Spin Streaks](https://guide.alightmotion.com/effects/spin-streaks) | Creates arc-shaped streaks by spinning the layer around a point and blending together overlapping pixels. | 無い |  |  |
@@ -167,7 +167,7 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Squeeze](https://guide.alightmotion.com/effects/squeeze) | Distorts the layer by squeezing it along one axis while expanding it along the other axis. | 有る | 形の squash | Squeeze |
 | [Star](https://guide.alightmotion.com/effects/star) | Renders an individual star in the current layer. | 有る | 物の fx に ISF の Star.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Star |
 | [Star Polyhedron](https://guide.alightmotion.com/effects/star-polyhedron) | Renders a faux-3D star polyhedron using the layer as a surface texture. | 無い |  |  |
-| [Star Prism](https://guide.alightmotion.com/effects/star-prism) | Renders a faux-3D star prism using the layer as a surface texture. | 無い |  |  |
+| [Star Prism](https://guide.alightmotion.com/effects/star-prism) | Renders a faux-3D star prism using the layer as a surface texture. | 有る | 物の fx に solids/Star_Prism.js（物の絵を面に、10/28、窓で確かめた） |  |
 | [Starfield](https://guide.alightmotion.com/effects/starfield) | Renders a complex parallax starfield that can be animated in two dimensions. | 一部 | ISF Hyperspace |  |
 | [Stretch Axis](https://guide.alightmotion.com/effects/stretch-axis) | Stretches the layer in an arbitrary direction. | 一部 | 形の stretch・skew（形だけ） |  |
 | [Stretch Segment](https://guide.alightmotion.com/effects/stretch-segment) | Slices the layer along an angle and then moves the pieces apart, stretching the pixels between them. | 無い |  |  |
@@ -180,15 +180,15 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Text Randomizer](https://guide.alightmotion.com/effects/text-randomizer) | Randomly changes individual characters in a text layer. | 無い |  | Random Characters |
 | [Text Spacing](https://guide.alightmotion.com/effects/text-spacing) | Adjusts the spacing between individual letters or between lines of text in a text layer. | 有る | letter_spacing・line_spacing |  |
 | [Text Transform](https://guide.alightmotion.com/effects/text-transform) | Transforms individual letters, words, lines, or pieces of letters within a specified range of a text layer. | 有る | split＋stagger（Cavalry の Animators の形） |  |
-| [Three-axis Cross](https://guide.alightmotion.com/effects/three-axis-cross) | Renders a faux-3D three-axis cross using the layer as a surface texture. | 無い |  |  |
+| [Three-axis Cross](https://guide.alightmotion.com/effects/three-axis-cross) | Renders a faux-3D three-axis cross using the layer as a surface texture. | 有る | 物の fx に solids/Three-axis_Cross.js（物の絵を面に、10/28、窓で確かめた） |  |
 | [Threshold](https://guide.alightmotion.com/effects/threshold) | Converts the layer to black and white with a hard cutoff at the specified luminance threshold. | 無い |  | Color Monochrome |
 | [Tile Rotate](https://guide.alightmotion.com/effects/tile-rotate) | Divides the layer into a grid of tiles and rotates the pixels in each tile independently. | 無い |  | Grid Flip |
 | [Tile Shift](https://guide.alightmotion.com/effects/tile-shift) | Divides the layer into a grid of tiles and shifts the contents of each tile in a random direction. | 一部 | ISF Pixel Shifter |  |
 | [Tiles](https://guide.alightmotion.com/effects/tiles) | Repeats the layer in a tile pattern, filling the screen. | 有る | 物の fx に ISF の Quad Tile.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Quad Tile |
 | [Time Quantization](https://guide.alightmotion.com/effects/time-quantization) | Causes time to pass in steps, but just for this layer. | 無い |  |  |
 | [Timecode](https://guide.alightmotion.com/effects/timecode) | Replaces the text in the layer with a running timecode. | 無い |  | Digital Clock |
-| [Torus](https://guide.alightmotion.com/effects/torus) | Renders a faux-3D torus using the layer as a surface texture. | 一部 | 立体 ring（絵を面に貼るのは無い） |  |
-| [Tunnel](https://guide.alightmotion.com/effects/tunnel) | Renders a round faux-3D tunnel using the layer as the interior surface texture. | 無い |  |  |
+| [Torus](https://guide.alightmotion.com/effects/torus) | Renders a faux-3D torus using the layer as a surface texture. | 有る | 物の fx に solids/Torus.js（物の絵を面に、10/28、窓で確かめた） |  |
+| [Tunnel](https://guide.alightmotion.com/effects/tunnel) | Renders a round faux-3D tunnel using the layer as the interior surface texture. | 有る | 物の fx に solids/Tunnel.js（物の絵を面に、10/28、窓で確かめた） |  |
 | [Turbulence](https://guide.alightmotion.com/effects/turbulence) | Renders smooth patterns of procedurally-generated fractal noise in the opaque parts of the layer, useful for simulating real-world phenomena like clouds, or for use as a luminance map. | 有る | 物の fx に ISF の Simplex Noise.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Simplex Noise |
 | [Turbulent Displace](https://guide.alightmotion.com/effects/turbulent-displace) | Distorts the layer along selected coordinate axes using a random pattern of smooth fractal noise. Distortion may be along one or more axis in either cartesian or polar coordinate space. Useful for sim | 有る | 写真・動画・文字の物の fx に ISF の Noise Displace.fs（10/28、窓で確かめた） | Noise Displace |
 | [Unsharp Mask](https://guide.alightmotion.com/effects/unsharp-mask) | Enhances the perceptual sharpness or "acutance" of a photo or video by increasing local contrast near edges, while avoiding changes to areas that were originally smooth. | 無い |  | Unsharp Mask |

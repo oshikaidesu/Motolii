@@ -58,7 +58,7 @@ Also: keyframes and easing (anime.js eases work as they are), physics (Jolt), re
 
 **Where Motolii is behind**: stability and breadth of features as a finished tool (every tool above is ahead), no app to hand out, no Windows, and no thought yet for performing live.
 
-**Why Alight Motion is the model for its handling**: people who make MVs on their phones already know how it feels; Motolii copies all of it first, then goes further. Of Alight Motion's 201 effects and features, Motolii has 85, 42 in part and 73 not at all (counted on 2026-10-28, [`reports/alight_map.md`](reports/alight_map.md)).
+**Why Alight Motion is the model for its handling**: people who make MVs on their phones already know how it feels; Motolii copies all of it first, then goes further. Of Alight Motion's 201 effects and features, Motolii has 99, 37 in part and 64 not at all (counted on 2026-10-28, [`reports/alight_map.md`](reports/alight_map.md)).
 
 ## How it is built
 
@@ -81,7 +81,7 @@ The UI only takes your hands; the engine draws. The engine's folder is named `fi
 ## Where it stands
 
 - Works: everything marked "Works" above, saving (automatic) and undo, playback (a video's sound is heard), writing mp4, the UI's timeline, value panel and shelves.
-- Partly: AviUtl2 scripts; copying Alight Motion (85 of the 201 above).
+- Partly: AviUtl2 scripts; copying Alight Motion (99 of the 201 above).
 - Known bugs: a screen effect put by command on a recipe made of copies (Iris, Weave, …) breaks the picture.
 - Not yet: Windows; an `.app` you can hand out (the engine loads Homebrew's libraries, so a build only runs on the Mac that made it); MIDI sound.
 
@@ -234,7 +234,7 @@ Still stuck? Open an [issue](https://github.com/oshikaidesu/motolii/issues) with
 1. An `.app` to hand out (Homebrew's libraries inside it), on Releases.
 2. The window's tests all passing when run together, and CI that stops on them.
 3. The AviUtl2 calls still missing (`obj.drawpoly`, …); TSL looks on the shelves.
-4. More of Alight Motion (85 of 201 today).
+4. More of Alight Motion (99 of 201 today).
 
 ## Contributing
 

@@ -115,7 +115,17 @@ const _rowsE = <(String, String, Map<String, double>)>[
   ('Hexagon Array', 'Hexagonalize', {'progress': .5}),
   ('Iridescence', 'Sine Warp Gradient', {}),
 ];
-final _rows = switch (_section) { 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, _ => _rowsA };
+// (section C: the thing's picture on a solid's faces, the solid named in its fx (filament/solids/*.js, as Alight
+//  Motion's faux-3D); the thing turned a little (its own values, '@') so its sides are seen)
+const _turned = <String, double>{'@rotate_x': 25, '@rotate_y': 35};
+const _rowsC = <(String, String, Map<String, double>)>[
+  ('Box', 'solids/Box.js', _turned), ('Cube', 'solids/Cube.js', _turned), ('Cylinder', 'solids/Cylinder.js', _turned),
+  ('Ellipsoid', 'solids/Ellipsoid.js', _turned), ('Heart', 'solids/Heart.js', _turned), ('Hexagonal Prism', 'solids/Hexagonal_Prism.js', _turned),
+  ('Hollow Box', 'solids/Hollow_Box.js', _turned), ('Octahedron', 'solids/Octahedron.js', _turned), ('Pyramid', 'solids/Pyramid.js', _turned),
+  ('Raster Extrude', 'solids/Raster_Extrude.js', _turned), ('Spherize', 'solids/Spherize.js', _turned), ('Star Prism', 'solids/Star_Prism.js', _turned),
+  ('Three-axis Cross', 'solids/Three-axis_Cross.js', _turned), ('Torus', 'solids/Torus.js', _turned), ('Tunnel', 'solids/Tunnel.js', _turned),
+];
+final _rows = switch (_section) { 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'C' => _rowsC, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -148,15 +158,19 @@ void main() {
     ws.reread();
     await shot('0_none.png');
     for (final (i, (row, effect, knobs)) in _rows.indexed) {
-      final file = '$motoliiDir/effects/$effect.fs';
+      final file = effect.contains('/') ? '$motoliiDir/$effect' : '$motoliiDir/effects/$effect.fs';
       expect(m.say(left, 'fx', file), isTrue, reason: '$row: ${m.trouble}');
-      final stem = effect.replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_');
+      final stem = effect.split('/').last.replaceFirst(RegExp(r'\.js$'), '').replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_');
       for (final MapEntry(:key, :value) in knobs.entries) {
-        expect(m.set(left, 'js_${stem}_$key', value), isTrue, reason: '$row $key: ${m.trouble}');
+        final name = key.startsWith('@') ? key.substring(1) : 'js_${stem}_$key';   // (@: the thing's own value)
+        expect(m.set(left, name, value), isTrue, reason: '$row $key: ${m.trouble}');
       }
       ws.reread();
       await shot('${i + 1}_${row.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}.png');
       expect(m.say(left, 'fx', 'none'), isTrue, reason: m.trouble);
+      for (final key in knobs.keys.where((k) => k.startsWith('@'))) {
+        m.set(left, key.substring(1), 0);
+      }
     }
     // ignore: avoid_print
     print('ALIGHT=${folder.path}');
