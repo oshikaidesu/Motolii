@@ -36,13 +36,16 @@ void main() {
 
     // WHO: swept over the whole of HOME
     final home = part('home'), m = ws.inside!;
+    final hit = HitTestResult();   // (what the hand first lands on there: the pane's HOME, or something over it)
+    WidgetsBinding.instance.hitTestInView(hit, home.topLeft + const Offset(2, 2), t.view.viewId);
+    final under = [for (final e in hit.path.take(8)) e.target.runtimeType.toString()];
     await drag(home.topLeft + const Offset(2, 2), [for (var i = 0; i < 8; i++) (home.size.bottomRight(Offset.zero) - const Offset(4, 4)) / 8]);
     final things = {for (final l in ws.layers) if (int.tryParse(l.id) case final i? when !const {'behaviour', 'camera', 'light'}.contains(m.word(i, 'kind'))) i};
     for (var i = 0; i < 200 && wsMoves(ws).isEmpty; i++) {   // (made by the inside, not waited for by the window)
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
       await t.pump();
     }
-    expect(wsMoves(ws), hasLength(1), reason: 'a sweep over HOME ${part('home')} makes a move; the things ${things.toList()} at ${[for (final i in things) (m.value(i, 'x', 0), m.value(i, 'y', 0))]}; ${ws.notice}; the inside has ${[for (final i in m.things) m.word(i, 'kind')]}; ${m.trouble}; point ${m.point}, frame ${ws.frame}, as the pane reads them ${[for (final i in things) (wsValue(m, i, 'x', ws.frame / Ws.fps, 0), wsValue(m, i, 'y', ws.frame / Ws.fps, 0))]}');
+    expect(wsMoves(ws), hasLength(1), reason: 'a sweep over HOME ${part('home')} makes a move; the things ${things.toList()} at ${[for (final i in things) (m.value(i, 'x', 0), m.value(i, 'y', 0))]}; ${ws.notice}; the inside has ${[for (final i in m.things) m.word(i, 'kind')]}; ${m.trouble}; point ${m.point}, frame ${ws.frame}, as the pane reads them ${[for (final i in things) (wsValue(m, i, 'x', ws.frame / Ws.fps, 0), wsValue(m, i, 'y', ws.frame / Ws.fps, 0))]}; the hand first on $under');
     var mv = wsMoves(ws).single;
     expect(mv.who.toSet(), things);
     expect(ws.selected, '${mv.by}');
