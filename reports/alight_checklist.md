@@ -131,7 +131,7 @@
 - [ ] **Iridescence**（無い）：Renders a flowing iridescent pattern in opaque parts of the layer.
 - [ ] **Lens Blur**（一部）：Applies an angular blur to the layer, excluding the central area. — いま：カメラの focus・aperture（立体と世界の物だけ）
 - [ ] **Lightning**（無い）：Renders fractal arcs of lightning between two points in the layer.
-- [ ] **Linear Streaks**（無い）：Creates line-shaped streaks by sliding the layer at an angle and blending together overlapping pixels.
+- [x] **Linear Streaks**（無い）：Creates line-shaped streaks by sliding the layer at an angle and blending together overlapping pixels. — 済（10/28）：物の写し（AE のリピーターの形、alight_sources_E.md の借りる先）、copies 12・copy_x 0.03・copy_y −0.015・blend lighten。窓で写真 2 枚の左に掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=E2）
 - [ ] **Long Shadow**（無い）：Renders long parallel shadows extending from opaque parts of the layer.
 - [ ] **Luma Key**（一部）：Keys out all pixels lighter than or darker than a given threshold, making those parts of the layer transparent. — いま：クリップの clip_matte luma（下の物で切る）
 - [ ] **Magnify Background**（無い）：Makes the layer transparent and magnifies the area behind the layer, as if the layer were a magnifying glass.
@@ -149,7 +149,7 @@
 - [ ] **Smooth Bevel**（無い）：Draws a smooth curved bevel inside the edges of the opaque parts of the layer.
 - [ ] **Smooth Edges**（無い）：Smooths the edges of the opaque parts of a layer without affecting the pixel colors within the layer.
 - [ ] **Spin Blur**（無い）：Applies an angular blur to the layer, as though it were spinning.
-- [ ] **Spin Streaks**（無い）：Creates arc-shaped streaks by spinning the layer around a point and blending together overlapping pixels.
+- [x] **Spin Streaks**（無い）：Creates arc-shaped streaks by spinning the layer around a point and blending together overlapping pixels. — 済（10/28）：物の写し（AE のリピーターの形、alight_sources_E.md の借りる先）、copies 12・copy_rotate 3・blend lighten。窓で写真 2 枚の左に掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=E2）
 - [ ] **Starfield**（一部）：Renders a complex parallax starfield that can be animated in two dimensions. — いま：ISF Hyperspace
 - [ ] **Stretch Segment**（無い）：Slices the layer along an angle and then moves the pieces apart, stretching the pixels between them.
 - [ ] **Stroke Taper**（無い）：Tapers the strokes of a freehand drawing layer.

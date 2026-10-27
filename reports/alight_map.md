@@ -11,9 +11,9 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | | 数 |
 |---|---|
 | Alight Motion の効果 | 169 |
-| Motolii に有る | **85**（50%） |
+| Motolii に有る | **87**（51%） |
 | 一部 | **33**（20%） |
-| 無い | **51**（30%） |
+| 無い | **49**（29%） |
 | 無いもののうち、手元の ISF-Files（`research_notes/isf/ISF-Files`、327 本、MIT）に近いものがある | 36 |
 | 一部のもののうち、同じく ISF-Files に近いものがある | 31 |
 
@@ -109,7 +109,7 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Light Glow](https://guide.alightmotion.com/effects/light-glow) | Creates a soft glow and optional halo around the lighter areas within a photo or video layer based on a luminance threshold. | 有る | 物の fx に ISF の Bloom.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Bloom |
 | [Lightning](https://guide.alightmotion.com/effects/lightning) | Renders fractal arcs of lightning between two points in the layer. | 無い |  |  |
 | [Linear Repeat](https://guide.alightmotion.com/effects/linear-repeat) | Dynamically generates multiple copies of the layer, arranged along a line. | 有る | copies＋copy_x・copy_y |  |
-| [Linear Streaks](https://guide.alightmotion.com/effects/linear-streaks) | Creates line-shaped streaks by sliding the layer at an angle and blending together overlapping pixels. | 無い |  |  |
+| [Linear Streaks](https://guide.alightmotion.com/effects/linear-streaks) | Creates line-shaped streaks by sliding the layer at an angle and blending together overlapping pixels. | 有る | 物の写し：copies 12・copy_x 0.03・copy_y −0.015・blend lighten（10/28、窓で確かめた） |  |
 | [Long Shadow](https://guide.alightmotion.com/effects/long-shadow) | Renders long parallel shadows extending from opaque parts of the layer. | 無い |  |  |
 | [Luma Key](https://guide.alightmotion.com/effects/luma-key) | Keys out all pixels lighter than or darker than a given threshold, making those parts of the layer transparent. | 一部 | クリップの clip_matte luma（下の物で切る） |  |
 | [Magnify Background](https://guide.alightmotion.com/effects/magnify-background) | Makes the layer transparent and magnifies the area behind the layer, as if the layer were a magnifying glass. | 無い |  |  |
@@ -162,7 +162,7 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Spherize](https://guide.alightmotion.com/effects/spherize) | Renders a faux-3D sphere, interpreting the layer as an equirectangular projection and using it as a surface texture for the sphere. | 有る | 物の fx に solids/Spherize.js（物の絵を面に、10/28、窓で確かめた） |  |
 | [Spin](https://guide.alightmotion.com/effects/spin) | Automatically spins the layer at a given speed. | 一部 | rotate のキー（ずっと回り続けるふるまいは無い） | Rotate |
 | [Spin Blur](https://guide.alightmotion.com/effects/spin-blur) | Applies an angular blur to the layer, as though it were spinning. | 無い |  |  |
-| [Spin Streaks](https://guide.alightmotion.com/effects/spin-streaks) | Creates arc-shaped streaks by spinning the layer around a point and blending together overlapping pixels. | 無い |  |  |
+| [Spin Streaks](https://guide.alightmotion.com/effects/spin-streaks) | Creates arc-shaped streaks by spinning the layer around a point and blending together overlapping pixels. | 有る | 物の写し：copies 12・copy_rotate 3・blend lighten（10/28、窓で確かめた） |  |
 | [Spot Color](https://guide.alightmotion.com/effects/spot-color) | Keeps one color while decreasing the saturation of other colors in the layer. | 無い |  | Chroma Desaturation Mask |
 | [Squeeze](https://guide.alightmotion.com/effects/squeeze) | Distorts the layer by squeezing it along one axis while expanding it along the other axis. | 有る | 形の squash | Squeeze |
 | [Star](https://guide.alightmotion.com/effects/star) | Renders an individual star in the current layer. | 有る | 物の fx に ISF の Star.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Star |

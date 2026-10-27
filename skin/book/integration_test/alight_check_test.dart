@@ -20,7 +20,7 @@ import 'package:lab_book/workspace/zoom.dart';
 // (the row, the bundled effect the checklist names, knobs set as the document names them: a thing's script knob,
 //  doc_values.h doc_screen_knob; a colour's parts _x _y _z)
 const _section = String.fromEnvironment('SECTION', defaultValue: 'A');
-const _rowsA = <(String, String, Map<String, double>)>[
+const _rowsA = <(String, String, Map<String, Object>)>[
   ('Brightness / Contrast', 'Color Controls', {'bright': .35}),
   ('Color Temperature', 'White Point Adjust', {'newWhite_x': 1, 'newWhite_y': .85, 'newWhite_z': .6}),
   ('Color Tune', 'LGG', {'gain_z': .45}),
@@ -31,7 +31,7 @@ const _rowsA = <(String, String, Map<String, double>)>[
   ('Saturation / Vibrance', 'Vibrance', {'vibrance': .6}),
 ];
 // (section D: the ISF-Files effect the checklist names, as it comes; a transition (progress) half way)
-const _rowsD = <(String, String, Map<String, double>)>[
+const _rowsD = <(String, String, Map<String, Object>)>[
   ('Block Dissolve', 'Random Squares Mask', {}),
   ('Block Noise', 'JPEG Block Corruption', {}),
   ('Box Blur', 'Fast Blur', {}),
@@ -93,7 +93,7 @@ const _rowsD = <(String, String, Map<String, double>)>[
 ];
 // (section D again, the rows that show nothing as they come: a knob set as the sentence says; the sample's sky is
 //  about 0.55 0.75 0.95, its balloon's red about 0.85 0.1 0.2)
-const _rowsD2 = <(String, String, Map<String, double>)>[
+const _rowsD2 = <(String, String, Map<String, Object>)>[
   ('Channel Remap (RGB)', 'RGBA Swap', {'redInput': 2, 'blueInput': 0}),
   ('Chroma Key', 'Chroma Mask', {'mask_color_x': .55, 'mask_color_y': .75, 'mask_color_z': .95, 'hueTol': .15, 'satTol': .4, 'valTol': .4}),
   ('Replace Color', 'Color Replacement', {'mask_color_x': .55, 'mask_color_y': .75, 'mask_color_z': .95, 'target_color_x': .9, 'target_color_y': .2, 'target_color_z': .2, 'hueTol': .15, 'satTol': .4, 'valTol': .4}),
@@ -102,14 +102,14 @@ const _rowsD2 = <(String, String, Map<String, double>)>[
   ('Unsharp Mask', 'Unsharp Mask', {'intensity': 5}),
 ];
 // (section B: what only shapes bent, on a photo)
-const _rowsB = <(String, String, Map<String, double>)>[
+const _rowsB = <(String, String, Map<String, Object>)>[
   ('Fractal Warp', 'Noise Displace', {'displaceX': .05, 'displaceY': .05}),
   ('Pinch/Bulge', 'Bump Distortion', {'level': .8, 'radius': .4}),
   ('Turbulent Displace', 'Noise Displace', {'displaceX': .05}),
   ('Wave Warp', 'Sine Warp Tile', {}),
 ];
 // (section E: the rows reports/alight_sources_E.md finds a bundled ISF-Files file for, put on as it says)
-const _rowsE = <(String, String, Map<String, double>)>[
+const _rowsE = <(String, String, Map<String, Object>)>[
   ('Bend', 'Circle Wrap Distortion', {}),
   ('Dark Glow', 'Gloom', {'intensity': .6}),
   ('Hexagon Array', 'Hexagonalize', {'progress': .5}),
@@ -117,15 +117,22 @@ const _rowsE = <(String, String, Map<String, double>)>[
 ];
 // (section C: the thing's picture on a solid's faces, the solid named in its fx (filament/solids/*.js, as Alight
 //  Motion's faux-3D); the thing turned a little (its own values, '@') so its sides are seen)
-const _turned = <String, double>{'@rotate_x': 25, '@rotate_y': 35};
-const _rowsC = <(String, String, Map<String, double>)>[
+const _turned = <String, Object>{'@rotate_x': 25, '@rotate_y': 35};
+const _rowsC = <(String, String, Map<String, Object>)>[
   ('Box', 'solids/Box.js', _turned), ('Cube', 'solids/Cube.js', _turned), ('Cylinder', 'solids/Cylinder.js', _turned),
   ('Ellipsoid', 'solids/Ellipsoid.js', _turned), ('Heart', 'solids/Heart.js', _turned), ('Hexagonal Prism', 'solids/Hexagonal_Prism.js', _turned),
   ('Hollow Box', 'solids/Hollow_Box.js', _turned), ('Octahedron', 'solids/Octahedron.js', _turned), ('Pyramid', 'solids/Pyramid.js', _turned),
   ('Raster Extrude', 'solids/Raster_Extrude.js', _turned), ('Spherize', 'solids/Spherize.js', _turned), ('Star Prism', 'solids/Star_Prism.js', _turned),
   ('Three-axis Cross', 'solids/Three-axis_Cross.js', _turned), ('Torus', 'solids/Torus.js', _turned), ('Tunnel', 'solids/Tunnel.js', _turned),
 ];
-final _rows = switch (_section) { 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'C' => _rowsC, _ => _rowsA };
+// (section E built of what a thing has already (reports/alight_sources_E.md: its copies, AE's repeater), lightened
+//  over each other; no effect file: '-')
+const _rowsE2 = <(String, String, Map<String, Object>)>[
+  ('Linear Streaks', '-', {'@copies': 12, '@copy_x': .03, '@copy_y': -.015, '@blend': 'lighten'}),
+  ('Spin Streaks', '-', {'@copies': 12, '@copy_rotate': 3, '@blend': 'lighten'}),
+  ('Zoom Streaks', '-', {'@copies': 12, '@copy_size': 1.03, '@blend': 'lighten'}),
+];
+final _rows = switch (_section) { 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -142,7 +149,8 @@ void main() {
     }
     await t.pumpAndSettle();
     final ws = WsScope.read(t.element(find.byType(WsTimeline))), m = ws.inside!;
-    final left = m.add('picture', '$motoliiDir/fx_sample.jpg'), right = m.add('picture', '$motoliiDir/fx_sample.jpg');
+    var left = m.add('picture', '$motoliiDir/fx_sample.jpg');
+    final right = m.add('picture', '$motoliiDir/fx_sample.jpg');
     m
       ..set(left, 'x', -.5)
       ..set(right, 'x', .5);
@@ -159,18 +167,17 @@ void main() {
     await shot('0_none.png');
     for (final (i, (row, effect, knobs)) in _rows.indexed) {
       final file = effect.contains('/') ? '$motoliiDir/$effect' : '$motoliiDir/effects/$effect.fs';
-      expect(m.say(left, 'fx', file), isTrue, reason: '$row: ${m.trouble}');
+      if (effect != '-') expect(m.say(left, 'fx', file), isTrue, reason: '$row: ${m.trouble}');
       final stem = effect.split('/').last.replaceFirst(RegExp(r'\.js$'), '').replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_');
       for (final MapEntry(:key, :value) in knobs.entries) {
         final name = key.startsWith('@') ? key.substring(1) : 'js_${stem}_$key';   // (@: the thing's own value)
-        expect(m.set(left, name, value), isTrue, reason: '$row $key: ${m.trouble}');
+        expect(value is String ? m.say(left, name, value) : m.set(left, name, (value as num).toDouble()), isTrue, reason: '$row $key: ${m.trouble}');
       }
       ws.reread();
       await shot('${i + 1}_${row.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}.png');
-      expect(m.say(left, 'fx', 'none'), isTrue, reason: m.trouble);
-      for (final key in knobs.keys.where((k) => k.startsWith('@'))) {
-        m.set(left, key.substring(1), 0);
-      }
+      expect(m.remove(left), isTrue, reason: m.trouble);   // (the next row on a photo as it comes)
+      left = m.add('picture', '$motoliiDir/fx_sample.jpg');
+      m.set(left, 'x', -.5);
     }
     // ignore: avoid_print
     print('ALIGHT=${folder.path}');
