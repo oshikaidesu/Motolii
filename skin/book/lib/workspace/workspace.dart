@@ -91,6 +91,17 @@ class _WorkspaceState extends State<Workspace> {
   }
 
   /// A text box has the keys: the act is its own, by Flutter's own text actions (true: it was given it).
+  /// Where a copied thing, or a copied look, is kept between windows (the inside's own document of it: doc_looks.h).
+  static String _clipboard(String what) {
+    final dir = Directory('${Platform.environment['HOME']}/Library/Caches/Motolii')..createSync(recursive: true);
+    return '${dir.path}/clipboard_$what.motolii';
+  }
+
+  void _copy(String call, String what) {
+    final t = int.tryParse(_ws.selected ?? '');
+    if (_inside != null && t != null) _inside!.later(call, thing: t, word: _clipboard(what));
+  }
+
   bool _typed(Intent act) {
     final box = primaryFocus?.context;
     if (box == null || box.findAncestorStateOfType<EditableTextState>() == null) return false;
@@ -143,9 +154,28 @@ class _WorkspaceState extends State<Workspace> {
       'file.render': () => wsAskRender.value++,   // (the settings window first)
       'edit.undo': () => _typed(const UndoTextIntent(SelectionChangedCause.keyboard)) ? null : ws.after(m.later('undo')),
       'edit.redo': () => _typed(const RedoTextIntent(SelectionChangedCause.keyboard)) ? null : ws.after(m.later('redo')),
-      'edit.cut': () => _typed(const CopySelectionTextIntent.cut(SelectionChangedCause.keyboard)),
-      'edit.copy': () => _typed(CopySelectionTextIntent.copy),
-      'edit.paste': () => _typed(const PasteTextIntent(SelectionChangedCause.keyboard)),
+      'edit.cut': () {   // (no words being written: the picked thing copied, then taken away, one step each as Live's)
+        if (_typed(const CopySelectionTextIntent.cut(SelectionChangedCause.keyboard))) return;
+        final t = int.tryParse(ws.selected ?? '');
+        if (t == null) return;
+        m.later('copy', thing: t, word: _clipboard('thing'));
+        ws.after(m.later('remove', thing: t));
+        ws.select(null);
+      },
+      'edit.copy': () => _typed(CopySelectionTextIntent.copy) ? null : _copy('copy', 'thing'),
+      'edit.paste': () => _typed(const PasteTextIntent(SelectionChangedCause.keyboard))
+          ? null
+          : File(_clipboard('thing')).existsSync()
+          ? ws.after(m.later('paste', word: _clipboard('thing'), number: ws.frame / Ws.fps), null, (made) => ws.select('$made'))   // (at the playhead, the pasted one picked: Live's paste at the insert marker)
+          : null,
+      'edit.copyStyle': () => _copy('copy_style', 'style'),
+      'edit.pasteStyle': () {   // (on every picked thing, one step)
+        final all = {...ws.many, ?ws.selected};
+        if (!File(_clipboard('style')).existsSync() || all.isEmpty) return;
+        for (final id in all) {
+          if (int.tryParse(id) case final t?) ws.after(m.later('paste_style', thing: t, word: _clipboard('style')));
+        }
+      },
       'edit.selectAll': () => _typed(const SelectAllTextIntent(SelectionChangedCause.keyboard)) ? null : ws.pickMany([for (final l in ws.layers) l.id]),   // (no words being written: every thing, as Ableton's Cmd+A in the arrangement)
       'thing.deactivate': () {
         final t = int.tryParse(ws.selected ?? '');
@@ -224,6 +254,8 @@ class _WorkspaceState extends State<Workspace> {
               item('Cut', 'edit.cut'),
               item('Copy', 'edit.copy'),
               item('Paste', 'edit.paste'),
+              item('Copy Style', 'edit.copyStyle'),
+              item('Paste Style', 'edit.pasteStyle'),
               item('Select All', 'edit.selectAll'),
             ],
           ),

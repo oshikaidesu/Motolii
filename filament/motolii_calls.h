@@ -380,7 +380,7 @@ const char* motolii_reading(Motolii* m, int thing, const char* name) {
 // behind every other, a ticket said at once; motolii_answer says whether it is done (-1 not yet, 0 refused: then
 // motolii_answer_why says why, 1 done; for add and make, the new thing). The calls: say, set, let_go (number: keep),
 // undo, redo, together (number: begin 1, end 0: the end's answer is the step's), add (name: kind, word: file), make
-// (word: recipe), duplicate (the answer is the new thing), split (number: at; the answer is the part after), remove, mark (number: at, word), guide (name: axis, number: at, word "off" takes it away), work
+// (word: recipe), duplicate (the answer is the new thing), split (number: at; the answer is the part after), copy and copy_style (word: a file), paste (word: a file, number: at) and paste_style (word: a file), remove, mark (number: at, word), guide (name: axis, number: at, word "off" takes it away), work
 // (number: from, word: to), raise (number: places), sequence (number: overlap), key_here, unkey, stay (number: at), way
 // (number: at, word: way), effect (number: at), hold (a hand takes hold of it). A thing -1: the one the last add or make made.
 int motolii_later(Motolii* m, const char* call, int thing, const char* name, const char* word, double number) {
@@ -405,6 +405,10 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "make") ok = m->made = changes(m, doc_make(doc(m), w.c_str()));
             else if (c == "duplicate") ok = m->made = changes(m, doc_duplicate(doc(m), thing));   // (the answer is the new thing)
             else if (c == "split") ok = m->made = changes(m, doc_split(doc(m), thing, number));   // (number: the moment; the answer is the part after it)
+            else if (c == "copy") ok = (int)doc_look_save(doc(m), thing, w.c_str(), true);   // (word: the file it is kept in, whole)
+            else if (c == "paste") ok = m->made = changes(m, doc_look_paste(doc(m), w.c_str(), number));   // (word: that file; number: when it begins; the answer is the new thing)
+            else if (c == "copy_style") ok = (int)doc_look_save(doc(m), thing, w.c_str());   // (its look: doc_looks.h)
+            else if (c == "paste_style") ok = changes(m, (int)doc_look_put(doc(m), thing, w.c_str()));
             else if (c == "remove") ok = changes(m, (int)doc_remove(doc(m), thing));
             else if (c == "relate") ok = changes(m, (int)doc_relate(doc(m), thing, w.c_str(), m->now));
             else if (c == "fx_file") ok = changes(m, (int)doc_fx_file(doc(m), thing, w.c_str()));   // (an effect file put at the end of the thing's effects, or taken out)
@@ -450,7 +454,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
                 ok = desk_is(m, dw, dh, x, y, sc, pt);
             }
             else if (c == "hold") ok = (int)doc_hold(doc(m), thing);   // (a hand takes hold: what it carries next is this thing's)
-            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, duplicate, split, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_move, size, watch, pick, desk, live, relate, lead, free, release";
+            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, duplicate, split, copy, paste, copy_style, paste_style, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_move, size, watch, pick, desk, live, relate, lead, free, release";
             } catch (const std::exception& e) {
                 ok = 0;
                 std::fprintf(stderr, "motolii: %s threw: %s\n", c.c_str(), e.what());

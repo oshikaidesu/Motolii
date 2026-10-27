@@ -18,6 +18,8 @@ const defaultKeys = <(String, String)>[
   ('cmd+x', 'edit.cut'),
   ('cmd+c', 'edit.copy'),
   ('cmd+v', 'edit.paste'),
+  ('cmd+alt+c', 'edit.copyStyle'),   // (the Mac's own: Pages, Keynote, TextEdit)
+  ('cmd+alt+v', 'edit.pasteStyle'),
   ('cmd+a', 'edit.selectAll'),
   ('cmd+d', 'thing.duplicate'),   // (Live 42.5)
   ('cmd+e', 'thing.split'),   // (Live 42.5: Split)

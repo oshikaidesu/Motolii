@@ -234,6 +234,49 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Cmd+C then Cmd+V pastes the picked thing whole at the playhead, its keys moved with it; Cmd+Alt+C and Cmd+Alt+V carry its look', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect'), other = m.add('shape', 'circle');
+    expect(m.set(rect, 'start', 1) && m.set(rect, 'x', .3) && m.key(rect, 'rotate', 1, 0) && m.key(rect, 'rotate', 2, 90) && m.say(rect, 'fill', 'ff3366'), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$rect')
+      ..frame = 3 * Ws.fps;
+    await t.pumpAndSettle();
+    Future<void> press(LogicalKeyboardKey k, {bool alt = false}) async {
+      await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      if (alt) await t.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await t.sendKeyEvent(k);
+      if (alt) await t.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await settled(t, ws);
+    }
+    await press(LogicalKeyboardKey.keyC);
+    await press(LogicalKeyboardKey.keyV);
+    for (var i = 0; i < 200 && ws.selected == '$rect'; i++) {   // (the pasted one is picked once the inside has made it)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    final pasted = int.parse(ws.selected!);
+    expect(pasted, isNot(rect), reason: m.trouble);
+    expect([m.word(pasted, 'kind'), m.word(pasted, 'fill'), m.value(pasted, 'x', 0), m.value(pasted, 'start', 0)], ['shape', m.word(rect, 'fill'), closeTo(.3, 1e-9), closeTo(3, 1e-9)], reason: 'whole, beginning at the playhead');
+    expect(m.keyMoments(pasted, 'rotate'), [closeTo(3, 1e-9), closeTo(4, 1e-9)], reason: 'its keys moved by as much as it was');
+    ws.select('$rect');
+    await t.pumpAndSettle();
+    await press(LogicalKeyboardKey.keyC, alt: true);
+    ws.select('$other');
+    await t.pumpAndSettle();
+    await press(LogicalKeyboardKey.keyV, alt: true);
+    for (var i = 0; i < 200 && m.word(other, 'fill') != m.word(rect, 'fill'); i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    expect(m.word(other, 'fill'), m.word(rect, 'fill'), reason: 'its look given: ${m.trouble}');
+    expect(m.word(other, 'shape'), 'circle', reason: 'what it is stays');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('the inspector says what a thing is in the document\'s word, and shows only the cards of values it has', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final film = m.add('', '$motoliiDir/out/vid/check_film.mp4'), cube = m.add('solid', 'cube');

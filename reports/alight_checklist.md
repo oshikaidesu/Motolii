@@ -211,7 +211,7 @@
 - [ ] イーズ 9 種（ベジェ・Bounce・Elastic・Cyclic・Random・Steps・Elastic Steps）（有る）：いま `filament/interp.h`（Alight Motion を手本に作ったもの。出典をそう直した）
 - [ ] 曲線エディタとプリセット（有る）：いま Ease の机、利用者のプリセット
 - [ ] **曲線のコピー・貼り付け、全部のキーに貼る**（無い）
-- [ ] **レイヤー・見た目・効果のコピー・貼り付け**（無い）
+- [x] **レイヤー・見た目・効果のコピー・貼り付け**（無い→有る）：⌘C・⌘X・⌘V（文字を打っていない時）は選んだ物をまるごと（親だけ除く）写して、再生位置に貼る。キーも一緒に動く（Ableton Live が挿入位置に貼るのと同じ）。⌥⌘C・⌥⌘V（Mac の Copy Style・Paste Style）は見た目（効果・色・線・ふるまい）を選んだ物すべてに。何の物か・形・位置は運ばない。手本：Motolii のルック（doc_looks.h、SQLite の ATTACH）、Alight Motion の Paste Style — 済（10/28）：窓でキーを押し、文書から読んで確かめた（`skin/book/test/workspace_joined_test_3.dart`）
 - [ ] 重ね方（ブレンドモード）（有る）：いま blend 25 種
 - [ ] マスク（有る）：いま clip（alpha・luma、反転、ぼかし）
 - [ ] 塗り：単色・グラデーション・**メディア**（一部）：いま fill・gradient。絵で塗るのは無い
