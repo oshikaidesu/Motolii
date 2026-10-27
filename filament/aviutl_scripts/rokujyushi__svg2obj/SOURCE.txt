@@ -3,4 +3,5 @@ licence: MIT
 from: https://github.com/rokujyushi/GCMZScripts/releases (the release file matching svg2obj\.lua) (version 0.2.0 in the catalog on 2026-10-27)
 page: https://github.com/rokujyushi/GCMZScripts
 catalog entry: KuroNeko.svg2obj in https://github.com/Neosku/aviutl2-catalog-data
+licence text: https://github.com/rokujyushi/GCMZScripts/blob/78d0f8020ef6/LICENSE.txt (the author's own, fetched 2026-10-27)
 Put here unchanged for Motolii (filament/aviutl_scripts).

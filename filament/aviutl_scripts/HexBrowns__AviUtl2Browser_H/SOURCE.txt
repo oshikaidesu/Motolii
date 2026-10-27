@@ -3,4 +3,5 @@ licence: MIT
 from: https://github.com/HexBrowns/AviUtl2Browser_H/releases (the release file matching ^HexBrowns\.AviUtl2Browser_H-v[^/]+\.au2pkg\.zip$) (version v0.1.1 in the catalog on 2026-10-27)
 page: https://github.com/HexBrowns/AviUtl2Browser_H
 catalog entry: HexBrowns.AviUtl2Browser_H in https://github.com/Neosku/aviutl2-catalog-data
+licence text: https://github.com/HexBrowns/AviUtl2Browser_H/blob/fe5d2f0fbfc2/LICENSE (the author's own, fetched 2026-10-27)
 Put here unchanged for Motolii (filament/aviutl_scripts).

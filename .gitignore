@@ -19,3 +19,4 @@ node_modules/
 # made from their sources by lottie3d.py (filament/led.sh, filament/motion_test.sh)
 /filament/led.json
 /filament/motion_test3d.json
+__pycache__/

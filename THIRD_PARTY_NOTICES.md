@@ -1,11 +1,12 @@
 # 同梱した他の人の作品（Third-party notices）
 
-Motolii は「ネットで見つけたかっこいい表現を、自分の動画にすぐ使う」ための道具です。そのために、多くの作者が公開してくれた作品を**手を入れずに**同梱し、作者の作り方のまま動かしています。作者のみなさんに感謝します。
+Motolii は「ネットで見つけたかっこいい表現を、自分の動画にすぐ使う」ための道具です。そのために、多くの作者が公開してくれた作品を同梱し、なるべく作者の作り方のまま動かしています。作者のみなさんに感謝します。
 
 - 同梱した物はそれぞれの作者の物で、それぞれのライセンスに従います。Motolii のリポジトリのライセンスはこれらには掛かりません。
 - 各作品の隣に、作者のライセンスの文書（`LICENSE` など）と、取ってきた所（`SOURCE.txt` や `README.md`）を置いています。
 - 手を入れて使っている物は、元に当てる差分（`.patch`）として分けて置き、元のソースは組み立ての時に作者の配布元から取ってきます（下の「組み立ての時に取ってくる物」）。
-- 配ってよいと書かれていない作品は同梱していません。
+- 配ってよいと書かれていない作品は同梱していません。ただし AviUtl2 の 8 パッケージ（下の一覧の ※）は、作者の配布元にライセンスの文書が無く、カタログ aviutl2-catalog-data に載ったライセンスだけが根拠です。作者の確認が取れるまでの扱いです。
+- 同梱した物のうち、手を入れて使っている物（three.js などのシェーダーを WGSL に書き換えた物）は、各ファイルの 1 行目に元と改変を書いています。
 - **作者の方へ**：載せ方に問題があれば、Issue でお知らせください。すぐに直すか、外します。
 
 *Motolii bundles works by other authors, unchanged, each under its own licence (its licence text and where it came from sit beside it). Modified upstream code is kept as patches applied at build time. If you are an author and want a change or removal, please open an issue.*
@@ -14,10 +15,13 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 
 | 物 | 作者・出所 | ライセンス | 置き場所 |
 |---|---|---|---|
-| AviUtl2 のスクリプト 193 パッケージ（一覧は下） | 各作者。集め方は [Neosku/aviutl2-catalog-data](https://github.com/Neosku/aviutl2-catalog-data) の入れ方の手順どおり | MIT 151・CC0 27・Unlicense 6・BSD-3-Clause 6・MIT-0 2・Apache-2.0 1 | `filament/aviutl_scripts/<作者>__<名前>/`（各フォルダに LICENSE と SOURCE.txt） |
+| AviUtl2 のスクリプト 180 パッケージ（一覧は下） | 各作者。集め方は [Neosku/aviutl2-catalog-data](https://github.com/Neosku/aviutl2-catalog-data) の入れ方の手順どおり | MIT 139・CC0 27・Unlicense 6・BSD-3-Clause 5・MIT-0 2・Apache-2.0 1 | `filament/aviutl_scripts/<作者>__<名前>/`（各フォルダに LICENSE と SOURCE.txt） |
 | ISF の効果 | [Vidvox/ISF-Files](https://github.com/Vidvox/ISF-Files) ほか（各 .fs の `CREDIT` に作者） | MIT | `filament/effects/*.fs`、`ISF-Files-LICENSE.txt` |
 | ossia score の ISF | [ossia/score-user-library](https://github.com/ossia/score-user-library) | MIT・CC BY-SA 4.0 | `filament/effects/`、`ossia-LICENSE-ISF.txt`、`ossia-score-user-library-LICENSE.txt` |
 | three.js の画面の効果（WGSL にした物） | [mrdoob/three.js](https://github.com/mrdoob/three.js) の examples/jsm/shaders | MIT | `filament/effects/*.wgsl`（各ファイルの 1 行目に出所） |
+| CRT の仕上げ（WGSL に改変） | [vercel-labs/vgpu](https://github.com/vercel-labs/vgpu) の post.wgsl | MIT | `filament/effects/crt_finish.wgsl`、`vgpu-LICENSE.txt` |
+| データモッシュ（WGSL に改変） | [newomp4/phosphor](https://github.com/newomp4/phosphor) | MIT | `filament/effects/datamosh.wgsl`、`phosphor-LICENSE.txt` |
+| 時間のずらし（WGSL に改変） | [keijiro/SlitScanCam](https://github.com/keijiro/SlitScanCam) | Unlicense | `filament/effects/time_displacement.wgsl`、`SlitScanCam-LICENSE.txt` |
 | 点群の効果 4 本 | [playcanvas/engine](https://github.com/playcanvas/engine) の scripts/esm/gsplat | MIT | `filament/effects/*.mjs`、`playcanvas-LICENSE.txt` |
 | three.js（形を作る部品） | [mrdoob/three.js](https://github.com/mrdoob/three.js) r186 | MIT | `filament/third_party/js/three/` |
 | d3-contour・d3-array | [d3](https://github.com/d3) | ISC | `filament/third_party/js/d3-contour/`、`d3-array/` |
@@ -26,6 +30,7 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 | ピアノロール（PianoRollSvg.js） | [bladeSk/midi-to-piano-roll](https://github.com/bladeSk/midi-to-piano-roll) | MIT（作者の package.json の申告。ライセンスの文書は作者の側に無い） | `filament/third_party/midi_roll/` |
 | 画面の拍子 | [nmfisher/thermion](https://github.com/nmfisher/thermion) | Apache-2.0 | `filament/third_party/thermion_frame/`（NOTICE.md） |
 | ブロブの追跡 | [k1sh0r/blob-tracker](https://github.com/k1sh0r/blob-tracker) | MIT | `filament/blobtrack/kit/` |
+| JetBrains Mono（ブロブの追跡の文字） | [JetBrains/JetBrainsMono](https://github.com/JetBrains/JetBrainsMono) | SIL OFL 1.1 | `filament/blobtrack/kit/JetBrainsMono-Regular.ttf`、`JetBrainsMono-OFL.txt` |
 
 ## 2. 組み立ての時に取ってくる物（リポジトリには入っていない）
 
@@ -41,7 +46,9 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 | [BabylonJS/JsRuntimeHost](https://github.com/BabylonJS/JsRuntimeHost) の Node-API | 980cfb0 | MIT | `filament/tsl/jsrh_napi/build.sh` | `jsrh_qjs017_dawn.patch` |
 | TSL の表現 48 か所 | `filament/tsl/sources.tsv` のとおり | 各作者 | `filament/tsl/fetch.sh` | `filament/tsl/*_target.patch`、`ics_tilt.patch` |
 
-## 3. AviUtl2 のスクリプトの一覧（193）
+## 3. AviUtl2 のスクリプトの一覧（180）
+
+※ 作者の配布元にライセンスの文書が無く、カタログに載ったライセンスだけが根拠の物。
 
 | 名前 | 作者 | ライセンス | 配布元 | 置き場所 |
 |---|---|---|---|---|
@@ -81,10 +88,8 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 | 曲げKR | かろてら | MIT | https://github.com/karoterra/aviutl2-Bend | `Karoterra__Bend` |
 | 色覚シミュレーションKR | かろてら | Unlicense | https://github.com/karoterra/aviutl2-ColorVisionSimulation | `Karoterra__ColorVisionSimulation` |
 | 油絵KR | かろてら | MIT | https://github.com/karoterra/aviutl2-OilPainting | `Karoterra__OilPainting` |
-| Constraint | Korarei | CC0-1.0 | https://gist.github.com/korarei/d5b089a69e0c8ba5903d641d677c89e8 | `Korarei__Constraint` |
-| CRTディスプレイ風.anm2 | Nanashi. | MIT | https://github.com/sevenc-nanashi/aviutl2-scripts/blob/main/scripts/CRT%E3%83%87%E3%82%A3%E3%82%B9%E3%83%97%E3%83%AC%E3%82%A4%E9%A2%A8/README.md | `Nanashi___CRTディスプレイ風.anm2` |
-| GPUピクセルソート.anm2 | Nanashi. | MIT | https://github.com/sevenc-nanashi/aviutl2-scripts/blob/main/scripts/GPU%E3%83%94%E3%82%AF%E3%82%BB%E3%83%AB%E3%82%BD%E3%83%BC%E3%83%88/README.md | `Nanashi___GPUピクセルソート.anm2` |
-| TextBackplate | なたのこ | MIT | https://github.com/Natadecoco2539/AviUtl2-TextBackplate | `Natadecoco2539__TextBackplate` |
+| Constraint | Korarei | CC0-1.0 ※ | https://gist.github.com/korarei/d5b089a69e0c8ba5903d641d677c89e8 | `Korarei__Constraint` |
+| TextBackplate | なたのこ | MIT ※ | https://github.com/Natadecoco2539/AviUtl2-TextBackplate | `Natadecoco2539__TextBackplate` |
 | SoftAnchorBone | なたのこ | MIT | https://github.com/Natadecoco2539/AviUtl2-SoftAnchorBone | `Natadecoco__SoftAnchorBone` |
 | 無印ノイズ | 猫愛 | MIT | https://github.com/nea-c/aviutl2_script_AviUtlNoise | `NeAc__AviUtlNoise` |
 | BezierPath | 猫愛 | MIT | https://github.com/nea-c/aviutl2_script_BezierPath | `NeAc__BezierPath` |
@@ -102,7 +107,7 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 | JpegNoise_for_AviUtl2 | サ行 | MIT | https://github.com/SagyouDarui900/JPEGNoise_AviUtl2 | `Sagyou__JpegNoise` |
 | OpticsCompensation_s_for_AviUtl2 | サ行 | MIT | https://github.com/SagyouDarui900/OpticsCompensation_s_for_AviUtl2 | `Sagyou__OpticsCompensation_s_for_AviUtl2` |
 | Mathy_Su | Suzukeh | MIT | https://github.com/Suzukeh/Mathy_Su | `Suzukeh__Mathy_Su` |
-| NCS風音声波形 (NCSAudioVisualizer) | tettu0530 | MIT | https://github.com/Tettu0530/NCSAudioVisualizer | `Tettu0530__NCS風音声波形__NCSAudioVisualizer_` |
+| NCS風音声波形 (NCSAudioVisualizer) | tettu0530 | MIT ※ | https://github.com/Tettu0530/NCSAudioVisualizer | `Tettu0530__NCS風音声波形__NCSAudioVisualizer_` |
 | uta-resources | UtaUtaUtau | MIT | https://github.com/UtaUtaUtau/uta-resources | `UtaUtaUtau__uta-resources` |
 | グランジ背景を生成 | arcana | MIT | https://github.com/ar-ca-na/aviutl2-grunge-bg | `ar-ca-na__grunge-bg` |
 | 波形ライン | arcana | MIT | https://github.com/ar-ca-na/aviutl2-waveform-line | `ar-ca-na__waveform-line` |
@@ -116,7 +121,6 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 | ポイントズーム | azurite | MIT | https://github.com/azurite581/AviUtl2-PointZoom | `azurite__PointZoom` |
 | scene-lighting | Beive60 | MIT | https://github.com/beive60/aviutl2-scene-lighting | `beive60__scene-lighting` |
 | RhythmShapesForAviutl2 | coffin299 | MIT | https://github.com/coffin299/RhythmShapesForAviutl2 | `coffin299__RhythmShapesForAviutl2` |
-| KSA | KAZOON | MIT | https://github.com/cycloawaodorin/ksa | `cycloawaodorin__KSA` |
 | プレースホルダー | 映像学区 | MIT | https://github.com/eizo-gak/aviutl2-Placeholder | `eizo-gak__aviutl2-Placeholder` |
 | aviutl2-script-skill | gasdyueer | MIT | https://github.com/gasdyueer/aviutl2-script-skill | `gasdyueer__aviutl2-script-skill` |
 | PSDToolkit用自然な口パク | ただのごみ | MIT | https://github.com/gomi1124/PSDToolKit-Natural-LipSync | `gomi1124__PSDToolkit用自然な口パク` |
@@ -163,7 +167,6 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 | Glitch_T | 3aGaM1 | MIT | https://github.com/sagami121/Glitch_T | `sagami121__Glitch_T` |
 | QRCode | 3aGaM1 | MIT | https://github.com/sagami121/Aviutl2-QRCode | `sagami121__QRCode` |
 | 墨だまり | saluf | MIT | https://github.com/5qlufz-1536/AviUtl2_SumiDamari | `saluf__SumiDamari` |
-| 墨だまり | saluf | MIT | https://github.com/5qlufz-1536/AviUtl2_SumiDamari | `saluf__墨だまり` |
 | 角丸正多角形_sl | セイル | MIT | https://github.com/seilor0/roundedPolygon_sl | `seilor0__roundedPolygonSl` |
 | twinkle_sl | セイル | MIT | https://github.com/seilor0/twinkle_sl | `seilor0__twinkle_sl` |
 | ベベルとエンボス.anm2 | Nanashi. | MIT | https://github.com/sevenc-nanashi/aviutl2-scripts/blob/main/scripts/%E3%83%99%E3%83%99%E3%83%AB%E3%81%A8%E3%82%A8%E3%83%B3%E3%83%9C%E3%82%B9/README.md | `sevenc-nanashi__aviutl2-scripts.bevel_and_emboss-anm2` |
@@ -222,19 +225,10 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 | OSC4AU2 | zopty | BSD-3-Clause | https://github.com/zopty/osc4au2 | `zopty__OSC4AU2` |
 | PerceptualColor.anm2 | zopty | BSD-3-Clause | https://github.com/zopty/PerceptualColor.anm2 | `zopty__PerceptualColor.anm2` |
 | SmoothNoise | zopty | MIT | https://github.com/zopty/SmoothNoise | `zopty__SmoothNoise` |
-| どこでもバッファ | zopty | BSD-3-Clause | https://github.com/zopty/DokodemoBuffer | `zopty__どこでもバッファ` |
 | ブラインドループ | zopty | BSD-3-Clause | https://gist.github.com/zopty/ff3439d79fe609c7714d6db4ef1a39a6 | `zopty__ブラインドループ` |
-| 光学モーションブラー | zopty | BSD-3-Clause | https://gist.github.com/zopty/51deda495876451c1dcfb09ceb05345d | `zopty__光学モーションブラー` |
+| 光学モーションブラー | zopty | BSD-3-Clause ※ | https://gist.github.com/zopty/51deda495876451c1dcfb09ceb05345d | `zopty__光学モーションブラー` |
 | JPEGCrush | しけもち | MIT | https://note.com/sikemoti/n/n7017a0e6eabf | `しけもち__JPEGCrush` |
-| トラックバー音声同期 | てるよし | MIT | https://x.com/teruyoshi_uec/status/1965389717224276231 | `てるよし__トラックバー音声同期` |
-| ノイズグラデーション | てるよし | MIT | https://x.com/teruyoshi_uec/status/1979927691215471002 | `てるよし__ノイズグラデーション` |
-| パスグラデーション | てるよし | MIT | https://github.com/teruyoshii/Teruyoshi_AviUtl2_Scripts/blob/main/%E3%83%91%E3%82%B9%E3%82%B0%E3%83%A9%E3%83%87%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3.anm2 | `てるよし__パスグラデーション` |
-| パスブラー | てるよし | MIT | https://github.com/teruyoshii/Teruyoshi_AviUtl2_Scripts/blob/main/%E3%83%91%E3%82%B9%E3%83%96%E3%83%A9%E3%83%BC.anm2 | `てるよし__パスブラー` |
-| 四隅に配置 | てるよし | MIT | https://github.com/teruyoshii/Teruyoshi_AviUtl2_Scripts/blob/main/%E5%9B%9B%E9%9A%85%E3%81%AB%E9%85%8D%E7%BD%AE.anm2 | `てるよし__四隅に配置` |
-| 段階グラデーション | てるよし | MIT | https://github.com/teruyoshii/Teruyoshi_AviUtl2_Scripts/blob/main/%E6%AE%B5%E9%9A%8E%E3%82%B0%E3%83%A9%E3%83%87%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3.anm2 | `てるよし__段階グラデーション` |
-| ウェーブクリッピング | もも猫 | MIT | https://x.com/momo_neeeko/status/2037491184260784191 | `もも猫__ウェーブクリッピング` |
-| スカラップ円 | もも猫 | MIT | https://x.com/momo_neeeko/status/2040680596410941589 | `もも猫__スカラップ円` |
-| ルーローの多角形 | もも猫 | MIT | https://drive.google.com/file/d/1X7q80FYOqJINB2CIKaJ5A9nHXAusRX0r/view?usp=drive_link | `もも猫__ルーローの多角形` |
-| DVD | サ行 | MIT | https://github.com/SagyouDarui900/AviUtl2_Script_SagyouDarui | `サ行__DVD` |
-| プレースホルダー | 映像学区 | MIT | https://github.com/eizo-gak/aviutl2-Placeholder | `映像学区__プレースホルダー` |
-| SliceGlitch | 暘 弥涼 | MIT | https://note.com/isuzu_hinode/n/n3a7d7b761b98 | `暘_弥涼__SliceGlitch` |
+| ウェーブクリッピング | もも猫 | MIT ※ | https://x.com/momo_neeeko/status/2037491184260784191 | `もも猫__ウェーブクリッピング` |
+| スカラップ円 | もも猫 | MIT ※ | https://x.com/momo_neeeko/status/2040680596410941589 | `もも猫__スカラップ円` |
+| ルーローの多角形 | もも猫 | MIT ※ | https://drive.google.com/file/d/1X7q80FYOqJINB2CIKaJ5A9nHXAusRX0r/view?usp=drive_link | `もも猫__ルーローの多角形` |
+| SliceGlitch | 暘 弥涼 | MIT ※ | https://note.com/isuzu_hinode/n/n3a7d7b761b98 | `暘_弥涼__SliceGlitch` |
