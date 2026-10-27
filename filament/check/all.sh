@@ -11,8 +11,9 @@ run() {   # (a check, and the words that mean it held)
 }
 run anime_ways.sh
 run glass_shift.sh
-if [ -f ../out/vid/happy.mp4 ]; then run doc.sh   # (it reads a film kept on this machine only)
-else print "skip doc.sh (needs filament/out/vid/happy.mp4)"; fi
+run doc.sh
+rel=$(./relations.sh 2>&1); print -r -- "relations: ${${(f)rel}[-1]}"   # (relations, behaviours between things: PASS or FAIL at its end)
+[[ ${${(f)rel}[-1]} == PASS ]] || { print "FAIL relations.sh"; bad=1; }
 taken=$(./isf_all.sh 2>&1 | head -1); print -r -- "ISF-Files: $taken"
 (( ${${(s: :)taken}[1]:-0} >= 318 )) || { print "FAIL isf_all.sh (README.md says 318)"; bad=1; }
 (( bad )) && { print "some checks failed"; exit 1; }

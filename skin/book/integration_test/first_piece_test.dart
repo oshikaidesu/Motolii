@@ -1,4 +1,4 @@
-// The README's first piece made in the window, a picture after each step (docs/media/window_step1..4.png): a recipe from
+// The README's first piece made in the window, a picture after each step (docs/media/window_step1..5.png): a recipe from
 // the Create shelf (Iris), the Glow effect from the Effects shelf on it, then Render writes the film.
 //   flutter drive --profile -d macos --driver=test_driver/integration_test.dart --target=integration_test/first_piece_test.dart
 import 'dart:io';
@@ -24,7 +24,7 @@ void main() {
   testWidgets('the first piece in the window', (t) async {
     t.view.physicalSize = const Size(3200, 1920);
     addTearDown(t.view.resetPhysicalSize);
-    final folder = Directory.systemTemp.createTempSync('first');
+    final folder = Directory('${Directory.systemTemp.createTempSync('first').path}/Motolii')..createSync(); // (a folder named as README's ~/Movies/Motolii)
     final doc = '${folder.path}/first.motolii';
     WsZoom.set(1, keep: false);
     ColorTheme.at = '${folder.path}/none.xml'; // (the window's own skin)
@@ -84,14 +84,19 @@ void main() {
     expect(ws.fxOf(ws.selected), contains('Glow'), reason: m.trouble);
     await shot(3); // (the effect on it)
 
-    ws.renderTo = '${folder.path}/first.mp4';
-    ws.onRender?.call();
+    await t.tap(find.text('Render').first);   // (the top bar's: it asks for a name)
+    await t.pumpAndSettle();
+    await shot(4); // (the Render box)
+    await t.enterText(find.byType(EditableText).last, 'first');
+    await t.pumpAndSettle();
+    await t.tap(find.text('Render').last);
+    await t.pumpAndSettle();
     for (var i = 0; i < 400 && !(ws.notice ?? '').startsWith('Written'); i++) {
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await t.pump();
     }
     expect(ws.notice, startsWith('Written'), reason: m.trouble);
     expect(File('${folder.path}/first.mp4').existsSync(), isTrue);
-    await shot(4); // (written: the top bar says so)
+    await shot(5); // (written: the top bar says so)
   });
 }

@@ -1,0 +1,35 @@
+# The whole build on a GitHub Apple silicon Mac, as README.md's "Build and open" does it, then the checks:
+# the engine's (filament/check/all.sh) and the window's (flutter analyze; flutter test, which has known failures, only tells).
+# Run by hand (Actions › build › Run workflow) and on pull requests that touch the code.
+name: build
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['filament/**', 'skin/**', 'Brewfile', '.github/workflows/build.yml']
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4   # (what the scripts fetch and build, kept between runs while their pins stay)
+        with:
+          path: |
+            filament/third_party/filament_src
+            filament/third_party/skia_src
+            filament/third_party/thorvg_src
+            filament/third_party/physics
+            filament/third_party/libtess2
+            filament/third_party/ISF-Files
+          key: deps-${{ runner.os }}-${{ hashFiles('filament/dawn_probe/*.patch', 'filament/dawn_probe/build.sh', 'filament/dawn_probe/tvg_on_dawn.sh', 'filament/skia.sh', 'filament/jolt.sh', 'filament/libtess2.sh', 'filament/check/isf_all.sh') }}
+      - run: brew bundle
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.2
+          channel: stable
+      - run: filament/dawn_probe/build.sh
+      - run: filament/edit.sh build.motolii < /dev/null
+      - run: filament/check/all.sh
+      - run: cd skin/book && flutter analyze lib test integration_test --no-fatal-infos --no-fatal-warnings
+      - run: cd skin/book && flutter test
+        continue-on-error: true   # (known failures, run together: CONTRIBUTING.md 'known gaps'; it tells, it does not stop the run)

@@ -25,7 +25,7 @@ git config core.hooksPath .githooks
 | 窓の試験 | `cd skin/book && flutter test` | 中身を組んでいない時は、中身を使う試験が飛ばされる |
 | 窓の書き方 | `cd skin/book && flutter analyze lib test integration_test` | エラー 0（今ある注意は 97） |
 
-GitHub の Actions は、台帳の確かめを毎回走らせます（`.github/workflows/assets.yml`）。知らせるだけで、PR は止めません。窓での最初の 1 本の確かめは `cd skin/book && flutter drive --profile -d macos --driver=test_driver/integration_test.dart --target=integration_test/first_piece_test.dart`（`docs/media/window_step1..4.png` を書く）。作りは [`ARCHITECTURE.md`](ARCHITECTURE.md) と [`filament/README.md`](filament/README.md)。行動規範は [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)、脆弱性は [`SECURITY.md`](SECURITY.md)。
+GitHub の Actions は、台帳の確かめを毎回走らせます（`.github/workflows/assets.yml`、知らせるだけで PR は止めない）。組み立て全部と試験は `.github/workflows/build.yml`（Apple Silicon の Mac で、README の手順どおり組んで `check/all.sh`・`flutter analyze`・`flutter test`。コードに触る PR と、Actions の画面から手で）。窓での最初の 1 本の確かめは `cd skin/book && flutter drive --profile -d macos --driver=test_driver/integration_test.dart --target=integration_test/first_piece_test.dart`（`docs/media/window_step1..4.png` を書く）。作りは [`ARCHITECTURE.md`](ARCHITECTURE.md) と [`filament/README.md`](filament/README.md)。行動規範は [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)、脆弱性は [`SECURITY.md`](SECURITY.md)。
 
 ## 決まり
 
@@ -51,11 +51,13 @@ GitHub の Actions は、台帳の確かめを毎回走らせます（`.github/w
 | 配れる `.app`：中身が読む Homebrew の部品（GStreamer・glib・SQLite・LuaJIT・QuickJS）を `.app` の中に入れる。[dylibbundler](https://github.com/auriamg/macdylibbundler) か GStreamer の macOS 用フレームワーク | `filament/edit.sh`、`skin/book/macos/` | 中 |
 | AviUtl2 のスクリプトで足りない呼び出し（`obj.drawpoly`、図形「円」など）を、手本（AviUtl2 の lua.txt、sashimono-edit）どおりに | `reports/aviutl2/converter_plan.md`、`filament/aviutl.cpp` | 中〜難 |
 | TSL の表現を編集の棚に出す | `filament/tsl/`、`reports/tsl_collection.md` | 中 |
+| 窓の試験の落ちる 3 本（下の「知っている穴」）を直し、まとめて走らせても通るようにする | `skin/book/test/` | 中 |
 | 台帳 `ASSETS.md` の見出しに英語を添える | `ASSETS.md` | 易 |
 | 窓の結合テストの出力先（いまは `reports/`）を一時フォルダに | `skin/book/integration_test/` | 易 |
 
 ## 知っている穴
 
 - 動くのは macOS（Apple Silicon）だけ。
+- 窓の試験（`flutter test`）は、まとめて走らせると落ちる物がある（2026-10-27 に 150 本中 125 本が通る）。1 本ずつなら通る物が多く、それだけで落ちるのは 3 本：Parent（親を付けた後の位置）、anime.js の庫（10/26 に anime.js の見本を外した後、試験が古いまま）、Posterize と Boxinator のつまみ。直すのは手を付けやすい所の 1 つ。CI ではこの段は知らせるだけ。
 - 中身（`libmotolii.dylib`）は Homebrew の GStreamer などを読むので、作った `.app` はそのままでは他の Mac で動きません。
 - `filament/` の直下には、今の中身と前の試しのファイルが並んでいます（前の試しのスクリプトは `filament/sdk.sh` が取る組み立て済みの Filament を使う）。

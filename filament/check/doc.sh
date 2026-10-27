@@ -3,6 +3,8 @@
 # way, undo and redo, a still after each stage), then the document opened afresh: its still against the last one made
 # before it was closed, number by number. Then the wrong calls. Says what each call took.   check/doc.sh
 cd "$(dirname "$0")/.."
+# (a film of its own for the calls: ffmpeg's test picture and tone, as long, as big and as quick as the one used before)
+mkdir -p out/vid && [ -f out/vid/check_film.mp4 ] || ffmpeg -v error -f lavfi -i testsrc2=size=1280x720:rate=30:duration=14.35 -f lavfi -i sine=frequency=440:sample_rate=44100:duration=14.35 -ac 2 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest out/vid/check_film.mp4
 rm -f out/doc_check.motolii out/wgpu_kit/out/e_*.png
 ./edit.sh out/doc_check.motolii < check/doc_calls.txt || exit 1
 printf 'at 2.5\nstill out/e_7.png\n' | ./edit.sh out/doc_check.motolii
@@ -28,7 +30,7 @@ rm -f out/doc_breaker.motolii
 grep -E "^[a-z]+: " out/doc_breaker.txt | sed 's/, [0-9.]* ms$//' | diff - check/doc_breaker.expect > /dev/null && echo "what the breaker found holds: yes ($(grep -c 'NOT done' out/doc_breaker.txt) calls refused)" || echo "what the breaker found holds: NO (check/doc_breaker.expect)"
 # every kind has the values it is to have (a line of the table of values lost, as a comment swallowing it, shows here)
 rm -f out/doc_names.motolii
-printf 'add shape rect\nset 1 nosuch 1\nadd text ../arial_black.ttf\nset 2 nosuch 1\nadd solid cube\nset 3 nosuch 1\nadd camera eye\nset 4 nosuch 1\nadd film ../vid/happy.mp4\nset 5 nosuch 1\n' | ./edit.sh out/doc_names.motolii | grep "has no nosuch" | sed 's/, [0-9.]* ms$//' | diff - check/doc_names.expect > /dev/null && echo "every kind has its values: yes" || echo "every kind has its values: NO (check/doc_names.expect)"
+printf 'add shape rect\nset 1 nosuch 1\nadd text ../arial_black.ttf\nset 2 nosuch 1\nadd solid cube\nset 3 nosuch 1\nadd camera eye\nset 4 nosuch 1\nadd film ../vid/check_film.mp4\nset 5 nosuch 1\n' | ./edit.sh out/doc_names.motolii | grep "has no nosuch" | sed 's/, [0-9.]* ms$//' | diff - check/doc_names.expect > /dev/null && echo "every kind has its values: yes" || echo "every kind has its values: NO (check/doc_names.expect)"
 # colours as the files hold them: a picture half white (255), half grey (144), and white typed words, on a document's stage
 python3 -c "
 from PIL import Image

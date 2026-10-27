@@ -1,12 +1,12 @@
 #!/bin/zsh
-# Skia's paths alone (its path ops, path effects, contour measure, stroker): the official source at the branch we use,
+# Skia's paths alone (its path ops, path effects, contour measure, stroker): the official source at the commit we use (on chrome/m149),
 # fetched once into third_party/skia_src, built as fontTools' skia-pathops builds it (no GPU, fonts, images or PDF).
 # Cavalry draws its shapes' paths with the same. Out comes third_party/skia_src/out/path/libskia.a.
 #   ./skia.sh
 set -e
 cd "$(dirname "$0")"
 K=$PWD/third_party/skia_src
-[ -d $K ] || git -c core.hooksPath=/dev/null clone -q --depth 1 --branch chrome/m149 https://skia.googlesource.com/skia $K
+[ -d $K ] || { mkdir -p $K && git init -q $K && git -C $K -c core.hooksPath=/dev/null fetch -q --depth 1 https://skia.googlesource.com/skia 9bb16a741cdbcbde46a0d4caf8ac73f4d07a89e2 && git -C $K checkout -q FETCH_HEAD; }   # (chrome/m149 as it stood when fetched)
 [ -x $K/bin/gn ] || (cd $K && python3 bin/fetch-gn > /dev/null)
 [ -f $K/out/path/build.ninja ] || (cd $K && bin/gn gen out/path --args='is_official_build=true is_debug=false skia_enable_pdf=false
     skia_enable_discrete_gpu=false skia_enable_ganesh=false skia_enable_graphite=false skia_enable_skottie=false skia_enable_skshaper=false

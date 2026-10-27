@@ -11,7 +11,7 @@
 - **読んだだけ** ＝ 中身は読んだが、動かしていない。
 - **未確認** ＝ 在る事だけ分かっている。
 
-場所は `/Users/motolii_maker/motolii`（今）と `/Users/motolii_maker/rust_ae/Motolii`（過去の倉庫。**読むだけ。中の物を書き換えない・走らせない**。決まりは `~/rust_ae/HANDOFF.md`）。
+場所はこのリポジトリの中と、過去の倉庫 rust_ae（https://github.com/oshikaidesu/rust_ae 、main 8d2a0ebd。**読むだけ。中の物を書き換えない・走らせない**）。下の `rust_ae/…` はその倉庫の中の場所（作者の手元では `~/rust_ae/Motolii` にクローンしてある）。
 
 ## 1. 動く絵をガワに渡す（コピーなし）
 
@@ -39,7 +39,7 @@
 
 | 何 | どこ | 状態 |
 |---|---|---|
-| Flutter 本体（3.47.2 stable、Dart 3.13.2） | PATH の flutter（別の場所なら変数 FLUTTER にその flutter の道）。この Mac では `~/rust_ae/Motolii/.tools/flutter/` | 今の土台で動く（ガラスを開くスクリプトがこれを使う） |
+| Flutter 本体（3.47.2 stable、Dart 3.13.2） | PATH の flutter（別の場所なら変数 FLUTTER にその flutter の道。入れ方は README の「Flutter を入れる」、版は `skin/book/.fvmrc`） | 今の土台で動く（ガラスを開くスクリプトがこれを使う） |
 | 部品の棚（Widgetbook）：19 コンポーネント、約 166 の使い方、約 1.8 万行。数値の井戸・スイッチ・スライダー・色・タブ・タイムライン（行、バー、キー、再生ヘッド、定規）・ブラウザ・舞台のふち・窓 | `skin/book/lib/`（`skin/book/lib/tokens.dart`、`kit.dart`、`skin/book/lib/sets/`、`skin/book/lib/parts/`） | 前の土台で動いた（見た目の部品。中身にはつながっていない） |
 | **見本の窓を本物の中身につないだ物**：Widgetbook の Workspace › Live。Flutter から中身の C の関数を直接呼ぶ束ね、Mac の窓の側の絵の受け（`StageTexture`）、舞台の席に絵を貼る所 | `skin/book/lib/motolii.dart`、`skin/book/macos/Runner/MainFlutterWindow.swift`、`skin/book/lib/workspace/workspace.dart`、`stage_view.dart`、`ws.dart`、`skin/book/lib/main.dart` | 今の土台で動く（舞台の絵と再生まで。ほかの席はまだ作り物の文書） |
 | ウィジェットブックの土台：Mac 用の窓の作り、部品の検査、設定 | `skin/book/`（`skin/book/macos/`、`skin/book/test/`、`skin/book/pubspec.yaml`）、`skin/README.md` | 前の土台で動いた |
@@ -48,9 +48,9 @@
 | 設計の紙 | `skin/DESIGN.md`、`skin/OVERVIEW.md`、`skin/PROCESS.md` | — |
 | 窓と中身の境目の決まりと、潰す物の表（窓が中身を呼ぶ所は `skin/book/tool/bridge_sites.py` で数える） | `skin/BRIDGE.md` | 書いた（10/24）、置き換えはこれから |
 | 窓が読む書類とコマの写し（中身の手が書類を持っている間に JSON で作り、窓は聞き口で受け取る） | `filament/picture.h` | 今の土台で動く（10/24） |
-| **過去の製品の窓**：橋、セッション、タイムライン、インスペクタ、舞台、机（ease、blend、depth、history、relations、notes） | `~/rust_ae/Motolii/motolii/ui/lib/` | 読んだだけ |
-| 過去のスキンと中身の間の約束：命令 JSON 約 90 個、返事の「様子」の JSON、絵のテクスチャ番号 | `~/rust_ae/Motolii/motolii/ui/lib/bridge/protocol.dart`、`~/rust_ae/Motolii/motolii/ui/native/src/port.rs`、`snapshot.rs` | 読んだだけ。対応表は `reports/ae_rubric/past_document_map.md` |
-| 過去の「Ease の机」と、間の種類のいつもの数 | `~/rust_ae/Motolii/motolii/ui/lib/desks/ease/`、`~/rust_ae/Motolii/motolii/ui/native/src/editor/ease_kinds.rs` | 読んだだけ。数は `filament/interp.h` に持ってきた |
+| **過去の製品の窓**：橋、セッション、タイムライン、インスペクタ、舞台、机（ease、blend、depth、history、relations、notes） | `rust_ae/motolii/ui/lib/` | 読んだだけ |
+| 過去のスキンと中身の間の約束：命令 JSON 約 90 個、返事の「様子」の JSON、絵のテクスチャ番号 | `rust_ae/motolii/ui/lib/bridge/protocol.dart`、`rust_ae/motolii/ui/native/src/port.rs`、`snapshot.rs` | 読んだだけ。対応表は `reports/ae_rubric/past_document_map.md` |
+| 過去の「Ease の机」と、間の種類のいつもの数 | `rust_ae/motolii/ui/lib/desks/ease/`、`rust_ae/motolii/ui/native/src/editor/ease_kinds.rs` | 読んだだけ。数は `filament/interp.h` に持ってきた |
 
 ## 3. 中身（今の土台：Filament を Dawn で）
 
@@ -117,13 +117,13 @@
 
 | 何 | どこ | 状態 |
 |---|---|---|
-| 文書の形：層、種類、値、番号、並び、時間（コマと分数）、カメラ、文字、素材 | `~/rust_ae/Motolii/motolii/crates/motolii-doc/src/store/`、`~/rust_ae/Motolii/motolii/crates/motolii-doc/src/core/` | 読んだだけ |
-| キーと間の定義、値の種類 | `~/rust_ae/Motolii/motolii/crates/motolii-doc/src/eval/track.rs`、`bezier.rs`、`value.rs` | 読んだだけ。式は `filament/interp.h` に写した |
-| GSAP の名前の表 | `~/rust_ae/Motolii/motolii/crates/motolii-doc/src/eval/gsap.rs` | **持ってこない**（負の遺産） |
-| 編集の操作、まとめ（グループ）、取り消し、確かめ、保存 | `~/rust_ae/Motolii/motolii/crates/motolii-edit/src/` | 読んだだけ |
-| ThorVG や OS とのつなぎ | `~/rust_ae/Motolii/motolii/crates/motolii-glue/src/macos/` | 未確認 |
-| 描く側、Lottie への書き出し | `~/rust_ae/Motolii/motolii/crates/motolii-render/` | 未確認 |
-| 決め事の紙 | `~/rust_ae/Motolii/docs/`、`~/rust_ae/Motolii/MANIFESTO.ja.md`、`VISION.ja.md`、`~/rust_ae/Motolii/v1/PLAN/` | ほぼ未読 |
+| 文書の形：層、種類、値、番号、並び、時間（コマと分数）、カメラ、文字、素材 | `rust_ae/motolii/crates/motolii-doc/src/store/`、`rust_ae/motolii/crates/motolii-doc/src/core/` | 読んだだけ |
+| キーと間の定義、値の種類 | `rust_ae/motolii/crates/motolii-doc/src/eval/track.rs`、`bezier.rs`、`value.rs` | 読んだだけ。式は `filament/interp.h` に写した |
+| GSAP の名前の表 | `rust_ae/motolii/crates/motolii-doc/src/eval/gsap.rs` | **持ってこない**（負の遺産） |
+| 編集の操作、まとめ（グループ）、取り消し、確かめ、保存 | `rust_ae/motolii/crates/motolii-edit/src/` | 読んだだけ |
+| ThorVG や OS とのつなぎ | `rust_ae/motolii/crates/motolii-glue/src/macos/` | 未確認 |
+| 描く側、Lottie への書き出し | `rust_ae/motolii/crates/motolii-render/` | 未確認 |
+| 決め事の紙 | `rust_ae/docs/`、`rust_ae/MANIFESTO.ja.md`、`VISION.ja.md`、`rust_ae/v1/PLAN/` | ほぼ未読 |
 
 ## 6. 検査と記録
 
@@ -138,7 +138,7 @@
 | Motolii 自身のライセンス（Apache-2.0 か MIT を選べる、過去の倉庫 rust_ae と同じ文書） | `LICENSE-APACHE`、`LICENSE-MIT` | 決めた（10/27） |
 | 関わり方（Issue・PR・台帳と出典の決まり・知っている穴） | `CONTRIBUTING.md` | 書いた（10/27） |
 | 取ってくる物の小さなスクリプト：Filament の組み立て済み SDK（前の試しのスクリプトが使う）、MIDI ビューの PianoRollSvg.js | `filament/sdk.sh`、`filament/midi_roll.sh` | 空の所から取れることを確かめた（10/27） |
-| 外向けの文書：英語の README、Issue と PR のひな型、台帳の確かめを GitHub Actions で毎回走らせる設定、README の絵（Motolii で作った物と、パブリックドメインの写真に掛けた物） | `README.en.md`、`ARCHITECTURE.md`（作りと言葉の対応表）、`CONTRIBUTING.en.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`.github/ISSUE_TEMPLATE/`、`.github/PULL_REQUEST_TEMPLATE.md`、`.github/workflows/assets.yml`、`docs/media/`、`docs/examples/`（README の作例の命令） | 書いた（10/27）。最初の 1 本のコマンドは書いたとおりに走らせて確かめた |
+| 外向けの文書：英語の README、Issue と PR のひな型、台帳の確かめを GitHub Actions で毎回走らせる設定、README の絵（Motolii で作った物と、パブリックドメインの写真に掛けた物） | `README.en.md`、`ARCHITECTURE.md`（作りと言葉の対応表）、`CONTRIBUTING.en.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`.github/ISSUE_TEMPLATE/`、`.github/PULL_REQUEST_TEMPLATE.md`、`.github/workflows/assets.yml`、`.github/workflows/build.yml`（組み立て全部と試験）、`docs/media/`、`docs/examples/`（README の作例の命令と、それを 1 行で走らせる mv.sh） | 書いた（10/27）。最初の 1 本のコマンドは書いたとおりに走らせて確かめた |
 | 組み立てに要る Homebrew の物の一覧（Homebrew Bundle の書き方、`brew bundle` で入る） | `Brewfile` | 新しいクローンで組んで確かめた（10/27） |
 | 同梱した他の人の作品の一覧と断り書き（AviUtl2 の 172、ISF・three.js・PlayCanvas の効果、取ってくる依存）。PlayCanvas の効果のライセンスの文書 | `THIRD_PARTY_NOTICES.md`、`filament/effects/playcanvas-LICENSE.txt`、`vgpu-LICENSE.txt`、`phosphor-LICENSE.txt`、`SlitScanCam-LICENSE.txt`、`three-LICENSE.txt` | 書いた（10/27） |
 | この台帳と、その見張り（コミットの前に走る） | `ASSETS.md`、`.githooks/assets_check.py`、`.githooks/pre-commit` | 今の土台で動く |

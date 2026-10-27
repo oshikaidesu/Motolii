@@ -1,6 +1,16 @@
 # build products and render output
 out/
 third_party/
+# (filament/third_party holds what the build fetches, kept out, beside a few small bundled works, kept in: a new one is let in below)
+!/filament/third_party/
+/filament/third_party/*
+!/filament/third_party/anime/
+!/filament/third_party/godot_easing/
+!/filament/third_party/js/
+!/filament/third_party/midi_roll/
+!/filament/third_party/thermion_frame/
+/filament/third_party/js/hermes/
+/filament/third_party/midi_roll/PianoRollSvg.js
 target/
 build/
 node_modules/
@@ -41,3 +51,4 @@ __pycache__/
 /filament/aviutl_scripts/暘_弥涼__SliceGlitch/
 /reports/user_panels/sheets/youtube/
 /build.motolii
+/reports/user_panels/

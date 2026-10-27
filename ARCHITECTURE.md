@@ -43,6 +43,7 @@ flowchart TB
 
 | 境目 | どこ | 決まり |
 |---|---|---|
+| 窓の入口 | `skin/book/lib/main.dart`（Widgetbook。`--dart-define=LAB_ROUTE=/?path=workspace/workspace/live` で本物の窓）→ `skin/book/lib/workspace/workspace.dart`（`Workspace`：窓の全体、書類を開く、メニュー）。窓の状態は `lib/workspace/ws.dart`（`Ws`） | パネルを足す入口は `lib/workspace/door.dart`（[`skin/book/lib/workspace/README.md`](skin/book/lib/workspace/README.md)） |
 | 窓 → 中身 | `filament/motolii.h`（約 230 行）、Dart 側は `skin/book/lib/motolii.dart` と ffigen が作る `motolii_bindings.dart` | 窓は値を持たない。読むのも変えるのも C の呼び出しで、書類が正（窓と中身の境目の決まりは [`skin/BRIDGE.md`](skin/BRIDGE.md)） |
 | 中身の中 | `filament/motolii_hand.h` | 書類と GPU に触るのは 1 本のスレッドだけ。呼び出しはそのスレッドに頼んで待つ（`by_hand`） |
 | 中身 → 窓（絵） | `filament/live.h` | 場面は IOSurface の上の CVPixelBuffer 3 枚に描き、それを Dawn のテクスチャとして Filament の描き先にする。窓（Flutter の外部テクスチャ、`skin/book/macos/Runner/MainFlutterWindow.swift`）は同じ物を読む |

@@ -28,7 +28,7 @@ set 1 wobble 3
 say 1 blend purple
 say 1 keyed yes
 key 1 x -1 0
-add film ../vid/happy.mp4
+add film ../vid/check_film.mp4
 set 2 speed 0
 set 2 begin 100
 set 2 speed -1

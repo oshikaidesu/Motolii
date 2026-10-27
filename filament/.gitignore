@@ -1,4 +1,9 @@
-third_party/
+/third_party/*
+!/third_party/anime/
+!/third_party/godot_easing/
+!/third_party/js/
+!/third_party/midi_roll/
+!/third_party/thermion_frame/
 probe
 *.filamat
 out/
