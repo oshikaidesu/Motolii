@@ -21,26 +21,28 @@ class EffectsShelf extends StatelessWidget {
     if (m == null) return DockEmpty(c.query);
     final on = ws.fxOf(ws.selected), screen = ws.screenFx, picked = int.tryParse(ws.selected ?? '') != null;
     // (a thing's own effects and motions go on a picked thing only; the whole-screen ones on it, or on the stage)
-    // (each: its name, what it is for, its tile, whether it is on, what two presses do (also what a drop on the stage does), what it says of itself)
-    final all = <({String name, String label, Widget tile, bool on, VoidCallback apply, String said})>[
+    // (each: what it is told by (a thing's own by its name; a file's by its file: two files may share a name, Halftone's
+    //  three.js .wgsl and an AviUtl2 script), its name, what it is for, its tile, whether it is on, what two presses do
+    //  (also what a drop on the stage does), what it says of itself)
+    final all = <({String id, String name, String label, Widget tile, bool on, VoidCallback apply, String said})>[
       if (picked)
         for (final (n, _) in m.thingEffects)
-          (name: n, label: m.label(n), on: on.contains(n), apply: () => ws.fxToggle(n), said: _said(ws, n),
+          (id: n, name: n, label: m.label(n), on: on.contains(n), apply: () => ws.fxToggle(n), said: _said(ws, n),
            tile: _Tile(n, file: m.picture(n), look: _FxLook(n), on: on.contains(n) ? 'ON' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: () => ws.fxToggle(n), star: c)),
       for (final (n, f) in m.effects)
-        (name: n, label: m.label(n), on: screen.contains(f), apply: () => ws.screenToggle(f), said: 'On the picked thing',
-         tile: _Tile(n, key: ValueKey('ws-screen-$n'), file: m.picture(f), same: m.tileSame(f), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: () => ws.screenToggle(f))),
+        (id: f, name: n, label: m.label(n), on: screen.contains(f), apply: () => ws.screenToggle(f), said: 'On the picked thing',
+         tile: _Tile(n, key: ValueKey('ws-screen-$f'), file: m.picture(f), same: m.tileSame(f), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, picked: c.sel == f, onTap: () => c.pick(f), onApply: () => ws.screenToggle(f))),
       if (picked)
         for (final (n, f) in m.animators)
-          (name: n, label: 'Motion', on: ws.motion == f, apply: () => ws.motionToggle(f), said: 'A motion for the picked thing',
-           tile: _Tile(n, key: ValueKey('ws-motion-$n'), on: ws.motion == f ? 'ON' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: () => ws.motionToggle(f))),
+          (id: f, name: n, label: 'Motion', on: ws.motion == f, apply: () => ws.motionToggle(f), said: 'A motion for the picked thing',
+           tile: _Tile(n, key: ValueKey('ws-motion-$n'), on: ws.motion == f ? 'ON' : null, picked: c.sel == f, onTap: () => c.pick(f), onApply: () => ws.motionToggle(f))),
     ].where((e) => c.hit(e.name)).toList();
     final kinds = <String, int>{};
     for (final e in all) {
       if (e.label.isNotEmpty) kinds[e.label] = (kinds[e.label] ?? 0) + 1;
     }
     final chip = kinds.containsKey(c.chip) ? c.chip : 'All', shown = [for (final e in all) if (chip == 'All' || e.label == chip) e.tile];
-    final sel = all.where((e) => e.name == c.sel).firstOrNull;
+    final sel = all.where((e) => e.id == c.sel).firstOrNull;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

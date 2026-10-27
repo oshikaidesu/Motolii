@@ -416,6 +416,7 @@ static bool doc_parent(Doc& d, int thing, double to) {
     const double size = doc_number(d, thing, "size", now, 1);
     doc_act(d);
     bool ok = doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(%d, 'parent', 0.0, %!.17g) on conflict do update set value = excluded.value", thing, to));
+    doc_forget(d);   // (the parent read again as now written, not as kept from the last picture: as doc_unrelate reads after its change)
     const math::mat4 into = inverse(doc_above(d, thing, now)) * was;
     for (int k = 0; ok && k < 3; ++k) {
         const std::vector<double> keys = doc_key_moments(d, thing, xyz[k]);
@@ -436,6 +437,7 @@ static bool doc_key_here(Doc& d, int thing, const char* name, double at) {
 // lies now, as one change.
 static bool doc_raise(Doc& d, int thing, int places) {
     if (!doc_knows(d, thing)) return false;
+    doc_forget(d);   // (the order as the document has it now, a thing just added in the same act too: as doc_relate forgets before it reads)
     std::vector<int> lie = doc_laid(d);
     const long from = std::find(lie.begin(), lie.end(), thing) - lie.begin(), to = std::clamp(from + (long)places, 0L, (long)lie.size() - 1);
     if (to == from) return d.trouble = places > 0 ? "it is the nearest already" : "it is the furthest back already", false;

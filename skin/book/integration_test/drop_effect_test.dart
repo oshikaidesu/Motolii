@@ -73,7 +73,7 @@ void main() {
     await t.pumpAndSettle();
     await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'ASCII');
     await t.pumpAndSettle();
-    final row = find.byKey(const ValueKey('ws-screen-ASCII Art'));
+    final row = find.byKey(ValueKey('ws-screen-${m.effects.firstWhere((e) => e.$1 == 'ASCII Art').$2}'));   // (a file's effect, by its file: dock_effects.dart)
     await seen(t, row);
     await t.tap(row);
     await t.pump(const Duration(milliseconds: 400));

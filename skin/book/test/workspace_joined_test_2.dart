@@ -144,6 +144,7 @@ void _tests2() {
     final parent = find.byWidgetPredicate((w) => w is Chooser && w.id == 'v_parent');
     await seen(t, parent);
     await pick(t, 'v_parent', t.widget<Chooser>(parent).options.firstWhere((o) => o.endsWith('Rect'))); // (the inside's Transform card: Parent, another thing, named with its number: '2. Rect')
+    await settled(t, ws);   // (the hand let go, not waited for by the window: where it stands is said once the inside has taken it)
     expect(m.value(cube, 'parent', 0), rect, reason: m.trouble);
     final given = m.frame(cube)!;
     expect([given[0], given[1]], [closeTo(before[0], 1), closeTo(before[1], 1)], reason: 'it did not move when it was given a parent');

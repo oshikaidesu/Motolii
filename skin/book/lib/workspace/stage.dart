@@ -386,7 +386,7 @@ class _OptionsStrip extends StatelessWidget {
         color: WsT.body,
         border: Border(top: BorderSide(color: WsT.line)),
       ),
-      child: Row(
+      child: LayoutBuilder(builder: (_, box) => Row(
         children: [
           Expanded(
             child: ClipRect(
@@ -407,9 +407,12 @@ class _OptionsStrip extends StatelessWidget {
             ),
           ),
           SizedBox(width: WsT.inset),
-          ValueListenableBuilder<int>(valueListenable: ws.seen, builder: (_, _, _) => _Readout(scene: scene, layer: layer)), // (and while a hand carries a value)
+          ConstrainedBox(   // (as wide as it is, the tools before it given the rest; wider than the whole strip, drawn smaller, never cut, as dock_parts.dart's trailing)
+            constraints: BoxConstraints(maxWidth: (box.maxWidth - 2 * WsT.inset).clamp(0, double.infinity)),
+            child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: ValueListenableBuilder<int>(valueListenable: ws.seen, builder: (_, _, _) => _Readout(scene: scene, layer: layer))), // (and while a hand carries a value)
+          ),
         ],
-      ),
+      )),
     );
   }
 }

@@ -388,10 +388,13 @@ void _tests3() {
     expect(inspectorCards(t), containsAll(['Copies', 'Wave']));
     expect(m.undo() && m.things.isEmpty, isTrue, reason: 'one step');
     // (two presses on the tile make it at once, without the foot's button)
-    await t.tap(tile);
-    await t.pump(const Duration(milliseconds: 60));
-    await t.tap(tile);
-    await t.pumpAndSettle();
+    await settled(t, ws);   // (the undo's picture taken first: the tile pressed where it then is)
+    await doubleTap(t, tile);
+    await settled(t, ws);   // (made by the inside, not waited for by the window)
+    for (var i = 0; i < 100 && m.things.isEmpty; i++) {   // (its picture of the document, told once the inside has made it: as drop_effect_test waits for what the window does not)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump();
+    }
     expect(m.things.length, 1, reason: 'made by two presses: ${m.trouble}');
     expect(m.word(m.things.single, 'name'), 'Iris');
     expect(m.make('Nope'), 0);
@@ -435,7 +438,7 @@ void _tests3() {
       ..select('$cube')
       ..shelf = 'Effects';
     await t.pumpAndSettle();
-    final row = find.byKey(ValueKey('ws-screen-${half.$1}'));
+    final row = find.byKey(ValueKey('ws-screen-${half.$2}'));   // (a file's effect, by its file: dock_effects.dart)
     await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), half.$1);
     await t.pumpAndSettle();
     await doubleTap(t, row);

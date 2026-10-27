@@ -32,7 +32,7 @@ void main() {
       ..select(null)
       ..shelf = 'Effects';
     await t.pumpAndSettle();
-    final names = m.effects.take(2).map((e) => e.$1).toList();
+    final names = m.effects.take(2).map((e) => e.$2).toList();   // (a file's effect, by its file: dock_effects.dart)
     debugProfileBuildsEnabledUserWidgets = true;
     await binding.traceAction(() async {
       for (final n in [...names, ...names]) {
