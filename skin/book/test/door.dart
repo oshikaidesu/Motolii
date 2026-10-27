@@ -96,7 +96,7 @@ Future<void> seen(WidgetTester t, Finder f) async {
 /// and desk tool, it shows the same words. What differs was held by the window, not the document.
 Future<void> expectSameAfterReopen(WidgetTester t, {List<WsPane> extra = const [], List<DeskTool> tools = const []}) async {
   final ws = wsOf(t);
-  for (var i = 0; i < 60 && ws.waiting; i++) {   // (the changes a hand told, done: as a hand sees the window once it rests)
+  for (var i = 0; i < 600 && ws.waiting; i++) {   // (the changes a hand told, done: as a hand sees the window once it rests; 30 s at most, as settled)
     await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await t.pump();
   }
@@ -156,7 +156,7 @@ Future<void> pick(WidgetTester t, String id, String word) async {
 /// The changes a hand told the inside, all done (as the window shows them once it rests).
 Future<void> settled(WidgetTester t, Ws ws) async {
   await t.pumpAndSettle();
-  for (var i = 0; i < 60 && ws.waiting; i++) {
+  for (var i = 0; i < 600 && ws.waiting; i++) {   // (30 s at most, as opening is given: a clean CI Mac answers a step of many changes in more than 3)
     await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await t.pump();
   }
