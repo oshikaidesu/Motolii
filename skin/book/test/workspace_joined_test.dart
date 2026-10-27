@@ -77,8 +77,8 @@ void main() {
 
   testWidgets('what the judges broke: keys of every value that moves are on the bar; a way reads back in one form; one act is one step', (t) async {
     final ws = await _pump(t), m = ws.inside!;
-    expect(m.kindOf('$motoliiDir/out/vid/happy.mp4'), 'film');
-    final film = m.add('', '$motoliiDir/out/vid/happy.mp4'); // (the inside makes of a file what it is)
+    expect(m.kindOf('$motoliiDir/out/vid/check_film.mp4'), 'film');
+    final film = m.add('', '$motoliiDir/out/vid/check_film.mp4'); // (the inside makes of a file what it is)
     expect(film, isNot(0), reason: m.trouble);
     expect(m.word(film, 'kind'), 'film');
     expect(m.moving(film), containsAll(['x', 'y', 'z', 'rotate', 'size', 'opacity']));

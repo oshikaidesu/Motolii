@@ -14,7 +14,7 @@ const _shelves = ['Media', 'Effects', 'Fonts', 'Colors', 'Create'];
 /// A window's state joined to a new document in a folder of its own, with a picture beside it.
 Ws _joined() {
   final dir = Directory.systemTemp.createTempSync('dock');
-  File('$motoliiDir/out/audit-cubes.png').copySync('${dir.path}/still.png');
+  File('$motoliiDir/fx_sample.jpg').copySync('${dir.path}/still.jpg');   // (a picture in git: a clean clone has it)
   final m = Motolii.open('${dir.path}/dock.motolii')!;
   addTearDown(m.close);
   return Ws()
@@ -66,11 +66,11 @@ void main() {
     await t.tap(folder.first);
     await t.pumpAndSettle();
     await t.enterText(find.byType(EditableText), 'still');
-    for (var i = 0; i < 10 && find.text('still.png').evaluate().isEmpty; i++) { // (a folder of the disk is read without waiting: its files come a moment later)
+    for (var i = 0; i < 10 && find.text('still.jpg').evaluate().isEmpty; i++) { // (a folder of the disk is read without waiting: its files come a moment later)
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await t.pumpAndSettle();
     }
-    expect(find.text('still.png'), findsWidgets, reason: 'the picture beside the document, found by its name');
+    expect(find.text('still.jpg'), findsWidgets, reason: 'the picture beside the document, found by its name');
     expect(t.takeException(), isNull);
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);

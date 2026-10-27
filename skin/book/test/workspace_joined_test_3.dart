@@ -206,7 +206,7 @@ void _tests3() {
 
   testWidgets('the inspector says what a thing is in the document\'s word, and shows only the cards of values it has', (t) async {
     final ws = await _pump(t), m = ws.inside!;
-    final film = m.add('', '$motoliiDir/out/vid/happy.mp4'), cube = m.add('solid', 'cube');
+    final film = m.add('', '$motoliiDir/out/vid/check_film.mp4'), cube = m.add('solid', 'cube');
     ws
       ..reread()
       ..select('$film');
@@ -239,7 +239,7 @@ void _tests3() {
     expect(letters, findsOneWidget);
     await seen(t, letters);
     await t.timedDrag(letters, const Offset(80, 0), const Duration(milliseconds: 300));
-    await t.pumpAndSettle();
+    await settled(t, ws);   // (the hand let go, not waited for by the window: read once the inside has taken it)
     expect(m.value(text, 'letter_spacing', 0), greaterThan(1), reason: 'the letters further apart: ${ws.notice}');
     expect(m.frame(text)![2], greaterThan(wide), reason: 'and the words wider on the stage');
     ws.select('$rect');

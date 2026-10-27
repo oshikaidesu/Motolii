@@ -64,7 +64,7 @@ void _tests4() {
       await t.pump(const Duration(milliseconds: 16));
     }
     await g.up();
-    await t.pumpAndSettle();
+    await settled(t, ws);   // (the hand let go, not waited for by the window: read once the inside has taken it)
     expect(t.state<ScrollableState>(list).position.pixels, scrolled, reason: 'the inspector stays where it was');
     expect(m.value(text, 'letter_spacing', 0), greaterThan(was), reason: 'the number went up');
     await expectSameAfterReopen(t);

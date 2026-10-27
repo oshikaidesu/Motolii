@@ -44,6 +44,10 @@ void main() {
       expect(mv.end[e.key], closeTo(e.value, 1e-6), reason: e.key);
     }
     expect([mv.out, mv.over], [closeTo(samples[pop].out, 1e-3), closeTo(samples[pop].over, 1e-3)]);
+    for (var i = 0; i < 200 && ws.selected != '${mv.by}'; i++) {   // (picked once the inside has made it: told after the move is there)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump(const Duration(milliseconds: 16));
+    }
     expect(ws.selected, '${mv.by}', reason: 'the new move picked');
 
     const left = 1;   // (the picked move told coming from the left)
