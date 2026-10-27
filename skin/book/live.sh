@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 FLUTTER="${FLUTTER:-flutter}"
 pid="build/live.pid" seen="build/live.seen"
 mkdir -p build && rm -f "$pid" && touch "$seen"
-"$FLUTTER" run -d macos --pid-file "$pid" --dart-define=LAB_ROUTE='/?path=workspace/workspace/live' ${MOTOLII_DOC:+--dart-define=MOTOLII_DOC="$MOTOLII_DOC"} "$@" &
+"$FLUTTER" run -d macos --pid-file "$pid" --dart-define=LAB_ROUTE='/?path=workspace/workspace/live' --dart-define=MOTOLII_DIR="${MOTOLII_DIR:-${PWD:h:h}/filament}" ${MOTOLII_DOC:+--dart-define=MOTOLII_DOC="$MOTOLII_DOC"} "$@" &
 run=$!
 trap 'kill $run 2>/dev/null' EXIT INT TERM
 while kill -0 $run 2>/dev/null; do   # (once a second: a .dart newer than the last reload, then reload)
