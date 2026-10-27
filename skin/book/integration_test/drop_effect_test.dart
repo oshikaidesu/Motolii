@@ -65,7 +65,7 @@ void main() {
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await t.pump();
     }
-    expect(m.picture('ASCII Art'), '${own.path}/effects/ASCII Art.png', reason: 'its tile drawn beside it');
+    expect(File(m.picture('ASCII Art')).existsSync(), isTrue, reason: 'its tile drawn where the inside says (~/Library/Caches/Motolii/tiles)');
     ws
       ..reread()
       ..select('$photo')
@@ -91,5 +91,11 @@ void main() {
     expect(await t.runAsync(() => m.write(film)), isTrue, reason: m.trouble); // (written from the window's own document: drawn right)
     // ignore: avoid_print
     print('written: $film');
+    List<String> bare() => [for (final (n, f) in m.effects) if (m.picture(f).isEmpty) n];
+    for (var i = 0; i < 3000 && bare().isNotEmpty; i++) {   // (every effect on the shelf with a tile: the ones none was drawn for, drawn by themselves)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+      await t.pump();
+    }
+    expect(bare(), isEmpty, reason: 'every effect on the shelf has a tile');
   });
 }

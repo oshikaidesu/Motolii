@@ -177,7 +177,7 @@ This is what Motolii is for. As an example, `ASCII Art.fs` from [ISF-Files](http
 
 1. Download the effect file (`.fs`). For example, open `ISF/ASCII Art.fs` on the ISF-Files page, right-click Raw and save the link.
 2. In Finder press ⌘⇧G, type `~/Library/Application Support/Motolii/` and go. Make a folder `effects` there (if there is none) and put the file in it.
-3. It appears on the Effects shelf at once (no restart). Its tile picture (the balloon photo with that effect on) is made by itself within seconds and put beside the effect as a `.png`. Pick a layer, press the tile, then **Add**.
+3. It appears on the Effects shelf at once (no restart). Its tile picture (the balloon photo with that effect on) is made by itself within seconds (in `~/Library/Caches/Motolii/tiles/`; every effect on the shelf without a picture is drawn this way, one that cannot be put on gets the plain sample, so no tile stays empty; a file written over is drawn again). Pick a layer, press the tile, then **Add**.
    ![ASCII Art on the Effects shelf](docs/media/drop_shelf.jpg)
 4. In the app and written out, it looks like this (ASCII Art on a photo).
    ![ASCII Art on a photo, written out](docs/media/drop_ascii.jpg)

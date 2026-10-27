@@ -23,7 +23,7 @@ git config core.hooksPath .githooks
 | 台帳（下の決まり 2） | `python3 .githooks/assets_check.py` | `ASSETS.md covers all … files` |
 | 中身の試験（まとめて。試験の道具は `brew bundle --file=Brewfile.checks` と `python3 -m pip install --user pillow numpy`） | `filament/check/all.sh` | `all checks held`（どれかが NO なら exit 1）。1 本ずつは `filament/check/*.sh` |
 | 窓の試験 | `cd skin/book && flutter test` | 中身を組んでいない時は、中身を使う試験が飛ばされる |
-| 窓の書き方 | `cd skin/book && flutter analyze lib test integration_test` | エラー 0（今ある注意は 97） |
+| 窓の書き方 | `cd skin/book && flutter analyze lib test integration_test` | エラー 0（今ある注意は 100） |
 
 GitHub の Actions は、台帳の確かめを毎回走らせます（`.github/workflows/assets.yml`、知らせるだけで PR は止めない）。組み立て全部と試験は `.github/workflows/build.yml`（Apple Silicon の Mac で、README の手順どおり組んで `check/all.sh`・`flutter analyze`・`flutter test`。コードに触る PR と、Actions の画面から手で）。窓での最初の 1 本の確かめは `cd skin/book && flutter drive --profile -d macos --driver=test_driver/integration_test.dart --target=integration_test/first_piece_test.dart`（`docs/media/window_step1..4.png` を書く）。作りは [`ARCHITECTURE.md`](ARCHITECTURE.md) と [`filament/README.md`](filament/README.md)。行動規範は [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)、脆弱性は [`SECURITY.md`](SECURITY.md)。
 

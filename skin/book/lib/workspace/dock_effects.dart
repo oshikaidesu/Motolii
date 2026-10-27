@@ -27,7 +27,7 @@ class EffectsShelf extends StatelessWidget {
            tile: _Tile(n, file: m.picture(n), look: _FxLook(n), on: on.contains(n) ? 'ON' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: () => ws.fxToggle(n), star: c)),
       for (final (n, f) in m.effects)
         (name: n, label: m.label(n), on: screen.contains(f), apply: () => ws.screenToggle(f), said: 'On the picked thing',
-         tile: _Tile(n, key: ValueKey('ws-screen-$n'), file: m.picture(n), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: () => ws.screenToggle(f))),
+         tile: _Tile(n, key: ValueKey('ws-screen-$n'), file: m.picture(f), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: () => ws.screenToggle(f))),
       if (picked)
         for (final (n, f) in m.animators)
           (name: n, label: 'Motion', on: ws.motion == f, apply: () => ws.motionToggle(f), said: 'A motion for the picked thing',

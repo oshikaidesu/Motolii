@@ -177,7 +177,7 @@ Motolii の一番の使い方です。例として、[ISF-Files](https://github.
 
 1. 効果のファイル（`.fs`）を落とす。例：ISF-Files のページで `ISF/ASCII Art.fs` を開き、Raw を右クリックして「リンク先を別名で保存」。
 2. Finder で ⌘⇧G を押し、`~/Library/Application Support/Motolii/` と打って開く。中に `effects` というフォルダを作り（無ければ）、落としたファイルを入れる。
-3. 画面の Effects の棚に、その場で出る（閉じて開き直さなくてよい）。タイルの絵（気球の写真にその効果を掛けた見本）も数秒で自動で作られ、効果の隣に `.png` で置かれる。レイヤーを選んで、タイルを押し、下の **Add**。
+3. 画面の Effects の棚に、その場で出る（閉じて開き直さなくてよい）。タイルの絵（気球の写真にその効果を掛けた見本）も数秒で自動で作られる（`~/Library/Caches/Motolii/tiles/` に。棚の効果で絵の無い物は全部こうして描かれ、掛けられない物は素の見本になるので、空のタイルは残らない。ファイルを書き換えると描き直す）。レイヤーを選んで、タイルを押し、下の **Add**。
    ![Effects の棚に ASCII Art が出た所](docs/media/drop_shelf.jpg)
 4. 画面の中でも書き出しても、こうなる（写真に ASCII Art を掛けた所）。
    ![写真に ASCII Art を掛けて書き出した所](docs/media/drop_ascii.jpg)

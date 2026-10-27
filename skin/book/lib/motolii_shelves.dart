@@ -20,22 +20,39 @@ extension MotoliiShelves on Motolii {
     return _labels[name] ?? '';
   }
 
-  /// An effect's (or a motion's) picture for its tile, as the inside says: what it does to a sample ('' none).
+  /// An effect's (or a motion's) picture for its tile, as the inside says: what it does to a sample ('' none). By its
+  /// name, or by its file (a file's effect may share a name with one of the inside's own, Datamosh and datamosh.wgsl).
   String picture(String name) {
     _said();
     return _pictures[name] ?? '';
   }
 
+  /// Where a tile drawn for an effect goes, as the inside says ('' none: an effect of its own, drawn by its look); by name or file.
+  String tileHome(String name) {
+    _said();
+    return _homes[name] ?? '';
+  }
+
+  /// A tile drawn where [home] says: the effects it is for show it from now on (workspace/effect_tiles.dart).
+  void tileDrawn(String home) {
+    for (final e in _homes.entries) {
+      if (e.value == home) _pictures[e.key] = home;
+    }
+  }
+
   void _said() => (effects, thingEffects);   // (both lists read: their labels and pictures with them)
 
-  /// "name\tfile\tlabel\tpicture" lines: the names and files, the labels and pictures kept for [label] and [picture].
+  /// "name\tfile\tlabel\tpicture\thome" lines: the names and files, the labels, pictures and homes kept for [label], [picture] and [tileHome].
   List<(String, String)> _labelled(String lines) {
     final out = <(String, String)>[];
     for (final w in [for (final l in lines.split('\n')) l.split('\t')]) {
       if (w.length < 2 || w[0].isEmpty) continue;
       out.add((w[0], w[1]));
       if (w.length > 2) _labels[w[0]] = w[2];
-      if (w.length > 3) _pictures[w[0]] = w[3];
+      for (final k in [w[0], w[1]]) {   // (by name and by file: the file's is its own)
+        if (w.length > 3) _pictures[k] = w[3];
+        if (w.length > 4) _homes[k] = w[4];
+      }
     }
     return out;
   }
