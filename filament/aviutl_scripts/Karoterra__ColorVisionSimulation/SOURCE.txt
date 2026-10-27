@@ -2,4 +2,5 @@
 licence: Unlicense
 from: https://github.com/karoterra/aviutl2-ColorVisionSimulation/releases/download/v1.1.1/Karoterra.ColorVisionSimulation-v1.1.1.au2pkg.zip (tag v1.1.1, commit 3455ef3f7595)
 page: https://github.com/karoterra/aviutl2-ColorVisionSimulation
+licence file: Script/Karoterra.ColorVisionSimulation/LICENSE
 Put here unchanged for Motolii (filament/aviutl_scripts).

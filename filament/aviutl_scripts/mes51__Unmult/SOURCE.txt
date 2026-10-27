@@ -2,4 +2,5 @@ Unmult by mes51
 licence: MIT
 from: https://github.com/mes51/AVIUtl2_Unmult/releases/download/v1.1.0/AVIUtl2_Unmult_1.1.0.zip (tag v1.1.0, commit 5f9b19251ba3)
 page: https://github.com/mes51/AVIUtl2_Unmult
+licence file: AVIUtl2_Unmult/LICENSE
 Put here unchanged for Motolii (filament/aviutl_scripts).

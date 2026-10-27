@@ -2,4 +2,5 @@ Region_S by σ軸
 licence: MIT
 from: https://github.com/sigma-axis/aviutl2_script_Region_S/releases/download/v1.10/aviutl2_script_Region_S-v1.10.au2pkg.zip (tag v1.10, commit c2e50107a605)
 page: https://github.com/sigma-axis/aviutl2_script_Region_S
+licence file: Script/Region_S/LICENSE
 Put here unchanged for Motolii (filament/aviutl_scripts).

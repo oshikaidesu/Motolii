@@ -2,4 +2,5 @@ ColoredCollar_S by σ軸
 licence: MIT
 from: https://github.com/sigma-axis/aviutl2_script_ColoredCollar_S/releases/download/v2.11/aviutl2_script_ColoredCollar_S-v2.11.au2pkg.zip (tag v2.11, commit aed6ba0d3482)
 page: https://github.com/sigma-axis/aviutl2_script_ColoredCollar_S
+licence file: Script/ColoredCollar_S/LICENSE
 Put here unchanged for Motolii (filament/aviutl_scripts).

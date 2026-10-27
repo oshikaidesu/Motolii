@@ -2,4 +2,5 @@ GroundShadow2_S by σ軸
 licence: MIT
 from: https://github.com/sigma-axis/aviutl2_script_GroundShadow2_S/releases/download/v1.40/aviutl2_script_GroundShadow2_S-v1.40.au2pkg.zip (tag v1.40, commit f256926660f5)
 page: https://github.com/sigma-axis/aviutl2_script_GroundShadow2_S
+licence file: Script/GroundShadow2_S/LICENSE
 Put here unchanged for Motolii (filament/aviutl_scripts).

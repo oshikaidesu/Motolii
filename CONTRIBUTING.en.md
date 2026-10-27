@@ -25,7 +25,7 @@ How the code is laid out: [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`filament/RE
 | What | Command | When it holds |
 |---|---|---|
 | The ledger (rule 2 below) | `python3 .githooks/assets_check.py` | `ASSETS.md covers all … files` |
-| The engine's checks, together (they need Python's Pillow and numpy: `python3 -m pip install --user pillow numpy`) | `filament/check/all.sh` | `all checks held` (exit 1 if any says NO); one at a time: `filament/check/*.sh` |
+| The engine's checks, together (their tools: `brew bundle --file=Brewfile.checks` and `python3 -m pip install --user pillow numpy`) | `filament/check/all.sh` | `all checks held` (exit 1 if any says NO); one at a time: `filament/check/*.sh` |
 | The window's tests | `cd skin/book && flutter test` | Tests that need the engine are skipped if it is not built |
 | The window's code | `cd skin/book && flutter analyze lib test integration_test` | No errors (97 notices today) |
 | The first piece in the window | `cd skin/book && flutter drive --profile -d macos --driver=test_driver/integration_test.dart --target=integration_test/first_piece_test.dart` | Writes `docs/media/window_step1..4.png` |

@@ -12,7 +12,7 @@ Motolii is a macOS app for making music videos (picture-led motion graphics). Sh
 
 [日本語](README.md) · [Questions (Discussions)](https://github.com/oshikaidesu/motolii/discussions) · [Bugs (Issues)](https://github.com/oshikaidesu/motolii/issues) — English or Japanese.
 
-**Words in the code and the Japanese docs**: window = the app's UI, the inside = the engine, thing = layer, stage = composition, document = project file (`.motolii`), shelf = the list of effects or recipes.
+**Words on screen**: Stage (the composition), Layer, Timeline, Inspector (the picked layer's values), Create and Effects (the shelves of recipes and effects), Render (writing out). Project files are `.motolii`. The code and the ledger call the UI "window", the engine "the inside", a layer "thing" and a project file "document".
 
 | 8 seconds made with Motolii (text, 3D, effects) | The app, with those 8 seconds open |
 |---|---|
@@ -58,7 +58,7 @@ Also: keyframes and easing (anime.js eases work as they are), physics (Jolt), re
 
 **Where Motolii is behind**: stability and breadth of features as a finished tool (every tool above is ahead), no app to hand out, no Windows, and no thought yet for performing live.
 
-**Why Alight Motion is the model for its handling**: people who make MVs on their phones already know how it feels; Motolii copies all of it first, then goes further. Of the 649 operations in the reference table, 14% behave the same today and 63% are missing ([`reports/overview.md`](reports/overview.md)).
+**Why Alight Motion is the model for its handling**: people who make MVs on their phones already know how it feels; Motolii copies all of it first, then goes further. Of Alight Motion's 201 effects and features, Motolii has 47, 60 in part and 93 not at all (counted on 2026-10-25, [`reports/alight_map.md`](reports/alight_map.md)).
 
 ## How it is built
 
@@ -81,7 +81,7 @@ The UI only takes your hands; the engine draws. The engine's folder is named `fi
 ## Where it stands
 
 - Works: everything marked "Works" above, saving (automatic) and undo, playback (a video's sound is heard), writing mp4, the UI's timeline, value panel and shelves.
-- Partly: AviUtl2 scripts; copying Alight Motion's handling (the 14% above).
+- Partly: AviUtl2 scripts; copying Alight Motion (47 of the 201 above).
 - Known bugs: inside the app, a screen effect (ISF `.fs`, `.wgsl`) put on a layer turns the composition white in the live view (the same project written out is drawn right; effects near the top of the Effects shelf, such as Glow, are fine). A screen effect put by command on a recipe made of copies (Iris, Weave, …) breaks the picture.
 - Not yet: Windows; an `.app` you can hand out (the engine loads Homebrew's libraries, so a build only runs on the Mac that made it); MIDI sound.
 
@@ -97,6 +97,7 @@ The UI only takes your hands; the engine draws. The engine's folder is named `fi
 | Flutter | 3.47.2 (stable), about 2 GB | "Get Flutter" below |
 | Python 3 | The one macOS has (it comes with Xcode) | — |
 | Disk | About 10 GB besides Xcode and Flutter (8.1 GB once built) | — |
+| In all | From nothing, with Xcode and Flutter: about 25 GB and about 2 hours (depends on your connection) | — |
 | Downloads | About 1 GB (Filament's source 635 MB, Skia 65 MB, Jolt 16 MB and others; Homebrew's apart) | — |
 | Time | 1–2 hours from nothing, Xcode and Flutter included (depends on your connection); with them, about 10 minutes the first time on an M4 (Filament ~5, the engine ~1–2, the UI ~1–3) | — |
 
@@ -152,7 +153,7 @@ Builds the engine, fetching ThorVG, Skia, libtess2 and Jolt the first time. `edi
 skin/book/live.sh
 ```
 
-Opens the app. The project file is `~/Movies/Motolii/Untitled.motolii` (saved by itself), and written videos go beside it. Closing the window ends it; next time this one line opens it.
+Opens the app (the first time it seems to stop for 1–3 minutes while it builds; the text running in the terminal can be ignored). The project file is `~/Movies/Motolii/Untitled.motolii` (saved by itself), and written videos go beside it. Closing the window ends it, and closing the terminal closes the window. Next time, in a new terminal: `cd ~/motolii && skin/book/live.sh` (if you cloned in your home folder).
 
 ### Your first piece (in the app)
 
@@ -181,10 +182,12 @@ This is what Motolii is for. As an example, `ASCII Art.fs` from [ISF-Files](http
 4. Written out, it looks like this (ASCII Art on a photo).
    ![ASCII Art on a photo, written out](docs/media/drop_ascii.jpg)
 
-For now the live view inside the app shows the composition white after this (see Known bugs); the written video is drawn right. These steps also run as a test (`skin/book/integration_test/drop_effect_test.dart`: put in with the app open → on the shelf → its tile drawn → put on → written, its frames checked). WGSL (`.wgsl`), recipes (`.js`, in `recipes/`) and eases (`.way`, in `ways/`) go in the same way.
+For now the live view inside the app shows the composition white after this (see Known bugs); the written video is drawn right. These steps also run as a test (`skin/book/integration_test/drop_effect_test.dart`: put in with the app open → on the shelf → its tile drawn → put on → written, its frames checked). WGSL (`.wgsl`), recipes (`.js`, in `recipes/`), eases (`.way`, in `ways/`) and AviUtl2 scripts (the author's folder as it is, in `aviutl_scripts/`) go in the same way. Check the saved file's name ends in `.fs` (a browser may add `.txt`).
 
 ### Next: your own media
 
+- **Project size**: press `1920 × 1080` at the top twice and type a new one (`1080x1920` for an upright MV).
+- **Music**: mp3, wav, m4a and others are placed from Media with Place too (they become a band, and go into what you write).
 - **Video and photos**: the 1st button (**Media**), open your folder from `Home`, pick a file and press **Place** at the bottom. A video's sound is heard while playing and goes into what you write.
 - **Text**: pick **T** in the tools left of the composition and press on it; a text layer appears. Change its words in the text box of the value panel on the right. Fonts are on the 3rd button's shelf (**Aa**).
 - **Motion**: turn on **Animate all** in the value panel, then drag a value (position, size, …) across; a key is set at the current time. Move the time and drag again, and it moves in between. Choose how it moves in **Ease** below.
@@ -232,7 +235,7 @@ Still stuck? Open an [issue](https://github.com/oshikaidesu/motolii/issues) with
 2. An `.app` to hand out (Homebrew's libraries inside it), on Releases.
 3. The window's tests all passing when run together, and CI that stops on them.
 4. The AviUtl2 calls still missing (`obj.drawpoly`, …); TSL looks on the shelves.
-5. More of Alight Motion's handling (14% today).
+5. More of Alight Motion (47 of 201 today).
 
 ## Contributing
 

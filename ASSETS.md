@@ -1,7 +1,7 @@
 # 資産台帳
 
 **作る前にここを見る。「無い」と思ったら、ここと過去の倉庫を探してから言う。**
-最終更新：2026-10-14。足した物・消した物があったら、その時にここも直す。
+最終更新：2026-10-27。足した物・消した物があったら、その時にここも直す。
 **忘れても見張りが止める**：コミットの前に `.githooks/assets_check.py` が走って、git の知っているファイルのうち台帳に場所の無い物と、台帳に在るのにもう無い場所を数える。1つでもあればコミットは通らない。
 （場所は `` ` `` で囲んで書く。フォルダを書けば中身は全部載った事になる。同じ行で前の場所と同じフォルダなら、名前だけでいい。）
 
@@ -140,7 +140,7 @@
 | 取ってくる物の小さなスクリプト：Filament の組み立て済み SDK（前の試しのスクリプトが使う）、MIDI ビューの PianoRollSvg.js | `filament/sdk.sh`、`filament/midi_roll.sh` | 空の所から取れることを確かめた（10/27） |
 | 外向けの文書：英語の README、Issue と PR のひな型、台帳の確かめを GitHub Actions で毎回走らせる設定、README の絵（Motolii で作った物と、パブリックドメインの写真に掛けた物） | `README.en.md`、`ARCHITECTURE.md`（作りと言葉の対応表）、`CONTRIBUTING.en.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`.github/ISSUE_TEMPLATE/`、`.github/PULL_REQUEST_TEMPLATE.md`、`.github/workflows/assets.yml`、`.github/workflows/build.yml`（組み立て全部と試験）、`docs/media/`、`docs/examples/`（README の作例の命令と、それを 1 行で走らせる mv.sh） | 書いた（10/27）。最初の 1 本のコマンドは書いたとおりに走らせて確かめた |
 | 作者のフォルダを窓が見張り、置いた効果がその場で棚に出る。絵の無い効果には fx_tiles.sh と同じ気球の見本を自動で描いて隣に置く（dart:io の watch、create_preview.dart と同じ別 isolate） | `skin/book/lib/workspace/effect_tiles.dart`、`skin/book/integration_test/drop_effect_test.dart` | 窓の試験で確かめた（10/27、開いたまま置いて棚に出て絵ができる） |
-| 組み立てに要る Homebrew の物の一覧（Homebrew Bundle の書き方、`brew bundle` で入る） | `Brewfile` | 新しいクローンで組んで確かめた（10/27） |
+| 組み立てに要る Homebrew の物の一覧（Homebrew Bundle の書き方、`brew bundle` で入る）と、試験だけが使う物 | `Brewfile`、`Brewfile.checks` | 新しいクローンで組んで確かめた（10/27） |
 | 同梱した他の人の作品の一覧と断り書き（AviUtl2 の 172、ISF・three.js・PlayCanvas の効果、取ってくる依存）。PlayCanvas の効果のライセンスの文書 | `THIRD_PARTY_NOTICES.md`、`filament/effects/playcanvas-LICENSE.txt`、`vgpu-LICENSE.txt`、`phosphor-LICENSE.txt`、`SlitScanCam-LICENSE.txt`、`three-LICENSE.txt` | 書いた（10/27） |
 | この台帳と、その見張り（コミットの前に走る） | `ASSETS.md`、`.githooks/assets_check.py`、`.githooks/pre-commit` | 今の土台で動く |
 | 入口の紙 | `README.md` | — |

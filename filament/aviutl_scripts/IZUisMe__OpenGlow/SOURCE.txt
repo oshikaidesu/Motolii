@@ -3,4 +3,5 @@ licence: MIT
 from: https://github.com/IZUisMe/aviutl2-open-glow/releases/download/r3/aviutl2_script_OpenGlow-r3.au2pkg.zip (tag r3, commit e4ac859af694)
 page: https://github.com/IZUisMe/aviutl2-open-glow
 left out: 1 .gif (Windows binaries, archives, build sources, files over 1 MB)
+licence file: Script/OpenGlow/LICENSE
 Put here unchanged for Motolii (filament/aviutl_scripts).

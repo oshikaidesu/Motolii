@@ -1,0 +1,4 @@
+# What the checks (filament/check/) and the effect tools use besides Brewfile: brew bundle --file=Brewfile.checks
+# (the checks also read pictures with Python's Pillow and numpy: python3 -m pip install --user pillow numpy)
+brew "imagemagick"
+brew "naga-cli"
