@@ -17,6 +17,7 @@ struct AviutlRun {
     lua_State* L = nullptr;
     int chunk = LUA_NOREF;
     std::map<std::string, AviutlBuf> bufs;
+    std::map<std::string, AviutlBuf> loaded;        // (figures and picture files obj.load drew, by what was asked: aviutl_load.h)
     std::multimap<std::pair<uint32_t, uint32_t>, AviutlBuf> spare;   // (pictures let go, kept by size for the next asked: a buffer made and let go each frame takes the same ones)
     std::map<std::string, door::Screen*> doors;     // (each shader made, by its name and way of sampling)
     std::map<door::Screen*, int> draws;             // (draws of each this frame: each its own constants, the door's pass)
@@ -165,17 +166,7 @@ static int aviutl_copybuffer(lua_State* L) {   // (dst, src)
     aviutl_copy(r, to, from);
     return lua_pushboolean(L, 1), 1;
 }
-static int aviutl_load(lua_State* L) {   // (only a buffer, and a square figure without its line)
-    AviutlRun& r = aviutl_of(L);
-    const std::string kind = aviutl_str(L, 1);
-    if (kind == "tempbuffer" && lua_gettop(L) == 1 && r.bufs.count(kind)) return aviutl_copy(r, "object", kind), lua_pushboolean(L, 1), 1;
-    if (kind == "figure" && aviutl_str(L, 2) == "四角形" && lua_gettop(L) <= 4) {
-        const uint32_t n = (uint32_t)std::max(1.0, aviutl_num(L, 4, 100));
-        aviutl_clear(r, aviutl_buf(r, "object", n, n), aviutl_num(L, 3, 0xffffff), true);
-        return lua_pushboolean(L, 1), 1;
-    }
-    return aviutl_no(L, "obj.load " + kind + (kind == "figure" ? " " + aviutl_str(L, 2) : ""));
-}
+#include "aviutl_load.h"   // (obj.load: a buffer, a figure, a picture file)
 static int aviutl_setoption(lua_State* L) {
     AviutlRun& r = aviutl_of(L);
     const std::string n = luaL_checkstring(L, 1);
@@ -277,6 +268,23 @@ static int aviutl_effect(lua_State* L) {   // (a built-in effect by its name: on
         aviutl_lay(r, from, to.rt, to.w, to.h, 0, 0, (double)to.w / from.w, (double)to.h / from.h, 0, 1, 0, 0, -1, at("補間なし", 0) != 0 ? 1 : 0);
         return 0;
     }
+    if (n == "クリッピング") {   // (sashimono-edit objapi.py _clip: 上 下 左 右 cut off in pixels, all of it a clear pixel; what is left stays where it was, ox, oy, cx, cy moved back by half the cut, unless 中心の位置を変更)
+        const double t = std::max(0.0, std::round(at("上", 0))), b = std::max(0.0, std::round(at("下", 0))), l = std::max(0.0, std::round(at("左", 0))), rt = std::max(0.0, std::round(at("右", 0)));
+        if (!std::isfinite(t + b + l + rt)) return aviutl_no(L, "obj.effect クリッピング of no number");
+        aviutl_copy(r, "~clip", "object");
+        const AviutlBuf from = r.bufs["~clip"];
+        const bool all = t + b >= from.h || l + rt >= from.w;
+        const AviutlBuf& to = aviutl_buf(r, "object", all ? 1 : (uint32_t)(from.w - l - rt), all ? 1 : (uint32_t)(from.h - t - b));
+        if (all) aviutl_clear(r, to, 0, false);
+        else aviutl_lay(r, from, to.rt, to.w, to.h, 0, 0, 1, 1, 0, 1, (l - rt) / 2, (t - b) / 2, -1, 1);
+        if (at("中心の位置を変更", 0) == 0) {
+            lua_getglobal(L, "obj");
+            const auto move = [&](const char* k, double by) { lua_getfield(L, -1, k); const double v = aviutl_num(L, -1, 0); lua_pop(L, 1); lua_pushnumber(L, v + by); lua_setfield(L, -2, k); };
+            move("ox", (l - rt) / 2), move("oy", (t - b) / 2), move("cx", -(l - rt) / 2), move("cy", -(t - b) / 2);
+            lua_pop(L, 1);
+        }
+        return 0;
+    }
     if (n == "オフスクリーン描画") return 0;   // (sashimono-edit objapi.py _offscreen: the effects laid up so far made into the picture; here each is made at once, so none wait)
     if (n.empty()) return 0;   // (no name: lua.txt says the filters after the script, which run after it here anyway; YMM4-LuaScript native/worker.lua and sashimono-edit objapi.py lua_effect return the same)
     return aviutl_no(L, "obj.effect " + n);
@@ -295,6 +303,20 @@ function AND(a, b) return bit.band(a, b) end
 function XOR(a, b) return bit.bxor(a, b) end
 function SHIFT(a, s) if s >= 0 then return bit.lshift(a, s) end return bit.arshift(a, -s) end
 function HSV() error("not yet: HSV") end
+-- obj.interpolation(t, x0,y0,z0, x1,y1,z1, x2,y2,z2, x3,y3,z3): four points' Catmull-Rom, t 0 to 1 from the second to the
+-- third, y and z left out as wanted (the AviUtl2 script skill's references/api.md, gasdyueer, MIT); each axis by
+-- sashimono-edit's _catmull_rom (MIT, compat/aviutl/objapi.py), of the four points around it.
+function aviutl_interpolation(t, ...)
+  local p, n = {...}, select("#", ...)
+  local d = math.floor(n / 4)
+  if d < 1 then return 0 end
+  local out = {}
+  for a = 1, d do
+    local p0, p1, p2, p3 = p[a], p[a + d], p[a + 2 * d], p[a + 3 * d]
+    out[a] = 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t * t * t)
+  end
+  return unpack(out)
+end
 function rotation() error("not yet: rotation") end
 debug_print = print
 global = {}
@@ -359,7 +381,7 @@ static std::shared_ptr<AviutlRun> aviutl_made(Stage& s, const std::string& file)
     luaL_dostring(L, "return { __index = function(_, k) error('not yet: obj.' .. tostring(k), 2) end }");   // (any other name of obj)
     lua_setmetatable(L, -2);
     lua_setglobal(L, "obj");
-    luaL_dostring(L, "obj.rand, obj.rand1 = rand, rand1");   // (lua.txt: obj. or not)
+    luaL_dostring(L, "obj.rand, obj.rand1, obj.interpolation = rand, rand1, aviutl_interpolation");   // (lua.txt: obj. or not)
     std::string text = r->own.rfind("\xEF\xBB\xBF", 0) == 0 ? r->own.substr(3) : r->own;
     if (luaL_loadbuffer(L, text.data(), text.size(), ("@" + std::filesystem::path(file).filename().string()).c_str())) r->trouble = lua_tostring(L, -1);
     else r->chunk = luaL_ref(L, LUA_REGISTRYINDEX);
