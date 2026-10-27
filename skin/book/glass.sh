@@ -6,5 +6,5 @@ set -eu
 cd "$(dirname "$0")"
 GLASS="$(cd ../../filament && pwd)"
 [ -f "$GLASS/out/libglass_live.dylib" ] || "$GLASS/build_live.sh"
-FLUTTER="${FLUTTER:-/Users/motolii_maker/rust_ae/Motolii/.tools/flutter/bin/flutter}"
+FLUTTER="${FLUTTER:-flutter}"
 exec "$FLUTTER" run -d macos --dart-define=GLASS_DIR="$GLASS" --dart-define=LAB_ROUTE='/?path=glass/glass/live' "$@"

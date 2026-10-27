@@ -2,7 +2,7 @@
 # The joined checks each end with expectSameAfterReopen where it holds: put it before every _close, run, take it out of
 # those that still differ, and list what differs (from skin/book: tool/reopen_sweep.sh).
 cd "${0:A:h}/.."
-FL=~/rust_ae/Motolii/.tools/flutter/bin/flutter
+FL="${FLUTTER:-flutter}"
 T=test/workspace_joined_test.dart; LOG=${REOPEN_LOG:-$(mktemp)}
 perl -0pi -e 's/^ +await expectSameAfterReopen\(t\);\n//mg; s/^( +)await _close\(t\);/$1await expectSameAfterReopen(t);\n$1await _close(t);/mg' $T
 $FL test $T > $LOG 2>&1

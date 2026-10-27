@@ -1,6 +1,6 @@
 # A plain LSP client for Dart's own language server: send a request, read the answer.
 import json, subprocess, os, sys, threading, queue
-DART = os.path.expanduser('~/rust_ae/Motolii/.tools/flutter/bin/dart')
+DART = os.environ.get('DART', 'dart')
 class Lsp:
     def __init__(self, root):
         self.p = subprocess.Popen([DART, 'language-server', '--protocol=lsp', '--client-id=split'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, cwd=root)

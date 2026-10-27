@@ -43,7 +43,7 @@ Mac：`~/Library/Application Support/Motolii/`、Windows：`%APPDATA%\\Motolii\\
 ## 開き方・確かめ方
 ```bash
 cd skin/book
-F=~/rust_ae/Motolii/.tools/flutter/bin
+F=$(dirname "$(command -v flutter)")   # (Flutter 3.47.2 on PATH)
 $F/flutter build macos --debug '--dart-define=LAB_ROUTE=/?path=workspace/workspace/live'
 $F/flutter analyze lib test integration_test
 $F/flutter test                                  # 中身とつないだ確かめは test/workspace_joined_test.dart

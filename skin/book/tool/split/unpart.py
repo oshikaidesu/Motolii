@@ -23,7 +23,7 @@ taken = set()
 for f in files:
     for x in s.call('textDocument/documentSymbol', {'textDocument': {'uri': 'file://' + root + '/' + f}}): taken.add(x['name'])
 import subprocess
-def errors(): return subprocess.run([os.path.expanduser('~/rust_ae/Motolii/.tools/flutter/bin/flutter'), 'analyze', 'lib', 'test', 'integration_test'], cwd=root, capture_output=True, text=True).stdout.count('error •')
+def errors(): return subprocess.run([os.environ.get('FLUTTER', 'flutter'), 'analyze', 'lib', 'test', 'integration_test'], cwd=root, capture_output=True, text=True).stdout.count('error •')
 base = errors(); done = 0
 for f in files:
     uri = 'file://' + root + '/' + f

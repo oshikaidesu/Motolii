@@ -15,7 +15,7 @@ Motolii とは別の、隔離した作業場。デザインの知識を LLM が�
 ## 起動(macOS)
 ```bash
 cd book
-/Users/motolii_maker/rust_ae/Motolii/.tools/flutter/bin/flutter run -d macos --pid-file /tmp/lab-book.pid
+flutter run -d macos --pid-file /tmp/lab-book.pid
 # 反映: kill -USR1 $(cat /tmp/lab-book.pid)   (const のクラスを変えた時は -USR2)
 ```
 - ウィンドウは「Window > Fill」で広げる。

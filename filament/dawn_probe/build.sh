@@ -17,6 +17,7 @@ cd "$SRC/out/wgpu"
 [ -f build.ninja ] || cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DFILAMENT_SUPPORTS_WEBGPU=ON -DFILAMENT_SKIP_SAMPLES=ON \
     -DFILAMENT_BUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=../wgpu_install -DMOTOLII_PROBE_DIR="$HERE" ../..
 ninja matc dawn_probe
+ninja install > /dev/null   # (the headers and libraries the kit builds against: ../wgpu_install, CMAKE_INSTALL_PREFIX above)
 cd "$HERE"
 "$SRC/out/wgpu/tools/matc/matc" -a webgpu -p desktop -o out/dawn_probe.filamat dawn_probe.mat
 "$SRC/out/wgpu/filament/motolii_probe/dawn_probe" out/dawn_probe.filamat out/shots 2>&1 | grep -v "FrameInfo's circular queue\|libvulkan\|BackendVk"

@@ -39,7 +39,7 @@
 
 | 何 | どこ | 状態 |
 |---|---|---|
-| Flutter 本体 | `~/rust_ae/Motolii/.tools/flutter/` | 前の土台で動いた（ガラスを開くスクリプトがここを使う） |
+| Flutter 本体（3.47.2 stable、Dart 3.13.2） | PATH の flutter（別の場所なら変数 FLUTTER にその flutter の道）。この Mac では `~/rust_ae/Motolii/.tools/flutter/` | 今の土台で動く（ガラスを開くスクリプトがこれを使う） |
 | 部品の棚（Widgetbook）：19 コンポーネント、約 166 の使い方、約 1.8 万行。数値の井戸・スイッチ・スライダー・色・タブ・タイムライン（行、バー、キー、再生ヘッド、定規）・ブラウザ・舞台のふち・窓 | `skin/book/lib/`（`skin/book/lib/tokens.dart`、`kit.dart`、`skin/book/lib/sets/`、`skin/book/lib/parts/`） | 前の土台で動いた（見た目の部品。中身にはつながっていない） |
 | **見本の窓を本物の中身につないだ物**：Widgetbook の Workspace › Live。Flutter から中身の C の関数を直接呼ぶ束ね、Mac の窓の側の絵の受け（`StageTexture`）、舞台の席に絵を貼る所 | `skin/book/lib/motolii.dart`、`skin/book/macos/Runner/MainFlutterWindow.swift`、`skin/book/lib/workspace/workspace.dart`、`stage_view.dart`、`ws.dart`、`skin/book/lib/main.dart` | 今の土台で動く（舞台の絵と再生まで。ほかの席はまだ作り物の文書） |
 | ウィジェットブックの土台：Mac 用の窓の作り、部品の検査、設定 | `skin/book/`（`skin/book/macos/`、`skin/book/test/`、`skin/book/pubspec.yaml`）、`skin/README.md` | 前の土台で動いた |

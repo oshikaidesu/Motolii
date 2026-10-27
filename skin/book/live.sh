@@ -4,7 +4,7 @@
 # The inside's own files reload by themselves (effects .wgsl, scripts .js). Ends when the window is closed.
 #   ./live.sh                      (MOTOLII_DOC=/path/to.motolii for another document)
 cd "$(dirname "$0")"
-FLUTTER="${FLUTTER:-/Users/motolii_maker/rust_ae/Motolii/.tools/flutter/bin/flutter}"
+FLUTTER="${FLUTTER:-flutter}"
 pid="build/live.pid" seen="build/live.seen"
 mkdir -p build && rm -f "$pid" && touch "$seen"
 "$FLUTTER" run -d macos --pid-file "$pid" --dart-define=LAB_ROUTE='/?path=workspace/workspace/live' ${MOTOLII_DOC:+--dart-define=MOTOLII_DOC="$MOTOLII_DOC"} "$@" &
