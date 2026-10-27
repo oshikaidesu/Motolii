@@ -11,8 +11,8 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | | 数 |
 |---|---|
 | Alight Motion の効果 | 169 |
-| Motolii に有る | **66**（39%） |
-| 一部 | **42**（25%） |
+| Motolii に有る | **69**（41%） |
+| 一部 | **39**（23%） |
 | 無い | **61**（36%） |
 | 無いもののうち、手元の ISF-Files（`research_notes/isf/ISF-Files`、327 本、MIT）に近いものがある | 36 |
 | 一部のもののうち、同じく ISF-Files に近いものがある | 31 |
@@ -77,7 +77,7 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Flip Layer](https://guide.alightmotion.com/effects/flip-layer) | Flips the layer in 3D along a specified axis. | 有る | rotate_x・rotate_y（2.5D） | Flip H / Flip V |
 | [Four-color Gradient](https://guide.alightmotion.com/effects/four-color-gradient) | Overlays the opaque parts of the layer with a gradient made between four individually positioned colors. | 有る | 物の fx に ISF の Corner Colors.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Corner Colors |
 | [Fractal Ridges](https://guide.alightmotion.com/effects/fractal-ridges) | Renders a procedurally generated pattern of turbulent ridges in the opaque parts of the layer. | 有る | 物の fx に ISF の Ridgelines.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Ridgelines |
-| [Fractal Warp](https://guide.alightmotion.com/effects/fractal-warp) | Distorts the layer using a procedurally generated fractal pattern. Useful for simulating distortions caused by real-world phenomena such as fire, water, and heat. | 一部 | 形の warp・wave_noise（形だけ） | Noise Displace |
+| [Fractal Warp](https://guide.alightmotion.com/effects/fractal-warp) | Distorts the layer using a procedurally generated fractal pattern. Useful for simulating distortions caused by real-world phenomena such as fire, water, and heat. | 有る | 写真・動画・文字の物の fx に ISF の Noise Displace.fs（10/28、窓で確かめた） | Noise Displace |
 | [Gaussian Blur](https://guide.alightmotion.com/effects/gaussian-blur) | Applies a fast, smooth blur to the layer using a gaussian function, reducing noise and details in the layer. | 有る | 物の blur | Multi Pass Gaussian Blur |
 | [Glass](https://guide.alightmotion.com/effects/glass) | Renders the layer as if the opaque parts were made of beveled glass, refracting the background and overlaying specular highlights. | 一部 | 立体の ior・dispersion（本物の屈折、立体だけ）。平らな物のガラスは無い | Frosted Glass |
 | [Glow](https://guide.alightmotion.com/effects/glow) | Draws a glow around the outside of the opaque parts of the layer. | 有る | 物の glow |  |
@@ -126,7 +126,7 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Omino Glass](https://guide.alightmotion.com/effects/omino-glass) | Renders the layer as though it were made of glass, with refraction and a glossy contour, and chromatic aberration based on segmentation of the visible spectrum into seven regions. The layer luminance  | 無い |  |  |
 | [Oscillate](https://guide.alightmotion.com/effects/oscillate) | Moves the layer back and forth repeatedly. | 有る | ふるまい oscillator |  |
 | [Palette Map](https://guide.alightmotion.com/effects/palette-map) | Maps pixel colors in the layer to the closest matching color in a palette. | 無い |  | Color Schemes |
-| [Pinch/Bulge](https://guide.alightmotion.com/effects/pinch-bulge) | Distorts the layer by pinching it towards the center or expanding it outward. | 一部 | 形の pinch・bloat（形だけ） | Bump Distortion |
+| [Pinch/Bulge](https://guide.alightmotion.com/effects/pinch-bulge) | Distorts the layer by pinching it towards the center or expanding it outward. | 有る | 写真・動画・文字の物の fx に ISF の Bump Distortion.fs（10/28、窓で確かめた） | Bump Distortion |
 | [Pixelate](https://guide.alightmotion.com/effects/pixelate) | Decreases the layer resolution so that individual pixels become visible, sampling at the centers of the pixels, and drawing each pixel with an optional vignette. | 有る | 物の fx に ISF の Pixellate.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Pixellate |
 | [Polar Coordinates](https://guide.alightmotion.com/effects/polar-coordinates) | Warps the layer by mapping from cartesian coordinates to polar coordinates. | 無い |  |  |
 | [Polar Displacement Map](https://guide.alightmotion.com/effects/polar-displacement-map) | Angularly displaces pixels in the background based on the color of pixels in the layer. | 無い |  |  |
@@ -190,7 +190,7 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Torus](https://guide.alightmotion.com/effects/torus) | Renders a faux-3D torus using the layer as a surface texture. | 一部 | 立体 ring（絵を面に貼るのは無い） |  |
 | [Tunnel](https://guide.alightmotion.com/effects/tunnel) | Renders a round faux-3D tunnel using the layer as the interior surface texture. | 無い |  |  |
 | [Turbulence](https://guide.alightmotion.com/effects/turbulence) | Renders smooth patterns of procedurally-generated fractal noise in the opaque parts of the layer, useful for simulating real-world phenomena like clouds, or for use as a luminance map. | 有る | 物の fx に ISF の Simplex Noise.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Simplex Noise |
-| [Turbulent Displace](https://guide.alightmotion.com/effects/turbulent-displace) | Distorts the layer along selected coordinate axes using a random pattern of smooth fractal noise. Distortion may be along one or more axis in either cartesian or polar coordinate space. Useful for sim | 一部 | 形の wiggle・wave_noise（形だけ） | Noise Displace |
+| [Turbulent Displace](https://guide.alightmotion.com/effects/turbulent-displace) | Distorts the layer along selected coordinate axes using a random pattern of smooth fractal noise. Distortion may be along one or more axis in either cartesian or polar coordinate space. Useful for sim | 有る | 写真・動画・文字の物の fx に ISF の Noise Displace.fs（10/28、窓で確かめた） | Noise Displace |
 | [Unsharp Mask](https://guide.alightmotion.com/effects/unsharp-mask) | Enhances the perceptual sharpness or "acutance" of a photo or video by increasing local contrast near edges, while avoiding changes to areas that were originally smooth. | 無い |  | Unsharp Mask |
 | [Vignette](https://guide.alightmotion.com/effects/vignette) | Darkens the edges of the layer. | 有る | 効果 vignette・段の vignette | v002 Vignette |
 | [Voronoi Cells](https://guide.alightmotion.com/effects/voronoi-cells) | Renders procedurally-generated pattern of Voronoi cells based on randomly placed points. | 有る | 物の fx に ISF の Worley Cells.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Worley Cells |

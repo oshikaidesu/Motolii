@@ -21,11 +21,11 @@
 
 ## B. 形にしか掛からない曲げを、写真・動画・文字にも（6）
 
-- [ ] **Fractal Warp**（一部）：Distorts the layer using a procedurally generated fractal pattern. Useful for simulating distortions caused by real-world phenomena such as fire, water, and heat. — いま：形の warp・wave_noise（形だけ） — ISF：Noise Displace
-- [ ] **Pinch/Bulge**（一部）：Distorts the layer by pinching it towards the center or expanding it outward. — いま：形の pinch・bloat（形だけ） — ISF：Bump Distortion
+- [x] **Fractal Warp**（一部）：Distorts the layer using a procedurally generated fractal pattern. Useful for simulating distortions caused by real-world phenomena such as fire, water, and heat. — いま：形の warp・wave_noise（形だけ） — ISF：Noise Displace — 済（10/28）：写真の物の fx に `filament/effects/Noise Displace.fs`（Vidvox ISF-Files、MIT）、x と y を 0.05。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=B）
+- [x] **Pinch/Bulge**（一部）：Distorts the layer by pinching it towards the center or expanding it outward. — いま：形の pinch・bloat（形だけ） — ISF：Bump Distortion — 済（10/28）：写真の物の fx に `filament/effects/Bump Distortion.fs`（Vidvox ISF-Files、MIT）、膨らみ 0.8、半径 0.4。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=B）
 - [ ] **Roughen Edges**（一部）：Roughens the edges of the opaque parts of the layer. — いま：形の rough（形だけ）
 - [ ] **Stretch Axis**（一部）：Stretches the layer in an arbitrary direction. — いま：形の stretch・skew（形だけ）
-- [ ] **Turbulent Displace**（一部）：Distorts the layer along selected coordinate axes using a random pattern of smooth fractal noise. Distortion may be along one or more axis in either cartesian or polar coordinate space. Useful for sim — いま：形の wiggle・wave_noise（形だけ） — ISF：Noise Displace
+- [x] **Turbulent Displace**（一部）：Distorts the layer along selected coordinate axes using a random pattern of smooth fractal noise. Distortion may be along one or more axis in either cartesian or polar coordinate space. Useful for sim — いま：形の wiggle・wave_noise（形だけ） — ISF：Noise Displace — 済（10/28）：写真の物の fx に `filament/effects/Noise Displace.fs`（Vidvox ISF-Files、MIT）、x だけ 0.05。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=B）
 - [ ] **Wave Warp**（一部）：Distorts the layer based on a sine wave. — いま：形の warp・ISF Sine Warp Tile（形だけ）
 
 ## C. レイヤーの絵を立体の面に貼る（faux-3D）（16）

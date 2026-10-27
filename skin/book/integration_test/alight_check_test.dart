@@ -101,7 +101,14 @@ const _rowsD2 = <(String, String, Map<String, double>)>[
   ('Sharpen', 'Sharpen RGB', {'intensityR': 5, 'intensityG': 5, 'intensityB': 5}),
   ('Unsharp Mask', 'Unsharp Mask', {'intensity': 5}),
 ];
-const _rows = _section == 'D' ? _rowsD : _section == 'D2' ? _rowsD2 : _rowsA;
+// (section B: what only shapes bent, on a photo)
+const _rowsB = <(String, String, Map<String, double>)>[
+  ('Fractal Warp', 'Noise Displace', {'displaceX': .05, 'displaceY': .05}),
+  ('Pinch/Bulge', 'Bump Distortion', {'level': .8, 'radius': .4}),
+  ('Turbulent Displace', 'Noise Displace', {'displaceX': .05}),
+  ('Wave Warp', 'Sine Warp Tile', {}),
+];
+const _rows = _section == 'D' ? _rowsD : _section == 'D2' ? _rowsD2 : _section == 'B' ? _rowsB : _rowsA;
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
