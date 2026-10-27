@@ -15,7 +15,7 @@ for line in ledger.split('\n'):
         token = token.strip()
         whole = token.endswith('/')   # (a folder named with its / : all that is in it)
         token = token.rstrip('/')
-        if ' ' in token or not (whole or '/' in token or re.search(r'\.[A-Za-z0-9]{1,6}$', token)):
+        if ' ' in token or not (whole or '/' in token or re.search(r'\.[A-Za-z0-9]{1,6}$', token) or os.path.isfile(token)):   # (or a file with no extension, as Brewfile)
             continue
         if '/' not in token and not whole and folder:
             token = folder + '/' + token

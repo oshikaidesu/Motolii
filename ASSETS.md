@@ -135,6 +135,7 @@
 | AEのファイル103本、AEの動き | `filament/ae_test.sh`、`ae_ref.cpp`、`motion_test.sh`、`motion_test.mm`、`motion_test.json`、`motion_test3d.json`、`motion_test3d.inc` | 今の土台で動く |
 | 採点表と採点4回 | `AE_RUBRIC.md`、`reports/ae_rubric/round_0*.md`、`evidence.md`、`try.md` | — |
 | タスク表 | `TASKS.md` | — |
+| 組み立てに要る Homebrew の物の一覧（Homebrew Bundle の書き方、`brew bundle` で入る） | `Brewfile` | 新しいクローンで組んで確かめた（10/27） |
 | 同梱した他の人の作品の一覧と断り書き（AviUtl2 の 193、ISF・three.js・PlayCanvas の効果、取ってくる依存）。PlayCanvas の効果のライセンスの文書 | `THIRD_PARTY_NOTICES.md`、`filament/effects/playcanvas-LICENSE.txt` | 書いた（10/27） |
 | この台帳と、その見張り（コミットの前に走る） | `ASSETS.md`、`.githooks/assets_check.py`、`.githooks/pre-commit` | 今の土台で動く |
 | GitHub の上限 100MB を超える物（libcef.dll 290MB）を載せる Git LFS の決まりと、git-lfs 3.7.1 が書いたままのフック（push の時に LFS の中身を送る） | `.gitattributes`、`.githooks/pre-push`、`.githooks/post-checkout`、`.githooks/post-commit`、`.githooks/post-merge` | 今の土台で動く |
@@ -147,11 +148,11 @@
 | 動画40本の読み比べ（GStreamer と FFmpeg） | `filament/probe_gst/` | 今の土台で動く |
 | 文書の入れ物の確かめ（SQLite の取り消し、GES、式の計算） | `filament/probe_edit/` | 今の土台で動く |
 | Filament に出来るかの確かめ（GPU の切り取り、1回で複数の値を書く、頂点の無い描き方） | `filament/clip_probe.mm`、`mrt_probe.mm`、`proc_probe.mm` | 前の土台で動いた |
-| 床の虹のコースティクス（wgpu + WGSL） | `caustics/` | 前の土台で動いた（別の作り） |
-| ハードウェアの光線（wgpu の ray query） | `rayq/` | 前の土台で動いた（別の作り） |
+| 床の虹のコースティクス（wgpu + WGSL） | `old/caustics/` | 前の土台で動いた（別の作り） |
+| ハードウェアの光線（wgpu の ray query） | `old/rayq/` | 前の土台で動いた（別の作り） |
 | ThorVG のマスクを WebGPU の上で測った物 | `melt/` | 前の土台で動いた（git には入っていない） |
 | 動く Filament を Mac の窓に出した最初の確かめ | `bridge/` | 前の土台で動いた（git には入っていない） |
-| `filmask/`、`thorvg/`（Rust の小さい物） | `filmask/`、`thorvg/` | 未確認 |
+| `old/filmask/`、`thorvg/`（Rust の小さい物） | `old/filmask/`、`thorvg/` | 未確認 |
 | 大きさで分けた続き（V3・V10：中身は1行も変えず、元のファイルが順に読む。関数の外の切れ目は header、1つの関数が長い時は LLVM の TableGen の .inc と同じく関数の中で読む断片。プリプロセッサの出力が分ける前と同じ） | `filament/*_[0-9].h`、`filament/*_[0-9].inc` | 組み立て・静止画が前と同じ |
 | 調べた紙：編集の中身、Flutter のガワの作り、過去の倉庫との対応、ガラス、マスク、二つのカメラ | `reports/ae_rubric/research_*.md`、`past_document_map.md`、`reports/`、`research_notes/` | — |
 
