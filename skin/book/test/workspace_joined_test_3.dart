@@ -182,7 +182,7 @@ void _tests3() {
     final ids = {for (final e in find.byType(NumField).evaluate()) (e.widget as NumField).id};
     expect(ids, containsAll(['v_shadow_distance', 'v_shadow_angle', 'v_shadow_blur', 'v_shadow_opacity']));
     await t.timedDrag(far, const Offset(40, 0), const Duration(milliseconds: 300));
-    await t.pumpAndSettle();
+    await settled(t, ws);   // (the hand let go, not waited for by the window)
     expect(m.value(a, 'shadow_distance', 0), isNot(was), reason: 'the distance is the document\'s: ${ws.notice}');
     expect(m.undo(), isTrue);
     expect(m.value(a, 'shadow_distance', 0), was, reason: 'one step');
