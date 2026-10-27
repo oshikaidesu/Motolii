@@ -132,7 +132,19 @@ const _rowsE2 = <(String, String, Map<String, Object>)>[
   ('Spin Streaks', '-', {'@copies': 12, '@copy_rotate': 3, '@blend': 'lighten'}),
   ('Zoom Streaks', '-', {'@copies': 12, '@copy_size': 1.03, '@blend': 'lighten'}),
 ];
-final _rows = switch (_section) { 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, _ => _rowsA };
+// (section F, 有る: the thing's own values the checklist names, on a photo; no effect file: '-')
+const _rowsF = <(String, String, Map<String, Object>)>[
+  ('Colorize', '-', {'@tint': .8, '@tint_black': '000000', '@tint_white': 'ff8800'}),
+  ('Flip Layer', '-', {'@rotate_y': 180}),
+  ('Gaussian Blur', '-', {'@blur': 20}),
+  ('Glow', '-', {'@glow': 'ffffff', '@glow_blur': 30, '@glow_opacity': 1}),
+  ('Grid Repeat', '-', {'@size': .4, '@copies': 4, '@copy_columns': 2, '@copy_x': .45, '@copy_y': .45}),   // (a photo is 1 wide: made small, the copies a little further apart than it)
+  ('Linear Repeat', '-', {'@copies': 4, '@copy_x': .15, '@copy_y': .05}),
+  ('Repeat', '-', {'@copies': 3, '@copy_x': .2}),
+  ('Scatter Repeat', '-', {'@copies': 6, '@scatter_x': .3, '@scatter_y': .3}),
+  ('Solid Color', '-', {'@tint': 1, '@tint_black': '3366ff', '@tint_white': '3366ff'}),
+];
+final _rows = switch (_section) { 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
