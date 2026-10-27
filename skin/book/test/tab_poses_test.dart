@@ -42,6 +42,7 @@ void main() {
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
       await t.pump();
     }
+    expect(wsMoves(ws), hasLength(1), reason: 'a sweep over HOME ${part('home')} makes a move; the things ${things.toList()} at ${[for (final i in things) (m.value(i, 'x', 0), m.value(i, 'y', 0))]}; ${ws.notice}');
     var mv = wsMoves(ws).single;
     expect(mv.who.toSet(), things);
     expect(ws.selected, '${mv.by}');
