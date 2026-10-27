@@ -4,6 +4,9 @@
 # before it was closed, number by number. Then the wrong calls. Says what each call took.   check/doc.sh
 cd "$(dirname "$0")/.."
 # (a film of its own for the calls: ffmpeg's test picture and tone, as long, as big and as quick as the one used before)
+# (a Lottie file with markers for the breaker: ThorVG's own sample, MIT, fetched once at the commit counted with)
+L=third_party/thorvg_example/res/lottie/swinging.json
+[ -f $L ] || { mkdir -p ${L:h} && curl -fsSL -o $L https://raw.githubusercontent.com/thorvg/thorvg.example/5c61ffd87cd2b1b64a7f6193aa12c17fb78d9d5a/res/lottie/swinging.json; }
 mkdir -p out/vid && [ -f out/vid/check_film.mp4 ] || ffmpeg -v error -f lavfi -i testsrc2=size=1280x720:rate=30:duration=14.35 -f lavfi -i sine=frequency=440:sample_rate=44100:duration=14.35 -ac 2 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest out/vid/check_film.mp4
 rm -f out/doc_check.motolii out/wgpu_kit/out/e_*.png
 ./edit.sh out/doc_check.motolii < check/doc_calls.txt || exit 1

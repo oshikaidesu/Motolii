@@ -21,7 +21,7 @@ git config core.hooksPath .githooks
 | 何を | コマンド | 通った時 |
 |---|---|---|
 | 台帳（下の決まり 2） | `python3 .githooks/assets_check.py` | `ASSETS.md covers all … files` |
-| 中身の試験（まとめて） | `filament/check/all.sh` | `all checks held`（どれかが NO なら exit 1）。1 本ずつは `filament/check/*.sh` |
+| 中身の試験（まとめて。Python の Pillow と numpy が要る：`python3 -m pip install --user pillow numpy`） | `filament/check/all.sh` | `all checks held`（どれかが NO なら exit 1）。1 本ずつは `filament/check/*.sh` |
 | 窓の試験 | `cd skin/book && flutter test` | 中身を組んでいない時は、中身を使う試験が飛ばされる |
 | 窓の書き方 | `cd skin/book && flutter analyze lib test integration_test` | エラー 0（今ある注意は 97） |
 

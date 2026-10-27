@@ -33,7 +33,7 @@ set 2 speed 0
 set 2 begin 100
 set 2 speed -1
 add solid ../../third_party/filament_src/third_party/models/Fox/Fox.glb
-add picture ../../../reports/ae_rubric/stills/lay_v1.jpg
+add picture ../../fx_sample.jpg
 add picture ../vid
 add robot x
 key 2 speed 1 2

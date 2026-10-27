@@ -30,6 +30,7 @@ jobs:
           channel: stable
       - run: filament/dawn_probe/build.sh
       - run: filament/edit.sh build.motolii < /dev/null
+      - run: python3 -m pip install --quiet --break-system-packages pillow numpy   # (what some checks read pictures with)
       - run: filament/check/all.sh
       - run: cd skin/book && flutter analyze lib test integration_test --no-fatal-infos --no-fatal-warnings
         if: success() || failure()   # (the window's checks told even when the engine's failed)
