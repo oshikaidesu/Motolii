@@ -27,7 +27,7 @@ part 'workspace_joined_test_3.dart';
 part 'workspace_joined_test_4.dart';
 
 final _built = insideBuilt;
-const _font = '$motoliiDir/out/arial_black.ttf';
+final _font = '$motoliiDir/out/arial_black.ttf';
 
 Future<Ws> _pump(WidgetTester t) async {
   final ws = await openWorkspace(t);

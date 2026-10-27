@@ -11,13 +11,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:lab_book/motolii.dart' show motoliiDir;
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show NumField;
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart' show Workspace;
 import 'package:lab_book/workspace/ws.dart';
 
 const _seconds = int.fromEnvironment('SECONDS', defaultValue: 600);
-const _films = String.fromEnvironment('FILMS', defaultValue: '/Users/motolii_maker/motolii/filament/out/vid');
+final _films = const String.fromEnvironment('FILMS').isNotEmpty ? const String.fromEnvironment('FILMS') : '$motoliiDir/out/vid';
 const _copies = int.fromEnvironment('COPIES', defaultValue: 3);   // (each film so many times: 0, none)
 const _effects = int.fromEnvironment('EFFECTS');   // (so many whole-screen effects over the stage, the shelf's first ones)
 const _hand = bool.fromEnvironment('HAND');   // (a hand on the picked cube's x the whole time: dragged to and fro, let go every three seconds)

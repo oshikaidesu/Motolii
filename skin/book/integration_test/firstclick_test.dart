@@ -25,7 +25,7 @@ import 'package:lab_book/sets/inspector/inspector_direct_transform_canvas.dart' 
 import 'package:lab_book/sets/inspector/inspector_direct_transform_layout.dart' show TransformLayout;
 import '../test/door.dart' show seen;
 
-const _font = '$motoliiDir/out/arial_black.ttf';
+final _font = '$motoliiDir/out/arial_black.ttf';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized().framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive; // (the stage's picture is the inside's, drawn as the window goes)

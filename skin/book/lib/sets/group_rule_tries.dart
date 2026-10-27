@@ -14,7 +14,7 @@ import '../workspace/panes.dart';
 import '../workspace/workspace.dart';
 import '../workspace/ws.dart';
 
-const _doc = String.fromEnvironment('MOTOLII_DOC', defaultValue: '$motoliiDir/out/skin.motolii');
+final _doc = motoliiDoc;
 
 /// The document's first relation of a kind (its number), or none.
 int? _relation(Motolii m, String kind) => m.things.where((t) => m.word(t, 'kind') == 'behaviour' && m.word(t, 'file') == kind).firstOrNull;

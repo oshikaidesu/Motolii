@@ -5,8 +5,8 @@ import "core-js/actual/url"   // QuickJS has no URL or structuredClone: core-js'
 import "core-js/actual/structured-clone"
 import * as std from "qjs:std"
 import * as THREE from "three/webgpu"
-import { DisplacedRingsPass } from "/Users/motolii_maker/motolii/research_notes/tracking/shader-lab/packages/shader-lab-react/src/renderer/displaced-rings-pass"
-import { PipelineManager } from "/Users/motolii_maker/motolii/research_notes/tracking/shader-lab/packages/shader-lab-react/src/renderer/pipeline-manager"
+import { DisplacedRingsPass } from "../third_party/tsl/basementstudio__shader-lab/packages/shader-lab-react/src/renderer/displaced-rings-pass"
+import { PipelineManager } from "../third_party/tsl/basementstudio__shader-lab/packages/shader-lab-react/src/renderer/pipeline-manager"
 const pass: any = new DisplacedRingsPass("rings")
 // the layer as the browser's Shader Lab saved it, set on the pass by its author's own applyLayerState (pipeline-manager.ts:567)
 const layer = { id: "rings", type: "displaced-rings", kind: "effect", visible: true, mask: null, hue: 0, saturation: 1, opacity: 1, blendMode: "normal", compositeMode: "filter", params: JSON.parse(std.loadFile("tsl_draw/params.json")) }

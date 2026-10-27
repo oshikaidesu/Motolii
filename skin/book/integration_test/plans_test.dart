@@ -7,13 +7,14 @@ import 'package:flutter/rendering.dart' show OffsetLayer;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:lab_book/motolii.dart' show motoliiDir;
 import 'package:lab_book/sets/inspector/plans_set.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized().framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
 
   testWidgets('inspector plans, shot', (t) async {
-    final out = Directory('/Users/motolii_maker/motolii/reports/inspector_plans')..createSync(recursive: true);
+    final out = Directory('$motoliiDir/../reports/inspector_plans')..createSync(recursive: true);
     t.view.physicalSize = const Size(2560, 1640);
     addTearDown(t.view.resetPhysicalSize);
     Future<void> shot(String name) async {

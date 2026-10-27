@@ -36,12 +36,23 @@ def covered(f):
     return False
 missing = [f for f in files if not covered(f)]
 names = {os.path.basename(f) for f in files} | set(files)
+ever = None
+def tracked_once(p):   # (git has held it at some time: a place only ever on one machine is not looked for in a clone)
+    global ever
+    if ever is None:
+        ever = set(subprocess.run(['git', 'log', '--format=', '--name-only', 'HEAD'], capture_output=True, text=True).stdout.split('\n'))
+    q = p.rstrip('/')
+    return any(f == q or f.startswith(q + '/') or fnmatch.fnmatch(f, q) for f in ever)
 def there(p):
+    if glob.glob(os.path.expanduser(p)):
+        return True
+    if not p.startswith('~') and not tracked_once(p):
+        return True   # (never in git: kept on this machine only, as bridge/ or research_notes/)
     if '/out/' in '/' + p + '/':
         return True   # (build output and footage put there by hand: made or placed when asked for)
     if not p.startswith('~') and subprocess.run(['git', 'check-ignore', '-q', p.rstrip('/')], stderr=subprocess.DEVNULL).returncode == 0:
         return True   # (kept out of git on purpose, here only on this machine: pictures and films of the reports, fetched sources)
-    return bool(glob.glob(os.path.expanduser(p)))
+    return False
 gone = sorted({p for p in places if not there(p)})
 if missing:
     by = {}

@@ -8,7 +8,6 @@ cd "$(dirname "$0")/.."
 n=${1:-ring}
 SRC=third_party/filament_src
 SDK=$SRC/out/wgpu_install
-TVG=../thorvg/third_party
 MATC=$SRC/out/wgpu/tools/matc/matc
 mkdir -p out/wgpu_kit/out
 # (the rooms' light, made once by Filament's own cmgen from its environments, as poster.sh and blocks.sh make them with the SDK's)
@@ -40,6 +39,7 @@ ninja -C $THOR/build_dawn > /dev/null
 [ out/bend.o -nt bend.cpp ] || clang++ -c -std=c++17 -O2 -fno-rtti -fno-exceptions -DTVG_STATIC -I $THOR/build_dawn -I $THOR/inc -I $THOR/src/common -I $THOR/src/renderer -I $THOR/src/renderer/gpu_engine -I $THOR/src/renderer/gpu_engine/wg -I $THOR/src/loaders/lottie -I $SRC/third_party/dawn/include -I $SRC/out/wgpu/third_party/dawn/gen/include bend.cpp -o out/bend.o
 ./libtess2.sh
 ./jolt.sh   # (physics.cpp: Jolt, which edit.sh and build_lib.sh link)
+./midi_roll.sh   # (midi_roll.cpp: bladeSk's PianoRollSvg.js, read as the MIDI view is drawn)
 # (skpath.cpp: Skia's own path operations, its Boolean: skia.sh builds it)
 SKIA=third_party/skia_src
 [ -f $SKIA/out/path/libpathops.a ] || ./skia.sh

@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 import '../theme.dart';
+import '../motolii.dart' show motoliiDir;
 import '../tokens.dart';
 import 'collage_cut.dart';
 
@@ -46,7 +47,7 @@ class _SheetPaperState extends State<SheetPaper> {
     super.initState();
     // The book wears whatever skin the window last saved. This page is the sheet, so it reads that file itself.
     final path = '${Directory.current.path}/skins/sheet/theme.xml';
-    ColorTheme.load(File(path).existsSync() ? path : '/Users/motolii_maker/motolii/skin/book/skins/sheet/theme.xml');
+    ColorTheme.load(File(path).existsSync() ? path : '$motoliiDir/../skin/book/skins/sheet/theme.xml');
   }
 
   TextStyle _sans(double size, Color color, {FontWeight weight = FontWeight.w500}) => TextStyle(

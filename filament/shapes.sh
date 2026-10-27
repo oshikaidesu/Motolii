@@ -1,6 +1,7 @@
 #!/bin/zsh
 # The shapes picture (shapes.mm): a glass ring, a twenty-faced solid and letters on pale paper.  ./shapes.sh  ->  out/shapes.png
 cd "$(dirname "$0")"
+./sdk.sh || exit 1   # (Filament's prebuilt SDK, fetched once: sdk.sh)
 F=third_party/filament
 [ out/shapes -nt shapes.mm ] && [ out/shapes -nt kit.h ] || ./build_one.sh shapes || exit 1
 for m in paper paper_copy floor_shade thick_glass far_side far_look glasslight; do [ $m.filamat -nt $m.mat ] && [ $m.filamat -nt spectrum.glsl ] || $F/bin/matc -a metal -p desktop -o $m.filamat $m.mat || exit 1; done

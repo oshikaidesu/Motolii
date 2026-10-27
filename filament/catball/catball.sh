@@ -3,9 +3,10 @@
 # simulated against it and baked to keys (sim.c), the document made of the film and the balls, and written.
 #   ./catball/catball.sh [balls] [seed]
 cd "$(dirname "$0")/.."
+HB=${HOMEBREW_PREFIX:-$(brew --prefix)}   # (where Homebrew is: /opt/homebrew on Apple silicon)
 mkdir -p out/catball ../reports/show/catball
 [ -f out/catball/happy.outline ] || python3 -I catball/bake.py out/vid/happy.mp4 out/catball/happy.outline || exit 1
-cc -std=c17 -O2 catball/sim.c -I/opt/homebrew/include -L/opt/homebrew/lib -lbox2d -o out/catball/sim || exit 1
+cc -std=c17 -O2 catball/sim.c -I$HB/include -L$HB/lib -lbox2d -o out/catball/sim || exit 1
 out/catball/sim out/catball/happy.outline ${1:-40} ${2:-7} > out/catball/balls.txt || exit 1
 rm -f out/catball/catball.motolii
 {

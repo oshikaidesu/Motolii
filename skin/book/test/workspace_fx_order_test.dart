@@ -12,7 +12,7 @@ List<String> _cards(WidgetTester t) => [for (final e in find.byType(ValuesCard).
 void main() {
   testWidgets('a blur and a halftone: cards in the order laid; the blur moved down lays after the halftone', (t) async {
     final ws = await openWorkspace(t), m = ws.inside!;
-    const halftone = '$motoliiDir/effects/halftone.wgsl';
+    final halftone = '$motoliiDir/effects/halftone.wgsl';
     final rect = m.add('shape', 'rect');
     expect(m.effect(rect, 'Gaussian Blur', 0), isTrue, reason: m.trouble);
     ws..reread()..select('$rect');

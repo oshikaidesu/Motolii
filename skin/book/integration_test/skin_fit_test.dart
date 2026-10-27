@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:lab_book/motolii.dart' show motoliiDir;
 import 'package:lab_book/theme.dart';
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart' show Workspace;
@@ -124,7 +125,7 @@ void main() {
     }
     // ignore: avoid_print
     print('fit:\n${report.join('\n')}');
-    File('/Users/motolii_maker/motolii/reports/skins/fit.txt').writeAsStringSync('${report.join('\n')}\n'); // (the same, kept)
+    File('$motoliiDir/../reports/skins/fit.txt').writeAsStringSync('${report.join('\n')}\n'); // (the same, kept)
     semantics.dispose();
     expect(report.where((l) => !l.startsWith(' ') && !l.endsWith(': 0 cut, 0 overflow')), isEmpty);
   });

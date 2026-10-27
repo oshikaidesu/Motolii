@@ -3,6 +3,7 @@
 # Built beside the old one and moved over it, so that an app that has the old one open goes on undisturbed.
 set -eu
 cd "$(dirname "$0")"
+./sdk.sh || exit 1   # (Filament's prebuilt SDK, fetched once: sdk.sh)
 SDK=third_party/filament
 mkdir -p out
 clang++ -std=c++20 -fobjc-arc -O2 -DGLASS_LIB -dynamiclib -fvisibility=hidden -I "$SDK/include" glass_scene.mm glass_live.mm glass_door_mac.mm \

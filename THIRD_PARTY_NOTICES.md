@@ -18,7 +18,8 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 |---|---|---|---|
 | AviUtl2 のスクリプト 172 パッケージ（一覧は下） | 各作者。集め方は [Neosku/aviutl2-catalog-data](https://github.com/Neosku/aviutl2-catalog-data) の入れ方の手順どおり | MIT 133・CC0 26・Unlicense 6・BSD-3-Clause 4・MIT-0 2・Apache-2.0 1 | `filament/aviutl_scripts/<作者>__<名前>/`（各フォルダに LICENSE と SOURCE.txt） |
 | ISF の効果 | [Vidvox/ISF-Files](https://github.com/Vidvox/ISF-Files) ほか（各 .fs の `CREDIT` に作者） | MIT | `filament/effects/*.fs`、`ISF-Files-LICENSE.txt` |
-| ossia score の ISF | [ossia/score-user-library](https://github.com/ossia/score-user-library) | MIT・CC BY-SA 4.0 | `filament/effects/`、`ossia-LICENSE-ISF.txt`、`ossia-score-user-library-LICENSE.txt` |
+| ossia score の ISF：Directional Blur・Polar Coordinates・Radial Blur | [ossia/score-user-library](https://github.com/ossia/score-user-library) | CC BY-SA 4.0（この 3 本と、その改変だけに掛かる） | `filament/effects/Directional Blur.fs`・`Polar Coordinates.fs`・`Radial Blur.fs`、`ossia-score-user-library-LICENSE.txt` |
+| ossia score の ISF：Luma Key（IMIMOT、memo.tv から移植） | [ossia/score-user-library](https://github.com/ossia/score-user-library) | MIT | `filament/effects/Luma Key.fs`、`ossia-LICENSE-ISF.txt` |
 | three.js の画面の効果（WGSL にした物） | [mrdoob/three.js](https://github.com/mrdoob/three.js) の examples/jsm/shaders | MIT | `filament/effects/*.wgsl`（各ファイルの 1 行目に出所） |
 | CRT の仕上げ（WGSL に改変） | [vercel-labs/vgpu](https://github.com/vercel-labs/vgpu) の post.wgsl | MIT | `filament/effects/crt_finish.wgsl`、`vgpu-LICENSE.txt` |
 | データモッシュ（WGSL に改変） | [newomp4/phosphor](https://github.com/newomp4/phosphor) | MIT | `filament/effects/datamosh.wgsl`、`phosphor-LICENSE.txt` |
@@ -29,7 +30,6 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 | d3-contour・d3-array | [d3](https://github.com/d3) | ISC | `filament/third_party/js/d3-contour/`、`d3-array/` |
 | anime.js v4.5.0 | [juliangarnier/anime](https://github.com/juliangarnier/anime) | MIT | `filament/third_party/anime/` |
 | Godot のイーズの式 | [godotengine/godot](https://github.com/godotengine/godot) の easing_equations.h（Robert Penner の式） | MIT | `filament/third_party/godot_easing/` |
-| ピアノロール（PianoRollSvg.js） | [bladeSk/midi-to-piano-roll](https://github.com/bladeSk/midi-to-piano-roll) | MIT（作者の package.json の申告。ライセンスの文書は作者の側に無い） | `filament/third_party/midi_roll/` |
 | 画面の拍子 | [nmfisher/thermion](https://github.com/nmfisher/thermion) | Apache-2.0 | `filament/third_party/thermion_frame/`（NOTICE.md） |
 | ブロブの追跡 | [k1sh0r/blob-tracker](https://github.com/k1sh0r/blob-tracker) | MIT | `filament/blobtrack/kit/` |
 | JetBrains Mono（ブロブの追跡の文字） | [JetBrains/JetBrainsMono](https://github.com/JetBrains/JetBrainsMono) | SIL OFL 1.1 | `filament/blobtrack/kit/JetBrainsMono-Regular.ttf`、`JetBrainsMono-OFL.txt` |
@@ -43,8 +43,10 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 | [Filament](https://github.com/google/filament)（Dawn・glslang を含む） | v1.77.2 | Apache-2.0 ほか | `filament/dawn_probe/build.sh` | `filament/dawn_probe/filament_dawn_compute.patch`、`glslang_hlsl.patch`、`filament/tsl/dawn_lend.patch` |
 | [ThorVG](https://github.com/thorvg/thorvg) | 9203245 | MIT | `filament/dawn_probe/tvg_on_dawn.sh` | `filament/dawn_probe/thorvg_*.patch` |
 | [Skia](https://skia.org/)（パスの部分だけ） | chrome/m149 | BSD-3-Clause | `filament/skia.sh` | なし |
-| [libtess2](https://github.com/memononen/libtess2) | main | SGI Free Software License B 2.0 | `filament/libtess2.sh` | なし |
+| [libtess2](https://github.com/memononen/libtess2) | 8dbd648 | SGI Free Software License B 2.0 | `filament/libtess2.sh` | なし |
 | [Jolt Physics](https://github.com/jrouwe/JoltPhysics) | a4b24c3 | MIT | `filament/jolt.sh` | なし |
+| [PianoRollSvg.js](https://github.com/bladeSk/midi-to-piano-roll)（MIDI ビューのピアノロール） | 205854e | MIT（作者の package.json の申告。ライセンスの文書が作者の側に無いので同梱しない） | `filament/midi_roll.sh` | なし |
+| [Filament の組み立て済み SDK](https://github.com/google/filament/releases/tag/v1.77.2)（前の試しのスクリプトだけが使う） | v1.77.2 | Apache-2.0 | `filament/sdk.sh` | なし |
 | [BabylonJS/JsRuntimeHost](https://github.com/BabylonJS/JsRuntimeHost) の Node-API | 980cfb0 | MIT | `filament/tsl/jsrh_napi/build.sh` | `jsrh_qjs017_dawn.patch` |
 | TSL の表現 48 か所 | `filament/tsl/sources.tsv` のとおり | 各作者 | `filament/tsl/fetch.sh` | `filament/tsl/*_target.patch`、`ics_tilt.patch` |
 

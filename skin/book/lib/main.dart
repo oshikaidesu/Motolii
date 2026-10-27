@@ -52,10 +52,10 @@ void main() {
     return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => const GroupHands()));
   }
   if (const bool.fromEnvironment('MOTOLII_BENCH')) {   // (the relation panels' bench alone, the whole screen: the stage, a seek bar, the panels side by side)
-    return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => const RelationBench()));
+    return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => RelationBench()));
   }
   if (const bool.fromEnvironment('MOTOLII_BARE')) {   // (the window alone, the whole screen of it, without the book round it: --dart-define=MOTOLII_BARE=true)
-    return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: const String.fromEnvironment('MOTOLII_DOC', defaultValue: '$motoliiDir/out/skin.motolii'), extra: const bool.fromEnvironment('MOTOLII_TRIES') ? groupRuleTryPanes() : const [])));   // (MOTOLII_TRIES: the group rule tries as tabs beside the inspector)
+    return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: motoliiDoc, extra: const bool.fromEnvironment('MOTOLII_TRIES') ? groupRuleTryPanes() : const [])));   // (MOTOLII_TRIES: the group rule tries as tabs beside the inspector)
   }
   runApp(const LabBook());
 }
@@ -95,12 +95,7 @@ class LabBook extends StatelessWidget {
               // the same window joined to the inside (motolii.dart): its stage is the inside's own picture
               WidgetbookUseCase(
                 name: 'Live',
-                builder: (c) => const Workspace(
-                  document: String.fromEnvironment(
-                    'MOTOLII_DOC',
-                    defaultValue: '$motoliiDir/out/skin.motolii',
-                  ),
-                ),
+                builder: (c) => Workspace(document: motoliiDoc),
               ),
             ],
           ),

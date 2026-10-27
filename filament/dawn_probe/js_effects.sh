@@ -5,10 +5,11 @@
 #   ./dawn_probe/js_effects.sh <preset.json> <w> <h> <frames> <out.rgba>
 set -e
 cd "$(dirname "$0")/.."
+HB=${HOMEBREW_PREFIX:-$(brew --prefix)}   # (where Homebrew is: /opt/homebrew on Apple silicon)
 SRC=third_party/filament_src
 SDK=$SRC/out/wgpu_install
 J=tsl/out/jsrh_napi/src/Node-API
-Q=/opt/homebrew/opt/quickjs-ng
+Q=$HB/opt/quickjs-ng
 (cd $SRC/out/wgpu && ninja motolii_door third_party/dawn/dawn.node > /dev/null)
 [ -d $J ] || ./tsl/jsrh_napi/build.sh > /dev/null
 (cd tsl && npx esbuild jsrh_napi/shaders.ts --bundle --format=esm --platform=neutral '--external:qjs:*' --main-fields=module,main \

@@ -19,8 +19,25 @@ part 'motolii_questions.dart';
 part 'motolii_shelves.dart';
 part 'motolii_watch.dart';
 
-/// Where the inside lives. Override with --dart-define=MOTOLII_DIR=/path/to/motolii/filament.
-const motoliiDir = String.fromEnvironment('MOTOLII_DIR', defaultValue: '/Users/motolii_maker/motolii/filament');
+/// Where the inside lives: --dart-define=MOTOLII_DIR=/path/to/motolii/filament, or else the filament/ found going up from
+/// where it was started (flutter test runs in skin/book) or from this program (the app is built under skin/book/build/).
+final String motoliiDir = () {
+  const given = String.fromEnvironment('MOTOLII_DIR');
+  if (given.isNotEmpty) return given;
+  for (final from in [Directory.current, File(Platform.resolvedExecutable).parent]) {
+    for (var d = from.absolute; ; d = d.parent) {
+      if (File('${d.path}/filament/edit.sh').existsSync()) return '${d.path}/filament';
+      if (d.parent.path == d.path) break;
+    }
+  }
+  return 'filament';
+}();
+
+/// The document the window opens: --dart-define=MOTOLII_DOC=/path/to.motolii, or the inside's own out/skin.motolii.
+String get motoliiDoc {
+  const given = String.fromEnvironment('MOTOLII_DOC');
+  return given.isNotEmpty ? given : '$motoliiDir/out/skin.motolii';
+}
 
 typedef _P = Pointer<c.Motolii>;
 typedef _S = Pointer<Utf8>;
@@ -57,7 +74,8 @@ class Motolii {
   final String home;
 
   /// The document at [document] (made if it is not there), on a stage [wide] by [high]. null: it could not be opened.
-  static Motolii? open(String document, {int wide = 1920, int high = 1080, String dir = motoliiDir}) {
+  static Motolii? open(String document, {int wide = 1920, int high = 1080, String? dir}) {
+    dir ??= motoliiDir;
     final path = '$dir/out/libmotolii.dylib';
     final DynamicLibrary lib;
     try {

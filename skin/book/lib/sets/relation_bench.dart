@@ -14,13 +14,12 @@ import '../workspace/stage.dart';
 import '../workspace/ws.dart';
 import 'group_rule_tries.dart';
 
-const _doc = String.fromEnvironment('MOTOLII_DOC', defaultValue: '$motoliiDir/out/skin.motolii');
 
 /// The panels on the bench, in order: the tab as it is first, then the tries.
 List<WsPane> _panels() => [WsPane('Relations', null, () => const DeskRelations()), ...groupRuleTryPanes()];
 
 class RelationBench extends StatefulWidget {
-  const RelationBench({super.key, this.document = _doc});
+  RelationBench({super.key, String? document}) : document = document ?? motoliiDoc;
   final String document;
   @override
   State<RelationBench> createState() => _RelationBenchState();
@@ -139,4 +138,4 @@ class _Bar extends CustomPainter {
   bool shouldRepaint(_Bar o) => o.u != u;
 }
 
-WidgetbookComponent relationBenchSet() => WidgetbookComponent(name: 'Bench', useCases: [WidgetbookUseCase(name: 'Panels', builder: (c) => const RelationBench())]);
+WidgetbookComponent relationBenchSet() => WidgetbookComponent(name: 'Bench', useCases: [WidgetbookUseCase(name: 'Panels', builder: (c) => RelationBench())]);

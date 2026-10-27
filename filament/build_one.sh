@@ -2,6 +2,7 @@
 # Builds one .mm into out/<name> without running it (link.sh also runs it).
 set -eu
 cd "$(dirname "$0")"
+./sdk.sh || exit 1   # (Filament's prebuilt SDK, fetched once: sdk.sh)
 SDK=third_party/filament
 TVG=../thorvg/third_party
 mkdir -p out

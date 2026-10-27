@@ -9,6 +9,7 @@ import 'package:flutter/services.dart' show LogicalKeyboardKey, PhysicalKeyboard
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:lab_book/motolii.dart' show motoliiDir;
 import 'package:lab_book/sets/inspector/cards_set.dart';
 
 void main() {
@@ -42,7 +43,7 @@ void main() {
     Rect tileBox(String label) => t.getRect(find.ancestor(of: find.text(label).first, matching: find.byType(AnimatedContainer)).first);
 
     for (final (i, (name, _, _)) in cardUses.indexed) {
-      out = Directory('/Users/motolii_maker/motolii/reports/card_ui/$name')..createSync(recursive: true);
+      out = Directory('$motoliiDir/../reports/card_ui/$name')..createSync(recursive: true);
       n = 0;
       await t.pumpWidget(WidgetsApp(key: ValueKey(i), color: const Color(0xFF000000), builder: (c, _) => cardsSet().useCases[i].builder(c)));
       await t.pump(const Duration(milliseconds: 500));

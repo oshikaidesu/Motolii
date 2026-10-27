@@ -26,7 +26,7 @@ import 'package:lab_book/workspace/ws.dart';
 
 import '../test/door.dart' show expectSameAfterReopen, openedDocument;
 
-const _font = '$motoliiDir/out/arial_black.ttf';
+final _font = '$motoliiDir/out/arial_black.ttf';
 const _seed = int.fromEnvironment('SEED', defaultValue: 7),
     _acts = int.fromEnvironment('ACTS', defaultValue: 400);
 

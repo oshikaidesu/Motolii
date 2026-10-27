@@ -1,6 +1,7 @@
 #!/bin/zsh
 # The poster picture (poster.mm): a glass band over white letters, by Filament as it is.  ./poster.sh  ->  out/poster.png
 cd "$(dirname "$0")"
+./sdk.sh || exit 1   # (Filament's prebuilt SDK, fetched once: sdk.sh)
 F=third_party/filament
 [ out/poster -nt poster.mm ] && [ out/poster -nt kit.h ] || ./build_one.sh poster || exit 1
 for m in poster thick_glass far_side far_look glassbox; do [ $m.filamat -nt $m.mat ] && [ $m.filamat -nt spectrum.glsl ] && [ $m.filamat -nt studio.glsl ] || $F/bin/matc -a metal -p desktop -o $m.filamat $m.mat || exit 1; done

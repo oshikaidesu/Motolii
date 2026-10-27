@@ -13,10 +13,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:widgetbook/widgetbook.dart';
 
+import '../motolii.dart' show motoliiDir;
 import '../tokens.dart';
 
 /// Where the glass lives. Override with --dart-define=GLASS_DIR=/path/to/motolii/filament.
-const _dir = String.fromEnvironment('GLASS_DIR', defaultValue: '/Users/motolii_maker/motolii/filament');
+final String _dir = const String.fromEnvironment('GLASS_DIR').isNotEmpty ? const String.fromEnvironment('GLASS_DIR') : motoliiDir;
 
 /// The picture's size in pixels, fixed when the library starts.
 const _w = 1920, _h = 1080;
@@ -78,7 +79,7 @@ class _GlassLiveViewState extends State<GlassLiveView> {
   }
 
   Future<void> _start() async {
-    const lib = '$_dir/out/libglass_live.dylib';
+    final lib = '$_dir/out/libglass_live.dylib';
     try {
       final id = await _channel.invokeMethod<int>('start', {'lib': lib, 'base': _dir, 'width': _w, 'height': _h, 'env': _scene});
       if (!mounted) return;

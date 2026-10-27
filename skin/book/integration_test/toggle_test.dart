@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:lab_book/motolii.dart' show motoliiDir;
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart' show Workspace;
 import 'package:lab_book/workspace/ws.dart';
@@ -19,7 +20,7 @@ void main() {
     await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: doc)));
     await t.pumpAndSettle();
     final ws = WsScope.read(t.element(find.byType(WsTimeline))), m = ws.inside!;
-    const font = String.fromEnvironment('FONT', defaultValue: '/Users/motolii_maker/motolii/filament/out/arial_black.ttf');
+    final font = const String.fromEnvironment('FONT').isNotEmpty ? const String.fromEnvironment('FONT') : '$motoliiDir/out/arial_black.ttf';
     for (final (k, f) in [('solid', 'cube'), ('solid', 'ring'), ('text', font), ('light', 'sun')]) {
       m.add(k, f);
     }

@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")"
+./sdk.sh || exit 1   # (Filament's prebuilt SDK, fetched once: sdk.sh)
 SDK=third_party/filament
 clang++ -std=c++20 -fobjc-arc -O2 \
   -I "$SDK/include" \

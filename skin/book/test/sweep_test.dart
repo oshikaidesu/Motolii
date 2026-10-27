@@ -14,10 +14,10 @@ import 'package:lab_book/workspace/ws.dart';
 import 'door.dart';
 
 final _built = File('$motoliiDir/out/libmotolii.dylib').existsSync();
-const _font = '$motoliiDir/out/arial_black.ttf';
+final _font = '$motoliiDir/out/arial_black.ttf';
 
 /// What each thing is made as, and the things the sweep works on.
-const _things = [('solid', 'cube', ''), ('solid', 'ring', 'glass'), ('shape', 'rect', ''), ('text', _font, ''), ('light', 'sun', '')];
+final _things = [('solid', 'cube', ''), ('solid', 'ring', 'glass'), ('shape', 'rect', ''), ('text', _font, ''), ('light', 'sun', '')];
 
 /// The values a handle on the stage is drawn for (a corner sizes, the knob turns, the cross moves the point it turns about, the body moves).
 const _handleFor = {

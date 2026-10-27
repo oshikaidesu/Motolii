@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:lab_book/motolii.dart' show motoliiDir;
 import 'package:lab_book/parts/skin_parts.dart';
 import 'package:lab_book/theme.dart';
 import 'package:lab_book/workspace/timeline.dart';
@@ -22,7 +23,7 @@ void main() {
     t.view.physicalSize = const Size(3200, 1920);
     addTearDown(t.view.resetPhysicalSize);
     t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.menu, (_) async => null);
-    final out = Directory('/Users/motolii_maker/motolii/reports/skins')..createSync(recursive: true);
+    final out = Directory('$motoliiDir/../reports/skins')..createSync(recursive: true);
     final doc = '${Directory.systemTemp.createTempSync('skin').path}/skin.motolii';
     WsZoom.set(1, keep: false); // (shot at 100%, whatever this Mac's window.xml keeps)
     ColorTheme.at = '${Directory.systemTemp.createTempSync('skin').path}/none.xml'; // (opened in the window's own skin, not the one this Mac wears)
@@ -30,9 +31,9 @@ void main() {
     await t.pumpAndSettle();
     final ws = WsScope.read(t.element(find.byType(WsTimeline))), m = ws.inside!;
     // (one thing of each kind the timeline colours, and keys, so every Clip colour, the bands and the key marks are in the picture)
-    const f = '/Users/motolii_maker/motolii/filament';
+    final f = motoliiDir;
     final cube = m.add('solid', 'cube');
-    for (final (k, w) in [('solid', 'ring'), ('light', 'sun'), ('shape', 'circle'), ('text', '/System/Library/Fonts/Supplemental/Arial Black.ttf'), ('camera', 'camera'), ('picture', '$f/third_party/thorvg_example/res/lottie/swinging.json')]) {
+    for (final (k, w) in [('solid', 'ring'), ('light', 'sun'), ('shape', 'circle'), ('text', '/System/Library/Fonts/Supplemental/Arial Black.ttf'), ('camera', 'camera'), ('picture', '$f/acid_flat.svg')]) {
       m.add(k, w);
     }
     m.key(cube, 'x', 0, -200);
