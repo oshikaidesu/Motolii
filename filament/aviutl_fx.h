@@ -19,6 +19,8 @@ struct AviutlRun {
     int chunk = LUA_NOREF;
     std::map<std::string, AviutlBuf> bufs;
     std::map<std::string, AviutlBuf> loaded;        // (figures and picture files obj.load drew, by what was asked: aviutl_load.h)
+    std::map<std::string, std::vector<uint8_t>> pixels;   // (the pixels obj.getpixeldata handed out, by buffer)
+    std::map<const void*, std::string> order;
     std::multimap<std::pair<uint32_t, uint32_t>, AviutlBuf> spare;   // (pictures let go, kept by size for the next asked: a buffer made and let go each frame takes the same ones)
     std::map<std::string, door::Screen*> doors;     // (each shader made, by its name and way of sampling)
     std::map<door::Screen*, int> draws;             // (draws of each this frame: each its own constants, the door's pass)
@@ -178,6 +180,7 @@ static int aviutl_copybuffer(lua_State* L) {   // (dst, src)
     return lua_pushboolean(L, 1), 1;
 }
 #include "aviutl_load.h"   // (obj.load: a buffer, a figure, a picture file)
+#include "aviutl_pixels.h"   // (obj.getpixeldata, obj.putpixeldata)
 static int aviutl_setoption(lua_State* L) {
     AviutlRun& r = aviutl_of(L);
     const std::string n = luaL_checkstring(L, 1);
@@ -461,7 +464,8 @@ static std::shared_ptr<AviutlRun> aviutl_made(Stage& s, const std::string& file)
     if (luaL_dostring(L, (sandbox + aviutl_globals).c_str())) r->trouble = lua_tostring(L, -1);
     lua_newtable(L);
     const std::pair<const char*, lua_CFunction> calls[] = {{"pixelshader", aviutl_pixelshader}, {"clearbuffer", aviutl_clearbuffer}, {"copybuffer", aviutl_copybuffer}, {"load", aviutl_load}, {"setoption", aviutl_setoption}, {"getoption", aviutl_getoption},
-        {"getinfo", aviutl_getinfo}, {"getvalue", aviutl_getvalue}, {"setanchor", aviutl_setanchor}, {"getpixel", aviutl_getpixel}, {"setfont", aviutl_setfont}, {"draw", aviutl_draw}, {"drawpoly", aviutl_drawpoly}, {"effect", aviutl_effect}};
+        {"getinfo", aviutl_getinfo}, {"getvalue", aviutl_getvalue}, {"setanchor", aviutl_setanchor}, {"getpixel", aviutl_getpixel}, {"setfont", aviutl_setfont}, {"draw", aviutl_draw}, {"drawpoly", aviutl_drawpoly}, {"effect", aviutl_effect},
+        {"getpixeldata", aviutl_getpixeldata}, {"putpixeldata", aviutl_putpixeldata}};
     for (const auto& [n, f] : calls) lua_pushlightuserdata(L, r.get()), lua_pushcclosure(L, f, 1), lua_setfield(L, -2, n);
     luaL_dostring(L, "return { __index = function(_, k) error('not yet: obj.' .. tostring(k), 2) end }");   // (any other name of obj)
     lua_setmetatable(L, -2);
