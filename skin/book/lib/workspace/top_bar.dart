@@ -13,6 +13,7 @@ import '../theme.dart';
 import '../tokens.dart';
 import 'stage_art.dart' show WsArt;
 import 'ws.dart';
+import 'desk_kit.dart' show DeskChip;
 import 'two_fingers.dart';
 part 'top_bar_2.dart';
 
@@ -278,10 +279,15 @@ class _RenderState extends State<_Render> {
     WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _focus.requestFocus() : null);
   }
 
+  // (the kinds the inside writes, by the file's ending: kit_draw.h; Alight Motion's own four)
+  static const _formats = [('MP4', '.mp4', "H.264, with the films' sound"), ('HEVC', '.mov', "HEVC by the Mac's own encoder, with the films' sound"), ('GIF', '.gif', '15 frames a second, no sound'), ('PNG', '.png', 'a picture each, name_0001.png on')];
+  String get _ending => _formats.map((f) => f.$2).firstWhere((e) => _name.text.trim().toLowerCase().endsWith(e), orElse: () => '.mp4');
+  void _as(String ending) => setState(() => _name.text = '${_name.text.trim().replaceFirst(RegExp(r'\.(mp4|mov|gif|png)$', caseSensitive: false), '')}$ending');
+
   void _go(Ws ws) {
     var name = _name.text.trim();
     if (name.isEmpty) return;
-    if (!name.toLowerCase().endsWith('.mp4')) name = '$name.mp4';
+    if (!_formats.any((f) => name.toLowerCase().endsWith(f.$2))) name = '$name.mp4';
     ws.renderTo = name.startsWith('/') ? name : '${ws.documentFolder ?? '.'}/$name';
     _open.hide();
     ws.onRender?.call();
@@ -340,7 +346,13 @@ class _RenderState extends State<_Render> {
                     row('Range', fact('Work area  ${t(from)} – ${t(to)}  ·  $frames frames')),
                     row('Size', fact('${WsArt.comp.width.round()} × ${WsArt.comp.height.round()}')),
                     row('Rate', fact('${Ws.fps} frames a second')),
-                    row('Format', fact("H.264 .mp4, with the films' sound")),
+                    row('Format', StatefulBuilder(builder: (context, again) => Row(children: [
+                      for (final (label, ending, _) in _formats) ...[
+                        DeskChip(key: ValueKey('render-$label'), label: label, on: _ending == ending, onTap: () => again(() => _as(ending))),
+                        SizedBox(width: Shape.s(6)),
+                      ],
+                      Expanded(child: fact(_formats.firstWhere((f) => f.$2 == _ending).$3)),
+                    ]))),
                     SizedBox(height: Shape.s(4)),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,

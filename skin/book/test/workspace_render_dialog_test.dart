@@ -42,4 +42,22 @@ void main() {
       await t.pumpWidget(const SizedBox());
     }, skip: !insideBuilt);
   }
+
+  testWidgets('the Format chips set the name\'s ending, and Render asks for that kind of file', (t) async {
+    final ws = await _pump(t);
+    wsAskRender.value++;
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('render-GIF')));
+    await t.pumpAndSettle();
+    expect(find.textContaining('.gif'), findsWidgets, reason: 'the name now ends .gif');
+    expect(find.textContaining('15 frames a second'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('render-HEVC')));
+    await t.pumpAndSettle();
+    var asked = '';
+    ws.onRender = () => asked = ws.renderTo ?? '';
+    await t.tap(find.text('Render').last);
+    await t.pumpAndSettle();
+    expect(asked, endsWith('.mov'), reason: 'HEVC: written as a .mov');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
 }

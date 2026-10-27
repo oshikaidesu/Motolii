@@ -13,7 +13,10 @@ static void move(Stage& s, const Mesh* m, const std::function<mat4f(int, const m
     }
 }
 
-// A film of the stage, 60 pictures a second, written by ffmpeg. Before each picture `pose` is told how far through
+// A film of the stage, 60 pictures a second, written by ffmpeg, its kind by the file's ending as ffmpeg takes one: .mp4
+// H.264; .mov HEVC by the Mac's own encoder (VideoToolbox, tagged hvc1 as QuickTime plays it); .gif by ffmpeg's palette
+// (palettegen, paletteuse: its own way to a good GIF) at 15 a second, as Alight Motion writes one; .png a picture each,
+// name_0001.png on (no sound in the last two). Before each picture `pose` is told how far through
 // the film it is (0 up to 1): where the end meets the start, the film loops. What is heard is the things' own sound
 // (Stage::sounding), cut, sped, gone round and mixed by ffmpeg as each thing says.
 static bool film(Stage& s, const char* path, int pictures, const std::function<void(float)>& pose) {
@@ -37,8 +40,14 @@ static bool film(Stage& s, const char* path, int pictures, const std::function<v
         each += how;
         all += "[a" + std::to_string(++n) + "]";
     }
-    const std::string sound = n ? files + " -filter_complex \"" + each + all + "amix=inputs=" + std::to_string(n) + ":normalize=0:duration=longest,alimiter[a]\" -map 0:v -map '[a]' -c:a aac -b:a 160k -t " + std::to_string(pictures / 60.0) : "";
-    const std::string cmd = "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgba -s " + std::to_string(s.w) + "x" + std::to_string(s.h) + " -r 60 -i -" + sound + " -c:v libx264 -crf 17 -g 60 -pix_fmt yuv420p -movflags +faststart " + quoted(path);
+    const std::string ending = std::filesystem::path(path).extension().string();
+    const bool silent = ending == ".gif" || ending == ".png";
+    const std::string sound = n && !silent ? files + " -filter_complex \"" + each + all + "amix=inputs=" + std::to_string(n) + ":normalize=0:duration=longest,alimiter[a]\" -map 0:v -map '[a]' -c:a aac -b:a 160k -t " + std::to_string(pictures / 60.0) : "";
+    const std::string way = ending == ".gif" ? " -an -vf \"fps=15,split[a][b];[a]palettegen[p];[b][p]paletteuse\" " + quoted(path)
+                            : ending == ".png" ? " -an -c:v png " + quoted(std::filesystem::path(path).replace_extension().string() + "_%04d.png")
+                            : ending == ".mov" ? " -c:v hevc_videotoolbox -q:v 65 -tag:v hvc1 -pix_fmt yuv420p -movflags +faststart " + quoted(path)
+                                               : " -c:v libx264 -crf 17 -g 60 -pix_fmt yuv420p -movflags +faststart " + quoted(path);
+    const std::string cmd = "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgba -s " + std::to_string(s.w) + "x" + std::to_string(s.h) + " -r 60 -i -" + sound + way;
     std::signal(SIGPIPE, SIG_IGN);   // (if ffmpeg gives up, writing to it fails and that is told, instead of this program ending with it)
     FILE* to = popen(cmd.c_str(), "w");
     if (!to) return false;

@@ -188,7 +188,7 @@ int motolii_redo(Motolii* m);
 double motolii_seconds(Motolii* m);                                /* how long the document runs */
 int motolii_at(Motolii* m, double seconds);                        /* the stage's moment: sent, not waited for (a later one replaces it); what was drawn, and when, motolii_drawn_at */
 int motolii_still(Motolii* m, const char* png);                    /* the stage as it is now, as a picture */
-int motolii_write(Motolii* m, const char* mp4);                    /* the whole document as a film, with its films' sound; other calls are answered meanwhile (from another thread), but the document is not changed and nothing is held until it is done */
+int motolii_write(Motolii* m, const char* mp4);                    /* the whole document as a film (.mp4 H.264, .mov HEVC, .gif, .png a picture each: kit_draw.h), with its films' sound; other calls are answered meanwhile (from another thread), but the document is not changed and nothing is held until it is done */
 int motolii_rate(Motolii* m);                                      /* how many pictures a second that film has (a shell that counts in frames counts in these) */
 char* motolii_picture(Motolii* m, int which, long since, long* version);   /* the window's pictures of the document (skin/BRIDGE.md), read without the document: 1 the document's (its own part and each thing's part newer than since), 2 the moment's; JSON, a copy freed with free(); *version: as of which */
 void motolii_tell(Motolii* m, void (*told)(int which));   /* the window's one listener, called (from the hand) when pictures are new: 1 the document's, 2 the moment's, 4 the kept pictures (motolii_kept), 8 an answer to a change asked later (motolii_answer), or'd */
