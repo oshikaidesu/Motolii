@@ -1,0 +1,6 @@
+どこでもバッファ by zopty
+licence: BSD-3-Clause
+from: https://raw.githubusercontent.com/zopty/DokodemoBuffer/refs/heads/main/%40%E3%81%A9%E3%81%93%E3%81%A7%E3%82%82%E3%83%90%E3%83%83%E3%83%95%E3%82%A1.anm2 (version v2.3.0 in the catalog on 2026-10-27)
+page: https://github.com/zopty/DokodemoBuffer
+catalog entry: zopty.DokodemoBuffer in https://github.com/Neosku/aviutl2-catalog-data
+Put here unchanged for Motolii (filament/aviutl_scripts).

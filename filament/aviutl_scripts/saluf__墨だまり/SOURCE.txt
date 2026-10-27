@@ -1,0 +1,6 @@
+墨だまり by saluf
+licence: MIT
+from: https://raw.githubusercontent.com/5qlufz-1536/AviUtl2_SumiDamari/refs/heads/main/%E5%A2%A8%E3%81%A0%E3%81%BE%E3%82%8A.anm2 (version v1.0 in the catalog on 2026-10-27)
+page: https://github.com/5qlufz-1536/AviUtl2_SumiDamari
+catalog entry: saluf.SumiDamari in https://github.com/Neosku/aviutl2-catalog-data
+Put here unchanged for Motolii (filament/aviutl_scripts).
