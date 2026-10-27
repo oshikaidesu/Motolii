@@ -26,6 +26,7 @@ const _tools = [
   (G.ellipse, 'Ellipse', 'E'),
   (G.pen, 'Pen', 'P'),
   (G.text, 'Text', 'T'),
+  (G.brush, 'Brush', 'B'),   // (a path drawn by hand, Alight Motion's freehand; B as Photoshop's and After Effects' brush)
 ];
 
 class _Stage extends StatefulWidget {
@@ -106,7 +107,7 @@ class _StageState extends State<_Stage> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      WsTwoFingers(onPinchStep: (step) => setState(() => _zoom = (_zoom + step).clamp(0, stageZooms.length - 1)), child: StageView(scene: scene, selected: ws.selected, zoom: _zoom, grid: _grid, safe: _safe, cursor: _cursor, onPoke: _focus.requestFocus, texture: ws.stageTexture, make: const [null, null, 'rect', 'circle', 'pen', 'text'][_tool], axis: _tool == 1 ? _opts['move.axis'] ?? 0 : 0, fromCentre: (_opts['ell.from'] ?? 0) == 1, snap: _tool < 2 && (_opts[_tool == 0 ? 'sel.snap' : 'move.snap'] ?? 1) == 1, pivots: (_opts['sel.pivot'] ?? 0) == 1, group: _tool == 0 && (_opts['sel.level'] ?? 0) == 1, mask: (_opts[_tool == 2 ? 'rect.mode' : 'pen.mode'] ?? 0) == 1 && (_tool == 2 || _tool == 4))), // (joined: the tool in hand draws a thing of the document)
+                      WsTwoFingers(onPinchStep: (step) => setState(() => _zoom = (_zoom + step).clamp(0, stageZooms.length - 1)), child: StageView(scene: scene, selected: ws.selected, zoom: _zoom, grid: _grid, safe: _safe, cursor: _cursor, onPoke: _focus.requestFocus, texture: ws.stageTexture, make: const [null, null, 'rect', 'circle', 'pen', 'text', 'brush'][_tool], brushSize: const [8.0, 16.0, 32.0][_opts['brush.size'] ?? 1], axis: _tool == 1 ? _opts['move.axis'] ?? 0 : 0, fromCentre: (_opts['ell.from'] ?? 0) == 1, snap: _tool < 2 && (_opts[_tool == 0 ? 'sel.snap' : 'move.snap'] ?? 1) == 1, pivots: (_opts['sel.pivot'] ?? 0) == 1, group: _tool == 0 && (_opts['sel.level'] ?? 0) == 1, mask: (_opts[_tool == 2 ? 'rect.mode' : 'pen.mode'] ?? 0) == 1 && (_tool == 2 || _tool == 4))), // (joined: the tool in hand draws a thing of the document)
                     ],
                   ),
                 ),
@@ -343,7 +344,7 @@ class _OptionsStrip extends StatelessWidget {
   final ArtScene scene;
   final WsLayer? layer;
 
-  Widget _seg(String key, List<String> items) => _Seg(items: items, index: opts[key] ?? 0, onChanged: (i) => onOpt(key, i));
+  Widget _seg(String key, List<String> items, {int initial = 0}) => _Seg(items: items, index: opts[key] ?? initial, onChanged: (i) => onOpt(key, i));
   Widget _flag(String key, String label, {bool initial = false, G? glyph}) {
     final on = (opts[key] ?? (initial ? 1 : 0)) == 1;
     return _Toggle(label: label, on: on, glyph: glyph, icon: glyph == null ? _Icon.safe : null, onTap: () => onOpt(key, on ? 0 : 1));
@@ -360,6 +361,7 @@ class _OptionsStrip extends StatelessWidget {
     2 => [_Field('Fill', swatch: p.fill ?? WsT.body), _Field('Stroke', value: p.width), _Field('Radius', value: p.round), _seg('rect.mode', const ['Shape', 'Mask'])],
     3 => [_Field('Fill', swatch: p.fill ?? WsT.body), _Field('Stroke', value: p.width), _seg('ell.from', const ['Corner', 'Centre'])],
     4 => [_seg('pen.mode', const ['Path', 'Mask']), _flag('pen.close', 'Close path', initial: true)],
+    6 => [_Field('Fill', swatch: p.fill ?? WsT.body), _seg('brush.size', const ['Thin', 'Medium', 'Thick'], initial: 1)],
     _ => [
       _Field('Font', value: p.font),
       _Field('Size', value: p.size),

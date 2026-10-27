@@ -1,6 +1,7 @@
 // The stage's viewport: the composition centred on a dark surround, rulers and guides, overlays, the selection, the zoom HUD and the navigator.
 // contract: paints only when the scene, the selection, the hover or the view changes; the pointer readout repaints the rulers alone.
 import 'dart:math' as math;
+import 'dart:ui' show PointMode;
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart';
@@ -14,6 +15,7 @@ import 'two_fingers.dart';
 import '../motolii.dart' show Motolii, MotoliiDocument, MotoliiMoment, MotoliiWrites, MotoliiQuestions, MotoliiShelves, MotoliiWatch;
 import '../sets/panels/timeline_parts_parts.dart' show TpGlyph, TpGlyphView;
 import 'relate.dart';
+import 'package:perfect_freehand/perfect_freehand.dart' show getStroke, PointVector, StrokeOptions;
 import 'ws.dart';
 part 'stage_view_2.dart';
 part 'stage_view_3.dart';
@@ -76,7 +78,11 @@ class StageView extends StatefulWidget {
     this.pivots = false,
     this.group = false,
     this.mask = false,
+    this.brushSize = 16,
   });
+
+  /// Joined: how wide the Brush draws, in points of the picture (perfect-freehand's size).
+  final double brushSize;
 
   /// Joined: the Move tool's way (0 free, 1 along x only, 2 along y only), and whether an ellipse is drawn out from its middle.
   final int axis;
@@ -87,7 +93,7 @@ class StageView extends StatefulWidget {
   /// drawn cuts the picked thing (mask: it lies just behind it, and that one is clipped by it).
   final bool snap, pivots, group, mask;
 
-  /// Joined: what the tool in hand makes where the hand is drawn across the stage (rect, circle, line, text; null:
+  /// Joined: what the tool in hand makes where the hand is drawn across the stage (rect, circle, line, text, brush; null:
   /// the hand takes hold of things).
   final String? make;
 

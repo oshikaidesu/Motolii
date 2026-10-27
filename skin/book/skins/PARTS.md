@@ -26,6 +26,7 @@ theme.xml に `<Parts Value="フォルダ"/>` を書くと、そのフォルダ�
 | `glyph.rect` `glyph.ellipse` `glyph.circle` `glyph.shape` | 四角・楕円・円・形を描く |
 | `glyph.pen` | ペン |
 | `glyph.text` | 文字 |
+| `glyph.brush` | ブラシ（手描き） |
 | `glyph.image` `glyph.camera` `glyph.grid` | 画像・カメラ・格子 |
 
 ## タイムライン（tp.）：タイムラインの上の帯と、層の行

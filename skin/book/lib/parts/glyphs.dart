@@ -6,7 +6,7 @@ import 'skin_parts.dart';
 
 import '../tokens.dart';
 
-enum G { select, move, rect, ellipse, pen, text, image, camera, repeater, grid, circle, spiral, shape, effect, media }
+enum G { select, move, rect, ellipse, pen, text, brush, image, camera, repeater, grid, circle, spiral, shape, effect, media }
 
 class Glyph extends StatelessWidget {
   const Glyph(this.kind, {super.key, this.size = 18, this.color});
@@ -45,6 +45,8 @@ class _GlyphPainter extends CustomPainter {
         c.drawPath(Path()..moveTo(w * .5, w * .1)..lineTo(w * .78, w * .46)..lineTo(w * .56, w * .9)..lineTo(w * .44, w * .9)..lineTo(w * .22, w * .46)..close(), st);
         c.drawCircle(p(.5, .52), w * .06, fl);
         c.drawLine(p(.5, .58), p(.5, .9), st);
+      case G.brush:   // (a stroke drawn by hand, thick in the middle)
+        c.drawPath(Path()..moveTo(w * .16, w * .74)..cubicTo(w * .3, w * .3, w * .46, w * .86, w * .6, w * .46)..quadraticBezierTo(w * .7, w * .2, w * .84, w * .26), st..strokeWidth = st.strokeWidth * 1.6..strokeCap = StrokeCap.round);
       case G.text:
         c.drawLine(p(.22, .2), p(.78, .2), st);
         c.drawLine(p(.5, .2), p(.5, .84), st);

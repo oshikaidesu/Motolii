@@ -79,6 +79,33 @@ static int doc_pen(Doc& d, int thing, double x, double y, double hx, double hy) 
     if (!thing) d.act_ok = false;
     return doc_acted(d) ? thing : 0;
 }
+// A path drawn by hand: the outline perfect-freehand makes round the hand's way (MIT, Steve Ruiz; its Dart port, Adil
+// Hanney: the window's), in points of the picture, made a closed path of its own, each point to the next by a quadratic
+// curve through their middle, as its example draws the outline. One step; the answer is the new shape.
+static int doc_freehand(Doc& d, const char* points) {
+    std::vector<double> xy;
+    std::istringstream said(points);
+    for (double v; said >> v;) xy.push_back(v);
+    if (xy.size() < 6) return d.trouble = "a stroke of fewer than three points", 0;
+    doc_act(d);
+    int thing = doc_add(d, "shape", "path");
+    const DocPlane plane(d, thing, d.stage->now);
+    if (thing && !plane.seen) d.trouble = "its plane is seen edge on", thing = 0;
+    if (thing) {
+        std::string path;
+        char one[160];
+        const size_t n = xy.size() / 2;
+        for (size_t i = 0; i < n; ++i) {
+            const math::double2 p = plane.own(xy[2 * i], xy[2 * i + 1]), q = plane.own(xy[2 * ((i + 1) % n)], xy[2 * ((i + 1) % n) + 1]);
+            if (!i) std::snprintf(one, sizeof one, "M%.4f %.4f", p.x, p.y), path += one;
+            std::snprintf(one, sizeof one, " Q%.4f %.4f %.4f %.4f", p.x, p.y, (p.x + q.x) / 2, (p.y + q.y) / 2);
+            path += one;
+        }
+        if (!doc_say(d, thing, "path", (path + " Z").c_str())) thing = 0;
+    }
+    if (!thing) d.act_ok = false;
+    return doc_acted(d) ? thing : 0;
+}
 // What of a thing is seen at a moment: the upright box of its outline on the picture (its own points where they are at
 // hand, else its box's corners), left, top, right, bottom in points of the picture. false: it is not shown.
 static bool doc_seen_box(Doc& d, int thing, double now, double* box) {

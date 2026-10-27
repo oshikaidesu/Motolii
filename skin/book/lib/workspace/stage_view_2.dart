@@ -282,7 +282,27 @@ class _StageViewState extends State<StageView> implements StageHandles {
     }
   }
 
+  // (the Brush's way so far, in points of the window; its outline perfect-freehand's (MIT, Steve Ruiz; Dart port, Adil
+  //  Hanney) in points of the picture, given to the inside as a path when let go: doc_freehand)
+  List<Offset>? _brush;
+  void _brushLetGo(_View v) {
+    final way = _brush, ws = WsScope.read(context), m = ws.inside;
+    setState(() => _brush = null);
+    if (way == null || way.length < 2 || m == null) return;
+    final outline = getStroke([for (final p in way) PointVector.fromOffset(offset: _doc(v, p))], options: StrokeOptions(size: widget.brushSize, simulatePressure: true, isComplete: true));
+    if (outline.length < 3) return;
+    m.later('together', number: 1);
+    var made = 0;
+    ws.after(m.later('freehand', word: [for (final p in outline) '${p.dx} ${p.dy}'].join(' ')), null, (t) => made = t);
+    m.later('say', thing: -1, name: 'fill', word: ws.ink.isEmpty ? 'ffffff' : ws.ink);   // (an outline with no fill shows nothing: white, as a drawing app's brush begins, when no ink is chosen)
+    ws.after(m.later('together'), (done, _) => done && made > 0 ? ws.select('$made') : null);
+  }
+
   void _hold(_View v, Offset local) {
+    if (widget.make == 'brush') {
+      setState(() => _brush = [local]);
+      return;
+    }
     if (widget.make != null) {
       setState(() => _drawFrom = local);
       return;
@@ -393,6 +413,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
             onTapUp: (d) {
               widget.onPoke?.call();
               if (widget.make == 'pen') return _pen(v, d.localPosition, d.localPosition); // (a tap: a corner)
+              if (widget.make == 'brush') return; // (a stroke is drawn, not tapped)
               if (widget.make != null) return _draw(v, _drawFrom = d.localPosition); // (only come down: one as it comes, there)
               final hit = _hit(v, d.localPosition), ws = WsScope.read(context);
               if (HardwareKeyboard.instance.isShiftPressed || HardwareKeyboard.instance.isMetaPressed) return hit == null ? null : wsPickAlso(ws, hit); // (Shift or Cmd: one more picked together, or one less; on nothing, nothing lost)
@@ -400,21 +421,25 @@ class _StageViewState extends State<StageView> implements StageHandles {
             },
             dragStartBehavior: DragStartBehavior.down, // (a thing is held where the hand came down, not where it had got to when the drag was known for one)
             onPanStart: (d) => _hold(v, _last = d.localPosition),
-            onPanUpdate: (d) => _lasso != null
+            onPanUpdate: (d) => _brush != null
+                ? setState(() => _brush!.add(d.localPosition))
+                : _lasso != null
                 ? setState(() => _lasso!.add(d.localPosition))
                 : _drawFrom != null
                 ? setState(() => _last = d.localPosition)
                 : _pulling != null
                 ? (widget.cursor.value = v.toComp(_last = d.localPosition))
                 : _carry(v, _last = d.localPosition),
-            onPanEnd: (_) => _lasso != null
+            onPanEnd: (_) => _brush != null
+                ? _brushLetGo(v)
+                : _lasso != null
                 ? _lassoLetGo(v)
                 : _drawFrom != null
                 ? (widget.make == 'pen' ? _pen(v, _drawFrom!, _last ?? _drawFrom!) : _draw(v, _last ?? _drawFrom!))
                 : _pulling != null
                 ? _pullLetGo(v, _last!)
                 : _letGo(),
-            onPanCancel: () => _lasso != null ? setState(() => _lasso = null) : _drawFrom != null ? setState(() => _drawFrom = null) : _pulling != null ? _pulling = null : _letGo(keep: false),
+            onPanCancel: () => _brush != null ? setState(() => _brush = null) : _lasso != null ? setState(() => _lasso = null) : _drawFrom != null ? setState(() => _drawFrom = null) : _pulling != null ? _pulling = null : _letGo(keep: false),
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -452,7 +477,8 @@ class _StageViewState extends State<StageView> implements StageHandles {
                     ),
                   ),
                 IgnorePointer(child: CustomPaint(painter: _RulerPainter(v, widget.cursor, scene))),
-                _RelationMarks(scene: scene, v: v, lasso: _lasso), // (drawn round, the things picked together, the relation picked: its shape, its handles, what it moves)
+                _RelationMarks(scene: scene, v: v, lasso: _lasso),
+                if (_brush case final way?) IgnorePointer(child: CustomPaint(painter: _BrushWay(way, WsT.accent))), // (the way drawn so far, thin: the stroke itself is the inside's once let go) // (drawn round, the things picked together, the relation picked: its shape, its handles, what it moves)
                 Positioned(
                   left: _V.ruler + _V.pad,
                   bottom: _V.pad,
@@ -472,4 +498,17 @@ class _StageViewState extends State<StageView> implements StageHandles {
       );
     },
   );
+}
+
+class _BrushWay extends CustomPainter {
+  const _BrushWay(this.way, this.ink);
+  final List<Offset> way;
+  final Color ink;
+  @override
+  void paint(Canvas c, Size s) => c.drawPoints(PointMode.polygon, way, Paint()
+    ..color = ink
+    ..strokeWidth = 2
+    ..strokeCap = StrokeCap.round);
+  @override
+  bool shouldRepaint(_BrushWay o) => true;
 }

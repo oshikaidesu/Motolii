@@ -437,6 +437,36 @@ void _tests2() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('the Brush draws a path by hand: perfect-freehand\'s outline round the stroke, a closed path in the ink', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    ws
+      ..reread()
+      ..select(null);
+    await t.pumpAndSettle();
+    final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp'))), before = m.things.length;
+    await t.tap(find.byKey(const ValueKey('ws-tool-6')));
+    await t.pumpAndSettle();
+    final g = await t.startGesture(stage.center - Offset(stage.width * .2, 0));
+    for (var i = 0; i < 20; i++) {   // (a wave across the stage)
+      await g.moveBy(Offset(stage.width * .02, (i % 10 < 5 ? 1 : -1) * stage.height * .02));
+      await t.pump();
+    }
+    await g.up();
+    await settled(t, ws);
+    for (var i = 0; i < 200 && ws.selected == null; i++) {   // (made by the inside, picked once it is there)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    final made = int.parse(ws.selected!);
+    expect(m.things.length, before + 1, reason: m.trouble);
+    expect([m.word(made, 'kind'), m.word(made, 'shape')], ['shape', 'path']);
+    final path = m.word(made, 'path');
+    expect(path.startsWith('M') && path.contains(' Q') && path.endsWith(' Z'), isTrue, reason: 'one closed outline of curves: ${path.length > 80 ? path.substring(0, 80) : path}');
+    expect(m.word(made, 'fill'), ws.ink.isEmpty ? 'ffffff' : ws.ink, reason: 'drawn in the ink, white with none');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('the inks and the strip mean the document: a colour filled with nothing picked is what is drawn next; the Move tool along X keeps y', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     ws

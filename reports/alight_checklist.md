@@ -198,7 +198,7 @@
 
 - [ ] 図形・文字・画像・動画・音のレイヤー（有る）：いま film・picture・text・shape
 - [ ] ベクター描画（ペン）（有る）：いま ペン（Skia でパスを読む）
-- [ ] **手描き（フリーハンド）**（無い）
+- [x] **手描き（フリーハンド）**（無い→有る）：段の道具の Brush（B、Photoshop・After Effects のブラシのキー）。なぞった道を perfect-freehand（MIT、Steve Ruiz、Dart 版 Adil Hanney）が輪郭にし、閉じたパスの形 1 つに（中点を通る 2 次曲線、perfect-freehand の見本どおり）。太さは Thin・Medium・Thick、色はインク（無ければ白）。1 回で取り消せる — 済（10/28）：窓で Brush でなぞり、文書から読んで確かめた（`skin/book/test/workspace_joined_test_2.dart`）
 - [ ] グループ（一部）：いま 関係の group（並びだけ）
 - [ ] **Elements**（使い回す部品、元とつながる、文字だけ差し替え、Intro・Outro と Freeze・Stretch・Loop の伸ばし方）（無い）
 - [ ] ヌル（有る）：いま 形の null

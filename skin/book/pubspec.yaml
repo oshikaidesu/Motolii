@@ -17,6 +17,7 @@ dependencies:
   flutter_svg: ^2.3.0
   material_color_utilities: any   # (Google's HCT colours, already in Flutter: a skin's greys made from its Background and Foreground)
   naked_ui: ^1.2.1
+  perfect_freehand: ^2.5.2+1
   vector_math: ^2.4.3
   widgetbook: ^3.25.0
 
