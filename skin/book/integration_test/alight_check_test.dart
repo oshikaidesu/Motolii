@@ -108,7 +108,14 @@ const _rowsB = <(String, String, Map<String, double>)>[
   ('Turbulent Displace', 'Noise Displace', {'displaceX': .05}),
   ('Wave Warp', 'Sine Warp Tile', {}),
 ];
-const _rows = _section == 'D' ? _rowsD : _section == 'D2' ? _rowsD2 : _section == 'B' ? _rowsB : _rowsA;
+// (section E: the rows reports/alight_sources_E.md finds a bundled ISF-Files file for, put on as it says)
+const _rowsE = <(String, String, Map<String, double>)>[
+  ('Bend', 'Circle Wrap Distortion', {}),
+  ('Dark Glow', 'Gloom', {'intensity': .6}),
+  ('Hexagon Array', 'Hexagonalize', {'progress': .5}),
+  ('Iridescence', 'Sine Warp Gradient', {}),
+];
+final _rows = switch (_section) { 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

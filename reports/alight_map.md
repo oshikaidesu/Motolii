@@ -11,9 +11,9 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | | 数 |
 |---|---|
 | Alight Motion の効果 | 169 |
-| Motolii に有る | **69**（41%） |
-| 一部 | **39**（23%） |
-| 無い | **61**（36%） |
+| Motolii に有る | **71**（42%） |
+| 一部 | **38**（22%） |
+| 無い | **60**（36%） |
 | 無いもののうち、手元の ISF-Files（`research_notes/isf/ISF-Files`、327 本、MIT）に近いものがある | 36 |
 | 一部のもののうち、同じく ISF-Files に近いものがある | 31 |
 
@@ -32,7 +32,7 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [360º Reorient Sphere](https://guide.alightmotion.com/effects/360-reorient-sphere) | Reorients a 360º photo or video in equirectangular format. | 無い |  |  |
 | [360º Viewer](https://guide.alightmotion.com/effects/360-viewer) | Projects a 360º photo or video onto a flat surface, as if viewed from within the 360º sphere. | 一部 | 部屋（environment）に正距円筒の絵を貼り、environment_rotate で回す。平らな物の効果としては無い |  |
 | [Auto-Shake](https://guide.alightmotion.com/effects/auto-shake) | Moves the layer randomly over time within specified parameters. | 有る | ふるまい noise を x・y に | Shake |
-| [Bend](https://guide.alightmotion.com/effects/bend) | Bends the layer along a circular arc. | 一部 | 形の bend（shape だけ）。写真・動画・文字には無い |  |
+| [Bend](https://guide.alightmotion.com/effects/bend) | Bends the layer along a circular arc. | 有る | 物の fx に ISF の Circle Wrap Distortion.fs（10/28、窓で確かめた） |  |
 | [Blink](https://guide.alightmotion.com/effects/blink) | Automatically adjusts the opacity of the layer, alternating between its normal value and zero over time. | 一部 | ふるまい oscillator を opacity に＋間 Steps |  |
 | [Block Dissolve](https://guide.alightmotion.com/effects/block-dissolve) | Randomly removes grid-aligned rectangular pieces from the layer by making them transparent. Keyframe animation can be applied to remove progressively more and more rectangles over time. | 有る | 物の fx に ISF の Random Squares Mask.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Random Squares Mask |
 | [Block Noise](https://guide.alightmotion.com/effects/block-noise) | Multiplies randomly generated rectangular blocks of noise with the existing colors of opaque parts of the layer. | 有る | 物の fx に ISF の JPEG Block Corruption.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | JPEG Block Corruption |
@@ -89,7 +89,7 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Halftone Dots](https://guide.alightmotion.com/effects/halftone-dots) | Replaces continuous tones in the layer with a pattern of monochrome dots of varying sizes, similar to the process used in newspaper or comic book printing. | 有る | 効果 halftone・dot_screen | Dot Screen |
 | [Halftone Lines](https://guide.alightmotion.com/effects/halftone-lines) | Replaces continuous tones in the layer with a pattern of monochrome lines of varying thickness, a variation of the process used in newspaper or comic book printing. | 有る | 物の fx に ISF の Line Screen.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Line Screen |
 | [Heart](https://guide.alightmotion.com/effects/heart) | Renders a faux-3D heart using the layer as a surface texture. | 無い |  |  |
-| [Hexagon Array](https://guide.alightmotion.com/effects/hexagon-array) | Covers opaque parts of the layer in an array of hexagons. | 無い |  |  |
+| [Hexagon Array](https://guide.alightmotion.com/effects/hexagon-array) | Covers opaque parts of the layer in an array of hexagons. | 有る | 物の fx に ISF の Hexagonalize.fs（10/28、窓で確かめた） |  |
 | [Hexagon Tile Rotate](https://guide.alightmotion.com/effects/hexagon-tile-rotate) | Divides the layer into a grid of hexagonal tiles and rotates the pixels in each tile independently. | 無い |  |  |
 | [Hexagon Tile Shift](https://guide.alightmotion.com/effects/hexagon-tile-shift) | Divides the layer into a grid of hexagonal tiles and shifts the contents of each tile in a random direction. | 無い |  |  |
 | [Hexagon Tiling](https://guide.alightmotion.com/effects/hexagon-tiling) | Repeats the layer in a pattern of hexagonal tiles, filling the screen. | 無い |  | Hexagonalize |

@@ -109,7 +109,7 @@
 
 - [ ] **360º Reorient Sphere**（無い）：Reorients a 360º photo or video in equirectangular format.
 - [ ] **360º Viewer**（一部）：Projects a 360º photo or video onto a flat surface, as if viewed from within the 360º sphere. — いま：部屋（environment）に正距円筒の絵を貼り、environment_rotate で回す。平らな物の効果としては無い
-- [ ] **Bend**（一部）：Bends the layer along a circular arc. — いま：形の bend（shape だけ）。写真・動画・文字には無い
+- [x] **Bend**（一部）：Bends the layer along a circular arc. — いま：形の bend（shape だけ）。写真・動画・文字には無い — 済（10/28）：物の fx に `filament/effects/Circle Wrap Distortion.fs`（Vidvox ISF-Files、MIT、alight_sources_E.md の借りる先）、そのまま。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=E）
 - [ ] **Blink**（一部）：Automatically adjusts the opacity of the layer, alternating between its normal value and zero over time. — いま：ふるまい oscillator を opacity に＋間 Steps
 - [ ] **Contour Gradient**（無い）：Renders a gradient around the contours of the opaque parts of the layer.
 - [ ] **Contour Lines**（一部）：Draws one or more lines around the contours of the opaque parts of the layer. — いま：形・文字の stroke（輪郭 1 本）
@@ -122,7 +122,7 @@
 - [ ] **Feather**（一部）：Softens the edges of the opaque part of the layer by blurring the alpha channel. — いま：クリップの clip_feather（切り抜きの縁だけ）
 - [ ] **Fill Behind**（無い）：Fills the area behind the layer with a modified copy of the layer, with optional adjustments such as blur, saturation, tint, and brightness, providing a convenient way to quickly adapt a photo or vide
 - [ ] **Glow Scan**（無い）：Renders a blur combined with a smooth glow within a region of the layer defined by a luminance band.
-- [ ] **Hexagon Array**（無い）：Covers opaque parts of the layer in an array of hexagons.
+- [x] **Hexagon Array**（無い）：Covers opaque parts of the layer in an array of hexagons. — 済（10/28）：物の fx に `filament/effects/Hexagonalize.fs`（Vidvox ISF-Files、MIT、alight_sources_E.md の借りる先）、progress 0.5。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=E）
 - [ ] **Hexagon Tile Rotate**（無い）：Divides the layer into a grid of hexagonal tiles and rotates the pixels in each tile independently.
 - [ ] **Hexagon Tile Shift**（無い）：Divides the layer into a grid of hexagonal tiles and shifts the contents of each tile in a random direction.
 - [ ] **Inner Blur**（無い）：Blurs the opaque parts of the layer without blurring the opacity.
