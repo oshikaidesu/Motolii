@@ -59,6 +59,6 @@ GitHub の Actions は、台帳の確かめを毎回走らせます（`.github/w
 ## 知っている穴
 
 - 動くのは macOS（Apple Silicon）だけ。
-- 窓の試験（`flutter test`）は、まとめて走らせると落ちる物がある（2026-10-27 に 150 本中 125 本が通る）。1 本ずつなら通る物が多く、それだけで落ちるのは 3 本：Parent（親を付けた後の位置）、anime.js の庫（10/26 に anime.js の見本を外した後、試験が古いまま）、Posterize と Boxinator のつまみ。直すのは手を付けやすい所の 1 つ。CI ではこの段は知らせるだけ。
+- 窓の試験（`flutter test`）は、まとめて走らせると落ちる物がある（2026-10-27 に、この Mac で 150 本中 125 本、CI の Mac で 126 本中 117 本が通る）。1 本ずつなら通る物が多く、それだけで落ちるのは 3 本：Parent（親を付けた後の位置）、anime.js の庫（10/26 に anime.js の見本を外した後、試験が古いまま）、Posterize と Boxinator のつまみ。直すのは手を付けやすい所の 1 つ。CI ではこの段は知らせるだけ。
 - 中身（`libmotolii.dylib`）は Homebrew の GStreamer などを読むので、作った `.app` はそのままでは他の Mac で動きません。
 - `filament/` の直下には、今の中身と前の試しのファイルが並んでいます（前の試しのスクリプトは `filament/sdk.sh` が取る組み立て済みの Filament を使う）。

@@ -1,5 +1,7 @@
 # Motolii
 
+[![build](https://github.com/oshikaidesu/motolii/actions/workflows/build.yml/badge.svg)](https://github.com/oshikaidesu/motolii/actions/workflows/build.yml) [![ledger](https://github.com/oshikaidesu/motolii/actions/workflows/assets.yml/badge.svg)](https://github.com/oshikaidesu/motolii/actions/workflows/assets.yml)
+
 **ネットで見つけたかっこいい表現を、自分の動画にすぐ使う。** 新しい表現のために、開発者の対応を待たない。
 
 Motolii は MV（絵が主役のモーショングラフィックス）を作る、macOS のアプリです。ネットで配られているシェーダーの効果（ISF・WGSL）や AviUtl2 のスクリプトを、**ファイルを置くだけで**自分の動画に掛けられます。2D と 3D を一つの画面の中で扱います。
@@ -36,6 +38,8 @@ Motolii は MV（絵が主役のモーショングラフィックス）を作る
 | ネットの TSL（three.js のシェーダー言語）の表現 | three.js 自身の変換器で WGSL に | WGSL まで。棚にはまだ無い |
 
 ほか：キーフレームとイーズ（anime.js のイーズもそのまま使える）、物理（Jolt）、ガラスの屈折、mp4 への書き出し。何が在ってどこまで確かめたかの全部は、作者の台帳 [`ASSETS.md`](ASSETS.md) にあります。
+
+**組み立ての確かめ**：GitHub の Apple Silicon の Mac（macos-15）で、この README の手順どおりに新しく組み、エンジンの試験（`filament/check/all.sh`）と画面の analyze が通る（上の build の印。2026-10-27 に緑）。画面の試験は 126 本中 117 本が通り、8 本は落ちる（[`CONTRIBUTING.md`](CONTRIBUTING.md) の「知っている穴」）。
 
 **速さ**（M4、上の 8 秒の作例、1080×1920）：1 コマ約 4 ms で、毎秒 240 コマでも落ちない。8 秒の書き出しは約 5 秒（ffmpeg の符号化を含む）。測り直すには、作例を作ってから `printf 'time 240\n' | filament/edit.sh ~/Movies/Motolii/mv.motolii`。
 

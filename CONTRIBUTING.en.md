@@ -58,6 +58,6 @@ GitHub Actions runs the ledger check on every push and pull request (`.github/wo
 ## Known gaps
 
 - macOS on Apple silicon only.
-- The window's tests (`flutter test`) have failures when run together (125 of 150 pass on 2026-10-27). Most pass one at a time; three fail alone: Parent (the position after a parent is given), the anime.js shelf (its samples were removed on 10/26 and the test was not updated), and the Posterize and Boxinator knobs. Fixing them is a good first task. In CI that step only reports.
+- The window's tests (`flutter test`) have failures when run together (on 2026-10-27, 125 of 150 pass on the author's Mac and 117 of 126 on the CI Mac). Most pass one at a time; three fail alone: Parent (the position after a parent is given), the anime.js shelf (its samples were removed on 10/26 and the test was not updated), and the Posterize and Boxinator knobs. Fixing them is a good first task. In CI that step only reports.
 - The engine (`libmotolii.dylib`) loads Homebrew's GStreamer and others, so a built `.app` does not run on another Mac as it is.
 - `filament/` mixes the current engine with earlier probes at one level; [`filament/README.md`](filament/README.md) lists which files the current build uses.

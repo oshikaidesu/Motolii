@@ -1,5 +1,7 @@
 # Motolii
 
+[![build](https://github.com/oshikaidesu/motolii/actions/workflows/build.yml/badge.svg)](https://github.com/oshikaidesu/motolii/actions/workflows/build.yml) [![ledger](https://github.com/oshikaidesu/motolii/actions/workflows/assets.yml/badge.svg)](https://github.com/oshikaidesu/motolii/actions/workflows/assets.yml)
+
 **Use a cool look you found on the net in your own video, right away — without waiting for a developer.**
 
 Motolii is a macOS app for making music videos (picture-led motion graphics). Shader effects that people share online (ISF, WGSL) and AviUtl2 scripts work in your video **by dropping the file in**. 2D and 3D share one composition.
@@ -36,6 +38,8 @@ Motolii is a macOS app for making music videos (picture-led motion graphics). Sh
 | Looks written in TSL (three.js's shading language) | three.js's own compiler to WGSL | Up to WGSL; not on the shelves yet |
 
 Also: keyframes and easing (anime.js eases work as they are), physics (Jolt), refracting glass, writing mp4. Everything that exists and how far it was checked is in the author's ledger [`ASSETS.md`](ASSETS.md) (Japanese).
+
+**Build check**: on a GitHub Apple silicon Mac (macos-15) it is built fresh exactly as this README says, and the engine's checks (`filament/check/all.sh`) and the UI's analyzer pass (the build badge above; green on 2026-10-27). Of the UI's tests, 117 of 126 pass there and 8 fail ([`CONTRIBUTING.en.md`](CONTRIBUTING.en.md), Known gaps).
 
 **Speed** (M4, the 8-second example above, 1080×1920): about 4 ms a frame, no frame dropped even at 240 a second; writing the 8 seconds takes about 5 seconds, ffmpeg's encoding included. To measure again, make the example, then `printf 'time 240\n' | filament/edit.sh ~/Movies/Motolii/mv.motolii`.
 
