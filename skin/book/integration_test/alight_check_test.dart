@@ -91,7 +91,17 @@ const _rowsD = <(String, String, Map<String, double>)>[
   ('Wipe', 'Wipe Left', {'progress': .5}),
   ('Zoom Blur', 'Zoom', {}),
 ];
-const _rows = _section == 'D' ? _rowsD : _rowsA;
+// (section D again, the rows that show nothing as they come: a knob set as the sentence says; the sample's sky is
+//  about 0.55 0.75 0.95, its balloon's red about 0.85 0.1 0.2)
+const _rowsD2 = <(String, String, Map<String, double>)>[
+  ('Channel Remap (RGB)', 'RGBA Swap', {'redInput': 2, 'blueInput': 0}),
+  ('Chroma Key', 'Chroma Mask', {'mask_color_x': .55, 'mask_color_y': .75, 'mask_color_z': .95, 'hueTol': .15, 'satTol': .4, 'valTol': .4}),
+  ('Replace Color', 'Color Replacement', {'mask_color_x': .55, 'mask_color_y': .75, 'mask_color_z': .95, 'target_color_x': .9, 'target_color_y': .2, 'target_color_z': .2, 'hueTol': .15, 'satTol': .4, 'valTol': .4}),
+  ('Spot Color', 'Chroma Desaturation Mask', {'mask_color_x': .85, 'mask_color_y': .1, 'mask_color_z': .2, 'hueTol': .1, 'satTol': .5, 'valTol': .5}),
+  ('Sharpen', 'Sharpen RGB', {'intensityR': 5, 'intensityG': 5, 'intensityB': 5}),
+  ('Unsharp Mask', 'Unsharp Mask', {'intensity': 5}),
+];
+const _rows = _section == 'D' ? _rowsD : _section == 'D2' ? _rowsD2 : _rowsA;
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

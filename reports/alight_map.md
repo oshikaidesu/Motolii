@@ -11,9 +11,9 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | | 数 |
 |---|---|
 | Alight Motion の効果 | 169 |
-| Motolii に有る | **63**（37%） |
+| Motolii に有る | **66**（39%） |
 | 一部 | **42**（25%） |
-| 無い | **64**（38%） |
+| 無い | **61**（36%） |
 | 無いもののうち、手元の ISF-Files（`research_notes/isf/ISF-Files`、327 本、MIT）に近いものがある | 36 |
 | 一部のもののうち、同じく ISF-Files に近いものがある | 31 |
 
@@ -41,7 +41,7 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Brightness / Contrast](https://guide.alightmotion.com/effects/brightness-contrast) | Adjusts the brightness or contrast of the layer. | 有る | 物の fx に ISF の Color Controls.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Color Controls |
 | [Bump Map](https://guide.alightmotion.com/effects/bump-map) | Uses a height map to model bumps or perturbations in the surface of the layer, then applies simulated lighting and shading. | 有る | 物の fx に ISF の Emboss.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Emboss |
 | [Channel Remap (HSV)](https://guide.alightmotion.com/effects/channel-remap-hsv) | Remaps the hue, saturation, value, and alpha channels in the layer. | 有る | 物の fx に ISF の RGBtoHSV.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | RGBtoHSV / HSVtoRGB |
-| [Channel Remap (RGB)](https://guide.alightmotion.com/effects/channel-remap-rgb) | Remaps the red, green, blue, and alpha channels in the layer. | 無い |  | RGBA Swap |
+| [Channel Remap (RGB)](https://guide.alightmotion.com/effects/channel-remap-rgb) | Remaps the red, green, blue, and alpha channels in the layer. | 有る | 物の fx に ISF の RGBA Swap.fs、赤と青の入れ替え（10/28、窓で確かめた） | RGBA Swap |
 | [Checker](https://guide.alightmotion.com/effects/checker) | Renders a checkerboard pattern in the opaque parts of the layer. | 有る | 物の fx に ISF の Checkerboard.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Checkerboard |
 | [Chroma Key](https://guide.alightmotion.com/effects/chroma-key) | Keys out all pixels similar to a particular color, making those parts of the layer transparent. Useful for greenscreening or bluescreening. | 一部 | 動画の keyed（四隅の色を抜く。色は選べない） | Chroma Mask |
 | [Circular Ripple](https://guide.alightmotion.com/effects/circular-ripple) | Distorts the layer in a pattern concentric circles around a center point, similar to the ripples caused by a pebble dropped in water. | 有る | 物の fx に ISF の Ripples.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Ripples |
@@ -145,13 +145,13 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Rays](https://guide.alightmotion.com/effects/rays) | Renders light rays from bright parts of the layer, based on the threshold setting. | 有る | ISF God Rays | God Rays |
 | [Repeat](https://guide.alightmotion.com/effects/repeat) | Dynamically generates multiple copies of the layer. | 有る | copies |  |
 | [Repeat Along Path](https://guide.alightmotion.com/effects/repeat-along-path) | Dynamically generates multiple copies of the layer along the outline path of the layer immediately beneath. | 有る | copy_on・copy_on_offset |  |
-| [Replace Color](https://guide.alightmotion.com/effects/replace-color) | Replaces one color in the layer with another. | 無い |  | Color Replacement |
+| [Replace Color](https://guide.alightmotion.com/effects/replace-color) | Replaces one color in the layer with another. | 有る | 物の fx に ISF の Color Replacement.fs、空の青を赤に（10/28、窓で確かめた） | Color Replacement |
 | [RGB Split](https://guide.alightmotion.com/effects/rgb-split) | Splits the red, green and blue channels of the layer, keeping one fixed in position and shifting the other two channels in opposite directions. | 有る | 効果 rgbshift・chroma | Chromatic Aberration |
 | [Ribbon](https://guide.alightmotion.com/effects/ribbon) | Renders a twisted, flowing ribbon of varying width in the opaque parts of the layer. | 無い |  |  |
 | [Roughen Edges](https://guide.alightmotion.com/effects/roughen-edges) | Roughens the edges of the opaque parts of the layer. | 一部 | 形の rough（形だけ） |  |
 | [Saturation / Vibrance](https://guide.alightmotion.com/effects/saturation-vibrance) | Adjusts the saturation or purity of colors in the layer. | 有る | 物の fx に ISF の Vibrance.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Vibrance |
 | [Scatter Repeat](https://guide.alightmotion.com/effects/scatter-repeat) | Dynamically generates multiple copies of the layer, scattered randomly around the original layer location. | 有る | copies＋scatter_x・scatter_y | Replicate Random |
-| [Sharpen](https://guide.alightmotion.com/effects/sharpen) | Enhances details in the layer by increasing the contrast wherever there are abrupt differences in the luminance of nearby pixels in the layer. | 無い |  | Sharpen RGB |
+| [Sharpen](https://guide.alightmotion.com/effects/sharpen) | Enhances details in the layer by increasing the contrast wherever there are abrupt differences in the luminance of nearby pixels in the layer. | 有る | 物の fx に ISF の Sharpen RGB.fs、強さ 5（10/28、窓で確かめた） | Sharpen RGB |
 | [Simple Starfield](https://guide.alightmotion.com/effects/simple-starfield) | Renders a simple parallax starfield pattern, with a depth component, in the opaque parts of the layer. | 一部 | ISF Hyperspace | Star |
 | [Smooth Bevel](https://guide.alightmotion.com/effects/smooth-bevel) | Draws a smooth curved bevel inside the edges of the opaque parts of the layer. | 無い |  |  |
 | [Smooth Edges](https://guide.alightmotion.com/effects/smooth-edges) | Smooths the edges of the opaque parts of a layer without affecting the pixel colors within the layer. | 無い |  |  |
