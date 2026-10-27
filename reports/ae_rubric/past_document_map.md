@@ -1,6 +1,6 @@
 # 過去の倉庫の文書の形と名前（今の文書をそれに揃えるための地図）
 
-読んだだけ。何も作らず、何も走らせていない。過去 = `/Users/motolii_maker/rust_ae/Motolii`（以下、道は `motolii/` から。`crates/motolii-doc/src/` は `doc/`、`crates/motolii-edit/src/` は `edit/`、`ui/native/src/` は `native/`、`ui/lib/` は `lib/` と略す）。今 = `/Users/motolii_maker/motolii/filament`（`doc.h`、`motolii.h`、`interp.h`）。
+読んだだけ。何も作らず、何も走らせていない。過去 = `~/rust_ae/Motolii`（以下、道は `motolii/` から。`crates/motolii-doc/src/` は `doc/`、`crates/motolii-edit/src/` は `edit/`、`ui/native/src/` は `native/`、`ui/lib/` は `lib/` と略す）。今 = `~/motolii/filament`（`doc.h`、`motolii.h`、`interp.h`）。
 「読んだ」= そのファイルのその行に書いてある。「推測」= 書いてある物から私が導いた。
 
 ## 1. まとめ

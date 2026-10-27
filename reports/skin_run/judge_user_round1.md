@@ -70,7 +70,7 @@ Steps: Media › Home › motolii › filament › out › models › saturn_v �
 Seen: a row on the timeline and a narrow selection frame on the stage, no rocket. I moved it by X and by Y to a clear spot and moved the playhead to 5:05: still nothing, for about half a minute. On dragging Scale to 400 it appeared. `Fox.glb` placed later appeared at once. Seen once; not repeated.
 
 ### 8. A refusal whose reason cannot be read
-Colors › Glass › Fill with `Fox.glb` picked: nothing changes (right), and the foot of the shelf says "the solid (/Users/motolii_maker/motolii…" — the path fills the line and the reason is cut off. With nothing picked the same foot says "Nothing is picked" (good) — and keeps saying it after a thing is picked.
+Colors › Glass › Fill with `Fox.glb` picked: nothing changes (right), and the foot of the shelf says "the solid (~/motolii…" — the path fills the line and the reason is cut off. With nothing picked the same foot says "Nothing is picked" (good) — and keeps saying it after a thing is picked.
 
 ### 9. Smaller things
 - A new text is the font file's name ("Arial Unicode.ttf"), black, wider than the stage, and drawn **behind** the films and the photo. A newer thing is sometimes in front (rocket over text), sometimes behind (photo behind the cat placed before it). I found no way to change the order.

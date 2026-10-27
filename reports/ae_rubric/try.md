@@ -3,7 +3,7 @@
 ## 文書を開いて、呼び出しで編集する
 
 ```
-cd /Users/motolii_maker/motolii/filament
+cd ~/motolii/filament
 ./edit.sh out/mine.motolii
 ```
 

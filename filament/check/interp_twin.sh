@@ -4,9 +4,9 @@
 # copy, and the two sets of numbers compared; the bezier is set against the ruler rows the past repository holds as exact.
 #   check/interp_twin.sh [the past repository's track.rs]
 cd "$(dirname "$0")/.."
-src=${1:-$HOME/rust_ae/Motolii/motolii/crates/motolii-doc/src/eval/track.rs}
-[ -f $src ] || { echo "the past repository's track.rs is not at $src: not checked"; exit 0 }
 mkdir -p out/twin
+src=${1:-out/twin/track.rs}   # (by default the past repository's own, github.com/oshikaidesu/rust_ae at main 8d2a0ebd, fetched once)
+[ -f $src ] || curl -fsSL -o $src https://raw.githubusercontent.com/oshikaidesu/rust_ae/8d2a0ebdf7261bc9b77262766560f26fc1b3c464/motolii/crates/motolii-doc/src/eval/track.rs || { echo "the past repository's track.rs could not be fetched: not checked"; exit 0 }
 { sed -n 264,432p $src; cat <<'RS'
 fn main() {
     for i in 0..=40 {

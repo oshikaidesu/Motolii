@@ -4,7 +4,7 @@
 
 Motolii is a macOS app for making music videos (picture-led motion graphics). Shader effects that people share online (ISF, WGSL) and AviUtl2 scripts work in your video **by dropping the file in**. 2D and 3D share one composition.
 
-- **Stage**: under development, one author. This repository began on 2026-10-12 by copying the ThorVG and Filament experiments of the earlier take, [rust_ae](https://github.com/oshikaidesu/rust_ae) (since July), and rebuilt the drawing here; the UI (Flutter) came from a separate workshop. There is no release yet; you build it from source.
+- **Stage**: under development (one author; this repository since 2026-10-12). There is no release yet; you build it from source.
 - **Try it now if** you have an Apple silicon Mac, can paste commands into a terminal, and want to put shared shader effects or AviUtl2 scripts into a video.
 - **Wait if** you need it for everyday work, use Windows, or want an app you just install.
 
@@ -37,7 +37,7 @@ Motolii is a macOS app for making music videos (picture-led motion graphics). Sh
 
 Also: keyframes and easing (anime.js eases work as they are), physics (Jolt), refracting glass, writing mp4. Everything that exists and how far it was checked is in the author's ledger [`ASSETS.md`](ASSETS.md) (Japanese).
 
-**Speed** (M4, the 8-second example above, 1080×1920): about 4 ms a frame, no frame dropped even at 240 a second; writing the 8 seconds takes about 5 seconds, ffmpeg's encoding included.
+**Speed** (M4, the 8-second example above, 1080×1920): about 4 ms a frame, no frame dropped even at 240 a second; writing the 8 seconds takes about 5 seconds, ffmpeg's encoding included. To measure again, make the example, then `printf 'time 240\n' | filament/edit.sh ~/Movies/Motolii/mv.motolii`.
 
 ## How it differs
 
@@ -49,6 +49,8 @@ Also: keyframes and easing (anime.js eases work as they are), physics (Jolt), re
 | Runs on | macOS (Apple silicon) only | Windows, macOS | Windows, macOS | iOS, Android | Windows, macOS, Linux | VDMX: macOS; TouchDesigner: Windows, macOS | Browser and others |
 | Maturity | Two weeks in this repository, one author, no release | Long established | Product | Product | Long established | Products | In use |
 | Price, licence | Free, Apache-2.0 or MIT | Paid | Paid (free tier) | Paid (free tier) | Free, GPL | Paid (free tier) | Motion Canvas free, MIT; Rive has a free tier |
+
+**What is really different**: other tools read ISF as it is too (VDMX, MadMapper). Motolii's difference is the combination: ISF, WGSL and AviUtl2 effects, Filament's 3D, a timeline and mp4 output in one tool.
 
 **Where Motolii is behind**: stability and breadth of features as a finished tool (every tool above is ahead), no app to hand out, no Windows, and no thought yet for performing live.
 
@@ -68,13 +70,15 @@ flowchart LR
   E -- "its picture, not copied" --> W
 ```
 
+This repository began by copying the ThorVG and Filament experiments of the earlier take, [rust_ae](https://github.com/oshikaidesu/rust_ae) (since July), and rebuilt the drawing here; the UI (Flutter) came from a separate workshop.
+
 The UI only takes your hands; the engine draws. The engine's folder is named `filament/` for historical reasons — it is Motolii's engine, not Google's Filament (which is fetched at build time). At its top level sit the 63 files the current build uses beside earlier probes (which still run with their own scripts): [`filament/README.md`](filament/README.md) says which is which, and [`ARCHITECTURE.md`](ARCHITECTURE.md) has the whole design.
 
 ## Where it stands
 
 - Works: everything marked "Works" above, saving (automatic) and undo, playback (a video's sound is heard), writing mp4, the UI's timeline, value panel and shelves.
 - Partly: AviUtl2 scripts; copying Alight Motion's handling (the 14% above).
-- Known bug: a screen effect (`.wgsl`) put on a recipe made of copies (Iris, Weave, …) as that layer's effect breaks the picture; on the whole composition it is fine.
+- Known bugs: inside the app, a screen effect (ISF `.fs`, `.wgsl`) put on a layer turns the composition white in the live view (the same project written out is drawn right; effects near the top of the Effects shelf, such as Glow, are fine). A screen effect put by command on a recipe made of copies (Iris, Weave, …) breaks the picture.
 - Not yet: Windows; an `.app` you can hand out (the engine loads Homebrew's libraries, so a build only runs on the Mac that made it); MIDI sound.
 
 ## Try it
@@ -87,6 +91,7 @@ The UI only takes your hands; the engine draws. The engine's folder is named `fi
 | Xcode | Xcode from the App Store (the Command Line Tools alone cannot build the UI); it can take more than 10 GB and 30 minutes to an hour to download | App Store; open it once to add its components, then `sudo xcodebuild -license accept` |
 | Homebrew | — | The one line on [brew.sh](https://brew.sh/) |
 | Flutter | 3.47.2 (stable), about 2 GB | "Get Flutter" below |
+| Python 3 | The one macOS has (it comes with Xcode) | — |
 | Disk | About 10 GB besides Xcode and Flutter (8.1 GB once built) | — |
 | Downloads | About 1 GB (Filament's source 635 MB, Skia 65 MB, Jolt 16 MB and others; Homebrew's apart) | — |
 | Time | 1–2 hours from nothing, Xcode and Flutter included (depends on your connection); with them, about 10 minutes the first time on an M4 (Filament ~5, the engine ~1–2, the UI ~1–3) | — |
@@ -161,6 +166,19 @@ Opens the app. The project file is `~/Movies/Motolii/Untitled.motolii` (saved by
 
 These five steps also run as a test (`skin/book/integration_test/first_piece_test.dart`, which took the pictures above).
 
+### Put in an effect from the net
+
+This is what Motolii is for. As an example, `ASCII Art.fs` from [ISF-Files](https://github.com/Vidvox/ISF-Files) (not bundled with Motolii):
+
+1. Download the effect file (`.fs`). For example, open `ISF/ASCII Art.fs` on the ISF-Files page, right-click Raw and save the link.
+2. In Finder press ⌘⇧G, type `~/Library/Application Support/Motolii/` and go. Make a folder `effects` there (if there is none) and put the file in it.
+3. It appears on the Effects shelf at once (no restart). Pick a layer, press the tile, then **Add**.
+   ![ASCII Art on the Effects shelf](docs/media/drop_shelf.jpg)
+4. Written out, it looks like this (ASCII Art on a photo).
+   ![ASCII Art on a photo, written out](docs/media/drop_ascii.jpg)
+
+For now the live view inside the app shows the composition white after this (see Known bugs); the written video is drawn right. Steps 1–3 also run as a test (`skin/book/integration_test/drop_effect_test.dart`), which also writes the video and was checked by its frames. WGSL (`.wgsl`), recipes (`.js`, in `recipes/`) and eases (`.way`, in `ways/`) go in the same way.
+
 ### Next: your own media
 
 - **Video and photos**: the 1st button (**Media**), open your folder from `Home`, pick a file and press **Place** at the bottom. A video's sound is heard while playing and goes into what you write.
@@ -173,17 +191,17 @@ These five steps also run as a test (`skin/book/integration_test/first_piece_tes
 A recipe makes a picture, a glow goes on it, an RGB split (`rgbshift.wgsl`) goes on the whole composition, and 8 seconds are written as mp4. `filament/edit.sh` opens a project file and takes one call per line (`help` lists them).
 
 ```bash
-filament/edit.sh $HOME/Movies/Motolii/first.motolii <<EOF
+filament/edit.sh $HOME/Movies/Motolii/first_cmd.motolii <<EOF
 make Weave
 effect 1 Glow
 say 0 script $PWD/filament/effects/rgbshift.wgsl
-write $HOME/Movies/Motolii/first.mp4
+write $HOME/Movies/Motolii/first_cmd.mp4
 EOF
 ```
 
 ![Your first piece: a pattern of lines waving, its colours split](docs/media/first.gif)
 
-`make` makes layer 1 from a recipe (`recipes` lists them); `effect` puts an effect on it (`effects` lists them); `say 0 script` puts an effect on 0, the composition itself; `write` writes the mp4. The 8-second example at the top is `docs/examples/mv.sh` (its calls are in `docs/examples/mv.txt`).
+`make` makes layer 1 from a recipe (`recipes` lists them); `effect` puts an effect on it (`effects` lists them); `say 0 script` puts an effect on 0, the composition itself; `write` writes the mp4. Running the same calls again adds another layer to the same project; to start over, `rm ~/Movies/Motolii/first_cmd.motolii` first. The 8-second example at the top is `docs/examples/mv.sh` (its calls are in `docs/examples/mv.txt`).
 
 ### If something stops
 
@@ -203,6 +221,14 @@ Still stuck? Open an [issue](https://github.com/oshikaidesu/motolii/issues) with
 
 - Update: `git pull`, then run `filament/dawn_probe/build.sh` and `filament/edit.sh build.motolii < /dev/null` again (only what changed is rebuilt); `skin/book/live.sh` rebuilds the app.
 - Remove: delete the `motolii` folder (everything fetched and built is inside it). Your projects and videos stay in `~/Movies/Motolii/` (or wherever else you put them). Flutter: delete `~/flutter`. What `brew bundle` installed goes with `brew uninstall`.
+
+## Next
+
+1. Fix the live view turning white when a screen effect is put on a layer inside the app.
+2. An `.app` to hand out (Homebrew's libraries inside it), on Releases.
+3. The window's tests all passing when run together, and CI that stops on them.
+4. The AviUtl2 calls still missing (`obj.drawpoly`, …); TSL looks on the shelves.
+5. More of Alight Motion's handling (14% today).
 
 ## Contributing
 

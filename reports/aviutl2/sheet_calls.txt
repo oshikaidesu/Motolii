@@ -1,4 +1,4 @@
-add picture /Users/motolii_maker/motolii/filament/fx_sample.jpg
+add picture ~/motolii/filament/fx_sample.jpg
 still out/base.png
 say 1 fx <pkgs>/IZUisMe.OpenGlow/y_aviutl2_script_OpenGlow-r3.au2pkg/Script/OpenGlow.anm2
 set 1 js_OpenGlow_strength 250

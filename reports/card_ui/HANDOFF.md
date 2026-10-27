@@ -17,11 +17,11 @@ Motolii は MV を作る道具で、目的は「思いつき → 動く絵」の
 - 見本：`skin/book/lib/sets/inspector/cards_table.dart`（約2,300行。中身の doc.h にはつないでいない）、`cards_set.dart`（頁の一覧）、`agent_hand.dart`（試す人用の手）
 - 窓を開く：
   ```
-  cd skin/book && /Users/motolii_maker/rust_ae/Motolii/.tools/flutter/bin/flutter run -d macos --dart-define=LAB_ROUTE='/?path=インスペクタ案/cards/link'
+  cd skin/book && ~/rust_ae/Motolii/.tools/flutter/bin/flutter run -d macos --dart-define=LAB_ROUTE='/?path=インスペクタ案/cards/link'
   ```
 - 撮影テスト（直したら毎回流す。絵は `reports/card_ui/<頁>/`）：
   ```
-  cd skin/book && /Users/motolii_maker/rust_ae/Motolii/.tools/flutter/bin/flutter drive --profile -d macos --driver=test_driver/integration_test.dart --target=integration_test/cards_test.dart
+  cd skin/book && ~/rust_ae/Motolii/.tools/flutter/bin/flutter drive --profile -d macos --driver=test_driver/integration_test.dart --target=integration_test/cards_test.dart
   ```
 - 先例の調べ（5言語と、論文・作り手・ゲーム）：`research_notes/link_ui/SUMMARY.md`、絵は `sheet.jpg`、`sheet2.jpg`
 - 試す人のテストの記録：`reports/card_ui/dogfood/LOOP.md`（1〜8回目）、やり方は `TESTER.md`

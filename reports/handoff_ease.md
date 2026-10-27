@@ -26,7 +26,7 @@
 
 ## 確かめ方
 - エンジン：`cd filament && ./edit.sh out/x.motolii < check/anime_ways.txt`、`./check/anime_ways.sh`。窓が使うライブラリは `./build_lib.sh`。
-- 窓：`cd skin/book && flutter test test/workspace_ease_library_test.dart test/workspace_desk_test.dart`（flutter は `/Users/motolii_maker/Documents/Motolii-probes/toolchains/flutter/bin/flutter`）。窓は `flutter build macos --debug`、`open -n build/macos/Build/Products/Debug/lab_book.app`（15:52 から動いている古い窓があるので `-n` で別に開く。古い窓は閉じない）。
+- 窓：`cd skin/book && flutter test test/workspace_ease_library_test.dart test/workspace_desk_test.dart`（flutter は `~/Documents/Motolii-probes/toolchains/flutter/bin/flutter`）。窓は `flutter build macos --debug`、`open -n build/macos/Build/Products/Debug/lab_book.app`（15:52 から動いている古い窓があるので `-n` で別に開く。古い窓は閉じない）。
 - 前からのずれ（今回の変更と無関係）：窓のテスト 9 本（Trim Paths ほか）、`filament/check/doc.sh` の 2 つの NO（値の一覧・動画の速さ）。
 
 ## 進め方の決まり（partner と記憶より）

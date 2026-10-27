@@ -4,7 +4,7 @@
 
 Motolii は MV（絵が主役のモーショングラフィックス）を作る、macOS のアプリです。ネットで配られているシェーダーの効果（ISF・WGSL）や AviUtl2 のスクリプトを、**ファイルを置くだけで**自分の動画に掛けられます。2D と 3D を一つの画面の中で扱います。
 
-- **いまの段階**：作っている途中。作者 1 人。このリポジトリは 2026-10-12 に、前の作り [rust_ae](https://github.com/oshikaidesu/rust_ae)（7 月から）の ThorVG と Filament の実験を写して始め、描く仕組みをここで作り直した。画面（Flutter）は別の作業場で作っていた物を持ってきた。配れるアプリはまだ無く、試すにはソースから組みます。
+- **いまの段階**：作っている途中（作者 1 人、このリポジトリは 2026-10-12 から）。配れるアプリはまだ無く、試すにはソースから組みます。
 - **いま試すと良い人**：Mac（Apple Silicon）があり、ターミナルでコマンドを貼って組める人。シェーダーの効果や AviUtl2 のスクリプトを動画に使ってみたい人。
 - **まだ待つと良い人**：普段の制作にすぐ使いたい人、Windows の人、アプリを入れるだけで使いたい人。
 
@@ -37,7 +37,7 @@ Motolii は MV（絵が主役のモーショングラフィックス）を作る
 
 ほか：キーフレームとイーズ（anime.js のイーズもそのまま使える）、物理（Jolt）、ガラスの屈折、mp4 への書き出し。何が在ってどこまで確かめたかの全部は、作者の台帳 [`ASSETS.md`](ASSETS.md) にあります。
 
-**速さ**（M4、上の 8 秒の作例、1080×1920）：1 コマ約 4 ms で、毎秒 240 コマでも落ちない。8 秒の書き出しは約 5 秒（ffmpeg の符号化を含む）。
+**速さ**（M4、上の 8 秒の作例、1080×1920）：1 コマ約 4 ms で、毎秒 240 コマでも落ちない。8 秒の書き出しは約 5 秒（ffmpeg の符号化を含む）。測り直すには、作例を作ってから `printf 'time 240\n' | filament/edit.sh ~/Movies/Motolii/mv.motolii`。
 
 ## 他の道具との違い
 
@@ -49,6 +49,8 @@ Motolii は MV（絵が主役のモーショングラフィックス）を作る
 | 動く所 | macOS（Apple Silicon）だけ | Windows・macOS | Windows・macOS | iOS・Android | Windows・macOS・Linux | VDMX は macOS、TouchDesigner は Windows・macOS | ブラウザ・各種 |
 | 成熟度 | このリポジトリで 2 週間、作者 1 人、リリース無し | 長く使われている | 製品 | 製品 | 長く使われている | 製品 | 使われている |
 | 値段・ライセンス | 無料、Apache-2.0 か MIT | 有料 | 有料（無料版あり） | 有料（無料版あり） | 無料、GPL | 有料（無料版あり） | Motion Canvas は無料・MIT、Rive は無料版あり |
+
+**本当に違う所**：ISF をそのまま読む道具は他にもあります（VDMX・MadMapper）。Motolii の違いは、ISF・WGSL・AviUtl2 の効果、Filament の 3D、タイムライン、mp4 の書き出しを一つにした組み合わせです。
 
 **Motolii がまだ負けている所**：出来上がった道具としての安定と機能の数（どれも上の道具が上）、配れるアプリが無い事、Windows で動かない事、ライブで演奏する使い方は考えていない事。
 
@@ -68,13 +70,15 @@ flowchart LR
   E -- "描いた絵をコピーせずに" --> W
 ```
 
+このリポジトリは、前の作り [rust_ae](https://github.com/oshikaidesu/rust_ae)（7 月から）の ThorVG と Filament の実験を写して始め、描く仕組みをここで作り直しました。画面（Flutter）は別の作業場で作っていた物を持ってきました。
+
 画面は操作だけで、絵はエンジンが描きます。エンジンのフォルダ名が `filament/` なのは歴史的な理由で、Google の Filament そのものではありません（Filament は組み立ての時に取ってきます）。`filament/` の直下には、今の組み立てが使う 63 本と、前の試し（今も自分のスクリプトで動く）が並んでいます。どれが今の物かは [`filament/README.md`](filament/README.md)、作りの全体は [`ARCHITECTURE.md`](ARCHITECTURE.md)。
 
 ## いまの状態
 
 - 動く：上の表の「動く」の物、保存（自動）と取り消し、再生（動画の音も鳴る）、mp4 への書き出し、画面のタイムライン・値の欄・棚。
 - 一部：AviUtl2 のスクリプト、Alight Motion の操作の写し（上の 14%）。
-- 知っている不具合：コピーで作るレシピ（Iris・Weave など）に画面用の効果（`.wgsl`）をレイヤーの効果として掛けると絵が崩れる（場面全体に掛けるのは大丈夫）。
+- 知っている不具合：画面の中で、画面用の効果（ISF の `.fs`・`.wgsl`）をレイヤーに掛けると、場面が白くなる（同じプロジェクトをコマンドで書き出すと正しく描ける。光（Glow）などの Effects の棚の上の方の効果は大丈夫）。コピーで作るレシピ（Iris・Weave など）にコマンドで画面用の効果を掛けると、絵が崩れる。
 - まだ：Windows、配れる `.app`（エンジンが Homebrew の部品を読むので、作った Mac の外では動かない）、MIDI の音。
 
 ## 使ってみる
@@ -87,6 +91,7 @@ flowchart LR
 | Xcode | App Store の Xcode（画面を組むのに要る。Command Line Tools だけでは足りない）。入れると 10 GB を超えることがあり、落とすのに 30 分〜1 時間かかることもある | App Store。入れたら一度開いて追加の部品を入れ、`sudo xcodebuild -license accept` |
 | Homebrew | — | [brew.sh](https://brew.sh/ja/) の 1 行 |
 | Flutter | 3.47.2（stable）。約 2 GB | 下の「Flutter を入れる」 |
+| Python 3 | macOS に付いている物（Xcode を入れると入る）でよい | — |
 | 空き容量 | Xcode と Flutter のほかに約 10 GB（組み立てた後で 8.1 GB） | — |
 | 取ってくる量 | 約 1 GB（Filament のソース 635 MB、Skia 65 MB、Jolt 16 MB ほか。Homebrew の物は別） | — |
 | 時間 | Xcode と Flutter を入れる所からなら 1〜2 時間（回線しだい）。それらがあれば初回 約 10 分（M4。Filament 約 5 分、エンジン 約 1〜2 分、画面 約 1〜3 分） | — |
@@ -161,6 +166,19 @@ skin/book/live.sh
 
 この 5 手は試験としても走ります（`skin/book/integration_test/first_piece_test.dart`。上の絵はこの試験が撮った物）。
 
+### ネットの効果を 1 本置く
+
+Motolii の一番の使い方です。例として、[ISF-Files](https://github.com/Vidvox/ISF-Files) の `ASCII Art.fs`（Motolii には同梱していない物）を使います。
+
+1. 効果のファイル（`.fs`）を落とす。例：ISF-Files のページで `ISF/ASCII Art.fs` を開き、Raw を右クリックして「リンク先を別名で保存」。
+2. Finder で ⌘⇧G を押し、`~/Library/Application Support/Motolii/` と打って開く。中に `effects` というフォルダを作り（無ければ）、落としたファイルを入れる。
+3. 画面の Effects の棚に、その場で出る（閉じて開き直さなくてよい）。レイヤーを選んで、タイルを押し、下の **Add**。
+   ![Effects の棚に ASCII Art が出た所](docs/media/drop_shelf.jpg)
+4. 書き出すと、こうなる（写真に ASCII Art を掛けた所）。
+   ![写真に ASCII Art を掛けて書き出した所](docs/media/drop_ascii.jpg)
+
+いまは画面の中だと掛けた後の場面が白く見える不具合があります（上の「知っている不具合」）。書き出した動画では正しく描かれます。この手順の 3 までは試験としても走ります（`skin/book/integration_test/drop_effect_test.dart`。書き出しもして、そのコマが正しく描かれているのを確かめた）。WGSL（`.wgsl`）・レシピ（`.js`、`recipes/` に）・イーズ（`.way`、`ways/` に）も同じ置き方です。
+
 ### 次に：自分の素材で
 
 - **動画・写真を置く**：左上の 1 つ目（**Media**）で `Home` から自分のフォルダを開き、ファイルを選んで下の **Place**。動画の音は再生中に鳴り、書き出しにも入る。
@@ -173,11 +191,11 @@ skin/book/live.sh
 画面を使わずに、レシピで絵を作り、光（Glow）と場面全体の RGB のずれ（`rgbshift.wgsl`）を掛けて、8 秒の mp4 に書き出す例です。`filament/edit.sh` はプロジェクトファイルを開いて、1 行ずつの命令を受けます（`help` で一覧）。
 
 ```bash
-filament/edit.sh $HOME/Movies/Motolii/first.motolii <<EOF
+filament/edit.sh $HOME/Movies/Motolii/first_cmd.motolii <<EOF
 make Weave
 effect 1 Glow
 say 0 script $PWD/filament/effects/rgbshift.wgsl
-write $HOME/Movies/Motolii/first.mp4
+write $HOME/Movies/Motolii/first_cmd.mp4
 EOF
 ```
 
@@ -187,6 +205,7 @@ EOF
 - `effect 1 Glow`：レイヤー 1 に効果を掛ける（`effects` で一覧）。
 - `say 0 script …`：0（場面そのもの）に場面全体の効果を置く。
 - `write …`：mp4 に書き出す。
+- 同じ命令をもう一度走らせると、同じプロジェクトにレイヤーがもう 1 つ増える。やり直すなら先に `rm ~/Movies/Motolii/first_cmd.motolii`。
 
 上の 8 秒の作例は `docs/examples/mv.sh`（中の命令は `docs/examples/mv.txt`）。
 
@@ -208,6 +227,14 @@ EOF
 
 - 新しくする：`git pull` の後、`filament/dawn_probe/build.sh` と `filament/edit.sh build.motolii < /dev/null` をもう一度（変わった所だけ組み直す）。画面は `skin/book/live.sh` が組み直す。
 - 消す：`motolii` のフォルダを消す（取ってきた物と組んだ物は全部この中）。作ったプロジェクトと動画は `~/Movies/Motolii/` に残ります（別の所に置いた物はそこに）。Flutter は `~/flutter` を消す。`brew bundle` で入れた物は `brew uninstall` で。
+
+## これから
+
+1. 画面の中で、レイヤーに掛けた画面用の効果が白くなる不具合を直す。
+2. 配れる `.app`（Homebrew の部品を中に入れる）を作り、Releases に置く。
+3. 窓の試験をまとめて走らせても全部通るようにし、CI を止まる設定にする。
+4. AviUtl2 のスクリプトで足りない呼び出し（`obj.drawpoly` など）、TSL の表現を棚に。
+5. Alight Motion の操作の写しを進める（いま 14%）。
 
 ## 開発に加わる
 

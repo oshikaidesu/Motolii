@@ -36,7 +36,7 @@ GitHub Actions runs the ledger check on every push and pull request (`.github/wo
 
 1. **Look before you write.** Search [`ASSETS.md`](ASSETS.md) (the ledger of what exists) and existing implementations on the net. If something can be used the way its author meant, use it.
 2. **A new file gets a line in the ledger.** `ASSETS.md` says what exists and how far it was checked. The pre-commit hook stops a commit whose files have no place there. Add a row, or add the file's place to an existing row (places in backticks; a folder covers everything in it). **If that is too much, commit with `git commit --no-verify` and say so in the pull request; the maintainer will add it when merging.** The ledger is in Japanese; English in your row is fine.
-3. **Say where things came from.** In the commit or pull request: what was borrowed from where (URL, version or commit), what was checked and what is not done yet. Example: `git show d46f69cac`.
+3. **Say where things came from.** In the commit or pull request: what was borrowed from where (URL, version or commit), what was checked and what is not done yet. Example: `git show d46f69cac`. Keep the first line (the subject) to about 72 characters and put the details after a blank line (git's convention; much of the history so far has long subjects, but from now on).
 4. **Bundling other people's work.**
    - Keep the author's folder as unchanged as possible, with their licence text (`LICENSE`) and where it came from (`SOURCE.txt`: name and author / licence / from / page) beside it.
    - Work whose author publishes no licence text is not bundled; fetch it from the author at build time instead (`filament/midi_roll.sh` is an example).
@@ -50,6 +50,7 @@ GitHub Actions runs the ledger check on every push and pull request (`.github/wo
 | An `.app` you can hand out: put the Homebrew libraries the engine loads (GStreamer, glib, SQLite, LuaJIT, QuickJS, and ffmpeg for writing) inside the `.app`, with [dylibbundler](https://github.com/auriamg/macdylibbundler) or GStreamer's macOS framework | `filament/edit.sh`, `skin/book/macos/` | Medium |
 | AviUtl2 calls still missing (`obj.drawpoly`, the "circle" figure, …), following the references (AviUtl2's lua.txt, sashimono-edit) | `reports/aviutl2/converter_plan.md`, `filament/aviutl.cpp` | Medium–hard |
 | TSL looks on the editor's shelves | `filament/tsl/`, `reports/tsl_collection.md` | Medium |
+| Inside the app, a screen effect (ISF, WGSL) put on a layer shows the composition white (the written video is right; `drop_effect_test.dart` shows it) | `filament/live.h`, `filament/thing_fx.h` | Medium–hard |
 | Fix the three failing window tests (see Known gaps) so the whole suite passes run together | `skin/book/test/` | Medium |
 | English beside the headings of `ASSETS.md` | `ASSETS.md` | Easy |
 | The window's integration tests write into `reports/`; make them use a temporary folder | `skin/book/integration_test/` | Easy |

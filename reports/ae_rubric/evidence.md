@@ -3,7 +3,7 @@
 事実だけを書く。良し悪しの判断は採点する人がする。数字は全部この Mac（Apple M4、macOS 15.5）で、
 Filament 1.77.2 を Dawn（WebGPU）で動かして測った物。**Windows では一度も動かしていない。**
 
-場所は `/Users/motolii_maker/motolii`。動画は `reports/show/`、絵は `reports/ae_rubric/stills/`、
+場所は `~/motolii`。動画は `reports/show/`、絵は `reports/ae_rubric/stills/`、
 検査が出した文面そのままは `reports/ae_rubric/records/`（`filament/records.sh` が全部を走らせ直して書く）。
 使う人が打つ物は `reports/ae_rubric/try.md`。
 
