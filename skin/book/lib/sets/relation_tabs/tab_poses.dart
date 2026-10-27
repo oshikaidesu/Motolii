@@ -27,6 +27,9 @@ enum _Part { there, arrow, home, strip, ruler }
 
 enum _Grip { none, sweep, move, fade, flip, scatter, ease, first, span, lag, scrub }
 
+/// What the last hand let go did (for a test on another Mac to say why no move was made).
+String tabPosesLastUp = '';
+
 class _TabPosesState extends State<TabPoses> {
   _Grip _grip = _Grip.none;
   Offset _from = Offset.zero, _to = Offset.zero;   // (where the hand went down, where it is)
@@ -137,6 +140,7 @@ class _TabPosesState extends State<TabPoses> {
       case _Grip.sweep when m != null && (_to - _from).distance > 4:
         final box = Rect.fromPoints(_from, _to), now = ws.frame / Ws.fps;
         final who = [for (final (t, _, _) in _things(ws)) if (box.contains(_seat(m, t, now))) '$t'];
+        tabPosesLastUp = 'a sweep $box over ${[for (final (t, _, _) in _things(ws)) _seat(m, t, now)]} took $who';
         if (who.isNotEmpty) wsMakeMove(ws, who, (now * 10).round() / 10);
       case _Grip.ease when mv != null && _ease != null:
         wsMoveEase(ws, mv, math.min(1, _ease!), math.max(0, _ease! - 1));
@@ -150,7 +154,7 @@ class _TabPosesState extends State<TabPoses> {
       case _Grip.move || _Grip.fade || _Grip.flip || _Grip.scatter || _Grip.lag:
         wsMoveHold(ws, false);
       default:
-        break;
+        tabPosesLastUp = 'let go of $_grip from $_from to $_to';
     }
     setState(() {
       _grip = _Grip.none;

@@ -49,7 +49,7 @@ void main() {
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
       await t.pump();
     }
-    expect(wsMoves(ws), hasLength(1), reason: 'a sweep over HOME ${part('home')} makes a move; the things ${things.toList()} at ${[for (final i in things) (m.value(i, 'x', 0), m.value(i, 'y', 0))]}; ${ws.notice}; the inside has ${[for (final i in m.things) m.word(i, 'kind')]}; ${m.trouble}; point ${m.point}, frame ${ws.frame}, as the pane reads them ${[for (final i in things) (wsValue(m, i, 'x', ws.frame / Ws.fps, 0), wsValue(m, i, 'y', ws.frame / Ws.fps, 0))]}; the hand first on $under');
+    expect(wsMoves(ws), hasLength(1), reason: 'a sweep over HOME ${part('home')} makes a move; the things ${things.toList()} at ${[for (final i in things) (m.value(i, 'x', 0), m.value(i, 'y', 0))]}; ${ws.notice}; the inside has ${[for (final i in m.things) m.word(i, 'kind')]}; ${m.trouble}; point ${m.point}, frame ${ws.frame}, as the pane reads them ${[for (final i in things) (wsValue(m, i, 'x', ws.frame / Ws.fps, 0), wsValue(m, i, 'y', ws.frame / Ws.fps, 0))]}; the hand first on $under; $tabPosesLastUp');
     var mv = wsMoves(ws).single;
     expect(mv.who.toSet(), things);
     expect(ws.selected, '${mv.by}');
