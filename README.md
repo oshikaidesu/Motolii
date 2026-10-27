@@ -238,9 +238,8 @@ EOF
 ## これから
 
 1. 配れる `.app`（Homebrew の部品を中に入れる）を作り、Releases に置く。
-2. 窓の試験をまとめて走らせても全部通るようにし、CI を止まる設定にする。
-3. AviUtl2 のスクリプトで足りない呼び出し（`obj.computeshader`、本体の効果など）、TSL の表現を棚に。
-4. Alight Motion の写しを進める（201 のうち、いま有る 101）。
+2. AviUtl2 のスクリプトで足りない呼び出し（`obj.computeshader`、本体の効果など）、TSL の表現を棚に。
+3. Alight Motion の写しを進める（201 のうち、いま有る 101）。
 
 ## 開発に加わる
 

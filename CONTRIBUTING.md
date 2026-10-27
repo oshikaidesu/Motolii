@@ -51,13 +51,12 @@ GitHub の Actions は、台帳の確かめを毎回走らせます（`.github/w
 | 配れる `.app`：中身が読む Homebrew の部品（GStreamer・glib・SQLite・LuaJIT・QuickJS）を `.app` の中に入れる。[dylibbundler](https://github.com/auriamg/macdylibbundler) か GStreamer の macOS 用フレームワーク | `filament/edit.sh`、`skin/book/macos/` | 中 |
 | AviUtl2 のスクリプトで足りない呼び出し（`obj.drawpoly`、図形「円」など）を、手本（AviUtl2 の lua.txt、sashimono-edit）どおりに | `reports/aviutl2/converter_plan.md`、`filament/aviutl.cpp` | 中〜難 |
 | TSL の表現を編集の棚に出す | `filament/tsl/`、`reports/tsl_collection.md` | 中 |
-| 窓の試験の落ちる 3 本（下の「知っている穴」）を直し、まとめて走らせても通るようにする | `skin/book/test/` | 中 |
 | 台帳 `ASSETS.md` の見出しに英語を添える | `ASSETS.md` | 易 |
 | 窓の結合テストの出力先（いまは `reports/`）を一時フォルダに | `skin/book/integration_test/` | 易 |
 
 ## 知っている穴
 
 - 動くのは macOS（Apple Silicon）だけ。
-- 窓の試験（`flutter test`）は、まとめて走らせると落ちる物がある（2026-10-27 に、この Mac で 150 本中 125 本、CI の Mac で 126 本中 117 本が通る）。1 本ずつなら通る物が多く、それだけで落ちるのは 3 本：Parent（親を付けた後の位置）、anime.js の庫（10/26 に anime.js の見本を外した後、試験が古いまま）、Posterize と Boxinator のつまみ。直すのは手を付けやすい所の 1 つ。CI ではこの段は知らせるだけ。
+- 窓の試験（`flutter test`）は、まとめて走らせても全部通る（2026-10-28、CI の Mac で 146 本、1 本は飛ばし）。CI でも落ちたら止まる。
 - 中身（`libmotolii.dylib`）は Homebrew の GStreamer などを読むので、作った `.app` はそのままでは他の Mac で動きません。
 - `filament/` の直下には、今の中身と前の試しのファイルが並んでいます（前の試しのスクリプトは `filament/sdk.sh` が取る組み立て済みの Filament を使う）。

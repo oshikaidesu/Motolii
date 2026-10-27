@@ -36,7 +36,6 @@ jobs:
         if: success() || failure()   # (the window's checks told even when the engine's failed)
       - run: cd skin/book && flutter test
         if: success() || failure()
-        continue-on-error: true   # (known failures, run together: CONTRIBUTING.md 'known gaps'; it tells, it does not stop the run)
       - uses: actions/cache/save@v4   # (kept even when a check before failed)
         if: always() && steps.deps.outputs.cache-hit != 'true'
         with:

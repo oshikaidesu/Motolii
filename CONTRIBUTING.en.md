@@ -50,13 +50,12 @@ GitHub Actions runs the ledger check on every push and pull request (`.github/wo
 | An `.app` you can hand out: put the Homebrew libraries the engine loads (GStreamer, glib, SQLite, LuaJIT, QuickJS, and ffmpeg for writing) inside the `.app`, with [dylibbundler](https://github.com/auriamg/macdylibbundler) or GStreamer's macOS framework | `filament/edit.sh`, `skin/book/macos/` | Medium |
 | AviUtl2 calls still missing (`obj.drawpoly`, the "circle" figure, …), following the references (AviUtl2's lua.txt, sashimono-edit) | `reports/aviutl2/converter_plan.md`, `filament/aviutl.cpp` | Medium–hard |
 | TSL looks on the editor's shelves | `filament/tsl/`, `reports/tsl_collection.md` | Medium |
-| Fix the three failing window tests (see Known gaps) so the whole suite passes run together | `skin/book/test/` | Medium |
 | English beside the headings of `ASSETS.md` | `ASSETS.md` | Easy |
 | The window's integration tests write into `reports/`; make them use a temporary folder | `skin/book/integration_test/` | Easy |
 
 ## Known gaps
 
 - macOS on Apple silicon only.
-- The window's tests (`flutter test`) have failures when run together (on 2026-10-27, 125 of 150 pass on the author's Mac and 117 of 126 on the CI Mac). Most pass one at a time; three fail alone: Parent (the position after a parent is given), the anime.js shelf (its samples were removed on 10/26 and the test was not updated), and the Posterize and Boxinator knobs. Fixing them is a good first task. In CI that step only reports.
+- The window's tests (`flutter test`) all pass run together (2026-10-28, 146 on the CI Mac, one skipped). In CI a failure stops the run.
 - The engine (`libmotolii.dylib`) loads Homebrew's GStreamer and others, so a built `.app` does not run on another Mac as it is.
 - `filament/` mixes the current engine with earlier probes at one level; [`filament/README.md`](filament/README.md) lists which files the current build uses.
