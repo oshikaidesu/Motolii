@@ -12,7 +12,8 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4   # (what the scripts fetch and build, kept between runs while their pins stay)
+      - uses: actions/cache/restore@v4   # (what the scripts fetch and build, kept between runs while their pins stay)
+        id: deps
         with:
           path: |
             filament/third_party/filament_src
@@ -31,5 +32,18 @@ jobs:
       - run: filament/edit.sh build.motolii < /dev/null
       - run: filament/check/all.sh
       - run: cd skin/book && flutter analyze lib test integration_test --no-fatal-infos --no-fatal-warnings
+        if: success() || failure()   # (the window's checks told even when the engine's failed)
       - run: cd skin/book && flutter test
+        if: success() || failure()
         continue-on-error: true   # (known failures, run together: CONTRIBUTING.md 'known gaps'; it tells, it does not stop the run)
+      - uses: actions/cache/save@v4   # (kept even when a check before failed)
+        if: always() && steps.deps.outputs.cache-hit != 'true'
+        with:
+          path: |
+            filament/third_party/filament_src
+            filament/third_party/skia_src
+            filament/third_party/thorvg_src
+            filament/third_party/physics
+            filament/third_party/libtess2
+            filament/third_party/ISF-Files
+          key: ${{ steps.deps.outputs.cache-primary-key }}
