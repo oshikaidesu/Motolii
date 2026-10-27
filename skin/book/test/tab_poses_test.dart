@@ -38,6 +38,10 @@ void main() {
     final home = part('home'), m = ws.inside!;
     await drag(home.topLeft + const Offset(2, 2), [for (var i = 0; i < 8; i++) (home.size.bottomRight(Offset.zero) - const Offset(4, 4)) / 8]);
     final things = {for (final l in ws.layers) if (int.tryParse(l.id) case final i? when !const {'behaviour', 'camera', 'light'}.contains(m.word(i, 'kind'))) i};
+    for (var i = 0; i < 200 && wsMoves(ws).isEmpty; i++) {   // (made by the inside, not waited for by the window)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
     var mv = wsMoves(ws).single;
     expect(mv.who.toSet(), things);
     expect(ws.selected, '${mv.by}');

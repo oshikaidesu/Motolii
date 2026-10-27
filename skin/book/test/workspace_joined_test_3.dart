@@ -54,7 +54,11 @@ void _tests3() {
     await t.tap(find.text('Mask'));
     await t.pumpAndSettle();
     await t.dragFrom(at(a) - Offset(stage.width * .03, stage.height * .03), Offset(stage.width * .06, stage.height * .06));
-    await t.pumpAndSettle();
+    await settled(t, ws);
+    for (var i = 0; i < 200 && ws.selected == '$a'; i++) {   // (the mask made by the inside, picked once it is there)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
     final cut = int.parse(ws.selected!), all = m.things;
     expect(all.indexOf(cut), all.indexOf(a) - 1, reason: 'the mask lies just behind the thing it cuts: ${m.trouble}');
     expect([m.value(a, 'clip', 0), m.value(cut, 'opacity', 0)], [1, 0], reason: 'it is clipped by it, which is not seen itself');
@@ -293,7 +297,7 @@ void _tests3() {
     await t.tap(find.descendant(of: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Strip'), matching: find.byType(DockHover)).first);
     await t.pumpAndSettle();
     await t.tap(find.descendant(of: find.byType(DockFooter), matching: find.text('Set')));
-    await t.pumpAndSettle();
+    await settled(t, ws);   // (set by the inside, not waited for by the window)
     expect(m.word(0, 'background'), hasLength(6), reason: 'the stage\'s colour behind everything: ${m.trouble}');
     expect(m.say(0, 'tone_mapper', 'agx') && m.word(0, 'tone_mapper') == 'agx', isTrue, reason: m.trouble);
     expect(m.say(0, 'tone_mapper', 'sepia'), isFalse, reason: 'one of Filament\'s own');

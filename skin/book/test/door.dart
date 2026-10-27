@@ -31,7 +31,7 @@ Future<Ws> openWorkspace(WidgetTester t, {List<WsPane> extra = const [], List<De
   ColorTheme.at = '${Directory.systemTemp.path}/motolii_test_no_theme.xml'; // (the window's own skin and 100%, whatever the home folder keeps)
   WsZoom.set(1, keep: false);
   await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: doc, extra: extra, tools: tools, view: view)));
-  for (var i = 0; i < 500 && find.byType(WsTimeline).evaluate().isEmpty; i++) {   // (the inside answers in real time, not the test's: Flutter's runAsync, as settled does; up to 10 s, a slow machine's opening)
+  for (var i = 0; i < 1500 && find.byType(WsTimeline).evaluate().isEmpty; i++) {   // (the inside answers in real time, not the test's: Flutter's runAsync, as settled does; up to 30 s, a slow machine's opening)
     await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
     await t.pump();
   }
