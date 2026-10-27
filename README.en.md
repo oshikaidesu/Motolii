@@ -70,7 +70,7 @@ flowchart LR
   E -- "its picture, not copied" --> W
 ```
 
-This repository began by copying the ThorVG and Filament experiments of the earlier take, [rust_ae](https://github.com/oshikaidesu/rust_ae) (since July), and rebuilt the drawing here; the UI (Flutter) came from a separate workshop.
+This repository began by copying the ThorVG and Filament experiments of the earlier take, rust_ae (since July, private), and rebuilt the drawing here; the UI (Flutter) came from a separate workshop.
 
 The UI only takes your hands; the engine draws. The engine's folder is named `filament/` for historical reasons — it is Motolii's engine, not Google's Filament (which is fetched at build time). At its top level sit the 63 files the current build uses beside earlier probes (which still run with their own scripts): [`filament/README.md`](filament/README.md) says which is which, and [`ARCHITECTURE.md`](ARCHITECTURE.md) has the whole design.
 

@@ -70,7 +70,7 @@ flowchart LR
   E -- "描いた絵をコピーせずに" --> W
 ```
 
-このリポジトリは、前の作り [rust_ae](https://github.com/oshikaidesu/rust_ae)（7 月から）の ThorVG と Filament の実験を写して始め、描く仕組みをここで作り直しました。画面（Flutter）は別の作業場で作っていた物を持ってきました。
+このリポジトリは、前の作り rust_ae（7 月から、非公開）の ThorVG と Filament の実験を写して始め、描く仕組みをここで作り直しました。画面（Flutter）は別の作業場で作っていた物を持ってきました。
 
 画面は操作だけで、絵はエンジンが描きます。エンジンのフォルダ名が `filament/` なのは歴史的な理由で、Google の Filament そのものではありません（Filament は組み立ての時に取ってきます）。`filament/` の直下には、今の組み立てが使う 63 本と、前の試し（今も自分のスクリプトで動く）が並んでいます。どれが今の物かは [`filament/README.md`](filament/README.md)、作りの全体は [`ARCHITECTURE.md`](ARCHITECTURE.md)。
 

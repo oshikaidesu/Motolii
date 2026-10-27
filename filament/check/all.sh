@@ -13,7 +13,7 @@ run anime_ways.sh
 run glass_shift.sh
 run doc.sh
 twin=$(./interp_twin.sh 2>&1); print -r -- "$twin" | grep -E ': the same|differ'   # (the eases the same as the past repository's own, number by number)
-(( $(print -r -- "$twin" | grep -c ': the same') >= 2 )) || { print "FAIL interp_twin.sh (its last lines:)"; print -r -- "$twin" | tail -25 | sed 's/^/    /'; bad=1; }
+print -r -- "$twin" | grep -q 'not checked' && print "skip interp_twin.sh (the past repository is private)" || (( $(print -r -- "$twin" | grep -c ': the same') >= 2 )) || { print "FAIL interp_twin.sh (its last lines:)"; print -r -- "$twin" | tail -25 | sed 's/^/    /'; bad=1; }
 rel=$(./relations.sh 2>&1); print -r -- "relations: ${${(f)rel}[-1]}"   # (relations, behaviours between things: PASS or FAIL at its end)
 [[ ${${(f)rel}[-1]} == PASS ]] || { print "FAIL relations.sh"; bad=1; }
 taken=$(./isf_all.sh 2>&1 | head -1); print -r -- "ISF-Files: $taken"
