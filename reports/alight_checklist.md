@@ -9,14 +9,14 @@
 
 ## A. 画面全体にしか掛からない色を、物ごとにも（9）
 
-- [ ] **Brightness / Contrast**（一部）：Adjusts the brightness or contrast of the layer. — いま：段の exposure・contrast（全体だけ、物ごとは無い） — ISF：Color Controls
-- [ ] **Color Temperature**（一部）：Corrects a photo or video so it appears as if illuminated by a light source with a different color temperature. Useful for changing the mood of a scene or correcting for the wrong illumination or whit — いま：段の temperature（全体だけ） — ISF：White Point Adjust
-- [ ] **Color Tune**（一部）：Smoothly tune the color of dark and light parts of a photo or video segmented by lift, gamma, and gain. Use this to achieve various color "looks", to change the mood of the video, or to match the colo — いま：段の slope・offset・power と影・中間・明るい所の色（全体だけ） — ISF：LGG
-- [ ] **Exposure / Gamma**（一部）：Adjusts the exposure, gamma curve, and luminance offset of photo and video layers. — いま：段の exposure（全体だけ） — ISF：Exposure Adjust / Gamma Correction
+- [x] **Brightness / Contrast**（一部）：Adjusts the brightness or contrast of the layer. — いま：段の exposure・contrast（全体だけ、物ごとは無い） — ISF：Color Controls — 済（10/28）：物の fx に `filament/effects/Color Controls.fs`（Vidvox ISF-Files、MIT）。窓で写真 2 枚の左だけに掛け、左だけが変わるのを絵と数で見た（`skin/book/integration_test/alight_a_test.dart`）
+- [x] **Color Temperature**（一部）：Corrects a photo or video so it appears as if illuminated by a light source with a different color temperature. Useful for changing the mood of a scene or correcting for the wrong illumination or whit — いま：段の temperature（全体だけ） — ISF：White Point Adjust — 済（10/28）：物の fx に `filament/effects/White Point Adjust.fs`（Vidvox ISF-Files、MIT）。窓で写真 2 枚の左だけに掛け、左だけが変わるのを絵と数で見た（`skin/book/integration_test/alight_a_test.dart`）
+- [x] **Color Tune**（一部）：Smoothly tune the color of dark and light parts of a photo or video segmented by lift, gamma, and gain. Use this to achieve various color "looks", to change the mood of the video, or to match the colo — いま：段の slope・offset・power と影・中間・明るい所の色（全体だけ） — ISF：LGG — 済（10/28）：物の fx に `filament/effects/LGG.fs`（Vidvox ISF-Files、MIT）。窓で写真 2 枚の左だけに掛け、左だけが変わるのを絵と数で見た（`skin/book/integration_test/alight_a_test.dart`）
+- [x] **Exposure / Gamma**（一部）：Adjusts the exposure, gamma curve, and luminance offset of photo and video layers. — いま：段の exposure（全体だけ） — ISF：Exposure Adjust / Gamma Correction — 済（10/28）：物の fx に `filament/effects/Exposure Adjust.fs`（Vidvox ISF-Files、MIT）。窓で写真 2 枚の左だけに掛け、左だけが変わるのを絵と数で見た（`skin/book/integration_test/alight_a_test.dart`）
 - [ ] **Highlights and Shadows**（一部）：Independently adjusts the intensity of the lightest and darkest parts of the layer. — いま：段の影・明るい所の色（全体だけ） — ISF：Color Levels
-- [ ] **Lens Flare**（一部）：Renders a lens flare in the layer. — いま：段の lens_flare（全体だけ） — ISF：Lens Flare
-- [ ] **Light Glow**（一部）：Creates a soft glow and optional halo around the lighter areas within a photo or video layer based on a luminance threshold. — いま：段の bloom（全体だけ） — ISF：Bloom
-- [ ] **Saturation / Vibrance**（一部）：Adjusts the saturation or purity of colors in the layer. — いま：段の saturation・vibrance（全体だけ） — ISF：Vibrance
+- [x] **Lens Flare**（一部）：Renders a lens flare in the layer. — いま：段の lens_flare（全体だけ） — ISF：Lens Flare — 済（10/28）：物の fx に `filament/effects/Lens Flare.fs`（Vidvox ISF-Files、MIT）。窓で写真 2 枚の左だけに掛け、左だけが変わるのを絵と数で見た（`skin/book/integration_test/alight_a_test.dart`）
+- [x] **Light Glow**（一部）：Creates a soft glow and optional halo around the lighter areas within a photo or video layer based on a luminance threshold. — いま：段の bloom（全体だけ） — ISF：Bloom — 済（10/28）：物の fx に `filament/effects/Bloom.fs`（Vidvox ISF-Files、MIT）。窓で写真 2 枚の左だけに掛け、左だけが変わるのを絵と数で見た（`skin/book/integration_test/alight_a_test.dart`）
+- [x] **Saturation / Vibrance**（一部）：Adjusts the saturation or purity of colors in the layer. — いま：段の saturation・vibrance（全体だけ） — ISF：Vibrance — 済（10/28）：物の fx に `filament/effects/Vibrance.fs`（Vidvox ISF-Files、MIT）。窓で写真 2 枚の左だけに掛け、左だけが変わるのを絵と数で見た（`skin/book/integration_test/alight_a_test.dart`）
 - [ ] **Solid Matte**（一部）：Composites the layer on a solid color matte, filling transparent parts of the layer with a solid background color. — いま：段の background（全体だけ）
 
 ## B. 形にしか掛からない曲げを、写真・動画・文字にも（6）

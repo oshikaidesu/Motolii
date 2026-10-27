@@ -11,8 +11,8 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | | 数 |
 |---|---|
 | Alight Motion の効果 | 169 |
-| Motolii に有る | **33**（20%） |
-| 一部 | **56**（33%） |
+| Motolii に有る | **40**（24%） |
+| 一部 | **49**（29%） |
 | 無い | **80**（47%） |
 | 無いもののうち、手元の ISF-Files（`research_notes/isf/ISF-Files`、327 本、MIT）に近いものがある | 36 |
 | 一部のもののうち、同じく ISF-Files に近いものがある | 31 |
@@ -38,7 +38,7 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Block Noise](https://guide.alightmotion.com/effects/block-noise) | Multiplies randomly generated rectangular blocks of noise with the existing colors of opaque parts of the layer. | 無い |  | JPEG Block Corruption |
 | [Box](https://guide.alightmotion.com/effects/box) | Renders a faux-3D box using the layer as a surface texture. | 一部 | 立体 cube（キットの形）。物の絵を面に貼るのは無い |  |
 | [Box Blur](https://guide.alightmotion.com/effects/box-blur) | Blurs the layer by averaging the colors of nearby pixels in a surrounding rectangular area (hence "box" blur). | 一部 | 物の blur（ガウス） | Fast Blur |
-| [Brightness / Contrast](https://guide.alightmotion.com/effects/brightness-contrast) | Adjusts the brightness or contrast of the layer. | 一部 | 段の exposure・contrast（全体だけ、物ごとは無い） | Color Controls |
+| [Brightness / Contrast](https://guide.alightmotion.com/effects/brightness-contrast) | Adjusts the brightness or contrast of the layer. | 有る | 物の fx に ISF の Color Controls.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Color Controls |
 | [Bump Map](https://guide.alightmotion.com/effects/bump-map) | Uses a height map to model bumps or perturbations in the surface of the layer, then applies simulated lighting and shading. | 無い |  | Emboss |
 | [Channel Remap (HSV)](https://guide.alightmotion.com/effects/channel-remap-hsv) | Remaps the hue, saturation, value, and alpha channels in the layer. | 無い |  | RGBtoHSV / HSVtoRGB |
 | [Channel Remap (RGB)](https://guide.alightmotion.com/effects/channel-remap-rgb) | Remaps the red, green, blue, and alpha channels in the layer. | 無い |  | RGBA Swap |
@@ -47,8 +47,8 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Circular Ripple](https://guide.alightmotion.com/effects/circular-ripple) | Distorts the layer in a pattern concentric circles around a center point, similar to the ripples caused by a pebble dropped in water. | 一部 | ISF Circle Splash Distortion | Ripples |
 | [Clouds](https://guide.alightmotion.com/effects/clouds) | Renders a procedurally generated cloud pattern in the opaque parts of the layer. | 無い |  | Simplex Noise |
 | [CMYK Halftone Dots](https://guide.alightmotion.com/effects/cmyk-halftone-dots) | Replaces continuous tones in the layer with a pattern of dots of varying sizes for each CMYK color channel, similar to the process used in magazine or comic book printing. | 有る | ISF CMYK Halftone | CMYK Halftone |
-| [Color Temperature](https://guide.alightmotion.com/effects/color-temperature) | Corrects a photo or video so it appears as if illuminated by a light source with a different color temperature. Useful for changing the mood of a scene or correcting for the wrong illumination or whit | 一部 | 段の temperature（全体だけ） | White Point Adjust |
-| [Color Tune](https://guide.alightmotion.com/effects/color-tune) | Smoothly tune the color of dark and light parts of a photo or video segmented by lift, gamma, and gain. Use this to achieve various color "looks", to change the mood of the video, or to match the colo | 一部 | 段の slope・offset・power と影・中間・明るい所の色（全体だけ） | LGG |
+| [Color Temperature](https://guide.alightmotion.com/effects/color-temperature) | Corrects a photo or video so it appears as if illuminated by a light source with a different color temperature. Useful for changing the mood of a scene or correcting for the wrong illumination or whit | 有る | 物の fx に ISF の White Point Adjust.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | White Point Adjust |
+| [Color Tune](https://guide.alightmotion.com/effects/color-tune) | Smoothly tune the color of dark and light parts of a photo or video segmented by lift, gamma, and gain. Use this to achieve various color "looks", to change the mood of the video, or to match the colo | 有る | 物の fx に ISF の LGG.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | LGG |
 | [Colorize](https://guide.alightmotion.com/effects/colorize) | Changes the color of the layer, keeping the original luminance. | 有る | 物の tint |  |
 | [Contour Gradient](https://guide.alightmotion.com/effects/contour-gradient) | Renders a gradient around the contours of the opaque parts of the layer. | 無い |  |  |
 | [Contour Lines](https://guide.alightmotion.com/effects/contour-lines) | Draws one or more lines around the contours of the opaque parts of the layer. | 一部 | 形・文字の stroke（輪郭 1 本） |  |
@@ -68,7 +68,7 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Edge Glow](https://guide.alightmotion.com/effects/edge-glow) | Detects edges in a photo or video and creates a glow around them. | 一部 | ISF Edge Blowout | Edges |
 | [Electric Edges](https://guide.alightmotion.com/effects/electric-edges) | Creates a glowing energy-like outline and optional contour lines around the opaque parts of the layer, which can be animated to look like arcs of electricity. | 無い |  |  |
 | [Ellipsoid](https://guide.alightmotion.com/effects/ellipsoid) | Renders a faux-3D ellipsoid using the layer as a surface texture. | 一部 | 立体 ball。絵を面に貼るのは無い |  |
-| [Exposure / Gamma](https://guide.alightmotion.com/effects/exposure-gamma) | Adjusts the exposure, gamma curve, and luminance offset of photo and video layers. | 一部 | 段の exposure（全体だけ） | Exposure Adjust / Gamma Correction |
+| [Exposure / Gamma](https://guide.alightmotion.com/effects/exposure-gamma) | Adjusts the exposure, gamma curve, and luminance offset of photo and video layers. | 有る | 物の fx に ISF の Exposure Adjust.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Exposure Adjust / Gamma Correction |
 | [Fade In/Out](https://guide.alightmotion.com/effects/fade-in-out) | Automatically animates the layer opacity to fade the layer in at its beginning, and out again at its end. | 一部 | キーで。出入りに自動で付くのは無い | Fade |
 | [Feather](https://guide.alightmotion.com/effects/feather) | Softens the edges of the opaque part of the layer by blurring the alpha channel. | 一部 | クリップの clip_feather（切り抜きの縁だけ） |  |
 | [Fill Behind](https://guide.alightmotion.com/effects/fill-behind) | Fills the area behind the layer with a modified copy of the layer, with optional adjustments such as blur, saturation, tint, and brightness, providing a convenient way to quickly adapt a photo or vide | 無い |  |  |
@@ -105,8 +105,8 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [Iridescence](https://guide.alightmotion.com/effects/iridescence) | Renders a flowing iridescent pattern in opaque parts of the layer. | 無い |  |  |
 | [Kaleidoscope](https://guide.alightmotion.com/effects/kaleidoscope) | Creates symmetric radial reflections of the layer. | 有る | 効果 kaleido・ISF Kaleidoscope Tile | Kaleidoscope |
 | [Lens Blur](https://guide.alightmotion.com/effects/lens-blur) | Applies an angular blur to the layer, excluding the central area. | 一部 | カメラの focus・aperture（立体と世界の物だけ） |  |
-| [Lens Flare](https://guide.alightmotion.com/effects/lens-flare) | Renders a lens flare in the layer. | 一部 | 段の lens_flare（全体だけ） | Lens Flare |
-| [Light Glow](https://guide.alightmotion.com/effects/light-glow) | Creates a soft glow and optional halo around the lighter areas within a photo or video layer based on a luminance threshold. | 一部 | 段の bloom（全体だけ） | Bloom |
+| [Lens Flare](https://guide.alightmotion.com/effects/lens-flare) | Renders a lens flare in the layer. | 有る | 物の fx に ISF の Lens Flare.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Lens Flare |
+| [Light Glow](https://guide.alightmotion.com/effects/light-glow) | Creates a soft glow and optional halo around the lighter areas within a photo or video layer based on a luminance threshold. | 有る | 物の fx に ISF の Bloom.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Bloom |
 | [Lightning](https://guide.alightmotion.com/effects/lightning) | Renders fractal arcs of lightning between two points in the layer. | 無い |  |  |
 | [Linear Repeat](https://guide.alightmotion.com/effects/linear-repeat) | Dynamically generates multiple copies of the layer, arranged along a line. | 有る | copies＋copy_x・copy_y |  |
 | [Linear Streaks](https://guide.alightmotion.com/effects/linear-streaks) | Creates line-shaped streaks by sliding the layer at an angle and blending together overlapping pixels. | 無い |  |  |
@@ -149,7 +149,7 @@ Alight Motion は**下限**（ここまでは揃える線）で、ゴールで�
 | [RGB Split](https://guide.alightmotion.com/effects/rgb-split) | Splits the red, green and blue channels of the layer, keeping one fixed in position and shifting the other two channels in opposite directions. | 有る | 効果 rgbshift・chroma | Chromatic Aberration |
 | [Ribbon](https://guide.alightmotion.com/effects/ribbon) | Renders a twisted, flowing ribbon of varying width in the opaque parts of the layer. | 無い |  |  |
 | [Roughen Edges](https://guide.alightmotion.com/effects/roughen-edges) | Roughens the edges of the opaque parts of the layer. | 一部 | 形の rough（形だけ） |  |
-| [Saturation / Vibrance](https://guide.alightmotion.com/effects/saturation-vibrance) | Adjusts the saturation or purity of colors in the layer. | 一部 | 段の saturation・vibrance（全体だけ） | Vibrance |
+| [Saturation / Vibrance](https://guide.alightmotion.com/effects/saturation-vibrance) | Adjusts the saturation or purity of colors in the layer. | 有る | 物の fx に ISF の Vibrance.fs（10/28、窓で写真 2 枚の片方に掛けて確かめた） | Vibrance |
 | [Scatter Repeat](https://guide.alightmotion.com/effects/scatter-repeat) | Dynamically generates multiple copies of the layer, scattered randomly around the original layer location. | 有る | copies＋scatter_x・scatter_y | Replicate Random |
 | [Sharpen](https://guide.alightmotion.com/effects/sharpen) | Enhances details in the layer by increasing the contrast wherever there are abrupt differences in the luminance of nearby pixels in the layer. | 無い |  | Sharpen RGB |
 | [Simple Starfield](https://guide.alightmotion.com/effects/simple-starfield) | Renders a simple parallax starfield pattern, with a depth component, in the opaque parts of the layer. | 一部 | ISF Hyperspace | Star |
