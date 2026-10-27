@@ -4,6 +4,7 @@ on: [push, pull_request]
 jobs:
   assets:
     runs-on: ubuntu-latest
+    continue-on-error: true   # (it tells; a contributor's pull request is not stopped by it: CONTRIBUTING.md rule 2)
     steps:
       - uses: actions/checkout@v4
         with:

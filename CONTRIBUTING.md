@@ -1,6 +1,6 @@
 # 関わり方
 
-*English is fine for issues and pull requests. Contributions are dual licensed under Apache-2.0 or MIT, as the project is. Short version: build with the README, run the checks below, and say in your pull request what you borrowed from where. If adding a line to ASSETS.md is too much, say so in the pull request and the maintainer will add it.*
+*English version: [CONTRIBUTING.en.md](CONTRIBUTING.en.md). English is fine for issues and pull requests. Contributions are dual licensed under Apache-2.0 or MIT, as the project is. Short version: build with the README, run the checks below, and say in your pull request what you borrowed from where. If adding a line to ASSETS.md is too much, say so in the pull request and the maintainer will add it.*
 
 ## できること
 
@@ -21,11 +21,11 @@ git config core.hooksPath .githooks
 | 何を | コマンド | 通った時 |
 |---|---|---|
 | 台帳（下の決まり 2） | `python3 .githooks/assets_check.py` | `ASSETS.md covers all … files` |
-| 中身の試験（1 本ずつ） | `filament/check/anime_ways.sh` など `filament/check/*.sh` | 最後の行が `… : yes` |
+| 中身の試験（まとめて） | `filament/check/all.sh` | `all checks held`（どれかが NO なら exit 1）。1 本ずつは `filament/check/*.sh` |
 | 窓の試験 | `cd skin/book && flutter test` | 中身を組んでいない時は、中身を使う試験が飛ばされる |
 | 窓の書き方 | `cd skin/book && flutter analyze lib test integration_test` | エラー 0（今ある注意は 97） |
 
-GitHub の Actions は、台帳の確かめを毎回走らせます（`.github/workflows/assets.yml`）。
+GitHub の Actions は、台帳の確かめを毎回走らせます（`.github/workflows/assets.yml`）。知らせるだけで、PR は止めません。窓での最初の 1 本の確かめは `cd skin/book && flutter drive --profile -d macos --driver=test_driver/integration_test.dart --target=integration_test/first_piece_test.dart`（`docs/media/window_step1..4.png` を書く）。作りは [`ARCHITECTURE.md`](ARCHITECTURE.md) と [`filament/README.md`](filament/README.md)。行動規範は [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)、脆弱性は [`SECURITY.md`](SECURITY.md)。
 
 ## 決まり
 

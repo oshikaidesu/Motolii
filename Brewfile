@@ -9,7 +9,8 @@ brew "gstreamer"
 brew "sqlite"
 brew "luajit"
 brew "quickjs-ng"
-# Tools for the checks and the records, not the editor itself
+# What the editor runs: writing a film (ffmpeg makes the mp4, kit_draw.h's film)
 brew "ffmpeg"
+# Tools for the checks and the records, not the editor itself
 brew "imagemagick"
 brew "naga-cli"
