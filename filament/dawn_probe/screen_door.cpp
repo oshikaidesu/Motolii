@@ -2,15 +2,19 @@
 #include "screen_door.h"
 
 #include <filament/Engine.h>
+#include <filament/IndexBuffer.h>
 #include <filament/RenderTarget.h>
+#include <filament/VertexBuffer.h>
 #include <filament/Texture.h>
 
 #include <backend/PipelineState.h>
 #include <backend/Program.h>
 
 #include "details/Engine.h"
+#include "details/IndexBuffer.h"
 #include "details/RenderTarget.h"
 #include "details/Texture.h"
+#include "details/VertexBuffer.h"
 #include "gpu_door.h"
 
 #include <webgpu/webgpu.h>
@@ -37,6 +41,17 @@ struct Out { @builtin(position) position: vec4f, @location(0) uv: vec2f };
 }
 )";
 
+// A mesh's: each corner's place as it is, its uv the two numbers after.
+static const char* const sMeshVertex = R"(
+struct Out { @builtin(position) position: vec4f, @location(0) uv: vec2f };
+@vertex fn main(@location(0) p: vec4f) -> Out {
+  var o: Out;
+  o.position = vec4f(p.xy, 0.0, 1.0);
+  o.uv = p.zw;
+  return o;
+}
+)";
+
 struct Screen {
     ProgramHandle program;
     DescriptorSetLayoutHandle layout;
@@ -45,6 +60,9 @@ struct Screen {
     std::vector<Set> sets;   // one for each pictures read and pass: a set once used is not told otherwise (Filament's WebGPU keeps what it made of it)
     std::vector<BufferObjectHandle> knobs;   // a pass's own (written several times in one frame, one buffer would show its last)
     uint32_t knobBytes = 0;
+    struct Mesh { VertexBuffer* vb = nullptr; IndexBuffer* ib = nullptr; RenderPrimitiveHandle primitive; uint32_t room = 0; };
+    std::vector<Mesh> meshes;   // a pass's own, as its knobs
+    bool mesh = false;
 };
 
 static DriverApi& driver(Engine* engine) { return downcast(engine)->getDriverApi(); }
@@ -83,16 +101,17 @@ static bool takes(Engine* engine, const char* fragment, std::string* why) {
     return said.ok;
 }
 
-Screen* screen(Engine* engine, const char* name, const char* fragment, uint32_t knobBytes, std::string* why, int pictures, unsigned layered) {
+Screen* screen(Engine* engine, const char* name, const char* fragment, uint32_t knobBytes, std::string* why, int pictures, unsigned layered, bool mesh) {
     if (!takes(engine, fragment, why)) return nullptr;
     DriverApi& d = driver(engine);
     auto* s = new Screen;
     s->knobBytes = (knobBytes + 15u) & ~15u;
     s->pictures = pictures < 1 ? 1 : pictures;
+    s->mesh = mesh;
     backend::Program p;
     p.shaderLanguage(ShaderLanguage::WGSL);
     p.diagnostics(utils::CString(name), [](utils::CString const&, utils::io::ostream& out) -> utils::io::ostream& { return out; });
-    p.shader(ShaderStage::VERTEX, sVertex, std::strlen(sVertex) + 1);
+    p.shader(ShaderStage::VERTEX, mesh ? sMeshVertex : sVertex, std::strlen(mesh ? sMeshVertex : sVertex) + 1);
     p.shader(ShaderStage::FRAGMENT, fragment, std::strlen(fragment) + 1);
     const size_t n = (size_t)s->pictures + 1;
     backend::Program::DescriptorBindingsInfo bindings = backend::Program::DescriptorBindingsInfo::with_capacity(n);
@@ -129,8 +148,31 @@ void knobs(Engine* engine, Screen* s, const void* data, uint32_t bytes, int pass
     driver(engine).updateBufferObject(to, BufferDescriptor(copy, s->knobBytes, [](void* p, size_t, void*) { std::free(p); }), 0);
 }
 
-void draw(Engine* engine, Screen* s, Texture* const* from, RenderTarget* to, uint32_t w, uint32_t h, int pass, const int* at, bool over, int blend, int sampler) {
+// A pass's mesh holding `count` corners: made again, twice as roomy, when it would not; filled with them.
+static RenderPrimitiveHandle meshOf(Engine* engine, Screen* s, int pass, const float* corners, uint32_t count) {
+    while ((int)s->meshes.size() <= pass) s->meshes.push_back({});
+    Screen::Mesh& m = s->meshes[(size_t)pass];
+    if (m.room < count) {
+        if (m.vb) driver(engine).destroyRenderPrimitive(m.primitive), engine->destroy(m.vb), engine->destroy(m.ib);
+        m.room = 64;
+        while (m.room < count) m.room *= 2;
+        m.vb = VertexBuffer::Builder().vertexCount(m.room).bufferCount(1).attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT4, 0).build(*engine);
+        m.ib = IndexBuffer::Builder().indexCount(m.room).bufferType(IndexBuffer::IndexType::UINT).build(*engine);
+        auto* order = (uint32_t*)std::malloc(m.room * sizeof(uint32_t));
+        for (uint32_t i = 0; i < m.room; ++i) order[i] = i;
+        m.ib->setBuffer(*engine, IndexBuffer::BufferDescriptor(order, m.room * sizeof(uint32_t), [](void* p, size_t, void*) { std::free(p); }));
+        m.primitive = driver(engine).createRenderPrimitive(downcast(m.vb)->getHwHandle(), downcast(m.ib)->getHwHandle(), PrimitiveType::TRIANGLES);
+    }
+    void* copy = std::malloc(count * 4 * sizeof(float));
+    std::memcpy(copy, corners, count * 4 * sizeof(float));
+    m.vb->setBufferAt(*engine, 0, VertexBuffer::BufferDescriptor(copy, count * 4 * sizeof(float), [](void* p, size_t, void*) { std::free(p); }));
+    return m.primitive;
+}
+
+void draw(Engine* engine, Screen* s, Texture* const* from, RenderTarget* to, uint32_t w, uint32_t h, int pass, const int* at, bool over, int blend, int sampler, const float* corners, uint32_t count) {
     DriverApi& d = driver(engine);
+    if (s->mesh && (!corners || count < 3)) return;
+    const RenderPrimitiveHandle primitive = s->mesh ? meshOf(engine, s, pass, corners, count) : downcast(engine)->getFullScreenRenderPrimitive();
     std::vector<TextureHandle> read;
     for (int i = 0; i < s->pictures; ++i) read.push_back(downcast(from[i])->getHwHandle());
     DescriptorSetHandle set;
@@ -163,7 +205,7 @@ void draw(Engine* engine, Screen* s, Texture* const* from, RenderTarget* to, uin
     }
     d.bindDescriptorSet(set, 0, {});
     d.beginRenderPass(to ? downcast(to)->getHwHandle() : downcast(engine)->getDefaultRenderTarget(), params);   // (none: the screen, as the frame's swap chain is)
-    d.draw(pipeline, downcast(engine)->getFullScreenRenderPrimitive(), 0, 3, 1);
+    d.draw(pipeline, primitive, 0, s->mesh ? count : 3, 1);
     d.endRenderPass();
     d.bindDescriptorSet({}, 0, {});
 }
@@ -171,6 +213,7 @@ void draw(Engine* engine, Screen* s, Texture* const* from, RenderTarget* to, uin
 void drop(Engine* engine, Screen* s) {
     DriverApi& d = driver(engine);
     for (BufferObjectHandle k : s->knobs) d.destroyBufferObject(k);
+    for (const Screen::Mesh& m : s->meshes) if (m.vb) d.destroyRenderPrimitive(m.primitive), engine->destroy(m.vb), engine->destroy(m.ib);
     for (const Screen::Set& one : s->sets) d.destroyDescriptorSet(one.handle);
     d.destroyDescriptorSetLayout(s->layout);
     d.destroyProgram(s->program);

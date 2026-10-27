@@ -7,6 +7,7 @@
 #pragma once
 #include "aviutl.h"
 #include <lua.hpp>
+#include <array>
 #include <random>
 
 struct AviutlBuf { Texture* t = nullptr; RenderTarget* rt = nullptr; uint32_t w = 0, h = 0; };
@@ -21,7 +22,7 @@ struct AviutlRun {
     std::multimap<std::pair<uint32_t, uint32_t>, AviutlBuf> spare;   // (pictures let go, kept by size for the next asked: a buffer made and let go each frame takes the same ones)
     std::map<std::string, door::Screen*> doors;     // (each shader made, by its name and way of sampling)
     std::map<door::Screen*, int> draws;             // (draws of each this frame: each its own constants, the door's pass)
-    door::Screen* place = nullptr;
+    door::Screen *place = nullptr, *poly = nullptr;
     Texture *none = nullptr, *random = nullptr;
     std::set<std::string> said;
     Stage* s = nullptr;                             // (this frame's)
@@ -48,6 +49,16 @@ struct K { m: vec4f, at: vec2f, src: vec2f, size: vec2f, alpha: f32, way: f32, c
   s = s * (k.alpha * select(w.x * w.y, 1.0, k.way == 2.0));
   if (k.colour.x == 2.0 && s.a > 0.0) { s = vec4f(s.rgb / s.a, s.a); }
   return s;
+}
+)";
+// obj.drawpoly's: the picture on triangles (the door's mesh), at each corner's uv, faded by alpha.
+static const char* const aviutl_poly = R"(
+struct K { alpha: f32 }
+@group(0) @binding(0) var picture: texture_2d<f32>;
+@group(0) @binding(1) var near: sampler;
+@group(0) @binding(2) var<uniform> k: K;
+@fragment fn main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  return textureSampleLevel(picture, near, uv, 0.0) * k.alpha;
 }
 )";
 
@@ -242,6 +253,80 @@ static int aviutl_draw(lua_State* L) {   // (ox, oy, oz, zoom, alpha, rx, ry, rz
     if (own) r.drew = true;
     return 0;
 }
+// obj.drawpoly: each four corners two triangles, 0-1-2 and 0-2-3 (sashimono-edit's _fill_quad, MIT), the picture on
+// them at the corners' u, v, all of one call drawn at once on the door's mesh (as Filament draws its own triangle). As
+// lua.txt has it (the AviUtl2 script skill's
+// references/api.md): corners from the object's place into the frame, as they are into the temporary buffer, the
+// frame's alpha the object's too (sashimono-edit's lua_drawpoly); u, v pixels (none: the picture's four corners), the
+// alpha the 13th or 21st; a table of faces of 20 ({x0 .. z3, u0 .. v3}[, alpha]), or of corners {x, y, z, u, v} with
+// u, v 0 to 1, 4 or 3 a face ([, count, alpha]).
+static int aviutl_drawpoly(lua_State* L) {
+    AviutlRun& r = aviutl_of(L);
+    const AviutlBuf& from = r.bufs["object"];
+    struct Corner { double x, y, z, u, v; };
+    std::vector<std::vector<Corner>> faces;
+    double alpha = 1;
+    const auto item = [&]() { std::vector<double> v; for (int j = 1; j <= (int)lua_objlen(L, -1); ++j) lua_rawgeti(L, -1, j), v.push_back(aviutl_num(L, -1)), lua_pop(L, 1); return v; };
+    const auto face = [&](const double* p) { std::vector<Corner> c(4); for (int i = 0; i < 4; ++i) c[i] = {p[i * 3], p[i * 3 + 1], p[i * 3 + 2], p[12 + i * 2], p[13 + i * 2]}; return c; };
+    if (lua_istable(L, 1)) {
+        std::vector<std::vector<double>> items;
+        for (int i = 1; i <= (int)lua_objlen(L, 1); ++i) {
+            lua_rawgeti(L, 1, i);
+            if (!lua_istable(L, -1)) return aviutl_no(L, "obj.drawpoly of a table of numbers");
+            items.push_back(item()), lua_pop(L, 1);
+        }
+        if (items.empty()) return 0;
+        const size_t width = items[0].size();
+        for (const auto& v : items) if (v.size() != width) return aviutl_no(L, "obj.drawpoly of mixed faces");
+        if (width == 20) {   // (faces)
+            alpha = aviutl_num(L, 2, 1);
+            for (const auto& v : items) faces.push_back(face(v.data()));
+        } else if (width == 5) {   // (corners)
+            const int count = lua_isnumber(L, 2) ? (int)lua_tonumber(L, 2) : 4;
+            alpha = aviutl_num(L, 3, 1);
+            if ((count != 3 && count != 4) || items.size() % count) return aviutl_no(L, "obj.drawpoly of " + std::to_string(count) + "-cornered faces");
+            for (size_t f = 0; f < items.size(); f += count) {
+                std::vector<Corner> c;
+                for (int i = 0; i < count; ++i) c.push_back({items[f + i][0], items[f + i][1], items[f + i][2], items[f + i][3] * from.w, items[f + i][4] * from.h});
+                faces.push_back(c);
+            }
+        } else return aviutl_no(L, "obj.drawpoly of " + std::to_string(width) + " numbers a " + (width == 7 || width == 28 ? "face with its corners' colours" : "face with its normals"));
+    } else {
+        const int n = lua_gettop(L);
+        if (n < 12) return aviutl_no(L, "obj.drawpoly with fewer than four corners");
+        double p[20] = {};
+        for (int i = 0; i < 12; ++i) p[i] = aviutl_num(L, i + 1);
+        if (n >= 20) for (int i = 0; i < 8; ++i) p[12 + i] = aviutl_num(L, 13 + i);
+        else p[14] = from.w, p[16] = from.w, p[17] = from.h, p[19] = from.h;
+        alpha = n == 13 ? aviutl_num(L, 13, 1) : n >= 21 ? aviutl_num(L, 21, 1) : 1;
+        faces.push_back(face(p));
+    }
+    const int way = r.blend == "none" || r.blend == "0" || r.blend.empty() ? 0 : r.blend == "add" || r.blend == "1" || r.blend == "rgba_add" || r.blend == "alpha_add" ? 1 : -1;
+    if (way < 0) return aviutl_no(L, "obj.drawpoly blend " + r.blend);
+    const AviutlBuf& to = r.bufs[r.target];
+    if (!to.t) return aviutl_no(L, "obj.drawpoly into a temporary buffer never made");
+    if (!r.poly) return aviutl_no(L, "obj.drawpoly: " + r.trouble);
+    const bool own = r.target == "framebuffer";
+    lua_getglobal(L, "obj");
+    const auto f = [&](const char* k, double otherwise) { lua_getfield(L, -1, k); const double v = aviutl_num(L, -1, otherwise); lua_pop(L, 1); return v; };
+    const double ox = own ? f("ox", 0) : 0, oy = own ? f("oy", 0) : 0, fade = alpha * (own ? f("alpha", 1) : 1);
+    lua_pop(L, 1);
+    for (const auto& c : faces)
+        for (const Corner& p : c) if (p.z != 0) return aviutl_no(L, "obj.drawpoly in depth");
+    std::vector<float> corners;   // (the target's -1 to 1, up; the picture's 0 to 1)
+    const auto corner = [&](const Corner& p) { corners.insert(corners.end(), {(float)((to.w / 2.0 + ox + p.x) / to.w * 2 - 1), (float)(1 - (to.h / 2.0 + oy + p.y) / to.h * 2), (float)(p.u / from.w), (float)(p.v / from.h)}); };
+    for (const auto& c : faces) {
+        corner(c[0]), corner(c[1]), corner(c[2]);
+        if (c.size() == 4) corner(c[0]), corner(c[2]), corner(c[3]);
+    }
+    const float k[4] = {(float)fade, 0, 0, 0};
+    const int pass = r.draws[r.poly]++;
+    door::knobs(r.s->engine, r.poly, k, sizeof k, pass);
+    Texture* picture = from.t;
+    door::draw(r.s->engine, r.poly, &picture, to.rt, to.w, to.h, pass, nullptr, true, way, r.sampler == "dot" ? 1 : r.sampler == "loop" ? 2 : r.sampler == "mirror" ? 3 : 0, corners.data(), (uint32_t)corners.size() / 4);
+    if (own) r.drew = true;
+    return 0;
+}
 static int aviutl_effect(lua_State* L) {   // (a built-in effect by its name: only where it is the picture as it is, or Area Expansion's margins)
     AviutlRun& r = aviutl_of(L);
     const std::string n = aviutl_str(L, 1);
@@ -376,7 +461,7 @@ static std::shared_ptr<AviutlRun> aviutl_made(Stage& s, const std::string& file)
     if (luaL_dostring(L, (sandbox + aviutl_globals).c_str())) r->trouble = lua_tostring(L, -1);
     lua_newtable(L);
     const std::pair<const char*, lua_CFunction> calls[] = {{"pixelshader", aviutl_pixelshader}, {"clearbuffer", aviutl_clearbuffer}, {"copybuffer", aviutl_copybuffer}, {"load", aviutl_load}, {"setoption", aviutl_setoption}, {"getoption", aviutl_getoption},
-        {"getinfo", aviutl_getinfo}, {"getvalue", aviutl_getvalue}, {"setanchor", aviutl_setanchor}, {"getpixel", aviutl_getpixel}, {"setfont", aviutl_setfont}, {"draw", aviutl_draw}, {"effect", aviutl_effect}};
+        {"getinfo", aviutl_getinfo}, {"getvalue", aviutl_getvalue}, {"setanchor", aviutl_setanchor}, {"getpixel", aviutl_getpixel}, {"setfont", aviutl_setfont}, {"draw", aviutl_draw}, {"drawpoly", aviutl_drawpoly}, {"effect", aviutl_effect}};
     for (const auto& [n, f] : calls) lua_pushlightuserdata(L, r.get()), lua_pushcclosure(L, f, 1), lua_setfield(L, -2, n);
     luaL_dostring(L, "return { __index = function(_, k) error('not yet: obj.' .. tostring(k), 2) end }");   // (any other name of obj)
     lua_setmetatable(L, -2);
@@ -387,6 +472,7 @@ static std::shared_ptr<AviutlRun> aviutl_made(Stage& s, const std::string& file)
     else r->chunk = luaL_ref(L, LUA_REGISTRYINDEX);
     std::string why;
     if (!(r->place = door::screen(s.engine, "aviutl place", aviutl_placing, 64, &why))) r->trouble = "its placing shader: " + why;
+    if (!(r->poly = door::screen(s.engine, "aviutl drawpoly", aviutl_poly, 16, &why, 1, 0, true))) r->trouble = "its drawpoly shader: " + why;
     r->none = Texture::Builder().width(1).height(1).levels(1).format(Texture::InternalFormat::RGBA8).build(*s.engine);
     r->none->setImage(*s.engine, 0, backend::PixelBufferDescriptor(new uint32_t(0), 4, backend::PixelDataFormat::RGBA, backend::PixelDataType::UBYTE, [](void* p, size_t, void*) { delete (uint32_t*)p; }));
     auto* noise = new std::vector<math::half>(256 * 256);   // ("random": 256 x 256 of 0 to 1 (R32F there; a half float here, as a door's picture is filtered))

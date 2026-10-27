@@ -233,7 +233,7 @@ Still stuck? Open an [issue](https://github.com/oshikaidesu/motolii/issues) with
 
 1. An `.app` to hand out (Homebrew's libraries inside it), on Releases.
 2. The window's tests all passing when run together, and CI that stops on them.
-3. The AviUtl2 calls still missing (`obj.drawpoly`, …); TSL looks on the shelves.
+3. The AviUtl2 calls still missing (`obj.getpixeldata`, the built-in effects, …); TSL looks on the shelves.
 4. More of Alight Motion (101 of 201 today).
 
 ## Contributing
