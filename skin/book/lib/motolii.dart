@@ -181,6 +181,7 @@ class Motolii {
   late final _guide = _b.motolii_guide;
 
   final _labels = <String, String>{}, _pictures = <String, String>{}, _homes = <String, String>{};
+  final _same = <String>{};
 
   final _shownOf = <String, Shown?>{};   // (read out of the things' parts once a picture of the document)
 
@@ -193,6 +194,7 @@ class Motolii {
     _labels.clear();
     _pictures.clear();
     _homes.clear();
+    _same.clear();
   }
 
   /// The window's thread watched: while on, a change it waits for, or a read that waits on the document over 2 ms, is

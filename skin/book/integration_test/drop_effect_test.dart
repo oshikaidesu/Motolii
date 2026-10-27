@@ -91,8 +91,8 @@ void main() {
     expect(await t.runAsync(() => m.write(film)), isTrue, reason: m.trouble); // (written from the window's own document: drawn right)
     // ignore: avoid_print
     print('written: $film');
-    List<String> bare() => [for (final (n, f) in m.effects) if (m.picture(f).isEmpty) n];
-    for (var i = 0; i < 3000 && bare().isNotEmpty; i++) {   // (every effect on the shelf with a tile: the ones none was drawn for, drawn by themselves)
+    List<String> bare() => [for (final (n, f) in m.effects) if (m.picture(f).isEmpty || m.picture(f) != m.tileHome(f)) n];   // (each drawn here: moving)
+    for (var i = 0; i < 6000 && bare().isNotEmpty; i++) {   // (every effect on the shelf with a tile: the ones none was drawn for, drawn by themselves)
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
       await t.pump();
     }

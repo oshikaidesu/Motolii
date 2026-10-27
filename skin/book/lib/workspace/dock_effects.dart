@@ -1,12 +1,14 @@
 // The Effects shelf: all the inside does to a picture, as tiles sorted by what each is for (the inside's labels as
 // chips, not who draws it): the effects a thing may be given (picked: its foot puts it on or takes it off), the
 // whole-screen effects (on the picked thing as the camera sees it, or on the stage, in their order), the motions.
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 
 import '../tokens.dart';
 import 'dock_parts.dart';
+import 'effect_tiles.dart';
 import 'ws.dart';
 
 class EffectsShelf extends StatelessWidget {
@@ -27,7 +29,7 @@ class EffectsShelf extends StatelessWidget {
            tile: _Tile(n, file: m.picture(n), look: _FxLook(n), on: on.contains(n) ? 'ON' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: () => ws.fxToggle(n), star: c)),
       for (final (n, f) in m.effects)
         (name: n, label: m.label(n), on: screen.contains(f), apply: () => ws.screenToggle(f), said: 'On the picked thing',
-         tile: _Tile(n, key: ValueKey('ws-screen-$n'), file: m.picture(f), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: () => ws.screenToggle(f))),
+         tile: _Tile(n, key: ValueKey('ws-screen-$n'), file: m.picture(f), same: m.tileSame(f), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: () => ws.screenToggle(f))),
       if (picked)
         for (final (n, f) in m.animators)
           (name: n, label: 'Motion', on: ws.motion == f, apply: () => ws.motionToggle(f), said: 'A motion for the picked thing',
@@ -61,15 +63,16 @@ class EffectsShelf extends StatelessWidget {
   }
 }
 
-/// One tile, whatever draws it: what it does to a sample (the picture the inside says, made by filament/fx_tiles.sh;
-/// without one, a thing's effect its small drawing, else a plain tile), its name, ON (and its place among
-/// those on the stage) when it is on, the star for a thing's effect.
+/// One tile, whatever draws it: what it does to a sample (the picture the inside says, drawn by effect_tiles.dart and
+/// moving while the hand is on it, as Alight Motion's tiles move; or made by filament/fx_tiles.sh; without one, a thing's
+/// effect its small drawing, else a plain tile), its name, ON (and its place among those on the stage) when it is on,
+/// NO CHANGE when it is seen to change nothing on the sample, the star for a thing's effect.
 class _Tile extends StatelessWidget {
-  const _Tile(this.name, {super.key, this.file, this.look, required this.on, required this.onTap, this.onApply, this.picked = false, this.star});
+  const _Tile(this.name, {super.key, this.file, this.look, required this.on, required this.onTap, this.onApply, this.picked = false, this.same = false, this.star});
   final String name;
   final String? file, on;
   final CustomPainter? look;
-  final bool picked;
+  final bool picked, same;
   final VoidCallback onTap;
   final VoidCallback? onApply;   // (two presses: it is put on, or taken off)
   final DockCtx? star;
@@ -87,10 +90,11 @@ class _Tile extends StatelessWidget {
             children: [
               ColoredBox(color: WsT.card),
               if (file case final f? when f.isNotEmpty)
-                Image.file(File(f), fit: BoxFit.cover, cacheWidth: 256, errorBuilder: (_, _, _) => const SizedBox())
+                _Moving(f, playing: h)
               else if (look != null)
                 FittedBox(child: CustomPaint(size: const Size(18, 16), painter: look)),
               if (on case final o?) Positioned(left: 3, top: 3, child: DockTag(o, hue: WsT.accent, edge: true)),
+              if (same) Positioned(left: 3, bottom: 3, child: DockTag('NO CHANGE', hue: Grey.g63, edge: true)),   // (the sample as it is: its defaults show nothing on a photo, or it helps other scripts)
               if (star case final s? when s.starred(name) || h) Positioned(right: 0, top: 0, child: DockStar(on: s.starred(name), onTap: () => s.star(name))),
               if (on != null || picked || h) DecoratedBox(decoration: BoxDecoration(border: Border.all(color: on != null || picked ? WsT.accentInk : Grey.g76, width: on != null || picked ? 2 : 1))),
             ],
@@ -106,6 +110,50 @@ class _Tile extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// A tile's picture, its eight moving ones played round and round while [playing] (the media shelf's 280 ms a picture,
+/// dock_files_contents.dart); its still otherwise, and for a picture with none beside it.
+class _Moving extends StatefulWidget {
+  const _Moving(this.file, {required this.playing});
+  final String file;
+  final bool playing;
+  @override
+  State<_Moving> createState() => _MovingState();
+}
+
+class _MovingState extends State<_Moving> {
+  int? _step;
+  Timer? _clock;
+
+  void _follow() {
+    final go = widget.playing && File(EffectTiles.frame(widget.file, 0)).existsSync();
+    if (go == (_clock != null)) return;
+    _clock?.cancel();
+    _clock = go ? Timer.periodic(const Duration(milliseconds: 280), (_) => mounted ? setState(() => _step = ((_step ?? EffectTiles.still) + 1) % EffectTiles.moments.length) : null) : null;
+    if (!go) _step = null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _follow();
+  }
+
+  @override
+  void didUpdateWidget(_Moving old) {
+    super.didUpdateWidget(old);
+    _follow();
+  }
+
+  @override
+  void dispose() {
+    _clock?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Image.file(File(_step == null ? widget.file : EffectTiles.frame(widget.file, _step!)), fit: BoxFit.cover, cacheWidth: 256, gaplessPlayback: true, errorBuilder: (_, _, _) => const SizedBox());
 }
 
 /// Joined: the document's value an effect is, and what the picked thing has for it now.

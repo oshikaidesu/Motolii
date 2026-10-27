@@ -33,16 +33,24 @@ extension MotoliiShelves on Motolii {
     return _homes[name] ?? '';
   }
 
+  /// Whether an effect's tile is seen to change nothing on the sample (its defaults show nothing, or it is a helper of others).
+  bool tileSame(String name) {
+    _said();
+    return _same.contains(name);
+  }
+
   /// A tile drawn where [home] says: the effects it is for show it from now on (workspace/effect_tiles.dart).
-  void tileDrawn(String home) {
+  void tileDrawn(String home, {bool same = false}) {
     for (final e in _homes.entries) {
-      if (e.value == home) _pictures[e.key] = home;
+      if (e.value != home) continue;
+      _pictures[e.key] = home;
+      same ? _same.add(e.key) : _same.remove(e.key);
     }
   }
 
   void _said() => (effects, thingEffects);   // (both lists read: their labels and pictures with them)
 
-  /// "name\tfile\tlabel\tpicture\thome" lines: the names and files, the labels, pictures and homes kept for [label], [picture] and [tileHome].
+  /// "name\tfile\tlabel\tpicture\thome\tsame" lines: the names and files, the labels, pictures, homes and sameness kept for [label], [picture], [tileHome] and [tileSame].
   List<(String, String)> _labelled(String lines) {
     final out = <(String, String)>[];
     for (final w in [for (final l in lines.split('\n')) l.split('\t')]) {
@@ -52,6 +60,7 @@ extension MotoliiShelves on Motolii {
       for (final k in [w[0], w[1]]) {   // (by name and by file: the file's is its own)
         if (w.length > 3) _pictures[k] = w[3];
         if (w.length > 4) _homes[k] = w[4];
+        if (w.length > 5 && w[5] == 'same') _same.add(k);
       }
     }
     return out;

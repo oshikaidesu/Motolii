@@ -34,10 +34,12 @@ static bool doc_files_moved(Doc& d) {
 // the motions a thing may be given (animators/*.js); a file's name as its first line says it, before the colon; its label
 // (what it is for, the shelf's kind) as a head line "// --label:Distort" says it (AviUtl's --label:, its script's menu); its
 // picture for the shelf the .png beside it, if there is one ("" none).
-// An effect's tile on the shelf, "\tpicture\thome": its picture (a .png beside it, as fx_tiles.sh writes the library's;
-// else the one drawn for it in ~/Library/Caches/Motolii/tiles; "" none yet) and where one drawn for it goes, named by
-// the file and when it was last written, as midi_roll_file names its rolls (an @ file's script by "file#name"): written
-// over, it is drawn again (the window draws those with none: skin/book/lib/workspace/effect_tiles.dart).
+// An effect's tile on the shelf, "\tpicture\thome\tsame": its picture (the one drawn for it in
+// ~/Library/Caches/Motolii/tiles, with its moving frames beside it, home_0..7.png, as Alight Motion's tiles move; until
+// then a .png beside it, as fx_tiles.sh writes the library's; "" none yet), where one drawn for it goes, named by the
+// file and when it was last written, as midi_roll_file names its rolls (an @ file's script by "file#name"): written
+// over, it is drawn again; and "same" when none of its frames is seen to differ from the sample (home.same; the window
+// draws and measures them: skin/book/lib/workspace/effect_tiles.dart).
 static std::string doc_tile(const std::string& ref, const std::filesystem::path& beside) {
     std::error_code wrong;
     const std::string file = ref.substr(0, ref.find('#'));
@@ -49,8 +51,8 @@ static std::string doc_tile(const std::string& ref, const std::filesystem::path&
     char name[24];
     std::snprintf(name, sizeof name, "%016llx.png", (unsigned long long)hash);
     const std::string drawn = (std::filesystem::path(home ? home : "/tmp") / "Library/Caches/Motolii/tiles" / name).string();
-    const std::string picture = !beside.empty() && std::filesystem::exists(beside, wrong) ? beside.string() : std::filesystem::exists(drawn, wrong) ? drawn : "";
-    return "\t" + picture + "\t" + drawn;
+    const std::string picture = std::filesystem::exists(drawn, wrong) ? drawn : !beside.empty() && std::filesystem::exists(beside, wrong) ? beside.string() : "";
+    return "\t" + picture + "\t" + drawn + "\t" + (std::filesystem::exists(drawn + ".same", wrong) ? "same" : "");
 }
 static std::string doc_folder_names(const char* folder, const char* extension) {
     struct Seen { std::string all; std::filesystem::file_time_type was{}; std::chrono::steady_clock::time_point looked{}; };
