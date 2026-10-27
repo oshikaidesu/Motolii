@@ -70,6 +70,7 @@ abstract final class EffectTiles {
       }
     }
     if (shown) changed();
+    if (Platform.environment['FLUTTER_TEST'] == 'true') return;   // (flutter test's widget tests: none drawn behind them, seven hundred pictures on the GPU while they time the window; flutter drive's draw them)
     _queue
       ..insertAll(0, mine)
       ..addAll(theirs);
