@@ -172,12 +172,12 @@ Motolii の一番の使い方です。例として、[ISF-Files](https://github.
 
 1. 効果のファイル（`.fs`）を落とす。例：ISF-Files のページで `ISF/ASCII Art.fs` を開き、Raw を右クリックして「リンク先を別名で保存」。
 2. Finder で ⌘⇧G を押し、`~/Library/Application Support/Motolii/` と打って開く。中に `effects` というフォルダを作り（無ければ）、落としたファイルを入れる。
-3. 画面の Effects の棚に、その場で出る（閉じて開き直さなくてよい）。レイヤーを選んで、タイルを押し、下の **Add**。
+3. 画面の Effects の棚に、その場で出る（閉じて開き直さなくてよい）。タイルの絵（気球の写真にその効果を掛けた見本）も数秒で自動で作られ、効果の隣に `.png` で置かれる。レイヤーを選んで、タイルを押し、下の **Add**。
    ![Effects の棚に ASCII Art が出た所](docs/media/drop_shelf.jpg)
 4. 書き出すと、こうなる（写真に ASCII Art を掛けた所）。
    ![写真に ASCII Art を掛けて書き出した所](docs/media/drop_ascii.jpg)
 
-いまは画面の中だと掛けた後の場面が白く見える不具合があります（上の「知っている不具合」）。書き出した動画では正しく描かれます。この手順の 3 までは試験としても走ります（`skin/book/integration_test/drop_effect_test.dart`。書き出しもして、そのコマが正しく描かれているのを確かめた）。WGSL（`.wgsl`）・レシピ（`.js`、`recipes/` に）・イーズ（`.way`、`ways/` に）も同じ置き方です。
+いまは画面の中だと掛けた後の場面が白く見える不具合があります（上の「知っている不具合」）。書き出した動画では正しく描かれます。この手順は試験としても走ります（`skin/book/integration_test/drop_effect_test.dart`：画面を開いたまま置く → 棚に出る → 見本の絵ができる → 掛ける → 書き出して、そのコマが正しく描かれているのを確かめた）。WGSL（`.wgsl`）・レシピ（`.js`、`recipes/` に）・イーズ（`.way`、`ways/` に）も同じ置き方です。
 
 ### 次に：自分の素材で
 

@@ -172,12 +172,12 @@ This is what Motolii is for. As an example, `ASCII Art.fs` from [ISF-Files](http
 
 1. Download the effect file (`.fs`). For example, open `ISF/ASCII Art.fs` on the ISF-Files page, right-click Raw and save the link.
 2. In Finder press ⌘⇧G, type `~/Library/Application Support/Motolii/` and go. Make a folder `effects` there (if there is none) and put the file in it.
-3. It appears on the Effects shelf at once (no restart). Pick a layer, press the tile, then **Add**.
+3. It appears on the Effects shelf at once (no restart). Its tile picture (the balloon photo with that effect on) is made by itself within seconds and put beside the effect as a `.png`. Pick a layer, press the tile, then **Add**.
    ![ASCII Art on the Effects shelf](docs/media/drop_shelf.jpg)
 4. Written out, it looks like this (ASCII Art on a photo).
    ![ASCII Art on a photo, written out](docs/media/drop_ascii.jpg)
 
-For now the live view inside the app shows the composition white after this (see Known bugs); the written video is drawn right. Steps 1–3 also run as a test (`skin/book/integration_test/drop_effect_test.dart`), which also writes the video and was checked by its frames. WGSL (`.wgsl`), recipes (`.js`, in `recipes/`) and eases (`.way`, in `ways/`) go in the same way.
+For now the live view inside the app shows the composition white after this (see Known bugs); the written video is drawn right. These steps also run as a test (`skin/book/integration_test/drop_effect_test.dart`: put in with the app open → on the shelf → its tile drawn → put on → written, its frames checked). WGSL (`.wgsl`), recipes (`.js`, in `recipes/`) and eases (`.way`, in `ways/`) go in the same way.
 
 ### Next: your own media
 

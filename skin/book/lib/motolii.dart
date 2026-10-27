@@ -184,8 +184,15 @@ class Motolii {
 
   final _shownOf = <String, Shown?>{};   // (read out of the things' parts once a picture of the document)
 
-  /// What the folders hold (recipes, effects, animators): not the document's, read once.
+  /// What the folders hold (recipes, effects, animators): not the document's, read once, and again after [forgetFolders].
   final _folders = <String, List<(String, String)>>{};
+
+  /// The folders read again at the next ask (a file put in the maker's own folder: workspace/effect_tiles.dart).
+  void forgetFolders() {
+    _folders.clear();
+    _labels.clear();
+    _pictures.clear();
+  }
 
   /// The window's thread watched: while on, a change it waits for, or a read that waits on the document over 2 ms, is
   /// kept; [broken] says each, one to a line ('' none). Turned on, what was kept is forgotten.

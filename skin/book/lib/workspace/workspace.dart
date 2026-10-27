@@ -9,6 +9,7 @@ import 'package:docking/docking.dart';
 import 'package:flutter/widgets.dart';
 import '../parts/skin_parts.dart';
 import 'zoom.dart';
+import 'effect_tiles.dart';
 import 'ableton.dart';
 import 'package:lab_book/sets/inspector/inspector_parts_insp_host.dart';
 
@@ -61,6 +62,7 @@ class _WorkspaceState extends State<Workspace> {
     ..tools = [...deskTools, ...widget.tools]
     ..view.addAll(widget.view);
   Motolii? _inside;
+  StreamSubscription<FileSystemEvent>? _own;   // (the maker's own folder watched: effect_tiles.dart)
 
   String? _doc; // (the document that is open: the one the window was given, or one made or opened from the menu)
 
@@ -277,6 +279,9 @@ class _WorkspaceState extends State<Workspace> {
     final inside = Motolii.open(doc);
     if (inside == null) return;
     _inside = inside;
+    _own = EffectTiles.watch(inside, () {   // (a file put in the maker's own folder: on the shelves at once)
+      if (mounted) _ws.reread();
+    });
     _doc = doc;
     _beside = _documents();
     final id = await inside.texture();
@@ -304,6 +309,7 @@ class _WorkspaceState extends State<Workspace> {
   void dispose() {
     FocusManager.instance.removeListener(_keepKeys);
     _windowFocus.dispose();
+    _own?.cancel();
     _inside?.close();
     _ws.dispose();
     super.dispose();
