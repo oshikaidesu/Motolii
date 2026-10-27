@@ -53,3 +53,4 @@ __pycache__/
 /build.motolii
 /reports/user_panels/
 /reports/skin_run/*.motolii
+/docs/media/*.png   # (what the window tests shoot; the pictures the READMEs show are .jpg made from them)

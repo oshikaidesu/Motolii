@@ -129,6 +129,7 @@ struct Stage {
              bool picked = false, hovered = false, knob = true; double pick[8] = {}, hover[8] = {}; } desk;
     std::function<void()> over;   // drawn last, over all of them (a whole-screen effect: screen.h)
     std::vector<std::function<void()>> before;   // drawn before the stage's own view, each into a picture of its own (a thing with effects of its own: thing_fx.h)
+    std::vector<std::function<void()>> aim;      // told before each frame begins, what those pictures and the looks that show them are (Filament sends a look's parameters on as a frame begins: FRenderer::beginFrame, FEngine::prepare)
     std::function<void()> lastly;   // and after everything, in the same frame (the desk: its stage's picture placed on it, live.h)
     Texture* drawnInto = nullptr;   // the picture the views draw into (live.h, screen.h); none: the screen
     RenderTarget* out = nullptr;   // where the picture goes at last (none: the screen; the window's live picture: live.h)

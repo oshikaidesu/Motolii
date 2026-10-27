@@ -12,6 +12,9 @@ if [ ! -d "$SRC" ]; then
     git clone --depth 1 --branch v1.77.2 https://github.com/google/filament.git "$SRC"
     (cd "$SRC" && git apply "$HERE/filament_dawn_compute.patch" && git apply "$HERE/glslang_hlsl.patch")   # (glslang_hlsl: its HLSL front end built in, AviUtl2's shaders: ../aviutl.cpp)
 fi
+# (Filament's WebGPU viewport turned to WebGPU's top-left origin, as its own scissor() does: upstream's TODO in
+#  beginRenderPass, still there on main 10/27. Put on a tree made before it too, once)
+(cd "$SRC" && { git apply --reverse --check "$HERE/filament_webgpu_viewport.patch" 2>/dev/null || git apply "$HERE/filament_webgpu_viewport.patch"; })
 mkdir -p "$SRC/out/wgpu" out/shots
 cd "$SRC/out/wgpu"
 [ -f build.ninja ] || cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DFILAMENT_SUPPORTS_WEBGPU=ON -DFILAMENT_SKIP_SAMPLES=ON \

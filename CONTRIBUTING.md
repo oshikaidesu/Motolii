@@ -51,7 +51,6 @@ GitHub の Actions は、台帳の確かめを毎回走らせます（`.github/w
 | 配れる `.app`：中身が読む Homebrew の部品（GStreamer・glib・SQLite・LuaJIT・QuickJS）を `.app` の中に入れる。[dylibbundler](https://github.com/auriamg/macdylibbundler) か GStreamer の macOS 用フレームワーク | `filament/edit.sh`、`skin/book/macos/` | 中 |
 | AviUtl2 のスクリプトで足りない呼び出し（`obj.drawpoly`、図形「円」など）を、手本（AviUtl2 の lua.txt、sashimono-edit）どおりに | `reports/aviutl2/converter_plan.md`、`filament/aviutl.cpp` | 中〜難 |
 | TSL の表現を編集の棚に出す | `filament/tsl/`、`reports/tsl_collection.md` | 中 |
-| 画面の中で、レイヤーに掛けた画面用の効果（ISF・WGSL）が白く見える不具合（書き出しは正しい。`drop_effect_test.dart` で出せる） | `filament/live.h`、`filament/thing_fx.h` | 中〜難 |
 | 窓の試験の落ちる 3 本（下の「知っている穴」）を直し、まとめて走らせても通るようにする | `skin/book/test/` | 中 |
 | 台帳 `ASSETS.md` の見出しに英語を添える | `ASSETS.md` | 易 |
 | 窓の結合テストの出力先（いまは `reports/`）を一時フォルダに | `skin/book/integration_test/` | 易 |

@@ -162,9 +162,10 @@ static void desk_marks(Stage& s, Live* l, int i) {
 // The stage's picture as it now is, drawn into the next buffer; it is the front one once the GPU has finished it.
 static void live_draw(Stage& s, Live* l) {
     Live* desk = l->desk && s.desk.w ? l->desk : nullptr;
-    // (with whole-screen effects the stage's picture is drawn as a written film has it, then placed on the desk where the
-    //  stage lies: an effect is the picture's, what lies off the stage is not in it)
-    const bool placed = desk && s.over;
+    // (with effects, whole-screen or a thing's own, the stage's picture is drawn as a written film has it, then placed on
+    //  the desk where the stage lies: an effect is the picture's, what lies off the stage is not in it. vgpu's way of
+    //  post-processing the screen: the scene drawn into an offscreen target, the effect on that, then presented)
+    const bool placed = desk && (s.over || !s.before.empty());
     s.out = desk && !placed ? desk->target[desk->next] : l->target[l->next];
     if (desk && !placed) desk_lay(s, true);
     Texture* const wasInto = s.drawnInto;   // (the picture the views draw into, for one that reads what is under: kit.h)

@@ -1,0 +1,18 @@
+--- a/filament/backend/src/webgpu/WebGPUDriver.cpp
++++ b/filament/backend/src/webgpu/WebGPUDriver.cpp
+@@ -1497,11 +1497,12 @@
+ 
+     mRenderPassEncoder = commandEncoder.BeginRenderPass(&renderPassDescriptor);
+ 
+-    // TODO: there's a bug here because the webgpu viewport has the origin at top-left, whereas
+-    // filament expects it to be bottom left.
++    // Filament gives us bottom-left-origin coordinates, we need to convert it to WebGPU's top-left
++    // coordinates (as scissor() and blit do).
+     mRenderPassEncoder.SetViewport(
+             static_cast<float>(params.viewport.left),
+-            static_cast<float>(params.viewport.bottom),
++            static_cast<float>(int32_t(renderTarget->height) - params.viewport.bottom -
++                               int32_t(params.viewport.height)),
+             static_cast<float>(params.viewport.width),
+             static_cast<float>(params.viewport.height),
+             params.depthRange.near,

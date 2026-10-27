@@ -63,7 +63,9 @@ static void thing_thor(Stage& s, ScreenStack& st, char k, void* from, int into, 
         c->sync();
     });
 }
-static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenNumbers& numbers, const std::function<DrawnFx()>& thorFx = nullptr, const ScreenPictures& pictures = nullptr) {
+// Its pictures, as large as the view draws (made again when that moves): made before the frame, as the look that shows
+// one is told it then (thing_fx_seen).
+static void thing_fx_pictures(Stage& s, ScreenStack& st, View* v) {
     const Viewport vp = v->getViewport();
     const uint32_t w = (uint32_t)std::max(1, vp.left + (int)vp.width), h = (uint32_t)std::max(1, vp.bottom + (int)vp.height);
     if (!st.shot || st.shot->getWidth() != w || st.shot->getHeight() != h) {   // (its pictures as large as the view draws; made again when that moves)
@@ -92,6 +94,13 @@ static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenN
         st.target = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, st.shot).texture(RenderTarget::AttachmentPoint::DEPTH, st.depth).build(*s.engine);
         for (int k = 0; k < 2; ++k) st.between[k] = picture(), st.betweenTarget[k] = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, st.between[k]).build(*s.engine);
     }
+}
+// The picture its effects leave (the last one drawn into; its own, with none): what its sheet or solid shows.
+static Texture* thing_fx_seen(const ScreenStack& st) { return st.steps.empty() ? st.shot : st.between[(st.steps.size() - 1) % 2]; }
+static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenNumbers& numbers, const std::function<DrawnFx()>& thorFx = nullptr, const ScreenPictures& pictures = nullptr) {
+    thing_fx_pictures(s, st, v);   // (made already when it was aimed: a thing's; the stage's own others made here)
+    const Viewport vp = v->getViewport();
+    const uint32_t w = (uint32_t)std::max(1, vp.left + (int)vp.width), h = (uint32_t)std::max(1, vp.bottom + (int)vp.height);
     RenderTarget* const was = v->getRenderTarget();
     const Renderer::ClearOptions clearWas = s.renderer->getClearOptions();
     Renderer::ClearOptions clear = clearWas;
@@ -115,7 +124,7 @@ static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenN
         for (const std::string& n : one.others) one.othersNow.push_back(pictures ? pictures(one.file, n) : nullptr);
         screen_draw(s, st, one, from, st.betweenTarget[i % 2], numbers, w, h);
     }
-    st.seen = st.between[(st.steps.size() - 1) % 2];
+    st.seen = thing_fx_seen(st);
 }
 
 // A thing with effects of its own as the stage keeps it: the view it is drawn alone in, its effects, and the sheet its
@@ -194,7 +203,6 @@ static void thing_fx_aim(Stage& s, ThingFx& e, const double* box) {
     e.camera->setModelMatrix(c.getModelMatrix());
     e.camera->setExposure(c.getAperture(), c.getShutterSpeed(), c.getSensitivity());
     e.view->setViewport({0, 0, (uint32_t)std::max(1L, std::lround((box[2] - box[0]) * ppp)), (uint32_t)std::max(1L, std::lround((box[3] - box[1]) * ppp))});
-    e.st.pw = box[2] - box[0], e.st.ph = box[3] - box[1];
     math::mat4f place;
     place[0][0] = (float)((x1 - x0) / 2), place[1][1] = (float)((y1 - y0) / 2), place[3][0] = (float)((x0 + x1) / 2), place[3][1] = (float)((y0 + y1) / 2);
     e.look->setParameter("place", place);
@@ -215,8 +223,6 @@ static void thing_fx_face(Stage& s, ThingFx& e, const math::mat4& place, float2 
     e.camera->setExposure(c.getAperture(), c.getShutterSpeed(), c.getSensitivity());
     const uint32_t w = (uint32_t)std::max(1L, std::lround(1024 * wide / std::max(wide, high))), h = (uint32_t)std::max(1L, std::lround(1024 * high / std::max(wide, high)));
     e.view->setViewport({0, 0, w, h});
-    const double ppp = (double)s.view->getViewport().width / std::max(1, s.w);
-    e.st.pw = w / ppp, e.st.ph = h / ppp;
 }
 
 // Its solid made again when what it is made of has changed (its shape's file, knobs and size; its coverage): put in the

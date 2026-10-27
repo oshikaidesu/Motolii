@@ -422,6 +422,7 @@ static void time_is(Stage& s, double seconds) {
 // as a frame begins, so each matte's eye is told just before: where it is now, a pose handed over, nothing more.
 static bool begins(Stage& s) {
     static const char* const eyes[] = {"matteEye0", "matteEye1", "matteEye2", "matteEye3"};
+    for (const auto& one : s.aim) one();   // (the things with effects of their own aimed, their looks told: thing_fx.h; as samples/rendertarget.cpp aims its offscreen camera before the frame)
     for (const Stage::Cut& c : s.cuts) {
         const Camera* eye = s.mattes[(size_t)c.matte].eye;
         c.look->setParameter(eyes[c.slot], mat4f(eye->getProjectionMatrix() * eye->getViewMatrix()));

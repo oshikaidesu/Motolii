@@ -185,7 +185,6 @@ struct ScreenStack {
     void* device[3] = {nullptr, nullptr, nullptr};  // (the WGPUTextures of shot, between[0], between[1])
     tvg::WgCanvas* thor[2] = {nullptr, nullptr};    // (ThorVG drawing into each picture between)
     Texture* seen = nullptr;                        // (its picture as the camera sees it, its effects on, this time)
-    double pw = 0, ph = 0;                          // (its pictures' size in points of the stage, ISF's RENDERSIZE: a thing's box; 0: the stage's)
     // (an audio input's values now: the effect's file, the input's name, fft or the wave, how many (0: as many as are
     //  read); none given, or none back: silence)
     std::function<std::vector<float>(const std::string& file, const std::string& name, bool fft, int wide)> sounds;
@@ -213,7 +212,8 @@ static Texture* screen_picture(Stage& s) {
 }
 static void screen_knobs(Stage& s, ScreenFx& fx, const ScreenNumbers& numbers, int pass = 0, double pw = 0, double ph = 0) {
     std::vector<float> at(fx.bytes / 4, 0.f);
-    const double w = pw > 0 ? pw : s.w, h = ph > 0 ? ph : s.h;   // (the picture it is given: ISF's RENDERSIZE)
+    const double w = pw > 0 ? pw : s.w, h = ph > 0 ? ph : s.h;   // (the picture it draws into, in its pixels: ISF's RENDERSIZE, each pass its own (ISF_Spec, VVISF);
+    //  vgpu's rule too, a shader told its target's own size (target.size), as gl_FragCoord and @builtin(position) count)
     for (const ScreenFx::Field& f : fx.fields) {
         float v[4] = {0, 0, 0, 0};
         if (f.name == "time") v[0] = (float)s.now;
@@ -323,14 +323,14 @@ static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, 
     };
     if (fx.passes.empty()) {
         gather();
-        screen_knobs(s, fx, numbers, 0, st.pw, st.ph);
+        screen_knobs(s, fx, numbers, 0, w, h);
         door::draw(s.engine, fx.door, read.data(), to, w, h, 0, nullptr, over);
         return;
     }
     for (size_t p = 0; p < fx.passes.size(); ++p) {
         gather();
-        screen_knobs(s, fx, numbers, (int)p, st.pw, st.ph);
         const int t = fx.passes[p];
+        screen_knobs(s, fx, numbers, (int)p, t < 0 ? w : fx.targets[(size_t)t].w, t < 0 ? h : fx.targets[(size_t)t].h);
         if (t < 0) { door::draw(s.engine, fx.door, read.data(), to, w, h, (int)p, nullptr, over); continue; }
         ScreenFx::Target& into = fx.targets[(size_t)t];
         const int back = 1 - into.front;

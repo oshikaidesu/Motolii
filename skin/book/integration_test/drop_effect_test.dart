@@ -1,6 +1,6 @@
 // The README's "put an effect from the net in": an ISF file Motolii does not bundle (ASCII Art, from Vidvox's ISF-Files,
 // which filament/check/isf_all.sh fetches) put in the maker's own effects folder, seen on the Effects shelf at once and
-// put on a photo; a picture of the shelf (docs/media/drop_step1.png). Put in with the window open: the shelf sees it, and its
+// put on a photo; a picture of the shelf and of the stage after (docs/media/drop_step1..2.png). Put in with the window open: the shelf sees it, and its
 // tile is drawn on the balloon by itself (lib/workspace/effect_tiles.dart).
 //   flutter drive --profile -d macos --driver=test_driver/integration_test.dart --target=integration_test/drop_effect_test.dart
 import 'dart:ffi' hide Size;
@@ -86,7 +86,7 @@ void main() {
       await t.pump();
     }
     expect(m.word(photo, 'fx'), endsWith('/ASCII Art.fs'), reason: m.trouble);
-    // (no picture of the stage after: the window shows it white while the same document draws right through edit.sh, a bug: README, known bugs)
+    await shot('drop_step2.png'); // (on the photo, in the window's own picture)
     final film = '${folder.path}/drop.mp4';
     expect(await t.runAsync(() => m.write(film)), isTrue, reason: m.trouble); // (written from the window's own document: drawn right)
     // ignore: avoid_print

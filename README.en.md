@@ -82,7 +82,7 @@ The UI only takes your hands; the engine draws. The engine's folder is named `fi
 
 - Works: everything marked "Works" above, saving (automatic) and undo, playback (a video's sound is heard), writing mp4, the UI's timeline, value panel and shelves.
 - Partly: AviUtl2 scripts; copying Alight Motion (47 of the 201 above).
-- Known bugs: inside the app, a screen effect (ISF `.fs`, `.wgsl`) put on a layer turns the composition white in the live view (the same project written out is drawn right; effects near the top of the Effects shelf, such as Glow, are fine). A screen effect put by command on a recipe made of copies (Iris, Weave, …) breaks the picture.
+- Known bugs: a screen effect put by command on a recipe made of copies (Iris, Weave, …) breaks the picture.
 - Not yet: Windows; an `.app` you can hand out (the engine loads Homebrew's libraries, so a build only runs on the Mac that made it); MIDI sound.
 
 ## Try it
@@ -179,10 +179,10 @@ This is what Motolii is for. As an example, `ASCII Art.fs` from [ISF-Files](http
 2. In Finder press ⌘⇧G, type `~/Library/Application Support/Motolii/` and go. Make a folder `effects` there (if there is none) and put the file in it.
 3. It appears on the Effects shelf at once (no restart). Its tile picture (the balloon photo with that effect on) is made by itself within seconds and put beside the effect as a `.png`. Pick a layer, press the tile, then **Add**.
    ![ASCII Art on the Effects shelf](docs/media/drop_shelf.jpg)
-4. Written out, it looks like this (ASCII Art on a photo).
+4. In the app and written out, it looks like this (ASCII Art on a photo).
    ![ASCII Art on a photo, written out](docs/media/drop_ascii.jpg)
 
-For now the live view inside the app shows the composition white after this (see Known bugs); the written video is drawn right. These steps also run as a test (`skin/book/integration_test/drop_effect_test.dart`: put in with the app open → on the shelf → its tile drawn → put on → written, its frames checked). WGSL (`.wgsl`), recipes (`.js`, in `recipes/`), eases (`.way`, in `ways/`) and AviUtl2 scripts (the author's folder as it is, in `aviutl_scripts/`) go in the same way. Check the saved file's name ends in `.fs` (a browser may add `.txt`).
+These steps also run as a test (`skin/book/integration_test/drop_effect_test.dart`: put in with the app open → on the shelf → its tile drawn → put on → written, its frames checked). WGSL (`.wgsl`), recipes (`.js`, in `recipes/`), eases (`.way`, in `ways/`) and AviUtl2 scripts (the author's folder as it is, in `aviutl_scripts/`) go in the same way. Check the saved file's name ends in `.fs` (a browser may add `.txt`).
 
 ### Next: your own media
 
@@ -231,11 +231,10 @@ Still stuck? Open an [issue](https://github.com/oshikaidesu/motolii/issues) with
 
 ## Next
 
-1. Fix the live view turning white when a screen effect is put on a layer inside the app.
-2. An `.app` to hand out (Homebrew's libraries inside it), on Releases.
-3. The window's tests all passing when run together, and CI that stops on them.
-4. The AviUtl2 calls still missing (`obj.drawpoly`, …); TSL looks on the shelves.
-5. More of Alight Motion (47 of 201 today).
+1. An `.app` to hand out (Homebrew's libraries inside it), on Releases.
+2. The window's tests all passing when run together, and CI that stops on them.
+3. The AviUtl2 calls still missing (`obj.drawpoly`, …); TSL looks on the shelves.
+4. More of Alight Motion (47 of 201 today).
 
 ## Contributing
 

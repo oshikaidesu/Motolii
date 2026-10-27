@@ -2,7 +2,7 @@
 // Each drawn alone into a picture of the box it is seen in, its effects run on it, before the stage's own view.
 // One whose fx names a solid's shape (solids/*.js, Alight Motion's Box, Torus...): drawn alone square to its own face,
 // its effects run on that, and the picture laid on the solid's faces where it lies; its sheet not seen.
-static void doc_thing_solid(Doc& d, int thing, ThingFx& e, const ScreenNumbers& numbers, const std::function<DrawnFx()>& thorFx) {
+static void doc_thing_solid_aim(Doc& d, int thing, ThingFx& e) {   // (before the frame)
     Stage& s = *d.stage;
     math::mat4 place;
     float2 half{0.5f};
@@ -11,17 +11,21 @@ static void doc_thing_solid(Doc& d, int thing, ThingFx& e, const ScreenNumbers& 
         place = doc_place(d, thing, d.stage->now), doc_half(d, thing, &half);
     }
     thing_fx_face(s, e, place, half);
-    thing_effects_draw(s, e.st, e.view, numbers, thorFx);
-    if (solid_reads(e.solidFile)) thing_fx_cover(s, e, (int)(e.knobs.count("precision") ? e.knobs["precision"] : 160)), thing_fx_solid(s, e, true);
+    thing_fx_pictures(s, e.st, e.view);
     e.look->setParameter("place", mat4f::scaling(float3{0.f}));   // (its sheet: nowhere)
-    if (!e.solid || !e.st.seen) return;
+    if (!e.solid || !e.solidLook) return;
     move(s, e.solid, [&](int, const mat4f&) { return mat4f(place); });
     const auto wrap = e.solidRepeat ? TextureSampler::WrapMode::REPEAT : TextureSampler::WrapMode::CLAMP_TO_EDGE;
-    e.solidLook->setParameter("image", e.st.seen, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR, wrap));
+    e.solidLook->setParameter("image", thing_fx_seen(e.st), TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR, wrap));
+}
+static void doc_thing_solid(Doc& d, int thing, ThingFx& e, const ScreenNumbers& numbers, const std::function<DrawnFx()>& thorFx) {   // (in the frame)
+    Stage& s = *d.stage;
+    thing_effects_draw(s, e.st, e.view, numbers, thorFx);
+    if (solid_reads(e.solidFile)) thing_fx_cover(s, e, (int)(e.knobs.count("precision") ? e.knobs["precision"] : 160)), thing_fx_solid(s, e, true);
 }
 static void doc_things_fx(Doc& d) {
     Stage& s = *d.stage;
-    s.before.clear();
+    s.before.clear(), s.aim.clear();
     for (auto& [thing, e] : d.thingFx) {   // (each drawn alone into a picture, its effects run on it, before the stage's own view: thing_fx.h)
         thing_effects(s, e.st, doc_fx_join(doc_fx_list(d, thing)));
         e.solidFile.clear();
@@ -62,7 +66,7 @@ static void doc_things_fx(Doc& d) {
             }
             return fx;
         };
-        s.before.push_back([&s, &d, thing = thing, &e = e, numbers, thorFx] {
+        s.aim.push_back([&s, &d, thing = thing, &e = e] {   // (before the frame: where it is seen, its pictures, what its sheet shows)
             double box[4] = {0, 0, (double)s.w, (double)s.h}, seen[4];
             {
                 std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn)
@@ -74,14 +78,18 @@ static void doc_things_fx(Doc& d) {
                 }
                 if (box[2] - box[0] < 1 || box[3] - box[1] < 1) box[0] = box[1] = 0, box[2] = s.w, box[3] = s.h;   // (none of it on the stage: the whole)
             }
-            if (!e.solidFile.empty()) return doc_thing_solid(d, thing, e, numbers, thorFx);
+            if (!e.solidFile.empty()) return doc_thing_solid_aim(d, thing, e);
             thing_fx_aim(s, e, box);
-            thing_effects_draw(s, e.st, e.view, numbers, thorFx);
-            if (e.st.seen && e.look) e.look->setParameter("image", e.st.seen, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
+            thing_fx_pictures(s, e.st, e.view);
+            if (e.look) e.look->setParameter("image", thing_fx_seen(e.st), TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
             if (e.look) {   // (its glow over what its effects made: the stage's bloom, as a thing without effects glows (doc_moment))
                 std::lock_guard<std::recursive_timed_mutex> hold(d.lock);
                 e.look->setParameter("glowing", (float)doc_number(d, thing, "emissive", d.stage->now, 0) + (doc_word(d, thing, "glow").empty() ? 0.f : 0.35f * (float)doc_number(d, thing, "glow_opacity", d.stage->now, 1)));
             }
+        });
+        s.before.push_back([&d, thing = thing, &e = e, numbers, thorFx] {   // (in the frame: drawn alone, its effects run)
+            if (!e.solidFile.empty()) return doc_thing_solid(d, thing, e, numbers, thorFx);
+            thing_effects_draw(*d.stage, e.st, e.view, numbers, thorFx);
         });
     }
 }
