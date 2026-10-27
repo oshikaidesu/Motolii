@@ -204,6 +204,11 @@ class _WorkspaceState extends State<Workspace> {
         if (t == null) return;
         ws.after(m.later('duplicate', thing: t), null, (made) => ws.select('$made'));   // (the new one picked, as After Effects does)
       },
+      'thing.extractSound': () {   // (a film's sound to a thing of its own, the film no longer heard: Alight Motion's Extract Audio)
+        final t = int.tryParse(ws.selected ?? '');
+        if (t == null || m.word(t, 'kind') != 'film') return;
+        ws.after(m.later('extract_sound', thing: t), null, (made) => ws.select('$made'));
+      },
       'thing.split': () {
         final t = int.tryParse(ws.selected ?? '');
         if (t == null) return;
@@ -263,6 +268,7 @@ class _WorkspaceState extends State<Workspace> {
             members: [
               item('Duplicate', 'thing.duplicate'),
               item('Split', 'thing.split'),
+              item('Extract Sound', 'thing.extractSound'),
               item('Rename', 'thing.rename'),
               item('Remove', 'thing.remove'),
             ],

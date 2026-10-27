@@ -79,6 +79,16 @@ static int doc_pen(Doc& d, int thing, double x, double y, double hx, double hy) 
     if (!thing) d.act_ok = false;
     return doc_acted(d) ? thing : 0;
 }
+// A film's sound taken out to a thing of its own (Alight Motion's Extract Audio): a copy of it, hidden, that is heard
+// (a hidden film's sound is: doc_match.h sounding), named so; the film itself no longer heard (volume 0). One step; the
+// answer is the copy.
+static int doc_extract_sound(Doc& d, int thing) {
+    if (!doc_knows(d, thing) || doc_word(d, thing, "kind") != "film") return d.trouble = "only a film's sound is taken out", 0;
+    doc_act(d);
+    const int made = doc_duplicate(d, thing);
+    const bool ok = made && doc_set(d, made, "visible", 0) && doc_say(d, made, "name", (doc_name(d, thing) + " (sound)").c_str()) && doc_set(d, thing, "volume", 0);
+    return doc_acted(d) && ok ? made : 0;
+}
 // A path drawn by hand: the outline perfect-freehand makes round the hand's way (MIT, Steve Ruiz; its Dart port, Adil
 // Hanney: the window's), in points of the picture, made a closed path of its own, each point to the next by a quadratic
 // curve through their middle, as its example draws the outline. One step; the answer is the new shape.
@@ -169,7 +179,7 @@ static double doc_usual(Doc& d, const char* name) {
         for (const auto& [file, sc] : doc_scripts(d))
             for (size_t i = 0; i < sc.names.size(); ++i)
                 if (sc.names[i] == name) return sc.knobs[i].usual;
-    return doc_among("scale_x scale_y scale_z size speed opacity wide tall visible distance zoom copies copy_size copy_wide blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed slope power strength spread", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
+    return doc_among("scale_x scale_y scale_z size speed volume opacity wide tall visible distance zoom copies copy_size copy_wide blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed slope power strength spread", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
          : !strcmp(name, "radius") ? 0.5 : !strcmp(name, "gap") ? 0.2   // (a relation as it comes: what it works by when nothing is said)
          : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5 : !strcmp(name, "thickness") ? 0.5 : !strcmp(name, "sun_size") ? 1.09 : !strcmp(name, "sun_halo") ? 10.0   // (a solid's surface as it comes)
          : !strcmp(name, "intensity") ? 1.0 : !strcmp(name, "falloff") ? 10.0 : !strcmp(name, "cone") ? 30.0   // (a light as it comes)

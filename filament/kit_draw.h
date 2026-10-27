@@ -18,7 +18,7 @@ static void move(Stage& s, const Mesh* m, const std::function<mat4f(int, const m
 // (palettegen, paletteuse: its own way to a good GIF) at 15 a second, as Alight Motion writes one; .png a picture each,
 // name_0001.png on (no sound in the last two). Before each picture `pose` is told how far through
 // the film it is (0 up to 1): where the end meets the start, the film loops. What is heard is the things' own sound
-// (Stage::sounding), cut, sped, gone round and mixed by ffmpeg as each thing says.
+// (Stage::sounding), cut, sped, gone round, made as loud as it says (ffmpeg's volume) and mixed by ffmpeg as each thing says.
 static bool film(Stage& s, const char* path, int pictures, const std::function<void(float)>& pose) {
     const auto quoted = [](std::string name) {   // (a file's name as a shell takes it)
         for (size_t at = 0; (at = name.find('\'', at)) != std::string::npos; at += 4) name.replace(at, 1, "'\\''");
@@ -33,9 +33,9 @@ static bool film(Stage& s, const char* path, int pictures, const std::function<v
         std::string halved;   // (ffmpeg's atempo goes no slower than half at a time)
         double left = fast;
         for (; left < 0.5; left /= 0.5) halved += "atempo=0.5,";
-        std::snprintf(how, sizeof how, "[%d:a]aresample=48000,atrim=start=%g:end=%g,asetpts=PTS-STARTPTS,%s%satempo=%g,aloop=loop=-1:size=%ld,atrim=start=%g%s%s,asetpts=PTS-STARTPTS,adelay=delays=%ld:all=1[a%d];",
+        std::snprintf(how, sizeof how, "[%d:a]aresample=48000,atrim=start=%g:end=%g,asetpts=PTS-STARTPTS,%s%satempo=%g,aloop=loop=-1:size=%ld,atrim=start=%g%s%s,asetpts=PTS-STARTPTS,volume=%g,adelay=delays=%ld:all=1[a%d];",
                       n + 1, a.from, a.to, a.speed < 0.0 ? "areverse," : "", halved.c_str(), left, std::lround((a.to - a.from) / fast * 48000.0), a.into,
-                      a.lasts < 0.0 ? "" : ":duration=", a.lasts < 0.0 ? "" : std::to_string(a.lasts).c_str(), std::lround(a.on * 1000.0), n + 1);
+                      a.lasts < 0.0 ? "" : ":duration=", a.lasts < 0.0 ? "" : std::to_string(a.lasts).c_str(), a.gain, std::lround(a.on * 1000.0), n + 1);
         files += " -i " + quoted(a.file);
         each += how;
         all += "[a" + std::to_string(++n) + "]";

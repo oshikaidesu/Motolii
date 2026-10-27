@@ -104,6 +104,7 @@ static const DocShown doc_shown[] = {
     {"marker", "", "", "Part", 0, 0, nullptr},
     {"animation", "", "", "Movement", 0, 0, nullptr},
     {"speed", "", "×", "Speed", -4, 4, nullptr},
+    {"volume", "share", "%", "Volume", 0, 2, nullptr},   // (1 shown as 100%, as Alight Motion shows it)
     {"beats", "", "dB", "Beats", 0, 30, nullptr},
     {"clip_matte", "", "", "Cut by", 0, 0, nullptr},
     {"clip_invert", "onoff", "", "Invert", 0, 1, nullptr},
@@ -300,7 +301,7 @@ static const DocCard doc_cards[] = {
     {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
     {"Motion", "orient", "kind", "!camera"},   // (how it goes along its way: turned the way it is going, After Effects' Auto-Orient)
     {"Play", "marker animation speed"},
-    {"Sound", "beats", "kind", "film"},   // (its beats: shown on the timeline's ruler where it strikes)
+    {"Sound", "volume beats", "kind", "film"},   // (its beats: shown on the timeline's ruler where it strikes)
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Connect", "connect connect_to connect_reach"},
     {"Line", "cap join dash dash_offset"},

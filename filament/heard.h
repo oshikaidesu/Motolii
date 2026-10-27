@@ -83,6 +83,7 @@ static void heard(const std::map<const void*, Stage::Sound>& told, std::map<cons
             gst_element_seek(h.bin, std::max(1e-3, std::fabs(a.speed)), GST_FORMAT_TIME, (GstSeekFlags)(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE),
                              GST_SEEK_TYPE_SET, (gint64)(at * GST_SECOND), GST_SEEK_TYPE_NONE, -1);
         }
+        g_object_set(h.bin, "volume", std::clamp(a.gain, 0.0, 10.0), nullptr);   // (playbin's own loudness, 1 as it comes: as the thing says)
         if (!h.on) gst_element_set_state(h.bin, GST_STATE_PLAYING), h.on = true;
     }
 }

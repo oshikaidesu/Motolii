@@ -234,6 +234,29 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a film\'s Volume on its Sound card; Extract Sound: a hidden copy heard, the film itself silent (Alight Motion\'s Extract Audio)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final film = m.add('', '$motoliiDir/out/vid/check_film.mp4');
+    ws
+      ..reread()
+      ..select('$film');
+    await t.pumpAndSettle();
+    expect([for (final c in m.cards(film)) if (c.$1 == 'Sound') ...c.$2], contains('volume'), reason: 'its card: ${m.cards(film)}');
+    expect(m.value(film, 'volume', 0) ?? 1, 1, reason: 'as loud as it comes');
+    ws.after(m.later('extract_sound', thing: film), null, (made) => ws.select('$made'));
+    await settled(t, ws);
+    for (var i = 0; i < 200 && ws.selected == '$film'; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    final sound = int.parse(ws.selected!);
+    expect(sound, isNot(film), reason: m.trouble);
+    expect([m.word(sound, 'file'), m.value(sound, 'visible', 0), m.value(film, 'volume', 0)], [m.word(film, 'file'), 0, 0], reason: 'the copy hidden and heard, the film silent');
+    expect(m.word(sound, 'name'), endsWith('(sound)'));
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Cmd+C then Cmd+V pastes the picked thing whole at the playhead, its keys moved with it; Cmd+Alt+C and Cmd+Alt+V carry its look', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect'), other = m.add('shape', 'circle');

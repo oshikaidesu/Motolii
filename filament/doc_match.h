@@ -160,7 +160,7 @@ static bool doc_match(Doc& d) {
             if (made.film) s.playing.erase(made.film);   // (the document tells it its moment, and when its sound comes on)
             if (made.film && made.film->sound) s.sounding[made.film] = [&d, thing, v = made.film, file] {   // (counted from where the film being written begins: a sound already going then is heard from that far into it)
                 const double on = doc_number(d, thing, "start", 0, 0) - d.written_from, lasts = doc_number(d, thing, "duration", 0, -1), late = std::max(0.0, -on);
-                return Stage::Sound{file, v->from, v->to, v->speed, late, std::max(0.0, on), lasts < 0.0 ? lasts : std::max(1e-3, lasts - late)};
+                return Stage::Sound{file, v->from, v->to, v->speed, late, std::max(0.0, on), lasts < 0.0 ? lasts : std::max(1e-3, lasts - late), doc_number(d, thing, "volume", 0, 1)};
             };
         } else if (kind == "picture") {
             std::string shown = file;
