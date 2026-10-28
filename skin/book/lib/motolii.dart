@@ -239,6 +239,10 @@ class Motolii {
 
   final _waiting = <int, Completer<(int, String)>>{};
 
+  /// Where the inside's hand is in its round, and how many changes wait for it: read without waiting (a shell that has
+  /// waited long says why).
+  String get handStep => '${_b.motolii_hand_step(_m).toDartString()}, ${_b.motolii_asked(_m)} asked and not begun';
+
   /// A file word of the document as a whole path.
   String whole(String file) => Uri.directory(home).resolveUri(Uri.file(file)).toFilePath();
 

@@ -56,7 +56,7 @@ void main() {
     for (final i in made) {
       expect(m.value(i, 'x_by', 0), b.toDouble(), reason: 'thing $i connected');
     }
-    expect(ws.selected, '$b', reason: 'the relation picked: its card, its row (the window still waiting on the inside: ${ws.waiting})');
+    expect(ws.selected, '$b', reason: 'the relation picked: its card, its row (the window still waiting on the inside: ${ws.waiting}; its hand: ${m.handStep})');
     expect(wsMembersOf(ws), {for (final i in made) '$i'}, reason: 'what it moves, lit on the stage and the timeline');
     expect(ws.many, isEmpty);
 

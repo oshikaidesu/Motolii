@@ -47,4 +47,6 @@ char* motolii_picture(Motolii* m, int which, long since, long* version) {
     *version = m->pictureVersion;
     return strdup((all + "}}").c_str());
 }
-void motolii_tell(Motolii* m, void (*told)(int which)) { m->told = told; }   // (the window's one listener: which pictures are new)
+void motolii_tell(Motolii* m, void (*told)(int which)) { m->told = told; }
+const char* motolii_hand_step(Motolii* m) { return m->step.load(); }   // (no lock: asked while the hand may be busy)
+int motolii_asked(Motolii* m) { std::lock_guard<std::mutex> hold(m->asked_lock); return (int)m->asked.size(); }   // (the window's one listener: which pictures are new)

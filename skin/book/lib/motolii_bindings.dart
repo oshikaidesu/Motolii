@@ -85,6 +85,17 @@ class MotoliiBindings {
   late final _motolii_answer_why = _motolii_answer_whyPtr
       .asFunction<ffi.Pointer<pkg_ffi.Utf8> Function(ffi.Pointer<Motolii>)>();
 
+  int motolii_asked(ffi.Pointer<Motolii> m) {
+    return _motolii_asked(m);
+  }
+
+  late final _motolii_askedPtr =
+      _lookup<ffi.NativeFunction<ffi.Int Function(ffi.Pointer<Motolii>)>>(
+        'motolii_asked',
+      );
+  late final _motolii_asked = _motolii_askedPtr
+      .asFunction<int Function(ffi.Pointer<Motolii>)>();
+
   int motolii_at(ffi.Pointer<Motolii> m, double seconds) {
     return _motolii_at(m, seconds);
   }
@@ -482,6 +493,19 @@ class MotoliiBindings {
         >
       >('motolii_guides');
   late final _motolii_guides = _motolii_guidesPtr
+      .asFunction<ffi.Pointer<pkg_ffi.Utf8> Function(ffi.Pointer<Motolii>)>();
+
+  ffi.Pointer<pkg_ffi.Utf8> motolii_hand_step(ffi.Pointer<Motolii> m) {
+    return _motolii_hand_step(m);
+  }
+
+  late final _motolii_hand_stepPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<pkg_ffi.Utf8> Function(ffi.Pointer<Motolii>)
+        >
+      >('motolii_hand_step');
+  late final _motolii_hand_step = _motolii_hand_stepPtr
       .asFunction<ffi.Pointer<pkg_ffi.Utf8> Function(ffi.Pointer<Motolii>)>();
 
   int motolii_handles(

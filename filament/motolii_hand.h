@@ -35,6 +35,7 @@ struct Motolii {
     std::map<const void*, Heard> heard;   // the things' sound heard as the live stage plays (heard.h)
     std::string trouble, listed;
     std::thread hand;
+    std::atomic<const char*> step{"opening"};   // (where the hand is in its round: said by motolii_hand_step, so a shell that waits long can tell why)
     std::mutex asked_lock;
     std::condition_variable asked_now;
     std::unique_ptr<thermion::FrameScheduler> beat;   // (the screen's beat, Thermion's: a picture is drawn on each; CVDisplayLink, DXGI on Windows)
@@ -223,6 +224,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         std::deque<std::function<void()>> todo;
         uint64_t beat;
         {
+            m->step = "waiting for a change or a beat";
             std::unique_lock<std::mutex> hold(m->asked_lock);
             const bool goes = m->live && (m->playing || m->changed), begun = m->live && m->live->pending;   // (begun: a picture the GPU has not finished)
             if (begun) m->asked_now.wait_for(hold, std::chrono::milliseconds(1), [m] { return !m->asked.empty() || m->closing; });   // (looked at again a moment later)
@@ -241,6 +243,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             if (doc_files_moved(*m->d)) m->changed = true;
         }   // (a shader or a script saved: drawn again)
         lap(0);
+        m->step = "doing the changes asked";
         {
             std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
             const long rows = sqlite3_total_changes(m->d->file);
@@ -259,6 +262,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             doc_match(*m->d);
             m->changed = true;
         }
+        m->step = "telling the window";
         picture_tell(m);   // (the document let go: the window told what is new)
         if (!m->playing) for (auto& [who, h] : m->heard) if (h.on) gst_element_set_state(h.bin, GST_STATE_PAUSED), h.on = false;   // (the stage stopped: so does its sound)
         lap(2);
@@ -267,6 +271,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         const bool ready = !m->live || live_ready(*m->s, m->live);   // (the picture begun before, offered once the GPU has finished it)
         if (finished() != had) if (auto tell = m->shown.load()) tell(m->shown_with.load());   // (and Flutter told: Thermion's markTextureFrameAvailable)
         lap(3);
+        m->step = "keeping pictures ahead";
         const auto t = std::chrono::steady_clock::now();
         if (!todo.empty() || m->playing || m->changed) m->stirred = t;
         m->ahead = false;
@@ -322,16 +327,19 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         picture_tell(m);
         const auto films_from = std::chrono::steady_clock::now();
         const long films_late = video_late;
+        m->step = "putting the films at the moment";
         for (const auto& now : films) now();
         const bool again = !m->playing && video_late != films_late;   // (a film without its picture for now yet, a seek under way: drawn again next beat, as a video sink shows its picture once it comes)
 
         { const double ms = 1e3 * std::chrono::duration<double>(std::chrono::steady_clock::now() - films_from).count(); m->films_ms += ms; m->films_most = std::max(m->films_most, ms); }   // (films put back or stepped on, while the shell reads the document)
+        m->step = "putting the sounds at the moment";
         heard(sounds, m->heard, m->now, m->playing);   // (and their sound sought and played so)
         const auto told = std::chrono::steady_clock::now();
         {
             std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
             stage_kept_fresh(m->kept, *m->d, *m->s, m->revision.load(), RATE);
         }
+        m->step = "drawing";
         if (!m->playing || !stage_kept_show(m->kept, *m->s, m->live, m->now, RATE)) live_draw(*m->s, m->live);   // (played: a picture kept is put on the stage, not drawn)
         const auto drawn = std::chrono::steady_clock::now();
         lap(5);
