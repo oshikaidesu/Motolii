@@ -117,6 +117,7 @@ class _UndoRedo extends StatelessWidget {
     children: [
       for (final flip in [false, true])
         _Hover(
+          key: ValueKey(flip ? 'ws-redo' : 'ws-undo'),
           // (a step of the document back, or forward again)
           onTap: () {
             final ws = WsScope.read(context), m = ws.inside;

@@ -256,6 +256,56 @@ void _tests3() {
     expect([s(a), s(b)], [.5, 2.5], reason: 'one after the other, in the order picked');
     await tell('extend', at: 2);
     expect([s(a), m.value(a, 'duration', 0), s(b), m.value(b, 'duration', 0)], [2, closeTo(.5, 1e-9), 2, closeTo(1.5, 1e-9)], reason: 'each start to the playhead, either way, the ends staying (Final Cut Pro\'s Extend Edit)');
+    await tell('trim_end', at: 3);
+    expect([m.value(a, 'duration', 0), m.value(b, 'duration', 0)], [closeTo(.5, 1e-9), closeTo(1, 1e-9)], reason: 'an end to the playhead inside it; one it is past left (Final Cut Pro\'s Trim End)');
+    Future<void> press(LogicalKeyboardKey k) async {   // (Final Cut Pro's keys: ⌥[ and ⌥])
+      await t.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await t.sendKeyEvent(k);
+      await t.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await settled(t, ws);
+    }
+    ws
+      ..select('$b')
+      ..frame = (2.5 * Ws.fps).round();
+    await t.pumpAndSettle();
+    await press(LogicalKeyboardKey.bracketLeft);
+    expect([s(b), m.value(b, 'duration', 0)], [2.5, closeTo(.5, 1e-9)], reason: '⌥[ trims its start: ${m.trouble}');
+    ws.frame = (2.75 * Ws.fps).round();
+    await t.pumpAndSettle();
+    await press(LogicalKeyboardKey.bracketRight);
+    expect(m.value(b, 'duration', 0), closeTo(.25, 1e-9), reason: '⌥] trims its end');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('⌘A picks every layer, ⌘D makes one more of the picked (picked), the arrows on the top bar take it back and bring it again', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final a = m.add('shape', 'rect');
+    m.add('shape', 'circle');
+    ws.reread();
+    await t.pumpAndSettle();
+    Future<void> press(LogicalKeyboardKey k) async {
+      await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await t.sendKeyEvent(k);
+      await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await settled(t, ws);
+    }
+    await press(LogicalKeyboardKey.keyA);
+    expect(ws.many, {for (final l in ws.layers) l.id}, reason: 'all the layers picked');
+    ws.select('$a');
+    final before = m.things.length;
+    await press(LogicalKeyboardKey.keyD);
+    for (var i = 0; i < 200 && ws.selected == '$a'; i++) {   // (the new one is picked once the inside has made it)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    expect([m.things.length, m.word(int.parse(ws.selected!), 'shape')], [before + 1, 'rect'], reason: 'one more, a rect, picked: ${m.trouble}');
+    await t.tap(find.byKey(const ValueKey('ws-undo')));
+    await settled(t, ws);
+    expect(m.things.length, before, reason: 'taken back by the arrow on the top bar');
+    await t.tap(find.byKey(const ValueKey('ws-redo')));
+    await settled(t, ws);
+    expect(m.things.length, before + 1, reason: 'and brought again');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

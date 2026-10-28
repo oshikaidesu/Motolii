@@ -450,7 +450,10 @@ static bool doc_time_align(Doc& d, const std::vector<int>& things, const std::st
             ok = doc_set(d, t, "start", std::max(0.0, now)) && doc_set(d, t, "duration", was + lasts - std::max(0.0, now));
             if (ok && doc_word(d, t, "kind") == "film") ok = doc_set(d, t, "begin", std::max(0.0, doc_number(d, t, "begin", 0, 0) + (std::max(0.0, now) - was) * std::fabs(doc_number(d, t, "speed", 0, 1))));
             continue;
-        } else { ok = false, d.trouble = "lined up by start, end, playhead, stagger or extend"; break; }
+        } else if (how == "trim_end") {   // (Final Cut Pro's Trim End: its end to the playhead, the playhead inside it)
+            if (now > was + 1e-3 && now < was + lasts - 1e-3) ok = doc_set(d, t, "duration", now - was);
+            continue;
+        } else { ok = false, d.trouble = "lined up by start, end, playhead, stagger, extend or trim_end"; break; }
         to = std::max(0.0, to);
         if (std::fabs(to - was) > 1e-9) ok = doc_set(d, t, "start", to) && doc_keys_by(d, t, to - was);
     }
