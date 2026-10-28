@@ -307,6 +307,28 @@ const char* motolii_font_tags(const char* path) {
             if ((uint32_t)symbolic & kCTFontItalicTrait) out += "italic ";
             CFRelease(traits);
         }
+        // (the letters beyond Latin it has, as CoreText says its languages; each named as the Mac names it in English)
+        if (CFArrayRef langs = (CFArrayRef)CTFontDescriptorCopyAttribute(one, kCTFontLanguagesAttribute)) {
+            CFLocaleRef english = CFLocaleCreate(nullptr, CFSTR("en"));
+            for (const char* code : {"ja", "ko", "zh", "ru", "el", "ar", "he", "th", "hi"}) {
+                CFStringRef c = CFStringCreateWithCString(nullptr, code, kCFStringEncodingUTF8);
+                bool has = false;
+                for (CFIndex i = 0; i < CFArrayGetCount(langs) && !has; ++i) {   // (the language itself, or one of its scripts: "zh-Hans", not another that begins so, "arn")
+                    CFStringRef l = (CFStringRef)CFArrayGetValueAtIndex(langs, i);
+                    has = CFStringCompare(l, c, 0) == kCFCompareEqualTo || (CFStringHasPrefix(l, c) && CFStringGetLength(l) > CFStringGetLength(c) && CFStringGetCharacterAtIndex(l, CFStringGetLength(c)) == '-');
+                }
+                if (has) if (CFStringRef name = CFLocaleCopyDisplayNameForPropertyValue(english, kCFLocaleLanguageCode, c)) {
+                    char said[64] = "";
+                    CFStringGetCString(name, said, sizeof said, kCFStringEncodingUTF8);
+                    for (char* ch = said; *ch; ++ch) *ch = (char)std::tolower((unsigned char)*ch);
+                    out += std::string(said) + " ";
+                    CFRelease(name);
+                }
+                CFRelease(c);
+            }
+            CFRelease(english);
+            CFRelease(langs);
+        }
     }
     if (all) CFRelease(all);
     if (url) CFRelease(url);

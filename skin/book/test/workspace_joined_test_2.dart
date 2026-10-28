@@ -72,6 +72,7 @@ void _tests2() {
     final chips = [for (final e in find.descendant(of: find.byType(FontsShelf), matching: find.byType(Text)).evaluate()) (e.widget as Text).data];
     expect(chips[chips.indexOf('Used') + 1], '1', reason: 'the shelf counts the one in use (its Used tag)');
     expect([chips[chips.indexOf('Recent') + 1], recent.readAsStringSync()], ['1', '["Andale Mono"]'], reason: 'and keeps it among the fonts set lately, for the next time');
+    expect([m.fontTags('/System/Library/Fonts/Supplemental/AppleGothic.ttf'), m.fontTags('/System/Library/Fonts/Supplemental/Georgia.ttf')], [contains('korean'), containsAll(['serif', 'russian', 'greek'])], reason: 'its kind, and the letters beyond Latin it has, as CoreText says them');
     expect(m.undo(), isTrue);
     expect(m.word(text, 'file'), _font);
     expect(t.takeException(), isNull);

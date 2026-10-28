@@ -279,9 +279,9 @@
 - [x] イーズ：カーブのコピー・貼り付け、全部のキーに貼る、行き過ぎを許す：Ease の机の帯の Copy・Paste・Paste All（10/28）、グラフの取っ手は枠の上下へも引ける（-0.42〜1.62） — 済：窓の試験（`workspace_ease_library_test.dart`：取っ手を 1.4 まで引くと 0.8 秒で 1 を越える）
 - [ ] 速さ：亀とウサギのつまみ、どちらの端を止めるか
 - [x] 帯を左で詰める・切る・右で詰める：⌥[（始まりを再生位置へ）・⌘E（切る）・⌥]（終わりを再生位置へ）。Final Cut Pro の Trim Start・Trim End と同じ鍵。Animation メニューにも — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
-- [ ] 文字：揃え・フォント・大きさ・色を 1 段に
+- [ ] 文字：揃え・フォント・大きさ・色を 1 段に（一部）：Text カードに文字・Font・Size・Alignment、色は Fill カード。1 段ではない
 - [x] フォント：最近使ったもの、太さごと、星：Fonts の棚の Recent（最近当てた 8 個、新しい順、次に開いても残る、10/28）、Starred、太さは CoreText の読む bold・light の札 — 済：窓の試験（`workspace_joined_test_2.dart`）
-- [ ] フォント：分類（Serif…）、言語、並べ替え、読み込む
+- [x] フォント：分類（Serif…）、言語、並べ替え、読み込む：Fonts の棚の札。分類は CoreText の serif・sans・script・mono など、言語は CoreText の対応言語からラテン以外（japanese・korean・chinese・russian・greek・arabic・hebrew・thai・hindi、10/28）、並べ替えは名前と Recent（新しい順）、読み込みは ~/Library/Fonts や書類の隣に置く — 済：窓の試験（`workspace_joined_test_2.dart`）
 - [x] 複数選ぶと上の帯が変わり、数が出る：舞台の上の帯が「N picked」と結びつけ（関係）の札に変わり、下の帯も「N picked」（先に 1 つ選んでいても、10/28） — 済：窓の試験（`workspace_joined_test_3.dart`）
 - [ ] グループにする・グループにしてマスク・グループにして抜く
 - [x] 時間の揃え：始まりを伸ばす・再生位置へ寄せる・左揃え・ずらして並べる・右揃え：Animation メニューの Align Starts・Align Ends・Move to Playhead・Stagger・Extend Start to Playhead（選んだ物に、選んだ順で。動かした物はキーも一緒。始まりを伸ばすは Final Cut Pro の Extend Edit と同じく両向き、終わりは動かない） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
