@@ -81,6 +81,9 @@ void main() {
       expect(m.value(0, name, 0), v, reason: '$name: ${m.trouble}');
     }
     await t.pumpAndSettle();
+    final (from, to) = ws.work;
+    expect(t.widget<Text>(find.byKey(const ValueKey('render-estimate'))).data, 'about ${(8 * (to - from) / 8).toStringAsFixed(1)} MB', reason: '8 megabits a second over its seconds');
+    expect(find.textContaining('GB free'), findsOneWidget, reason: 'the folder\'s room, as df says it');
     expect(t.takeException(), isNull, reason: 'the dialog lays out with its rows');
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);

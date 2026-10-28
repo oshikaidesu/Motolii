@@ -272,9 +272,22 @@ class _RenderState extends State<_Render> {
     super.dispose();
   }
 
+  String _free = '';   // (the folder's room, read as the dialog opens)
+
+  /// How much room the folder's disk has, as the Mac's df says it (its Available, in 1024-byte blocks).
+  static String _room(String? folder) {
+    try {
+      final cols = (Process.runSync('df', ['-k', folder ?? '.']).stdout as String).trim().split('\n').last.split(RegExp(r'\s+'));
+      return '${(int.parse(cols[3]) / (1024 * 1024)).toStringAsFixed(1)} GB free';
+    } catch (_) {
+      return '';
+    }
+  }
+
   void _ask() {
     if (!mounted || _open.isShowing) return;
     final ws = WsScope.read(context), doc = ws.document ?? 'film.motolii';
+    _free = _room(ws.documentFolder);
     _name.text = '${doc.replaceFirst(RegExp(r'\.motolii$'), '')}.mp4';
     _open.show();
     WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _focus.requestFocus() : null);
@@ -343,7 +356,7 @@ class _RenderState extends State<_Render> {
                         ),
                       ),
                     ),
-                    row('Folder', Text(ws.documentFolder ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g76))),
+                    row('Folder', Text('${ws.documentFolder ?? ''}${_free.isEmpty ? '' : '  ·  $_free'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g76))),
                     row('Range', fact('Work area  ${t(from)} – ${t(to)}  ·  $frames frames')),
                     row('Size', fact('${WsArt.comp.width.round()} × ${WsArt.comp.height.round()}')),
                     // (how it is written, the document's own and kept with it: Alight Motion's export rows; 0 as the stage is)
@@ -354,9 +367,10 @@ class _RenderState extends State<_Render> {
                     ])
                       row(label, StatefulBuilder(builder: (context, again) {
                         final m = ws.inside, now = (m?.value(0, name, 0) ?? 0).round();
-                        return Wrap(spacing: Shape.s(6), runSpacing: Shape.s(4), children: [
+                        return Wrap(spacing: Shape.s(6), runSpacing: Shape.s(4), crossAxisAlignment: WrapCrossAlignment.center, children: [
                           for (final (v, said) in choices)
                             DeskChip(key: ValueKey('render-$name-$v'), label: said, on: now == v, onTap: m == null ? null : () => ws.after(m.later('set', thing: 0, name: name, number: v.toDouble()), (_, _) => mounted ? again(() {}) : null)),
+                          if (name == 'render_mbps' && now > 0) Text('about ${(now * (to - from) / 8).toStringAsFixed(1)} MB', key: const ValueKey('render-estimate'), style: T.label(Grey.g76)),   // (megabits a second over its seconds, as Alight Motion estimates it)
                         ]);
                       })),
                     row('Format', StatefulBuilder(builder: (context, again) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
