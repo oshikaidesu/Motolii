@@ -388,6 +388,21 @@ class _StageViewState extends State<StageView> implements StageHandles {
     setState(() => _pan = Offset(p.dx.clamp(-lim.dx, lim.dx), p.dy.clamp(-lim.dy, lim.dy)));
   }
 
+  /// What the hand is changing, as the stage shows it now (its frame, carried values and all): where it is, how wide and
+  /// high, how far turned, or where it turns about (points of the picture, degrees clockwise as seen).
+  String? _heldSays(String? by) {
+    final m = WsScope.read(context).inside, t = int.tryParse(widget.selected ?? '');
+    final f = m == null || t == null ? null : m.frame(t);
+    if (f == null) return null;
+    return switch (by) {
+      null => '${f[0].round()}, ${f[1].round()}',
+      'scale' => '${f[2].round()} × ${f[3].round()}',
+      'turn' => '${(f[4] % 360).round()}°',
+      'pivot' => '${f[5].round()}, ${f[6].round()}',
+      _ => null,
+    };
+  }
+
   // The picked thing's way over its time: where the inside places it, moment by moment (motolii_path, its wave and all),
   // in points of the picture, drawn thin with arrows the way it goes (Alight Motion's motion path). Asked again only
   // when the document or the pick changes; none when it stays put.
@@ -493,6 +508,20 @@ class _StageViewState extends State<StageView> implements StageHandles {
                     rect: Rect.fromPoints(from, _last!),
                     child: IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(border: Border.all(color: WsT.accent)))),
                   ),
+                if (_held case final h? when h.moved && _last != null)   // (the numbers while a hand moves it, by the hand, as Figma shows them; Alight Motion shows none)
+                  if (_heldSays(h.by) case final says?)
+                    Positioned(
+                      left: _last!.dx + 16,
+                      top: _last!.dy + 16,
+                      child: IgnorePointer(
+                        child: Container(
+                          key: const ValueKey('ws-held-says'),
+                          padding: EdgeInsets.symmetric(horizontal: Shape.s(6), vertical: Shape.s(3)),
+                          decoration: BoxDecoration(color: WsT.raised, borderRadius: BorderRadius.all(Shape.r(3))),
+                          child: Text(says, style: T.micro(Grey.g95)),
+                        ),
+                      ),
+                    ),
                 if (widget.texture != null)
                   IgnorePointer(
                     child: CustomPaint(

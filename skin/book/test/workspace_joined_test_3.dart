@@ -640,6 +640,41 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('while a hand carries a thing, where it is is said by the hand, and while it sizes one, how wide and high (Figma\'s numbers by the hand)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    expect(m.set(rect, 'size', .5), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$rect');
+    await t.pumpAndSettle();
+    final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp'))), k = 1920 / stage.width;
+    String? says() => find.byKey(const ValueKey('ws-held-says')).evaluate().isEmpty ? null : (find.descendant(of: find.byKey(const ValueKey('ws-held-says')), matching: find.byType(Text)).evaluate().single.widget as Text).data;
+    Future<String?> carry(Offset from, Offset by) async {
+      final g = await t.startGesture(from, kind: PointerDeviceKind.mouse), seen = <String>{};
+      for (var i = 0; i < 6; i++) {
+        await g.moveBy(by / 6);
+        for (var j = 0; j < 8; j++) {   // (the inside shows what is carried in its next picture)
+          await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+          await t.pump();
+        }
+        if (says() case final s?) seen.add(s);
+      }
+      final said = says();
+      expect(seen.length, greaterThan(1), reason: 'the numbers follow the hand: $seen');
+      await g.up();
+      await settled(t, ws);
+      return said;
+    }
+    final f = m.frame(rect)!;
+    expect(await carry(stage.topLeft + Offset(f[0], f[1]) / k, const Offset(60, 0)), matches(RegExp(r'^\d+, \d+$')), reason: 'where it is, while carried');
+    expect(says(), isNull, reason: 'gone once let go');
+    final g = m.frame(rect)!;
+    expect(await carry(stage.topLeft + Offset(g[0] + g[2] / 2, g[1] + g[3] / 2) / k, const Offset(40, 0)), matches(RegExp(r'^\d+ × \d+$')), reason: 'how wide and high, while sized');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');
