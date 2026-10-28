@@ -170,6 +170,7 @@ static bool screen_read(ScreenFx& fx, std::string& code) {
 struct ScreenStack {
     std::string files;
     std::vector<ScreenFx*> fx;
+    bool readsBehind = false;   // (one of its effects reads what is behind the thing: AbsentMotion's backdrop, the stage's behind)
     std::map<std::string, ScreenFx*> made;   // every effect made so far, by its file, kept (a shader is made once: making one takes a picture's time or ten)
     Texture* shot = nullptr;
     Texture* depth = nullptr;
@@ -315,6 +316,7 @@ static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, 
         for (size_t k = 1; k < own; ++k)
             read[k] = (fx.layered >> k) & 1u ? fx.history : target < fx.targets.size() ? fx.targets[target].picture[fx.targets[target].front] : from, target += !((fx.layered >> k) & 1u);
         for (size_t k = own; k < read.size(); ++k) {   // (another thing's picture; none chosen yet, its own, but a transition's end nothing (ISF_Spec: a transition's endImage))
+            if (fx.others[k - own] == "backdrop" && s.behind) { read[k] = s.behind; continue; }   // (what is behind the thing: the stage's picture without it, kit_things.h; AbsentMotion's backdrop)
             const bool end = fx.others[k - own] == "endImage";
             if (end && !st.clear) {
                 st.clear = Texture::Builder().width(1).height(1).levels(1).format(Texture::InternalFormat::RGBA8).build(*s.engine);

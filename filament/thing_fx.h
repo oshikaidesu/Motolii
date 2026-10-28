@@ -13,6 +13,7 @@ static void thing_effects(Stage& s, ScreenStack& st, const std::string& files) {
     st.files = files;
     st.fx.clear();
     st.steps.clear();
+    st.readsBehind = false;
     std::vector<std::shared_ptr<AviutlRun>> scripts;
     for (const std::string& file : script_files(files)) {
         if (file == "none") continue;
@@ -36,6 +37,7 @@ static void thing_effects(Stage& s, ScreenStack& st, const std::string& files) {
             made->stamp = screen_stamp(file);
         }
         if (made->door) st.fx.push_back(made), st.steps.push_back(0);
+        if (made->door && std::find(made->others.begin(), made->others.end(), "backdrop") != made->others.end()) st.readsBehind = true;   // (AbsentMotion's backdrop: the stage's behind, screen.h)
     }
     st.aviutl = scripts;
 }

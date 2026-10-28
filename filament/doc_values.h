@@ -266,6 +266,7 @@ static DocScript* doc_script_of(Doc& d, const std::string& file) {
         s.viewer = lottie && viewer_is(file);
         s.stamp = stamp, s.seen = files_changed(), s.knobs = ext == ".mjs" ? SplatEffect(file).knobs() : s.viewer ? viewer_knobs(file) : lottie ? lottie_knobs(file) : script_knobs(screen ? isf_file(file) : file);
         if (screen) script_first(file, s.knobs);   // (the values it comes with, where its own show nothing: fx_first.sh)
+        std::erase_if(s.knobs, [](const ScriptKnob& k) { return k.kind == "picture" && k.name == "backdrop"; });   // (what is behind it is given, not chosen on its card: screen.h)
         doc_scripts_made(d)++;   // (what was worked out from the old one is forgotten)
         for (const ScriptKnob& k : s.knobs) s.names.push_back(screen || lottie || absent ? doc_screen_knob(file, k.name) : "js_" + k.name);
         for (size_t i = 0; i < s.knobs.size(); ++i) {   // (the names are all made first: what points into them stays put)

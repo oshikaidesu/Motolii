@@ -50,13 +50,17 @@ if 'sksl' not in d:
 s = d['sksl']
 pictures = re.findall(r'^\s*uniform\s+shader\s+(\w+)\s*;', s, re.M)
 blur = next((p for p in pictures if p in ('blurred', 'bright')), None)
-if sorted(pictures) != sorted(['image'] + ([blur] if blur else [])):
-    sys.exit(f"{src}: reads {pictures}: an effect reads the picture, and it blurred at most")
+across = 'h_' if re.search(r'\bh\b', s) else 'h'   # (the blur's pass across: a name the effect's own lines do not use)
+back = 'backdrop' in pictures   # (what lies behind the layer: the stage's picture without it, screen.h's behind, read where the layer's box lies on it)
+if sorted(pictures) != sorted(['image'] + ([blur] if blur else []) + (['backdrop'] if back else [])):
+    sys.exit(f"{src}: reads {pictures}: an effect reads the picture, it blurred, and what is behind it at most")
 s = re.sub(r'\bsize\b', 'resolution', s)
 typed = r'^\s*(?:layout\(color\)\s+)?uniform\s+(float[234]?|half[234]?|int)\s+(\w+)\s*;'
 loose = re.findall(typed, s, re.M)
 s = re.sub(typed + r'\s*$', '', s, flags=re.M)
-s = re.sub(r'^\s*uniform\s+shader\s+(image|blurred|bright)\s*;', '', s, flags=re.M)
+s = re.sub(r'^\s*uniform\s+shader\s+(image|blurred|bright|backdrop)\s*;', '', s, flags=re.M)
+if back:
+    loose.append(('float4', 'backdropBox'))   # (the layer's box on the stage: left, top, width, height, each a share of it: doc_moment_fx.h)
 if blur:
     for n in ('blur', 'threshold') if blur == 'bright' else ('blur',):
         if not any(m == n for _, m in loose): loose.append(('float', n))   # (what the blur is made by, a knob of the effect's own in AbsentMotion)
@@ -64,16 +68,21 @@ if blur:
 head = '/*#pragma settings ForceHighPrecision AllowNarrowingConversions*/\n'   # (as a runtime effect: floats throughout, a half taken from a float)
 head += 'layout(webgpu, set=0, texture=0, sampler=1) sampler2D image;\n'
 if blur:
-    head += 'layout(webgpu, set=0, texture=2, sampler=3) sampler2D h;\nlayout(webgpu, set=0, texture=4, sampler=5) sampler2D blurPicture;\n'
-head += f"layout(set=0, binding={6 if blur else 2}) uniform Knobs {{\n" + ''.join(f'  {t} {n};\n' for t, n in loose) + '};\n'
+    head += f'layout(webgpu, set=0, texture=2, sampler=3) sampler2D {across};\nlayout(webgpu, set=0, texture=4, sampler=5) sampler2D blurPicture;\n'
+if back:
+    head += f"layout(webgpu, set=0, texture={6 if blur else 2}, sampler={7 if blur else 3}) sampler2D backdropPic;\n"   # (read after its own and its passes' pictures: screen.h's others)
+head += f"layout(set=0, binding={(6 if blur else 2) + (2 if back else 0)}) uniform Knobs {{\n" + ''.join(f'  {t} {n};\n' for t, n in loose) + '};\n'
 head += 'half4 imageAt(float2 p) { return sample(image, p / resolution); }\n'   # (a child shader read at a pixel: the picture at that place)
+if back:
+    head += 'half4 backdropAt(float2 p) { return sample(backdropPic, backdropBox.xy + p / resolution * backdropBox.zw); }\n'   # (what is behind that place)
 if blur:   # (a Gaussian across then down, sigma blur/3 in pixels, three sigmas each side, as Skia's blur reaches)
     head += 'half4 ' + blur + 'At(float2 p) { return sample(blurPicture, p / resolution); }\n'
-    head += ('half4 gauss_(float2 p, float2 by, int from) {\n  float sigma = max(blur, 0) / 3; if (sigma < 0.5) return from == 0 ? sample(image, p / resolution) : sample(h, p / resolution);\n'
+    head += ('half4 gauss_(float2 p, float2 by, int from) {\n  float sigma = max(blur, 0) / 3; if (sigma < 0.5) return from == 0 ? sample(image, p / resolution) : sample(' + across + ', p / resolution);\n'
              '  half4 all = half4(0); float weight = 0;\n  for (int i = -96; i <= 96; i++) { float x = float(i); if (abs(x) > 3 * sigma) continue; float w = exp(-x * x / (2 * sigma * sigma));\n'
-             '    half4 c = from == 0 ? sample(image, (p + by * x) / resolution) : sample(h, (p + by * x) / resolution);\n'
+             '    half4 c = from == 0 ? sample(image, (p + by * x) / resolution) : sample(' + across + ', (p + by * x) / resolution);\n'
              + ('    if (from == 0) c = half4(clamp(dot(c.rgb, half3(0.2126, 0.7152, 0.0722)) - threshold, 0, 1).xxx, c.a);\n' if blur == 'bright' else '') +
              '    all += c * w; weight += w; }\n  return all / weight;\n}\n')
+s = re.sub(r'\bbackdrop\.eval\(', 'backdropAt(', s)
 s = head + re.sub(r'\b(blurred|bright)\.eval\(', blur + 'At(' if blur else r'\1.eval(', re.sub(r'\bimage\.eval\(', 'imageAt(', s))
 s = re.sub(r'\bhalf4 main\(float2 (\w+)\)', r'half4 effect_(float2 \1)', s)   # (the file's own pixel function, whatever it names the pixel: the wrapper's main calls it)
 s += ('\nvoid main() { sk_FragColor = passindex < 0.5 ? gauss_(sk_FragCoord.xy, float2(1, 0), 0) : passindex < 1.5 ? gauss_(sk_FragCoord.xy, float2(0, 1), 1) : effect_(sk_FragCoord.xy); }\n' if blur
@@ -88,7 +97,9 @@ named = {re.sub(r'^R_', '', n): n for n in fields}   # (skslc's R_ before a name
 lines = [f"// {d['name']}: AbsentMotion's {d['id']} (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)"]
 lines.append(f"// --label:{d.get('category', '').capitalize()}")
 if blur:
-    lines += ['// --pass@h:0,1,s1,s1', '// --pass@blurPicture:0,1,s1,s1', '// --pass@:0,0,s1,s1']   # (across, down, then the effect itself)
+    lines += [f'// --pass@{across}:0,1,s1,s1', '// --pass@blurPicture:0,1,s1,s1', '// --pass@:0,0,s1,s1']   # (across, down, then the effect itself)
+if back:
+    lines.append('// --picture@backdrop:Behind')   # (screen.h gives it the stage's picture of what is behind, not a thing chosen)
 if d.get('description'):
     lines.append(f"// --about:{' '.join(d['description'].split())}")   # (what it does, in AbsentMotion's words: the shelf finds it by them)
 lines += knob_lines(named, ('float', 'int', 'bool', 'choice', 'angle'))

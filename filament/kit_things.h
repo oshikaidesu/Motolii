@@ -433,6 +433,7 @@ static bool begins(Stage& s) {
 // All the pictures of one frame, the helper pictures first (between Filament's beginFrame and endFrame). Every way
 // of drawing the stage goes through here.
 static void pictures_of(Stage& s) {
+    if (s.backdropRead) s.renderer->render(s.view_behind);   // (what is behind, for an effect that reads it (screen.h's backdrop): drawn before the effects, those things' own sheets left out of it)
     for (const auto& one : s.before) one();   // (the things with effects of their own, each drawn alone first, as FilamentApp draws its offscreen views before every other: thing_fx.h)
     for (Stage::Matte& m : s.mattes) {
         s.renderer->render(m.view);

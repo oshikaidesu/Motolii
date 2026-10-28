@@ -50,6 +50,11 @@ static void doc_things_fx(Doc& d) {
                 const double lasts = doc_number(d, thing, "duration", 0, -1);
                 return lasts > 0 ? lasts : doc_seconds(d);
             }
+            if (name.rfind("backdropBox_", 0) == 0) {   // (the box its picture is, on the stage's: left, top, width, height, each a share of it: what is behind it read there, effects/from_absent.py)
+                const Stage& s = *d.stage;
+                const int i = name.back() - 'x';
+                return i == 0 ? e.box[0] / s.w : i == 1 ? e.box[1] / s.h : i == 2 ? (e.box[2] - e.box[0]) / s.w : (e.box[3] - e.box[1]) / s.h;
+            }
             if (name == "origin_x" || name == "origin_y" || name == "turn" || name == "extent") {   // (where the thing is on the picture now, how turned, how large: an effect's pattern stuck to it)
                 double frame[8];
                 if (!doc_frame(d, thing, d.stage->now, frame)) return usual;
@@ -83,6 +88,10 @@ static void doc_things_fx(Doc& d) {
                 if (box[2] - box[0] < 1 || box[3] - box[1] < 1) box[0] = box[1] = 0, box[2] = s.w, box[3] = s.h;   // (none of it on the stage: the whole)
             }
             if (!e.solidFile.empty()) return doc_thing_solid_aim(d, thing, e);
+            if (e.st.readsBehind) {   // (its sheet on the screen only, not in the picture of what is behind it that its effect reads: as the glass leaves itself out, kit_things.h)
+                s.backdropRead = true;
+                for (const Stage::Made& made : s.made) if (made.of == e.sheet) s.engine->getRenderableManager().setLayerMask(s.engine->getRenderableManager().getInstance(made.thing), 0xFF, 0x02);
+            }
             thing_fx_aim(s, e, box);
             thing_fx_pictures(s, e.st, e.view);
             if (e.look) e.look->setParameter("image", thing_fx_seen(e.st), TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
