@@ -432,6 +432,37 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a number scrubbed with ⇧ held moves a tenth as far, with ⌃ ten times (fine and coarse scrubbing, Ableton Live\'s keys)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$rect');
+    await t.pumpAndSettle();
+    final x = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_x');
+    await seen(t, x);
+    Future<double> scrub([LogicalKeyboardKey? held]) async {   // (the key held once the scrub has begun, as Live has it: Shift at the press picks a span)
+      final was = m.value(rect, 'x', 0) ?? 0;
+      final g = await t.startGesture(t.getCenter(x.first), kind: PointerDeviceKind.mouse);
+      await g.moveBy(const Offset(10, 0));   // (10 at its own rate, then 40 with the key)
+      await t.pump();
+      if (held != null) await t.sendKeyDownEvent(held);
+      for (var i = 0; i < 4; i++) {
+        await g.moveBy(const Offset(10, 0));
+        await t.pump();
+      }
+      if (held != null) await t.sendKeyUpEvent(held);
+      await g.up();
+      await settled(t, ws);
+      return (m.value(rect, 'x', 0) ?? 0) - was;
+    }
+    final plain = await scrub(), fine = await scrub(LogicalKeyboardKey.shiftLeft), coarse = await scrub(LogicalKeyboardKey.controlLeft);
+    expect(plain, isNot(0), reason: m.trouble);
+    expect([fine / plain, coarse / plain], [closeTo((10 + 4) / 50, .03), closeTo((10 + 400) / 50, .5)], reason: 'plain $plain, fine $fine, coarse $coarse');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');
