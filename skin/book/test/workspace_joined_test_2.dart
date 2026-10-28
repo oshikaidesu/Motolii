@@ -51,9 +51,11 @@ void _tests2() {
     await _close(t);
   }, skip: !_built);
 
-  testWidgets('the Fonts shelf offers the machine\'s font files: the picked text is set in the one applied, as one step', (t) async {
+  testWidgets('the Fonts shelf offers the machine\'s font files: the picked text is set in the one applied, as one step, and it is kept among the recent', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final text = m.add('text', _font);
+    final recent = File('${Directory.systemTemp.createTempSync('fonts').path}/font_recent.json');
+    fontRecentAt(recent);   // (not the maker's own list)
     await t.runAsync(() => fontsRead(ws)); // (the shelf reads the folders without waiting; here the reading is done first)
     ws
       ..reread()
@@ -69,6 +71,7 @@ void _tests2() {
     expect(m.word(text, 'file'), endsWith('/Andale Mono.ttf'), reason: m.trouble);
     final chips = [for (final e in find.descendant(of: find.byType(FontsShelf), matching: find.byType(Text)).evaluate()) (e.widget as Text).data];
     expect(chips[chips.indexOf('Used') + 1], '1', reason: 'the shelf counts the one in use (its Used tag)');
+    expect([chips[chips.indexOf('Recent') + 1], recent.readAsStringSync()], ['1', '["Andale Mono"]'], reason: 'and keeps it among the fonts set lately, for the next time');
     expect(m.undo(), isTrue);
     expect(m.word(text, 'file'), _font);
     expect(t.takeException(), isNull);

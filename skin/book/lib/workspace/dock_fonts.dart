@@ -1,5 +1,6 @@
 // The Fonts shelf: each row set in its own face. Effects live in dock_effects.dart, files and media in dock_files.dart.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -49,8 +50,32 @@ Future<void> fontsRead(Ws ws) => _reading ??= Zone.root.run<Future<void>>(() asy
   dockRead.value++;
 });
 
+/// Where the fonts set lately are kept, the newest first, eight (a test points it elsewhere: [fontRecentAt]), as the
+/// Ease desk keeps its recent ways (ease_stars.json).
+File _recentFile = File('${Platform.environment['HOME']}/.motolii/font_recent.json');
+List<String>? _recent;
+void fontRecentAt(File f) => (_recentFile = f, _recent = null);
+List<String> fontRecent() => _recent ??= () {
+  try {
+    return [for (final s in jsonDecode(_recentFile.readAsStringSync()) as List) '$s'];
+  } catch (_) {
+    return <String>[];
+  }
+}();
+void _used(String family) {
+  final r = fontRecent()
+    ..remove(family)
+    ..insert(0, family);
+  if (r.length > 8) r.removeRange(8, r.length);
+  try {
+    _recentFile.parent.createSync(recursive: true);
+    _recentFile.writeAsStringSync(jsonEncode(r));
+  } catch (_) {}   // (not kept: known while the window is open)
+}
+
 /// Joined: the font given to the picked text; with no text picked, a new text set in it.
 void _setFont(DockCtx c, _Font f) {
+  _used(f.family);
   final m = c.ws.inside!, t = int.tryParse(c.ws.selected ?? '');
   void told(bool done, String why) => c.set(() => done ? c.mem.trouble.remove(f.family) : c.mem.trouble[f.family] = why);
   if (t != null && m.word(t, 'kind') == 'text') return c.ws.after(m.later('say', thing: t, name: 'file', word: f.path!), told);   // (without waiting)
@@ -87,10 +112,12 @@ class FontsShelf extends StatelessWidget {
     bool keep(_Font f) => switch (c.chip) {
       'All' => true,
       'Used' => used(f),
+      'Recent' => fontRecent().contains(f.family),
       'Starred' => c.starred(f.family),
       final tag => tagsOf(f).contains(tag),   // (a tag chip: the families with it)
     };
     final list = hits.where(keep).toList();
+    if (c.chip == 'Recent') list.sort((a, b) => fontRecent().indexOf(a.family).compareTo(fontRecent().indexOf(b.family)));   // (the newest first)
     final sel = fonts.where((f) => f.family == c.sel).firstOrNull;
     final picked = sel == null ? null : setIn[sel.path], onText = picked != null && picked.id == c.ws.selected;
     return Column(
@@ -100,6 +127,7 @@ class FontsShelf extends StatelessWidget {
           [
             ('All', hits.length),
             ('Used', hits.where(used).length),
+            ('Recent', hits.where((f) => fontRecent().contains(f.family)).length),
             ('Starred', hits.where((f) => c.starred(f.family)).length),
             for (final t in top.take(8)) (t.key, t.value),
           ],
