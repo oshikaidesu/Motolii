@@ -4,7 +4,10 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'mac_fonts.dart';
+
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   LiveTestWidgetsFlutterBinding.ensureInitialized();
+  await loadMacFonts();   // (letters as the Mac draws them: mac_fonts.dart)
   await testMain();
 }

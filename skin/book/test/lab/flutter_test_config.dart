@@ -2,4 +2,12 @@
 // is the one a test runs under: test/flutter_test_config.dart's real time is for the tests joined to the inside).
 import 'dart:async';
 
-Future<void> testExecutable(FutureOr<void> Function() testMain) async => testMain();
+import 'package:flutter_test/flutter_test.dart';
+
+import '../mac_fonts.dart';
+
+Future<void> testExecutable(FutureOr<void> Function() testMain) async {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  await loadMacFonts();   // (letters as the Mac draws them: ../mac_fonts.dart)
+  await testMain();
+}
