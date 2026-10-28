@@ -204,7 +204,7 @@
 - [x] ヌル（有る）：いま 形の null — 済：窓の試験（`workspace_joined_test_2.dart` の Create：Null）
 - [x] カメラ（Z、ズーム距離・画角、焦点ぼけ、フォグ）（有る）：いま camera の distance・zoom・focus・aperture、段の fog — 済：窓の試験（`workspace_joined_test_2.dart`、`workspace_desk_test.dart`）、`check/fog_near.sh`
 - [x] カメラを複数置いて切り替える：カメラごとに始まりと長さを決めると、その時に出ている一番手前のカメラで見る（今は 2D の図形もカメラのズームを受ける） — 済（10/28）：`check/camera_switch.sh`
-- [ ] カメラに親子づけ（字幕を画面に固定）（有る）：いま parent
+- [ ] カメラに親子づけ（字幕を画面に固定）（有る）：いま parent — 見た（10/28、SECTION=AB）：カメラの x にふるまい oscillator（-0.35〜0.35）。世界の立方体は画面を横に動く。文字 SUB は space を 2.5d にしてそのカメラを parent にした。字幕は画面に残らず、立方体と同じ向きにずれる。2D の右の写真だけが画面に貼り付いたまま。出典: `filament/doc_relations.h` の doc_above（子の場所は親の場所）。ライセンス: この回にコードは取り込んでいない
 - [x] 親子づけ（有る）：いま parent — 済：窓の試験（`workspace_joined_test_2.dart` の Parent、`workspace_joined_test_3.dart` の Parent カード）
 - [x] **Parenting Helper**（親の回転・大きさを無視・倍に、車輪の自動回転）（無い→有る）：親がある間だけ出る Parent の札。Its turn・Its size（親の回転・大きさをどれだけ受けるか、0〜200%、キー可）、Roll（x か y に進んだ分だけ車輪として回る）と Roll radius。手本：bevy_alight_motion の parenthelper.rs（MIT/Apache-2.0）の式 — 済（10/28）：親を 45° 回して子の棒が 1・0・2 で 45°・水平・90°、親 150% で子の大きさ 0 なら元の大きさを絵で確かめた。札の出方は窓の試験（`skin/book/test/workspace_joined_test_3.dart`）
 - [x] 全部の値にキー（有る）：キーの打てる値は内側の一覧（doc_kinds.h の moves）すべて — 済：`check/doc.sh`（キーの打てない値は断る、の確かめ）、窓の試験（キーの帯）
