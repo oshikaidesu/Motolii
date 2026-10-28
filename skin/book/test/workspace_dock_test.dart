@@ -1,6 +1,7 @@
 // The shelves on a real document (the inside joined, test/door.dart): each lays out at the dock's sizes; Media is one
 // browser, its tree beside the contents when wide and above them when narrow, its search over where it is.
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/widgets.dart';
@@ -129,6 +130,40 @@ void main() {
     await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'checkerboard');
     await t.pumpAndSettle();
     expect(find.byKey(ValueKey('ws-screen-${checker.$2}')), findsOneWidget, reason: 'Checker found by a word of what it does, not of its name');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
+  testWidgets('a sound file picked on the Media shelf is heard before it is placed: pressed, the Mac plays it; pressed again, it stops (Alight Motion\'s song preview)', (t) async {
+    final ws = _joined();
+    final wav = File('${ws.documentFolder}/tone.wav');   // (half a second of silence, as a WAV file says it: 16-bit mono at 8000)
+    final data = ByteData(44 + 8000)..setUint32(0, 0x52494646)..setUint32(4, 36 + 8000, Endian.little)..setUint32(8, 0x57415645)..setUint32(12, 0x666d7420)..setUint32(16, 16, Endian.little)..setUint16(20, 1, Endian.little)..setUint16(22, 1, Endian.little)..setUint32(24, 8000, Endian.little)..setUint32(28, 16000, Endian.little)..setUint16(32, 2, Endian.little)..setUint16(34, 16, Endian.little)..setUint32(36, 0x64617461)..setUint32(40, 8000, Endian.little);
+    wav.writeAsBytesSync(data.buffer.asUint8List());
+    await _shelf(t, ws, const Size(520, 900), 'Media');
+    final folder = find.byKey(ValueKey('browser:file:${ws.documentFolder}'));
+    await t.ensureVisible(folder.first);
+    await t.tap(folder.first);
+    await t.pumpAndSettle();
+    final tile = find.byKey(ValueKey('browser:file:${wav.path}'));
+    for (var i = 0; i < 20 && tile.evaluate().isEmpty; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pumpAndSettle();
+    }
+    await t.tap(tile.first);
+    final listen = find.byKey(const ValueKey('media-listen'));
+    for (var i = 0; i < 100 && listen.evaluate().isEmpty; i++) {   // (known to be sound once the discoverer has read it)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump();
+    }
+    await t.tap(listen);
+    for (var i = 0; i < 40 && find.descendant(of: listen, matching: find.text('■')).evaluate().isEmpty; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    expect(find.descendant(of: listen, matching: find.text('■')), findsOneWidget, reason: 'playing');
+    await t.tap(listen);
+    await t.pump();
+    expect(find.descendant(of: listen, matching: find.text('▶')), findsOneWidget, reason: 'stopped');
+    expect(t.takeException(), isNull);
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 }

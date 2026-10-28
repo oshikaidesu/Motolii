@@ -301,7 +301,7 @@ class _Footer extends StatelessWidget {
     return FutureBuilder<String>(   // (what the media is, as GStreamer's discoverer tells it: Alight Motion's Media Info; its file's kind and size until then)
       future: can && m != null ? mediaInfoOf(m.libPath, n.id) : null,
       builder: (context, info) => DockFooter(
-      preview: _Art(n),
+      preview: n.disk && n.g == DockG.video && (info.data ?? '×').isNotEmpty && !(info.data ?? '×').contains('×') ? _Listen(n) : _Art(n),   // (sound alone, no picture in it: heard before it is placed)
       title: n.name,
       meta: c.mem.trouble[n.id] ?? [if (layer != null) 'In use', if (info.data case final i? when i.isNotEmpty) i, _metaOf(n)].join(' · '),
       action: can ? 'Place' : 'Select',
@@ -312,4 +312,53 @@ class _Footer extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A sound file heard before it is placed (Alight Motion plays a song before it is added): pressed, the Mac's own
+/// player plays it (afplay); pressed again, or another file picked, it stops.
+class _Listen extends StatefulWidget {
+  const _Listen(this.n);
+  final FileNode n;
+  @override
+  State<_Listen> createState() => _ListenState();
+}
+
+class _ListenState extends State<_Listen> {
+  Process? _playing;
+
+  Future<void> _toggle() async {
+    if (_playing case final p?) {
+      p.kill();
+      return setState(() => _playing = null);
+    }
+    final p = await Process.start('afplay', [widget.n.id]);
+    if (!mounted) {
+      p.kill();
+      return;
+    }
+    setState(() => _playing = p);
+    p.exitCode.then((_) => mounted && identical(_playing, p) ? setState(() => _playing = null) : null);   // (to its end: still again)
+  }
+
+  @override
+  void didUpdateWidget(_Listen old) {
+    super.didUpdateWidget(old);
+    if (old.n.id != widget.n.id) _playing?.kill();
+  }
+
+  @override
+  void dispose() {
+    _playing?.kill();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    key: const ValueKey('media-listen'),
+    onTap: _toggle,
+    child: Stack(fit: StackFit.expand, children: [
+      _Art(widget.n),
+      Center(child: Text(_playing == null ? '▶' : '■', style: T.name(Grey.g95))),
+    ]),
+  );
 }
