@@ -471,6 +471,31 @@ void _tests2() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('the Pen puts a point at each press and closes on the first: a path shape of straight stretches (Alight Motion\'s vector drawing)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    ws
+      ..reread()
+      ..select(null);
+    await t.pumpAndSettle();
+    final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp'))), before = m.things.length;
+    await t.tap(find.byKey(const ValueKey('ws-tool-4')));   // (Pen, P)
+    await t.pumpAndSettle();
+    final c = stage.center, d = stage.height * .15;
+    for (final p in [c + Offset(-d, d), c + Offset(0, -d), c + Offset(d, d), c + Offset(-d, d)]) {   // (round, and on the first again)
+      await t.tapAt(p);
+      await settled(t, ws);
+    }
+    for (var i = 0; i < 200 && m.things.length == before; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    final made = m.things.last, path = m.word(made, 'path');
+    expect([m.things.length, m.word(made, 'shape')], [before + 1, 'path'], reason: m.trouble);
+    expect([' L'.allMatches(path).length, path.endsWith(' Z')], [2, isTrue], reason: 'three points, closed: $path');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('the inks and the strip mean the document: a colour filled with nothing picked is what is drawn next; the Move tool along X keeps y', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     ws
