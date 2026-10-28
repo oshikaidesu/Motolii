@@ -286,6 +286,14 @@ final _rowsAA = <(String, String, Map<String, Object>)>[
   ('rd3', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .55}),
   ('rd4', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .8}),
 ];
+// (section AU: a modest squeeze the file allows, a page curl at a progress the file allows, and a starfield moved a short way on each axis.)
+final _rowsAU = <(String, String, Map<String, Object>)>[
+  ('squeeze', 'effects/am_squeeze.wgsl', const {'amount': 0.5}),
+  ('curl', 'effects/Inverted Page Curl.fs', const {'progress': 0.4}),
+  ('stars0', 'effects/am_starfield.wgsl', const {'brightness': 1.5, 'offset_x': 0, 'offset_y': 0}),
+  ('starsX', 'effects/am_starfield.wgsl', const {'brightness': 1.5, 'offset_x': 20, 'offset_y': 0}),
+  ('starsY', 'effects/am_starfield.wgsl', const {'brightness': 1.5, 'offset_x': 0, 'offset_y': 20}),
+];
 // (section AT: angles the files declare. Extrude at its own rotation. A panorama turned by yaw. Flicker at two times.)
 final _rowsAT = <(String, String, Map<String, Object>)>[
   ('extrude', 'effects/am_rasterextrude.wgsl', const <String, Object>{}),
@@ -392,7 +400,7 @@ final _rowsAB = <(String, String, Map<String, Object>)>[
   ('zoomHi', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .25}),
   ('zoomLo', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .75}),
 ];
-final _rows = switch (_section) { 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+final _rows = switch (_section) { 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
