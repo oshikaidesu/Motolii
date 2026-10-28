@@ -303,15 +303,15 @@
 
 - [ ] Advanced Chroma Key
 - [ ] Chromatic Zoom Blur
-- [ ] Color Balance
+- [ ] Color Balance — 見た（10/28、SECTION=AD）：`effects/am_colorbalance.wgsl`（AbsentMotion の colorbalance、Apache-2.0、https://github.com/Comett1225/AbsentMotion/blob/0f5d891b7e6fd7260ca6191b4eafef23141230c8/app/src/main/assets/effects/colorbalance.json 、Amount 1。ファイルの影の色へ寄る）。左の暗い草は青くなる。その青い角が右の気球の左端に被る。右の気球の本体は元の絵
 - [ ] Energy Beam
 - [ ] Grunge
 - [ ] Key Spill Cleaner
 - [ ] Luma Stamper
 - [ ] Matte Fringe
-- [ ] Page Curl
+- [ ] Page Curl — 見た（10/28、SECTION=AD）：`effects/am_curl.wgsl`（AbsentMotion の curl、Apache-2.0、https://github.com/Comett1225/AbsentMotion/blob/0f5d891b7e6fd7260ca6191b4eafef23141230c8/app/src/main/assets/effects/curl.json 、Offset 0.2・Radius 40。どちらもファイルの範囲）。端が円に巻く絵には見えない。右の気球は元の絵
 - [ ] Parenting Helper
-- [ ] Raster Transform
+- [ ] Raster Transform — 見た（10/28、SECTION=AD）：`effects/am_rastertransform.wgsl`（AbsentMotion の rastertransform、Apache-2.0、https://github.com/Comett1225/AbsentMotion/blob/0f5d891b7e6fd7260ca6191b4eafef23141230c8/app/src/main/assets/effects/rastertransform.json 、Scale 1.6・Offset x 80。どちらもファイルの範囲）。左は大きくなり右へ寄るが、その絵が右の気球まで被る
 - [ ] Ring
 - [ ] Scale Assist
 - [ ] Scatter Field
