@@ -286,6 +286,17 @@ final _rowsAA = <(String, String, Map<String, Object>)>[
   ('rd3', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .55}),
   ('rd4', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .8}),
 ];
+// (section AY: a vignette whose size sits inside the photo, a vertical stretch, and noise that steps.)
+final _rowsAY = <(String, String, Map<String, Object>)>[
+  ('vig', 'effects/am_vignette.wgsl', const {'extent': 0.18, 'strength': 1, 'feather': 0.3}),
+  ('vig2', 'effects/am_vignette.wgsl', const {'extent': 0.12, 'strength': 1, 'feather': 0.2}),
+  ('tall', 'effects/am_stretchaxis.wgsl', const {'scale': 1.8, 'angle': 90}),
+  ('tall2', 'effects/am_stretchaxis.wgsl', const {'scale': 1.4, 'angle': 90}),
+  ('j0', 'noise:x', const {'@minimum': -.9, '@maximum': -.4, '@frequency': 6, '@step': .2, '@when': 0}),
+  ('j1', 'noise:x', const {'@minimum': -.9, '@maximum': -.4, '@frequency': 6, '@step': .2, '@when': .25}),
+  ('j2', 'noise:x', const {'@minimum': -.9, '@maximum': -.4, '@frequency': 6, '@step': .2, '@when': .55}),
+  ('j3', 'noise:x', const {'@minimum': -.9, '@maximum': -.4, '@frequency': 6, '@step': .2, '@when': .9}),
+];
 // (section AX: noise at a frequency that crosses more than one cell, so the photo is not carried one way.)
 final _rowsAX = <(String, String, Map<String, Object>)>[
   ('d0', 'noise:xy', const {'@minimum': -.85, '@maximum': -.45, '@ymin': -.12, '@ymax': .12, '@frequency': 4, '@when': 0}),
@@ -418,7 +429,7 @@ final _rowsAB = <(String, String, Map<String, Object>)>[
   ('zoomHi', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .25}),
   ('zoomLo', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .75}),
 ];
-final _rows = switch (_section) { 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+final _rows = switch (_section) { 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
