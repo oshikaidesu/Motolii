@@ -231,7 +231,14 @@ final _rowsP = <(String, String, Map<String, Object>)>[
   ('rotate', 'Rotate', const {'angle': .25}),
   ('chromakey', 'effects/am_chromakey.wgsl', const {'tolerance': .7}),
 ];
-final _rows = switch (_section) { 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+// (section Q: open rows whose value is the thing's own, not an effect file. text and shape: replace the left photo for that row.)
+final _rowsQ = <(String, String, Map<String, Object>)>[
+  ('spacing', 'text', const {'@letter_spacing': 1.5, '@size': .7}),
+  ('stroke', 'shape:rect', const {'@stroke': 'ff2266', '@stroke_width': 36, '@size': .5, '@fill': '2244aa'}),
+  ('trim', 'shape:circle', const {'@fill': '', '@stroke': 'ffffff', '@stroke_width': 20, '@trim_begin': .1, '@trim': .4, '@size': .55}),
+  ('radial', '-', const {'@copies': 8, '@copy_turn': 360, '@size': .28}),
+];
+final _rows = switch (_section) { 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -265,8 +272,15 @@ void main() {
     ws.reread();
     await shot('0_none.png');
     for (final (i, (row, effect, knobs)) in _rows.indexed) {
-      final file = effect.contains('/') ? '$motoliiDir/$effect' : '$motoliiDir/effects/$effect.fs';
-      if (effect != '-') expect(m.say(left, 'fx', file), isTrue, reason: '$row: ${m.trouble}');
+      if (effect == 'text' || effect.startsWith('shape:')) {
+        expect(m.remove(left), isTrue, reason: m.trouble);
+        left = effect == 'text' ? m.add('text', '/System/Library/Fonts/Supplemental/Arial Unicode.ttf') : m.add('shape', effect.substring('shape:'.length));
+        expect(m.set(left, 'x', -.5), isTrue, reason: m.trouble);
+        if (effect == 'text') expect(m.say(left, 'text', 'MOTOLII'), isTrue, reason: m.trouble);
+      } else if (effect != '-') {
+        final file = effect.contains('/') ? '$motoliiDir/$effect' : '$motoliiDir/effects/$effect.fs';
+        expect(m.say(left, 'fx', file), isTrue, reason: '$row: ${m.trouble}');
+      }
       final stem = effect.split('/').last.replaceFirst(RegExp(r'\.(js|wgsl|fs)$'), '').replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_');
       for (final MapEntry(:key, :value) in knobs.entries) {
         final name = key.startsWith('@') ? key.substring(1) : 'js_${stem}_$key';   // (@: the thing's own value)

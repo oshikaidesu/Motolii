@@ -163,7 +163,7 @@
 - [ ] **Auto-Shake**（有る）：Moves the layer randomly over time within specified parameters. — いま：ふるまい noise を x・y に — ISF：Shake
 - [x] **CMYK Halftone Dots**（有る）：Replaces continuous tones in the layer with a pattern of dots of varying sizes for each CMYK color channel, similar to the process used in magazine or comic book printing. — いま：ISF CMYK Halftone — ISF：CMYK Halftone — 済（10/28）：AbsentMotion の `effects/am_cmykhalftone.wgsl`（Apache-2.0、既定 Amount 100）。窓で写真 2 枚の左だけが印刷の網点になるのを絵と数で見た（左 70794、右 8243、`skin/book/integration_test/alight_check_test.dart` SECTION=S3）
 - [x] **Colorize**（有る）：Changes the color of the layer, keeping the original luminance. — いま：物の tint — 済（10/28）：物の tint 0.8、黒→黒・白→橙。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=F）
-- [ ] **Drawing Progress**（有る）：Clips the beginning and end of the vector outline of the layer so that the outline is only partially drawn. — いま：形の trim・trim_begin・trim_offset
+- [x] **Drawing Progress**（有る）：Clips the beginning and end of the vector outline of the layer so that the outline is only partially drawn. — いま：形の trim・trim_begin・trim_offset — 済（10/28）：形の trim_begin 0.1・trim 0.4、白い線。窓で左の円の輪郭が欠け、右の写真はそのままなのを絵で見た（`skin/book/integration_test/alight_check_test.dart` SECTION=Q）
 - [x] **Flip Layer**（有る）：Flips the layer in 3D along a specified axis. — いま：rotate_x・rotate_y（2.5D） — ISF：Flip H / Flip V — 済（10/28）：物の rotate_y 180（左右に裏返る）。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=F）
 - [x] **Gaussian Blur**（有る）：Applies a fast, smooth blur to the layer using a gaussian function, reducing noise and details in the layer. — いま：物の blur — ISF：Multi Pass Gaussian Blur — 済（10/28）：物の blur 20。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=F）
 - [ ] **Glow**（有る）：Draws a glow around the outside of the opaque parts of the layer. — いま：物の glow — 見た（10/28、SECTION=F）：物の glow ffffff・glow_blur 30 で、外の光は薄く、写真の中も明るくなる
@@ -178,7 +178,7 @@
 - [x] **Posterize**（有る）：Decreases the number of step in the layer's color channels. — いま：ISF Posterize — ISF：Color Posterize — 済（10/28）：AbsentMotion の `effects/am_posterize.wgsl`（Apache-2.0、既定 Steps 10）。窓で写真 2 枚の左だけが段の色になるのを絵と数で見た（左 46519、右 8244、`skin/book/integration_test/alight_check_test.dart` SECTION=S3）
 - [ ] **Pulse Opacity**（有る）：Automatically pulses the layer opacity over time, based on a sine wave or triangular wave. — いま：ふるまい oscillator を opacity に
 - [ ] **Pulse Size**（有る）：Automatically grows and shrinks the layer repeatedly over time, based on a sine wave or triangular wave. — いま：ふるまい oscillator を size に
-- [ ] **Radial Repeat**（有る）：Dynamically generates multiple copies of the layer, arranged in a circular pattern. — いま：copies＋copy_rotate — ISF：Radial Replicate
+- [ ] **Radial Repeat**（有る）：Dynamically generates multiple copies of the layer, arranged in a circular pattern. — いま：copies＋copy_rotate — ISF：Radial Replicate — 見た（10/28、SECTION=Q）：copies 8・copy_turn 360・size 0.28。写しは同じ場所で回って重なり、円周に並ぶ一文にはなっていない。右の写真は変わらない
 - [ ] **Random Displacement**（有る）：Automatically moves the layer smoothly but randomly over time — いま：ふるまい noise
 - [ ] **Rays**（有る）：Renders light rays from bright parts of the layer, based on the threshold setting. — いま：ISF God Rays — ISF：God Rays — 見た（10/28、SECTION=W）：`effects/God Rays.fs`（既定）。光の筋ではなく薄い重なりで、右にも被った（右 31000）
 - [x] **Repeat**（有る）：Dynamically generates multiple copies of the layer. — いま：copies — 済（10/28）：物の copies 3・copy_x 0.2。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=F）
@@ -187,10 +187,10 @@
 - [x] **Scatter Repeat**（有る）：Dynamically generates multiple copies of the layer, scattered randomly around the original layer location. — いま：copies＋scatter_x・scatter_y — ISF：Replicate Random — 済（10/28）：物の copies 6・scatter_x・scatter_y 0.3。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=F）
 - [x] **Solid Color**（有る）：Fills the opaque parts of the layer with a solid color. — いま：物の tint・fill — ISF：Solid Color — 済（10/28）：物の tint 1、黒も白も 3366ff。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=F）
 - [ ] **Squeeze**（有る）：Distorts the layer by squeezing it along one axis while expanding it along the other axis. — いま：形の squash — ISF：Squeeze — 見た（10/28、SECTION=W）：AbsentMotion の `effects/am_squeeze.wgsl`（Strength 1.2）。中が細く両脇が黒で、軸を縮めてもう一方を伸ばす一文には見えない。右の写真は変わらない
-- [ ] **Stroke Color**（有る）：Overrides the layer's stroke color. — いま：stroke
+- [x] **Stroke Color**（有る）：Overrides the layer's stroke color. — いま：stroke — 済（10/28）：形の stroke ff2266・stroke_width 36、塗りは 2244aa。窓で左の四角の縁が赤く、右の写真はそのままなのを絵で見た（`skin/book/integration_test/alight_check_test.dart` SECTION=Q）
 - [ ] **Swing**（有る）：Automatically rotates the layer back and forth over time. — いま：ふるまい oscillator を rotate に
 - [x] **Swirl**（有る）：Warps the layer by rotating it different amounts based on the distance from a center-point, resulting in a vortex or whirlpool-like distortion. — いま：ISF Twirl・形の twist — ISF：Swirl — 済（10/28）：AbsentMotion の `effects/am_twirl.wgsl`（Apache-2.0、既定 Strength 0.1・Radius 0.3）。窓で写真 2 枚の左だけが渦になるのを絵と数で見た（左 63057、右 8351、`skin/book/integration_test/alight_check_test.dart` SECTION=S4）
-- [ ] **Text Spacing**（有る）：Adjusts the spacing between individual letters or between lines of text in a text layer. — いま：letter_spacing・line_spacing
+- [x] **Text Spacing**（有る）：Adjusts the spacing between individual letters or between lines of text in a text layer. — いま：letter_spacing・line_spacing — 済（10/28）：文字の letter_spacing 1.5。窓で左の MOTOLII の字が離れ、右の写真はそのままなのを絵で見た（`skin/book/integration_test/alight_check_test.dart` SECTION=Q）
 - [ ] **Text Transform**（有る）：Transforms individual letters, words, lines, or pieces of letters within a specified range of a text layer. — いま：split＋stagger（Cavalry の Animators の形）
 - [ ] **Vignette**（有る）：Darkens the edges of the layer. — いま：効果 vignette・段の vignette — ISF：v002 Vignette — 見た（10/28、SECTION=S3）：AbsentMotion の `effects/am_vignette.wgsl`（既定 Size 0.95・Strength 0.8）。左は 19525 画素変わったが、縁が暗くなる一文としては見えない。SECTION=W の `effects/vignette.wgsl`（three.js、既定 offset 1・darkness 1）も、縁の暗さとしては見えない
 
