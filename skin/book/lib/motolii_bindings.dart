@@ -1954,6 +1954,36 @@ class MotoliiBindings {
         )
       >();
 
+  int motolii_thumbnail_seconds(
+    ffi.Pointer<pkg_ffi.Utf8> film,
+    ffi.Pointer<pkg_ffi.Utf8> png,
+    int wide,
+    double seconds,
+  ) {
+    return _motolii_thumbnail_seconds(film, png, wide, seconds);
+  }
+
+  late final _motolii_thumbnail_secondsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int Function(
+            ffi.Pointer<pkg_ffi.Utf8>,
+            ffi.Pointer<pkg_ffi.Utf8>,
+            ffi.Int,
+            ffi.Double,
+          )
+        >
+      >('motolii_thumbnail_seconds');
+  late final _motolii_thumbnail_seconds = _motolii_thumbnail_secondsPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<pkg_ffi.Utf8>,
+          ffi.Pointer<pkg_ffi.Utf8>,
+          int,
+          double,
+        )
+      >();
+
   void motolii_timed(ffi.Pointer<Motolii> m, int pictures) {
     return _motolii_timed(m, pictures);
   }

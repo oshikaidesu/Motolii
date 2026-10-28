@@ -246,8 +246,9 @@ double motolii_way_at(Motolii* m, const char* way, double u) {
 }
 // A film's first picture as a small .png: GStreamer's own line for it (decode, scale, into a .png), held at its first
 // picture, which is taken and written. It asks nothing of a stage, so a shell may call it from another thread.
-// (fraction: where in the film, 0 to 1; a picture there, not the first: a hand moving over a tile looks along the film)
-static int thumbnail_at(const char* film, const char* png, int wide, double fraction) {
+// (fraction: where in the film, 0 to 1; a picture there, not the first: a hand moving over a tile looks along the film;
+//  or, seconds given (0 or more), so many seconds in: a bar on the timeline shows the pictures it plays)
+static int thumbnail_at(const char* film, const char* png, int wide, double fraction, double seconds = -1.0) {
     gst_init(nullptr, nullptr);
     gchar* uri = gst_filename_to_uri(film, nullptr);
     if (!uri) return 0;
@@ -258,7 +259,11 @@ static int thumbnail_at(const char* film, const char* png, int wide, double frac
     GstElement* out = gst_bin_get_by_name(GST_BIN(made), "out");
     gst_element_set_state(made, GST_STATE_PAUSED);
     GstSample* first = gst_app_sink_try_pull_preroll(GST_APP_SINK(out), 4 * GST_SECOND);
-    if (first && fraction > 0.0) {
+    if (first && seconds > 0.0) {
+        gst_sample_unref(first);
+        gst_element_seek_simple(made, GST_FORMAT_TIME, (GstSeekFlags)(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE), (gint64)(seconds * (double)GST_SECOND));
+        first = gst_app_sink_try_pull_preroll(GST_APP_SINK(out), 4 * GST_SECOND);
+    } else if (first && fraction > 0.0) {
         gint64 length = 0;
         if (gst_element_query_duration(made, GST_FORMAT_TIME, &length) && length > 0) {
             gst_sample_unref(first);
@@ -280,6 +285,7 @@ static int thumbnail_at(const char* film, const char* png, int wide, double frac
 }
 int motolii_thumbnail(const char* film, const char* png, int wide) { return thumbnail_at(film, png, wide, 0.0); }
 int motolii_thumbnail_at(const char* film, const char* png, int wide, double fraction) { return thumbnail_at(film, png, wide, fraction); }
+int motolii_thumbnail_seconds(const char* film, const char* png, int wide, double seconds) { return thumbnail_at(film, png, wide, 0.0, seconds); }
 // A font file's kinds, as CoreText reads them (its own: the file's family class and traits): serif, sans, script,
 // mono, bold, light, italic, symbols, ornaments, space separated; "" for none.
 const char* motolii_font_tags(const char* path) {

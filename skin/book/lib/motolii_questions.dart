@@ -145,6 +145,9 @@ extension MotoliiQuestions on Motolii {
   Future<String?> thumbnail(String film) => _thumbnails[film] ??= _thumbnail(libPath, film);
 
   /// A picture [step] of [steps] along the film (a tile looked along by the hand's place on it, or played).
+  /// The film's picture so many seconds in (a tenth's nearest), small: a bar on the timeline shows what it plays.
+  Future<String?> filmFrame(String film, double seconds) => _thumbnails['$film@${(seconds * 10).round()}'] ??= _thumbnail(libPath, film, 0, 1, (seconds * 10).round() / 10);
+
   Future<String?> thumbnailAt(String film, int step, int steps) => step == 0 ? thumbnail(film) : _thumbnails['$film#$step/$steps'] ??= _thumbnail(libPath, film, step, steps);
 
   /// A ticket's answer when it comes, and why not if refused: Thermion's VoidCallbackRegistry, as it is (a Completer under

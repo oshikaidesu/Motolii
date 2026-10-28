@@ -1,7 +1,9 @@
 // The workspace's Timeline seat: transport + timecode on top, layer labels beside the track area, a ruler with the work area, the playhead.
 // The document lives in Ws; this seat keeps only how it looks at it (zoom, scroll, loop, the row toggles, the work area).
 import 'dart:developer' show Timeline;
+import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart' show DragStartBehavior, PointerScrollEvent, PointerSignalEvent;
 import 'package:flutter/scheduler.dart';
@@ -278,6 +280,30 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
 
   // A film's sound on its bar: read once on another isolate (the inside keeps it), then laid on the document's frames
   // where the film shows them, asked again only when the document changes.
+  // A film's pictures on its bar: the one it plays in the middle of each sixth of it (its begin, its speed, either way),
+  // made small by the inside (GStreamer, another isolate) and read as pictures; asked again only when the document changes.
+  final _frames = <String, (Object, List<ui.Image>?)>{};
+  final _framesAsked = <String, Object>{};
+  List<ui.Image>? _framesOf(Ws ws, WsLayer l) {
+    final m = ws.inside, t = int.tryParse(l.id);
+    if (m == null || t == null || m.word(t, 'kind') != 'film') return null;
+    final file = m.whole(m.word(t, 'file')), begin = m.value(t, 'begin', 0) ?? 0, speed = m.value(t, 'speed', 0) ?? 1, start = m.value(t, 'start', 0) ?? 0;
+    final key = (file, begin, speed, start, l.inF, l.outF);
+    if (_frames[l.id] case (final k, final f) when k == key) return f;
+    if (_framesAsked[l.id] != key) {
+      _framesAsked[l.id] = key;
+      const n = 6;
+      final lasts = (l.outF - l.inF) / Ws.fps;
+      final seconds = [for (var i = 0; i < n; i++) begin + (speed < 0 ? lasts - (i + .5) / n * lasts : (i + .5) / n * lasts) * speed.abs()];
+      Future.wait([for (final s in seconds) m.filmFrame(file, s)]).then((pngs) async {
+        if (pngs.any((p) => p == null)) return mounted ? setState(() => _frames[l.id] = (key, null)) : null;   // (no pictures: its sound alone)
+        final read = [for (final p in pngs) (await (await ui.instantiateImageCodec(File(p!).readAsBytesSync())).getNextFrame()).image];
+        if (mounted) setState(() => _frames[l.id] = (key, read));
+      });
+    }
+    return _frames[l.id]?.$2;
+  }
+
   final _waves = <String, (int, int, int, List<double>?)>{};   // (thing: document read, from, to, loudness a frame)
   final _asked = <String>{};
   final _waveAsked = <String, (int, int, int)>{};
@@ -327,6 +353,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
           dim: _isHidden(ws, l.id) || (_anySolo(ws) && !_isSolo(ws, l.id)),
           locked: _isLocked(ws, l.id),
           wave: _waveOf(ws, l),
+          frames: _framesOf(ws, l),
           tone: l.tone,
           mix: _mixOf(ws, l.id),
         ),

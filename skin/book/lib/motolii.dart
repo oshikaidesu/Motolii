@@ -45,16 +45,16 @@ typedef _S = Pointer<Utf8>;
 /// A film's thumbnail, made by the inside's own call on another isolate (nothing of a document is handed over: the
 /// call asks nothing of one). Kept in the system's temp folder under the film's place and when it was last changed.
 final _thumbnails = <String, Future<String?>>{};
-Future<String?> _thumbnail(String lib, String film, [int step = 0, int steps = 1]) async {
+Future<String?> _thumbnail(String lib, String film, [int step = 0, int steps = 1, double? seconds]) async {
   final folder = Directory('${Directory.systemTemp.path}/motolii_thumbnails')..createSync(recursive: true);
   // (named by the film's own place, so it is found again in another run, and by when the film was last changed)
   final named = film.replaceAll(RegExp(r'[^A-Za-z0-9]'), '_');
-  final png = '${folder.path}/${named.length > 150 ? named.substring(named.length - 150) : named}_${File(film).statSync().modified.millisecondsSinceEpoch}${step == 0 ? '' : '_$step'}.png';
+  final png = '${folder.path}/${named.length > 150 ? named.substring(named.length - 150) : named}_${File(film).statSync().modified.millisecondsSinceEpoch}${seconds != null ? '_s${(seconds * 10).round()}' : step == 0 ? '' : '_$step'}.png';
   if (File(png).existsSync()) return png;
   final made = await Isolate.run(() {
-    final ask = c.MotoliiBindings(DynamicLibrary.open(lib)).motolii_thumbnail_at;
+    final b = c.MotoliiBindings(DynamicLibrary.open(lib));
     final from = film.toNativeUtf8(), to = png.toNativeUtf8();
-    final done = ask(from, to, 240, step / steps) != 0;
+    final done = (seconds != null ? b.motolii_thumbnail_seconds(from, to, 160, seconds) : b.motolii_thumbnail_at(from, to, 240, step / steps)) != 0;
     malloc
       ..free(from)
       ..free(to);

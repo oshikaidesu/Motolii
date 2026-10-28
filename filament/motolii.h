@@ -46,6 +46,7 @@ const char* motolii_kind_of(const char* file);                     /* what kind 
 int motolii_sets(const char* font, const char* words);             /* 1 if a text in that font file can be those words (any thread, while a document is open) */
 int motolii_thumbnail(const char* film, const char* png, int wide);   /* a film's first picture written small, as a .png (asks nothing of a document: callable from any thread) */
 int motolii_thumbnail_at(const char* film, const char* png, int wide, double fraction);   /* the same, a picture that far along the film (0 to 1) */
+int motolii_thumbnail_seconds(const char* film, const char* png, int wide, double seconds);   /* the same, the picture so many seconds in */
 const char* motolii_font_tags(const char* path);   /* a font file's kinds as CoreText reads them: serif sans script mono bold light italic symbols ornaments, and the languages beyond Latin it has (japanese korean chinese russian greek arabic hebrew thai hindi) */
 int motolii_add(Motolii* m, const char* kind, const char* file);   /* a new thing (kind "": what the file makes), on from the stage's present moment: its number (0: not made) */
 int motolii_remove(Motolii* m, int thing);

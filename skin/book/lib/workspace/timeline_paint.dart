@@ -1,6 +1,7 @@
 // The workspace timeline's drawing: ruler, track rows, playhead, overview strip and the kind chip.
 // Every painter takes plain values and repaints only when one of them changes; nothing here ticks.
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/foundation.dart' show listEquals, ValueListenable;
@@ -59,6 +60,7 @@ class WtRow {
     this.dim = false,
     this.locked = false,
     this.wave,
+    this.frames,
     this.tone,
     this.mix,
     this.stretches = const [],
@@ -70,6 +72,9 @@ class WtRow {
 
   /// How loud its sound is at each frame of its bar (dB, the inside's reading; null: no sound to show).
   final List<double>? wave;
+
+  /// What a film's bar plays, a picture for each of its stretches in turn (null: not a film, or not read yet).
+  final List<ui.Image>? frames;
   final WsKind kind;
   final int inF, outF;
   final List<int> keys;
@@ -89,7 +94,8 @@ class WtRow {
       other.selected == selected &&
       other.dim == dim &&
       other.locked == locked &&
-      identical(other.wave, wave) &&   // (read once a change: the same list until the document changes)
+      identical(other.wave, wave) &&
+      identical(other.frames, frames) &&   // (read once a change: the same list until the document changes)
       other.stretches.length == stretches.length &&
       [for (var i = 0; i < stretches.length; i++) other.stretches[i].from == stretches[i].from && other.stretches[i].to == stretches[i].to && other.stretches[i].way == stretches[i].way].every((same) => same);
   @override
@@ -259,11 +265,18 @@ class WtTracksPainter extends CustomPainter {
     final notch = ink.withAlpha(r.selected ? 200 : 120);
     c.drawRect(Rect.fromLTWH(x0 + 2, bar.top + 4, 1.5, bar.height - 8), p..color = notch);
     c.drawRect(Rect.fromLTWH(x1 - 3.5, bar.top + 4, 1.5, bar.height - 8), p..color = notch);
+    if (r.frames case final f? when f.isNotEmpty) {   // (each picture filling its part of the bar, its middle kept: a strip of frames, as Alight Motion's)
+      final step = (bar.width - 10) / f.length;
+      for (final (i, im) in f.indexed) {
+        final at = Rect.fromLTWH(bar.left + 5 + i * step, bar.top, step, bar.height);
+        paintImage(canvas: c, rect: at, image: im, fit: BoxFit.cover, opacity: r.dim ? .35 : .8, filterQuality: FilterQuality.low);
+      }
+    }
     if (r.wave case final w?) _wave(c, bar, ink, fill, r.inF, w);
     final nameX = math.max(x0 + 8, 6.0);
     final t = _text(r.name, T.name(ink).copyWith(fontWeight: FontWeight.w700));
     if (nameX + 20 < x1) {
-      if (r.wave != null) c.drawRRect(RRect.fromLTRBR(nameX - 4, cy - 6.5, nameX + t.width + 4, cy + 6.5, Shape.r(3)), p..color = fill);
+      if (r.wave != null || r.frames != null) c.drawRRect(RRect.fromLTRBR(nameX - 4, cy - 6.5, nameX + t.width + 4, cy + 6.5, Shape.r(3)), p..color = fill);   // (its name on its own ground, over its sound or its pictures)
       c.save();
       c.clipRect(Rect.fromLTRB(nameX, bar.top, x1 - 6, bar.bottom));
       t.paint(c, Offset(nameX, cy - t.height / 2));

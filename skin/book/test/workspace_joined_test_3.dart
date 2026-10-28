@@ -510,7 +510,7 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
-  testWidgets('a film\'s sound is drawn on its bar: its loudness, read by the inside, laid where the film shows it (Alight Motion\'s waveform on a sound strip)', (t) async {
+  testWidgets('a film\'s sound and pictures are drawn on its bar: its loudness, read by the inside, laid where the film shows it, and what it plays (Alight Motion\'s waveform and frames on a strip)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final film = m.add('film', '$motoliiDir/check/beats.mp4');
     expect(film, isNot(0), reason: m.trouble);
@@ -524,6 +524,12 @@ void _tests3() {
     final w = wave();
     expect(w, isNotNull, reason: 'its bar has its sound');
     expect([w!.length, w.reduce(math.max)], [ws.layers.single.outF - ws.layers.single.inF, greaterThan(-60)], reason: 'one loudness a frame, and heard');
+    List<Object>? frames() => [for (final e in find.byWidgetPredicate((w) => w is CustomPaint && w.painter is WtTracksPainter).evaluate()) ...(((e.widget as CustomPaint).painter as WtTracksPainter).rows)].where((r) => r.frames != null).firstOrNull?.frames;
+    for (var i = 0; i < 400 && frames() == null; i++) {   // (its pictures made small by the inside, on another isolate)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    expect(frames(), hasLength(6), reason: 'and the pictures it plays, one for each sixth of it (Alight Motion\'s strip of frames)');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
