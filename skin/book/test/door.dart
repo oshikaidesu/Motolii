@@ -11,6 +11,7 @@ import 'package:lab_book/sets/inspector/inspector_parts.dart' show Chooser, Ctx,
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart' show PropRow;
 import 'package:lab_book/theme.dart' show ColorTheme;
 import 'package:lab_book/workspace/zoom.dart' show WsZoom;
+import 'package:lab_book/workspace/create_preview.dart' show RecipeMotions;
 import 'package:lab_book/workspace/dock_parts.dart' show dockStarsAt;
 import 'package:lab_book/workspace/timeline.dart' show WsTimeline;
 
@@ -183,6 +184,7 @@ Ws wsOf(WidgetTester t) => WsScope.read(t.element(find.byType(WsTimeline)));
 
 /// The window taken down, so the inside is closed before the next test opens it.
 Future<void> closeWorkspace(WidgetTester t) async {
+  await t.runAsync(RecipeMotions.stop);   // (the Create shelf's previews, made on an isolate of their own, not left making as the program ends)
   await t.pumpWidget(const SizedBox());
   t.view.reset();
 }

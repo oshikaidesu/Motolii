@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Two cameras, one after the other (Alight Motion switches between cameras so): the first, zoomed in, on for the first
-# second; the second, as it comes, from then on (the cube three seconds long, so the document runs past both). A cube (a thing in the world, as 2.5D and 3D things are: a 2D one keeps to the camera, as stuck to it) is seen larger through the first than through the second (the
+# second; the second, as it comes, from then on (the cube three seconds long, so the document runs past both). A cube (a thing in the world) is seen larger through the first than through the second (the
 # stage looks through the nearest camera that is on: doc_moment.h).
 #   ./check/camera_switch.sh
 cd "$(dirname "$0")/.."

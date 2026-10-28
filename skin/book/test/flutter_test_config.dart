@@ -4,10 +4,13 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:lab_book/workspace/create_preview.dart' show RecipeMotions;
+
 import 'mac_fonts.dart';
 
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   LiveTestWidgetsFlutterBinding.ensureInitialized();
   await loadMacFonts();   // (letters as the Mac draws them: mac_fonts.dart)
+  tearDownAll(RecipeMotions.stop);   // (a file of tests done: the Create shelf's previews not left making documents as the program ends)
   await testMain();
 }

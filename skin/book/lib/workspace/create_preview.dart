@@ -3,12 +3,14 @@
 // the tile draws those places as points, seen a little from above and turning, and plays them round and round. Nothing
 // is kept on disk: the pictures are the inside's own reckoning, drawn again whenever the shelf is shown.
 import 'dart:async';
+import 'dart:ffi' show Int32, Pointer, Int32Pointer;
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' show PointMode;
 
+import 'package:ffi/ffi.dart' show calloc;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:vector_math/vector_math_64.dart' show Matrix4, Vector3;
@@ -24,6 +26,21 @@ const _moments = 24, _seconds = 3.0, _mostCopies = 160;
 abstract final class RecipeMotions {
   static final _all = <String, RecipeMotion>{};
   static bool _asked = false;
+  static Pointer<Int32>? _halt;   // (said to the making: stop after the recipe it is on; read there between recipes)
+  static Completer<void>? _ended;
+
+  /// The making stopped once the recipe it is on is made, its document shut by itself, and waited for: a window shut,
+  /// or a file of tests done, does not leave it opening documents while the program ends. Asked again, it begins again.
+  static Future<void> stop() async {
+    final halt = _halt, ended = _ended;
+    if (halt == null || ended == null) return;
+    halt.value = 1;
+    await ended.future.timeout(const Duration(seconds: 30), onTimeout: () {});
+    calloc.free(halt);
+    _halt = null;
+    _ended = null;
+    _asked = false;
+  }
   static final ready = ValueNotifier<int>(0);
 
   static RecipeMotion? of(String recipe) => _all[recipe];
@@ -33,24 +50,27 @@ abstract final class RecipeMotions {
   static void ask(String libDir, List<String> recipes) {
     if (_asked) return;
     _asked = true;
-    final port = ReceivePort();
+    final port = ReceivePort(), halt = _halt = calloc.allocate<Int32>(4)..value = 0, ended = _ended = Completer<void>();
     port.listen((got) {
       if (got case (final String r, final RecipeMotion motion)) {
         _all[r] = motion;
         ready.value++;
       } else {
         port.close();
+        if (!ended.isCompleted) ended.complete();
       }
     });
-    Isolate.spawn(_reckon, (libDir, recipes, port.sendPort));
+    Isolate.spawn(_reckon, (libDir, recipes, port.sendPort, halt.address), onExit: port.sendPort);
   }
 
-  static void _reckon((String, List<String>, SendPort) asked) {
-    final (dir, recipes, tell) = asked;
+  static void _reckon((String, List<String>, SendPort, int) asked) {
+    final (dir, recipes, tell, at) = asked;
+    final halt = Pointer<Int32>.fromAddress(at);
     final folder = Directory.systemTemp.createTempSync('motolii_previews');
     final m = Motolii.open('${folder.path}/previews.motolii', wide: 1080, high: 1080, dir: dir);
     if (m == null) return tell.send(null);
     for (final r in recipes) {
+      if (halt.value != 0) break;   // (stopped: its document shut below, as when all are made)
       final before = m.things.toSet();
       if (m.make(r) == 0) continue;
       final parts = <({int colour, List<Float32List> copies, String outline, bool evenOdd, bool edge})>[];
