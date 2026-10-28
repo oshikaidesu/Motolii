@@ -388,6 +388,13 @@ class _StageViewState extends State<StageView> implements StageHandles {
     setState(() => _pan = Offset(p.dx.clamp(-lim.dx, lim.dx), p.dy.clamp(-lim.dy, lim.dy)));
   }
 
+  /// The picked thing's parent, by its id (null: none).
+  String? _parentOf() {
+    final m = WsScope.read(context).inside, t = int.tryParse(widget.selected ?? '');
+    final p = m == null || t == null ? 0 : (m.value(t, 'parent', 0) ?? 0).round();
+    return p > 0 ? '$p' : null;
+  }
+
   /// What the hand is changing, as the stage shows it now (its frame, carried values and all): where it is, how wide and
   /// high, how far turned, or where it turns about (points of the picture, degrees clockwise as seen).
   String? _heldSays(String? by) {
@@ -483,7 +490,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
               children: [
                 RepaintBoundary(
                   child: CustomPaint(
-                    painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: widget.texture == null ? _Part.all : _Part.under, pivots: widget.pivots, met: _met, trail: trail),
+                    painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: widget.texture == null ? _Part.all : _Part.under, pivots: widget.pivots, met: _met, trail: trail, parent: _parentOf()),
                   ),
                 ),
                 if (_desk case final desk? when widget.texture != null) ...[ // (the whole pane as the inside draws it: off the stage covered half way, the picked thing marked)
@@ -525,7 +532,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
                 if (widget.texture != null)
                   IgnorePointer(
                     child: CustomPaint(
-                      painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: _Part.over, pivots: widget.pivots, met: _met, marked: _desk != null, trail: trail),
+                      painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: _Part.over, pivots: widget.pivots, met: _met, marked: _desk != null, trail: trail, parent: _parentOf()),
                     ),
                   ),
                 IgnorePointer(child: CustomPaint(painter: _RulerPainter(v, widget.cursor, scene))),

@@ -675,6 +675,23 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a thing that goes with another, picked: the other\'s frame is drawn grey on the stage (Alight Motion\'s parent outline)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final mother = m.add('shape', 'rect'), child = m.add('shape', 'circle');
+    expect(m.set(mother, 'x', -1) && m.set(child, 'parent', mother.toDouble()), isTrue, reason: m.trouble);
+    String? drawn() => [for (final e in find.byWidgetPredicate((w) => w is CustomPaint && w.painter?.runtimeType.toString() == '_ViewPainter').evaluate()) (((e.widget as CustomPaint).painter as dynamic).parent as String?)].nonNulls.firstOrNull;
+    ws
+      ..reread()
+      ..select('$child');
+    await t.pumpAndSettle();
+    expect(drawn(), '$mother', reason: 'its parent\'s frame');
+    ws.select('$mother');
+    await t.pumpAndSettle();
+    expect(drawn(), isNull, reason: 'one with no parent: none');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

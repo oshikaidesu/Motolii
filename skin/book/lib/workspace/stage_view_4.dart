@@ -2,7 +2,7 @@
 part of 'stage_view.dart';
 
 class _ViewPainter extends CustomPainter {
-  _ViewPainter(this.scene, this.v, this.sel, this.hover, {required this.grid, required this.safe, this.part = _Part.all, this.pivots = false, this.met = (null, null), this.marked = false, this.trail});
+  _ViewPainter(this.scene, this.v, this.sel, this.hover, {required this.grid, required this.safe, this.part = _Part.all, this.pivots = false, this.met = (null, null), this.marked = false, this.trail, this.parent});
 
   /// The inside marks the picked thing and the one under the hand on its desk: not drawn here.
   final bool marked;
@@ -14,6 +14,9 @@ class _ViewPainter extends CustomPainter {
 
   /// The picked thing's way over its time, in points of the picture (null: it stays put, or not read yet).
   final List<Offset>? trail;
+
+  /// The picked thing's parent (what it goes with), its frame drawn grey: Alight Motion's parent outline.
+  final String? parent;
   final ArtScene scene;
   final _View v;
   final String? sel, hover;
@@ -59,6 +62,7 @@ class _ViewPainter extends CustomPainter {
         c.drawCircle(a, 3.5, _line(Grey.g91, 1.2));
       }
     }
+    if (WsArt.boxOf(scene, parent) case final b?) c.drawPath(_boxPath(b), _line(Grey.g63, 1));   // (what the picked thing goes with: its frame, grey)
     if (marked) return c.restore();
     if (WsArt.boxOf(scene, hover) case final b?) _legible(c, _boxPath(b), wsLabel(hover!), 1);   // (in its label colour, as its row)
     if (WsArt.boxOf(scene, sel) case final b?) _selection(c, b, scene.layer(sel)!);
@@ -171,7 +175,7 @@ class _ViewPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ViewPainter o) => o.scene != scene || o.v != v || o.sel != sel || o.hover != hover || o.grid != grid || o.safe != safe || o.part != part || o.pivots != pivots || o.met != met || o.marked != marked || !identical(o.trail, trail);
+  bool shouldRepaint(_ViewPainter o) => o.scene != scene || o.v != v || o.sel != sel || o.hover != hover || o.grid != grid || o.safe != safe || o.part != part || o.pivots != pivots || o.met != met || o.marked != marked || !identical(o.trail, trail) || o.parent != parent;
 }
 
 // ---- rulers -----------------------------------------------------------------------------------------------------------

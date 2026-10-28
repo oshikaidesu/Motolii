@@ -392,7 +392,7 @@
 - [ ] イーズの取っ手を曲線の上で直接動かす（黄＝形、白＝始めと終わり）
 - [ ] ベジェの 4 つのプリセット
 - [x] 親：一覧で選ぶ（None・自分は灰色・音は出ない）：Transform カードの Parent（None と他の物の名前、自分は出ない） — 済：窓の試験（`workspace_joined_test_2.dart` の Parent）
-- [ ] 親：子を選ぶと親の外枠を出す
+- [x] 親：子を選ぶと親の外枠を出す：親のある物を選ぶと、舞台に親の枠が灰色の線で（10/28） — 済：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 動きの道筋を細い線と向きの矢印で出す：選んだ物が動くと、舞台にその道筋（内側の位置の計算 motolii_path、揺れも含む）を細い線と矢印で（10/28） — 済：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 書き出し GIF：書き出しの箱の GIF（ffmpeg の palettegen・paletteuse、15 コマ毎秒） — 済：`check/film_way.sh`（10/28）、窓の試験（`workspace_render_dialog_test.dart`）
 
