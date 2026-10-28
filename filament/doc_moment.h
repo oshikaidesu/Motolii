@@ -427,21 +427,36 @@ static void doc_moment(Doc& d, double now) {
     }
     // A clipped thing is seen only inside the frame of the thing before it: Filament's own scissor on its looks, told
     // the rectangle of the picture that the thing before it covers now (turned or leaning: the upright box around it).
+    // A group made to mask (its Null's group_mask: Alight Motion's Group and Mask, Group and Exclude): its top thing is
+    // the shape, not seen itself; the others in it are seen inside it (or outside, to exclude), as a clipped thing is.
+    std::map<int, int> tops;
+    for (int thing : lie)
+        if (const int g = (int)std::lround(doc_number(d, thing, "parent", 0, 0)); g > 0)
+            if (const std::string& how = doc_word(d, g, "group_mask"); how == "mask" || how == "exclude") tops[g] = thing;   // (the last laid: the top)
     int before = 0;
     for (int thing : lie) {
         const auto found = d.shown.find(thing);
         if (found == d.shown.end()) continue;
         Doc::Shown& t = found->second;
         double box[4] = {0, 0, 0, 0};
-        const bool clipped = t.in && before && doc_number(d, thing, "clip", 0, 0) > 0.5 && doc_covers(d, before, now, box);
+        const int group = (int)std::lround(doc_number(d, thing, "parent", 0, 0));
+        const auto top = tops.find(group);
+        const bool grouped = top != tops.end() && top->second != thing;   // (in a group made to mask, not its top: cut by that)
+        if (top != tops.end() && top->second == thing) {   // (the group's top: the shape only, as Alight Motion's is not seen)
+            if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", 0.f);
+            if (t.drawn && t.drawn->edgeLook) t.drawn->edgeLook->setParameter("opacity", 0.f);
+        }
+        const int by = grouped ? top->second : before;
+        const double invert = grouped ? (doc_word(d, group, "group_mask") == "exclude" ? 1.0 : 0.0) : doc_number(d, thing, "clip_invert", 0, 0);
+        const bool clipped = t.in && by && (grouped || doc_number(d, thing, "clip", 0, 0) > 0.5) && doc_covers(d, by, now, box);
         // (clipped by a flat thing ThorVG draws, it is cut by that thing's own picture: the kit's matte, After Effects'
         //  alpha matte; by anything else, by the upright box of what that covers)
-        const Doc::Shown* const a = clipped ? &d.shown[before] : nullptr;
+        const Doc::Shown* const a = clipped ? &d.shown[by] : nullptr;
         const bool shaped = a && a->drawn && (t.drawn || t.film || t.look);   // (a solid too, by its own look: the kit's glass, or its plain look made to be cut)
         Doc::Cut& cut = d.cuts[thing];
         MaterialInstance* const own = t.film ? t.film->look : t.drawn ? t.drawn->look : t.look;
-        const std::string how = shaped ? doc_word(d, thing, "clip_matte") + " " + std::to_string(doc_number(d, thing, "clip_invert", 0, 0)) + " " + std::to_string(doc_number(d, thing, "clip_feather", 0, 0)) : std::string();   // (said only for one that is cut)
-        if (shaped && (cut.from != before || cut.by != a->drawn || cut.how != how)) {   // (its matte takes that picture's shape, at that thing's place, cut as it is said)
+        const std::string how = shaped ? doc_word(d, thing, "clip_matte") + " " + std::to_string(invert) + " " + std::to_string(doc_number(d, thing, "clip_feather", 0, 0)) : std::string();   // (said only for one that is cut)
+        if (shaped && (cut.from != by || cut.by != a->drawn || cut.how != how)) {   // (its matte takes that picture's shape, at that thing's place, cut as it is said)
             if (cut.look) {   // (what cut its look before is let go of first)
                 std::erase_if(s.cuts, [&](const Stage::Cut& c) { return c.look == cut.look; });
                 cut.look->setParameter("matteUse", float4{0.f});
@@ -450,12 +465,12 @@ static void doc_moment(Doc& d, double now) {
                 Scene* sc = s.mattes[(size_t)cut.matte].scene;
                 doc_unshape(s, [sc](const Stage::Made& made) { return sc->hasEntity(made.thing); });
             }
-            cut.matte = matte(s, a->drawn->sheet, {mat4f(doc_place(d, before, now))}, a->drawn->texture ? a->drawn->texture : white_point(s), doc_word(d, thing, "clip_matte") == "luma", 1.f, cut.matte);
-            cut.from = before, cut.by = a->drawn, cut.look = nullptr, cut.how = how;
+            cut.matte = matte(s, a->drawn->sheet, {mat4f(doc_place(d, by, now))}, a->drawn->texture ? a->drawn->texture : white_point(s), doc_word(d, thing, "clip_matte") == "luma", 1.f, cut.matte);
+            cut.from = by, cut.by = a->drawn, cut.look = nullptr, cut.how = how;
         }
         if (shaped && cut.look != own && own && cut.matte >= 0) {
-            matted(s, own, cut.matte, doc_number(d, thing, "clip_invert", 0, 0) < 0.5, (float)doc_number(d, thing, "clip_feather", 0, 0)), cut.look = own;
-            if (t.drawn && t.drawn->edgeLook) matted(s, t.drawn->edgeLook, cut.matte, doc_number(d, thing, "clip_invert", 0, 0) < 0.5, (float)doc_number(d, thing, "clip_feather", 0, 0));   // (its edge too)
+            matted(s, own, cut.matte, invert < 0.5, (float)doc_number(d, thing, "clip_feather", 0, 0)), cut.look = own;
+            if (t.drawn && t.drawn->edgeLook) matted(s, t.drawn->edgeLook, cut.matte, invert < 0.5, (float)doc_number(d, thing, "clip_feather", 0, 0));   // (its edge too)
         }   // (its look, or its look made again, is cut by it)
         if (!shaped && cut.look) {   // (no longer cut so: the matte is let go of)
             std::erase_if(s.cuts, [&](const Stage::Cut& c) { return c.look == cut.look; });

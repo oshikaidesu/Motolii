@@ -153,6 +153,7 @@ static const DocValue doc_values[] = {
     {"clip", doc_drawn, 0, 1, false, nullptr},
     // (clipped by a flat thing before it, the kit's matte: by how clear that is or how light (After Effects' alpha and
     //  luma mattes), the other way about (inverted), its edge so soft, in points of the screen)
+    {"group_mask", "shape", 0, 0, false, "none mask exclude"},   // (a group made to mask: its top thing the shape the others in it are seen in, or cut out by: Alight Motion's Group and Mask, Group and Exclude, reports/alight_ui.md)
     {"clip_matte", "film picture text shape", 0, 0, false, "alpha luma"}, {"clip_invert", "film picture text shape", 0, 1, false, nullptr}, {"clip_feather", "film picture text shape", 0, 500, false, nullptr},   // (a solid is cut by a box, not a matte)
     {"solo", doc_kinds, 0, 1, false, nullptr}, {"lock", doc_kinds, 0, 1, false, nullptr},   // (After Effects' own: while any thing is solo only those are seen; a locked thing is not changed)
     {"visible", "film picture text solid shape camera light behaviour", 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid polygon star line wave null ring arc arrow squircle cog path spiral chamfer"},
