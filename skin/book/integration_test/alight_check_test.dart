@@ -164,7 +164,12 @@ final _rowsS3 = <(String, String, Map<String, Object>)>[
   for (final n in const ['gradientoverlay', 'kaleidoscope', 'posterize', 'rgbsplit', 'noise', 'vignette', 'cmykhalftone', 'iridescence'])
     (n, 'effects/am_$n.wgsl', const {}),
 ];
-final _rows = switch (_section) { 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+// (section S4: more shelf effects whose head defaults are not the unchanged picture)
+final _rowsS4 = <(String, String, Map<String, Object>)>[
+  for (final n in const ['innerbulge', 'lightning', 'lumakey', 'radialrays', 'twirl', 'tilerotate', 'mirror', 'zoomstreaks'])
+    (n, 'effects/am_$n.wgsl', const {}),
+];
+final _rows = switch (_section) { 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
