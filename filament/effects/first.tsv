@@ -1,5 +1,6 @@
 # fx_first.sh: the values these come with, where their own show nothing (file, knob, value)
 Bloom.fs	intensity	0.4
+Chroma Zoom.fs	master_zoom	1.1
 Color Controls.fs	bright	0.1
 Color Replacement.fs	threshold	0.75
 Diagonal Blur.fs	width	0.1
@@ -16,3 +17,20 @@ Side Scroller And Flip.fs	slide	0.2
 Twirl.fs	amount	1
 Vibrance.fs	vibrance	0.42
 Zoom.fs	level	1.9
+am_channelremap.wgsl	r	0.5
+am_channelremaphsv.wgsl	h	0.5
+am_chromakey.wgsl	key_x	0.8
+am_contourgradient.wgsl	fill	0.9
+am_contourlines.wgsl	fill	0
+am_electricedges.wgsl	fill	0
+am_fillbehind.wgsl	fgAlpha	0.8
+am_highlightshadow.wgsl	highlights	1.4
+am_offset.wgsl	offset_x	500
+am_rastertransform.wgsl	scale	5.9
+am_replacecolor.wgsl	source_x	0.9
+am_simplestarfield.wgsl	starSize	1.85
+am_squeeze.wgsl	amount	0.2
+am_stretchaxis.wgsl	scale	5.9
+am_tiles.wgsl	zoom	2.9
+am_unsharpmask.wgsl	radius	0.614
+am_wipe.wgsl	start	0.15
