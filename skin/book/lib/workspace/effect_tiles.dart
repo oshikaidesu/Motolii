@@ -34,6 +34,9 @@ abstract final class EffectTiles {
   /// The maker's own folder: MOTOLII_OWN, or ~/Library/Application Support/Motolii (as the inside's doc_folders).
   static String get own => Platform.environment['MOTOLII_OWN'] ?? '${Platform.environment['HOME']}/Library/Application Support/Motolii';
 
+  /// The library's own folders beside the maker's (as the inside's doc_folders: the folder above its out/).
+  static List<String> get library => [for (final f in const ['effects', 'aviutl_scripts', 'recipes', 'animators']) '$motoliiDir/$f'];
+
   /// Watched until the subscription is cancelled; [changed] is told after the folders are read again and after tiles are drawn.
   static StreamSubscription<FileSystemEvent>? watch(Motolii m, void Function() changed) {
     ask(m, changed);
@@ -49,7 +52,10 @@ abstract final class EffectTiles {
       changed();
       ask(m, changed);
     }
-    return Directory(own).watch(recursive: true).listen((_) {
+    final inner = <StreamSubscription<FileSystemEvent>>[];
+    final merged = StreamController<FileSystemEvent>(onCancel: () => Future.wait([for (final w in inner) w.cancel()]));   // (one watch a folder, told as one)
+    inner.addAll([for (final p in [own, ...library.where((p) => Directory(p).existsSync())]) Directory(p).watch(recursive: true).listen(merged.add)]);
+    return merged.stream.listen((_) {
       soon?.cancel();
       soon = Timer(const Duration(milliseconds: 300), again); // (a copy is several events: read once it has settled)
     });
@@ -122,7 +128,7 @@ abstract final class EffectTiles {
       } catch (_) {
         continue;
       }
-      final whole = (f.endsWith('.fs') || f.endsWith('.wgsl')) && m.say(0, 'script', f);   // (a screen effect; the stage takes an AviUtl2 script too, but draws none of it: motolii.h, a thing's)
+      final whole = (f.endsWith('.fs') || f.endsWith('.wgsl') || f.endsWith('.json')) && m.say(0, 'script', f);   // (.json: Filament's own settings, laid on the stage's view: viewer_settings.h)   // (a screen effect; the stage takes an AviUtl2 script too, but draws none of it: motolii.h, a thing's)
       final onIt = !whole && m.say(photo, 'fx', f);   // (as a thing's: as edit.sh says it)
       if (whole) {   // (a transition, ISF's progress, seen going from 0 to 1 across its pictures; a file without one has no such value: nothing)
         final progress = 'js_${f.split('/').last.replaceFirst(RegExp(r'\.[^.]*$'), '').replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_')}_progress';   // (doc_values.h doc_screen_knob)

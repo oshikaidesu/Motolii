@@ -331,6 +331,15 @@ class MotoliiBindings {
   late final _motolii_effects = _motolii_effectsPtr
       .asFunction<ffi.Pointer<pkg_ffi.Utf8> Function(ffi.Pointer<Motolii>)>();
 
+  void motolii_files_changed() {
+    return _motolii_files_changed();
+  }
+
+  late final _motolii_files_changedPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function()>>('motolii_files_changed');
+  late final _motolii_files_changed = _motolii_files_changedPtr
+      .asFunction<void Function()>();
+
   void motolii_finished(
     ffi.Pointer<Motolii> m,
     ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>

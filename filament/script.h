@@ -6,12 +6,17 @@
 //   function each(i, n, t, k) { return { x, y, z, size, rotate, rotate_x, rotate_y, opacity }; }   // i of n copies, t seconds since the thing began, k the knobs (and k.duration: how long the thing lasts)
 // (as Cavalry's JavaScript Utility gives a Duplicator its points). Behind the door: QuickJS-ng (js_bench chose it).
 #pragma once
+#include <atomic>
 #include <map>
 #include <memory>
 #include <cstring>
 #include <sstream>
 #include <string>
 #include <vector>
+
+// How many times a watched file or folder was said to be written, put in or taken out (motolii_files_changed): the OS's
+// own watch runs in the window (dart:io's, on FSEvents), none in here; what is made from files asks its file again only then.
+static std::atomic<int>& files_changed() { static std::atomic<int> n{0}; return n; }
 
 struct ScriptKnob {
     std::string name, label, kind;   // kind: track, check, select or picture (an effect's image read from another thing)

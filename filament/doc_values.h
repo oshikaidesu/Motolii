@@ -212,7 +212,8 @@ static const DocShown doc_shown[] = {
 // and its code, made once a file and again when the file changes (a script written and saved shows at once).
 struct DocScript {
     long long stamp = -1;
-    std::chrono::steady_clock::time_point looked{};   // (when the file was last asked whether it changed: a few times a second at most)
+    int seen = -1;   // (files_changed when the file was last asked whether it changed: asked again only after another)
+    bool viewer = false;   // (Filament's own settings file: read and laid on the stage's view, not drawn: viewer_settings.h)
     std::vector<ScriptKnob> knobs;
     std::vector<std::string> names;
     std::vector<DocValue> values;
@@ -253,15 +254,15 @@ static DocScript* doc_script_of(Doc& d, const std::string& file) {
     const bool screen = ext == ".wgsl" || ext == ".fs" || ext == ".mjs" || three_is(file) || solid_is(file) || aviutl_is(file);   // (a three.js effect: as an ISF one, three_isf.cpp; a solid's shape: its knobs named by it too, not run as a script, solid_three.cpp; an AviUtl2 script: run by its own Lua, aviutl_fx.h)
     const bool lottie = ext == ".json" || ext == ".lot";   // (an After Effects file: its slots its knobs, lottie_slots.h)   // (.mjs: a PlayCanvas splat effect, its knobs its attributes: splatfx.h)   // (a whole-screen effect's knobs: named by the effect too)
     DocScript& s = doc_scripts(d)[file];
-    const auto now = std::chrono::steady_clock::now();
-    if (s.stamp >= 0 && now - s.looked < std::chrono::milliseconds(250)) return &s;
-    s.looked = now;
+    if (s.stamp >= 0 && s.seen == files_changed()) return &s;
+    s.seen = files_changed();
     std::error_code wrong;
     const long long stamp = (long long)std::filesystem::last_write_time(aviutl_is(file) ? aviutl_path(file) : file, wrong).time_since_epoch().count();
     if (wrong) return s.stamp >= 0 ? &s : nullptr;
     if (s.stamp != stamp) {
         s = DocScript{};
-        s.stamp = stamp, s.looked = now, s.knobs = ext == ".mjs" ? SplatEffect(file).knobs() : lottie ? lottie_knobs(file) : script_knobs(screen ? isf_file(file) : file);
+        s.viewer = lottie && viewer_is(file);
+        s.stamp = stamp, s.seen = files_changed(), s.knobs = ext == ".mjs" ? SplatEffect(file).knobs() : s.viewer ? viewer_knobs(file) : lottie ? lottie_knobs(file) : script_knobs(screen ? isf_file(file) : file);
         if (screen) script_first(file, s.knobs);   // (the values it comes with, where its own show nothing: fx_first.sh)
         doc_scripts_made(d)++;   // (what was worked out from the old one is forgotten)
         for (const ScriptKnob& k : s.knobs) s.names.push_back(screen || lottie ? doc_screen_knob(file, k.name) : "js_" + k.name);

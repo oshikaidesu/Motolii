@@ -8,6 +8,7 @@
 #include "physics.h"
 #include "script.h"
 #include "lottie_slots.h"
+#include "viewer_settings.h"
 #include "isf.h"
 #include "three_isf.h"
 #include "midi_roll.h"

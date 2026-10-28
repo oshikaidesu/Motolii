@@ -1,0 +1,99 @@
+{
+  "view": {
+    "colorGrading": {
+      "enabled": true,
+      "colorspace": "Rec709-sRGB-D65",
+      "quality": "MEDIUM",
+      "toneMapping": "ACES_LEGACY",
+      "customLut": "NONE",
+      "genericToneMapper": {
+        "contrast": 1.55,
+        "midGrayIn": 0.18,
+        "midGrayOut": 0.215,
+        "hdrMax": 10
+      },
+      "agxToneMapper": {
+        "look": "NONE"
+      },
+      "luminanceScaling": false,
+      "gamutMapping": false,
+      "exposure": 0,
+      "nightAdaptation": 0,
+      "temperature": 0,
+      "tint": 0,
+      "outRed": [
+        1,
+        0,
+        0
+      ],
+      "outGreen": [
+        0,
+        1,
+        0
+      ],
+      "outBlue": [
+        0,
+        0,
+        1
+      ],
+      "shadows": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "midtones": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "highlights": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "ranges": [
+        0,
+        0.333,
+        0.55,
+        1
+      ],
+      "contrast": 1,
+      "vibrance": 1,
+      "saturation": 1,
+      "slope": [
+        1,
+        1,
+        1
+      ],
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "power": [
+        1,
+        1,
+        1
+      ],
+      "gamma": [
+        1,
+        1,
+        1
+      ],
+      "midPoint": [
+        1,
+        1,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "linkedCurves": false
+    }
+  }
+}

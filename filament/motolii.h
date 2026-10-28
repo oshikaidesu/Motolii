@@ -159,6 +159,9 @@ int motolii_make(Motolii* m, const char* recipe);
    paths of those on it, with spaces between, the first nearest the picture. AviUtl2's scripts after them (aviutl_scripts/,
    to any depth; an @ file's each "file#name"), each for a thing's fx. */
 const char* motolii_effects(Motolii* m);
+/* A file or folder the shelves read from was written, put in or taken out (the window's own watch says so, or a hand
+   asks): the shelves, effects, scripts and recipes ask their files again at their next use, and not before. */
+void motolii_files_changed(void);
 /* The motions a thing may be given (Cavalry's Animators: "name\tpath\tlabel", one to a line, until the next call): a thing's
    script is the path of the one it has (a text given one moves letter by letter). */
 const char* motolii_animators(Motolii* m);

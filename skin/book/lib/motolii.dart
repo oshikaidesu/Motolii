@@ -214,8 +214,10 @@ class Motolii {
   /// What the folders hold (recipes, effects, animators): not the document's, read once, and again after [forgetFolders].
   final _folders = <String, List<(String, String)>>{};
 
-  /// The folders read again at the next ask (a file put in the maker's own folder: workspace/effect_tiles.dart).
+  /// The folders read again at the next ask (a file put in, taken out or written over in a watched folder:
+  /// workspace/effect_tiles.dart); the inside asks its files again too (motolii_files_changed), and not before.
   void forgetFolders() {
+    _b.motolii_files_changed();
     _folders.clear();
     _labels.clear();
     _pictures.clear();

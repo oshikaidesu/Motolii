@@ -58,11 +58,11 @@ static std::string doc_tile(const std::string& ref, const std::filesystem::path&
     return "\t" + picture + "\t" + drawn + "\t" + (std::filesystem::exists(drawn + ".same", wrong) ? "same" : "");
 }
 static std::string doc_folder_names(const char* folder, const char* extension) {
-    struct Seen { std::string all; std::filesystem::file_time_type was{}; std::chrono::steady_clock::time_point looked{}; };
+    struct Seen { std::string all; int seen = -1; };
     static std::map<std::string, Seen> seen;
     Seen& one = seen[folder];
     std::string& all = one.all;
-    if (!doc_folder_moved(folder, one.was, one.looked)) return all;
+    if (!doc_folder_moved(one.seen)) return all;
     all.clear();
     for (const auto& f : doc_folder_files(folder, extension)) {
         const std::string read = isf_file(f.string());   // (an ISF effect: its head as made WGSL; one that cannot be is not shown)
@@ -86,10 +86,9 @@ static std::string doc_folder_names(const char* folder, const char* extension) {
 // --label:. A file is read again only when it was written over.
 static std::string doc_aviutl_names() {
     static std::string all;
-    static std::filesystem::file_time_type was{};
-    static std::chrono::steady_clock::time_point looked{};
+    static int seen = -1;
     static std::map<std::string, std::pair<std::filesystem::file_time_type, std::string>> read;   // (each file's lines as it was)
-    if (!doc_folder_moved("aviutl_scripts", was, looked)) return all;
+    if (!doc_folder_moved(seen)) return all;
     all.clear();
     std::error_code wrong;
     for (const auto& dir : doc_folders("aviutl_scripts")) {
@@ -132,10 +131,9 @@ static std::atomic<int>& doc_own_ways_made() { static std::atomic<int> made{0}; 
 static std::map<std::string, std::string> doc_own_ways() {
     std::lock_guard<std::mutex> hold(doc_own_ways_lock());
     static std::map<std::string, std::string> kept;
-    static std::chrono::steady_clock::time_point looked{};
-    const auto now = std::chrono::steady_clock::now();
-    if (looked != std::chrono::steady_clock::time_point{} && now - looked < std::chrono::milliseconds(500)) return kept;   // (looked at again at most twice a second, Node's fs.watchFile way: the OS's own watch, GIO's GFileMonitor, tells only while GLib's default main context runs, and none runs here)
-    looked = now;
+    static int seen = -1;
+    if (seen == files_changed()) return kept;   // (looked at again when the window says a file changed: the OS's own watch, GIO's GFileMonitor, tells only while GLib's default main context runs, and none runs here; dart:io's runs in the window)
+    seen = files_changed();
     std::map<std::string, std::string> all;
     std::error_code wrong;
     for (const auto& dir : doc_folders("ways"))

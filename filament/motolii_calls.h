@@ -182,10 +182,11 @@ int motolii_range(Motolii* m, int thing, const char* name, double* low, double* 
 const char* motolii_recipes(Motolii* m) { return by_look(m, [=] { return (said_word() = doc_recipe_names()).c_str(); }); }
 const char* motolii_effects(Motolii* m) {   // (the effects folder's, then AviUtl2's scripts)
     return by_look(m, [=] {
-        const std::string files = doc_folder_names("effects", ".wgsl .fs .mjs .js"), aviutl = doc_aviutl_names();
+        const std::string files = doc_folder_names("effects", ".wgsl .fs .mjs .js .json"), aviutl = doc_aviutl_names();   // (.json: Filament's own settings, viewer_settings.h)
         return (said_word() = files + (files.empty() || aviutl.empty() ? "" : "\n") + aviutl).c_str();
     });
 }
+void motolii_files_changed(void) { ++files_changed(); }
 int motolii_look_save(Motolii* m, int thing, const char* path) { return by_look(m, [=] { return (int)doc_look_save(*m->d, thing, path); }); }
 int motolii_look_put(Motolii* m, int thing, const char* path) { return by_hand(m, [=] { return changes(m, doc_look_put(doc(m), thing, path)); }); }
 const char* motolii_looks(Motolii* m) { return by_look(m, [=] { return (said_word() = doc_look_names()).c_str(); }); }

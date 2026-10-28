@@ -51,7 +51,7 @@ struct ScreenFx {
     std::vector<Sound> sounds;
     uint32_t hw = 0, hh = 0;
     std::filesystem::file_time_type stamp{};       // (the file's time when it was made: written over, it is made again)
-    std::chrono::steady_clock::time_point looked{};
+    int seen = -1;                                 // (files_changed when its file was last asked)
 };
 static std::filesystem::file_time_type screen_stamp(const std::string& file) {
     std::error_code wrong;
@@ -344,12 +344,11 @@ static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, 
         door::draw(s.engine, screen_copy(s, st), &last.picture[last.front], to, w, h, 0, nullptr, over);
     }
 }
-// An effect whose file was written over made again where it stands (looked at four times a second at most): a shader
+// An effect whose file was written over made again where it stands (asked when the window says a file changed): a shader
 // saved shows at once. A file that no longer reads keeps the one before (said on stderr).
 static void screen_fresh(Stage& s, ScreenFx& fx) {
-    const auto now = std::chrono::steady_clock::now();
-    if (now - fx.looked < std::chrono::milliseconds(250)) return;
-    fx.looked = now;
+    if (fx.seen == files_changed()) return;
+    fx.seen = files_changed();
     const auto stamp = screen_stamp(fx.file);
     if (stamp == fx.stamp) return;
     fx.stamp = stamp;
@@ -366,7 +365,7 @@ static void screen_fresh(Stage& s, ScreenFx& fx) {
 }
 // Whether a file of the stage's effects has been written over since it was made (what wakes a stage that is not drawing).
 static bool screen_moved(const ScreenStack& st) {
-    for (const ScreenFx* fx : st.fx) if (screen_stamp(fx->file) != fx->stamp) return true;
+    for (const ScreenFx* fx : st.fx) if (fx->seen != files_changed() && screen_stamp(fx->file) != fx->stamp) return true;
     return false;
 }
 static void screen_effects(Stage& s, ScreenStack& st, const std::string& files, ScreenNumbers numbers) {
@@ -377,7 +376,7 @@ static void screen_effects(Stage& s, ScreenStack& st, const std::string& files, 
     s.view->setRenderTarget(nullptr);
     st.fx.clear();
     for (const std::string& file : script_files(files)) {
-        if (file == "none") continue;
+        if (file == "none" || std::filesystem::path(file).extension() == ".json") continue;   // (Filament's own settings: laid on the view, not drawn: viewer_settings.h)
         ScreenFx*& made = st.made[file];
         if (!made) {
             made = new ScreenFx;

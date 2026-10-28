@@ -292,17 +292,31 @@ static void doc_look(Doc& d) {
     std::snprintf(grade, sizeof grade, "%s %g %g %g %g %g %g %g %g", mapper.c_str(), doc_number(d, 0, "exposure", 0, 0), doc_number(d, 0, "contrast", 0, 1), doc_number(d, 0, "saturation", 0, 1), doc_number(d, 0, "vibrance", 0, 1), doc_number(d, 0, "temperature", 0, 0), slope, offset, power);
     const auto tint = [&](const char* name) { const float3 c = hex(name, float3{1.f}); std::strncat(grade, (" " + doc_word(d, 0, name)).c_str(), 20); return float4{Color::toLinear<ACCURATE>(sRGBColor{c}), 0.f}; };
     const float4 low = tint("shadows_color"), mid = tint("midtones_color"), high = tint("highlights_color");
-    if (d.graded != grade) {
+    std::vector<std::string> told;   // (Filament's own settings files on the stage, its knobs' values put in: viewer_settings.h)
+    for (const std::string& file : script_files(doc_word(d, 0, "script")))
+        if (DocScript* sc = doc_script_of(d, file); sc && sc->viewer)
+            told.push_back(viewer_said(file, sc->knobs, [&](size_t k) { return doc_number(d, 0, sc->names[k].c_str(), s.now, sc->knobs[k].usual); }));
+    const bool theirs = std::any_of(told.begin(), told.end(), [](const std::string& t) { return t.find("\"colorGrading\"") != std::string::npos; });
+    std::string key = grade;
+    if (theirs) for (const std::string& t : told) key += t;
+    if (d.graded != key) {
         static LinearToneMapper linear; static ACESToneMapper aces; static FilmicToneMapper filmic; static AgxToneMapper agx; static PBRNeutralToneMapper neutral;
         const ToneMapper* tm = mapper == "aces" ? (const ToneMapper*)&aces : mapper == "filmic" ? (const ToneMapper*)&filmic : mapper == "agx" ? (const ToneMapper*)&agx : mapper == "pbr_neutral" ? (const ToneMapper*)&neutral : (const ToneMapper*)&linear;
         ColorGrading* was = const_cast<ColorGrading*>(s.view->getColorGrading());
-        ColorGrading* now = ColorGrading::Builder().toneMapper(tm).exposure((float)doc_number(d, 0, "exposure", 0, 0)).contrast((float)doc_number(d, 0, "contrast", 0, 1))
+        ColorGrading* now = nullptr;
+        if (theirs) {   // (a file's grading is the whole grading, made as Filament's viewer makes it)
+            filament::viewer::Settings in;
+            filament::viewer::JsonSerializer read;
+            for (const std::string& t : told) read.readJson(t.c_str(), t.size(), &in);
+            now = filament::viewer::createColorGrading(in.view.colorGrading, s.engine);
+        } else
+            now = ColorGrading::Builder().toneMapper(tm).exposure((float)doc_number(d, 0, "exposure", 0, 0)).contrast((float)doc_number(d, 0, "contrast", 0, 1))
                                 .saturation((float)doc_number(d, 0, "saturation", 0, 1)).vibrance((float)doc_number(d, 0, "vibrance", 0, 1)).whiteBalance((float)doc_number(d, 0, "temperature", 0, 0), 0.f)
                                 .slopeOffsetPower(float3{slope}, float3{offset}, float3{power})
                                 .shadowsMidtonesHighlights(low, mid, high, float4{0.f, 0.333f, 0.55f, 1.f}).build(*s.engine);   // (the ranges as Filament's own)
         s.view->setColorGrading(now);
         if (was) s.engine->destroy(was);
-        d.graded = grade;
+        d.graded = key;
     }
     View::BloomOptions glow = s.view->getBloomOptions();
     glow.enabled = doc_number(d, 0, "bloom", 0, 0) > 0.0, glow.strength = (float)doc_number(d, 0, "bloom", 0, 0);
@@ -332,6 +346,15 @@ static void doc_look(Doc& d) {
     View::ScreenSpaceReflectionsOptions mirror = s.view->getScreenSpaceReflectionsOptions();
     mirror.enabled = doc_number(d, 0, "reflections", 0, 0) > 0.0;
     s.view->setScreenSpaceReflectionsOptions(mirror);
+    if (!told.empty()) {   // (Filament's own settings over the stage's: begun from what the view has, so a part a file does not name stays)
+        filament::viewer::Settings in;
+        in.view.bloom = s.view->getBloomOptions(), in.view.vignette = s.view->getVignetteOptions(), in.view.fog = s.view->getFogOptions();
+        in.view.ssao = s.view->getAmbientOcclusionOptions(), in.view.screenSpaceReflections = s.view->getScreenSpaceReflectionsOptions();
+        filament::viewer::JsonSerializer read;
+        for (const std::string& t : told) read.readJson(t.c_str(), t.size(), &in);
+        s.view->setBloomOptions(in.view.bloom), s.view->setVignetteOptions(in.view.vignette), s.view->setFogOptions(in.view.fog);
+        s.view->setAmbientOcclusionOptions(in.view.ssao), s.view->setScreenSpaceReflectionsOptions(in.view.screenSpaceReflections);
+    }
     if (d.roomLight <= 0.f && s.scene->getIndirectLight()) d.roomLight = s.scene->getIndirectLight()->getIntensity();
     std::string which = doc_word(d, 0, "room");
     if (which.empty()) which = "small_studio";   // (as the stage was opened)

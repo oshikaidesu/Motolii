@@ -479,21 +479,16 @@ static std::vector<std::filesystem::path> doc_folder_files(const char* folder, c
     for (const auto& [_, f] : by) files.push_back(f);
     return files;
 }
-// Whether a kind of file is to be read again: a file put in or taken out of either folder (its time), else every two
-// seconds (a file written over). A window asks at every build.
-static bool doc_folder_moved(const char* folder, std::filesystem::file_time_type& was, std::chrono::steady_clock::time_point& looked) {
-    std::error_code wrong;
-    std::filesystem::file_time_type stamp{};
-    for (const auto& dir : doc_folders(folder)) stamp = std::max(stamp, std::filesystem::last_write_time(dir, wrong));
-    const auto now = std::chrono::steady_clock::now();
-    if (stamp == was && now - looked < std::chrono::seconds(2)) return false;
-    was = stamp, looked = now;
+// Whether a kind of file is to be read again: once at first, then after the window says a file was put in, taken out or
+// written over (files_changed). A window asks at every build.
+static bool doc_folder_moved(int& seen) {
+    if (seen == files_changed()) return false;
+    seen = files_changed();
     return true;
 }
 static std::vector<DocRecipe> doc_recipes() {
     static std::vector<DocRecipe> all;
-    static std::filesystem::file_time_type was{};
-    static std::chrono::steady_clock::time_point looked{};
-    if (doc_folder_moved("recipes", was, looked)) all = doc_recipes_read();
+    static int seen = -1;
+    if (doc_folder_moved(seen)) all = doc_recipes_read();
     return all;
 }
