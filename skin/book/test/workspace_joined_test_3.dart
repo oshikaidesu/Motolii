@@ -234,6 +234,32 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Arrange: lined up on the picture, against their own box, spread evenly; made to fit the picture; turned over (Keynote\'s Align, Alight Motion\'s Fit and Flip)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final a = m.add('shape', 'rect'), b = m.add('shape', 'rect'), c = m.add('shape', 'rect');
+    expect(m.set(a, 'x', -1) && m.set(a, 'y', .3) && m.set(b, 'x', .2) && m.set(b, 'y', -.2) && m.set(c, 'x', 1.4) && m.set(a, 'size', .3) && m.set(b, 'size', .3) && m.set(c, 'size', .3), isTrue, reason: m.trouble);
+    ws.reread();
+    await t.pumpAndSettle();
+    Future<void> tell(String call, {int thing = 0, String word = ''}) async {
+      ws.after(m.later(call, thing: thing, word: word));
+      await settled(t, ws);
+    }
+    await tell('align', word: 'top $a $b $c');
+    expect([m.value(a, 'y', 0), m.value(b, 'y', 0), m.value(c, 'y', 0)].map((v) => (v ?? 0).toStringAsFixed(6)).toSet(), hasLength(1), reason: 'the tops in a line: ${m.trouble}');
+    await tell('align', word: 'across $b $a $c');
+    final xs = [m.value(a, 'x', 0)!, m.value(b, 'x', 0)!, m.value(c, 'x', 0)!]..sort();
+    expect(xs[1] - xs[0], closeTo(xs[2] - xs[1], 1e-6), reason: 'the gaps even: $xs');
+    await tell('align', word: 'centre $a');
+    expect(m.value(a, 'x', 0), closeTo(0, 1e-6), reason: 'one alone: on the picture');
+    await tell('fit', thing: b, word: 'fit');
+    expect([m.value(b, 'x', 0), m.value(b, 'y', 0)], [closeTo(0, 1e-6), closeTo(0, 1e-6)], reason: 'its middle at the picture\'s');
+    expect(m.value(b, 'size', 0)!, greaterThan(.3), reason: 'as large as fits');
+    await tell('flip', thing: c, word: 'x');
+    expect(m.value(c, 'scale_x', 0), -1, reason: 'turned over left to right');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a Parent card while it has a parent: how much of its turn and size it takes, and a wheel\'s roll (Alight Motion\'s Parenting Helper)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final a = m.add('shape', 'rect'), b = m.add('shape', 'rect');

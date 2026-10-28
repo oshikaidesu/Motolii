@@ -97,6 +97,22 @@ class _WorkspaceState extends State<Workspace> {
     return '${dir.path}/clipboard_$what.motolii';
   }
 
+  static const _aligns = [('Align Left', 'left'), ('Align Centre', 'centre'), ('Align Right', 'right'), ('Align Top', 'top'), ('Align Middle', 'middle'), ('Align Bottom', 'bottom'), ('Spread Across', 'across'), ('Spread Down', 'down')];
+
+  /// The things picked: together if more than one is, else the one.
+  List<int> _picked() => [for (final id in _ws.many.isNotEmpty ? _ws.many : {?_ws.selected}) ?int.tryParse(id)];
+
+  /// One step for each picked thing told so, all of it one step to undo.
+  void _eachPicked(int Function(int) tell) {
+    final m = _inside, all = _picked();
+    if (m == null || all.isEmpty) return;
+    m.later('together', number: 1);
+    for (final t in all) {
+      tell(t);
+    }
+    _ws.after(m.later('together'));
+  }
+
   void _copy(String call, String what) {
     final t = int.tryParse(_ws.selected ?? '');
     if (_inside != null && t != null) _inside!.later(call, thing: t, word: _clipboard(what));
@@ -214,6 +230,13 @@ class _WorkspaceState extends State<Workspace> {
         if (t == null) return;
         ws.after(m.later('split', thing: t, number: ws.frame / Ws.fps), null, (made) => ws.select('$made'));   // (the part after the playhead picked, as Live does)
       },
+      for (final (_, how) in _aligns) 'arrange.$how': () {   // (the picked: one against the picture, more against their own box)
+        final all = _picked();
+        if (all.isNotEmpty) ws.after(m.later('align', word: '$how ${all.join(' ')}'));
+      },
+      for (final how in const ['fit', 'fill', 'stretch']) 'arrange.$how': () => _eachPicked((t) => m.later('fit', thing: t, word: how)),
+      'arrange.flipX': () => _eachPicked((t) => m.later('flip', thing: t, word: 'x')),
+      'arrange.flipY': () => _eachPicked((t) => m.later('flip', thing: t, word: 'y')),
       'layers.sequence': () => ws.after(m.later('sequence')),   // (After Effects' Keyframe Assistant: one after another, from the top)
       'play.toggle': () => ws.playing = !ws.playing,
       ...wsAbletonCommands(ws),   // (Ableton Live's keys: ableton.dart)
@@ -308,6 +331,14 @@ class _WorkspaceState extends State<Workspace> {
               PlatformMenuItem(label: 'Show Skins Folder', onSelected: () => Process.run('open', [(Directory(ColorTheme.skins)..createSync(recursive: true)).path])),
             ],
           ),
+        ],
+      ),
+      PlatformMenu(
+        label: 'Arrange',   // (Keynote's and Figma's Align, Alight Motion's Fit and Flip)
+        menus: [
+          PlatformMenuItemGroup(members: [for (final (label, how) in _aligns) item(label, 'arrange.$how')]),
+          PlatformMenuItemGroup(members: [item('Fit to Picture', 'arrange.fit'), item('Fill Picture', 'arrange.fill'), item('Stretch to Picture', 'arrange.stretch')]),
+          PlatformMenuItemGroup(members: [item('Flip Horizontal', 'arrange.flipX'), item('Flip Vertical', 'arrange.flipY')]),
         ],
       ),
       PlatformMenu(

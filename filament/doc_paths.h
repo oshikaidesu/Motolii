@@ -131,6 +131,85 @@ static bool doc_seen_box(Doc& d, int thing, double now, double* box) {
     box[0] = cover[0], box[1] = cover[1], box[2] = cover[0] + cover[2], box[3] = cover[1] + cover[3];
     return true;
 }
+// A value changed by so much where it is said, every key of it too (moved or sized, its own way of moving kept): its
+// value as it comes, if none is said, changed so and said.
+static bool doc_value_by(Doc& d, int thing, const char* name, double add, double times) {
+    int rows = 0;
+    doc_rows(d, sqlite3_mprintf("select count(*) from fact where thing = %d and name = %Q", thing, name), [&](sqlite3_stmt* q) { rows = sqlite3_column_int(q, 0); });
+    if (!rows) return doc_set(d, thing, name, doc_usual(d, name) * times + add);
+    return doc_change(d, sqlite3_mprintf("update fact set value = value * %!.17g + %!.17g where thing = %d and name = %Q", times, add, thing, name));
+}
+// A thing moved by so many points of the picture (as a hand carries it): its x and y in the plane it hangs in.
+static bool doc_move_seen(Doc& d, int thing, double dx, double dy, double now) {
+    const math::mat4 above = doc_above(d, thing, now);
+    const math::double2 o = doc_seen(d, (above * math::double4{0, 0, 0, 1}).xyz), ex = doc_seen(d, (above * math::double4{1, 0, 0, 1}).xyz) - o, ey = doc_seen(d, (above * math::double4{0, 1, 0, 1}).xyz) - o;
+    const double det = ex.x * ey.y - ex.y * ey.x;
+    if (std::fabs(det) < 1e-12) return d.trouble = "it is seen edge on", false;
+    return doc_value_by(d, thing, "x", (dx * ey.y - dy * ey.x) / det, 1) && doc_value_by(d, thing, "y", (ex.x * dy - ex.y * dx) / det, 1);
+}
+// Things lined up on the picture as Keynote and Figma line them up (Arrange > Align): one against the picture, more
+// against the box round them all; left, centre, right, top, middle, bottom; across and down spread three or more so
+// the gaps between them are even. One step.
+static bool doc_align(Doc& d, const std::vector<int>& things, const std::string& how) {
+    const double now = d.stage->now;
+    std::vector<std::array<double, 4>> boxes;
+    for (const int t : things) {
+        std::array<double, 4> b{};
+        if (!doc_seen_box(d, t, now, b.data())) return d.trouble = "a thing not seen now", false;
+        boxes.push_back(b);
+    }
+    if (boxes.empty()) return d.trouble = "nothing to line up", false;
+    std::array<double, 4> all = things.size() == 1 ? std::array<double, 4>{0, 0, (double)d.stage->w, (double)d.stage->h} : boxes[0];
+    for (const auto& b : boxes) if (things.size() > 1) all = {std::min(all[0], b[0]), std::min(all[1], b[1]), std::max(all[2], b[2]), std::max(all[3], b[3])};
+    std::vector<std::pair<double, double>> by(things.size(), {0.0, 0.0});
+    if (how == "across" || how == "down") {   // (in the order they lie along the way: the first and last stay, the gaps between made even)
+        const int a = how == "across" ? 0 : 1;
+        if (things.size() < 3) return d.trouble = "three or more are spread", false;
+        std::vector<size_t> order(things.size());
+        for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+        std::sort(order.begin(), order.end(), [&](size_t p, size_t q) { return boxes[p][a] + boxes[p][a + 2] < boxes[q][a] + boxes[q][a + 2]; });
+        double sizes = 0;
+        for (const auto& b : boxes) sizes += b[a + 2] - b[a];
+        const double gap = (boxes[order.back()][a + 2] - boxes[order.front()][a] - sizes) / (double)(things.size() - 1);
+        double at = boxes[order.front()][a];
+        for (const size_t i : order) {
+            (a ? by[i].second : by[i].first) = at - boxes[i][a];
+            at += boxes[i][a + 2] - boxes[i][a] + gap;
+        }
+    } else
+        for (size_t i = 0; i < things.size(); ++i) {
+            const auto& b = boxes[i];
+            if (how == "left") by[i].first = all[0] - b[0];
+            else if (how == "centre") by[i].first = (all[0] + all[2] - b[0] - b[2]) / 2;
+            else if (how == "right") by[i].first = all[2] - b[2];
+            else if (how == "top") by[i].second = all[1] - b[1];
+            else if (how == "middle") by[i].second = (all[1] + all[3] - b[1] - b[3]) / 2;
+            else if (how == "bottom") by[i].second = all[3] - b[3];
+            else return d.trouble = "lined up left, centre, right, top, middle, bottom, across or down", false;
+        }
+    doc_act(d);
+    bool ok = true;
+    for (size_t i = 0; i < things.size() && ok; ++i) ok = doc_move_seen(d, things[i], by[i].first, by[i].second, now);
+    if (!ok) d.act_ok = false;
+    return doc_acted(d) && ok;
+}
+// A thing made to the picture (Alight Motion's Fit, Fill and Stretch): as large as it can be inside it, or covering it,
+// or stretched to it; then its middle at the picture's. One step.
+static bool doc_fit(Doc& d, int thing, const std::string& how) {
+    const double now = d.stage->now;
+    double b[4];
+    if (!doc_seen_box(d, thing, now, b) || b[2] - b[0] < 1e-6 || b[3] - b[1] < 1e-6) return d.trouble = "it is not seen now", false;
+    const double wx = (double)d.stage->w / (b[2] - b[0]), wy = (double)d.stage->h / (b[3] - b[1]);
+    if (how != "fit" && how != "fill" && how != "stretch") return d.trouble = "made to fit, fill or stretch", false;
+    doc_act(d);
+    bool ok = how == "stretch" ? doc_value_by(d, thing, "scale_x", 0, wx) && doc_value_by(d, thing, "scale_y", 0, wy) : doc_value_by(d, thing, "size", 0, how == "fit" ? std::min(wx, wy) : std::max(wx, wy));
+    if (ok) {
+        doc_moment(d, now);   // (seen as it is now, to put its middle at the picture's)
+        ok = doc_seen_box(d, thing, now, b) && doc_move_seen(d, thing, d.stage->w / 2.0 - (b[0] + b[2]) / 2, d.stage->h / 2.0 - (b[1] + b[3]) / 2, now);
+    }
+    if (!ok) d.act_ok = false;
+    return doc_acted(d) && ok;
+}
 // The upright box of the picture a thing covers at a moment, however it is turned or leans: left, top, wide, high.
 static bool doc_covers(Doc& d, int thing, double now, double* box) {
     float2 half{0.f};
