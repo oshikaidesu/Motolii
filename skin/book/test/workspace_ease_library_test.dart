@@ -86,4 +86,25 @@ void main() {
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   });
+
+  testWidgets('the Ease desk\'s arrows go to the curve before and after (Alight Motion\'s previous and next curve)', (t) async {
+    final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    expect(m.key(cube, 'x', 0, 0) && m.key(cube, 'x', 1, 1) && m.key(cube, 'x', 2, 0), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..pickKey((layer: '$cube', frame: 0))
+      ..front('Ease');
+    await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ease-previous')), findsNothing, reason: 'none before the first');
+    await t.tap(find.byKey(const ValueKey('ease-next')));
+    await t.pumpAndSettle();
+    expect(ws.keys, {(layer: '$cube', frame: Ws.fps)}, reason: 'the next curve: from its key at 1 s');
+    expect(find.byKey(const ValueKey('ease-next')), findsNothing, reason: 'none after the last');
+    await t.tap(find.byKey(const ValueKey('ease-previous')));
+    await t.pumpAndSettle();
+    expect(ws.keys, {(layer: '$cube', frame: 0)}, reason: 'back to the first');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  });
 }

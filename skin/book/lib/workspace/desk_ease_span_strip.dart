@@ -19,11 +19,20 @@ class SpanStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = span, ws = WsScope.of(context, {WsAspect.document});
     final frames = s == null ? 0 : s.to - s.from;
+    // (the curve before this one, or after it: its first key picked, as Alight Motion's arrows go between the curves)
+    final keys = s == null ? const <int>[] : ([...s.layer.keys]..sort()), before = keys.where((f) => f < s!.from).lastOrNull;
+    final after = keys.any((f) => s != null && f > s.to) ? s!.to : null;
+    Widget step(int? to, bool back) => to == null   // (its place kept: the numbers do not move as the arrows come and go)
+        ? SizedBox(width: Shape.z(18))
+        : DeskIconButton(key: ValueKey(back ? 'ease-previous' : 'ease-next'), size: Shape.z(18), glyph: (ink) => _Step(ink, back), onTap: () => ws.pickKey((layer: s!.layer.id, frame: to)));
     return DeskStrip(
       left: [
         if (s == null)
           Text('No keys picked · pick a key on the timeline', style: T.label(Grey.g63)) // (a way is of the stretch after a key; with none picked it is of nothing)
         else ...[
+          step(before, true),   // (first, where the strip never hides them)
+          step(after, false),
+          SizedBox(width: Shape.s(6)),
           DeskLayerChip(s.layer.name, wsTone(s.layer.kind)),
           SizedBox(width: Shape.s(8)),
           _KeyMark(),
@@ -40,7 +49,6 @@ class SpanStrip extends StatelessWidget {
         ],
       ],
       right: [
-        if (s != null) ...[DeskChip(label: ws.timecode(s.from)), SizedBox(width: WsT.gap)],
         for (final (label, tap) in [('Copy', onCopy), ('Paste', onPaste), ('Paste All', onPasteAll)])
           if (s != null && tap != null) ...[DeskChip(key: ValueKey('ease-${label.toLowerCase().replaceAll(' ', '-')}'), label: label, onTap: tap), SizedBox(width: WsT.gap)],
         DeskIconButton(size: Shape.z(18), glyph: (ink) => _ReverseGlyph(ink), onTap: onReverse),
@@ -114,4 +122,19 @@ class _Arrow extends CustomPainter {
 
   @override
   bool shouldRepaint(_Arrow o) => o.ink != ink;
+}
+
+/// A chevron, back or on: to the curve before or after.
+class _Step extends CustomPainter {
+  const _Step(this.ink, this.back);
+  final Color ink;
+  final bool back;
+  @override
+  void paint(Canvas c, Size s) {
+    final x = back ? s.width * .6 : s.width * .4, d = back ? -s.width * .2 : s.width * .2;
+    c.drawPath(Path()..moveTo(x, s.height * .25)..lineTo(x + d, s.height / 2)..lineTo(x, s.height * .75), Paint()..color = ink..strokeWidth = 1.4..style = PaintingStyle.stroke..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
+  }
+
+  @override
+  bool shouldRepaint(_Step o) => o.ink != ink || o.back != back;
 }
