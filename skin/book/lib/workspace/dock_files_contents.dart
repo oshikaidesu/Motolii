@@ -311,11 +311,37 @@ class _Footer extends StatelessWidget {
       done: !can && layer == null,
       doneLabel: 'Folder', // (the shelf lists only folders and files the inside can place: what cannot be placed is a folder)
       fresh: can, // (placed, it is a new thing)
+      lasts: _kindOfFile(n.id) == 'picture' ? _StillSeconds(c) : null,
       onAction: () => can ? _place(c, n) : c.ws.select(layer),
       ),
     );
   }
 }
+
+/// How long a still lasts, chosen before it is placed: Alight Motion's ruler under a photo (2 seconds as it comes);
+/// End, as long as the document goes on. Kept for the next still.
+class _StillSeconds extends StatelessWidget {
+  const _StillSeconds(this.c);
+  final DockCtx c;
+  @override
+  Widget build(BuildContext context) {
+    final at = _stillSteps.indexOf(_stillSeconds), s = _stillSeconds;
+    Widget step(String word, int by) => DockHover(
+      key: ValueKey('media-still-$word'),
+      onTap: at + by < 0 || at + by >= _stillSteps.length ? null : () => c.set(() => _stillSeconds = _stillSteps[at + by]),
+      builder: (_, h) => Padding(padding: EdgeInsets.symmetric(horizontal: Shape.s(3)), child: Text(word == 'less' ? '−' : '+', style: T.label(h ? Grey.g95 : Grey.g63))),
+    );
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Text('for', style: T.label(Grey.g56)),
+      step('less', -1),
+      Text(s == 0 ? 'End' : '${s % 1 == 0 ? s.round() : s} s', key: const ValueKey('media-still-seconds'), style: T.label(Grey.g91)),
+      step('more', 1),
+    ]);
+  }
+}
+
+const _stillSteps = [0.5, 1.0, 2.0, 3.0, 5.0, 10.0, 0.0];   // (0: to the document's end)
+var _stillSeconds = 2.0;
 
 /// A sound file heard before it is placed (Alight Motion plays a song before it is added): pressed, the Mac's own
 /// player plays it (afplay); pressed again, or another file picked, it stops.

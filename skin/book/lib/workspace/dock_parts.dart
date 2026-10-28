@@ -237,10 +237,12 @@ class DockFooter extends StatelessWidget {
     this.done = false,
     this.doneLabel = 'Added',
     this.fresh = false,
+    this.lasts,
   });
 
   /// What the action does is make a new thing (not change the selected one): 'to new layer'.
   final bool fresh;
+  final Widget? lasts;   // (how long the new thing lasts, chosen before it is placed: beside where it goes)
   final Widget? preview;
   final String title, meta, action, doneLabel;
   final VoidCallback? onAction;
@@ -289,6 +291,7 @@ class DockFooter extends StatelessWidget {
                       ),
                     ] else
                       Flexible(child: Text('new layer', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g91))),
+                    if (lasts case final w?) ...[SizedBox(width: Shape.s(8)), w],
                   ],
                 ),
               ],

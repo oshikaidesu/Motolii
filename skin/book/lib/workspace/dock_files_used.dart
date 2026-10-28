@@ -26,11 +26,11 @@ final _filesPicked = <String>{};
 
 /// The files picked together put on the stage, each a new thing from the present moment, each film as long as it plays
 /// (the discoverer's length: a film said no length lasts to the document's end), then, all of them films, laid one after
-/// another in the order picked (the inside's Stagger: Alight Motion adds several so); all of them picked. A still has no
-/// length of its own: stills are laid together.
+/// another in the order picked (the inside's Stagger: Alight Motion adds several so); all of them picked. A still lasts
+/// as long as chosen under it (End: stills are laid together).
 Future<void> _placeAll(DockCtx c, List<String> files) async {
   final m = c.ws.inside!;
-  final lengths = await Future.wait([for (final f in files) mediaSecondsOf(m.libPath, f)]);
+  final lengths = [for (final (i, s) in (await Future.wait([for (final f in files) mediaSecondsOf(m.libPath, f)])).indexed) _kindOfFile(files[i]) == 'picture' ? _stillSeconds : s];   // (a still: as long as chosen)
   m.later('together', number: 1);
   final made = <Future<int>>[];
   for (final (i, f) in files.indexed) {
@@ -54,6 +54,11 @@ Future<void> _placeAll(DockCtx c, List<String> files) async {
 
 /// A file put on the stage as a new thing, picked. Not done: the foot of the shelf says why.
 void _place(DockCtx c, FileNode n) {
-  final m = c.ws.inside!; // (the inside makes of it what the file is; without waiting, picked once made)
+  final m = c.ws.inside!, still = _kindOfFile(n.id) == 'picture' && _stillSeconds > 0; // (the inside makes of it what the file is; without waiting, picked once made)
+  if (still) m.later('together', number: 1);   // (made and given its length: one step)
   c.ws.after(m.later('add', word: n.id), (done, why) => c.set(() => done ? c.mem.trouble.remove(n.id) : c.mem.trouble[n.id] = why), (made) => c.ws.select('$made'));
+  if (still) {
+    m.later('set', thing: -1, name: 'duration', number: _stillSeconds);   // (the one just added: as long as chosen under it)
+    c.ws.after(m.later('together'), (_, _) => c.ws.reread());
+  }
 }

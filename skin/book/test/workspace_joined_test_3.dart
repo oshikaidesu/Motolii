@@ -573,6 +573,48 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a still picked on the Media shelf says how long it lasts before it is placed: 2 s as it comes, End to the document\'s end (Alight Motion\'s ruler under a photo)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    File('${ws.documentFolder}/dot.png').writeAsBytesSync(const [137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 218, 99, 252, 207, 192, 80, 15, 0, 4, 133, 1, 128, 132, 169, 140, 33, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130]);   // (one pixel, as a PNG says it)
+    ws.shelf = 'Media';
+    await t.pumpAndSettle();
+    final folder = find.byKey(ValueKey('browser:file:${ws.documentFolder}'));
+    await t.ensureVisible(folder.first);
+    await t.tap(folder.first);
+    await t.pumpAndSettle();
+    final tile = find.byKey(ValueKey('browser:file:${ws.documentFolder}/dot.png'));
+    for (var i = 0; i < 20 && tile.evaluate().isEmpty; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pumpAndSettle();
+    }
+    await t.tap(tile.first);
+    await t.pump(kDoubleTapTimeout);
+    await t.pumpAndSettle();
+    String said() => t.widget<Text>(find.byKey(const ValueKey('media-still-seconds'))).data!;
+    expect(said(), '2 s', reason: 'two seconds as it comes, as Alight Motion\'s');
+    Future<int> place() async {
+      final before = m.things.length;
+      await t.tap(find.text('Place'));
+      for (var i = 0; i < 200 && m.things.length == before; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+        await t.pump();
+      }
+      await settled(t, ws);
+      return m.things.last;
+    }
+    final two = await place();
+    expect(m.value(two, 'duration', 0), 2, reason: 'it lasts the two seconds said: ${m.trouble}');
+    for (final _ in [1, 2, 3, 4]) {
+      await t.tap(find.byKey(const ValueKey('media-still-more')));
+      await t.pump();
+    }
+    expect(said(), 'End', reason: '3, 5, 10, then the document\'s end');
+    final end = await place();
+    expect(m.value(end, 'duration', 0) ?? -1, lessThanOrEqualTo(0), reason: 'no length of its own: to the document\'s end');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a picked thing that moves shows its way on the stage, from where it begins to where it ends (Alight Motion\'s motion path)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');
