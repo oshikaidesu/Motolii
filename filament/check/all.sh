@@ -13,6 +13,7 @@ run anime_ways.sh
 run glass_shift.sh
 run doc.sh
 run absent_shapes.sh
+run absent_blurred.sh
 run clip_matte.sh
 run fog_near.sh
 run film_way.sh
