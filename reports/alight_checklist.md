@@ -329,7 +329,7 @@
 - [ ] 写真を図形と同じ仕組みで（塗り・縁・影が効く）
 - [ ] 写真の切り抜きの大きさと取っ手（角・辺）
 - [x] 動画の帯にコマの絵：動画の帯を 6 つに分け、それぞれの真ん中で流れる絵（begin・speed・逆向きも）を内側が GStreamer で小さく作り、帯いっぱいに並べる — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
-- [ ] 音量のつまみにキー・イーズ
+- [x] 音量のつまみにキー・イーズ（無い→有る）：動画の Volume にキーとイーズが打てる。再生中は今の時刻の大きさで鳴り（heard.h、GStreamer の playbin の volume を毎コマ）、書き出しは 1/30 秒ごとの大きさを ffmpeg の asendcmd で volume に伝える — 済（10/28）：0 秒で 0・2 秒で 1 のキーで書き出し、キーなしより早い所が −12.6 dB、遅い所が −0.1 dB（`filament/check/volume_keys.sh`）
 - [x] 動画から音を別のレイヤーに取り出す — 済（10/28）：G の「動画から音を取り出す」と同じ（Edit > Extract Sound）
 - [ ] Convert to Outline（輪郭に変換）
 - [x] Media Info（大きさ・fps・長さ・形式・ファイルの大きさ）：Media の棚で選ぶと下の欄に「幅 × 高さ · fps · 秒 · 形式 · 拡張子 · ファイルの大きさ」（GStreamer の Discoverer、10/28） — 済：窓の試験（`workspace_dock_test.dart`）

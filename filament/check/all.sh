@@ -16,6 +16,7 @@ run absent_shapes.sh
 run clip_matte.sh
 run fog_near.sh
 run film_way.sh
+run volume_keys.sh
 run motion_blur.sh
 run camera_switch.sh
 run pack.sh

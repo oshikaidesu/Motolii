@@ -104,7 +104,7 @@ struct Stage {
     std::vector<std::function<void()>>* later = nullptr;
     // a thing's own sound: the cut of its file (seconds of the file) and how fast, how far into that it is as it comes on,
     // and when on the stage it comes on and for how long (below 0: to the end)
-    struct Sound { std::string file; double from, to, speed, into, on, lasts; double gain = 1.0; };   // (gain: as loud as that, 1 as it comes)
+    struct Sound { std::string file; double from, to, speed, into, on, lasts; double gain = 1.0; std::vector<float> loud = {}; };   // (gain: as loud as that, 1 as it comes; loud: keyed, how loud each 1/30 s from when it comes on)
     std::map<const void*, std::function<Sound()>> sounding;   // what is heard, each under its own thing: asked when a film is written
     std::map<const void*, std::function<void(double)>> playing;   // what goes on by itself as the stage's time does (films, pictures), each under its own thing
     std::vector<std::function<void()>> said_after;      // a word of their own after each line of `clock` and `soak`

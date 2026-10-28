@@ -156,7 +156,7 @@ static const DocValue doc_values[] = {
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film solid picture text shape", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
     {"frame_rate", "film picture text solid shape", 0, 60, false, nullptr},   // (its own frames a second, 0 as the stage's: doc_stepped)
-    {"volume", "film", 0, 2, false, nullptr},   // (how loud its sound is heard and written: 1 as it comes, 0 none, 2 twice; Alight Motion's Volume, 0 to 200%)
+    {"volume", "film", 0, 2, true, nullptr},   // (how loud its sound is heard and written: 1 as it comes, 0 none, 2 twice; Alight Motion's Volume, 0 to 200%)
     {"beats", "film", 0, 60, false, nullptr},   // (where its sound strikes: louder by so many dB at once; 0, none shown)
     {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen darken lighten overlay soft_light hard_light color_dodge color_burn difference exclusion hue saturation color luminosity linear_burn linear_light vivid_light pin_light darker_color lighter_color subtract divide"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
     {"text", "text", 0, 0, false, ""}, {"fill", "text solid shape light", 0, 0, false, ""},

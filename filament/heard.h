@@ -28,6 +28,15 @@ static bool heard_where(const Stage::Sound& a, double now, double* at) {
     return true;
 }
 
+// How loud a thing's sound is at the stage's moment: its keys' reading (Stage::Sound::loud) between the two nearest,
+// or its one loudness.
+static double heard_loud(const Stage::Sound& a, double now) {
+    if (a.loud.empty()) return a.gain;
+    const double i = std::clamp((now - a.on) * 30.0, 0.0, (double)a.loud.size() - 1.0);
+    const size_t k = (size_t)i, k1 = std::min(k + 1, a.loud.size() - 1);
+    return a.loud[k] + (a.loud[k1] - a.loud[k]) * (i - (double)k);
+}
+
 static void heard_off(Heard& h) {
     if (!h.bin) return;
     gst_element_set_state(h.bin, GST_STATE_NULL);
@@ -83,7 +92,7 @@ static void heard(const std::map<const void*, Stage::Sound>& told, std::map<cons
             gst_element_seek(h.bin, std::max(1e-3, std::fabs(a.speed)), GST_FORMAT_TIME, (GstSeekFlags)(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE),
                              GST_SEEK_TYPE_SET, (gint64)(at * GST_SECOND), GST_SEEK_TYPE_NONE, -1);
         }
-        g_object_set(h.bin, "volume", std::clamp(a.gain, 0.0, 10.0), nullptr);   // (playbin's own loudness, 1 as it comes: as the thing says)
+        g_object_set(h.bin, "volume", std::clamp(heard_loud(a, now), 0.0, 10.0), nullptr);   // (playbin's own loudness, 1 as it comes: as the thing says)
         if (!h.on) gst_element_set_state(h.bin, GST_STATE_PLAYING), h.on = true;
     }
 }

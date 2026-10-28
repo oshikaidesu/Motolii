@@ -36,15 +36,19 @@ static bool film(Stage& s, const char* path, int pictures, const std::function<v
     for (const auto& [who, tells] : s.sounding) {
         const Stage::Sound a = tells();
         const double fast = std::fabs(a.speed);
-        char how[700];
+        std::string loud;   // (keyed: ffmpeg's asendcmd telling its volume each 1/30 s, counted from when it comes on)
+        for (size_t i = 0; i < a.loud.size(); ++i)
+            if (i == 0 || a.loud[i] != a.loud[i - 1]) loud += (loud.empty() ? "" : ";") + std::to_string(i / 30.0) + " volume@v" + std::to_string(n + 1) + " volume " + std::to_string(a.loud[i]);
         std::string halved;   // (ffmpeg's atempo goes no slower than half at a time)
         double left = fast;
         for (; left < 0.5; left /= 0.5) halved += "atempo=0.5,";
-        std::snprintf(how, sizeof how, "[%d:a]aresample=48000,atrim=start=%g:end=%g,asetpts=PTS-STARTPTS,%s%satempo=%g,aloop=loop=-1:size=%ld,atrim=start=%g%s%s,asetpts=PTS-STARTPTS,volume=%g,adelay=delays=%ld:all=1[a%d];",
+        std::vector<char> how(700 + loud.size());   // (room for its volume's commands)
+        std::snprintf(how.data(), how.size(), "[%d:a]aresample=48000,atrim=start=%g:end=%g,asetpts=PTS-STARTPTS,%s%satempo=%g,aloop=loop=-1:size=%ld,atrim=start=%g%s%s,asetpts=PTS-STARTPTS,%svolume@v%d=%g,adelay=delays=%ld:all=1[a%d];",
                       n + 1, a.from, a.to, a.speed < 0.0 ? "areverse," : "", halved.c_str(), left, std::lround((a.to - a.from) / fast * 48000.0), a.into,
-                      a.lasts < 0.0 ? "" : ":duration=", a.lasts < 0.0 ? "" : std::to_string(a.lasts).c_str(), a.gain, std::lround(a.on * 1000.0), n + 1);
+                      a.lasts < 0.0 ? "" : ":duration=", a.lasts < 0.0 ? "" : std::to_string(a.lasts).c_str(), loud.empty() ? "" : ("asendcmd=c='" + loud + "',").c_str(), n + 1,
+                      a.loud.empty() ? a.gain : a.loud[0], std::lround(a.on * 1000.0), n + 1);
         files += " -i " + quoted(a.file);
-        each += how;
+        each += how.data();
         all += "[a" + std::to_string(++n) + "]";
     }
     const std::string ending = std::filesystem::path(path).extension().string();

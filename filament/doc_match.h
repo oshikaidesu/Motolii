@@ -160,7 +160,11 @@ static bool doc_match(Doc& d) {
             if (made.film) s.playing.erase(made.film);   // (the document tells it its moment, and when its sound comes on)
             if (made.film && made.film->sound) s.sounding[made.film] = [&d, thing, v = made.film, file] {   // (counted from where the film being written begins: a sound already going then is heard from that far into it)
                 const double on = doc_number(d, thing, "start", 0, 0) - d.written_from, lasts = doc_number(d, thing, "duration", 0, -1), late = std::max(0.0, -on);
-                return Stage::Sound{file, v->from, v->to, v->speed, late, std::max(0.0, on), lasts < 0.0 ? lasts : std::max(1e-3, lasts - late), doc_number(d, thing, "volume", 0, 1)};
+                Stage::Sound a{file, v->from, v->to, v->speed, late, std::max(0.0, on), lasts < 0.0 ? lasts : std::max(1e-3, lasts - late), doc_number(d, thing, "volume", 0, 1)};
+                if (doc_keys_of(d, thing, "volume").at.size() > 1)   // (keyed: Alight Motion's Volume with its keys and eases, read each 1/30 s, as the document reads it)
+                    for (double t = 0.0, end = a.lasts >= 0.0 ? a.lasts : doc_seconds(d) - d.written_from - a.on; t <= end + 1e-9 && a.loud.size() < 30 * 3600; t += 1.0 / 30.0)
+                        a.loud.push_back((float)doc_number(d, thing, "volume", d.written_from + a.on + t, 1));
+                return a;
             };
         } else if (kind == "picture") {
             std::string shown = file;
