@@ -227,7 +227,7 @@
 - [x] プレビューの拡大・手のひら（有る）：いま トラックパッド 2 本指・ピンチ — 済：窓の試験（`workspace_trackpad_test.dart`）
 - [x] 書き出し MP4（H.264）（一部）：書き出しの箱の Resolution・Rate・Quality を ffmpeg にそのまま（10/28） — 済：`check/film_way.sh`
 - [ ] **書き出し HEVC・GIF・PNG 連番・静止画・透明**（無い→一部）：HEVC（.mov）・GIF・PNG と JPEG の連番・今のコマの PNG（⇧E）は有る（10/28、`check/film_way.sh`）。まだ：透明（段の絵が不透明）
-- [ ] **プロジェクトを包んで共有（リンク・QR）**（無い）
+- [ ] **プロジェクトを包んで共有（リンク・QR）**（無い）（一部）：File › Package Project で書類と素材を 1 つのフォルダに（10/28、`check/pack.sh`）。まだ：リンク・QR（クラウドが無い）
 
 
 ## H. 実機で見つけた根幹の操作（alight_ui.md）（66）
@@ -238,7 +238,7 @@
 - [x] 書き出し Video：解像度、H.264 / H.265、fps 3 段、画質 Mbps：書き出しの箱の Format（MP4 H.264・HEVC・GIF・PNG）、Resolution（Full と 2160p〜）、Rate（60・30・24・15）、Quality（Auto と 4〜32 Mbps）。値は書類に残る — 済（10/28）：`check/film_way.sh`、窓の試験（`workspace_render_dialog_test.dart`）
 - [x] 書き出し：今のコマを PNG：File メニューの Export Frame・⇧E（Premiere Pro と同じ）。再生位置の絵を文書の隣に「文書名_コマ.png」で — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 書き出し：画像の連番（PNG / JPEG、解像度、fps、画質）：書き出しの箱の Format の PNG・JPEG（名前_0001 から 1 枚ずつ）、Resolution・Rate の行が効く。JPEG の画質は ffmpeg の -q:v 2（決まり） — 済（10/28）：`check/film_way.sh`、窓の試験（`workspace_render_dialog_test.dart`）
-- [ ] 書き出し：プロジェクトを素材ごと包んで共有（リンク）
+- [ ] 書き出し：プロジェクトを素材ごと包んで共有（リンク）（一部）：File › Package Project で書類と素材を 1 つのフォルダに（10/28）。リンクは無い
 - [ ] 書き出し：テンプレートとしても書き出す
 - [ ] プロジェクト一覧：カードに長さ・縦横比・解像度・大きさ・fps、日付の見出し
 - [ ] プロジェクト一覧：並べ替え（名前・日付）、選ぶ・書き出す・複製・消す

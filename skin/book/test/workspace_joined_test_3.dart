@@ -692,6 +692,22 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('File › Package Project gathers the document and its media in a folder beside it (Alight Motion\'s project package)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final media = Directory.systemTemp.createTempSync('media');
+    File('$motoliiDir/fx_sample.jpg').copySync('${media.path}/photo.jpg');
+    expect(m.add('picture', '${media.path}/photo.jpg'), isNot(0), reason: m.trouble);
+    ws.reread();
+    await t.pumpAndSettle();
+    final file = t.widget<PlatformMenuBar>(find.byType(PlatformMenuBar)).menus.whereType<PlatformMenu>().firstWhere((e) => e.label == 'File');
+    file.menus.expand((e) => e is PlatformMenuItemGroup ? e.members : [e]).firstWhere((e) => e.label == 'Package Project').onSelected!();
+    await t.pumpAndSettle();
+    final name = ws.document!.replaceFirst(RegExp(r'\.motolii$'), ''), folder = Directory('${ws.documentFolder}/$name package');
+    expect([File('${folder.path}/$name.motolii').existsSync(), File('${folder.path}/photo.jpg').existsSync(), ws.notice], [true, true, 'Packaged with 1 file: $name package'], reason: m.trouble);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

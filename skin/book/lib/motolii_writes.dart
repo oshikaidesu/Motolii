@@ -21,6 +21,10 @@ extension MotoliiWrites on Motolii {
   /// The stage as it is now, as a picture (.png): for a hand that sees only pictures (test/agent_window_test.dart).
   bool still(String png) => _with([png], (s) => _still(_m, s[0])) != 0;
 
+  /// The document and the files its things are made of copied into [folder] (the document as [name].motolii), to be
+  /// taken elsewhere whole: how many files (-1: not).
+  int pack(String folder, String name) => _with([folder, name], (s) => _b.motolii_pack(_m, s[0], s[1]));
+
   bool play(bool on) => _play(_m, on ? 1 : 0) != 0;
 
   bool at(double seconds) => _at(_m, seconds) != 0;

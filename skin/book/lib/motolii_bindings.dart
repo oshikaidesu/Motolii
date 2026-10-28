@@ -1178,6 +1178,33 @@ class MotoliiBindings {
         ffi.Pointer<Motolii> Function(ffi.Pointer<pkg_ffi.Utf8>, int, int)
       >();
 
+  int motolii_pack(
+    ffi.Pointer<Motolii> m,
+    ffi.Pointer<pkg_ffi.Utf8> folder,
+    ffi.Pointer<pkg_ffi.Utf8> name,
+  ) {
+    return _motolii_pack(m, folder, name);
+  }
+
+  late final _motolii_packPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int Function(
+            ffi.Pointer<Motolii>,
+            ffi.Pointer<pkg_ffi.Utf8>,
+            ffi.Pointer<pkg_ffi.Utf8>,
+          )
+        >
+      >('motolii_pack');
+  late final _motolii_pack = _motolii_packPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<Motolii>,
+          ffi.Pointer<pkg_ffi.Utf8>,
+          ffi.Pointer<pkg_ffi.Utf8>,
+        )
+      >();
+
   int motolii_path(
     ffi.Pointer<Motolii> m,
     int thing,

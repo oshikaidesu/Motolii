@@ -144,6 +144,16 @@ class _WorkspaceState extends State<Workspace> {
     if (mounted) _ws.notice = done ? 'Written: ${mp4.split('/').last}' : 'Not written: ${m.trouble}';
   }
 
+  /// The document and its media gathered into "<name> package" beside it, to be taken elsewhere whole (Alight Motion's
+  /// project package, After Effects' Collect Files); the top bar says so.
+  void _package() {
+    final m = _inside, doc = _doc;
+    if (m == null || doc == null) return;
+    final name = doc.split('/').last.replaceFirst(RegExp(r'\.motolii$'), ''), folder = '${File(doc).parent.path}/$name package';
+    final n = m.pack(folder, name);
+    _ws.notice = n < 0 ? 'Not packaged: ${m.trouble}' : 'Packaged with $n ${n == 1 ? 'file' : 'files'}: $name package';
+  }
+
   /// The picture at the playhead written beside the document (Premiere Pro's Export Frame); the top bar says so.
   void _exportFrame() {
     final m = _inside, doc = _doc;
@@ -178,6 +188,7 @@ class _WorkspaceState extends State<Workspace> {
       'file.new': () => _open(_fresh()),
       'file.render': () => wsAskRender.value++,   // (the settings window first)
       'file.exportFrame': _exportFrame,
+      'file.package': _package,
       'edit.undo': () => _typed(const UndoTextIntent(SelectionChangedCause.keyboard)) ? null : ws.after(m.later('undo')),
       'edit.redo': () => _typed(const RedoTextIntent(SelectionChangedCause.keyboard)) ? null : ws.after(m.later('redo')),
       'edit.cut': () {   // (no words being written: the picked thing copied, then taken away, one step each as Live's)
@@ -289,6 +300,7 @@ class _WorkspaceState extends State<Workspace> {
           ),
           item('Export Video…', 'file.render'),   // (Live's File menu: Export Audio/Video)
           item('Export Frame', 'file.exportFrame'),
+          item('Package Project', 'file.package'),
         ],
       ),
       PlatformMenu(

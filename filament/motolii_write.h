@@ -25,6 +25,7 @@ int motolii_write(Motolii* m, const char* mp4) {
         return ok;
     });
 }
+int motolii_pack(Motolii* m, const char* folder, const char* name) { return by_look(m, [=] { return doc_pack(*m->d, folder, name); }); }
 const char* motolii_list(Motolii* m) {
     return by_look(m, [m] {
     m->listed.clear();

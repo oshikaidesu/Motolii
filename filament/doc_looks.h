@@ -131,6 +131,43 @@ static bool doc_look_keep(Doc& d, int thing, const std::string& name) {
     std::filesystem::create_directories(dir, wrong);
     return doc_look_save(d, thing, (dir / (name + ".motolii")).string().c_str());
 }
+// The document and the files it is made of gathered in one folder, to be taken elsewhere whole (Alight Motion's project
+// package; After Effects' Collect Files): the document copied as SQLite copies a database (VACUUM INTO), each file a thing
+// is made of (its `file`, not one of the library's own nor the maker's: those are found on any machine) copied beside
+// it, and the copy told its name there (a word read from the folder it is opened in). How many files were copied (-1: not).
+static int doc_pack(Doc& d, const std::string& folder, const std::string& name) {
+    std::error_code wrong;
+    std::filesystem::create_directories(folder, wrong);
+    const std::filesystem::path to = std::filesystem::path(folder) / (name + ".motolii");
+    std::filesystem::remove(to, wrong);
+    char* copy = sqlite3_mprintf("vacuum into %Q", to.string().c_str());
+    const bool copied = sqlite3_exec(d.file, copy, nullptr, nullptr, nullptr) == SQLITE_OK;
+    sqlite3_free(copy);
+    if (!copied) return d.trouble = sqlite3_errmsg(d.file), -1;
+    std::vector<std::string> files;
+    doc_rows(d, sqlite3_mprintf("select distinct value from fact where name = 'file' and typeof(value) = 'text'"), [&](sqlite3_stmt* q) { files.push_back((const char*)sqlite3_column_text(q, 0)); });
+    const auto roots = doc_look_roots();
+    sqlite3* pack = nullptr;
+    if (sqlite3_open(to.string().c_str(), &pack) != SQLITE_OK) return sqlite3_close(pack), d.trouble = "the package could not be opened", -1;
+    int n = 0;
+    std::set<std::string> taken;
+    for (const std::string& word : files) {
+        const std::filesystem::path was = std::filesystem::absolute(word, wrong);
+        const std::string whole = was.string();
+        if (!std::filesystem::is_regular_file(was, wrong) || whole.rfind(roots.first, 0) == 0 || whole.rfind(roots.second, 0) == 0) continue;   // (a kind's own word, or the library's: nothing to carry)
+        std::string named = was.filename().string();
+        for (int k = 2; taken.count(named); ++k) named = was.stem().string() + " " + std::to_string(k) + was.extension().string();   // (two files of one name from two folders)
+        taken.insert(named);
+        if (!std::filesystem::copy_file(was, std::filesystem::path(folder) / named, std::filesystem::copy_options::overwrite_existing, wrong)) continue;
+        char* told = sqlite3_mprintf("update fact set value = %Q where name = 'file' and value = %Q", named.c_str(), word.c_str());
+        sqlite3_exec(pack, told, nullptr, nullptr, nullptr);
+        sqlite3_free(told);
+        ++n;
+    }
+    sqlite3_close(pack);
+    return n;
+}
+
 // The looks on the shelf: looks/*.motolii in the library's folder and the maker's own (doc_folders), as the effects
 // are ("name\tpath\tlabel\tpicture", one to a line): its name the file's, its picture the .png beside it.
 static std::string doc_look_names() {
