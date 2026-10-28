@@ -708,6 +708,28 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('⌘N: a new document, and its shape and resolution asked first (Alight Motion\'s new-project box)', (t) async {
+    final ws = await _pump(t), first = ws.inside;
+    await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await t.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    for (var i = 0; i < 100 && (identical(ws.inside, first) || find.byKey(const ValueKey('ws-size-box')).evaluate().isEmpty); i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await t.pump();
+    }
+    expect([ws.document, find.byKey(const ValueKey('ws-size-box')).evaluate().length], [startsWith('untitled_'), 1], reason: 'a new one, its box open');
+    final fresh = ws.inside;
+    await t.tap(find.byKey(const ValueKey('size-1:1')));
+    for (var i = 0; i < 100 && identical(ws.inside, fresh); i++) {   // (opened again at it)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await t.pump();
+    }
+    await settled(t, ws);
+    expect(ws.inside!.size, (1080, 1080), reason: 'square, as asked');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

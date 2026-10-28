@@ -185,7 +185,10 @@ class _WorkspaceState extends State<Workspace> {
     }
 
     return {
-      'file.new': () => _open(_fresh()),
+      'file.new': () {
+        _open(_fresh());
+        wsAskSize.value = true;   // (its shape and resolution asked first, as Alight Motion's new-project box)
+      },
       'file.render': () => wsAskRender.value++,   // (the settings window first)
       'file.exportFrame': _exportFrame,
       'file.package': _package,

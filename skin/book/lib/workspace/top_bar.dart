@@ -424,6 +424,10 @@ const sizeResolutions = [2160, 1440, 1080, 720, 540, 360, 270];
   return a >= b ? (even(p * a / b), p) : (p, even(p * b / a));
 }
 
+/// A new document asks for its size, as Alight Motion's new-project box comes first: the size chip's box opened once the
+/// window shows the new one (true until it is).
+final wsAskSize = ValueNotifier<bool>(false);
+
 class _SizeChipState extends State<_SizeChip> {
   final _text = TextEditingController(), _focus = FocusNode(), _box = OverlayPortalController();
   bool _editing = false;
@@ -431,7 +435,21 @@ class _SizeChipState extends State<_SizeChip> {
   double _dx = 0;
 
   @override
+  void initState() {
+    super.initState();
+    wsAskSize.addListener(_asked);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _asked());   // (asked while the window was opening the new one)
+  }
+
+  void _asked() {
+    if (!mounted || !wsAskSize.value || WsScope.read(context).onSize == null) return;
+    wsAskSize.value = false;
+    _box.show();
+  }
+
+  @override
   void dispose() {
+    wsAskSize.removeListener(_asked);
     _text.dispose();
     _focus.dispose();
     super.dispose();
