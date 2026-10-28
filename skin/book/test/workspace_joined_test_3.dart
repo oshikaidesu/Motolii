@@ -825,7 +825,7 @@ void _tests3() {
     final round = find.descendant(of: find.byType(ValuesCard), matching: find.text('ROUND')).first; // (the ends: butt, round, square, as the sample's segments write them)
     await seen(t, round);
     await t.tap(round);
-    await t.pumpAndSettle();
+    await settled(t, ws);   // (told the inside without waiting: read once it has it)
     expect(m.word(rect, 'cap'), 'round', reason: m.trouble);
     expect(m.undo() && m.word(rect, 'cap').isEmpty, isTrue, reason: 'one step');
     final cube = m.add('solid', 'cube');

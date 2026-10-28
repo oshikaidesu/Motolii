@@ -21,7 +21,7 @@ final _things = [('solid', 'cube', ''), ('solid', 'ring', 'glass'), ('shape', 'r
 
 /// The values a handle on the stage is drawn for (a corner sizes, the knob turns, the cross moves the point it turns about, the body moves).
 const _handleFor = {
-  'corner': {'scale_x', 'scale_y'},
+  'corner': {'scale_x', 'scale_y', 'x', 'y'}, // (sized, the corner across staying where it is: so it moves too, as Figma's and Keynote's handles)
   'turn': {'rotate'},
   'anchor': {'anchor_x', 'anchor_y', 'x', 'y'}, // (the point it turns about, the thing staying put; where it lies on the body, the body is taken and moved, as After Effects' selection tool)
   'body': {'x', 'y', 'z'},
