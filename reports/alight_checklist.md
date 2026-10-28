@@ -282,7 +282,7 @@
 - [ ] 文字：揃え・フォント・大きさ・色を 1 段に
 - [ ] フォント：最近使ったもの、太さごと、星
 - [ ] フォント：分類（Serif…）、言語、並べ替え、読み込む
-- [ ] 複数選ぶと上の帯が変わり、数が出る
+- [x] 複数選ぶと上の帯が変わり、数が出る：舞台の上の帯が「N picked」と結びつけ（関係）の札に変わり、下の帯も「N picked」（先に 1 つ選んでいても、10/28） — 済：窓の試験（`workspace_joined_test_3.dart`）
 - [ ] グループにする・グループにしてマスク・グループにして抜く
 - [x] 時間の揃え：始まりを伸ばす・再生位置へ寄せる・左揃え・ずらして並べる・右揃え：Animation メニューの Align Starts・Align Ends・Move to Playhead・Stagger・Extend Start to Playhead（選んだ物に、選んだ順で。動かした物はキーも一緒。始まりを伸ばすは Final Cut Pro の Extend Edit と同じく両向き、終わりは動かない） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 画面の揃え：左・中・右・上・中・下・等間隔 2 種：Arrange > Align Left〜Bottom・Spread Across・Spread Down（Keynote・Figma の Align：1 つなら絵に、いくつかならその箱に、3 つ以上を等間隔に） — 済（10/28）：窓の試験

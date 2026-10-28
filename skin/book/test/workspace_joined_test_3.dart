@@ -290,8 +290,11 @@ void _tests3() {
       await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
       await settled(t, ws);
     }
+    ws.select('$a');
+    await t.pumpAndSettle();
     await press(LogicalKeyboardKey.keyA);
     expect(ws.many, {for (final l in ws.layers) l.id}, reason: 'all the layers picked');
+    expect(find.text('${ws.layers.length} picked'), findsNWidgets(2), reason: 'the bar over the stage and the strip under it say how many, not the one picked before');
     ws.select('$a');
     final before = m.things.length;
     await press(LogicalKeyboardKey.keyD);
