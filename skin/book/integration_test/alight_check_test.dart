@@ -169,7 +169,25 @@ final _rowsS4 = <(String, String, Map<String, Object>)>[
   for (final n in const ['innerbulge', 'lightning', 'lumakey', 'radialrays', 'twirl', 'tilerotate', 'mirror', 'zoomstreaks'])
     (n, 'effects/am_$n.wgsl', const {}),
 ];
-final _rows = switch (_section) { 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+// (section S5: shelf effects still open, head defaults that are not the unchanged picture)
+final _rowsS5 = <(String, String, Map<String, Object>)>[
+  for (final n in const ['spotcolor', 'simplestarfield', 'contourstrips', 'ominodiffusion', 'ribbon', 'stretch', 'lensblur', 'chromakey'])
+    (n, 'effects/am_$n.wgsl', const {}),
+];
+// (section W: the open rows, shelf or not. A head default of "unchanged" is set to a value that file already declares. The last four are the effects those rows already name, not another am_ file.)
+final _rowsW = <(String, String, Map<String, Object>)>[
+  for (final n in const ['spotcolor', 'simplestarfield', 'contourstrips', 'ominodiffusion', 'ribbon', 'stretch', 'lensblur', 'chromakey', 'polar'])
+    (n, 'effects/am_$n.wgsl', const {}),
+  ('squeeze', 'effects/am_squeeze.wgsl', const {'amount': 1.2}),
+  ('offset', 'effects/am_offset.wgsl', const {'offset_x': 220}),
+  ('wipe', 'effects/am_wipe.wgsl', const {'end': .4}),
+  ('stretchaxis', 'effects/am_stretchaxis.wgsl', const {'scale': 2.2}),
+  ('halftone', 'effects/halftone.wgsl', const {}),
+  ('fine_grain', 'effects/fine_grain.wgsl', const {'amount': .8}),
+  ('vignette3', 'effects/vignette.wgsl', const {}),
+  ('rays', 'God Rays', const {}),
+];
+final _rows = switch (_section) { 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -205,7 +223,7 @@ void main() {
     for (final (i, (row, effect, knobs)) in _rows.indexed) {
       final file = effect.contains('/') ? '$motoliiDir/$effect' : '$motoliiDir/effects/$effect.fs';
       if (effect != '-') expect(m.say(left, 'fx', file), isTrue, reason: '$row: ${m.trouble}');
-      final stem = effect.split('/').last.replaceFirst(RegExp(r'\.js$'), '').replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_');
+      final stem = effect.split('/').last.replaceFirst(RegExp(r'\.(js|wgsl|fs)$'), '').replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_');
       for (final MapEntry(:key, :value) in knobs.entries) {
         final name = key.startsWith('@') ? key.substring(1) : 'js_${stem}_$key';   // (@: the thing's own value)
         expect(value is String ? m.say(left, name, value) : m.set(left, name, (value as num).toDouble()), isTrue, reason: '$row $key: ${m.trouble}');
