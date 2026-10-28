@@ -128,7 +128,7 @@
 - [x] **Inner Blur**（無い）：Blurs the opaque parts of the layer without blurring the opacity. — 済（10/28）：AbsentMotion の `effects/am_innerblur.wgsl`（Apache-2.0、ぼかした絵は AbsentMotion の effects.cpp と同じ sigma＝blur/3 のガウスを横と縦の 2 パスで）。窓で写真 2 枚の左だけに掛け、左だけが変わるのを数と絵で見た（`skin/book/integration_test/alight_check_test.dart` SECTION=AM）
 - [x] **Inner Glow**（無い）：Draws a glow along the inside edges of the opaque parts the layer. — 済（10/28）：AbsentMotion の `effects/am_innerglow.wgsl`（Apache-2.0、ぼかした絵は AbsentMotion の effects.cpp と同じ sigma＝blur/3 のガウスを横と縦の 2 パスで）。窓で写真 2 枚の左だけに掛け、左だけが変わるのを数と絵で見た（`skin/book/integration_test/alight_check_test.dart` SECTION=AM）
 - [ ] **Inner Pinch/Bulge**（無い）：Distorts the layer by pinching it towards the center or expanding it outwards, without affecting the edges or opacity of the layer.
-- [ ] **Iridescence**（無い）：Renders a flowing iridescent pattern in opaque parts of the layer.
+- [x] **Iridescence**（無い）：Renders a flowing iridescent pattern in opaque parts of the layer. — 済（10/28）：AbsentMotion の `effects/am_iridescence.wgsl`（Apache-2.0、既定 Saturation 0.6・Alpha 0.8）。窓で写真 2 枚の左だけが油膜の虹になるのを絵と数で見た（左 76397、右 8274、`skin/book/integration_test/alight_check_test.dart` SECTION=S3）
 - [ ] **Lens Blur**（一部）：Applies an angular blur to the layer, excluding the central area. — いま：カメラの focus・aperture（立体と世界の物だけ）
 - [ ] **Lightning**（無い）：Renders fractal arcs of lightning between two points in the layer.
 - [x] **Linear Streaks**（無い）：Creates line-shaped streaks by sliding the layer at an angle and blending together overlapping pixels. — 済（10/28）：物の写し（AE のリピーターの形、alight_sources_E.md の借りる先）、copies 12・copy_x 0.03・copy_y −0.015・blend lighten。窓で写真 2 枚の左に掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=E2）
@@ -161,21 +161,21 @@
 ## F. 有る（確かめるだけ）（33）
 
 - [ ] **Auto-Shake**（有る）：Moves the layer randomly over time within specified parameters. — いま：ふるまい noise を x・y に — ISF：Shake
-- [ ] **CMYK Halftone Dots**（有る）：Replaces continuous tones in the layer with a pattern of dots of varying sizes for each CMYK color channel, similar to the process used in magazine or comic book printing. — いま：ISF CMYK Halftone — ISF：CMYK Halftone
+- [x] **CMYK Halftone Dots**（有る）：Replaces continuous tones in the layer with a pattern of dots of varying sizes for each CMYK color channel, similar to the process used in magazine or comic book printing. — いま：ISF CMYK Halftone — ISF：CMYK Halftone — 済（10/28）：AbsentMotion の `effects/am_cmykhalftone.wgsl`（Apache-2.0、既定 Amount 100）。窓で写真 2 枚の左だけが印刷の網点になるのを絵と数で見た（左 70794、右 8243、`skin/book/integration_test/alight_check_test.dart` SECTION=S3）
 - [x] **Colorize**（有る）：Changes the color of the layer, keeping the original luminance. — いま：物の tint — 済（10/28）：物の tint 0.8、黒→黒・白→橙。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=F）
 - [ ] **Drawing Progress**（有る）：Clips the beginning and end of the vector outline of the layer so that the outline is only partially drawn. — いま：形の trim・trim_begin・trim_offset
 - [x] **Flip Layer**（有る）：Flips the layer in 3D along a specified axis. — いま：rotate_x・rotate_y（2.5D） — ISF：Flip H / Flip V — 済（10/28）：物の rotate_y 180（左右に裏返る）。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=F）
 - [x] **Gaussian Blur**（有る）：Applies a fast, smooth blur to the layer using a gaussian function, reducing noise and details in the layer. — いま：物の blur — ISF：Multi Pass Gaussian Blur — 済（10/28）：物の blur 20。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=F）
 - [ ] **Glow**（有る）：Draws a glow around the outside of the opaque parts of the layer. — いま：物の glow — 見た（10/28、SECTION=F）：物の glow ffffff・glow_blur 30 で、外の光は薄く、写真の中も明るくなる
-- [ ] **Gradient Overlay**（有る）：Overlays the opaque parts of the layer with a gradient. — いま：形・文字の gradient — ISF：Linear Gradient
+- [x] **Gradient Overlay**（有る）：Overlays the opaque parts of the layer with a gradient. — いま：形・文字の gradient — ISF：Linear Gradient — 済（10/28）：AbsentMotion の `effects/am_gradientoverlay.wgsl`（Apache-2.0、既定 Opacity 0.6）。窓で写真 2 枚の左だけにグラデーションが乗るのを絵と数で見た（左 78436、右 4846、`skin/book/integration_test/alight_check_test.dart` SECTION=S3）
 - [x] **Grid Repeat**（有る）：Dynamically generates multiple copies of the layer, arranged in a grid. — いま：copies＋copy_columns — 済（10/28）：物の copies 4・copy_columns 2・copy_x・copy_y 0.45（写真を 0.4 に）。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=F）
 - [ ] **Halftone Dots**（有る）：Replaces continuous tones in the layer with a pattern of monochrome dots of varying sizes, similar to the process used in newspaper or comic book printing. — いま：効果 halftone・dot_screen — ISF：Dot Screen
-- [ ] **Kaleidoscope**（有る）：Creates symmetric radial reflections of the layer. — いま：効果 kaleido・ISF Kaleidoscope Tile — ISF：Kaleidoscope
+- [x] **Kaleidoscope**（有る）：Creates symmetric radial reflections of the layer. — いま：効果 kaleido・ISF Kaleidoscope Tile — ISF：Kaleidoscope — 済（10/28）：AbsentMotion の `effects/am_kaleidoscope.wgsl`（Apache-2.0、既定 Segments 6）。窓で写真 2 枚の左だけが放射の鏡になるのを絵と数で見た（左 72749、右 8766、`skin/book/integration_test/alight_check_test.dart` SECTION=S3）
 - [x] **Linear Repeat**（有る）：Dynamically generates multiple copies of the layer, arranged along a line. — いま：copies＋copy_x・copy_y — 済（10/28）：物の copies 4・copy_x 0.15・copy_y 0.05。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=F）
 - [ ] **Mirror**（有る）：Overlays the layer with a copy of itself mirrored along either the horizontal or vertical axis, with optional alpha and blending mode control. — いま：効果 mirror — ISF：Mirror
-- [ ] **Noise**（有る）：Blends random noise with the opaque parts of the layer. — いま：効果 grain・fine_grain — ISF：Noise
+- [ ] **Noise**（有る）：Blends random noise with the opaque parts of the layer. — いま：効果 grain・fine_grain — ISF：Noise — 見た（10/28、SECTION=S3）：AbsentMotion の `effects/am_noise.wgsl`（既定 Strength 0.25）。左は 20863 画素変わったが、粒としては見えない
 - [ ] **Oscillate**（有る）：Moves the layer back and forth repeatedly. — いま：ふるまい oscillator
-- [ ] **Posterize**（有る）：Decreases the number of step in the layer's color channels. — いま：ISF Posterize — ISF：Color Posterize
+- [x] **Posterize**（有る）：Decreases the number of step in the layer's color channels. — いま：ISF Posterize — ISF：Color Posterize — 済（10/28）：AbsentMotion の `effects/am_posterize.wgsl`（Apache-2.0、既定 Steps 10）。窓で写真 2 枚の左だけが段の色になるのを絵と数で見た（左 46519、右 8244、`skin/book/integration_test/alight_check_test.dart` SECTION=S3）
 - [ ] **Pulse Opacity**（有る）：Automatically pulses the layer opacity over time, based on a sine wave or triangular wave. — いま：ふるまい oscillator を opacity に
 - [ ] **Pulse Size**（有る）：Automatically grows and shrinks the layer repeatedly over time, based on a sine wave or triangular wave. — いま：ふるまい oscillator を size に
 - [ ] **Radial Repeat**（有る）：Dynamically generates multiple copies of the layer, arranged in a circular pattern. — いま：copies＋copy_rotate — ISF：Radial Replicate
@@ -183,7 +183,7 @@
 - [ ] **Rays**（有る）：Renders light rays from bright parts of the layer, based on the threshold setting. — いま：ISF God Rays — ISF：God Rays
 - [x] **Repeat**（有る）：Dynamically generates multiple copies of the layer. — いま：copies — 済（10/28）：物の copies 3・copy_x 0.2。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=F）
 - [ ] **Repeat Along Path**（有る）：Dynamically generates multiple copies of the layer along the outline path of the layer immediately beneath. — いま：copy_on・copy_on_offset
-- [ ] **RGB Split**（有る）：Splits the red, green and blue channels of the layer, keeping one fixed in position and shifting the other two channels in opposite directions. — いま：効果 rgbshift・chroma — ISF：Chromatic Aberration
+- [x] **RGB Split**（有る）：Splits the red, green and blue channels of the layer, keeping one fixed in position and shifting the other two channels in opposite directions. — いま：効果 rgbshift・chroma — ISF：Chromatic Aberration — 済（10/28）：AbsentMotion の `effects/am_rgbsplit.wgsl`（Apache-2.0、既定 Strength 0.15）。窓で写真 2 枚の左だけが赤と青に分かれるのを絵と数で見た（左 39337、右 8242、`skin/book/integration_test/alight_check_test.dart` SECTION=S3）
 - [x] **Scatter Repeat**（有る）：Dynamically generates multiple copies of the layer, scattered randomly around the original layer location. — いま：copies＋scatter_x・scatter_y — ISF：Replicate Random — 済（10/28）：物の copies 6・scatter_x・scatter_y 0.3。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=F）
 - [x] **Solid Color**（有る）：Fills the opaque parts of the layer with a solid color. — いま：物の tint・fill — ISF：Solid Color — 済（10/28）：物の tint 1、黒も白も 3366ff。窓で写真 2 枚の左だけに掛けて見た（`skin/book/integration_test/alight_check_test.dart`、SECTION=F）
 - [ ] **Squeeze**（有る）：Distorts the layer by squeezing it along one axis while expanding it along the other axis. — いま：形の squash — ISF：Squeeze
@@ -192,7 +192,7 @@
 - [ ] **Swirl**（有る）：Warps the layer by rotating it different amounts based on the distance from a center-point, resulting in a vortex or whirlpool-like distortion. — いま：ISF Twirl・形の twist — ISF：Swirl
 - [ ] **Text Spacing**（有る）：Adjusts the spacing between individual letters or between lines of text in a text layer. — いま：letter_spacing・line_spacing
 - [ ] **Text Transform**（有る）：Transforms individual letters, words, lines, or pieces of letters within a specified range of a text layer. — いま：split＋stagger（Cavalry の Animators の形）
-- [ ] **Vignette**（有る）：Darkens the edges of the layer. — いま：効果 vignette・段の vignette — ISF：v002 Vignette
+- [ ] **Vignette**（有る）：Darkens the edges of the layer. — いま：効果 vignette・段の vignette — ISF：v002 Vignette — 見た（10/28、SECTION=S3）：AbsentMotion の `effects/am_vignette.wgsl`（既定 Size 0.95・Strength 0.8）。左は 19525 画素変わったが、縁が暗くなる一文としては見えない
 
 ## G. 効果以外の機能（32）
 
