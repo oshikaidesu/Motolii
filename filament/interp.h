@@ -23,7 +23,7 @@ static const struct { const char* name; int numbers; const char* names; double u
     {"Elastic", 3, "limit period damp", {1.5, 0.3, 0.35}, {1.02, 0.12, 0}, {2, 0.7, 0.97}},
     {"Cyclic", 4, "period peak linear envelope_end", {2.0 / 7.0, 0.5, 0.0, 0.0}, {0.08, 0.02, 0, 0}, {0.95, 0.98, 1, 0.95}},
     {"Random", 5, "seed grain center_u center_v bias", {500.0, 0.15, 0.5, 0.75, 0.5}, {1, 0, 0.05, -0.2, 0}, {999, 0.5, 0.95, 1.2, 1}},
-    {"Steps", 2, "width smooth", {0.178, 0.0}, {0.06, 0}, {0.5, 0.45}},
+    {"Steps", 2, "width smooth", {0.25, 0.0}, {0.06, 0}, {0.5, 0.45}},   // (four steps, the last to 1 at the end: Alight Motion's own, reports/alight_ui/135_ease_steps.jpg; the past repository's 0.178 made six)
     {"ElasticSteps", 2, "width elasticity", {0.2, 0.5}, {0.09, 0}, {0.5, 1}},
 };
 

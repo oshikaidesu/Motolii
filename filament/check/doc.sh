@@ -26,6 +26,11 @@ grep "^  [0-9(]" out/doc_wrong.txt | grep -v "(a number" | diff - check/doc_wron
 rm -f out/doc_ways.motolii
 ./edit.sh out/doc_ways.motolii < check/doc_ways.txt > out/doc_ways.txt
 grep "^  \|NOT done" out/doc_ways.txt | sed 's/, [0-9.]* ms$//' | diff - check/doc_ways.expect > /dev/null && echo "the stretches between keys go as expected: yes ($(grep -c '^  [0-9-]*\.[0-9]*$' out/doc_ways.txt) values read, $(grep -c 'NOT done' out/doc_ways.txt) calls refused)" || echo "the stretches between keys go as expected: NO"
+# Steps as Alight Motion's own, said with no numbers: four steps, a quarter each at a quarter, the last to 1 at the end
+# (reports/alight_ui/135_ease_steps.jpg)
+rm -f out/doc_steps.motolii
+steps=$(printf 'add shape rect\nkey 1 x 0 0\nkey 1 x 1 1\nway 1 x 0 Steps\nvalue 1 x 0.1\nvalue 1 x 0.3\nvalue 1 x 0.6\nvalue 1 x 0.8\nvalue 1 x 0.99\nvalue 1 x 1\n' | ./edit.sh out/doc_steps.motolii | grep "^  " | tr -s ' \n' ' ')
+[[ $steps == " 0.0000 0.2500 0.5000 0.7500 0.7500 1.0000 " ]] && echo "Steps go as Alight Motion's: yes" || echo "Steps go as Alight Motion's: NO ($steps)"
 # what a breaker found on 2026-10-14, and a recipe made after 0 or a value changed twice in one step undone (SQLite's session and a real moment, 10-15) (names a file has not, colours not six digits, a text broken into a picture taller
 # than the device takes, effects reaching past it): each refused or drawn smaller, and the run lives to its end
 rm -f out/doc_breaker.motolii
