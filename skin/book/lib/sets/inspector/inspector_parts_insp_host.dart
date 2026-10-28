@@ -24,6 +24,8 @@ class InspHost extends StatefulWidget {
     this.movable = const [],
     this.onCardMove,
     this.onCardReset,
+    this.onCardCopy,
+    this.onCardPaste,
     this.onPath,
     this.cards,
     this.title,
@@ -73,6 +75,8 @@ class InspHost extends StatefulWidget {
   final List<String> movable;
   final void Function(String title, int by)? onCardMove;
   final void Function(List<String> names)? onCardReset;   // (a card's values as they come: Reset on its head)
+  final void Function(List<String> names)? onCardCopy;   // (a card's values copied, to be given to another thing: Copy on its head)
+  final VoidCallback? onCardPaste;   // (and given: Paste)
 
   /// How the thing moves over a while, as the host places it (see [Doc.onPath]).
   final Future<List<double>?> Function(double to, int n, int copy)? onPath;   // (a question of the host's: answered later)
@@ -144,6 +148,8 @@ class _InspHostState extends State<InspHost> {
       ..movable = widget.movable
       ..onCardMove = widget.onCardMove
       ..onCardReset = widget.onCardReset
+      ..onCardCopy = widget.onCardCopy
+      ..onCardPaste = widget.onCardPaste
       ..onPath = widget.onPath
       ..v.addAll(widget.values)
       ..s2.addAll(widget.strs)
@@ -289,6 +295,8 @@ class _InspHostState extends State<InspHost> {
       ..movable = widget.movable
       ..onCardMove = widget.onCardMove
       ..onCardReset = widget.onCardReset
+      ..onCardCopy = widget.onCardCopy
+      ..onCardPaste = widget.onCardPaste
       ..onPath = widget.onPath;
     doc.choices
       ..clear()

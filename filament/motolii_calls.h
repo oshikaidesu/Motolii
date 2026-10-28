@@ -493,7 +493,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "freehand") ok = m->made = changes(m, doc_freehand(doc(m), w.c_str()));   // (word: the outline's points of the picture, x y each; the answer is the new shape)
             else if (c == "copy") ok = (int)doc_look_save(doc(m), thing, w.c_str(), true);   // (word: the file it is kept in, whole)
             else if (c == "paste") ok = m->made = changes(m, doc_look_paste(doc(m), w.c_str(), number));   // (word: that file; number: when it begins; the answer is the new thing)
-            else if (c == "copy_style") ok = (int)doc_look_save(doc(m), thing, w.c_str());   // (its look: doc_looks.h)
+            else if (c == "copy_style") ok = (int)doc_look_save(doc(m), thing, w.c_str(), false, n);   // (its look: doc_looks.h; name: only these values, a card's)
             else if (c == "keep_look") ok = (int)doc_look_keep(doc(m), thing, w);   // (word: its name on the shelf)
             else if (c == "paste_style") ok = changes(m, (int)doc_look_put(doc(m), thing, w.c_str()));
             else if (c == "remove") ok = changes(m, (int)doc_remove(doc(m), thing));

@@ -730,6 +730,30 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a card\'s Copy and Paste give its values alone to another thing (Alight Motion\'s copy of one effect)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final a = m.add('shape', 'rect'), b = m.add('shape', 'circle');
+    expect(m.set(a, 'wave_x', .3) && m.set(a, 'wave_speed', 2) && m.say(a, 'fill', 'ff3366') && m.say(b, 'fill', '3a86ff'), isTrue, reason: m.trouble);
+    Future<void> press(String what) async {
+      final k = find.byKey(ValueKey('card-$what:Wave'));
+      await seen(t, k);
+      await t.tap(k);
+      await settled(t, ws);
+    }
+    ws
+      ..reread()
+      ..select('$a');
+    await t.pumpAndSettle();
+    await press('copy');
+    ws.select('$b');
+    await t.pumpAndSettle();
+    await press('paste');
+    expect([m.value(b, 'wave_x', 0), m.value(b, 'wave_speed', 0), m.word(b, 'fill')], [closeTo(.3, 1e-9), 2, '3a86ff'], reason: 'its wave, and nothing else of the rect: ${m.trouble}');
+    expect(m.undo() && (m.value(b, 'wave_x', 0) ?? 0) == 0, isTrue, reason: 'one step');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

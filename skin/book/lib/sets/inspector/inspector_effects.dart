@@ -119,14 +119,18 @@ class ValuesCard extends StatelessWidget {
       title: card.name,
       tone: card.tone,
       mark: card.mark,
-      trailing: (at < 0 || doc.onCardMove == null) && doc.onCardReset == null
+      trailing: (at < 0 || doc.onCardMove == null) && doc.onCardReset == null && doc.onCardCopy == null
           ? null
           : Row(mainAxisSize: MainAxisSize.min, children: [
-              if (doc.onCardReset case final reset?)   // (its values as they come: After Effects' Reset on an effect)
+              for (final (word, does) in [   // (its values copied, given to another, as they come: Alight Motion's Copy and Paste of an effect, After Effects' Reset)
+                if (doc.onCardCopy case final copy?) ('Copy', () => copy([for (final p in card.params) p.id])),
+                if (doc.onCardPaste case final paste?) ('Paste', paste),
+                if (doc.onCardReset case final reset?) ('Reset', () => reset([for (final p in card.params) p.id])),
+              ])
                 Hov(
-                  key: ValueKey('card-reset:${card.name}'),
-                  onTap: () => reset([for (final p in card.params) p.id]),
-                  builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: Text('Reset', style: T.label(h ? Grey.g95 : Grey.g56))),
+                  key: ValueKey('card-${word.toLowerCase()}:${card.name}'),
+                  onTap: does,
+                  builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: Text(word, style: T.label(h ? Grey.g95 : Grey.g56))),
                 ),
               if (at >= 0 && doc.onCardMove != null)
                 for (final (by, up) in const [(-1, true), (1, false)])

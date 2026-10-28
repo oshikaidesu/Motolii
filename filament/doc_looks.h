@@ -16,7 +16,8 @@ static std::pair<std::string, std::string> doc_look_roots() {
 }
 // The thing's look written as a file (a new document; one there before is written over); whole: all of it but what it
 // hangs on (a copy, Edit > Copy: doc_look_paste makes it a thing again).
-static bool doc_look_save(Doc& d, int thing, const char* path, bool whole = false) {
+// only: those values alone, their names with spaces between (a card's: its effect copied, as Alight Motion copies one).
+static bool doc_look_save(Doc& d, int thing, const char* path, bool whole = false, const std::string& only = "") {
     std::error_code wrong;
     std::filesystem::remove(path, wrong);
     char* attach = sqlite3_mprintf("attach database %Q as look", path);
@@ -29,8 +30,9 @@ static bool doc_look_save(Doc& d, int thing, const char* path, bool whole = fals
         "create table look.way(name text primary key, goes text) without rowid;"
         "create table look.thing(id integer primary key autoincrement); insert into look.thing(id) values(1);"
         "insert into look.fact select 1, name, at, case typeof(value) when 'text' then replace(replace(value, %Q, '{motolii}/'), %Q, '{own}/') else value end, way from main.fact as f where thing = %d and name not in (%s)"
-        " and not (name in (%s) and (select count(*) from main.fact where thing = f.thing and name = f.name) = 1);"
-        "insert into look.way select * from main.way where name in (select way from look.fact);", roots.first.c_str(), roots.second.c_str(), thing, whole ? "'parent'" : doc_look_kept_out, whole ? "''" : doc_look_placed);
+        " and not (name in (%s) and (select count(*) from main.fact where thing = f.thing and name = f.name) = 1)"
+        " and (%Q = '' or instr(' ' || %Q || ' ', ' ' || name || ' ') > 0);"
+        "insert into look.way select * from main.way where name in (select way from look.fact);", roots.first.c_str(), roots.second.c_str(), thing, whole ? "'parent'" : doc_look_kept_out, whole ? "''" : doc_look_placed, only.c_str(), only.c_str());
     ok = sqlite3_exec(d.file, copy, nullptr, nullptr, nullptr) == SQLITE_OK;
     sqlite3_free(copy);
     if (!ok) d.trouble = sqlite3_errmsg(d.file);

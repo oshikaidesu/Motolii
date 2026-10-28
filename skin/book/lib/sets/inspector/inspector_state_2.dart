@@ -368,6 +368,8 @@ class Doc extends ChangeNotifier {
   List<String> movable = const [];
   void Function(String title, int by)? onCardMove;
   void Function(List<String> names)? onCardReset;
+  void Function(List<String> names)? onCardCopy;
+  VoidCallback? onCardPaste;
 
   /// The host's answer to how the thing (its copy, the first is 0) moves over a while (see Motolii.path): four numbers a
   /// moment; null: it has none.
