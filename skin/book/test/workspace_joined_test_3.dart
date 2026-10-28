@@ -601,6 +601,45 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a corner handle pulled sizes the thing with the side across staying; with ⌥ held, from its middle (Figma\'s and Keynote\'s handles; Alight Motion sizes from the middle only)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    expect(m.set(rect, 'size', .5), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$rect');
+    await t.pumpAndSettle();
+    final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp'))), k = 1920 / stage.width;
+    Future<void> pull({bool alt = false}) async {
+      final f = m.frame(rect)!, corner = stage.topLeft + Offset(f[0] + f[2] / 2, f[1] + f[3] / 2) / k;   // (its bottom right corner, where its handle is)
+      if (alt) await t.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await t.timedDragFrom(corner, const Offset(40, 0), const Duration(milliseconds: 300));
+      if (alt) await t.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await settled(t, ws);
+    }
+    final before = m.frame(rect)!;
+    await pull();
+    final after = m.frame(rect)!;
+    expect([after[2], after[0] - after[2] / 2], [greaterThan(before[2] + 20), closeTo(before[0] - before[2] / 2, 1)], reason: 'wider, its left side where it was: ${m.trouble}');
+    await pull(alt: true);
+    final mid = m.frame(rect)!;
+    expect([mid[2], mid[0]], [greaterThan(after[2] + 20), closeTo(after[0], 1)], reason: 'wider again, its middle where it was');
+    expect(m.set(rect, 'rotate', -30), isTrue);   // (turned: the corner across still stays)
+    ws.reread();
+    await t.pumpAndSettle();
+    Offset at(List<double> f, double sx, double sy) {   // (a corner of its frame on the picture: its middle and half its size, turned as it is)
+      final a = f[4] * math.pi / 180, x = sx * f[2] / 2, y = sy * f[3] / 2;
+      return Offset(f[0] + x * math.cos(a) - y * math.sin(a), f[1] + x * math.sin(a) + y * math.cos(a));
+    }
+    final turned = m.frame(rect)!, across = at(turned, -1, -1), grip = stage.topLeft + at(turned, 1, 1) / k;
+    await t.timedDragFrom(grip, const Offset(30, 30), const Duration(milliseconds: 300));
+    await settled(t, ws);
+    final now = m.frame(rect)!;
+    expect([now[2] > turned[2] + 10, (at(now, -1, -1) - across).distance], [isTrue, lessThan(1.5)], reason: 'turned, larger, the corner across where it was');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

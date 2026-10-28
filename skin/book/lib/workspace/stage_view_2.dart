@@ -355,7 +355,8 @@ class _StageViewState extends State<StageView> implements StageHandles {
     final all = (local - h.from) / v.s; // (screen px -> points of the picture)
     if (h.by case final way?) {
       final gone = _doc(v, local) - _doc(v, h.from);
-      m.carry(way, gone.dx, gone.dy);
+      // (a corner: the side across stays, as Figma's and Keynote's; with ⌥ held, about its pivot, from the middle)
+      m.carry(way == 'scale' && !HardwareKeyboard.instance.isAltPressed ? 'side' : way, gone.dx, gone.dy);
       _held = (from: h.from, moved: true, by: way);
       setState(() {});
       return;

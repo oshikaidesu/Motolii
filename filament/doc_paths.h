@@ -278,6 +278,8 @@ static bool doc_value(Doc& d, int thing, const char* name, double at, double* is
 //               showing at each moment what it showed there)
 //   by "point"  a path shape's point or handle nearest where the hand took hold ("grip" first), moved as far as the
 //               hand has gone (a, b: points of the picture); a point's handles with it
+//   by "scale"  sized about its pivot as far as the hand has gone from where it took hold ("grip" first); "side" the
+//               same, the side or corner across from the hand staying where it is
 //   by a value's name  that number carried: a = what it is now
 static bool doc_hold(Doc& d, int thing) {
     if (!doc_knows(d, thing)) return false;
@@ -306,6 +308,7 @@ static bool doc_carry(Doc& d, const char* by, double a, double b) {
         double frame[8];
         if (!doc_frame(d, h.thing, now, frame)) return d.trouble = "it has no frame on the picture", false;
         h.from[" grip x"] = a, h.from[" grip y"] = b, h.from[" pivot x"] = frame[5], h.from[" pivot y"] = frame[6], h.from[" turned"] = frame[4];
+        h.from[" middle x"] = frame[0], h.from[" middle y"] = frame[1], h.from[" wide"] = frame[2], h.from[" high"] = frame[3];
         h.from[" point"] = doc_point(d, h.thing, now);
         was("scale_x"), was("scale_y"), was("rotate"), was("anchor_x"), was("anchor_y"), was("x"), was("y");
     } else if (!strcmp(by, "scale") || !strcmp(by, "turn") || !strcmp(by, "pivot")) {   // (a, b: how far the hand has gone since it took hold)
@@ -329,6 +332,20 @@ static bool doc_carry(Doc& d, const char* by, double a, double b) {
             const math::double3 move = inverse(doc_above(d, h.thing, now).upperLeft()) * math::double3{a / point, -b / point, 0.0};
             ok = ok && tries("x", was("x") + move.x) && tries("y", was("y") + move.y);
         }
+    } else if (!strcmp(by, "side")) {   // (sized, the side or corner across from where the hand took hold staying where it is: Figma's and Keynote's handles; "scale" sizes it about its pivot, as with Alt)
+        if (!h.from.count(" grip x")) return d.trouble = "the hand has not said where it took hold (grip)", false;
+        const double turned = h.from[" turned"] * (double)TAU / 360.0, c = std::cos(-turned), s = std::sin(-turned);
+        const auto own = [&](double x, double y) { return math::double2{c * x - s * y, s * x + c * y}; };   // (the picture's way into the thing's own upright, from its middle)
+        const double mx = h.from[" middle x"], my = h.from[" middle y"], w = h.from[" wide"], hi = h.from[" high"];
+        const math::double2 grip = own(h.from[" grip x"] - mx, h.from[" grip y"] - my);
+        const math::double2 o{std::fabs(grip.x) > w / 4.0 ? -std::copysign(w / 2.0, grip.x) : 0.0, std::fabs(grip.y) > hi / 4.0 ? -std::copysign(hi / 2.0, grip.y) : 0.0};   // (the side across, or the corner; an edge's middle: that way unsized)
+        const math::double2 pivot = own(h.from[" pivot x"] - mx, h.from[" pivot y"] - my), g = grip - o, n = own(h.from[" grip x"] + a - mx, h.from[" grip y"] + b - my) - o;
+        const double k0 = std::fabs(g.x) < 2.0 ? 1.0 : n.x / g.x, k1 = std::fabs(g.y) < 2.0 ? 1.0 : n.y / g.y;
+        ok = (k0 == 1.0 || tries("scale_x", was("scale_x") * k0)) && (k1 == 1.0 || tries("scale_y", was("scale_y") * k1));
+        const math::double2 back{(1.0 - k0) * (o.x - pivot.x), (1.0 - k1) * (o.y - pivot.y)};   // (sized about its pivot, the side across moved: so much back, in its own upright)
+        const double dx = c * back.x + s * back.y, dy = -s * back.x + c * back.y, point = h.from[" point"];
+        const math::double3 move = inverse(doc_above(d, h.thing, now).upperLeft()) * math::double3{dx / point, -dy / point, 0.0};
+        ok = ok && tries("x", was("x") + move.x) && tries("y", was("y") + move.y);
     } else if (!strcmp(by, "point")) {   // (a path shape's point nearest where the hand took hold (grip), moved as far as the hand has gone: a, b)
         if (!h.from.count(" grip x")) return d.trouble = "the hand has not said where it took hold (grip)", false;
         if (!h.said.count(" path")) {   // (which point, and the path as it was: once, with the hold)
