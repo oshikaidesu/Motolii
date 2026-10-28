@@ -259,6 +259,9 @@ void main() {
     expect(m.value(cube, 'clip', 0), 1, reason: 'the seat is the document\'s clip');
     await settled(t, ws);
     expect(t.widget<OnOff>(clip).on, isTrue, reason: 'the switch is on (however the skin draws it)');
+    ws.reread();
+    await t.pumpAndSettle();
+    expect([for (final e in find.byWidgetPredicate((w) => w is CustomPaint && w.painter is WtTracksPainter).evaluate()) for (final r in ((e.widget as CustomPaint).painter as WtTracksPainter).rows) if (r.clipped) r.name], ['Cube'], reason: 'its row marked ↘, as Alight Motion marks a clipped layer');
     expect(find.byWidgetPredicate((w) => w is PropRow && w.id == 'ghost'), findsNothing, reason: 'the document has no ghost: no switch that moves nothing');
     expect(m.undo() && m.value(cube, 'clip', 0) == 0, isTrue, reason: 'one step back: the clip');
     expect(t.takeException(), isNull);

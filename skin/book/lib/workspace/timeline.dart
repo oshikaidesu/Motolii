@@ -352,6 +352,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
           selected: l.id == sel || lit.contains(l.id),
           dim: _isHidden(ws, l.id) || (_anySolo(ws) && !_isSolo(ws, l.id)),
           locked: _isLocked(ws, l.id),
+          clipped: l.clipped,
           wave: _waveOf(ws, l),
           frames: _framesOf(ws, l),
           tone: l.tone,

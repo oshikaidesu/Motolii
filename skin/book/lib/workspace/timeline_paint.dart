@@ -59,6 +59,7 @@ class WtRow {
     this.selected = false,
     this.dim = false,
     this.locked = false,
+    this.clipped = false,
     this.wave,
     this.frames,
     this.tone,
@@ -79,7 +80,7 @@ class WtRow {
   final int inF, outF;
   final List<int> keys;
   final Set<int> picked;
-  final bool selected, dim, locked;
+  final bool selected, dim, locked, clipped;   // (clipped: cut to the thing under it, a ↘ before its name as Alight Motion marks it)
   @override
   bool operator ==(Object other) =>
       other is WtRow &&
@@ -94,6 +95,7 @@ class WtRow {
       other.selected == selected &&
       other.dim == dim &&
       other.locked == locked &&
+      other.clipped == clipped &&
       identical(other.wave, wave) &&
       identical(other.frames, frames) &&   // (read once a change: the same list until the document changes)
       other.stretches.length == stretches.length &&
@@ -273,7 +275,12 @@ class WtTracksPainter extends CustomPainter {
       }
     }
     if (r.wave case final w?) _wave(c, bar, ink, fill, r.inF, w);
-    final nameX = math.max(x0 + 8, 6.0);
+    if (r.clipped) {   // (↘: cut to the one under it)
+      final at = Offset(math.max(x0 + 8, 6.0), cy - 4), arrow = Paint()..color = ink..strokeWidth = 1.4..style = PaintingStyle.stroke..strokeCap = StrokeCap.round;
+      c.drawLine(at, at + const Offset(7, 7), arrow);
+      c.drawPath(Path()..moveTo(at.dx + 7, at.dy + 3)..lineTo(at.dx + 7, at.dy + 7)..lineTo(at.dx + 3, at.dy + 7), arrow);
+    }
+    final nameX = math.max(x0 + 8, 6.0) + (r.clipped ? 12 : 0);
     final t = _text(r.name, T.name(ink).copyWith(fontWeight: FontWeight.w700));
     if (nameX + 20 < x1) {
       if (r.wave != null || r.frames != null) c.drawRRect(RRect.fromLTRBR(nameX - 4, cy - 6.5, nameX + t.width + 4, cy + 6.5, Shape.r(3)), p..color = fill);   // (its name on its own ground, over its sound or its pictures)
