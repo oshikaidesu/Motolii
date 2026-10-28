@@ -198,7 +198,18 @@ final _rowsX = <(String, String, Map<String, Object>)>[
   ('rasterextrude', 'effects/am_rasterextrude.wgsl', const {}),
   ('tileshift', 'effects/am_tileshift.wgsl', const {'strength': .8}),
 ];
-final _rows = switch (_section) { 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+// (section Y: open rows not yet shot. Hexagon tiles use a value the file already declares, because the head default does not turn or slide them.)
+final _rowsY = <(String, String, Map<String, Object>)>[
+  ('hexrot', 'effects/am_hexagontilerotate.wgsl', const {'random': 1}),
+  ('hexshift', 'effects/am_hexagontileshift.wgsl', const {'strength': .8}),
+  ('viewer360', 'effects/am_viewer360.wgsl', const {}),
+  ('reorient360', 'effects/am_reorient360.wgsl', const {}),
+  ('thermal', 'Thermal Camera', const {}),
+  ('falsecolor', 'False Color', const {}),
+  ('scales', 'Color Scales', const {'iAuthor': 1}),
+  ('motionblur', 'VVMotionBlur 3.0', const {}),
+];
+final _rows = switch (_section) { 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
