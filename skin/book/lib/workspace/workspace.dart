@@ -144,6 +144,14 @@ class _WorkspaceState extends State<Workspace> {
     if (mounted) _ws.notice = done ? 'Written: ${mp4.split('/').last}' : 'Not written: ${m.trouble}';
   }
 
+  /// The picture at the playhead written beside the document (Premiere Pro's Export Frame); the top bar says so.
+  void _exportFrame() {
+    final m = _inside, doc = _doc;
+    if (m == null || doc == null) return;
+    final png = '${doc.substring(0, doc.lastIndexOf('.'))}_${_ws.frame}.png';
+    _ws.notice = m.still(png) ? 'Written: ${png.split('/').last}' : 'Not written: ${m.trouble}';
+  }
+
   /// The window's menus, in the system's own menu bar: what the sample window has no seat for (a new document,
   /// another document, the film written out) and what the keyboard does elsewhere (undo, redo, take a thing out).
   // The window holds the focus when nothing in it does (a field left, a pane closed): its keys are heard there.
@@ -169,6 +177,7 @@ class _WorkspaceState extends State<Workspace> {
     return {
       'file.new': () => _open(_fresh()),
       'file.render': () => wsAskRender.value++,   // (the settings window first)
+      'file.exportFrame': _exportFrame,
       'edit.undo': () => _typed(const UndoTextIntent(SelectionChangedCause.keyboard)) ? null : ws.after(m.later('undo')),
       'edit.redo': () => _typed(const RedoTextIntent(SelectionChangedCause.keyboard)) ? null : ws.after(m.later('redo')),
       'edit.cut': () {   // (no words being written: the picked thing copied, then taken away, one step each as Live's)
@@ -270,6 +279,7 @@ class _WorkspaceState extends State<Workspace> {
             ],
           ),
           item('Export Video…', 'file.render'),   // (Live's File menu: Export Audio/Video)
+          item('Export Frame', 'file.exportFrame'),
         ],
       ),
       PlatformMenu(

@@ -310,6 +310,25 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('⇧E writes the picture at the playhead beside the document (Premiere Pro\'s Export Frame)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    expect(m.say(rect, 'fill', 'ff3366'), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..frame = 30;
+    await t.pumpAndSettle();
+    await t.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await t.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await settled(t, ws);
+    final png = File('${ws.documentFolder}/${ws.document!.substring(0, ws.document!.lastIndexOf('.'))}_30.png');   // (its name, in its folder)
+    expect([png.existsSync(), ws.notice], [true, 'Written: ${png.path.split('/').last}'], reason: m.trouble);
+    expect(png.readAsBytesSync().sublist(1, 4), 'PNG'.codeUnits, reason: 'a PNG');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

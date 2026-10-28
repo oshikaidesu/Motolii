@@ -13,6 +13,7 @@ import 'package:flutter/widgets.dart';
 const defaultKeys = <(String, String)>[
   ('cmd+n', 'file.new'),
   ('cmd+shift+r', 'file.render'),   // (Live 42.3: Export Audio/Video)
+  ('shift+e', 'file.exportFrame'),   // (Premiere Pro's Export Frame)
   ('cmd+z', 'edit.undo'),
   ('cmd+shift+z', 'edit.redo'),
   ('cmd+x', 'edit.cut'),
