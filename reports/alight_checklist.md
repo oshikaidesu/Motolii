@@ -215,7 +215,7 @@
 - [ ] 重ね方（ブレンドモード）（有る）：いま blend 25 種
 - [ ] マスク（有る）：いま clip（alpha・luma、反転、ぼかし）
 - [ ] 塗り：単色・グラデーション・**メディア**（一部）：いま fill・gradient。絵で塗るのは無い
-- [ ] 線・影・**Multi-Border**（一部）：いま stroke・shadow。縁取りを何重にもは無い
+- [x] 線・影・**Multi-Border**（一部→有る）：効果の棚の Multi-Border（ISF、Stylize）。3 つまでの縁を前の縁のまわりに。どの物（写真・文字・形）にも。手本：pixi-filters の OutlineFilter（MIT）の行そのまま、3 pass — 済（10/28）：文字に 2 重・3 重を描いて絵で確かめた
 - [ ] 自分のフォント（有る）：いま ドックのフォント
 - [ ] ブックマーク（有る）：いま ロケーター（Ableton どおり）
 - [x] お気に入り（一部→有る）：効果の棚の全部（ファイルの効果も）に ★、★ を付けた物だけの表（★ の札、All の次）。~/.motolii/effect_stars.json に残る（Ease の机の ease_stars.json と同じ）。タイルの枠が ★ を覆って押せなかったのも直した — 済（10/28）：窓で ★ を押し、★ の表に 1 つだけ出てファイルに残るのを確かめた（`skin/book/test/workspace_dock_test.dart`）
