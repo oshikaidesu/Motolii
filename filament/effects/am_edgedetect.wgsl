@@ -14,21 +14,23 @@ struct Knobs {
   resolution: vec2<f32>,
   time: f32,
   strength: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
 fn l_hf2(p: vec2<f32>) -> f32 {
   {
-    return dot(textureSample(image_Texture, image_Sampler, p / _uniform0.resolution).xyz, vec3<f32>(0.2126, 0.7152, 0.0722));
+    return dot(textureSample(image_Texture, image_Sampler, (p + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution).xyz, vec3<f32>(0.2126, 0.7152, 0.0722));
   }
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    let _0_gx: f32 = ((((l_hf2(_stageIn.sk_FragCoord.xy + vec2<f32>(1.0, -1.0)) + 2.0 * l_hf2(_stageIn.sk_FragCoord.xy + vec2<f32>(1.0, 0.0))) + l_hf2(_stageIn.sk_FragCoord.xy + vec2<f32>(1.0))) - l_hf2(_stageIn.sk_FragCoord.xy + vec2<f32>(-1.0))) - 2.0 * l_hf2(_stageIn.sk_FragCoord.xy + vec2<f32>(-1.0, 0.0))) - l_hf2(_stageIn.sk_FragCoord.xy + vec2<f32>(-1.0, 1.0));
-    let _1_gy: f32 = ((((l_hf2(_stageIn.sk_FragCoord.xy + vec2<f32>(-1.0, 1.0)) + 2.0 * l_hf2(_stageIn.sk_FragCoord.xy + vec2<f32>(0.0, 1.0))) + l_hf2(_stageIn.sk_FragCoord.xy + vec2<f32>(1.0))) - l_hf2(_stageIn.sk_FragCoord.xy + vec2<f32>(-1.0))) - 2.0 * l_hf2(_stageIn.sk_FragCoord.xy + vec2<f32>(0.0, -1.0))) - l_hf2(_stageIn.sk_FragCoord.xy + vec2<f32>(1.0, -1.0));
-    let _2_a: f32 = textureSample(image_Texture, image_Sampler, _stageIn.sk_FragCoord.xy / _uniform0.resolution).w;
-    (*_stageOut).sk_FragColor = vec4<f32>(vec3<f32>(saturate(length(vec2<f32>(_0_gx, _1_gy)) * f32(_uniform0.strength))) * _2_a, _2_a);
+    let _0_coord: vec2<f32> = _stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)));
+    let _1_gx: f32 = ((((l_hf2(_0_coord + vec2<f32>(1.0, -1.0)) + 2.0 * l_hf2(_0_coord + vec2<f32>(1.0, 0.0))) + l_hf2(_0_coord + vec2<f32>(1.0))) - l_hf2(_0_coord + vec2<f32>(-1.0))) - 2.0 * l_hf2(_0_coord + vec2<f32>(-1.0, 0.0))) - l_hf2(_0_coord + vec2<f32>(-1.0, 1.0));
+    let _2_gy: f32 = ((((l_hf2(_0_coord + vec2<f32>(-1.0, 1.0)) + 2.0 * l_hf2(_0_coord + vec2<f32>(0.0, 1.0))) + l_hf2(_0_coord + vec2<f32>(1.0))) - l_hf2(_0_coord + vec2<f32>(-1.0))) - 2.0 * l_hf2(_0_coord + vec2<f32>(0.0, -1.0))) - l_hf2(_0_coord + vec2<f32>(1.0, -1.0));
+    let _3_a: f32 = textureSample(image_Texture, image_Sampler, (_0_coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution).w;
+    (*_stageOut).sk_FragColor = vec4<f32>(vec3<f32>(saturate(length(vec2<f32>(_1_gx, _2_gy)) * f32(_uniform0.strength))) * _3_a, _3_a);
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

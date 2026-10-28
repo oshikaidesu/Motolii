@@ -26,26 +26,28 @@ struct Knobs {
   alpha: f32,
   fill: f32,
   sampling: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    let _0_c: vec2<f32> = _uniform0.resolution * 0.5;
-    let _1_a: f32 = radians(_uniform0.angle);
-    let _2_v: vec2<f32> = (_stageIn.sk_FragCoord.xy - _0_c) - _uniform0.offset;
-    var _3_p: vec2<f32> = _0_c + vec2<f32>(cos(_1_a) * _2_v.x + sin(_1_a) * _2_v.y, cos(_1_a) * _2_v.y - sin(_1_a) * _2_v.x) / max(_uniform0.scale, 0.01);
+    let _0_coord: vec2<f32> = _stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)));
+    let _1_c: vec2<f32> = (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))) * 0.5;
+    let _2_a: f32 = radians(_uniform0.angle);
+    let _3_v: vec2<f32> = (_0_coord - _1_c) - _uniform0.offset;
+    var _4_p: vec2<f32> = _1_c + vec2<f32>(cos(_2_a) * _3_v.x + sin(_2_a) * _3_v.y, cos(_2_a) * _3_v.y - sin(_2_a) * _3_v.x) / max(_uniform0.scale, 0.01);
     if _uniform0.sampling < 0.5 {
-      _3_p = floor(_3_p) + 0.5;
+      _4_p = floor(_4_p) + 0.5;
     }
-    let _4_own: vec4<f32> = textureSample(image_Texture, image_Sampler, _stageIn.sk_FragCoord.xy / _uniform0.resolution);
-    let _5_moved: vec4<f32> = textureSample(image_Texture, image_Sampler, _3_p / _uniform0.resolution) * f32(clamp(_uniform0.alpha, 0.0, 1.0));
-    var _6_color: vec4<f32> = _5_moved + (_4_own * f32(clamp(_uniform0.fill, 0.0, 1.0))) * (1.0 - _5_moved.w);
+    let _5_own: vec4<f32> = textureSample(image_Texture, image_Sampler, (_0_coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
+    let _6_moved: vec4<f32> = textureSample(image_Texture, image_Sampler, (_4_p + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution) * f32(clamp(_uniform0.alpha, 0.0, 1.0));
+    var _7_color: vec4<f32> = _6_moved + (_5_own * f32(clamp(_uniform0.fill, 0.0, 1.0))) * (1.0 - _6_moved.w);
     if _uniform0.mask > 0.5 {
-      _6_color = _6_color * _4_own.w;
+      _7_color = _7_color * _5_own.w;
     }
-    (*_stageOut).sk_FragColor = _6_color;
+    (*_stageOut).sk_FragColor = _7_color;
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

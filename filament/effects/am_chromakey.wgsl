@@ -22,6 +22,7 @@ struct Knobs {
   tolerance: f32,
   softness: f32,
   invert: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
@@ -33,7 +34,7 @@ fn chroma_f2h3(c: vec3<f32>) -> vec2<f32> {
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    let _0_c: vec4<f32> = textureSample(image_Texture, image_Sampler, _stageIn.sk_FragCoord.xy / _uniform0.resolution);
+    let _0_c: vec4<f32> = textureSample(image_Texture, image_Sampler, ((_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
     let _1_d: f32 = distance(chroma_f2h3(vec4<f32>(_0_c.xyz / max(_0_c.w, 0.0001), _0_c.w).xyz), chroma_f2h3(_uniform0.key.xyz));
     let _2_keep: f32 = smoothstep(_uniform0.tolerance, (_uniform0.tolerance + _uniform0.softness) + 0.0001, _1_d);
     var _skTemp1: f32;

@@ -35,6 +35,7 @@ struct Knobs {
   color2: vec4<f32>,
   lineColor: vec4<f32>,
   seed: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
@@ -55,12 +56,12 @@ fn site_f2f2(n: vec2<f32>) -> vec2<f32> {
 }
 fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
   {
-    let src: vec4<f32> = textureSample(image_Texture, image_Sampler, coord / _uniform0.resolution);
+    let src: vec4<f32> = textureSample(image_Texture, image_Sampler, (coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
     if src.w <= 0.0 {
       return src;
     }
-    let cell: f32 = (_uniform0.resolution.y * max(_uniform0.scale, 0.01)) * 0.07692308;
-    let x: vec2<f32> = (coord - _uniform0.resolution * 0.5) / cell;
+    let cell: f32 = ((select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))).y * max(_uniform0.scale, 0.01)) * 0.07692308;
+    let x: vec2<f32> = (coord - (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))) * 0.5) / cell;
     let n: vec2<f32> = floor(x);
     let f: vec2<f32> = x - n;
     var best: vec2<f32> = vec2<f32>(0.0);
@@ -127,7 +128,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy);
+    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0))));
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

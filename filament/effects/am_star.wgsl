@@ -32,6 +32,7 @@ struct Knobs {
   points: f32,
   alpha: f32,
   blend: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
@@ -79,12 +80,12 @@ fn blendWith_f3ff3f3(m: f32, b: vec3<f32>, s: vec3<f32>) -> vec3<f32> {
 }
 fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
   {
-    let src: vec4<f32> = textureSample(image_Texture, image_Sampler, coord / _uniform0.resolution);
+    let src: vec4<f32> = textureSample(image_Texture, image_Sampler, (coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
     if src.w <= 0.0 {
       return src;
     }
-    let p: vec2<f32> = coord - _uniform0.R_position * _uniform0.resolution;
-    let r: f32 = length(p) / max((_uniform0.radius * 0.5) * min(_uniform0.resolution.x, _uniform0.resolution.y), 0.0001);
+    let p: vec2<f32> = coord - _uniform0.R_position * (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0)));
+    let r: f32 = length(p) / max((_uniform0.radius * 0.5) * min((select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))).x, (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))).y), 0.0001);
     var _skTemp1: f32;
     if dot(p, p) > 0.0 {
       _skTemp1 = atan2(p.y, p.x);
@@ -111,7 +112,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy);
+    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0))));
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

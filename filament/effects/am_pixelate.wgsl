@@ -26,28 +26,34 @@ struct Knobs {
   angle: f32,
   vignette: f32,
   screenSpace: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
+fn layerSize__f2() -> vec2<f32> {
+  {
+    return select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0));
+  }
+}
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
     var _skTemp1: vec2<f32>;
     if _uniform0.screenSpace > 0.5 {
       _skTemp1 = _uniform0.screen.xy + _uniform0.screen.zw * 0.5;
     } else {
-      _skTemp1 = _uniform0.resolution * 0.5;
+      _skTemp1 = layerSize__f2() * 0.5;
     }
     let _0_origin: vec2<f32> = _skTemp1 + _uniform0.offset;
     let _1_cell: vec2<f32> = max(_uniform0.blockSize * _uniform0.stretch, vec2<f32>(1.0));
     let _2_a: f32 = radians(_uniform0.angle);
     let _3_c: f32 = cos(_2_a);
     let _4_s: f32 = sin(_2_a);
-    let _5_d: vec2<f32> = _stageIn.sk_FragCoord.xy - _0_origin;
+    let _5_d: vec2<f32> = (_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) - _0_origin;
     let _6_p: vec2<f32> = vec2<f32>(_3_c * _5_d.x + _4_s * _5_d.y, _3_c * _5_d.y - _4_s * _5_d.x) / _1_cell;
     let _7_b: vec2<f32> = floor(_6_p);
     let _8_m: vec2<f32> = (_7_b + 0.5) * _1_cell;
-    var _9_col: vec4<f32> = textureSample(image_Texture, image_Sampler, (_0_origin + vec2<f32>(_3_c * _8_m.x - _4_s * _8_m.y, _4_s * _8_m.x + _3_c * _8_m.y)) / _uniform0.resolution);
+    var _9_col: vec4<f32> = textureSample(image_Texture, image_Sampler, ((_0_origin + vec2<f32>(_3_c * _8_m.x - _4_s * _8_m.y, _4_s * _8_m.x + _3_c * _8_m.y)) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
     if (_uniform0.vignette > 0.0) && (_9_col.w > 0.001) {
       {
         let _10_e: vec2<f32> = abs((_6_p - _7_b) - 0.5) * 2.0;

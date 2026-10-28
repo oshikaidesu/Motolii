@@ -22,6 +22,7 @@ struct Knobs {
   evolution: f32,
   complexity: f32,
   seed: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
@@ -66,11 +67,12 @@ fn fbm_ff3ff2f(_skParam0: vec3<f32>, octaves: f32, drift: vec2<f32>, gain: f32) 
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    let _6_unit: f32 = (0.4 * _uniform0.resolution.y) * max(_uniform0.scale, 0.01);
-    let _7_p: vec2<f32> = (_stageIn.sk_FragCoord.xy - _uniform0.resolution * 0.5) / _6_unit + _uniform0.seed * vec2<f32>(13.1, 7.7);
-    let _8_q: vec2<f32> = vec2<f32>(fbm_ff3ff2f(vec3<f32>(_7_p, _uniform0.evolution), _uniform0.complexity, vec2<f32>(0.0), 0.5), fbm_ff3ff2f(vec3<f32>(_7_p + vec2<f32>(5.2, 1.3), _uniform0.evolution), _uniform0.complexity, vec2<f32>(0.0), 0.5));
-    let _9_w: vec2<f32> = vec2<f32>(fbm_ff3ff2f(vec3<f32>((_7_p + 4.0 * _8_q) + vec2<f32>(1.7, 9.2), _uniform0.evolution * 1.3), _uniform0.complexity, vec2<f32>(0.0), 0.5), fbm_ff3ff2f(vec3<f32>((_7_p + 4.0 * _8_q) + vec2<f32>(8.3, 2.8), _uniform0.evolution * 1.3), _uniform0.complexity, vec2<f32>(0.0), 0.5));
-    (*_stageOut).sk_FragColor = textureSample(image_Texture, image_Sampler, (_stageIn.sk_FragCoord.xy + (((_9_w - 0.5) * 2.0) * _uniform0.strength) * _6_unit) / _uniform0.resolution);
+    let _6_coord: vec2<f32> = _stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)));
+    let _7_unit: f32 = (0.4 * (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))).y) * max(_uniform0.scale, 0.01);
+    let _8_p: vec2<f32> = (_6_coord - (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))) * 0.5) / _7_unit + _uniform0.seed * vec2<f32>(13.1, 7.7);
+    let _9_q: vec2<f32> = vec2<f32>(fbm_ff3ff2f(vec3<f32>(_8_p, _uniform0.evolution), _uniform0.complexity, vec2<f32>(0.0), 0.5), fbm_ff3ff2f(vec3<f32>(_8_p + vec2<f32>(5.2, 1.3), _uniform0.evolution), _uniform0.complexity, vec2<f32>(0.0), 0.5));
+    let _10_w: vec2<f32> = vec2<f32>(fbm_ff3ff2f(vec3<f32>((_8_p + 4.0 * _9_q) + vec2<f32>(1.7, 9.2), _uniform0.evolution * 1.3), _uniform0.complexity, vec2<f32>(0.0), 0.5), fbm_ff3ff2f(vec3<f32>((_8_p + 4.0 * _9_q) + vec2<f32>(8.3, 2.8), _uniform0.evolution * 1.3), _uniform0.complexity, vec2<f32>(0.0), 0.5));
+    (*_stageOut).sk_FragColor = textureSample(image_Texture, image_Sampler, ((_6_coord + (((_10_w - 0.5) * 2.0) * _uniform0.strength) * _7_unit) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

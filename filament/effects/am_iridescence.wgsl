@@ -26,6 +26,7 @@ struct Knobs {
   alpha: f32,
   blend: f32,
   seed: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
@@ -111,12 +112,12 @@ fn blendWith_f3ff3f3(m: f32, b: vec3<f32>, s: vec3<f32>) -> vec3<f32> {
 }
 fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
   {
-    let src: vec4<f32> = textureSample(image_Texture, image_Sampler, coord / _uniform0.resolution);
+    let src: vec4<f32> = textureSample(image_Texture, image_Sampler, (coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
     if src.w <= 0.0 {
       return src;
     }
-    let unit: f32 = (0.4 * _uniform0.resolution.y) * max(_uniform0.scale, 0.01);
-    let p: vec2<f32> = (coord - _uniform0.resolution * 0.5) / unit + _uniform0.seed * vec2<f32>(11.3, 5.9);
+    let unit: f32 = (0.4 * (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))).y) * max(_uniform0.scale, 0.01);
+    let p: vec2<f32> = (coord - (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))) * 0.5) / unit + _uniform0.seed * vec2<f32>(11.3, 5.9);
     let w: f32 = fbm_ff3ff2f(vec3<f32>(p, _uniform0.evolution), 5.0, vec2<f32>(0.0), 0.5);
     let v: f32 = fbm_ff3ff2f(vec3<f32>((p + 3.0 * w) + vec2<f32>(2.7, 8.1), _uniform0.evolution * 0.7), 5.0, vec2<f32>(0.0), 0.5);
     let _skTemp1 = fract(v * 2.5 + _uniform0.shift) * 6.0 + vec3<f32>(0.0, 4.0, 2.0);
@@ -128,7 +129,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy);
+    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0))));
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

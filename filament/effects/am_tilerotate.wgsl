@@ -28,18 +28,19 @@ struct Knobs {
   angle: f32,
   random: f32,
   seed: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    let _1_cell: f32 = _uniform0.resolution.y / (2.475 * max(_uniform0.count, 0.5));
+    let _1_cell: f32 = (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))).y / (2.475 * max(_uniform0.count, 0.5));
     let _2_a: f32 = radians(_uniform0.angle);
     let _3_cs: f32 = cos(_2_a);
     let _4_sn: f32 = sin(_2_a);
-    let _5_c: vec2<f32> = _uniform0.resolution * 0.5 + _uniform0.offset;
-    var _6_p: vec2<f32> = _stageIn.sk_FragCoord.xy - _5_c;
+    let _5_c: vec2<f32> = (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))) * 0.5 + _uniform0.offset;
+    var _6_p: vec2<f32> = (_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) - _5_c;
     _6_p = vec2<f32>(_3_cs * _6_p.x + _4_sn * _6_p.y, -_4_sn * _6_p.x + _3_cs * _6_p.y);
     let _7_dims: vec2<f32> = max(abs(_uniform0.stretch), vec2<f32>(0.01)) * _1_cell;
     let _8_g: vec2<f32> = _6_p / _7_dims;
@@ -53,7 +54,7 @@ fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
     _10_l = vec2<f32>(_13_rc * _10_l.x + _14_rs * _10_l.y, -_14_rs * _10_l.x + _13_rc * _10_l.y);
     var _15_q: vec2<f32> = (_9_n + 0.5) * _7_dims + _10_l;
     _15_q = vec2<f32>(_3_cs * _15_q.x - _4_sn * _15_q.y, _4_sn * _15_q.x + _3_cs * _15_q.y) + _5_c;
-    (*_stageOut).sk_FragColor = textureSample(image_Texture, image_Sampler, _15_q / _uniform0.resolution);
+    (*_stageOut).sk_FragColor = textureSample(image_Texture, image_Sampler, (_15_q + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

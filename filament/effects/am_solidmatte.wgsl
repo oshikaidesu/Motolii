@@ -21,21 +21,39 @@ struct Knobs {
   alpha: f32,
   punch: f32,
   screenSpace: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
+fn layerSize__f2() -> vec2<f32> {
+  {
+    return select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0));
+  }
+}
 fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
   {
-    let c: vec4<f32> = textureSample(image_Texture, image_Sampler, coord / _uniform0.resolution);
-    let inside: bool = (((coord.x >= 0.0) && (coord.y >= 0.0)) && (coord.x < _uniform0.resolution.x)) && (coord.y < _uniform0.resolution.y);
-    var _skTemp1: f32;
-    if (_uniform0.screenSpace > 0.5) || inside {
-      _skTemp1 = _uniform0.color.w * f32(clamp(_uniform0.alpha, 0.0, 1.0));
+    let c: vec4<f32> = textureSample(image_Texture, image_Sampler, (coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
+    var _skTemp1: bool;
+    var _skTemp2: bool;
+    if (coord.x >= 0.0) && (coord.y >= 0.0) {
+      _skTemp2 = coord.x < layerSize__f2().x;
     } else {
-      _skTemp1 = 0.0;
+      _skTemp2 = false;
     }
-    let m: f32 = _skTemp1;
+    if _skTemp2 {
+      _skTemp1 = coord.y < layerSize__f2().y;
+    } else {
+      _skTemp1 = false;
+    }
+    let inside: bool = _skTemp1;
+    var _skTemp3: f32;
+    if (_uniform0.screenSpace > 0.5) || inside {
+      _skTemp3 = _uniform0.color.w * f32(clamp(_uniform0.alpha, 0.0, 1.0));
+    } else {
+      _skTemp3 = 0.0;
+    }
+    let m: f32 = _skTemp3;
     let matte: vec4<f32> = vec4<f32>(_uniform0.color.xyz * m, m);
     if _uniform0.punch > 0.5 {
       return matte * (1.0 - c.w);
@@ -45,7 +63,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy);
+    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0))));
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

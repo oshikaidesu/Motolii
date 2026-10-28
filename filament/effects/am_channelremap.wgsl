@@ -20,6 +20,7 @@ struct Knobs {
   g: f32,
   b: f32,
   a: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
@@ -49,7 +50,7 @@ fn pick_fff4(k: f32, c: vec4<f32>) -> f32 {
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    let _0_src: vec4<f32> = textureSample(image_Texture, image_Sampler, _stageIn.sk_FragCoord.xy / _uniform0.resolution);
+    let _0_src: vec4<f32> = textureSample(image_Texture, image_Sampler, ((_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
     var _1_c: vec4<f32> = vec4<f32>(_0_src);
     if _1_c.w > 0.0 {
       _1_c = vec4<f32>((_1_c.xyz / _1_c.w), _1_c.w);

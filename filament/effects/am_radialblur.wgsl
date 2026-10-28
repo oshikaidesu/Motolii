@@ -17,21 +17,22 @@ struct Knobs {
   time: f32,
   amount: f32,
   R_center: vec2<f32>,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    let _0_c: vec2<f32> = _uniform0.R_center * _uniform0.resolution;
-    let _1_d: vec2<f32> = _stageIn.sk_FragCoord.xy - _0_c;
+    let _0_c: vec2<f32> = _uniform0.R_center * (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0)));
+    let _1_d: vec2<f32> = (_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) - _0_c;
     let _2_s: f32 = clamp(_uniform0.amount, 0.0, 1.9);
     var _3_sum: vec4<f32> = vec4<f32>(0.0);
     {
       var _4_i: i32 = 0;
       for (; _4_i < 48; _4_i = _4_i + i32(1)) {
         {
-          _3_sum = _3_sum + textureSample(image_Texture, image_Sampler, (_0_c + _1_d * (1.0 + _2_s * (f32(_4_i) * 0.0212765951 - 0.5))) / _uniform0.resolution);
+          _3_sum = _3_sum + textureSample(image_Texture, image_Sampler, ((_0_c + _1_d * (1.0 + _2_s * (f32(_4_i) * 0.0212765951 - 0.5))) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
         }
       }
     }

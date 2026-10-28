@@ -19,6 +19,7 @@ struct Knobs {
   scale: f32,
   magnify: f32,
   sampling: f32,
+  layerRect: vec4<f32>,
   backdropBox: vec4<f32>,
 };
 @group(0) @binding(4) var<uniform> _uniform0 : Knobs;
@@ -28,21 +29,21 @@ struct Knobs {
 @group(0) @binding(2) var backdropPic_Texture: texture_2d<f32>;
 fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
   {
-    let c: vec2<f32> = _uniform0.resolution * 0.5;
+    let c: vec2<f32> = (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))) * 0.5;
     var p: vec2<f32> = c + (coord - c) / max(_uniform0.scale, 0.01);
-    let m: f32 = textureSample(image_Texture, image_Sampler, (select(coord, p, vec2<bool>(_uniform0.magnify > 0.5))) / _uniform0.resolution).w;
+    let m: f32 = textureSample(image_Texture, image_Sampler, ((select(coord, p, vec2<bool>(_uniform0.magnify > 0.5))) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution).w;
     if m <= 0.0 {
       return vec4<f32>(0.0);
     }
     if _uniform0.sampling < 0.5 {
       p = (_uniform0.screen.xy + floor(p - _uniform0.screen.xy)) + 0.5;
     }
-    return textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + (p / _uniform0.resolution) * _uniform0.backdropBox.zw) * m;
+    return textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + ((p + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution) * _uniform0.backdropBox.zw) * m;
   }
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy);
+    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0))));
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

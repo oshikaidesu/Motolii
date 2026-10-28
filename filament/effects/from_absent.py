@@ -54,11 +54,13 @@ across = 'h_' if re.search(r'\bh\b', s) else 'h'   # (the blur's pass across: a 
 back = 'backdrop' in pictures   # (what lies behind the layer: the stage's picture without it, screen.h's behind, read where the layer's box lies on it)
 if sorted(pictures) != sorted(['image'] + ([blur] if blur else []) + (['backdrop'] if back else [])):
     sys.exit(f"{src}: reads {pictures}: an effect reads the picture, it blurred, and what is behind it at most")
-s = re.sub(r'\bsize\b', 'resolution', s)
+s = re.sub(r'(uniform\s+float2\s+)size\b', r'\1resolution', s)   # (the picture's size, as screen.h tells it)
+s = re.sub(r'\bsize\b', 'layerSize_()', s)   # (AbsentMotion's size where it is read: the layer's own, not the picture's with room round it)
 typed = r'^\s*(?:layout\(color\)\s+)?uniform\s+(float[234]?|half[234]?|int)\s+(\w+)\s*;'
 loose = re.findall(typed, s, re.M)
 s = re.sub(typed + r'\s*$', '', s, flags=re.M)
 s = re.sub(r'^\s*uniform\s+shader\s+(image|blurred|bright|backdrop)\s*;', '', s, flags=re.M)
+loose.append(('float4', 'layerRect'))   # (the layer's own rectangle on the picture, in its pixels: corner and size, doc_moment_fx.h; none said, the whole picture)
 if back:
     loose.append(('float4', 'backdropBox'))   # (the layer's box on the stage: left, top, width, height, each a share of it: doc_moment_fx.h)
 if blur:
@@ -72,11 +74,12 @@ if blur:
 if back:
     head += f"layout(webgpu, set=0, texture={6 if blur else 2}, sampler={7 if blur else 3}) sampler2D backdropPic;\n"   # (read after its own and its passes' pictures: screen.h's others)
 head += f"layout(set=0, binding={(6 if blur else 2) + (2 if back else 0)}) uniform Knobs {{\n" + ''.join(f'  {t} {n};\n' for t, n in loose) + '};\n'
-head += 'half4 imageAt(float2 p) { return sample(image, p / resolution); }\n'   # (a child shader read at a pixel: the picture at that place)
+head += 'float2 layerAt_() { return layerRect.z > 0 ? layerRect.xy : float2(0); }\nfloat2 layerSize_() { return layerRect.z > 0 ? layerRect.zw : resolution; }\n'   # (where AbsentMotion's layer space begins on the picture, and how large it is)
+head += 'half4 imageAt(float2 p) { return sample(image, (p + layerAt_()) / resolution); }\n'   # (a child shader read at a pixel: the picture at that place)
 if back:
-    head += 'half4 backdropAt(float2 p) { return sample(backdropPic, backdropBox.xy + p / resolution * backdropBox.zw); }\n'   # (what is behind that place)
+    head += 'half4 backdropAt(float2 p) { return sample(backdropPic, backdropBox.xy + (p + layerAt_()) / resolution * backdropBox.zw); }\n'   # (what is behind that place)
 if blur:   # (a Gaussian across then down, sigma blur/3 in pixels, three sigmas each side, as Skia's blur reaches)
-    head += 'half4 ' + blur + 'At(float2 p) { return sample(blurPicture, p / resolution); }\n'
+    head += 'half4 ' + blur + 'At(float2 p) { return sample(blurPicture, (p + layerAt_()) / resolution); }\n'
     head += ('half4 gauss_(float2 p, float2 by, int from) {\n  float sigma = max(blur, 0) / 3; if (sigma < 0.5) return from == 0 ? sample(image, p / resolution) : sample(' + across + ', p / resolution);\n'
              '  half4 all = half4(0); float weight = 0;\n  for (int i = -96; i <= 96; i++) { float x = float(i); if (abs(x) > 3 * sigma) continue; float w = exp(-x * x / (2 * sigma * sigma));\n'
              '    half4 c = from == 0 ? sample(image, (p + by * x) / resolution) : sample(' + across + ', (p + by * x) / resolution);\n'
@@ -85,8 +88,8 @@ if blur:   # (a Gaussian across then down, sigma blur/3 in pixels, three sigmas 
 s = re.sub(r'\bbackdrop\.eval\(', 'backdropAt(', s)
 s = head + re.sub(r'\b(blurred|bright)\.eval\(', blur + 'At(' if blur else r'\1.eval(', re.sub(r'\bimage\.eval\(', 'imageAt(', s))
 s = re.sub(r'\bhalf4 main\(float2 (\w+)\)', r'half4 effect_(float2 \1)', s)   # (the file's own pixel function, whatever it names the pixel: the wrapper's main calls it)
-s += ('\nvoid main() { sk_FragColor = passindex < 0.5 ? gauss_(sk_FragCoord.xy, float2(1, 0), 0) : passindex < 1.5 ? gauss_(sk_FragCoord.xy, float2(0, 1), 1) : effect_(sk_FragCoord.xy); }\n' if blur
-      else '\nvoid main() { sk_FragColor = effect_(sk_FragCoord.xy); }\n')
+s += ('\nvoid main() { sk_FragColor = passindex < 0.5 ? gauss_(sk_FragCoord.xy, float2(1, 0), 0) : passindex < 1.5 ? gauss_(sk_FragCoord.xy, float2(0, 1), 1) : effect_(sk_FragCoord.xy - layerAt_()); }\n' if blur
+      else '\nvoid main() { sk_FragColor = effect_(sk_FragCoord.xy - layerAt_()); }\n')
 open(out + '.frag', 'w').write(s)
 made = subprocess.run([skslc, out + '.frag', out + '.raw.wgsl'], capture_output=True, text=True)
 if made.returncode:

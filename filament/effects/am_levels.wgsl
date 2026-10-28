@@ -22,6 +22,7 @@ struct Knobs {
   gamma: f32,
   outBlack: f32,
   outWhite: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
@@ -29,7 +30,7 @@ struct Knobs {
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
     var _0_effect_: vec4<f32>;
-    let _1_color: vec4<f32> = textureSample(image_Texture, image_Sampler, _stageIn.sk_FragCoord.xy / _uniform0.resolution);
+    let _1_color: vec4<f32> = textureSample(image_Texture, image_Sampler, ((_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
     let _2_alpha: f32 = f32(_1_color.w);
     if _2_alpha < 1e-06 {
       {

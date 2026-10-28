@@ -22,30 +22,36 @@ struct Knobs {
   curlFrom: f32,
   direction: f32,
   stretch: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
+fn layerSize__f2() -> vec2<f32> {
+  {
+    return select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0));
+  }
+}
 fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
   {
     var p: vec2<f32> = coord;
     if _uniform0.curlFrom < 0.5 {
-      p.x = _uniform0.resolution.x - p.x;
+      p.x = layerSize__f2().x - p.x;
     }
     if _uniform0.direction > 0.5 {
-      p.y = _uniform0.resolution.y - p.y;
+      p.y = layerSize__f2().y - p.y;
     }
     var _skTemp1: f32;
     if _uniform0.curlFrom < 0.5 {
-      _skTemp1 = _uniform0.resolution.x * (1.0 - _uniform0.offset);
+      _skTemp1 = layerSize__f2().x * (1.0 - _uniform0.offset);
     } else {
-      _skTemp1 = _uniform0.resolution.x * _uniform0.offset;
+      _skTemp1 = layerSize__f2().x * _uniform0.offset;
     }
     let x0: f32 = _skTemp1;
-    let yc: f32 = _uniform0.resolution.y * 0.5;
-    let r: f32 = (max(_uniform0.radius, 0.001) * _uniform0.resolution.y) * 0.5;
+    let yc: f32 = layerSize__f2().y * 0.5;
+    let r: f32 = (max(_uniform0.radius, 0.001) * layerSize__f2().y) * 0.5;
     let k: f32 = max(_uniform0.stretch, 0.01) / r;
-    let reach: f32 = _uniform0.resolution.x - x0;
+    let reach: f32 = layerSize__f2().x - x0;
     let c: vec2<f32> = vec2<f32>(x0, yc - r);
     let d: vec2<f32> = p - c;
     let off: f32 = length(d) - r;
@@ -79,17 +85,17 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
       return vec4<f32>(0.0);
     }
     if _uniform0.curlFrom < 0.5 {
-      src.x = _uniform0.resolution.x - src.x;
+      src.x = layerSize__f2().x - src.x;
     }
     if _uniform0.direction > 0.5 {
-      src.y = _uniform0.resolution.y - src.y;
+      src.y = layerSize__f2().y - src.y;
     }
-    return textureSample(image_Texture, image_Sampler, src / _uniform0.resolution);
+    return textureSample(image_Texture, image_Sampler, (src + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
   }
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy);
+    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0))));
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

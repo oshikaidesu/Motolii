@@ -17,6 +17,7 @@ struct Knobs {
   fadeIn: f32,
   fadeOut: f32,
   duration: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
@@ -30,7 +31,7 @@ fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
     if _uniform0.fadeOut > 0.0 {
       _0_a = _0_a * clamp((_uniform0.duration - _uniform0.time) / _uniform0.fadeOut, 0.0, 1.0);
     }
-    (*_stageOut).sk_FragColor = textureSample(image_Texture, image_Sampler, _stageIn.sk_FragCoord.xy / _uniform0.resolution) * f32(_0_a);
+    (*_stageOut).sk_FragColor = textureSample(image_Texture, image_Sampler, ((_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution) * f32(_0_a);
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

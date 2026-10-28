@@ -32,6 +32,7 @@ struct Knobs {
   color: vec4<f32>,
   blend: f32,
   opacity: f32,
+  layerRect: vec4<f32>,
   passindex: f32,
 };
 @group(0) @binding(6) var<uniform> _uniform0 : Knobs;
@@ -41,6 +42,11 @@ struct Knobs {
 @group(0) @binding(2) var h_Texture: texture_2d<f32>;
 @group(0) @binding(5) var blurPicture_Sampler: sampler;
 @group(0) @binding(4) var blurPicture_Texture: texture_2d<f32>;
+fn layerAt__f2() -> vec2<f32> {
+  {
+    return select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0));
+  }
+}
 fn gauss__h4f2f2i(p: vec2<f32>, by: vec2<f32>, R_from: i32) -> vec4<f32> {
   {
     let sigma: f32 = max(_uniform0.blur, 0.0) * 0.333333343;
@@ -81,8 +87,8 @@ fn gauss__h4f2f2i(p: vec2<f32>, by: vec2<f32>, R_from: i32) -> vec4<f32> {
 }
 fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
   {
-    let c: vec4<f32> = textureSample(image_Texture, image_Sampler, coord / _uniform0.resolution);
-    let g: vec4<f32> = textureSample(blurPicture_Texture, blurPicture_Sampler, coord / _uniform0.resolution);
+    let c: vec4<f32> = textureSample(image_Texture, image_Sampler, (coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
+    let g: vec4<f32> = textureSample(blurPicture_Texture, blurPicture_Sampler, (coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
     var _skTemp3: vec3<f32>;
     if g.w > 0.0 {
       _skTemp3 = vec3<f32>(g.xyz) / f32(g.w);
@@ -110,7 +116,7 @@ fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
       if _uniform0.passindex < 1.5 {
         _skTemp5 = gauss__h4f2f2i(_stageIn.sk_FragCoord.xy, vec2<f32>(0.0, 1.0), 1);
       } else {
-        _skTemp5 = effect__h4f2(_stageIn.sk_FragCoord.xy);
+        _skTemp5 = effect__h4f2(_stageIn.sk_FragCoord.xy - layerAt__f2());
       }
       _skTemp4 = _skTemp5;
     }

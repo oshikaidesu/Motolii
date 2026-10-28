@@ -35,6 +35,7 @@ struct Knobs {
   style: f32,
   thresholdAdd: vec4<f32>,
   color: vec4<f32>,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
@@ -48,8 +49,8 @@ fn effect__h4f2(p: vec2<f32>) -> vec4<f32> {
   {
     if _uniform0.style < 0.5 {
       {
-        let _0_src: vec4<f32> = textureSample(image_Texture, image_Sampler, p / _uniform0.resolution);
-        let _1_c: vec2<f32> = _uniform0.R_center * _uniform0.resolution;
+        let _0_src: vec4<f32> = textureSample(image_Texture, image_Sampler, (p + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
+        let _1_c: vec2<f32> = _uniform0.R_center * (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0)));
         let _2_length_: f32 = max(_uniform0.reach, 0.0);
         var _3_sum: f32 = 0.0;
         {
@@ -57,7 +58,7 @@ fn effect__h4f2(p: vec2<f32>) -> vec4<f32> {
           for (; _4_i < 48; _4_i = _4_i + i32(1)) {
             {
               let _5_t: f32 = f32(_4_i) * 0.0212765951;
-              let _6_s: vec4<f32> = textureSample(image_Texture, image_Sampler, (_1_c + (p - _1_c) * (1.0 - (_2_length_ * _5_t) / (1.0 + _2_length_))) / _uniform0.resolution);
+              let _6_s: vec4<f32> = textureSample(image_Texture, image_Sampler, ((_1_c + (p - _1_c) * (1.0 - (_2_length_ * _5_t) / (1.0 + _2_length_))) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
               var _skTemp1: f32;
               if _6_s.w > 0.0 {
                 _skTemp1 = luma_ff3(vec3<f32>(_6_s.xyz) / f32(_6_s.w)) * f32(_6_s.w);
@@ -90,13 +91,13 @@ fn effect__h4f2(p: vec2<f32>) -> vec4<f32> {
         return vec4<f32>(vec3<f32>(clamp(_13_rgb, vec3<f32>(0.0), vec3<f32>(1.0))) * f32(_12_outA), f32(_12_outA));
       }
     }
-    let src: vec4<f32> = vec4<f32>(textureSample(image_Texture, image_Sampler, p / _uniform0.resolution));
+    let src: vec4<f32> = vec4<f32>(textureSample(image_Texture, image_Sampler, (p + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution));
     let len: f32 = clamp(_uniform0.reach, 0.0, 1000.0);
     let gain: f32 = (clamp(_uniform0.intensity, 0.0, 100.0) * clamp(f32(_uniform0.color.w), 0.0, 1.0)) * clamp(len * 100.0, 0.0, 1.0);
     if gain <= 0.0 {
       return vec4<f32>(src);
     }
-    let c: vec2<f32> = clamp(_uniform0.R_center, vec2<f32>(-8.0), vec2<f32>(9.0)) * _uniform0.resolution;
+    let c: vec2<f32> = clamp(_uniform0.R_center, vec2<f32>(-8.0), vec2<f32>(9.0)) * (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0)));
     let d: vec2<f32> = p - c;
     let f: f32 = len / (len + 0.1);
     let n: f32 = clamp(ceil((f * length(d)) * 0.333333343), 1.0, 48.0);
@@ -114,7 +115,7 @@ fn effect__h4f2(p: vec2<f32>) -> vec4<f32> {
           if f32(i) >= n {
             break;
           }
-          let s: vec4<f32> = vec4<f32>(textureSample(image_Texture, image_Sampler, q / _uniform0.resolution));
+          let s: vec4<f32> = vec4<f32>(textureSample(image_Texture, image_Sampler, (q + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution));
           var _skTemp4: f32;
           if s.w > 0.0 {
             _skTemp4 = smoothstep(knee, thr, luma_ff3(s.xyz) / max(s.w, 1e-06));
@@ -137,7 +138,7 @@ fn effect__h4f2(p: vec2<f32>) -> vec4<f32> {
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy);
+    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0))));
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

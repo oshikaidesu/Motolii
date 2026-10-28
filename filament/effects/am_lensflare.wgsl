@@ -24,17 +24,19 @@ struct Knobs {
   radius: f32,
   brightness: f32,
   color: vec4<f32>,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    let _0_c: vec4<f32> = textureSample(image_Texture, image_Sampler, _stageIn.sk_FragCoord.xy / _uniform0.resolution);
-    let _1_d: f32 = distance(_stageIn.sk_FragCoord.xy, _uniform0.R_center * _uniform0.resolution) / max(_uniform0.radius * max(_uniform0.resolution.x, _uniform0.resolution.y), 0.0001);
-    let _2_light: f32 = _uniform0.brightness * (exp((-_1_d * _1_d) * 6.0) + 0.35 * exp((-(_1_d - 1.0) * (_1_d - 1.0)) * 60.0));
-    let _3_rgb: vec3<f32> = _0_c.xyz + _uniform0.color.xyz * f32(_2_light);
-    (*_stageOut).sk_FragColor = vec4<f32>(_3_rgb, max(_0_c.w, max(_3_rgb.x, max(_3_rgb.y, _3_rgb.z))));
+    let _0_coord: vec2<f32> = _stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)));
+    let _1_c: vec4<f32> = textureSample(image_Texture, image_Sampler, (_0_coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
+    let _2_d: f32 = distance(_0_coord, _uniform0.R_center * (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / max(_uniform0.radius * max((select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))).x, (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))).y), 0.0001);
+    let _3_light: f32 = _uniform0.brightness * (exp((-_2_d * _2_d) * 6.0) + 0.35 * exp((-(_2_d - 1.0) * (_2_d - 1.0)) * 60.0));
+    let _4_rgb: vec3<f32> = _1_c.xyz + _uniform0.color.xyz * f32(_3_light);
+    (*_stageOut).sk_FragColor = vec4<f32>(_4_rgb, max(_1_c.w, max(_4_rgb.x, max(_4_rgb.y, _4_rgb.z))));
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

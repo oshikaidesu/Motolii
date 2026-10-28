@@ -16,21 +16,23 @@ struct Knobs {
   time: f32,
   amount: f32,
   grain: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    let _2_color: vec4<f32> = textureSample(image_Texture, image_Sampler, _stageIn.sk_FragCoord.xy / _uniform0.resolution);
-    let _3_c: vec4<f32> = vec4<f32>(_2_color.xyz / max(_2_color.w, 0.0001), _2_color.w);
+    let _2_coord: vec2<f32> = _stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)));
+    let _3_color: vec4<f32> = textureSample(image_Texture, image_Sampler, (_2_coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
+    let _4_c: vec4<f32> = vec4<f32>(_3_color.xyz / max(_3_color.w, 0.0001), _3_color.w);
     let _skTemp1 = floor((_uniform0.time + 0.000999) * 30.0);
-    let _4_frame: f32 = (_skTemp1 - 4096.0 * floor(_skTemp1 / 4096.0));
-    var _5_p: vec3<f32> = vec3<f32>(floor(_stageIn.sk_FragCoord.xy / max(_uniform0.grain, 0.5)), _4_frame);
-    _5_p = fract(_5_p * 0.1031);
-    _5_p = _5_p + dot(_5_p, _5_p.zyx + 31.32);
-    let _6_n: f32 = f32(fract((_5_p.x + _5_p.y) * _5_p.z));
-    (*_stageOut).sk_FragColor = vec4<f32>(mix(_3_c.xyz, vec3<f32>(_6_n), vec3<f32>(f32(_uniform0.amount))) * _3_c.w, _3_c.w);
+    let _5_frame: f32 = (_skTemp1 - 4096.0 * floor(_skTemp1 / 4096.0));
+    var _6_p: vec3<f32> = vec3<f32>(floor(_2_coord / max(_uniform0.grain, 0.5)), _5_frame);
+    _6_p = fract(_6_p * 0.1031);
+    _6_p = _6_p + dot(_6_p, _6_p.zyx + 31.32);
+    let _7_n: f32 = f32(fract((_6_p.x + _6_p.y) * _6_p.z));
+    (*_stageOut).sk_FragColor = vec4<f32>(mix(_4_c.xyz, vec3<f32>(_7_n), vec3<f32>(f32(_uniform0.amount))) * _4_c.w, _4_c.w);
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

@@ -33,18 +33,19 @@ struct Knobs {
   shading: f32,
   light: f32,
   shine: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
-fn pic_f4f2(uv: vec2<f32>) -> vec4<f32> {
+fn layerSize__f2() -> vec2<f32> {
   {
-    return vec4<f32>(textureSample(image_Texture, image_Sampler, clamp(uv * _uniform0.resolution, vec2<f32>(0.5), max(_uniform0.resolution - 0.5, vec2<f32>(0.5))) / _uniform0.resolution));
+    return select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0));
   }
 }
 fn cover_f2f2f2(uv: vec2<f32>, face: vec2<f32>) -> vec2<f32> {
   {
-    let r: f32 = (face.x / max(face.y, 0.0001)) / (_uniform0.resolution.x / max(_uniform0.resolution.y, 0.0001));
+    let r: f32 = (face.x / max(face.y, 0.0001)) / (layerSize__f2().x / max(layerSize__f2().y, 0.0001));
     var _skTemp1: vec2<f32>;
     if r > 1.0 {
       _skTemp1 = vec2<f32>(1.0, 1.0 / r);
@@ -69,10 +70,10 @@ fn normal_f3f3f(p: vec3<f32>, e: f32) -> vec3<f32> {
 }
 fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
   {
-    let unit: f32 = max((min(_uniform0.resolution.x, _uniform0.resolution.y) * 0.5) * _uniform0.scale, 0.5);
+    let unit: f32 = max((min(layerSize__f2().x, layerSize__f2().y) * 0.5) * _uniform0.scale, 0.5);
     let rb: f32 = _uniform0.radius;
     let dist: f32 = max(2.0 + 40.0 * pow(1.0 - clamp(_uniform0.R_perspective, 0.0, 1.0), 3.0), rb + 0.5);
-    let rw: vec3<f32> = normalize(vec3<f32>(((coord - _uniform0.resolution * 0.5) - _uniform0.R_position) / unit, dist));
+    let rw: vec3<f32> = normalize(vec3<f32>(((coord - layerSize__f2() * 0.5) - _uniform0.R_position) / unit, dist));
     let ow: vec3<f32> = vec3<f32>(0.0, 0.0, -dist);
     let reach: f32 = rb + (2.0 * dist) / (unit * max(dist - rb, 0.1));
     let b: f32 = dot(ow, rw);
@@ -80,14 +81,14 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
     if disc <= 0.0 {
       return vec4<f32>(0.0);
     }
-    let _13_a: vec3<f32> = radians(vec3<f32>(_uniform0.rotX, _uniform0.rotY, _uniform0.rotZ));
-    let _14_cx: f32 = cos(_13_a.x);
-    let _15_sx: f32 = sin(_13_a.x);
-    let _16_cy: f32 = cos(_13_a.y);
-    let _17_sy: f32 = sin(_13_a.y);
-    let _18_cz: f32 = cos(_13_a.z);
-    let _19_sz: f32 = sin(_13_a.z);
-    let m: mat3x3<f32> = (mat3x3<f32>(_18_cz, -_19_sz, 0.0, _19_sz, _18_cz, 0.0, 0.0, 0.0, 1.0) * mat3x3<f32>(_16_cy, 0.0, _17_sy, 0.0, 1.0, 0.0, -_17_sy, 0.0, _16_cy)) * mat3x3<f32>(1.0, 0.0, 0.0, 0.0, _14_cx, -_15_sx, 0.0, _15_sx, _14_cx);
+    let _24_a: vec3<f32> = radians(vec3<f32>(_uniform0.rotX, _uniform0.rotY, _uniform0.rotZ));
+    let _25_cx: f32 = cos(_24_a.x);
+    let _26_sx: f32 = sin(_24_a.x);
+    let _27_cy: f32 = cos(_24_a.y);
+    let _28_sy: f32 = sin(_24_a.y);
+    let _29_cz: f32 = cos(_24_a.z);
+    let _30_sz: f32 = sin(_24_a.z);
+    let m: mat3x3<f32> = (mat3x3<f32>(_29_cz, -_30_sz, 0.0, _30_sz, _29_cz, 0.0, 0.0, 0.0, 1.0) * mat3x3<f32>(_27_cy, 0.0, _28_sy, 0.0, 1.0, 0.0, -_28_sy, 0.0, _27_cy)) * mat3x3<f32>(1.0, 0.0, 0.0, 0.0, _25_cx, -_26_sx, 0.0, _26_sx, _25_cx);
     let ro: vec3<f32> = ow * m;
     let rd: vec3<f32> = rw * m;
     let far: f32 = -b + sqrt(disc);
@@ -133,22 +134,24 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
     if !hit {
       p = p - n * map_ff3(p);
     }
-    let _20_f: vec3<f32> = normalize(sign(n));
-    let _21_w: vec3<f32> = vec3<f32>(-_20_f.z, 0.0, _20_f.x);
+    let _31_f: vec3<f32> = normalize(sign(n));
+    let _32_w: vec3<f32> = vec3<f32>(-_31_f.z, 0.0, _31_f.x);
     var _skTemp2: vec3<f32>;
-    if dot(_21_w, _21_w) > 0.0 {
-      _skTemp2 = normalize(_21_w);
+    if dot(_32_w, _32_w) > 0.0 {
+      _skTemp2 = normalize(_32_w);
     } else {
       _skTemp2 = vec3<f32>(1.0, 0.0, 0.0);
     }
-    let _22_u: vec3<f32> = _skTemp2;
-    let _23_c: vec4<f32> = pic_f4f2(cover_f2f2f2((vec2<f32>(dot(p, _22_u), dot(p, cross(_22_u, _20_f))) / (_uniform0.radius * 0.8)) * 0.5 + 0.5, vec2<f32>(1.0)));
-    let _24_n: vec3<f32> = normalize(m * n);
-    let _25_a: f32 = radians(_uniform0.light);
-    let _26_l: vec3<f32> = normalize(vec3<f32>(cos(_25_a), -sin(_25_a), -1.2));
-    let _27_k: f32 = (1.0 - _uniform0.shading) + _uniform0.shading * (0.3 + 0.85 * max(dot(_24_n, _26_l), 0.0));
-    let _28_s: f32 = _uniform0.shine * pow(max(dot(_24_n, normalize(_26_l + -rw)), 0.0), 40.0);
-    var c: vec4<f32> = vec4<f32>(min(_23_c.xyz * _27_k + _28_s * _23_c.w, vec3<f32>(_23_c.w)), _23_c.w);
+    let _33_u: vec3<f32> = _skTemp2;
+    let _34_uv: vec2<f32> = cover_f2f2f2((vec2<f32>(dot(p, _33_u), dot(p, cross(_33_u, _31_f))) / (_uniform0.radius * 0.8)) * 0.5 + 0.5, vec2<f32>(1.0));
+    let _35_p: vec2<f32> = clamp(_34_uv * layerSize__f2(), vec2<f32>(0.5), max(layerSize__f2() - 0.5, vec2<f32>(0.5)));
+    let _36_c: vec4<f32> = vec4<f32>(textureSample(image_Texture, image_Sampler, (_35_p + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution));
+    let _37_n: vec3<f32> = normalize(m * n);
+    let _38_a: f32 = radians(_uniform0.light);
+    let _39_l: vec3<f32> = normalize(vec3<f32>(cos(_38_a), -sin(_38_a), -1.2));
+    let _40_k: f32 = (1.0 - _uniform0.shading) + _uniform0.shading * (0.3 + 0.85 * max(dot(_37_n, _39_l), 0.0));
+    let _41_s: f32 = _uniform0.shine * pow(max(dot(_37_n, normalize(_39_l + -rw)), 0.0), 40.0);
+    var c: vec4<f32> = vec4<f32>(min(_36_c.xyz * _40_k + _41_s * _36_c.w, vec3<f32>(_36_c.w)), _36_c.w);
     if hit && (c.w < 0.996) {
       {
         var s: f32 = far;
@@ -174,23 +177,25 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
         if back {
           {
             let q: vec3<f32> = ro + rd * s;
-            let _29_n: vec3<f32> = -normal_f3f3f(q, e);
-            let _30_f: vec3<f32> = normalize(sign(_29_n));
-            let _31_w: vec3<f32> = vec3<f32>(-_30_f.z, 0.0, _30_f.x);
+            let _42_n: vec3<f32> = -normal_f3f3f(q, e);
+            let _43_f: vec3<f32> = normalize(sign(_42_n));
+            let _44_w: vec3<f32> = vec3<f32>(-_43_f.z, 0.0, _43_f.x);
             var _skTemp3: vec3<f32>;
-            if dot(_31_w, _31_w) > 0.0 {
-              _skTemp3 = normalize(_31_w);
+            if dot(_44_w, _44_w) > 0.0 {
+              _skTemp3 = normalize(_44_w);
             } else {
               _skTemp3 = vec3<f32>(1.0, 0.0, 0.0);
             }
-            let _32_u: vec3<f32> = _skTemp3;
-            let _33_c: vec4<f32> = pic_f4f2(cover_f2f2f2((vec2<f32>(dot(q, _32_u), dot(q, cross(_32_u, _30_f))) / (_uniform0.radius * 0.8)) * 0.5 + 0.5, vec2<f32>(1.0)));
-            let _34_n: vec3<f32> = normalize(m * _29_n);
-            let _35_a: f32 = radians(_uniform0.light);
-            let _36_l: vec3<f32> = normalize(vec3<f32>(cos(_35_a), -sin(_35_a), -1.2));
-            let _37_k: f32 = (1.0 - _uniform0.shading) + _uniform0.shading * (0.3 + 0.85 * max(dot(_34_n, _36_l), 0.0));
-            let _38_s: f32 = _uniform0.shine * pow(max(dot(_34_n, normalize(_36_l + -rw)), 0.0), 40.0);
-            c = c + vec4<f32>(min(_33_c.xyz * _37_k + _38_s * _33_c.w, vec3<f32>(_33_c.w)), _33_c.w) * (1.0 - c.w);
+            let _45_u: vec3<f32> = _skTemp3;
+            let _46_uv: vec2<f32> = cover_f2f2f2((vec2<f32>(dot(q, _45_u), dot(q, cross(_45_u, _43_f))) / (_uniform0.radius * 0.8)) * 0.5 + 0.5, vec2<f32>(1.0));
+            let _47_p: vec2<f32> = clamp(_46_uv * layerSize__f2(), vec2<f32>(0.5), max(layerSize__f2() - 0.5, vec2<f32>(0.5)));
+            let _48_c: vec4<f32> = vec4<f32>(textureSample(image_Texture, image_Sampler, (_47_p + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution));
+            let _49_n: vec3<f32> = normalize(m * _42_n);
+            let _50_a: f32 = radians(_uniform0.light);
+            let _51_l: vec3<f32> = normalize(vec3<f32>(cos(_50_a), -sin(_50_a), -1.2));
+            let _52_k: f32 = (1.0 - _uniform0.shading) + _uniform0.shading * (0.3 + 0.85 * max(dot(_49_n, _51_l), 0.0));
+            let _53_s: f32 = _uniform0.shine * pow(max(dot(_49_n, normalize(_51_l + -rw)), 0.0), 40.0);
+            c = c + vec4<f32>(min(_48_c.xyz * _52_k + _53_s * _48_c.w, vec3<f32>(_48_c.w)), _48_c.w) * (1.0 - c.w);
           }
         }
       }
@@ -206,7 +211,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy);
+    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0))));
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

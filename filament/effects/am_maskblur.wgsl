@@ -16,6 +16,7 @@ struct Knobs {
   time: f32,
   strength: f32,
   invert: f32,
+  layerRect: vec4<f32>,
   backdropBox: vec4<f32>,
 };
 @group(0) @binding(4) var<uniform> _uniform0 : Knobs;
@@ -25,7 +26,7 @@ struct Knobs {
 @group(0) @binding(2) var backdropPic_Texture: texture_2d<f32>;
 fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
   {
-    let src: vec4<f32> = textureSample(image_Texture, image_Sampler, coord / _uniform0.resolution);
+    let src: vec4<f32> = textureSample(image_Texture, image_Sampler, (coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
     if src.w <= 0.0 {
       return vec4<f32>(0.0);
     }
@@ -36,7 +37,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
     let r: f32 = max(_uniform0.strength, 0.0) * clamp(lum, 0.0, 1.0);
     if r < 0.5 {
       {
-        return textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + (coord / _uniform0.resolution) * _uniform0.backdropBox.zw) * src.w;
+        return textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + ((coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution) * _uniform0.backdropBox.zw) * src.w;
       }
     }
     let spin: f32 = fract(sin(dot(floor(coord), vec2<f32>(12.9898, 78.233))) * 43758.5469) * 6.28318548;
@@ -47,7 +48,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
         {
           let k: f32 = (f32(i) + 0.5) * 0.015625;
           let a: f32 = f32(i) * 2.39996314 + spin;
-          sum = sum + textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + ((coord + (sqrt(k) * r) * vec2<f32>(cos(a), sin(a))) / _uniform0.resolution) * _uniform0.backdropBox.zw);
+          sum = sum + textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + (((coord + (sqrt(k) * r) * vec2<f32>(cos(a), sin(a))) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution) * _uniform0.backdropBox.zw);
         }
       }
     }
@@ -56,7 +57,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy);
+    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0))));
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

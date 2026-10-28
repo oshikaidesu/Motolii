@@ -20,24 +20,26 @@ struct Knobs {
   stretch: f32,
   offset: f32,
   spread: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    let _0_r: f32 = radians(_uniform0.angle);
-    let _1_dir: vec2<f32> = vec2<f32>(cos(_0_r), sin(_0_r));
-    let _2_d: f32 = dot(_stageIn.sk_FragCoord.xy - 0.5 * _uniform0.resolution, _1_dir) - _uniform0.offset;
-    let _3_gap: f32 = 0.5 * max(_uniform0.stretch, 0.0);
+    let _0_coord: vec2<f32> = _stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)));
+    let _1_r: f32 = radians(_uniform0.angle);
+    let _2_dir: vec2<f32> = vec2<f32>(cos(_1_r), sin(_1_r));
+    let _3_d: f32 = dot(_0_coord - 0.5 * (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))), _2_dir) - _uniform0.offset;
+    let _4_gap: f32 = 0.5 * max(_uniform0.stretch, 0.0);
     var _skTemp1: vec2<f32>;
-    if abs(_2_d) <= _3_gap {
-      _skTemp1 = (_stageIn.sk_FragCoord.xy - _1_dir * _2_d) + (_1_dir * (_2_d / max(_3_gap, 0.001))) * _uniform0.spread;
+    if abs(_3_d) <= _4_gap {
+      _skTemp1 = (_0_coord - _2_dir * _3_d) + (_2_dir * (_3_d / max(_4_gap, 0.001))) * _uniform0.spread;
     } else {
-      _skTemp1 = _stageIn.sk_FragCoord.xy - (_1_dir * sign(_2_d)) * _3_gap;
+      _skTemp1 = _0_coord - (_2_dir * sign(_3_d)) * _4_gap;
     }
-    let _4_from: vec2<f32> = _skTemp1;
-    (*_stageOut).sk_FragColor = textureSample(image_Texture, image_Sampler, _4_from / _uniform0.resolution);
+    let _5_from: vec2<f32> = _skTemp1;
+    (*_stageOut).sk_FragColor = textureSample(image_Texture, image_Sampler, (_5_from + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

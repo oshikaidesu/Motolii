@@ -25,17 +25,19 @@ struct Knobs {
   magnitude: f32,
   warpAngle: f32,
   speed: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    let _0_a: f32 = radians(_uniform0.angle);
-    let _1_b: f32 = radians(_uniform0.warpAngle);
-    let _2_u: f32 = dot(_stageIn.sk_FragCoord.xy / max(_uniform0.resolution, vec2<f32>(1.0)), vec2<f32>(cos(_0_a), sin(_0_a)));
-    let _3_d: f32 = ((_uniform0.magnitude * min(_uniform0.screen.z, _uniform0.screen.w)) * 0.01) * sin((_uniform0.spacing * _2_u + 6.28318548 * _uniform0.phase) + _uniform0.time * _uniform0.speed);
-    (*_stageOut).sk_FragColor = textureSample(image_Texture, image_Sampler, (_stageIn.sk_FragCoord.xy + _3_d * vec2<f32>(cos(_1_b), sin(_1_b))) / _uniform0.resolution);
+    let _0_coord: vec2<f32> = _stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)));
+    let _1_a: f32 = radians(_uniform0.angle);
+    let _2_b: f32 = radians(_uniform0.warpAngle);
+    let _3_u: f32 = dot(_0_coord / max(select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0)), vec2<f32>(1.0)), vec2<f32>(cos(_1_a), sin(_1_a)));
+    let _4_d: f32 = ((_uniform0.magnitude * min(_uniform0.screen.z, _uniform0.screen.w)) * 0.01) * sin((_uniform0.spacing * _3_u + 6.28318548 * _uniform0.phase) + _uniform0.time * _uniform0.speed);
+    (*_stageOut).sk_FragColor = textureSample(image_Texture, image_Sampler, ((_0_coord + _4_d * vec2<f32>(cos(_2_b), sin(_2_b))) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

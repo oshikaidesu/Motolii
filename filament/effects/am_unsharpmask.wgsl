@@ -20,6 +20,7 @@ struct Knobs {
   amount: f32,
   threshold: f32,
   showMask: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
@@ -34,7 +35,7 @@ fn softGate_hhh(d: f32, t: f32) -> f32 {
 }
 fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
   {
-    let c: vec4<f32> = textureSample(image_Texture, image_Sampler, coord / _uniform0.resolution);
+    let c: vec4<f32> = textureSample(image_Texture, image_Sampler, (coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
     if c.w <= 0.001 {
       return vec4<f32>(0.0);
     }
@@ -52,7 +53,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
               let r: f32 = (sqrt((f32(i) + 0.5) * 0.015625) * 2.5) * sigma;
               let t: f32 = f32(i) * 2.39996314;
               let w: f32 = exp(((-0.5 * r) * r) / (sigma * sigma));
-              sum = sum + w * vec4<f32>(textureSample(image_Texture, image_Sampler, (coord + r * vec2<f32>(cos(t), sin(t))) / _uniform0.resolution));
+              sum = sum + w * vec4<f32>(textureSample(image_Texture, image_Sampler, ((coord + r * vec2<f32>(cos(t), sin(t))) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution));
               total = total + w;
             }
           }
@@ -74,7 +75,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy);
+    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0))));
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

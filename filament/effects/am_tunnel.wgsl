@@ -38,21 +38,27 @@ struct Knobs {
   fogColor: vec4<f32>,
   R_position: vec2<f32>,
   scale: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
+fn layerSize__f2() -> vec2<f32> {
+  {
+    return select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0));
+  }
+}
 fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
   {
-    let unit: f32 = max((min(_uniform0.resolution.x, _uniform0.resolution.y) * 0.5) * _uniform0.scale, 0.5);
-    let _0_a: vec3<f32> = radians(vec3<f32>(_uniform0.rotX, _uniform0.rotY, _uniform0.rotZ));
-    let _1_cx: f32 = cos(_0_a.x);
-    let _2_sx: f32 = sin(_0_a.x);
-    let _3_cy: f32 = cos(_0_a.y);
-    let _4_sy: f32 = sin(_0_a.y);
-    let _5_cz: f32 = cos(_0_a.z);
-    let _6_sz: f32 = sin(_0_a.z);
-    let rd: vec3<f32> = ((mat3x3<f32>(_5_cz, -_6_sz, 0.0, _6_sz, _5_cz, 0.0, 0.0, 0.0, 1.0) * mat3x3<f32>(_3_cy, 0.0, _4_sy, 0.0, 1.0, 0.0, -_4_sy, 0.0, _3_cy)) * mat3x3<f32>(1.0, 0.0, 0.0, 0.0, _1_cx, -_2_sx, 0.0, _2_sx, _1_cx)) * normalize(vec3<f32>(((coord - _uniform0.resolution * 0.5) - _uniform0.R_position) / unit, 1.4));
+    let unit: f32 = max((min(layerSize__f2().x, layerSize__f2().y) * 0.5) * _uniform0.scale, 0.5);
+    let _1_a: vec3<f32> = radians(vec3<f32>(_uniform0.rotX, _uniform0.rotY, _uniform0.rotZ));
+    let _2_cx: f32 = cos(_1_a.x);
+    let _3_sx: f32 = sin(_1_a.x);
+    let _4_cy: f32 = cos(_1_a.y);
+    let _5_sy: f32 = sin(_1_a.y);
+    let _6_cz: f32 = cos(_1_a.z);
+    let _7_sz: f32 = sin(_1_a.z);
+    let rd: vec3<f32> = ((mat3x3<f32>(_6_cz, -_7_sz, 0.0, _7_sz, _6_cz, 0.0, 0.0, 0.0, 1.0) * mat3x3<f32>(_4_cy, 0.0, _5_sy, 0.0, 1.0, 0.0, -_5_sy, 0.0, _4_cy)) * mat3x3<f32>(1.0, 0.0, 0.0, 0.0, _2_cx, -_3_sx, 0.0, _3_sx, _2_cx)) * normalize(vec3<f32>(((coord - layerSize__f2() * 0.5) - _uniform0.R_position) / unit, 1.4));
     let r: f32 = length(rd.xy);
     let haze: vec4<f32> = vec4<f32>(vec3<f32>(_uniform0.fogColor.xyz * _uniform0.fogColor.w), f32(_uniform0.fogColor.w));
     if r < 0.0001 {
@@ -60,18 +66,19 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
     }
     let p: vec3<f32> = rd / r;
     let tile: f32 = 6.28318548 / max(floor(_uniform0.repeat + 0.5), 1.0);
-    let along: f32 = (tile * _uniform0.resolution.y) / max(_uniform0.resolution.x, 0.0001);
+    let along: f32 = (tile * layerSize__f2().y) / max(layerSize__f2().x, 0.0001);
     let z: f32 = p.z + _uniform0.time * _uniform0.speed;
     let u: f32 = fract((atan2(p.y, p.x) + radians(_uniform0.twist) * p.z) / tile);
     let v: f32 = fract(z / along + _uniform0.phase);
-    let c: vec4<f32> = vec4<f32>(textureSample(image_Texture, image_Sampler, clamp(vec2<f32>(u, v) * _uniform0.resolution, vec2<f32>(0.5), max(_uniform0.resolution - 0.5, vec2<f32>(0.5))) / _uniform0.resolution));
+    let _8_p: vec2<f32> = clamp(vec2<f32>(u, v) * layerSize__f2(), vec2<f32>(0.5), max(layerSize__f2() - 0.5, vec2<f32>(0.5)));
+    let c: vec4<f32> = vec4<f32>(textureSample(image_Texture, image_Sampler, (_8_p + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution));
     let k: f32 = 1.0 - exp((-abs(p.z) * _uniform0.fog) * 0.6);
     return vec4<f32>(mix(c, haze, vec4<f32>(k)));
   }
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy);
+    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0))));
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

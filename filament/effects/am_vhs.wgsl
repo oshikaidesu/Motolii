@@ -29,10 +29,16 @@ struct Knobs {
   saturation: f32,
   headSwitch: f32,
   seed: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
+fn layerSize__f2() -> vec2<f32> {
+  {
+    return select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0));
+  }
+}
 fn hash_ff2(_skParam0: vec2<f32>) -> f32 {
   var p = _skParam0;
   {
@@ -58,26 +64,26 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
     let _skTemp3 = floor(y);
     let line: f32 = (_skTemp3 - 2048.0 * floor(_skTemp3 / 2048.0));
     var shift: f32 = ((hash_ff2(vec2<f32>(line * 0.37 + s, frame)) - 0.5) * _uniform0.wobble) * 0.6 + ((wave_fff(y * 0.015 + _uniform0.time * 1.7, s + 3.0) - 0.5) * _uniform0.wobble) * 2.0;
-    let roll: f32 = (fract(_uniform0.time * 0.09 + hash_ff2(vec2<f32>(s, 7.0))) * _uniform0.resolution.y) * 1.4 - _uniform0.resolution.y * 0.2;
-    let reach: f32 = _uniform0.resolution.y * 0.05 + 4.0;
+    let roll: f32 = (fract(_uniform0.time * 0.09 + hash_ff2(vec2<f32>(s, 7.0))) * (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))).y) * 1.4 - (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))).y * 0.2;
+    let reach: f32 = (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))).y * 0.05 + 4.0;
     let band: f32 = ((1.0 - smoothstep(0.0, reach, abs(y - roll))) * _uniform0.tracking) * smoothstep(0.3, 0.6, wave_fff(_uniform0.time * 0.4, s + 11.0));
     shift = shift + (band * (hash_ff2(vec2<f32>(line, frame + 1.0)) - 0.3)) * 28.0;
     var _skTemp4: f32;
     if _uniform0.headSwitch > 0.5 {
-      _skTemp4 = 1.0 - smoothstep(0.0, _uniform0.resolution.y * 0.035 + 3.0, _uniform0.resolution.y - y);
+      _skTemp4 = 1.0 - smoothstep(0.0, layerSize__f2().y * 0.035 + 3.0, layerSize__f2().y - y);
     } else {
       _skTemp4 = 0.0;
     }
     let head: f32 = _skTemp4;
     shift = shift + head * (10.0 + 16.0 * hash_ff2(vec2<f32>(floor(y * 0.5), frame + 2.0)));
     let p: vec2<f32> = vec2<f32>(coord.x - shift, y);
-    let base: vec4<f32> = textureSample(image_Texture, image_Sampler, p / _uniform0.resolution);
+    let base: vec4<f32> = textureSample(image_Texture, image_Sampler, (p + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
     var smeared: vec4<f32> = base;
     {
       var i: i32 = 1;
       for (; i <= 4; i = i + i32(1)) {
         {
-          smeared = smeared + textureSample(image_Texture, image_Sampler, (p - vec2<f32>((_uniform0.smear * f32(i)) * 0.5, 0.0)) / _uniform0.resolution);
+          smeared = smeared + textureSample(image_Texture, image_Sampler, ((p - vec2<f32>((_uniform0.smear * f32(i)) * 0.5, 0.0)) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
         }
       }
     }
@@ -87,7 +93,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
       var i: i32 = 0;
       for (; i < 4; i = i + i32(1)) {
         {
-          bleed = bleed + textureSample(image_Texture, image_Sampler, (p - vec2<f32>(_uniform0.chroma * (0.6 + 0.4 * f32(i)), 0.0)) / _uniform0.resolution);
+          bleed = bleed + textureSample(image_Texture, image_Sampler, ((p - vec2<f32>(_uniform0.chroma * (0.6 + 0.4 * f32(i)), 0.0)) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
         }
       }
     }
@@ -131,7 +137,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy);
+    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0))));
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

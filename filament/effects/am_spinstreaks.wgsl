@@ -29,6 +29,7 @@ struct Knobs {
   g: f32,
   b: f32,
   a: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
@@ -52,8 +53,8 @@ fn pick_ffffff(m: f32, lo: f32, hi: f32, avg: f32, src: f32) -> f32 {
 }
 fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
   {
-    let src: vec4<f32> = textureSample(image_Texture, image_Sampler, coord / _uniform0.resolution);
-    let c: vec2<f32> = _uniform0.R_center * _uniform0.resolution;
+    let src: vec4<f32> = textureSample(image_Texture, image_Sampler, (coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
+    let c: vec2<f32> = _uniform0.R_center * (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0)));
     let span: f32 = radians(_uniform0.sweep);
     if span <= 0.0 {
       return src;
@@ -69,7 +70,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
           let t: f32 = (span * 0.5) * mix(_uniform0.bias - 1.0, _uniform0.bias + 1.0, f32(i) * 0.0212765951);
           let cs: f32 = cos(t);
           let sn: f32 = sin(t);
-          let v: vec4<f32> = vec4<f32>(textureSample(image_Texture, image_Sampler, (c + vec2<f32>(cs * d.x - sn * d.y, sn * d.x + cs * d.y)) / _uniform0.resolution));
+          let v: vec4<f32> = vec4<f32>(textureSample(image_Texture, image_Sampler, ((c + vec2<f32>(cs * d.x - sn * d.y, sn * d.x + cs * d.y)) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution));
           hi = max(hi, v);
           sum = sum + v;
           lo = min(lo, v);
@@ -84,7 +85,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy);
+    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0))));
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

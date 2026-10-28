@@ -16,6 +16,7 @@ struct Knobs {
   time: f32,
   blurLength: f32,
   angle: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
@@ -31,8 +32,8 @@ fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
         {
           let _4_t: f32 = f32(_3_i) * 0.0322580636;
           let _5_offset: vec2<f32> = (_1_dir * _4_t) * _uniform0.blurLength;
-          let _6_sampleCoord: vec2<f32> = _stageIn.sk_FragCoord.xy - _5_offset;
-          _2_accum = _2_accum + textureSample(image_Texture, image_Sampler, _6_sampleCoord / _uniform0.resolution);
+          let _6_sampleCoord: vec2<f32> = (_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) - _5_offset;
+          _2_accum = _2_accum + textureSample(image_Texture, image_Sampler, (_6_sampleCoord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
         }
       }
     }

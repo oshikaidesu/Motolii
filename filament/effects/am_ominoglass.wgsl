@@ -62,6 +62,7 @@ struct Knobs {
   scale: f32,
   evolution: f32,
   seed: f32,
+  layerRect: vec4<f32>,
   backdropBox: vec4<f32>,
   passindex: f32,
 };
@@ -74,6 +75,16 @@ struct Knobs {
 @group(0) @binding(4) var blurPicture_Texture: texture_2d<f32>;
 @group(0) @binding(7) var backdropPic_Sampler: sampler;
 @group(0) @binding(6) var backdropPic_Texture: texture_2d<f32>;
+fn layerAt__f2() -> vec2<f32> {
+  {
+    return select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0));
+  }
+}
+fn layerSize__f2() -> vec2<f32> {
+  {
+    return select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0));
+  }
+}
 fn gauss__h4f2f2i(p: vec2<f32>, by: vec2<f32>, R_from: i32) -> vec4<f32> {
   {
     let sigma: f32 = max(_uniform0.blur, 0.0) * 0.333333343;
@@ -163,7 +174,7 @@ fn rough_ff2(p: vec2<f32>) -> f32 {
 }
 fn height_ff2(p: vec2<f32>) -> f32 {
   {
-    let b: vec4<f32> = textureSample(blurPicture_Texture, blurPicture_Sampler, p / _uniform0.resolution);
+    let b: vec4<f32> = textureSample(blurPicture_Texture, blurPicture_Sampler, (p + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
     var _skTemp3: f32;
     if _uniform0.useLuma > 0.5 {
       _skTemp3 = dot(vec3<f32>(b.xyz), vec3<f32>(0.2126, 0.7152, 0.0722));
@@ -182,7 +193,7 @@ fn height_ff2(p: vec2<f32>) -> f32 {
 }
 fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
   {
-    let src: vec4<f32> = textureSample(image_Texture, image_Sampler, coord / _uniform0.resolution);
+    let src: vec4<f32> = textureSample(image_Texture, image_Sampler, (coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
     if src.w <= 0.0 {
       return vec4<f32>(0.0);
     }
@@ -207,7 +218,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
       var i: i32 = 0;
       for (; i < 7; i = i + i32(1)) {
         {
-          let s: vec4<f32> = textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + ((coord - n.xy * (_uniform0.refraction + _uniform0.aberration * (f32(i) * 0.166666672 - 0.5))) / _uniform0.resolution) * _uniform0.backdropBox.zw);
+          let s: vec4<f32> = textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + (((coord - n.xy * (_uniform0.refraction + _uniform0.aberration * (f32(i) * 0.166666672 - 0.5))) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution) * _uniform0.backdropBox.zw);
           acc = acc + vec3<f32>(s.xyz) * band_f3i(i);
           alpha = alpha + f32(s.w) * 0.142857149;
         }
@@ -219,7 +230,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
       {
         var _skTemp5: vec3<f32>;
         if _uniform0.shading < 1.5 {
-          _skTemp5 = vec3<f32>((_uniform0.resolution * 0.5 + _uniform0.direction) - coord, _uniform0.elevation);
+          _skTemp5 = vec3<f32>((layerSize__f2() * 0.5 + _uniform0.direction) - coord, _uniform0.elevation);
         } else {
           _skTemp5 = vec3<f32>(_uniform0.direction, _uniform0.elevation);
         }
@@ -252,7 +263,7 @@ fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
       if _uniform0.passindex < 1.5 {
         _skTemp8 = gauss__h4f2f2i(_stageIn.sk_FragCoord.xy, vec2<f32>(0.0, 1.0), 1);
       } else {
-        _skTemp8 = effect__h4f2(_stageIn.sk_FragCoord.xy);
+        _skTemp8 = effect__h4f2(_stageIn.sk_FragCoord.xy - layerAt__f2());
       }
       _skTemp7 = _skTemp8;
     }

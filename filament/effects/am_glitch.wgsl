@@ -18,10 +18,16 @@ struct Knobs {
   intensity: f32,
   blockHeight: f32,
   seed: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
+fn layerSize__f2() -> vec2<f32> {
+  {
+    return select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0));
+  }
+}
 fn hash_ff2(p: vec2<f32>) -> f32 {
   {
     var q: vec3<f32> = fract(vec3<f32>(p, _uniform0.seed) * 0.1031);
@@ -57,16 +63,22 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
     var rCoord: vec2<f32> = coord + vec2<f32>(offset + rOffset, 0.0);
     var gCoord: vec2<f32> = coord + vec2<f32>(offset + gOffset, 0.0);
     var bCoord: vec2<f32> = coord + vec2<f32>(offset + bOffset, 0.0);
-    if all((coord >= vec2<f32>(0.0))) && all((coord < _uniform0.resolution)) {
+    var _skTemp2: bool;
+    if all((coord >= vec2<f32>(0.0))) {
+      _skTemp2 = all((coord < layerSize__f2()));
+    } else {
+      _skTemp2 = false;
+    }
+    if _skTemp2 {
       {
-        rCoord = clamp(rCoord, vec2<f32>(0.0), _uniform0.resolution - 1.0);
-        gCoord = clamp(gCoord, vec2<f32>(0.0), _uniform0.resolution - 1.0);
-        bCoord = clamp(bCoord, vec2<f32>(0.0), _uniform0.resolution - 1.0);
+        rCoord = clamp(rCoord, vec2<f32>(0.0), (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))) - 1.0);
+        gCoord = clamp(gCoord, vec2<f32>(0.0), (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))) - 1.0);
+        bCoord = clamp(bCoord, vec2<f32>(0.0), (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))) - 1.0);
       }
     }
-    let rCol: vec4<f32> = textureSample(image_Texture, image_Sampler, rCoord / _uniform0.resolution);
-    let gCol: vec4<f32> = textureSample(image_Texture, image_Sampler, gCoord / _uniform0.resolution);
-    let bCol: vec4<f32> = textureSample(image_Texture, image_Sampler, bCoord / _uniform0.resolution);
+    let rCol: vec4<f32> = textureSample(image_Texture, image_Sampler, (rCoord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
+    let gCol: vec4<f32> = textureSample(image_Texture, image_Sampler, (gCoord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
+    let bCol: vec4<f32> = textureSample(image_Texture, image_Sampler, (bCoord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
     let alpha: f32 = max(max(rCol.w, gCol.w), bCol.w);
     if alpha < 0.001 {
       {
@@ -81,7 +93,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy);
+    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0))));
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

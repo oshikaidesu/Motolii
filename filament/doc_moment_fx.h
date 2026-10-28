@@ -52,8 +52,16 @@ static void doc_things_fx(Doc& d) {
             }
             if (name.rfind("backdropBox_", 0) == 0) {   // (the box its picture is, on the stage's: left, top, width, height, each a share of it: what is behind it read there, effects/from_absent.py)
                 const Stage& s = *d.stage;
-                const int i = name.back() - 'x';
+                const size_t i = std::string("xyzw").find(name.back());
                 return i == 0 ? e.box[0] / s.w : i == 1 ? e.box[1] / s.h : i == 2 ? (e.box[2] - e.box[0]) / s.w : (e.box[3] - e.box[1]) / s.h;
+            }
+            if (name.rfind("layerRect_", 0) == 0) {   // (its own rectangle on its picture, in the picture's pixels: AbsentMotion's layer, where its corner is and how large: effects/from_absent.py)
+                double frame[8];
+                if (!doc_frame(d, thing, d.stage->now, frame)) return 0.0;
+                const Stage& s = *d.stage;
+                const double ppp = (double)s.view->getViewport().width / std::max(1, s.w);
+                const size_t i = std::string("xyzw").find(name.back());
+                return ppp * (i == 0 ? frame[0] - frame[2] / 2 - e.box[0] : i == 1 ? frame[1] - frame[3] / 2 - e.box[1] : i == 2 ? frame[2] : frame[3]);
             }
             if (name == "origin_x" || name == "origin_y" || name == "turn" || name == "extent") {   // (where the thing is on the picture now, how turned, how large: an effect's pattern stuck to it)
                 double frame[8];

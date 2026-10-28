@@ -19,6 +19,7 @@ struct Knobs {
   softness: f32,
   invert: f32,
   blend: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
@@ -66,7 +67,7 @@ fn blendWith_f3ff3f3(m: f32, b: vec3<f32>, s: vec3<f32>) -> vec3<f32> {
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    let _1_color: vec4<f32> = textureSample(image_Texture, image_Sampler, _stageIn.sk_FragCoord.xy / _uniform0.resolution);
+    let _1_color: vec4<f32> = textureSample(image_Texture, image_Sampler, ((_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
     let _2_c: vec4<f32> = vec4<f32>(_1_color.xyz / max(_1_color.w, 0.0001), _1_color.w);
     let _3_lum: f32 = dot(vec3<f32>(_2_c.xyz), vec3<f32>(0.2126, 0.7152, 0.0722));
     var _skTemp1: f32;

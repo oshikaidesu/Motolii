@@ -28,17 +28,18 @@ struct Knobs {
   tint: f32,
   color: vec4<f32>,
   punch: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
 fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
   {
-    let c: vec4<f32> = textureSample(image_Texture, image_Sampler, coord / _uniform0.resolution);
+    let c: vec4<f32> = textureSample(image_Texture, image_Sampler, (coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
     if c.w <= 0.0001 {
       return vec4<f32>(0.0);
     }
-    let n: vec2<f32> = abs((coord / max(_uniform0.resolution, vec2<f32>(1.0)) - 0.5) * 2.0);
+    let n: vec2<f32> = abs((coord / max(select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0)), vec2<f32>(1.0)) - 0.5) * 2.0);
     let p: f32 = max(_uniform0.rounding, 0.5);
     let d: f32 = pow(pow(n.x, p) + pow(n.y, p), 1.0 / p);
     let s: f32 = max(_uniform0.extent, 0.001);
@@ -53,7 +54,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy);
+    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0))));
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

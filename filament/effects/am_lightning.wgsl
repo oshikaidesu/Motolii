@@ -33,6 +33,7 @@ struct Knobs {
   glow: f32,
   color: vec4<f32>,
   seed: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
@@ -89,12 +90,12 @@ fn bolt_ff2f2f2ff(coord: vec2<f32>, a: vec2<f32>, b: vec2<f32>, amp: f32, salt: 
 }
 fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
   {
-    let src: vec4<f32> = textureSample(image_Texture, image_Sampler, coord / _uniform0.resolution);
+    let src: vec4<f32> = textureSample(image_Texture, image_Sampler, (coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
     if src.w <= 0.0 {
       return src;
     }
-    let a: vec2<f32> = _uniform0.R_from * _uniform0.resolution;
-    let b: vec2<f32> = _uniform0.to * _uniform0.resolution;
+    let a: vec2<f32> = _uniform0.R_from * (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0)));
+    let b: vec2<f32> = _uniform0.to * (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0)));
     var d: f32 = bolt_ff2f2f2ff(coord, a, b, _uniform0.jag * 2.0, 0.0);
     let mid: vec2<f32> = mix(a, b, vec2<f32>(0.45)) + (vec2<f32>(-(b - a).y, (b - a).x) * (fbm_ff3ff2f(vec3<f32>(_uniform0.seed, 7.7, _uniform0.evolution), 3.0, vec2<f32>(0.0), 0.5) - 0.5)) * _uniform0.jag;
     let fork: vec2<f32> = (mid + (b - a) * 0.35) + ((vec2<f32>(-(b - a).y, (b - a).x) * 0.25) * _uniform0.jag) * 2.0;
@@ -109,7 +110,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy);
+    (*_stageOut).sk_FragColor = effect__h4f2(_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0))));
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

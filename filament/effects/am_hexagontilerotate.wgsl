@@ -25,18 +25,19 @@ struct Knobs {
   angle: f32,
   random: f32,
   seed: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    let _5_unit: f32 = _uniform0.resolution.y / (2.475 * max(_uniform0.count, 0.5));
+    let _5_unit: f32 = (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))).y / (2.475 * max(_uniform0.count, 0.5));
     let _6_a: f32 = radians(_uniform0.angle);
     let _7_cs: f32 = cos(_6_a);
     let _8_sn: f32 = sin(_6_a);
-    let _9_c: vec2<f32> = _uniform0.resolution * 0.5 + _uniform0.offset;
-    var _10_p: vec2<f32> = _stageIn.sk_FragCoord.xy - _9_c;
+    let _9_c: vec2<f32> = (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))) * 0.5 + _uniform0.offset;
+    var _10_p: vec2<f32> = (_stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) - _9_c;
     _10_p = vec2<f32>(_7_cs * _10_p.x + _8_sn * _10_p.y, -_8_sn * _10_p.x + _7_cs * _10_p.y) / _5_unit;
     const _11_r: vec2<f32> = vec2<f32>(1.0, 1.73205078);
     const _12_h: vec2<f32> = vec2<f32>(0.5, 0.8660254);
@@ -52,7 +53,7 @@ fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
     let _20_rs: f32 = sin(_18_r);
     var _21_q: vec2<f32> = (_10_p - _15_g) + vec2<f32>(_19_rc * _15_g.x + _20_rs * _15_g.y, -_20_rs * _15_g.x + _19_rc * _15_g.y);
     _21_q = _21_q * _5_unit;
-    (*_stageOut).sk_FragColor = textureSample(image_Texture, image_Sampler, (vec2<f32>(_7_cs * _21_q.x - _8_sn * _21_q.y, _8_sn * _21_q.x + _7_cs * _21_q.y) + _9_c) / _uniform0.resolution);
+    (*_stageOut).sk_FragColor = textureSample(image_Texture, image_Sampler, ((vec2<f32>(_7_cs * _21_q.x - _8_sn * _21_q.y, _8_sn * _21_q.x + _7_cs * _21_q.y) + _9_c) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {

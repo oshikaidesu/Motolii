@@ -35,6 +35,7 @@ struct Knobs {
   seed: f32,
   octaves: f32,
   bias: f32,
+  layerRect: vec4<f32>,
 };
 @group(0) @binding(2) var<uniform> _uniform0 : Knobs;
 @group(0) @binding(1) var image_Sampler: sampler;
@@ -84,40 +85,41 @@ fn fbm_ff3ff2f(_skParam0: vec3<f32>, octaves: f32, drift: vec2<f32>, gain: f32) 
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
   {
-    let _0_unit: f32 = (0.4 * _uniform0.resolution.y) * max(_uniform0.scale, 0.01);
-    let _1_rel: vec2<f32> = _stageIn.sk_FragCoord.xy - _uniform0.resolution * 0.5;
-    let _2_p: vec2<f32> = (_1_rel - _uniform0.offset) / (_0_unit * max(abs(_uniform0.stretch), vec2<f32>(0.01)));
-    let _3_q: vec3<f32> = vec3<f32>(_2_p + _uniform0.seed * vec2<f32>(37.1, 17.3), _uniform0.evolution);
-    let _4_drift: vec2<f32> = _uniform0.parallax / _0_unit;
-    let _5_nx: f32 = (fbm_ff3ff2f(_3_q, _uniform0.octaves, _4_drift, 0.62) - 0.5) + _uniform0.bias * 0.5;
-    let _6_ny: f32 = (fbm_ff3ff2f(_3_q + vec3<f32>(31.7, 47.3, 11.0), _uniform0.octaves, _4_drift, 0.62) - 0.5) + _uniform0.bias * 0.5;
-    let _7_amount: f32 = ((4.0 * _uniform0.strength) * 0.4) * _uniform0.resolution.y;
-    var _8_d: vec2<f32> = vec2<f32>(_5_nx, _6_ny) * _7_amount;
+    let _0_coord: vec2<f32> = _stageIn.sk_FragCoord.xy - (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)));
+    let _1_unit: f32 = (0.4 * (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))).y) * max(_uniform0.scale, 0.01);
+    let _2_rel: vec2<f32> = _0_coord - (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))) * 0.5;
+    let _3_p: vec2<f32> = (_2_rel - _uniform0.offset) / (_1_unit * max(abs(_uniform0.stretch), vec2<f32>(0.01)));
+    let _4_q: vec3<f32> = vec3<f32>(_3_p + _uniform0.seed * vec2<f32>(37.1, 17.3), _uniform0.evolution);
+    let _5_drift: vec2<f32> = _uniform0.parallax / _1_unit;
+    let _6_nx: f32 = (fbm_ff3ff2f(_4_q, _uniform0.octaves, _5_drift, 0.62) - 0.5) + _uniform0.bias * 0.5;
+    let _7_ny: f32 = (fbm_ff3ff2f(_4_q + vec3<f32>(31.7, 47.3, 11.0), _uniform0.octaves, _5_drift, 0.62) - 0.5) + _uniform0.bias * 0.5;
+    let _8_amount: f32 = ((4.0 * _uniform0.strength) * 0.4) * (select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0))).y;
+    var _9_d: vec2<f32> = vec2<f32>(_6_nx, _7_ny) * _8_amount;
     if (_uniform0.direction > 0.5) && (_uniform0.direction < 1.5) {
-      _8_d.y = 0.0;
+      _9_d.y = 0.0;
     }
     if (_uniform0.direction > 1.5) && (_uniform0.direction < 2.5) {
-      _8_d.x = 0.0;
+      _9_d.x = 0.0;
     }
     if _uniform0.direction > 2.5 {
       {
         var _skTemp1: vec2<f32>;
-        if length(_1_rel) > 0.001 {
-          _skTemp1 = normalize(_1_rel);
+        if length(_2_rel) > 0.001 {
+          _skTemp1 = normalize(_2_rel);
         } else {
           _skTemp1 = vec2<f32>(1.0, 0.0);
         }
-        let _9_r: vec2<f32> = _skTemp1;
+        let _10_r: vec2<f32> = _skTemp1;
         var _skTemp2: vec2<f32>;
         if _uniform0.direction < 3.5 {
-          _skTemp2 = (_9_r * _5_nx) * _7_amount;
+          _skTemp2 = (_10_r * _6_nx) * _8_amount;
         } else {
-          _skTemp2 = (vec2<f32>(-_9_r.y, _9_r.x) * _5_nx) * _7_amount;
+          _skTemp2 = (vec2<f32>(-_10_r.y, _10_r.x) * _6_nx) * _8_amount;
         }
-        _8_d = _skTemp2;
+        _9_d = _skTemp2;
       }
     }
-    (*_stageOut).sk_FragColor = textureSample(image_Texture, image_Sampler, (_stageIn.sk_FragCoord.xy + _8_d) / _uniform0.resolution);
+    (*_stageOut).sk_FragColor = textureSample(image_Texture, image_Sampler, ((_0_coord + _9_d) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution);
   }
 }
 @fragment fn main(_stageIn: FSIn) -> FSOut {
