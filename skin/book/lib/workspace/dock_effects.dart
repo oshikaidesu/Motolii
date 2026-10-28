@@ -32,6 +32,10 @@ class EffectsShelf extends StatelessWidget {
       for (final (n, f) in m.effects)
         (id: f, name: n, label: m.label(n), on: screen.contains(f), apply: () => ws.screenToggle(f), said: 'On the picked thing',
          tile: _Tile(n, key: ValueKey('ws-screen-$f'), file: m.picture(f), same: m.tileSame(f), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, picked: c.sel == f, onTap: () => c.pick(f), onApply: () => ws.screenToggle(f), star: c, starId: f)),
+      if (picked)   // (a look kept by its name, Save Look: given to the picked thing, its values, effects and keys)
+        for (final (n, f) in m.looks)
+          (id: f, name: n, label: 'Look', on: false, apply: () => ws.after(m.later('paste_style', thing: int.parse(ws.selected!), word: f)), said: 'A look for the picked thing',
+           tile: _Tile(n, key: ValueKey('ws-look-$n'), file: m.picture(f), on: null, picked: c.sel == f, onTap: () => c.pick(f), onApply: () => ws.after(m.later('paste_style', thing: int.parse(ws.selected!), word: f)), star: c, starId: f)),
       if (picked)
         for (final (n, f) in m.animators)
           (id: f, name: n, label: 'Motion', on: ws.motion == f, apply: () => ws.motionToggle(f), said: 'A motion for the picked thing',

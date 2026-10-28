@@ -858,6 +858,65 @@ class MotoliiBindings {
   late final _motolii_live = _motolii_livePtr
       .asFunction<int Function(ffi.Pointer<Motolii>)>();
 
+  int motolii_look_put(
+    ffi.Pointer<Motolii> m,
+    int thing,
+    ffi.Pointer<pkg_ffi.Utf8> path,
+  ) {
+    return _motolii_look_put(m, thing, path);
+  }
+
+  late final _motolii_look_putPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int Function(
+            ffi.Pointer<Motolii>,
+            ffi.Int,
+            ffi.Pointer<pkg_ffi.Utf8>,
+          )
+        >
+      >('motolii_look_put');
+  late final _motolii_look_put = _motolii_look_putPtr
+      .asFunction<
+        int Function(ffi.Pointer<Motolii>, int, ffi.Pointer<pkg_ffi.Utf8>)
+      >();
+
+  int motolii_look_save(
+    ffi.Pointer<Motolii> m,
+    int thing,
+    ffi.Pointer<pkg_ffi.Utf8> path,
+  ) {
+    return _motolii_look_save(m, thing, path);
+  }
+
+  late final _motolii_look_savePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int Function(
+            ffi.Pointer<Motolii>,
+            ffi.Int,
+            ffi.Pointer<pkg_ffi.Utf8>,
+          )
+        >
+      >('motolii_look_save');
+  late final _motolii_look_save = _motolii_look_savePtr
+      .asFunction<
+        int Function(ffi.Pointer<Motolii>, int, ffi.Pointer<pkg_ffi.Utf8>)
+      >();
+
+  ffi.Pointer<pkg_ffi.Utf8> motolii_looks(ffi.Pointer<Motolii> m) {
+    return _motolii_looks(m);
+  }
+
+  late final _motolii_looksPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<pkg_ffi.Utf8> Function(ffi.Pointer<Motolii>)
+        >
+      >('motolii_looks');
+  late final _motolii_looks = _motolii_looksPtr
+      .asFunction<ffi.Pointer<pkg_ffi.Utf8> Function(ffi.Pointer<Motolii>)>();
+
   int motolii_loop(ffi.Pointer<Motolii> m, int on) {
     return _motolii_loop(m, on);
   }

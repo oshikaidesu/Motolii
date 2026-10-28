@@ -11,6 +11,9 @@ extension MotoliiShelves on Motolii {
   /// The whole-screen effects on the shelf: each one's name and file (the stage's script is the files of those on it).
   List<(String, String)> get effects => _folders.putIfAbsent('effects', () => _labelled(_effects(_m).toDartString()));
 
+  /// The looks on the shelf (a thing's values, effects and keys kept by a name: doc_looks.h): each one's name and file.
+  List<(String, String)> get looks => _folders.putIfAbsent('looks', () => _labelled(_looks(_m).toDartString()));
+
   /// The motions a thing may be given (Cavalry's Animators): each one's name and file (a thing's script is the file of the one it has).
   List<(String, String)> get animators => _folders.putIfAbsent('animators', () => _labelled(_animators(_m).toDartString()));
 

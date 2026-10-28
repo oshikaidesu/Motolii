@@ -122,6 +122,15 @@ static int doc_look_paste(Doc& d, const char* path, double now) {
     sqlite3_exec(d.file, "detach database look", nullptr, nullptr, nullptr);
     return made;
 }
+// The thing's look kept on the shelf by a name: in the maker's own looks folder (doc_folders), one of that name written
+// over (Alight Motion's Save as Preset, After Effects' Save Animation Preset).
+static bool doc_look_keep(Doc& d, int thing, const std::string& name) {
+    if (name.empty() || name.find_first_of("/\\:") != std::string::npos) return d.trouble = "a look's name is a file's name", false;
+    std::error_code wrong;
+    const std::filesystem::path dir = doc_folders("looks").back();
+    std::filesystem::create_directories(dir, wrong);
+    return doc_look_save(d, thing, (dir / (name + ".motolii")).string().c_str());
+}
 // The looks on the shelf: looks/*.motolii in the library's folder and the maker's own (doc_folders), as the effects
 // are ("name\tpath\tlabel\tpicture", one to a line): its name the file's, its picture the .png beside it.
 static std::string doc_look_names() {

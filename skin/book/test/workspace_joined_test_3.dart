@@ -349,6 +349,44 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Save Look keeps a layer\'s look on the Effects shelf by its name; two presses give it to another (Alight Motion\'s Save as Preset)', (t) async {
+    final own = Directory.systemTemp.createTempSync('own');
+    final setenv = DynamicLibrary.process().lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32), int Function(Pointer<Utf8>, Pointer<Utf8>, int)>('setenv');
+    final name = 'MOTOLII_OWN'.toNativeUtf8(), path = own.path.toNativeUtf8();
+    setenv(name, path, 1); // (the maker's folder here: a test does not write into the real one)
+    malloc
+      ..free(name)
+      ..free(path);
+    addTearDown(() {
+      final unsetenv = DynamicLibrary.process().lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>('unsetenv');
+      final n = 'MOTOLII_OWN'.toNativeUtf8();
+      unsetenv(n);
+      malloc.free(n);
+    });
+    final ws = await _pump(t), m = ws.inside!;
+    final a = m.add('shape', 'rect'), b = m.add('shape', 'circle');
+    expect(m.say(a, 'name', 'Pulse') && m.say(a, 'fill', 'ff3366') && m.key(a, 'opacity', 0, 0) && m.key(a, 'opacity', 1, 1), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$a');
+    await t.pumpAndSettle();
+    final edit = t.widget<PlatformMenuBar>(find.byType(PlatformMenuBar)).menus.whereType<PlatformMenu>().firstWhere((e) => e.label == 'Edit');
+    edit.menus.expand((e) => e is PlatformMenuItemGroup ? e.members : [e]).firstWhere((e) => e.label == 'Save Look').onSelected!();
+    await settled(t, ws);
+    expect([File('${own.path}/looks/Pulse.motolii').existsSync(), ws.notice], [true, 'Look kept: Pulse'], reason: m.trouble);
+    ws
+      ..select('$b')
+      ..shelf = 'Effects';
+    await t.pumpAndSettle();
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Pulse');
+    await t.pumpAndSettle();
+    await doubleTap(t, find.byKey(const ValueKey('ws-look-Pulse')));
+    await settled(t, ws);
+    expect([m.word(b, 'fill'), m.word(b, 'shape'), m.keyMoments(b, 'opacity')], ['ff3366', 'circle', [0, 1]], reason: 'its look, still a circle: ${m.trouble}');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

@@ -195,6 +195,15 @@ class _WorkspaceState extends State<Workspace> {
           ? ws.after(m.later('paste', word: _clipboard('thing'), number: ws.frame / Ws.fps), null, (made) => ws.select('$made'))   // (at the playhead, the pasted one picked: Live's paste at the insert marker)
           : null,
       'edit.copyStyle': () => _copy('copy_style', 'style'),
+      'thing.saveLook': () {   // (kept on the Effects shelf by the layer's name: Alight Motion's Save as Preset)
+        final m = _inside, l = _ws.layer;
+        if (m == null || l == null) return;
+        ws.after(m.later('keep_look', thing: int.parse(l.id), word: l.name), (done, why) {
+          m.forgetFolders();
+          _ws.notice = done ? 'Look kept: ${l.name}' : 'Not kept: $why';
+          ws.reread();
+        });
+      },
       'edit.pasteStyle': () {   // (on every picked thing, one step)
         final all = {...ws.many, ?ws.selected};
         if (!File(_clipboard('style')).existsSync() || all.isEmpty) return;
@@ -299,6 +308,7 @@ class _WorkspaceState extends State<Workspace> {
               item('Paste', 'edit.paste'),
               item('Copy Style', 'edit.copyStyle'),
               item('Paste Style', 'edit.pasteStyle'),
+              item('Save Look', 'thing.saveLook'),
               item('Select All', 'edit.selectAll'),
             ],
           ),

@@ -135,6 +135,7 @@ class Motolii {
   late final _recipes = _b.motolii_recipes;
   late final _make = _b.motolii_make;
   late final _effects = _b.motolii_effects;
+  late final _looks = _b.motolii_looks;
   late final _animators = _b.motolii_animators;
   late final _spent = _b.motolii_spent;
   late final _define = _b.motolii_define;
