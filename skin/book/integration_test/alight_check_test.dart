@@ -287,6 +287,12 @@ final _rowsAA = <(String, String, Map<String, Object>)>[
   ('rd3', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .55}),
   ('rd4', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .8}),
 ];
+// (section BJ: a separable box of two equal-weight blurs, and a matte behind small text.)
+final _rowsBJ = <(String, String, Map<String, Object>)>[
+  ('plain', 'shape:rect', const {'@fill': 'ffcc33', '@size': 0.28, '@x': -.88}),
+  ('box', 'box2', const <String, Object>{}),
+  ('matte', 'text+effects/am_solidmatte.wgsl', const {'@x': -.92, '@size': 0.16}),
+];
 // (section BI: a freehand stroke, the brush's own outline.)
 final _rowsBI = <(String, String, Map<String, Object>)>[
   ('ink', 'ink', const <String, Object>{}),
@@ -494,7 +500,7 @@ final _rowsAB = <(String, String, Map<String, Object>)>[
   ('zoomHi', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .25}),
   ('zoomLo', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .75}),
 ];
-final _rows = switch (_section) { 'BI' => _rowsBI, 'BH' => _rowsBH, 'BG' => _rowsBG, 'BF' => _rowsBF, 'BE' => _rowsBE, 'BD' => _rowsBD, 'BC' => _rowsBC, 'BB' => _rowsBB, 'BA' => _rowsBA, 'AZ' => _rowsAZ, 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+final _rows = switch (_section) { 'BJ' => _rowsBJ, 'BI' => _rowsBI, 'BH' => _rowsBH, 'BG' => _rowsBG, 'BF' => _rowsBF, 'BE' => _rowsBE, 'BD' => _rowsBD, 'BC' => _rowsBC, 'BB' => _rowsBB, 'BA' => _rowsBA, 'AZ' => _rowsAZ, 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -616,6 +622,15 @@ void main() {
         expect(m.say(path3, 'text', 'SUB') && m.say(path3, 'space', '2.5d'), isTrue, reason: m.trouble);
         expect(m.set(path3, 'y', .35) && m.set(path3, 'size', .25) && m.set(path3, 'parent', path2.toDouble()), isTrue, reason: m.trouble);
         expect(m.set(path2, '${effect.substring('cam:'.length)}_by', path.toDouble()), isTrue, reason: '$row: ${m.trouble}');
+      } else if (effect == 'box2') {
+        expect(m.remove(left), isTrue, reason: m.trouble);
+        left = m.add('shape', 'rect');
+        expect(m.set(left, 'x', -.88) && m.set(left, 'size', .28), isTrue, reason: m.trouble);
+        expect(m.say(left, 'fill', 'ffcc33'), isTrue, reason: m.trouble);
+        final blur = '$motoliiDir/effects/Diagonal Blur.fs', dir = '$motoliiDir/effects/am_directionalblur.wgsl';
+        expect(m.say(left, 'fx', '$blur $dir'), isTrue, reason: m.trouble);
+        expect(m.set(left, 'js_Diagonal_Blur_width', .02) && m.set(left, 'js_Diagonal_Blur_angle', 0) && m.set(left, 'js_Diagonal_Blur_quality', 2), isTrue, reason: m.trouble);
+        expect(m.set(left, 'js_am_directionalblur_blurLength', 20) && m.set(left, 'js_am_directionalblur_angle', 90), isTrue, reason: m.trouble);
       } else if (effect == 'ink') {
         final way = [for (var i = 0; i <= 48; i++) PointVector.fromOffset(offset: Offset(1180 + i * 7, 760))];
         final outline = getStroke(way, options: StrokeOptions(size: 32, simulatePressure: true, isComplete: true));
