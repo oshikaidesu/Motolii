@@ -286,6 +286,13 @@ final _rowsAA = <(String, String, Map<String, Object>)>[
   ('rd3', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .55}),
   ('rd4', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .8}),
 ];
+// (section AX: noise at a frequency that crosses more than one cell, so the photo is not carried one way.)
+final _rowsAX = <(String, String, Map<String, Object>)>[
+  ('d0', 'noise:xy', const {'@minimum': -.85, '@maximum': -.45, '@ymin': -.12, '@ymax': .12, '@frequency': 4, '@when': 0}),
+  ('d1', 'noise:xy', const {'@minimum': -.85, '@maximum': -.45, '@ymin': -.12, '@ymax': .12, '@frequency': 4, '@when': .35}),
+  ('d2', 'noise:xy', const {'@minimum': -.85, '@maximum': -.45, '@ymin': -.12, '@ymax': .12, '@frequency': 4, '@when': .7}),
+  ('d3', 'noise:xy', const {'@minimum': -.85, '@maximum': -.45, '@ymin': -.12, '@ymax': .12, '@frequency': 4, '@when': 1.15}),
+];
 // (section AW: a wipe whose start and end sit inside the file's range, and a stretch short of the one that reached the other photo.)
 final _rowsAW = <(String, String, Map<String, Object>)>[
   ('wipe', 'effects/am_wipe.wgsl', const {'start': 0.35, 'end': 0.65}),
@@ -411,7 +418,7 @@ final _rowsAB = <(String, String, Map<String, Object>)>[
   ('zoomHi', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .25}),
   ('zoomLo', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .75}),
 ];
-final _rows = switch (_section) { 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+final _rows = switch (_section) { 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -482,14 +489,14 @@ void main() {
         expect(path, isNot(0), reason: m.trouble);
         expect(m.set(path, 'minimum', (knobs['@minimum'] as num).toDouble()), isTrue, reason: m.trouble);
         expect(m.set(path, 'maximum', (knobs['@maximum'] as num).toDouble()), isTrue, reason: m.trouble);
-        expect(m.set(path, 'frequency', 1), isTrue, reason: m.trouble);
+        expect(m.set(path, 'frequency', knobs['@frequency'] is num ? (knobs['@frequency'] as num).toDouble() : 1), isTrue, reason: m.trouble);
         if (knobs['@step'] is num) expect(m.set(path, 'step', (knobs['@step'] as num).toDouble()), isTrue, reason: m.trouble);
         if (name == 'xy') {
           expect(m.set(left, 'x_by', path.toDouble()), isTrue, reason: '$row: ${m.trouble}');
           path2 = m.add('behaviour', kind);
           expect(m.set(path2, 'minimum', (knobs['@ymin'] as num).toDouble()), isTrue, reason: m.trouble);
           expect(m.set(path2, 'maximum', (knobs['@ymax'] as num).toDouble()), isTrue, reason: m.trouble);
-          expect(m.set(path2, 'frequency', 1), isTrue, reason: m.trouble);
+          expect(m.set(path2, 'frequency', knobs['@frequency'] is num ? (knobs['@frequency'] as num).toDouble() : 1), isTrue, reason: m.trouble);
           expect(m.set(path2, 'seed', 7), isTrue, reason: m.trouble);
           expect(m.set(left, 'y_by', path2.toDouble()), isTrue, reason: '$row: ${m.trouble}');
         } else {
@@ -523,7 +530,7 @@ void main() {
       }
       final stem = effect.split('/').last.replaceFirst(RegExp(r'\.(js|wgsl|fs)$'), '').replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_');
       for (final MapEntry(:key, :value) in knobs.entries) {
-        if (key == '@when' || key == '@minimum' || key == '@maximum' || key == '@step' || key == '@ymin' || key == '@ymax') continue;   // (the behaviour's own, or when the playhead sits)
+        if (key == '@when' || key == '@minimum' || key == '@maximum' || key == '@step' || key == '@ymin' || key == '@ymax' || key == '@frequency') continue;   // (the behaviour's own, or when the playhead sits)
         final name = key.startsWith('@') ? key.substring(1) : 'js_${stem}_$key';   // (@: the thing's own value)
         expect(value is String ? m.say(left, name, value) : m.set(left, name, (value as num).toDouble()), isTrue, reason: '$row $key: ${m.trouble}');
       }
