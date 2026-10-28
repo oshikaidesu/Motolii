@@ -62,7 +62,7 @@ for p in d.get('params', []):
     if not n:
         continue
     lo, hi, step = p.get('min', 0), p.get('max', 1), p.get('step', 0.01)
-    if p['type'] in ('float', 'int', 'bool', 'choice'):
+    if p['type'] in ('float', 'int', 'bool', 'choice', 'angle'):   # (an angle is degrees, as the shader's radians() reads it)
         lines.append(f"// --track@{n}:{p['label']},{lo},{hi},{float(p['default'])},{step}")
     elif p['type'] == 'point':
         lines += [f"// --track@{n}_{a}:{p['label']} {a},{lo},{hi},{p['default'][i]},{step}" for i, a in enumerate('xy')]

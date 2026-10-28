@@ -46,6 +46,10 @@ static void doc_things_fx(Doc& d) {
         e.st.sounds = [&d, thing = thing](const std::string& file, const std::string& name, bool fft, int wide) { return doc_sound_now(d, thing, file, name, fft, wide); };
         const ScreenNumbers numbers = [&d, thing = thing, &e = e](const std::string& file, const std::string& name, double usual) {
             std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn)
+            if (name == "duration") {   // (AbsentMotion's effects.cpp: the layer's length in seconds. None said: the document's, as a still that does not end)
+                const double lasts = doc_number(d, thing, "duration", 0, -1);
+                return lasts > 0 ? lasts : doc_seconds(d);
+            }
             if (name == "origin_x" || name == "origin_y" || name == "turn" || name == "extent") {   // (where the thing is on the picture now, how turned, how large: an effect's pattern stuck to it)
                 double frame[8];
                 if (!doc_frame(d, thing, d.stage->now, frame)) return usual;
