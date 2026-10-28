@@ -14,6 +14,7 @@ run glass_shift.sh
 run doc.sh
 run absent_shapes.sh
 run clip_matte.sh
+run fog_near.sh
 twin=$(./interp_twin.sh 2>&1); print -r -- "$twin" | grep -E ': the same|differ'   # (the eases the same as the past repository's own, number by number)
 print -r -- "$twin" | grep -q 'not checked' && print "skip interp_twin.sh (the past repository is private)" || (( $(print -r -- "$twin" | grep -c ': the same') >= 2 )) || { print "FAIL interp_twin.sh (its last lines:)"; print -r -- "$twin" | tail -25 | sed 's/^/    /'; bad=1; }
 rel=$(./relations.sh 2>&1); print -r -- "relations: ${${(f)rel}[-1]}"   # (relations, behaviours between things: PASS or FAIL at its end)

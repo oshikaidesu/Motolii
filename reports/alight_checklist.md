@@ -288,9 +288,9 @@
 - [x] 画面の揃え：左・中・右・上・中・下・等間隔 2 種：Arrange > Align Left〜Bottom・Spread Across・Spread Down（Keynote・Figma の Align：1 つなら絵に、いくつかならその箱に、3 つ以上を等間隔に） — 済（10/28）：窓の試験
 - [ ] グループに入って編集、パンくず
 - [ ] グループの設定：幅・高さ・背景・Precompose・伸び方（Freeze・Stretch・Loop・Loop & Stretch・Blank）
-- [ ] カメラ：遠近、画角とズーム
-- [ ] カメラ：焦点ぼけ（距離・深度・強さ）
-- [ ] カメラ：フォグ（色・近い・遠い）
+- [x] カメラ：遠近、画角とズーム：カメラのカード（Projection：遠近と正投影）と Depth の机（焦点距離＝ズーム） — 済：窓の試験（`workspace_joined_test_2.dart`・`workspace_desk_test.dart`）
+- [x] カメラ：焦点ぼけ（距離・深度・強さ）：カメラの focus（距離）・aperture（深さ、f 値）・blur_level（強さ） — 済：窓の試験（`workspace_joined_test_2.dart` の Depth の机）
+- [ ] カメラ：フォグ（色・近い・遠い）（一部）：Lens カードの Fog（濃さ）・Fog near（始まり、10/28、`check/fog_near.sh`）・色。まだ：遠い（Filament の霧は始まりと濃さで決まり、終わりの距離は無い）
 - [ ] 初めての所で押す場所を吹き出しで指す
 - [ ] 効果の検索（説明文の中まで）
 - [ ] 効果のおすすめ、分類、動く絵
