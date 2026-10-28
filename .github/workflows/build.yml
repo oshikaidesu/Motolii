@@ -36,6 +36,8 @@ jobs:
         if: success() || failure()   # (the window's checks told even when the engine's failed)
       - run: cd skin/book && flutter test
         if: success() || failure()
+      - run: for f in $(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -3); do echo "== $f"; head -c 6000 "$f"; echo; done   # (a test process that died says nothing in its own log: the Mac's crash report says where)
+        if: failure()
       - uses: actions/cache/save@v4   # (kept even when a check before failed)
         if: always() && steps.deps.outputs.cache-hit != 'true'
         with:
