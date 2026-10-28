@@ -11,6 +11,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:lab_book/motolii.dart' show motoliiDir;
+import 'package:perfect_freehand/perfect_freehand.dart' show PointVector, StrokeOptions, getStroke;
 import 'package:lab_book/theme.dart';
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart' show Workspace;
@@ -286,6 +287,10 @@ final _rowsAA = <(String, String, Map<String, Object>)>[
   ('rd3', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .55}),
   ('rd4', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .8}),
 ];
+// (section BI: a freehand stroke, the brush's own outline.)
+final _rowsBI = <(String, String, Map<String, Object>)>[
+  ('ink', 'ink', const <String, Object>{}),
+];
 // (section BH: color balance, a raster scale, and a curl on a wide thin rect. Each file's own numbers.)
 final _rowsBH = <(String, String, Map<String, Object>)>[
   ('balance', 'effects/am_colorbalance.wgsl', const {'amount': 1, '@x': -.88, '@size': 0.28}),
@@ -489,7 +494,7 @@ final _rowsAB = <(String, String, Map<String, Object>)>[
   ('zoomHi', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .25}),
   ('zoomLo', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .75}),
 ];
-final _rows = switch (_section) { 'BH' => _rowsBH, 'BG' => _rowsBG, 'BF' => _rowsBF, 'BE' => _rowsBE, 'BD' => _rowsBD, 'BC' => _rowsBC, 'BB' => _rowsBB, 'BA' => _rowsBA, 'AZ' => _rowsAZ, 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+final _rows = switch (_section) { 'BI' => _rowsBI, 'BH' => _rowsBH, 'BG' => _rowsBG, 'BF' => _rowsBF, 'BE' => _rowsBE, 'BD' => _rowsBD, 'BC' => _rowsBC, 'BB' => _rowsBB, 'BA' => _rowsBA, 'AZ' => _rowsAZ, 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -611,6 +616,14 @@ void main() {
         expect(m.say(path3, 'text', 'SUB') && m.say(path3, 'space', '2.5d'), isTrue, reason: m.trouble);
         expect(m.set(path3, 'y', .35) && m.set(path3, 'size', .25) && m.set(path3, 'parent', path2.toDouble()), isTrue, reason: m.trouble);
         expect(m.set(path2, '${effect.substring('cam:'.length)}_by', path.toDouble()), isTrue, reason: '$row: ${m.trouble}');
+      } else if (effect == 'ink') {
+        final way = [for (var i = 0; i <= 48; i++) PointVector.fromOffset(offset: Offset(1180 + i * 7, 760))];
+        final outline = getStroke(way, options: StrokeOptions(size: 32, simulatePressure: true, isComplete: true));
+        expect(outline.length, greaterThan(3), reason: 'ink');
+        m.later('together', number: 1);
+        m.later('freehand', word: [for (final p in outline) '${p.dx} ${p.dy}'].join(' '));
+        m.later('say', thing: -1, name: 'fill', word: 'ffcc33');
+        m.later('together');
       } else if (effect.startsWith('circle+') || effect.startsWith('rect+')) {
         final wide = effect.startsWith('rect+');
         expect(m.remove(left), isTrue, reason: m.trouble);
