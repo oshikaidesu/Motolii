@@ -31,7 +31,7 @@ class EffectsShelf extends StatelessWidget {
            tile: _Tile(n, file: m.picture(n), look: _FxLook(n), on: on.contains(n) ? 'ON' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: () => ws.fxToggle(n), star: c)),
       for (final (n, f) in m.effects)
         (id: f, name: n, label: m.label(n), on: screen.contains(f), apply: () => ws.screenToggle(f), said: 'On the picked thing',
-         tile: _Tile(n, key: ValueKey('ws-screen-$f'), file: m.picture(f), same: m.tileSame(f), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, picked: c.sel == f, onTap: () => c.pick(f), onApply: () => ws.screenToggle(f))),
+         tile: _Tile(n, key: ValueKey('ws-screen-$f'), file: m.picture(f), same: m.tileSame(f), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, picked: c.sel == f, onTap: () => c.pick(f), onApply: () => ws.screenToggle(f), star: c, starId: f)),
       if (picked)
         for (final (n, f) in m.animators)
           (id: f, name: n, label: 'Motion', on: ws.motion == f, apply: () => ws.motionToggle(f), said: 'A motion for the picked thing',
@@ -41,12 +41,13 @@ class EffectsShelf extends StatelessWidget {
     for (final e in all) {
       if (e.label.isNotEmpty) kinds[e.label] = (kinds[e.label] ?? 0) + 1;
     }
-    final chip = kinds.containsKey(c.chip) ? c.chip : 'All', shown = [for (final e in all) if (chip == 'All' || e.label == chip) e.tile];
+    final starred = all.where((e) => c.starred(e.id)).length;   // (the starred a table of their own, as the Ease desk's ★)
+    final chip = kinds.containsKey(c.chip) || (c.chip == '★' && starred > 0) ? c.chip : 'All', shown = [for (final e in all) if (chip == 'All' || (chip == '★' ? c.starred(e.id) : e.label == chip)) e.tile];
     final sel = all.where((e) => e.id == c.sel).firstOrNull;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DockChips([('All', all.length), for (final k in kinds.entries) (k.key, k.value)], active: chip, onPick: c.pickChip),
+        DockChips([('All', all.length), if (starred > 0) ('★', starred), for (final k in kinds.entries) (k.key, k.value)], active: chip, onPick: c.pickChip),
         Expanded(
           child: shown.isEmpty
               ? DockEmpty(c.query)
@@ -70,7 +71,7 @@ class EffectsShelf extends StatelessWidget {
 /// effect its small drawing, else a plain tile), its name, ON (and its place among those on the stage) when it is on,
 /// NO CHANGE when it is seen to change nothing on the sample, the star for a thing's effect.
 class _Tile extends StatelessWidget {
-  const _Tile(this.name, {super.key, this.file, this.look, required this.on, required this.onTap, this.onApply, this.picked = false, this.same = false, this.star});
+  const _Tile(this.name, {super.key, this.file, this.look, required this.on, required this.onTap, this.onApply, this.picked = false, this.same = false, this.star, this.starId});
   final String name;
   final String? file, on;
   final CustomPainter? look;
@@ -78,6 +79,7 @@ class _Tile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onApply;   // (two presses: it is put on, or taken off)
   final DockCtx? star;
+  final String? starId;   // (what it is starred by: a file's effect by its file, two files may share a name)
   @override
   Widget build(BuildContext context) => DockHover(
     onTap: onTap,
@@ -97,8 +99,8 @@ class _Tile extends StatelessWidget {
                 FittedBox(child: CustomPaint(size: const Size(18, 16), painter: look)),
               if (on case final o?) Positioned(left: 3, top: 3, child: DockTag(o, hue: WsT.accent, edge: true)),
               if (same) Positioned(left: 3, bottom: 3, child: DockTag('NO CHANGE', hue: Grey.g63, edge: true)),   // (the sample as it is: its defaults show nothing on a photo, or it helps other scripts)
-              if (star case final s? when s.starred(name) || h) Positioned(right: 0, top: 0, child: DockStar(on: s.starred(name), onTap: () => s.star(name))),
-              if (on != null || picked || h) DecoratedBox(decoration: BoxDecoration(border: Border.all(color: on != null || picked ? WsT.accentInk : Grey.g76, width: on != null || picked ? 2 : 1))),
+              if (star case final s? when s.starred(starId ?? name) || h) Positioned(right: 0, top: 0, child: DockStar(key: ValueKey('ws-star-${starId ?? name}'), on: s.starred(starId ?? name), onTap: () => s.star(starId ?? name))),
+              if (on != null || picked || h) IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(border: Border.all(color: on != null || picked ? WsT.accentInk : Grey.g76, width: on != null || picked ? 2 : 1)))),   // (drawn over all, taking no hand: the star under it is pressed)
             ],
           ),
         ),

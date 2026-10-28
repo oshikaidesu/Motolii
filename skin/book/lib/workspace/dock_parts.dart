@@ -1,4 +1,7 @@
 // The dock's shared pieces: what a shelf remembers, hover, chips, section heads, the detail strip at the foot of a shelf.
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 
 import '../forms/forms.dart';
@@ -16,7 +19,7 @@ class DockMem {
   final chip = <String, String>{};
   final folded = <String>{'Time'};
   final open = <String>{'Project'};
-  final starred = <String>{}; // (what the hand starred)
+  final starred = _starsRead(); // (what the hand starred: kept in ~/.motolii/effect_stars.json, as the Ease desk keeps its own)
 
   /// Why the last thing asked of the inside for an entry was not done (by the entry's id).
   final trouble = <String, String>{};
@@ -51,7 +54,10 @@ class DockCtx {
   bool hit(String name) => query.isEmpty || name.toLowerCase().contains(query.toLowerCase());
   Set<String> get _stars => mem.starred;
   bool starred(String id) => _stars.contains(id);
-  void star(String id) => set(() => _stars.contains(id) ? _stars.remove(id) : _stars.add(id));
+  void star(String id) => set(() {
+    _stars.contains(id) ? _stars.remove(id) : _stars.add(id);
+    _starsKeep(_stars);
+  });
   void toggle(Set<String> s, String id) => set(() => s.contains(id) ? s.remove(id) : s.add(id));
 }
 
@@ -458,4 +464,21 @@ class DockMasonry extends StatelessWidget {
       );
     },
   );
+}
+
+/// Where the starred effects are kept (a test points it elsewhere: [dockStarsAt]), in the Ease desk's way (ease_stars.json).
+File _starsFile = File('${Platform.environment['HOME']}/.motolii/effect_stars.json');
+void dockStarsAt(File f) => _starsFile = f;
+Set<String> _starsRead() {
+  try {
+    return {for (final s in jsonDecode(_starsFile.readAsStringSync()) as List) '$s'};
+  } catch (_) {
+    return {};
+  }
+}
+void _starsKeep(Set<String> all) {
+  try {
+    _starsFile.parent.createSync(recursive: true);
+    _starsFile.writeAsStringSync(jsonEncode(all.toList()));
+  } catch (_) {}
 }

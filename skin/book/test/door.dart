@@ -11,6 +11,7 @@ import 'package:lab_book/sets/inspector/inspector_parts.dart' show Chooser, Ctx,
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart' show PropRow;
 import 'package:lab_book/theme.dart' show ColorTheme;
 import 'package:lab_book/workspace/zoom.dart' show WsZoom;
+import 'package:lab_book/workspace/dock_parts.dart' show dockStarsAt;
 import 'package:lab_book/workspace/timeline.dart' show WsTimeline;
 
 export 'package:lab_book/motolii.dart' show motoliiDir;
@@ -29,6 +30,7 @@ Future<Ws> openWorkspace(WidgetTester t, {List<WsPane> extra = const [], List<De
   final doc = document ?? '${Directory.systemTemp.createTempSync('door').path}/door.motolii';
   openedDocument = doc;
   ColorTheme.at = '${Directory.systemTemp.path}/motolii_test_no_theme.xml'; // (the window's own skin and 100%, whatever the home folder keeps)
+  dockStarsAt(File('${Directory.systemTemp.createTempSync('stars').path}/effect_stars.json'));   // (none starred, and the maker's own kept as they are)
   WsZoom.set(1, keep: false);
   await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: doc, extra: extra, tools: tools, view: view)));
   for (var i = 0; i < 1500 && find.byType(WsTimeline).evaluate().isEmpty; i++) {   // (the inside answers in real time, not the test's: Flutter's runAsync, as settled does; up to 30 s, a slow machine's opening)

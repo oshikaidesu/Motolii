@@ -2,10 +2,12 @@
 // browser, its tree beside the contents when wide and above them when narrow, its search over where it is.
 import 'dart:io';
 
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/workspace/dock.dart';
+import 'package:lab_book/workspace/dock_parts.dart' show dockStarsAt;
 
 import 'door.dart';
 
@@ -72,6 +74,28 @@ void main() {
     }
     expect(find.text('still.jpg'), findsWidgets, reason: 'the picture beside the document, found by its name');
     expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
+  testWidgets('a file\'s effect starred: a ★ table of the starred, and kept for the next time', (t) async {
+    final kept = File('${Directory.systemTemp.createTempSync('stars').path}/effect_stars.json');
+    dockStarsAt(kept);
+    final ws = _joined();
+    await _shelf(t, ws, const Size(600, 918), 'Effects');
+    final tile = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('ws-screen-')).first;
+    final id = (t.widget(tile).key as ValueKey<String>).value.substring('ws-screen-'.length);
+    expect(find.text('★'), findsNothing, reason: 'none starred: no table of them');
+    final hand = await t.createGesture(kind: PointerDeviceKind.mouse);
+    await hand.addPointer(location: t.getCenter(tile));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(ValueKey('ws-star-$id')));
+    await t.pump(const Duration(milliseconds: 400));   // (the tile under it waits for a second press first: a double tap puts it on)
+    await hand.removePointer();
+    await t.pumpAndSettle();
+    expect(kept.readAsStringSync(), contains(id), reason: 'kept for the next time');
+    await t.tap(find.text('★'));
+    await t.pumpAndSettle();
+    expect(find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('ws-screen-')), findsOneWidget, reason: 'the starred alone');
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 }

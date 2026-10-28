@@ -218,7 +218,7 @@
 - [ ] 線・影・**Multi-Border**（一部）：いま stroke・shadow。縁取りを何重にもは無い
 - [ ] 自分のフォント（有る）：いま ドックのフォント
 - [ ] ブックマーク（有る）：いま ロケーター（Ableton どおり）
-- [ ] お気に入り（一部）：いま ★ はイーズの棚と中の効果（workspace_ease_library_test）。ファイルの効果には無い
+- [x] お気に入り（一部→有る）：効果の棚の全部（ファイルの効果も）に ★、★ を付けた物だけの表（★ の札、All の次）。~/.motolii/effect_stars.json に残る（Ease の机の ease_stars.json と同じ）。タイルの枠が ★ を覆って押せなかったのも直した — 済（10/28）：窓で ★ を押し、★ の表に 1 つだけ出てファイルに残るのを確かめた（`skin/book/test/workspace_dock_test.dart`）
 - [ ] **速度に応じたモーションブラー**（無い）
 - [x] **Time Quantization（コマ落とし。ポスタリゼーション時間）**（無い→一部）：物の Frame rate（Play の札、0 は段と同じ滑らかさ）。キーで動く値は、その物の始まりから数えたコマの時刻で読む（doc_stepped：doc_number と doc_literal の両方の読みに）。After Effects の Posterize Time と同じ考え。まだ：映像そのものの再生と、キーでない動き（揺れ・ふるまい）は段のまま — 済（10/28）：窓で 4 コマ/秒にして値が 0.25・0.25・0.5・0.75 と段になるのを確かめた（`skin/book/test/workspace_joined_test_3.dart`）
 - [x] **レイヤーを切る**（無い→有る）：⌘E（Ableton Live の Split）とメニューの Split。選んだ物を再生位置で 2 つに：前は再生位置で終わり、後ろはそこから元の終わりまで、映像は前を切った分だけ先から（左端を詰める時と同じ計算）。キーは画面の時刻のまま。1 回で取り消せる。手本：AbsentMotion の Scene.splitAt（Apache-2.0） — 済（10/28）：窓で映像を選んで ⌘E、文書から両方を読んで確かめた（`skin/book/test/workspace_joined_test_3.dart`）
