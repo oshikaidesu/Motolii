@@ -144,7 +144,12 @@ const _rowsF = <(String, String, Map<String, Object>)>[
   ('Scatter Repeat', '-', {'@copies': 6, '@scatter_x': .3, '@scatter_y': .3}),
   ('Solid Color', '-', {'@tint': 1, '@tint_black': '3366ff', '@tint_white': '3366ff'}),
 ];
-final _rows = switch (_section) { 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+// (section AM: AbsentMotion's effects that read the picture blurred, made by effects/from_absent.py's two blur passes)
+final _rowsAM = <(String, String, Map<String, Object>)>[
+  for (final n in const ['contourgradient', 'contourlines', 'darkglow', 'edgeglow', 'electricedges', 'feather', 'fillbehind', 'glowscan', 'innerblur', 'innerglow', 'lightglow', 'mattechoker', 'roughenedges', 'smoothbevel', 'smoothedges', 'softglow'])
+    (n, 'effects/am_$n.wgsl', const {}),
+];
+final _rows = switch (_section) { 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

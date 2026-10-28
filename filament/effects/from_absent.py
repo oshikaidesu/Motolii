@@ -4,7 +4,10 @@
 # around them the picture is a texture and a sampler (Skia's WGSL tests' way of writing one: resources/sksl/wgsl/
 # Sample.sksl), the loose uniforms one struct, `size` read as the stage's `resolution`, its main called at each pixel;
 # the knobs written in the head (a point two, a colour four, as screen.h reads a vector's numbers).
-# usage: from_absent.py <id>.json out.wgsl skslc   (an effect reading a second picture, or native, is refused)
+# One reading the picture blurred (`blurred`), or its bright part blurred (`bright`), is given it as AbsentMotion's
+# effects.cpp gives it: a Gaussian blur of sigma blur/3 (bright: luma less its threshold first), here in two passes
+# (screen.h's ISF passes: across into `h`, then down into the blurred picture), as Skia's own blur goes, then its own.
+# usage: from_absent.py <id>.json out.wgsl skslc   (an effect reading another picture, or native, is refused)
 import json, re, subprocess, sys
 
 src, out, skslc = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -13,19 +16,34 @@ if 'sksl' not in d:
     sys.exit(f"{src}: drawn by AbsentMotion's own C++, no shader")
 s = d['sksl']
 pictures = re.findall(r'^\s*uniform\s+shader\s+(\w+)\s*;', s, re.M)
-if pictures != ['image']:
-    sys.exit(f"{src}: reads {pictures}: an effect reads one picture")
+blur = next((p for p in pictures if p in ('blurred', 'bright')), None)
+if sorted(pictures) != sorted(['image'] + ([blur] if blur else [])):
+    sys.exit(f"{src}: reads {pictures}: an effect reads the picture, and it blurred at most")
 s = re.sub(r'\bsize\b', 'resolution', s)
 typed = r'^\s*(?:layout\(color\)\s+)?uniform\s+(float[234]?|half[234]?|int)\s+(\w+)\s*;'
 loose = re.findall(typed, s, re.M)
 s = re.sub(typed + r'\s*$', '', s, flags=re.M)
-s = re.sub(r'^\s*uniform\s+shader\s+image\s*;', '', s, flags=re.M)
+s = re.sub(r'^\s*uniform\s+shader\s+(image|blurred|bright)\s*;', '', s, flags=re.M)
+if blur:
+    for n in ('blur', 'threshold') if blur == 'bright' else ('blur',):
+        if not any(m == n for _, m in loose): loose.append(('float', n))   # (what the blur is made by, a knob of the effect's own in AbsentMotion)
+    loose.append(('float', 'passindex'))   # (which pass: screen.h's ISF PASSINDEX)
 head = '/*#pragma settings ForceHighPrecision AllowNarrowingConversions*/\n'   # (as a runtime effect: floats throughout, a half taken from a float)
 head += 'layout(webgpu, set=0, texture=0, sampler=1) sampler2D image;\n'
-head += 'layout(set=0, binding=2) uniform Knobs {\n' + ''.join(f'  {t} {n};\n' for t, n in loose) + '};\n'
+if blur:
+    head += 'layout(webgpu, set=0, texture=2, sampler=3) sampler2D h;\nlayout(webgpu, set=0, texture=4, sampler=5) sampler2D blurPicture;\n'
+head += f"layout(set=0, binding={6 if blur else 2}) uniform Knobs {{\n" + ''.join(f'  {t} {n};\n' for t, n in loose) + '};\n'
 head += 'half4 imageAt(float2 p) { return sample(image, p / resolution); }\n'   # (a child shader read at a pixel: the picture at that place)
-s = head + re.sub(r'\bimage\.eval\(', 'imageAt(', s).replace('half4 main(float2 coord)', 'half4 effect_(float2 coord)')
-s += '\nvoid main() { sk_FragColor = effect_(sk_FragCoord.xy); }\n'
+if blur:   # (a Gaussian across then down, sigma blur/3 in pixels, three sigmas each side, as Skia's blur reaches)
+    head += 'half4 ' + blur + 'At(float2 p) { return sample(blurPicture, p / resolution); }\n'
+    head += ('half4 gauss_(float2 p, float2 by, int from) {\n  float sigma = max(blur, 0) / 3; if (sigma < 0.5) return from == 0 ? sample(image, p / resolution) : sample(h, p / resolution);\n'
+             '  half4 all = half4(0); float weight = 0;\n  for (int i = -96; i <= 96; i++) { float x = float(i); if (abs(x) > 3 * sigma) continue; float w = exp(-x * x / (2 * sigma * sigma));\n'
+             '    half4 c = from == 0 ? sample(image, (p + by * x) / resolution) : sample(h, (p + by * x) / resolution);\n'
+             + ('    if (from == 0) c = half4(clamp(dot(c.rgb, half3(0.2126, 0.7152, 0.0722)) - threshold, 0, 1).xxx, c.a);\n' if blur == 'bright' else '') +
+             '    all += c * w; weight += w; }\n  return all / weight;\n}\n')
+s = head + re.sub(r'\b(blurred|bright)\.eval\(', blur + 'At(' if blur else r'\1.eval(', re.sub(r'\bimage\.eval\(', 'imageAt(', s)).replace('half4 main(float2 coord)', 'half4 effect_(float2 coord)')
+s += ('\nvoid main() { sk_FragColor = passindex < 0.5 ? gauss_(sk_FragCoord.xy, float2(1, 0), 0) : passindex < 1.5 ? gauss_(sk_FragCoord.xy, float2(0, 1), 1) : effect_(sk_FragCoord.xy); }\n' if blur
+      else '\nvoid main() { sk_FragColor = effect_(sk_FragCoord.xy); }\n')
 open(out + '.frag', 'w').write(s)
 made = subprocess.run([skslc, out + '.frag', out + '.raw.wgsl'], capture_output=True, text=True)
 if made.returncode:
@@ -35,6 +53,8 @@ fields = re.findall(r'^\s*(\w+)\s*:', re.search(r'struct Knobs\s*\{([^}]*)\}', w
 named = {re.sub(r'^R_', '', n): n for n in fields}   # (skslc's R_ before a name WGSL keeps for itself: center)
 lines = [f"// {d['name']}: AbsentMotion's {d['id']} (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)"]
 lines.append(f"// --label:{d.get('category', '').capitalize()}")
+if blur:
+    lines += ['// --pass@h:0,1,s1,s1', '// --pass@blurPicture:0,1,s1,s1', '// --pass@:0,0,s1,s1']   # (across, down, then the effect itself)
 if d.get('description'):
     lines.append(f"// --about:{' '.join(d['description'].split())}")   # (what it does, in AbsentMotion's words: the shelf finds it by them)
 for p in d.get('params', []):
