@@ -113,4 +113,22 @@ void main() {
       await closeWorkspace(t);
     }
   }, skip: !insideBuilt);
+
+  testWidgets('Blend: a layer\'s way of lying on what is under, picked from its pictures in After Effects\' groups (Alight Motion\'s blend picker)', (t) async {
+    final (ws, _) = await _keyed(t);
+    final m = ws.inside!, rect = m.add('shape', 'rect');
+    ws.reread();
+    await t.pumpAndSettle();
+    await t.tap(find.text('Blend').last);
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(ValueKey('blend.$rect')));
+    await t.pumpAndSettle();
+    final ways = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('blend.$rect.'));
+    expect(ways.evaluate().length, m.words(rect, 'blend').length, reason: 'every way the inside names, each its picture');
+    await t.tap(find.byKey(ValueKey('blend.$rect.multiply')));
+    await settled(t, ws);
+    expect(m.word(rect, 'blend'), 'multiply', reason: m.trouble);
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
 }
