@@ -149,7 +149,12 @@ final _rowsAM = <(String, String, Map<String, Object>)>[
   for (final n in const ['contourgradient', 'contourlines', 'darkglow', 'edgeglow', 'electricedges', 'feather', 'fillbehind', 'glowscan', 'innerblur', 'innerglow', 'lightglow', 'mattechoker', 'roughenedges', 'smoothbevel', 'smoothedges', 'softglow'])
     (n, 'effects/am_$n.wgsl', const {}),
 ];
-final _rows = switch (_section) { 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+// (section S: AbsentMotion effects already on the shelf, drawn at the defaults in each file's head)
+final _rowsS = <(String, String, Map<String, Object>)>[
+  for (final n in const ['threshold', 'mosaic', 'grid', 'dissolve', 'dots', 'palettemap'])
+    (n, 'effects/am_$n.wgsl', const {}),
+];
+final _rows = switch (_section) { 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
