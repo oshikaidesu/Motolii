@@ -390,7 +390,7 @@
 - [x] 同：Steps（今は 6 段、Alight Motion は 4 段）：既定を 4 段に（0.25・0.5・0.75 で 4 分の 1 ずつ、終わりで 1。実機の絵 135 と同じ、10/28） — 済：`check/doc.sh`
 - [ ] 同：Elastic Steps
 - [ ] イーズの取っ手を曲線の上で直接動かす（黄＝形、白＝始めと終わり）
-- [ ] ベジェの 4 つのプリセット
+- [x] ベジェの 4 つのプリセット（有る）：Ease の机のプリセットに Linear・In・Out・In-out（Alight Motion の直線・加速・減速・加速して減速と同じ形、CSS の ease-in・ease-out・ease-in-out の数）、ほかに Ease・Back・Hold。曲線の白い取っ手 2 つは引ける（`skin/book/lib/workspace/desk_ease.dart` の easePresets、`desk_ease_graph.dart`）
 - [x] 親：一覧で選ぶ（None・自分は灰色・音は出ない）：Transform カードの Parent（None と他の物の名前、自分は出ない） — 済：窓の試験（`workspace_joined_test_2.dart` の Parent）
 - [x] 親：子を選ぶと親の外枠を出す：親のある物を選ぶと、舞台に親の枠が灰色の線で（10/28） — 済：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 動きの道筋を細い線と向きの矢印で出す：選んだ物が動くと、舞台にその道筋（内側の位置の計算 motolii_path、揺れも含む）を細い線と矢印で（10/28） — 済：窓の試験（`workspace_joined_test_3.dart`）
