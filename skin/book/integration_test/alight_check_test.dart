@@ -253,7 +253,18 @@ final _rowsT = <(String, String, Map<String, Object>)>[
   ('xform', 'text', const {'@split': 'letters', '@copy_y': .045, '@size': .32}),
   ('move', 'along', const {'@copies': 1, '@size': .12, '@copy_on_offset': .25}),
 ];
-final _rows = switch (_section) { 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+// (section U: Cavalry's oscillator, already a behaviour, at two moments of its own wave.)
+final _rowsU = <(String, String, Map<String, Object>)>[
+  ('oscHi', 'wave:x', const {'@minimum': -.7, '@maximum': -.2, '@when': .25}),
+  ('oscLo', 'wave:x', const {'@minimum': -.7, '@maximum': -.2, '@when': .75}),
+  ('opHi', 'wave:opacity', const {'@minimum': .15, '@maximum': 1, '@when': .25}),
+  ('opLo', 'wave:opacity', const {'@minimum': .15, '@maximum': 1, '@when': .75}),
+  ('szHi', 'wave:size', const {'@minimum': .35, '@maximum': .8, '@when': .25}),
+  ('szLo', 'wave:size', const {'@minimum': .35, '@maximum': .8, '@when': .75}),
+  ('swHi', 'wave:rotate', const {'@minimum': -18, '@maximum': 18, '@when': .25}),
+  ('swLo', 'wave:rotate', const {'@minimum': -18, '@maximum': 18, '@when': .75}),
+];
+final _rows = switch (_section) { 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -312,19 +323,29 @@ void main() {
         expect(m.set(left, 'x', -.5), isTrue, reason: m.trouble);
         expect(m.say(left, 'fill', 'ffcc33'), isTrue, reason: m.trouble);
         expect(m.set(left, 'copy_on', path.toDouble()), isTrue, reason: m.trouble);
+      } else if (effect.startsWith('wave:')) {
+        path = m.add('behaviour', 'oscillator');
+        expect(path, isNot(0), reason: m.trouble);
+        expect(m.set(path, 'minimum', (knobs['@minimum'] as num).toDouble()), isTrue, reason: m.trouble);
+        expect(m.set(path, 'maximum', (knobs['@maximum'] as num).toDouble()), isTrue, reason: m.trouble);
+        expect(m.set(path, 'frequency', 1), isTrue, reason: m.trouble);
+        expect(m.set(left, '${effect.substring('wave:'.length)}_by', path.toDouble()), isTrue, reason: '$row: ${m.trouble}');
       } else if (effect != '-') {
         final file = effect.contains('/') ? '$motoliiDir/$effect' : '$motoliiDir/effects/$effect.fs';
         expect(m.say(left, 'fx', file), isTrue, reason: '$row: ${m.trouble}');
       }
       final stem = effect.split('/').last.replaceFirst(RegExp(r'\.(js|wgsl|fs)$'), '').replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_');
       for (final MapEntry(:key, :value) in knobs.entries) {
+        if (key == '@when' || key == '@minimum' || key == '@maximum') continue;   // (the behaviour's own, or when the playhead sits)
         final name = key.startsWith('@') ? key.substring(1) : 'js_${stem}_$key';   // (@: the thing's own value)
         expect(value is String ? m.say(left, name, value) : m.set(left, name, (value as num).toDouble()), isTrue, reason: '$row $key: ${m.trouble}');
       }
       ws.reread();
-      if (effect.contains('print_on.js')) expect(m.at(.35), isTrue, reason: m.trouble);   // (inside the animator's own length, 0.67: some letters on)
+      final when = knobs['@when'];
+      if (when is num) expect(m.at(when.toDouble()), isTrue, reason: m.trouble);
+      else if (effect.contains('print_on.js')) expect(m.at(.35), isTrue, reason: m.trouble);   // (inside the animator's own length, 0.67: some letters on)
       await shot('${i + 1}_${row.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}.png');
-      if (effect.contains('print_on.js')) expect(m.at(0), isTrue, reason: m.trouble);
+      if (when is num || effect.contains('print_on.js')) expect(m.at(0), isTrue, reason: m.trouble);
       if (path != 0) expect(m.remove(path), isTrue, reason: m.trouble);
       expect(m.remove(left), isTrue, reason: m.trouble);   // (the next row on a photo as it comes)
       left = m.add('picture', '$motoliiDir/fx_sample.jpg');
