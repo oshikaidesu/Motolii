@@ -466,6 +466,31 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('the size chip pressed once: Alight Motion\'s shapes and resolutions; one pressed is the document\'s size', (t) async {
+    final ws = await _pump(t);
+    Future<void> pick(String key) async {
+      final was = ws.inside;
+      await t.tap(find.byKey(const ValueKey('ws-top-size')));
+      await t.pump(kDoubleTapTimeout);   // (one press: a second would type its numbers)
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('ws-size-box')), findsOneWidget);
+      await t.tap(find.byKey(ValueKey(key)));
+      for (var i = 0; i < 100 && identical(ws.inside, was); i++) {   // (opened again at it, in real time)
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await t.pump();
+      }
+      await settled(t, ws);
+    }
+    expect(ws.inside!.size, (1920, 1080));
+    await pick('size-9:16');
+    expect(ws.inside!.size, (1080, 1920), reason: 'tall, its shorter side kept');
+    await pick('size-720p');
+    expect(ws.inside!.size, (720, 1280), reason: 'the same shape, smaller');
+    expect(find.text('720 × 1280'), findsOneWidget);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

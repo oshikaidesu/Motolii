@@ -388,8 +388,18 @@ class _SizeChip extends StatefulWidget {
   State<_SizeChip> createState() => _SizeChipState();
 }
 
+/// Alight Motion's new-project box, its shapes and its resolutions (each the shorter side, as its 2160p to 270p are):
+/// a shape and a resolution pressed is the document's size, opened again at it.
+const sizeShapes = [('16:9', 16, 9), ('9:16', 9, 16), ('4:5', 4, 5), ('1:1', 1, 1), ('4:3', 4, 3)];
+const sizeResolutions = [2160, 1440, 1080, 720, 540, 360, 270];
+(int, int) sizeOf((String, int, int) shape, int p) {
+  final (_, a, b) = shape;
+  int even(double v) => (v / 2).round() * 2;   // (an even number of pixels: H.264 asks it)
+  return a >= b ? (even(p * a / b), p) : (p, even(p * b / a));
+}
+
 class _SizeChipState extends State<_SizeChip> {
-  final _text = TextEditingController(), _focus = FocusNode();
+  final _text = TextEditingController(), _focus = FocusNode(), _box = OverlayPortalController();
   bool _editing = false;
   double? _scrub;   // (the width being scrubbed to)
   double _dx = 0;
@@ -433,12 +443,54 @@ class _SizeChipState extends State<_SizeChip> {
         ),
       );
     }
-    return MouseRegion(
+    // (pressed once: the shapes and resolutions; the one it is now lit, a shape of its own said as it is)
+    final short = math.min(w0, h0).round(), now = sizeShapes.where((s) => sizeOf(s, short) == (w0.round(), h0.round())).firstOrNull;
+    Widget box(BuildContext _) => Stack(
+      children: [
+        Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _box.hide, child: const ColoredBox(color: Color(0x88000000)))),
+        Center(
+          child: Container(
+            key: const ValueKey('ws-size-box'),
+            width: Shape.z(380),
+            padding: EdgeInsets.all(Shape.s(16)),
+            decoration: BoxDecoration(color: WsT.card, borderRadius: BorderRadius.all(Shape.r(8)), border: Border.all(color: WsT.line)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Document', style: T.title(Grey.g95).copyWith(fontWeight: FontWeight.w700)),
+                SizedBox(height: Shape.s(12)),
+                Text('Shape', style: T.label(Grey.g56)),
+                SizedBox(height: Shape.s(6)),
+                Wrap(spacing: Shape.s(6), runSpacing: Shape.s(6), children: [
+                  for (final s in sizeShapes) DeskChip(key: ValueKey('size-${s.$1}'), label: s.$1, on: s == now, onTap: () => _to(ws, sizeOf(s, short))),
+                  if (now == null) DeskChip(label: '$shownW:$shownH', on: true, onTap: () {}),   // (its own: a size typed)
+                ]),
+                SizedBox(height: Shape.s(12)),
+                Text('Resolution', style: T.label(Grey.g56)),
+                SizedBox(height: Shape.s(6)),
+                Wrap(spacing: Shape.s(6), runSpacing: Shape.s(6), children: [
+                  for (final p in sizeResolutions)
+                    DeskChip(key: ValueKey('size-${p}p'), label: '${p}p', on: p == short, onTap: () => _to(ws, now == null ? ((p * w0 / short).round(), (p * h0 / short).round()) : sizeOf(now, p))),
+                ]),
+                SizedBox(height: Shape.s(12)),
+                Text('$shownW × $shownH  ·  ${Ws.fps} frames a second', style: T.value(Grey.g76)),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+    return OverlayPortal(
+      controller: _box,
+      overlayChildBuilder: box,
+      child: MouseRegion(
       cursor: SystemMouseCursors.resizeLeftRight,
       child: GestureDetector(
         supportedDevices: wsPressing,
         key: const ValueKey('ws-top-size'),
         behavior: HitTestBehavior.opaque,
+        onTap: ws.onSize == null ? null : _box.show,
         onDoubleTap: ws.onSize == null
             ? null
             : () {
@@ -456,7 +508,13 @@ class _SizeChipState extends State<_SizeChip> {
         },
         child: _Chip('$shownW × $shownH'),
       ),
+      ),
     );
+  }
+
+  void _to(Ws ws, (int, int) size) {
+    _box.hide();
+    if (size != (WsArt.comp.width.round(), WsArt.comp.height.round())) ws.onSize?.call(size.$1, size.$2);
   }
 }
 
