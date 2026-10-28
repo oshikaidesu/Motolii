@@ -75,6 +75,13 @@ void main() {
       await t.pumpAndSettle();
     }
     expect(find.text('still.jpg'), findsWidgets, reason: 'the picture beside the document, found by its name');
+    await t.tap(find.byKey(ValueKey('browser:file:${ws.documentFolder}/still.jpg')).first);   // (picked: its foot says what it is)
+    for (var i = 0; i < 100 && find.textContaining('857 × 857').evaluate().isEmpty; i++) {   // (GStreamer's discoverer, on another isolate)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump();
+    }
+    expect(find.textContaining('857 × 857 · JPEG'), findsOneWidget, reason: 'its size and kind, as GStreamer\'s discoverer tells them (Alight Motion\'s Media Info)');
+    expect(await mediaInfoOf(ws.inside!.libPath, '$motoliiDir/check/beats.mp4'), '320 × 180 · 30 fps · 4.0 s · Quicktime', reason: 'a film: its rate and length too');
     expect(t.takeException(), isNull);
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);

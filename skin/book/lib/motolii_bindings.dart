@@ -1040,6 +1040,21 @@ class MotoliiBindings {
   late final _motolii_marks = _motolii_marksPtr
       .asFunction<ffi.Pointer<pkg_ffi.Utf8> Function(ffi.Pointer<Motolii>)>();
 
+  ffi.Pointer<pkg_ffi.Utf8> motolii_media_info(ffi.Pointer<pkg_ffi.Utf8> file) {
+    return _motolii_media_info(file);
+  }
+
+  late final _motolii_media_infoPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<pkg_ffi.Utf8> Function(ffi.Pointer<pkg_ffi.Utf8>)
+        >
+      >('motolii_media_info');
+  late final _motolii_media_info = _motolii_media_infoPtr
+      .asFunction<
+        ffi.Pointer<pkg_ffi.Utf8> Function(ffi.Pointer<pkg_ffi.Utf8>)
+      >();
+
   int motolii_midi(
     ffi.Pointer<Motolii> m,
     int thing,

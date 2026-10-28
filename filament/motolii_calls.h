@@ -286,6 +286,43 @@ static int thumbnail_at(const char* film, const char* png, int wide, double frac
 int motolii_thumbnail(const char* film, const char* png, int wide) { return thumbnail_at(film, png, wide, 0.0); }
 int motolii_thumbnail_at(const char* film, const char* png, int wide, double fraction) { return thumbnail_at(film, png, wide, fraction); }
 int motolii_thumbnail_seconds(const char* film, const char* png, int wide, double seconds) { return thumbnail_at(film, png, wide, 0.0, seconds); }
+// What a media file is, as GStreamer's discoverer tells it (gst-discoverer-1.0's own): "wide high rate seconds format",
+// its first picture's size, pictures a second (0: a still), how long (0: a still), its container or kind as GStreamer
+// names it; "" when it cannot be read. Asks nothing of a document.
+const char* motolii_media_info(const char* file) {
+    static thread_local std::string out;
+    out.clear();
+    gst_init(nullptr, nullptr);
+    GstDiscoverer* looks = gst_discoverer_new(5 * GST_SECOND, nullptr);
+    gchar* uri = gst_filename_to_uri(file, nullptr);
+    GstDiscovererInfo* info = looks && uri ? gst_discoverer_discover_uri(looks, uri, nullptr) : nullptr;
+    if (info && gst_discoverer_info_get_result(info) != GST_DISCOVERER_OK) g_object_unref(info), info = nullptr;   // (not there, or not media: nothing said)
+    if (info) {
+        unsigned wide = 0, high = 0, num = 0, den = 1;
+        GList* pictures = gst_discoverer_info_get_video_streams(info);
+        if (pictures) {
+            GstDiscovererVideoInfo* v = (GstDiscovererVideoInfo*)pictures->data;
+            wide = gst_discoverer_video_info_get_width(v), high = gst_discoverer_video_info_get_height(v);
+            if (!gst_discoverer_video_info_is_image(v)) num = gst_discoverer_video_info_get_framerate_num(v), den = std::max(1u, gst_discoverer_video_info_get_framerate_denom(v));
+        }
+        std::string kind;
+        if (GstDiscovererStreamInfo* top = gst_discoverer_info_get_stream_info(info)) {
+            if (GstCaps* caps = gst_discoverer_stream_info_get_caps(top)) {
+                gchar* said = gst_pb_utils_get_codec_description(caps);
+                if (said) kind = said, g_free(said);
+                gst_caps_unref(caps);
+            }
+            gst_discoverer_stream_info_unref(top);
+        }
+        char line[512];
+        std::snprintf(line, sizeof line, "%u %u %g %g %s", wide, high, (double)num / den, (double)gst_discoverer_info_get_duration(info) / GST_SECOND, kind.c_str());
+        out = line;
+        gst_discoverer_stream_info_list_free(pictures), g_object_unref(info);
+    }
+    g_free(uri);
+    if (looks) g_object_unref(looks);
+    return out.c_str();
+}
 // A font file's kinds, as CoreText reads them (its own: the file's family class and traits): serif, sans, script,
 // mono, bold, light, italic, symbols, ornaments, space separated; "" for none.
 const char* motolii_font_tags(const char* path) {

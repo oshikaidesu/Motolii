@@ -297,16 +297,19 @@ class _Footer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // A file the inside can show is placed (as often as wanted, each a new thing from the present moment); one in use says so.
-    final layer = _layerOf(n, c), can = _kindOfFile(n.id).isNotEmpty;
-    return DockFooter(
+    final layer = _layerOf(n, c), can = _kindOfFile(n.id).isNotEmpty, m = c.ws.inside;
+    return FutureBuilder<String>(   // (what the media is, as GStreamer's discoverer tells it: Alight Motion's Media Info; its file's kind and size until then)
+      future: can && m != null ? mediaInfoOf(m.libPath, n.id) : null,
+      builder: (context, info) => DockFooter(
       preview: _Art(n),
       title: n.name,
-      meta: c.mem.trouble[n.id] ?? (layer != null ? 'In use · ${_metaOf(n)}' : _metaOf(n)),
+      meta: c.mem.trouble[n.id] ?? [if (layer != null) 'In use', if (info.data case final i? when i.isNotEmpty) i, _metaOf(n)].join(' · '),
       action: can ? 'Place' : 'Select',
       done: !can && layer == null,
       doneLabel: 'Folder', // (the shelf lists only folders and files the inside can place: what cannot be placed is a folder)
       fresh: can, // (placed, it is a new thing)
       onAction: () => can ? _place(c, n) : c.ws.select(layer),
+      ),
     );
   }
 }
