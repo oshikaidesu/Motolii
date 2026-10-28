@@ -286,6 +286,13 @@ final _rowsAA = <(String, String, Map<String, Object>)>[
   ('rd3', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .55}),
   ('rd4', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .8}),
 ];
+// (section AQ: the file's own width, now that a shader which already has resolution keeps that knob. Each one as the file declares it.)
+final _rowsAQ = <(String, String, Map<String, Object>)>[
+  ('grid', 'effects/am_grid.wgsl', const <String, Object>{}),
+  ('rays', 'effects/am_radialrays.wgsl', const <String, Object>{}),
+  ('bolt', 'effects/am_lightning.wgsl', const <String, Object>{}),
+  ('ribbon', 'effects/am_ribbon.wgsl', const <String, Object>{}),
+];
 // (section AP: a small text matte, and a glow on a circle, both kept clear of the right photo.)
 final _rowsAP = <(String, String, Map<String, Object>)>[
   ('matte', 'text+effects/am_solidmatte.wgsl', const {'@x': -.72, '@size': .2, 'color_x': .1765, 'color_y': .1176, 'color_z': .9647, 'color_w': 1, 'alpha': 1}),
@@ -364,7 +371,7 @@ final _rowsAB = <(String, String, Map<String, Object>)>[
   ('zoomHi', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .25}),
   ('zoomLo', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .75}),
 ];
-final _rows = switch (_section) { 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+final _rows = switch (_section) { 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
