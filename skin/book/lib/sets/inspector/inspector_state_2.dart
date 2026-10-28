@@ -367,6 +367,7 @@ class Doc extends ChangeNotifier {
   /// The host's cards that may be moved up or down (its effects, by their titles), and what moves one so many places.
   List<String> movable = const [];
   void Function(String title, int by)? onCardMove;
+  void Function(List<String> names)? onCardReset;
 
   /// The host's answer to how the thing (its copy, the first is 0) moves over a while (see Motolii.path): four numbers a
   /// moment; null: it has none.

@@ -119,10 +119,17 @@ class ValuesCard extends StatelessWidget {
       title: card.name,
       tone: card.tone,
       mark: card.mark,
-      trailing: at < 0 || doc.onCardMove == null
+      trailing: (at < 0 || doc.onCardMove == null) && doc.onCardReset == null
           ? null
           : Row(mainAxisSize: MainAxisSize.min, children: [
-              for (final (by, up) in const [(-1, true), (1, false)])
+              if (doc.onCardReset case final reset?)   // (its values as they come: After Effects' Reset on an effect)
+                Hov(
+                  key: ValueKey('card-reset:${card.name}'),
+                  onTap: () => reset([for (final p in card.params) p.id]),
+                  builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: Text('Reset', style: T.label(h ? Grey.g95 : Grey.g56))),
+                ),
+              if (at >= 0 && doc.onCardMove != null)
+                for (final (by, up) in const [(-1, true), (1, false)])
                 Hov(
                   key: ValueKey('card-move:${card.name}:$by'),
                   onTap: (up ? at > 0 : at < doc.movable.length - 1) ? () => doc.onCardMove!(card.name, by) : null,

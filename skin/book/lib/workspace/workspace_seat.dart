@@ -128,6 +128,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         onAim: (at) => ws.aim = at.startsWith('v_') ? at.substring(2) : null, // (a colour link of a card is aimed at that value)
         movable: int.tryParse(l?.id ?? '') == null ? const [] : m.fxTitles(int.parse(l!.id)), // (its effects, up or down their stack)
         onCardMove: int.tryParse(l?.id ?? '') == null ? null : (title, by) => ws.after(m.later('fx_move', thing: int.parse(l!.id), word: title, number: by.toDouble())),
+        onCardReset: int.tryParse(l?.id ?? '') == null ? null : (names) => ws.after(m.later('reset', thing: int.parse(l!.id), word: names.join(' ')), (_, _) => ws.reread()),
         values: Ws.timed('transform', () => wsTransform(ws, l?.id)),
         strs: Ws.timed('words', () => _words(ws, l?.id)),
         choices: Ws.timed('choices', () => _choices(ws, l?.id)),

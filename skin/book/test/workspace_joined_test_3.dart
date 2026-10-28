@@ -329,6 +329,26 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a skewed, bent rect put straight again by Reset on its Deform card (Alight Motion\'s reset skew and transform, After Effects\' Reset on an effect)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    expect(m.set(rect, 'skew', 20) && m.set(rect, 'skew_axis', 45) && m.set(rect, 'bend', 30), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$rect');
+    await t.pumpAndSettle();
+    final deform = find.byWidgetPredicate((w) => w is Sect && w.title == 'Deform');
+    await seen(t, deform);
+    await t.tap(find.byKey(const ValueKey('card-reset:Deform')));
+    await settled(t, ws);
+    expect([m.value(rect, 'skew', 0), m.value(rect, 'skew_axis', 0), m.value(rect, 'bend', 0)], [0, 0, 0], reason: 'straight again: ${m.trouble}');
+    ws.after(m.later('undo'));
+    await settled(t, ws);
+    expect([m.value(rect, 'skew', 0), m.value(rect, 'skew_axis', 0), m.value(rect, 'bend', 0)], [20, 45, 30], reason: 'one step back');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

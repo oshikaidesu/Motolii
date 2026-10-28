@@ -422,6 +422,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
                 for (int t; said >> t;) things.push_back(t);
                 ok = changes(m, (int)doc_time_align(doc(m), things, how, number));
             }
+            else if (c == "reset") ok = changes(m, (int)doc_reset(doc(m), thing, w));   // (word: the values' names)
             else if (c == "fit") ok = changes(m, (int)doc_fit(doc(m), thing, w));   // (word: fit, fill or stretch)
             else if (c == "extract_sound") ok = m->made = changes(m, doc_extract_sound(doc(m), thing));   // (the answer is the copy that is heard)
             else if (c == "freehand") ok = m->made = changes(m, doc_freehand(doc(m), w.c_str()));   // (word: the outline's points of the picture, x y each; the answer is the new shape)
@@ -474,7 +475,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
                 ok = desk_is(m, dw, dh, x, y, sc, pt);
             }
             else if (c == "hold") ok = (int)doc_hold(doc(m), thing);   // (a hand takes hold: what it carries next is this thing's)
-            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, duplicate, split, align, time_align, fit, flip, extract_sound, freehand, copy, paste, copy_style, paste_style, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_move, size, watch, pick, desk, live, relate, lead, free, release";
+            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, duplicate, split, align, time_align, reset, fit, flip, extract_sound, freehand, copy, paste, copy_style, paste_style, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_move, size, watch, pick, desk, live, relate, lead, free, release";
             } catch (const std::exception& e) {
                 ok = 0;
                 std::fprintf(stderr, "motolii: %s threw: %s\n", c.c_str(), e.what());

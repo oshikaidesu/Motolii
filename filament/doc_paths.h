@@ -460,5 +460,15 @@ static bool doc_time_align(Doc& d, const std::vector<int>& things, const std::st
     if (!ok) d.act_ok = false;
     return doc_acted(d) && ok;
 }
+// A thing's named values as they come (After Effects' Reset on a group of values): what was said of them and their keys
+// forgotten; one step.
+static bool doc_reset(Doc& d, int thing, const std::string& names) {
+    doc_act(d);
+    bool ok = true;
+    std::istringstream said(names);
+    for (std::string n; ok && said >> n;) ok = doc_knows(d, thing, n.c_str()) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q", thing, n.c_str()));
+    if (!ok) d.act_ok = false;
+    return doc_acted(d) && ok;
+}
 static bool doc_undo(Doc& d) { return doc_step(d, true); }
 static bool doc_redo(Doc& d) { return doc_step(d, false); }
