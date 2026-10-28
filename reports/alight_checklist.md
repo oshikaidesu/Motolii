@@ -258,7 +258,7 @@
 - [ ] Element：使い回す部品、元とつながる、文字だけ差し替え、グループに戻す
 - [x] レイヤーを左右・上下に反転：Arrange > Flip Horizontal・Flip Vertical（scale_x か scale_y を −1 倍、キーも一緒に） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 画面に合わせる（Fit・Fill・Stretch）：Arrange > Fit to Picture・Fill Picture・Stretch to Picture（見えている箱を絵に合わせ、真ん中を絵の真ん中に） — 済（10/28）：窓の試験
-- [ ] クリッピングマスクを作る
+- [x] クリッピングマスクを作る：舞台の Mask の道具で四角を描く（その物の真後ろに見えない型ができて切り抜く）、または Blending カードの Clip to below で下の物に切り抜く — 済：窓の試験（`workspace_joined_test.dart`・`workspace_joined_test_3.dart`）
 - [x] レイヤーのラベルの色：Note カードの Label colour（Ableton Live のクリップの 16 色と auto）。選ぶと時間軸の行・関係の図・舞台の枠が同じ色に。文書の値なので取り消しも複製も効く — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [ ] 塗りの種類 4 つ（なし・単色・グラデーション・メディア）
 - [ ] メディアで塗る
@@ -267,7 +267,7 @@
 - [x] 縁を何重にも足す（Multi-Border）：効果の棚の Multi-Border（pixi-filters の OutlineFilter、3 重まで） — 済（10/28）：G の行と同じ
 - [x] 影：色・大きさ・アルファ・位置：Drop Shadow のカード（色 shadow、ぼかし shadow_blur、不透明度 shadow_opacity、位置は距離と角度、絵を引いて決める） — 済：窓の試験（`workspace_drawings_test.dart`：引くと向きと距離、つまみでぼかし）
 - [ ] 重ね方 28 を 7 分類で畳み、見本の絵で選ぶ
-- [ ] Mask・Exclude の重ね方
+- [x] Mask・Exclude の重ね方：Mask は Clip to below、Exclude はその Matte カードの Invert（下の物の外だけ見える）。alpha・luma とぼかしも — 済（10/28）：`check/clip_matte.sh`（赤い四角を青い円に切り抜き、反転で外だけ）
 - [ ] 回転をダイヤルで
 - [x] 大きさの幅・高さのつなぎ：Transform カードの Scale の横の鎖（入れると縦横が同じ割合で、外すと押した方だけ） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 傾き X・Y と、傾き・変形を戻す：傾きは Deform カードの Skew と Skew axis（どの向きにも傾く）。戻すのはカードの頭の Reset（そのカードの値とキーを初めの状態へ、1 歩で。After Effects の効果の Reset と同じ）。Deform 以外の窓のカードにも同じ Reset — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
