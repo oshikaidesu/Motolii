@@ -6,6 +6,7 @@
 #include "absent_motion.h"
 #include "scene.h"
 #include <cmath>
+#include <cstring>
 
 static am::Layer absent_layer(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs) {
     am::Layer l;
@@ -48,4 +49,12 @@ std::vector<AbsentCopy> absent_copies(const std::vector<AbsentEffect>& effects, 
         out.push_back({m.getTranslateX(), m.getTranslateY(), std::atan2(m.getSkewY(), m.getScaleX()) * 180.0 / M_PI, std::hypot(m.getScaleX(), m.getSkewY()), c.alpha});
     }
     return out;
+}
+// One of AbsentMotion's eases at u, its numbers as Alight Motion says them (easing.h: bounce, elastic, cyclic, random, step, elasticStep).
+double absent_ease(const char* type, const double* p, int n, double u) {
+    static const struct { const char* name; am::Easing::Type type; } kinds[] = {{"bounce", am::Easing::kBounce}, {"elastic", am::Easing::kElastic}, {"cyclic", am::Easing::kCyclic}, {"random", am::Easing::kRandom}, {"step", am::Easing::kStep}, {"elasticStep", am::Easing::kElasticStep}};
+    am::Easing e;
+    for (const auto& k : kinds) if (!std::strcmp(k.name, type)) e.type = k.type;
+    for (int i = 0; i < n && i < 8; ++i) e.p[e.count++] = (float)p[i];
+    return am::Ease(e, (float)u);
 }

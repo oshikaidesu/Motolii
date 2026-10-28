@@ -383,12 +383,12 @@
 
 ## O. 有料の中身：イーズと親（実機、無料体験）（12）
 
-- [ ] イーズの既定の数字と取っ手を Alight Motion に合わせる：Bounce
-- [ ] 同：Elastic（今は大きくずれている）
-- [ ] 同：Cyclic
-- [ ] 同：Random（今はおとなしすぎる）
+- [x] イーズの既定の数字と取っ手を Alight Motion に合わせる：Bounce — 数と曲線は AbsentMotion の（Alight Motion のプリセット `Keyframes.kt`、式 `easing.cpp` をそのまま、`filament/interp.h` → `absent_motion.cpp` absent_ease）。10/29 edit.sh：キーの間の値が AbsentMotion の Ease と小数 4 桁まで同じ（u 0.1・0.25・0.4 で 44.44 22.22 87.36）。曲線の上の取っ手は別の行
+- [x] 同：Elastic — 数と曲線は AbsentMotion の（Alight Motion のプリセット `Keyframes.kt`、式 `easing.cpp` をそのまま、`filament/interp.h` → `absent_motion.cpp` absent_ease）。10/29 edit.sh：キーの間の値が AbsentMotion の Ease と小数 4 桁まで同じ（u 0.1・0.25・0.4 で 45.79 125.50 97.27）。曲線の上の取っ手は別の行
+- [x] 同：Cyclic — 数と曲線は AbsentMotion の（Alight Motion のプリセット `Keyframes.kt`、式 `easing.cpp` をそのまま、`filament/interp.h` → `absent_motion.cpp` absent_ease）。10/29 edit.sh：キーの間の値が AbsentMotion の Ease と小数 4 桁まで同じ（u 0.1・0.25・0.4 で 79.39 14.64 90.45）。曲線の上の取っ手は別の行
+- [x] 同：Random — 数と曲線は AbsentMotion の（Alight Motion のプリセット `Keyframes.kt`、式 `easing.cpp` をそのまま、`filament/interp.h` → `absent_motion.cpp` absent_ease）。10/29 edit.sh：キーの間の値が AbsentMotion の Ease と小数 4 桁まで同じ（u 0.1・0.25・0.4 で 19.07 -11.71 58.36）。曲線の上の取っ手は別の行
 - [x] 同：Steps（今は 6 段、Alight Motion は 4 段）：既定を 4 段に（0.25・0.5・0.75 で 4 分の 1 ずつ、終わりで 1。実機の絵 135 と同じ、10/28） — 済：`check/doc.sh`
-- [ ] 同：Elastic Steps
+- [x] 同：Elastic Steps — 数と曲線は AbsentMotion の（Alight Motion のプリセット `Keyframes.kt`、式 `easing.cpp` をそのまま、`filament/interp.h` → `absent_motion.cpp` absent_ease）。10/29 edit.sh：キーの間の値が AbsentMotion の Ease と小数 4 桁まで同じ（u 0.1・0.25・0.4 で 0 20.79 20.00）。曲線の上の取っ手は別の行
 - [ ] イーズの取っ手を曲線の上で直接動かす（黄＝形、白＝始めと終わり）
 - [x] ベジェの 4 つのプリセット（有る）：Ease の机のプリセットに Linear・In・Out・In-out（Alight Motion の直線・加速・減速・加速して減速と同じ形、CSS の ease-in・ease-out・ease-in-out の数）、ほかに Ease・Back・Hold。曲線の白い取っ手 2 つは引ける（`skin/book/lib/workspace/desk_ease.dart` の easePresets、`desk_ease_graph.dart`）
 - [x] 親：一覧で選ぶ（None・自分は灰色・音は出ない）：Transform カードの Parent（None と他の物の名前、自分は出ない） — 済：窓の試験（`workspace_joined_test_2.dart` の Parent）

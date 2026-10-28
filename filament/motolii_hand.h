@@ -371,6 +371,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
 void motolii_home(const char* folder) { if (chdir(folder)) std::printf("motolii_home: %s is not a folder\n", folder); }
 Motolii* motolii_open(const char* document, int wide, int high) {
     setenv("BACKEND", "webgpu", 0);   // (the inside is on Filament's WebGPU backend, wherever it is opened from)
+    ++files_changed();   // (a document opened reads the folders as they are now: BRIDGE.md rule 8, read once as a window opens)
     Motolii* m = new Motolii;
     std::promise<bool> opened;
     auto ok = opened.get_future();
