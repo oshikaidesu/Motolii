@@ -287,6 +287,12 @@ final _rowsAA = <(String, String, Map<String, Object>)>[
   ('rd3', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .55}),
   ('rd4', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .8}),
 ];
+// (section BM: red and blue zoomed apart from the centre, then the same with a radial blur.)
+final _rowsBM = <(String, String, Map<String, Object>)>[
+  ('plain', 'effects/Chroma Zoom.fs', const {'red_zoom': 1, 'blue_zoom': 1, 'green_zoom': 1, 'master_zoom': 1, '@size': 0.28, '@x': -.88}),
+  ('chroma', 'effects/Chroma Zoom.fs', const {'red_zoom': 1.2, 'blue_zoom': 1.4, '@size': 0.28, '@x': -.88}),
+  ('zoom', 'chroma2', const <String, Object>{}),
+];
 // (section BL: unsharp mask at the file's own threshold, which leaves small differences alone.)
 final _rowsBL = <(String, String, Map<String, Object>)>[
   ('flat', 'effects/am_unsharpmask.wgsl', const {'radius': 0.6, 'amount': 0, 'threshold': 1, '@size': 0.28, '@x': -.88}),
@@ -511,7 +517,7 @@ final _rowsAB = <(String, String, Map<String, Object>)>[
   ('zoomHi', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .25}),
   ('zoomLo', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .75}),
 ];
-final _rows = switch (_section) { 'BL' => _rowsBL, 'BK' => _rowsBK, 'BJ' => _rowsBJ, 'BI' => _rowsBI, 'BH' => _rowsBH, 'BG' => _rowsBG, 'BF' => _rowsBF, 'BE' => _rowsBE, 'BD' => _rowsBD, 'BC' => _rowsBC, 'BB' => _rowsBB, 'BA' => _rowsBA, 'AZ' => _rowsAZ, 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+final _rows = switch (_section) { 'BM' => _rowsBM, 'BL' => _rowsBL, 'BK' => _rowsBK, 'BJ' => _rowsBJ, 'BI' => _rowsBI, 'BH' => _rowsBH, 'BG' => _rowsBG, 'BF' => _rowsBF, 'BE' => _rowsBE, 'BD' => _rowsBD, 'BC' => _rowsBC, 'BB' => _rowsBB, 'BA' => _rowsBA, 'AZ' => _rowsAZ, 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -648,6 +654,12 @@ void main() {
         for (var k = 0; k < 8; k++) {
           await t.pump(const Duration(milliseconds: 50));
         }
+      } else if (effect == 'chroma2') {
+        expect(m.set(left, 'x', -.88) && m.set(left, 'size', .28), isTrue, reason: m.trouble);
+        final zoom = '$motoliiDir/effects/Chroma Zoom.fs', blur = '$motoliiDir/effects/am_radialblur.wgsl';
+        expect(m.say(left, 'fx', '$zoom $blur'), isTrue, reason: m.trouble);
+        expect(m.set(left, 'js_Chroma_Zoom_red_zoom', 1.2) && m.set(left, 'js_Chroma_Zoom_blue_zoom', 1.4), isTrue, reason: m.trouble);
+        expect(m.set(left, 'js_am_radialblur_amount', .35), isTrue, reason: m.trouble);
       } else if (effect == 'box2') {
         expect(m.remove(left), isTrue, reason: m.trouble);
         left = m.add('shape', 'rect');

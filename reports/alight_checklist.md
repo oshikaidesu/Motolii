@@ -302,7 +302,7 @@
 ## I. アプリだけにある効果（公式ガイドに無い 16）（16）
 
 - [ ] Advanced Chroma Key
-- [ ] Chromatic Zoom Blur
+- [x] Chromatic Zoom Blur — 済（10/28、SECTION=BM）：`effects/Chroma Zoom.fs`（Vidvox ISF-Files、MIT、https://github.com/Vidvox/ISF-Files/blob/395072d48b3ce7351ccb20a5fda54470591324df/ISF/Chroma%20Zoom.fs 、CREDIT by toneburst、Red Zoom 1.2・Blue Zoom 1.4、範囲はどちらも 1〜1.5）と `effects/am_radialblur.wgsl`（AbsentMotion、Apache-2.0、https://github.com/Comett1225/AbsentMotion/blob/0f5d891b7e6fd7260ca6191b4eafef23141230c8/app/src/main/assets/effects/radialblur.json 、Strength 0.35、範囲 0〜1.9）。写真は size 0.28・x -0.88。色ごとに中心から別の倍率で拡がり、その上に放射のぼかしが乗る。右の気球の内側は差の強い画素 610
 - [ ] Color Balance — 見た（10/28、SECTION=AD）：`effects/am_colorbalance.wgsl`（AbsentMotion の colorbalance、Apache-2.0、https://github.com/Comett1225/AbsentMotion/blob/0f5d891b7e6fd7260ca6191b4eafef23141230c8/app/src/main/assets/effects/colorbalance.json 、Amount 1。ファイルの影の色へ寄る）。左の暗い草は青くなる。その青い角が右の気球の左端に被る。右の気球の本体は元の絵 — 見た（10/28、SECTION=BH）：同じファイル、Amount 1、写真は size 0.28・x -0.88。暗い画素は 43,12,115（同じ大きさでこの効果の無い絵の暗い画素は 98,43,63）で影は青へ寄る。明るい画素は 213,226,236 のままで、ファイルが宣言するハイライトの色 255,176,112 へ寄らない。右の気球の内側は差の強い画素 610
 - [ ] Energy Beam — 見た（10/28、SECTION=BG）：線（fill と stroke を白、stroke_width 10、size 0.28、x -0.78）に glow 白・opacity 1・blur 80。線の近傍は黒のまま（glow 無しとの差 0）で、光の線にはならない。右の気球の内側は無変化。物の glow は Filament の bloom（白円では SECTION=BD で光った、https://github.com/google/filament/blob/main/filament/include/filament/View.h 、Apache-2.0）。この回にシェーダは書いていない
 - [ ] Grunge
