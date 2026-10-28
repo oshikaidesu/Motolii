@@ -187,7 +187,18 @@ final _rowsW = <(String, String, Map<String, Object>)>[
   ('vignette3', 'effects/vignette.wgsl', const {}),
   ('rays', 'God Rays', const {}),
 ];
-final _rows = switch (_section) { 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+// (section X: open rows whose shelf file has not been shot. A head default of "unchanged" is a value that file already declares.)
+final _rowsX = <(String, String, Map<String, Object>)>[
+  ('highlightshadow', 'effects/am_highlightshadow.wgsl', const {'highlights': .15, 'shadows': 1.8}),
+  ('unsharpmask', 'effects/am_unsharpmask.wgsl', const {'radius': 1.5, 'amount': 2}),
+  ('longshadow', 'effects/am_longshadow.wgsl', const {}),
+  ('radialshadow', 'effects/am_radialshadow.wgsl', const {'reach': 2, 'alpha': .9}),
+  ('starfield', 'effects/am_starfield.wgsl', const {'brightness': 1.5}),
+  ('starpolyhedron', 'effects/am_starpolyhedron.wgsl', const {}),
+  ('rasterextrude', 'effects/am_rasterextrude.wgsl', const {}),
+  ('tileshift', 'effects/am_tileshift.wgsl', const {'strength': .8}),
+];
+final _rows = switch (_section) { 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
