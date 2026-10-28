@@ -281,7 +281,7 @@ static std::string doc_cards_of(Doc& d, int thing) {
             const std::string w = doc_word(d, thing, card.when), want = card.is[0] == '!' ? card.is + 1 : card.is;
             char* end = nullptr;
             const double n = std::strtod(w.c_str(), &end);
-            const bool is = w == want || (!w.empty() && !*end && n == std::atof(want.c_str()) && !want.empty() && isdigit((unsigned char)want[0]));
+            const bool is = w == want || (w.empty() && want == "0") || (!w.empty() && !*end && n == std::atof(want.c_str()) && !want.empty() && isdigit((unsigned char)want[0]));   // (a number not said is 0: a parent not given)
             if (is == (card.is[0] == '!')) continue;
         }
         std::string names;

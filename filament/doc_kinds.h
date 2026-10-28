@@ -177,6 +177,8 @@ static const DocValue doc_values[] = {
     // (Filament's light channels: a light of group 1 to 7 lights only the solids of that group; 0, as it comes: the solids of group 0 and every other)
     {"light_group", "light solid", 0, 7, false, nullptr},
     {"parent", doc_kinds, 0, 1e9, false, nullptr},
+    {"parent_rotate", doc_kinds, 0, 2, true, nullptr}, {"parent_size", doc_kinds, 0, 2, true, nullptr},   // (how much of its parent's turn and size it takes: 1 all, 0 none, 2 twice; Alight Motion's Parenting Helper weights)
+    {"roll", doc_kinds, 0, 0, false, "x y"}, {"roll_radius", doc_kinds, -1e3, 1e3, true, nullptr},   // (turned as a wheel rolling as it goes along x, or y; its radius half its smaller side and this more)
     {"dissolve", "solid", 0, 100, true, nullptr}, {"grain", "solid", 0.05, 20, true, nullptr},   // (a point cloud's: its grains thrown out each its own way, so far; and how large they are drawn: points.h)
     {"mosh", "film", 0, 1, false, nullptr}, {"mosh_with", "film", 0, 1e9, false, nullptr}, {"mosh_at", "film", 0, 1e6, false, nullptr},   // (a real datamosh: from that moment of its film, the other's motion poured into its last picture: mosh.h)   // (the thing it goes with: it is moved, turned and sized as that one is, then as it is itself; 0: none)
     {"space", "film picture text shape", 0, 0, false, "2d 2.5d"},   // (the past repository's three tags: 2d is not in the world and lies by the order alone; 2.5d is a sheet in the world, before or behind by depth; a solid is 3d)

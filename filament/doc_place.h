@@ -168,7 +168,22 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
                 }
             }
         }
-    math::mat4 place = doc_above(d, thing, now, deeper) * math::mat4::translation(math::double3{doc_literal(d, thing, "x", now, 0), doc_literal(d, thing, "y", now, 0), doc_literal(d, thing, "z", now, 0)}) *
+    const math::mat4 above = doc_above(d, thing, now, deeper), there = above * math::mat4::translation(math::double3{doc_literal(d, thing, "x", now, 0), doc_literal(d, thing, "y", now, 0), doc_literal(d, thing, "z", now, 0)});
+    math::mat4 helped;   // (Alight Motion's Parenting Helper, as bevy_alight_motion works it (MIT/Apache-2.0, src/animation/parenthelper.rs): its parent's turn and size taken by their weights, and a wheel's roll)
+    if (const double wr = doc_literal(d, thing, "parent_rotate", now, 1), ws = doc_literal(d, thing, "parent_size", now, 1); doc_literal(d, thing, "parent", 0, 0) != 0.0 && (wr != 1.0 || ws != 1.0)) {
+        const math::double3 ax = above[0].xyz;
+        const double turn = std::atan2(ax.y, ax.x), size = std::max(1e-9, length(ax));
+        helped = math::mat4::rotation(turn * (wr - 1.0), math::double3{0, 0, 1}) * math::mat4::scaling((1.0 + (size - 1.0) * ws) / size);
+    }
+    if (const std::string roll = doc_literal_word(d, thing, "roll"); roll == "x" || roll == "y") {   // (the way gone along over the wheel's round, in turns: x to the right turns it clockwise)
+        float2 half{0.5f};
+        float deep = 0.f;
+        doc_half(d, thing, &half, &deep);
+        const math::double3 at = (there * math::double4{0, 0, 0, 1}).xyz;
+        const double r = std::min(half.x, half.y) * doc_literal(d, thing, "size", now, 1) + doc_literal(d, thing, "roll_radius", now, 0);
+        if (std::fabs(r) > 1e-6) helped = helped * math::mat4::rotation(-(roll == "x" ? at.x : -at.y) / r, math::double3{0, 0, 1});
+    }
+    math::mat4 place = there * helped *
                        heading * turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::translation(shift) * math::mat4::scaling(doc_literal(d, thing, "size", now, 1)) *
                        math::mat4::scaling(math::double3{doc_literal(d, thing, "scale_x", now, 1), doc_literal(d, thing, "scale_y", now, 1), doc_literal(d, thing, "scale_z", now, 1)}) *
                        own * math::mat4::translation(-anchor);

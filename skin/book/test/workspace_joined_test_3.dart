@@ -234,6 +234,19 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a Parent card while it has a parent: how much of its turn and size it takes, and a wheel\'s roll (Alight Motion\'s Parenting Helper)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final a = m.add('shape', 'rect'), b = m.add('shape', 'rect');
+    ws.reread();
+    await t.pumpAndSettle();
+    expect(m.cards(b).map((c) => c.$1), isNot(contains('Parent')), reason: 'no parent: nothing to take of it');
+    expect(m.set(b, 'parent', a.toDouble()), isTrue, reason: m.trouble);
+    expect([for (final c in m.cards(b)) if (c.$1 == 'Parent') ...c.$2], ['parent_rotate', 'parent_size', 'roll', 'roll_radius']);
+    expect([m.value(b, 'parent_rotate', 0) ?? 1, m.value(b, 'parent_size', 0) ?? 1], [1, 1], reason: 'all of its parent\'s, as it comes');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Frame rate on the Play card: a thing\'s moving values seen only at its own frames (Alight Motion\'s Time Quantization)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

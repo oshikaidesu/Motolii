@@ -206,7 +206,7 @@
 - [ ] カメラを複数置いて切り替える（未確認）
 - [ ] カメラに親子づけ（字幕を画面に固定）（有る）：いま parent
 - [ ] 親子づけ（有る）：いま parent
-- [ ] **Parenting Helper**（親の回転・大きさを無視・倍に、車輪の自動回転）（無い）
+- [x] **Parenting Helper**（親の回転・大きさを無視・倍に、車輪の自動回転）（無い→有る）：親がある間だけ出る Parent の札。Its turn・Its size（親の回転・大きさをどれだけ受けるか、0〜200%、キー可）、Roll（x か y に進んだ分だけ車輪として回る）と Roll radius。手本：bevy_alight_motion の parenthelper.rs（MIT/Apache-2.0）の式 — 済（10/28）：親を 45° 回して子の棒が 1・0・2 で 45°・水平・90°、親 150% で子の大きさ 0 なら元の大きさを絵で確かめた。札の出方は窓の試験（`skin/book/test/workspace_joined_test_3.dart`）
 - [ ] 全部の値にキー（有る）
 - [ ] イーズ 9 種（ベジェ・Bounce・Elastic・Cyclic・Random・Steps・Elastic Steps）（有る）：いま `filament/interp.h`（Alight Motion を手本に作ったもの。出典をそう直した）
 - [ ] 曲線エディタとプリセット（有る）：いま Ease の机、利用者のプリセット
