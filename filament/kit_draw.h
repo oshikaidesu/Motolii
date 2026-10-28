@@ -22,8 +22,11 @@ static void move(Stage& s, const Mesh* m, const std::function<mat4f(int, const m
 // How it is written, as Alight Motion's export asks (0: as it was): how high (ffmpeg's scale, the shape kept, Lanczos),
 // how many pictures a second (ffmpeg's -r: some of the 60 left out), how many megabits a second (-b:v, in place of
 // x264's -crf 17 or VideoToolbox's -q:v 65).
-struct FilmWay { int high = 0, rate = 0; double mbps = 0.0; };
-static bool film(Stage& s, const char* path, int pictures, const std::function<void(float)>& pose, const FilmWay& said = {}) {
+// blur: so many moments drawn for each picture and laid one on another (After Effects' and Blender's motion blur: a
+// 180° shutter round the picture's own moment, as After Effects' shutter angle 180 and phase -90): what moves is smeared
+// along its way, what stays is as sharp as before.
+struct FilmWay { int high = 0, rate = 0; double mbps = 0.0; int blur = 0; };
+static bool film(Stage& s, const char* path, int pictures, const std::function<void(double)>& pose, const FilmWay& said = {}) {
     const auto quoted = [](std::string name) {   // (a file's name as a shell takes it)
         for (size_t at = 0; (at = name.find('\'', at)) != std::string::npos; at += 4) name.replace(at, 1, "'\\''");
         return "'" + name + "'";
@@ -60,10 +63,18 @@ static bool film(Stage& s, const char* path, int pictures, const std::function<v
     if (!to) return false;
     std::vector<uint8_t> pic((size_t)s.w * s.h * 4);
     s.by_clock = false;
+    const int samples = std::max(1, said.blur);
+    std::vector<uint32_t> sum(samples > 1 ? pic.size() : 0);
     for (int i = 0; i < pictures; ++i) {
-        time_is(s, (double)i / 60.0);
-        pose((float)i / (float)pictures);
-        draw(s, &pic);
+        if (samples > 1) std::fill(sum.begin(), sum.end(), 0u);
+        for (int k = 0; k < samples; ++k) {
+            const double at = samples > 1 ? std::max(0.0, i + 0.5 * ((k + 0.5) / samples - 0.5)) : (double)i;   // (its moment, or one of those round it)
+            time_is(s, at / 60.0);
+            pose(at / pictures);
+            draw(s, &pic);
+            if (samples > 1) for (size_t j = 0; j < pic.size(); ++j) sum[j] += pic[j];
+        }
+        if (samples > 1) for (size_t j = 0; j < pic.size(); ++j) pic[j] = (uint8_t)((sum[j] + samples / 2) / samples);
         if (std::fwrite(pic.data(), 1, pic.size(), to) != pic.size()) break;
     }
     return pclose(to) == 0;

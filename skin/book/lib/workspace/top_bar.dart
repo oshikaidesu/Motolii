@@ -364,6 +364,7 @@ class _RenderState extends State<_Render> {
                       ('Resolution', 'render_height', [(0, 'Full'), for (final p in sizeResolutions) if (p < math.min(WsArt.comp.width, WsArt.comp.height)) (p, '${p}p')]),
                       ('Rate', 'render_rate', [(0, '${Ws.fps}'), for (final r in const [30, 24, 15]) if (r < Ws.fps) (r, '$r')]),
                       ('Quality', 'render_mbps', [(0, 'Auto'), for (final b in const [4, 8, 16, 32]) (b, '$b Mbps')]),
+                      ('Motion blur', 'render_blur', const [(0, 'Off'), (8, 'On')]),   // (After Effects' 180° shutter: eight moments laid on each picture)
                     ])
                       row(label, StatefulBuilder(builder: (context, again) {
                         final m = ws.inside, now = (m?.value(0, name, 0) ?? 0).round();

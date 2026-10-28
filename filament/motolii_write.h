@@ -11,13 +11,14 @@ int motolii_write(Motolii* m, const char* mp4) {
         // (between two pictures the hand does what it was asked meanwhile, so a shell that asks does not stand still;
         //  the document is read then, not changed, and the picture being written is told its moment again after)
         m->d->lock.unlock();   // (held by the hand that asked this: let go while each picture is drawn, as when it is live)
-        const int ok = told(m, film(*m->s, mp4, pictures, [m, pictures, from](float done) {
+        const int ok = told(m, film(*m->s, mp4, pictures, [m, pictures, from](double done) {
             std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
             std::deque<std::function<void()>> todo;
             { std::lock_guard<std::mutex> hold(m->asked_lock); todo.swap(m->asked); }
             for (auto& does : todo) does();
-            time_is(*m->s, from + (double)std::lround(done * (float)pictures) / RATE);   // (the picture's moment: from the work area's start)
-        }, FilmWay{(int)doc_number(*m->d, 0, "render_height", 0, 0), (int)doc_number(*m->d, 0, "render_rate", 0, 0), doc_number(*m->d, 0, "render_mbps", 0, 0)}), "the file could not be written");
+            const double at = done * pictures;   // (in pictures: a whole one, or a moment between for a blur)
+            time_is(*m->s, from + (std::fabs(at - std::round(at)) < 1e-6 ? std::round(at) : at) / RATE);   // (the picture's moment: from the work area's start)
+        }, FilmWay{(int)doc_number(*m->d, 0, "render_height", 0, 0), (int)doc_number(*m->d, 0, "render_rate", 0, 0), doc_number(*m->d, 0, "render_mbps", 0, 0), (int)doc_number(*m->d, 0, "render_blur", 0, 0)}), "the file could not be written");
         m->d->lock.lock();
         m->d->writing = false;
         m->d->written_from = 0.0;

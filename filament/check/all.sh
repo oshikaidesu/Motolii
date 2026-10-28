@@ -16,6 +16,7 @@ run absent_shapes.sh
 run clip_matte.sh
 run fog_near.sh
 run film_way.sh
+run motion_blur.sh
 run camera_switch.sh
 run pack.sh
 twin=$(./interp_twin.sh 2>&1); print -r -- "$twin" | grep -E ': the same|differ'   # (the eases the same as the past repository's own, number by number)
