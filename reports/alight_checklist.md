@@ -277,7 +277,7 @@
 - [x] 数字は細かい目盛りをこする：どの数字の欄もこすると変わり、こすりながら ⇧ で 10 分の 1、⌃ で 10 倍（Ableton Live の決まり） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] イーズ：反転、前・次のカーブへ：Ease の机の帯。反転は右端の矢印、前・次のカーブは左端の ‹ ›（そのカーブの始まりのキーを選ぶ。端では出ない） — 済（10/28）：窓の試験（`workspace_ease_library_test.dart`）
 - [x] イーズ：カーブのコピー・貼り付け、全部のキーに貼る、行き過ぎを許す：Ease の机の帯の Copy・Paste・Paste All（10/28）、グラフの取っ手は枠の上下へも引ける（-0.42〜1.62） — 済：窓の試験（`workspace_ease_library_test.dart`：取っ手を 1.4 まで引くと 0.8 秒で 1 を越える）
-- [ ] 速さ：亀とウサギのつまみ、どちらの端を止めるか
+- [x] 速さ：亀とウサギのつまみ、どちらの端を止めるか（一部→有る、別の形）：Play カードの Speed と Hold at（start・now・end）。つまみを離すと、選んだ所を止めたまま長さとキーが速さに合わせて伸び縮みする（After Effects の Time Stretch の Hold in place、Pinnacle Studio の速さの基準点と同じ 3 つ）。Alight Motion の 4 つは説明が見つからず、絵だけでは意味を決められないので借りなかった。長さを言っていない物は書類の終わりまでを長さとする — 済（10/28）：窓で end に止めて速さを上げ、終わりが 2 秒のまま・長さ 2÷速さ・キーも終わりを中心に縮むのを確かめた（`skin/book/test/workspace_joined_test_3.dart`）。sweep_test の全部のつまみも通る
 - [x] 帯を左で詰める・切る・右で詰める：⌥[（始まりを再生位置へ）・⌘E（切る）・⌥]（終わりを再生位置へ）。Final Cut Pro の Trim Start・Trim End と同じ鍵。Animation メニューにも — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [ ] 文字：揃え・フォント・大きさ・色を 1 段に（一部）：Text カードに文字・Font・Size・Alignment、色は Fill カード。1 段ではない
 - [x] フォント：最近使ったもの、太さごと、星：Fonts の棚の Recent（最近当てた 8 個、新しい順、次に開いても残る、10/28）、Starred、太さは CoreText の読む bold・light の札 — 済：窓の試験（`workspace_joined_test_2.dart`）

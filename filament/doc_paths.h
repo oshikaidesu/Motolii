@@ -478,6 +478,23 @@ static bool doc_time_align(Doc& d, const std::vector<int>& things, const std::st
     if (!ok) d.act_ok = false;
     return doc_acted(d) && ok;
 }
+// A thing made to go at another speed, held in place at its start, at a moment, or at its end (After Effects' Time
+// Stretch: Hold in place Layer In-point, Current Frame, Layer Out-point; Pinnacle Studio's speed anchor): it lasts as
+// much longer as it goes slower, and its keys are stretched with it round that place; a film plays the same stretch of
+// itself. One step.
+static bool doc_time_stretch(Doc& d, int thing, double speed, const std::string& hold, double now) {
+    const double was = std::fabs(doc_number(d, thing, "speed", 0, 1)), to = std::fabs(speed);
+    if (to < 1e-3) return d.trouble = "a speed of nothing goes nowhere", false;
+    if (hold != "start" && hold != "now" && hold != "end") return d.trouble = "held at start, now or end", false;
+    const double start = doc_number(d, thing, "start", 0, 0), lasts = doc_lasts(d, thing) > 0.0 ? doc_lasts(d, thing) : std::max(1e-3, doc_seconds(d) - start), f = was / to;   // (no length said: to the document's end, as doc_split counts it)
+    const double at = hold == "start" ? start : hold == "end" ? start + lasts : std::clamp(now, start, start + lasts);
+    doc_act(d);
+    bool ok = doc_set(d, thing, "speed", speed) && doc_set(d, thing, "start", std::max(0.0, at + (start - at) * f)) && doc_set(d, thing, "duration", lasts * f)
+           && doc_change(d, sqlite3_mprintf("update fact set at = 1e7 + %!.17g + (at - %!.17g) * %!.17g where thing = %d and name in (select name from fact where thing = %d group by name having count(*) > 1 or max(at) <> 0 or max(way) is not null);"
+                                            "update fact set at = at - 1e7 where thing = %d and at >= 5e6", at, at, f, thing, thing, thing));   // (by way of far off, as doc_keys_by: no key lands on one not yet moved)
+    if (!ok) d.act_ok = false;
+    return doc_acted(d) && ok;
+}
 // A thing's named values as they come (After Effects' Reset on a group of values): what was said of them and their keys
 // forgotten; one step.
 static bool doc_reset(Doc& d, int thing, const std::string& names) {

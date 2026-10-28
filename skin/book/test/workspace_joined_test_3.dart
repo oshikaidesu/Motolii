@@ -658,6 +658,36 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Speed dragged on the Play card stretches the thing in time round where it is held: held at its end, its end stays and its keys come with it (After Effects\' Time Stretch)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    expect(m.set(rect, 'duration', 2) && m.key(rect, 'x', 0, -1) && m.key(rect, 'x', 1, 1), isTrue, reason: m.trouble);
+    ws..reread()..select('$rect');
+    await t.pumpAndSettle();
+    await pick(t, 'v_speed_hold', 'end');
+    await settled(t, ws);
+    expect(m.word(rect, 'speed_hold'), 'end');
+    final knob = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_speed');
+    await seen(t, knob);
+    await t.dragFrom(t.getCenter(knob.first), const Offset(60, 0));
+    await t.pumpAndSettle();
+    for (var i = 0; i < 80 && (m.value(rect, 'speed', 0) ?? 1) == 1; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    await settled(t, ws);
+    final s = m.value(rect, 'speed', 0)!;
+    expect(s, isNot(1), reason: 'its speed changed: ${m.trouble}');
+    final lasts = 2 / s.abs();
+    expect(m.value(rect, 'duration', 0), closeTo(lasts, 1e-6), reason: 'as much shorter as it goes faster');
+    expect((m.value(rect, 'start', 0) ?? 0) + lasts, closeTo(2, 1e-6), reason: 'its end held where it was');
+    expect(m.keyMoments(rect, 'x').last, closeTo(2 - 1 / s.abs(), 1e-6), reason: 'its keys stretched round its end');
+    expect(m.undo(), isTrue);
+    expect(m.value(rect, 'duration', 0), 2, reason: 'one step back');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a picked thing that moves shows its way on the stage, from where it begins to where it ends (Alight Motion\'s motion path)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');
@@ -1174,7 +1204,7 @@ void _tests3() {
     await t.pumpAndSettle();
     expect(m.words(fox, 'animation'), ['Survey', 'Walk', 'Run'], reason: 'its file\'s own movements');
     expect(m.say(fox, 'animation', 'Run') && m.set(fox, 'speed', 2), isTrue, reason: m.trouble);
-    expect(m.cards(fox).firstWhere((c) => c.$1 == 'Play').$2, ['animation', 'speed', 'frame_rate']);
+    expect(m.cards(fox).firstWhere((c) => c.$1 == 'Play').$2, ['animation', 'speed', 'speed_hold', 'frame_rate']);
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);

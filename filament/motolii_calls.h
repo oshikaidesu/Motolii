@@ -479,6 +479,13 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
                 ok = changes(m, (int)doc_align(doc(m), things, how));
             }
             else if (c == "flip") ok = changes(m, (int)doc_value_by(doc(m), thing, w == "y" ? "scale_y" : "scale_x", 0, -1));   // (word: x or y; its keys turned over too)
+            else if (c == "time_stretch") {   // (word: where it is held, start, now or end, then the playhead; number: its new speed)
+                std::istringstream said(w);
+                std::string hold;
+                double now = 0.0;
+                said >> hold >> now;
+                ok = changes(m, (int)doc_time_stretch(doc(m), thing, number, hold, now));
+            }
             else if (c == "time_align") {   // (word: how, then the things, each its number; number: the playhead)
                 std::istringstream said(w);
                 std::string how;

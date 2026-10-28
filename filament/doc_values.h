@@ -104,6 +104,7 @@ static const DocShown doc_shown[] = {
     {"marker", "", "", "Part", 0, 0, nullptr},
     {"animation", "", "", "Movement", 0, 0, nullptr},
     {"speed", "", "×", "Speed", -4, 4, nullptr},
+    {"speed_hold", "", "", "Hold at", 0, 0, nullptr},
     {"frame_rate", "", "fps", "Frame rate", 0, 60, nullptr},   // (0: as smooth as the stage)
     {"volume", "share", "%", "Volume", 0, 2, nullptr},   // (1 shown as 100%, as Alight Motion shows it)
     {"beats", "", "dB", "Beats", 0, 30, nullptr},
@@ -306,7 +307,7 @@ static const DocCard doc_cards[] = {
     {"Scatter", "scatter_x scatter_y scatter_z scatter_rotate scatter_size seed drift_x drift_y"},
     {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
     {"Motion", "orient", "kind", "!camera"},   // (how it goes along its way: turned the way it is going, After Effects' Auto-Orient)
-    {"Play", "marker animation speed frame_rate"},
+    {"Play", "marker animation speed speed_hold frame_rate"},
     {"Sound", "volume beats", "kind", "film"},   // (its beats: shown on the timeline's ruler where it strikes)
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Parent", "parent_rotate parent_size roll roll_radius", "parent", "!0"},   // (Alight Motion's Parenting Helper: how much of its parent's turn and size it takes, and rolling as a wheel; while it has a parent)

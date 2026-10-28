@@ -73,6 +73,11 @@ void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}
     if (changed.isEmpty) return;
   }
   if (t == null) return;
+  if (changed['v_speed'] case final speed? when t > 0) {   // (its speed: the thing stretched in time round where it is held, After Effects' Time Stretch; let go, not while dragged)
+    changed = {...changed}..remove('v_speed');
+    if (!live) ws.after(m.later('time_stretch', thing: t, number: speed, word: '${m.word(t, 'speed_hold').isEmpty ? 'start' : m.word(t, 'speed_hold')} ${ws.frame / Ws.fps}'), (done, why) => done ? ws.reread() : _told(ws, why));
+    if (changed.isEmpty) return;
+  }
   if (_holding != t) m.take(t); // (held once a hand: each step after only carries)
   _holding = live ? t : null;
   String? why;
