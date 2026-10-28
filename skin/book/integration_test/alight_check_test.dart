@@ -287,6 +287,13 @@ final _rowsAA = <(String, String, Map<String, Object>)>[
   ('rd3', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .55}),
   ('rd4', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .8}),
 ];
+// (section BN: a small photo shifted by more than the crop's margin, so the wrap can show.)
+final _rowsBN = <(String, String, Map<String, Object>)>[
+  ('plain', 'effects/am_offset.wgsl', const {'offset_x': 0, '@size': 0.28, '@x': -.88}),
+  ('wrap', 'effects/am_offset.wgsl', const {'offset_x': 180, '@size': 0.28, '@x': -.88}),
+  ('key', 'effects/am_chromakey.wgsl', const {'key_x': 0.50, 'key_y': 0.69, 'key_z': 0.90, 'tolerance': 0.12, '@size': 0.28, '@x': -.88}),
+  ('spill', 'spill', const <String, Object>{}),
+];
 // (section BM: red and blue zoomed apart from the centre, then the same with a radial blur.)
 final _rowsBM = <(String, String, Map<String, Object>)>[
   ('plain', 'effects/Chroma Zoom.fs', const {'red_zoom': 1, 'blue_zoom': 1, 'green_zoom': 1, 'master_zoom': 1, '@size': 0.28, '@x': -.88}),
@@ -517,7 +524,7 @@ final _rowsAB = <(String, String, Map<String, Object>)>[
   ('zoomHi', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .25}),
   ('zoomLo', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .75}),
 ];
-final _rows = switch (_section) { 'BM' => _rowsBM, 'BL' => _rowsBL, 'BK' => _rowsBK, 'BJ' => _rowsBJ, 'BI' => _rowsBI, 'BH' => _rowsBH, 'BG' => _rowsBG, 'BF' => _rowsBF, 'BE' => _rowsBE, 'BD' => _rowsBD, 'BC' => _rowsBC, 'BB' => _rowsBB, 'BA' => _rowsBA, 'AZ' => _rowsAZ, 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+final _rows = switch (_section) { 'BN' => _rowsBN, 'BM' => _rowsBM, 'BL' => _rowsBL, 'BK' => _rowsBK, 'BJ' => _rowsBJ, 'BI' => _rowsBI, 'BH' => _rowsBH, 'BG' => _rowsBG, 'BF' => _rowsBF, 'BE' => _rowsBE, 'BD' => _rowsBD, 'BC' => _rowsBC, 'BB' => _rowsBB, 'BA' => _rowsBA, 'AZ' => _rowsAZ, 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -654,6 +661,12 @@ void main() {
         for (var k = 0; k < 8; k++) {
           await t.pump(const Duration(milliseconds: 50));
         }
+      } else if (effect == 'spill') {
+        expect(m.set(left, 'x', -.88) && m.set(left, 'size', .28), isTrue, reason: m.trouble);
+        final key = '$motoliiDir/effects/am_chromakey.wgsl', clean = '$motoliiDir/effects/Chroma Desaturation Mask.fs';
+        expect(m.say(left, 'fx', '$key $clean'), isTrue, reason: m.trouble);
+        expect(m.set(left, 'js_am_chromakey_key_x', .50) && m.set(left, 'js_am_chromakey_key_y', .69) && m.set(left, 'js_am_chromakey_key_z', .90) && m.set(left, 'js_am_chromakey_tolerance', .12), isTrue, reason: m.trouble);
+        expect(m.set(left, 'js_Chroma_Desaturation_Mask_mask_color_x', .50) && m.set(left, 'js_Chroma_Desaturation_Mask_mask_color_y', .69) && m.set(left, 'js_Chroma_Desaturation_Mask_mask_color_z', .90), isTrue, reason: m.trouble);
       } else if (effect == 'chroma2') {
         expect(m.set(left, 'x', -.88) && m.set(left, 'size', .28), isTrue, reason: m.trouble);
         final zoom = '$motoliiDir/effects/Chroma Zoom.fs', blur = '$motoliiDir/effects/am_radialblur.wgsl';
