@@ -74,7 +74,10 @@ void wsMakeMove(Ws ws, List<String> who, double start) {
   m.later('key', thing: -1, name: 'strength', word: '$start', number: coming ? 1 : 0);
   m.later('key', thing: -1, name: 'strength', word: '${start + .6}', number: coming ? 0 : 1);
   m.later('way', thing: -1, name: 'strength', number: start, word: wsMoveWay(.8, 0));
-  ws.after(m.later('together'), (_, _) => ws.reread());
+  ws.after(m.later('together'), (done, why) {
+    if (!done) ws.notice = 'No move made: $why';   // (the step undone as a whole: why, on the top bar)
+    ws.reread();
+  });
 }
 
 /// One of the other end's values (or the lag) told; a hand's drag is one step when begun and ended with [wsMoveHold].
