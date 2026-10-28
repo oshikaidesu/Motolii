@@ -1,5 +1,6 @@
 // Split Tone: AbsentMotion's splittone (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Color
+// --about:Tints the shadows towards one hue and the highlights towards another, keeping black, white and brightness.
 // --track@shadowAmount:Shadow Amount,0,1,0.6,0.01
 // --track@highlightAmount:Highlight Amount,0,1,0.6,0.01
 diagnostic(off, derivative_uniformity);

@@ -1,5 +1,6 @@
 // Spin Blur: AbsentMotion's spinblur (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Blur
+// --about:Blurs the layer in circles around a point, as if it were spinning.
 // --track@R_center_x:Center x,-1,2,0.5,0.01
 // --track@R_center_y:Center y,-1,2,0.5,0.01
 diagnostic(off, derivative_uniformity);

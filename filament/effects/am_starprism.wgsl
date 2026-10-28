@@ -1,5 +1,6 @@
 // Star Prism: AbsentMotion's starprism (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:3d
+// --about:Cuts the layer into a star and gives it depth.
 // --track@points:Points,3,12,5.0,1
 // --track@radius:Radius,0.02,5,0.95,0.01
 // --track@inner:Inner Radius,0.05,1,0.45,0.01

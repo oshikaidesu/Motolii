@@ -1,5 +1,6 @@
 // Inner Pinch/Bulge: AbsentMotion's innerbulge (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Distort
+// --about:Bulges the middle of the layer out or pinches it in, while the edges of the layer stay where they are.
 // --track@strength:Strength,-1,1,0.5,0.001
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);

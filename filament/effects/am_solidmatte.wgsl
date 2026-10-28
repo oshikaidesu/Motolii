@@ -1,5 +1,6 @@
 // Solid Matte: AbsentMotion's solidmatte (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Key
+// --about:Puts a solid color behind the layer, filling its transparent parts. Punch Out shows only the color with the layer's shape cut out of it, and Screen Space fills the whole screen instead of the layer's box.
 // --track@color_x:Color R,0,1,0.1765,0.01
 // --track@color_y:Color G,0,1,0.1176,0.01
 // --track@color_z:Color B,0,1,0.9647,0.01

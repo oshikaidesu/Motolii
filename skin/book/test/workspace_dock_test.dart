@@ -113,4 +113,15 @@ void main() {
     expect(find.byType(SvgPicture), findsOneWidget, reason: 'drawn on its tile');
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
+
+  testWidgets('the Effects shelf\'s search reads what an effect does, in its maker\'s words (Alight Motion\'s search of the descriptions)', (t) async {
+    final ws = _joined(), m = ws.inside!;
+    final checker = m.effects.firstWhere((e) => e.$2.endsWith('/am_checker.wgsl'));
+    expect(m.about(checker.$2), startsWith('Draws a checkerboard'), reason: 'its head\'s --about:, from AbsentMotion\'s description');
+    await _shelf(t, ws, const Size(240, 918), 'Effects');
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'checkerboard');
+    await t.pumpAndSettle();
+    expect(find.byKey(ValueKey('ws-screen-${checker.$2}')), findsOneWidget, reason: 'Checker found by a word of what it does, not of its name');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
 }

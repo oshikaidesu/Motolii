@@ -1,5 +1,6 @@
 // Solid Color: AbsentMotion's solid (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Color
+// --about:Lays one color over the layer, keeping its shape, with a choice of blend modes.
 // --track@color_x:Color R,0,1,0.1765,0.01
 // --track@color_y:Color G,0,1,0.1176,0.01
 // --track@color_z:Color B,0,1,0.9647,0.01

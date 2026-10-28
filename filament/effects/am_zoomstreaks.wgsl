@@ -1,5 +1,6 @@
 // Zoom Streaks: AbsentMotion's zoomstreaks (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Blur
+// --about:Makes streaks that shoot out from a point by scaling copies of the layer around it and keeping the brightest pixels. Average gives a zoom blur. R, G, B and A choose per channel whether the copies keep the lowest, highest or average value, or leave that channel alone.
 // --track@R_center_x:Center x,-1,2,0.5,0.01
 // --track@R_center_y:Center y,-1,2,0.5,0.01
 // --track@strength:Strength,0,1,0.15,0.001

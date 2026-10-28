@@ -1,5 +1,6 @@
 // Palette Map: AbsentMotion's palettemap (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Color
+// --about:Maps each pixel to the nearest color in a palette of up to eight colors. Alpha blends the mapped colors with the original layer.
 // --track@colors:Colors,2,8,5.0,1
 // --track@color1_x:Color 1 R,0,1,0.1137,0.01
 // --track@color1_y:Color 1 G,0,1,0.1686,0.01

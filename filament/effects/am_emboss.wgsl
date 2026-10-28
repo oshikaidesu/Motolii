@@ -1,5 +1,6 @@
 // Emboss: AbsentMotion's emboss (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Stylize
+// --about:Applies an emboss effect using luminance gradients along a specified light angle.
 // --track@angle:Light Angle,0.0,360.0,45.0,1.0
 // --track@strength:Strength,0.0,4.0,1.0,0.1
 diagnostic(off, derivative_uniformity);

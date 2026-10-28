@@ -1,5 +1,6 @@
 // Torus: AbsentMotion's torus (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:3d
+// --about:Wraps the layer around a ring.
 // --track@radius:Radius,0.02,5,0.62,0.01
 // --track@thickness:Thickness,0.01,3,0.28,0.01
 // --track@R_position_x:Position x,-5000,5000,0,1

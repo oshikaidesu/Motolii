@@ -1,5 +1,6 @@
 // Blink: AbsentMotion's blink (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Stylize
+// --about:Switches the layer on and off a number of times per second.
 // --track@frequency:Frequency,0,30,2.0,0.01
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);

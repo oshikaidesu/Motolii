@@ -1,5 +1,6 @@
 // Bump Map: AbsentMotion's bumpmap (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Stylize
+// --about:Lights the layer as if its brightness were a raised surface, for an embossed, textured look that keeps the colors.
 // --track@height:Height,0,30,4.0,0.01
 // --track@ambient:Ambient,0,1,0.4,0.001
 // --track@shine:Shine,0,1,0.3,0.001

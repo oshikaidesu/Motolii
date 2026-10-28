@@ -1,5 +1,6 @@
 // Film Grain: AbsentMotion's filmgrain (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Noise
+// --about:Animated monochrome film grain with adjustable amount, grain size, and animation speed.
 // --track@amount:Amount,0.0,1.0,0.5,0.01
 // --track@grainSize:Grain Size,1.0,8.0,4.0,1.0
 // --track@speed:Speed,0.0,5.0,1.0,0.1

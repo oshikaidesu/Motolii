@@ -1,5 +1,6 @@
 // Contour Strips: AbsentMotion's contourstrips (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Stylize
+// --about:Draws stacked paper strips whose height follows the layer's brightness or opacity, like a ridge-line landscape.
 // --track@count:Count,0.5,200,10.0,0.1
 // --track@height:Height,0,15,1.0,0.01
 // --track@thickness:Thickness,0,1,0.005,0.001

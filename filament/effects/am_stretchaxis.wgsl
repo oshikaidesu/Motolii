@@ -1,5 +1,6 @@
 // Stretch Axis: AbsentMotion's stretchaxis (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Move
+// --about:Stretches the layer in any direction.
 // --track@scale:Scale,0.01,50,1.0,0.01
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);

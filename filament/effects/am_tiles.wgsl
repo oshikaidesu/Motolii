@@ -1,5 +1,6 @@
 // Tiles: AbsentMotion's tiles (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Distort
+// --about:Repeats the layer to fill the screen. Raise Crop to make smaller tiles, with optional mirroring, row offset and rotation. Legacy Scale preserves older projects.
 // --track@zoom:Crop,0.005,20,1.0,0.005
 // --track@offset:Offset,-100,100,0.0,0.01
 // --track@sizing:Sizing,0,1,0.0,0.01

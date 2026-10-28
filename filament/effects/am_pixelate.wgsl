@@ -1,5 +1,6 @@
 // Pixelate: AbsentMotion's pixelate (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Stylize
+// --about:Turns the layer into blocks of one color each, taken from the middle of the block, on a grid centered on the layer (or on the frame with Screen Space). Stretch, Offset and Angle shape the grid and Vignette darkens each block toward its edges.
 // --track@blockSize:Size,1,500,20.0,1
 // --track@stretch_x:Stretch x,0.01,100,1,0.01
 // --track@stretch_y:Stretch y,0.01,100,1,0.01

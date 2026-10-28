@@ -1,5 +1,6 @@
 // Glitch: AbsentMotion's glitch (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Distort
+// --about:Random horizontal block displacement and color channel offsets, changing a few times per second.
 // --track@intensity:Intensity,0.0,1.0,0.5,0.01
 // --track@blockHeight:Block Height,4.0,80.0,20.0,1.0
 // --track@seed:Seed,0.0,1000.0,0.0,1.0

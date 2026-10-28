@@ -30,6 +30,12 @@ extension MotoliiShelves on Motolii {
     return _pictures[name] ?? '';
   }
 
+  /// What an effect does, in its maker's words, as its file's head says (--about:; '' none said): by name or file.
+  String about(String name) {
+    _said();
+    return _abouts[name] ?? '';
+  }
+
   /// Where a tile drawn for an effect goes, as the inside says ('' none: an effect of its own, drawn by its look); by name or file.
   String tileHome(String name) {
     _said();
@@ -53,7 +59,7 @@ extension MotoliiShelves on Motolii {
 
   void _said() => (effects, thingEffects);   // (both lists read: their labels and pictures with them)
 
-  /// "name\tfile\tlabel\tpicture\thome\tsame" lines: the names and files, the labels, pictures, homes and sameness kept for [label], [picture], [tileHome] and [tileSame].
+  /// "name\tfile\tlabel\tpicture\thome\tsame\tabout" lines: the names and files, the labels, pictures, homes, sameness and words kept for [label], [picture], [tileHome], [tileSame] and [about].
   List<(String, String)> _labelled(String lines) {
     final out = <(String, String)>[];
     for (final w in [for (final l in lines.split('\n')) l.split('\t')]) {
@@ -64,6 +70,7 @@ extension MotoliiShelves on Motolii {
         if (w.length > 3) _pictures[k] = w[3];
         if (w.length > 4) _homes[k] = w[4];
         if (w.length > 5 && w[5] == 'same') _same.add(k);
+        if (w.length > 6 && w[6].isNotEmpty) _abouts[k] = w[6];
       }
     }
     return out;

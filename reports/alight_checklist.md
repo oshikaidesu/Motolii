@@ -292,7 +292,7 @@
 - [x] カメラ：焦点ぼけ（距離・深度・強さ）：カメラの focus（距離）・aperture（深さ、f 値）・blur_level（強さ） — 済：窓の試験（`workspace_joined_test_2.dart` の Depth の机）
 - [ ] カメラ：フォグ（色・近い・遠い）（一部）：Lens カードの Fog（濃さ）・Fog near（始まり、10/28、`check/fog_near.sh`）・色。まだ：遠い（Filament の霧は始まりと濃さで決まり、終わりの距離は無い）
 - [ ] 初めての所で押す場所を吹き出しで指す
-- [ ] 効果の検索（説明文の中まで）
+- [x] 効果の検索（説明文の中まで）：Effects の棚の検索が名前と、効果の作り手の説明（頭の --about:。AbsentMotion の description 126 本、ISF の DESCRIPTION）を読む。下の欄にも説明 — 済（10/28）：窓の試験（`workspace_dock_test.dart`、「checkerboard」で Checker）
 - [ ] 効果のおすすめ、分類、動く絵
 - [ ] 効果の大きな動く見本・説明・タグ・Guide
 - [ ] 効果ごとのプリセット、お気に入り

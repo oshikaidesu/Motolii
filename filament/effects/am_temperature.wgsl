@@ -1,5 +1,6 @@
 // Color Temperature: AbsentMotion's temperature (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Color
+// --about:Warms or cools the picture like light of a color temperature in kelvin; 6500 K leaves it unchanged.
 // --track@kelvin:Temperature,1000,40000,3200.0,100
 // --track@strength:Strength,0,1,1.0,0.01
 diagnostic(off, derivative_uniformity);

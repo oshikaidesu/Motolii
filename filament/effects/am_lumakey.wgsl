@@ -1,5 +1,6 @@
 // Luma Key: AbsentMotion's lumakey (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Key
+// --about:Removes the dark parts of the layer (or the light ones).
 // --track@threshold:Threshold,0,1,0.3,0.01
 // --track@softness:Softness,0,1,0.1,0.01
 diagnostic(off, derivative_uniformity);

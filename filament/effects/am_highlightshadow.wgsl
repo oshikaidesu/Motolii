@@ -1,5 +1,6 @@
 // Highlights & Shadows: AbsentMotion's highlightshadow (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Color
+// --about:Recovers or boosts bright highlights and lifts or deepens dark shadows, going by the brightness of each pixel.
 // --track@highlights:Highlights,0.0,2.0,1.0,0.01
 // --track@shadows:Shadows,0.0,2.0,1.0,0.01
 diagnostic(off, derivative_uniformity);

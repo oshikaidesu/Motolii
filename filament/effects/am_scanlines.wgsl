@@ -1,5 +1,6 @@
 // Scanlines: AbsentMotion's scanlines (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Stylize
+// --about:Adds horizontal scanlines for a CRT monitor effect with optional vertical rolling.
 // --track@spacing:Line Spacing,2.0,20.0,6.0,1.0
 // --track@darkness:Darkness,0.0,1.0,0.4,0.01
 // --track@roll_speed:Roll Speed,0.0,2.0,0.3,0.01

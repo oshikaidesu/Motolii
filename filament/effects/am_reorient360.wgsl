@@ -1,5 +1,6 @@
 // 360° Reorient Sphere: AbsentMotion's reorient360 (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Distort
+// --about:Turns a 360° panorama layer around inside its sphere, to level the horizon or change where the front is.
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);
 struct FSIn {

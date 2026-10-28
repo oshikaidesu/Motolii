@@ -1,5 +1,6 @@
 // Light Flare: AbsentMotion's lensflare (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Stylize
+// --about:A bright light with a halo, laid over the picture.
 // --track@R_center_x:Center x,-1,2,0.3,0.01
 // --track@R_center_y:Center y,-1,2,0.3,0.01
 // --track@radius:Radius,0.01,2,0.25,0.01

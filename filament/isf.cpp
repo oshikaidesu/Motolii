@@ -204,6 +204,10 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
         for (const char* own : {"Glitch", "Distort", "Color", "Film", "Light", "Time", "Stylize"}) if (all.find(own) != std::string::npos) { shelf = own; break; }
         top += "// --label:" + shelf + "\n";
     }
+    if (std::string about = str(head, "DESCRIPTION"); !about.empty()) {   // (what it does, in its own words: the shelf finds it by them)
+        std::replace(about.begin(), about.end(), '\n', ' ');
+        top += "// --about:" + about + "\n";
+    }
     for (const std::string& p : passLines) lines += p + "\n";
     return top + lines + "\n" + wgsl->wgsl;
 }
@@ -212,7 +216,7 @@ std::string isf_file(const std::string& file) {
     if (std::filesystem::path(file).extension() != ".fs" && !three_is(file)) return file;   // (a three.js effect: made ISF first, three_isf.cpp)
     struct stat st {};
     if (stat(file.c_str(), &st) != 0) return "";
-    const std::string key = "isf 9|" + file + "|" + std::to_string(st.st_mtimespec.tv_sec) + "." + std::to_string(st.st_mtimespec.tv_nsec) + "|" + std::to_string(st.st_size);
+    const std::string key = "isf 10|" + file + "|" + std::to_string(st.st_mtimespec.tv_sec) + "." + std::to_string(st.st_mtimespec.tv_nsec) + "|" + std::to_string(st.st_size);
     static std::mutex lock;
     static std::map<std::string, std::string> made;   // (what each file as it is became: "" could not be)
     std::lock_guard<std::mutex> hold(lock);

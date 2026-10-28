@@ -1,5 +1,6 @@
 // Gradient Map: AbsentMotion's gradientmap (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Color
+// --about:Recolors the picture by brightness through three colors, with repeats and a phase. Scale Brightness multiplies the result by the picture's own brightness.
 // --track@color1_x:Shadows R,0,1,0.1059,0.01
 // --track@color1_y:Shadows G,0,1,0.07843,0.01
 // --track@color1_z:Shadows B,0,1,0.3922,0.01

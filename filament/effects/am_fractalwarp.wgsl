@@ -1,5 +1,6 @@
 // Fractal Warp: AbsentMotion's fractalwarp (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Distort
+// --about:Warps the layer with folded fractal noise, for fire, water and heat shimmer.
 // --track@strength:Strength,0,2,0.15,0.001
 // --track@scale:Scale,0.01,50,1.0,0.01
 // --track@evolution:Evolution,-50,50,0.0,0.01

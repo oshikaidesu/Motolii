@@ -1,5 +1,6 @@
 // Tint: AbsentMotion's tint (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Color
+// --about:Maps the picture's luminance between a shadow color and a highlight color with a blend amount.
 // --track@amount:Amount,0.0,1.0,1.0,0.01
 // --track@shadowColor_x:Shadow Color R,0,1,0,0.01
 // --track@shadowColor_y:Shadow Color G,0,1,0,0.01

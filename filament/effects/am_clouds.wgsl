@@ -1,5 +1,6 @@
 // Clouds: AbsentMotion's clouds (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Noise
+// --about:Covers the opaque parts of the layer with a soft cloud pattern, also handy as a noise source.
 // --track@parallax_x:Parallax x,-5000,5000,0,1
 // --track@parallax_y:Parallax y,-5000,5000,0,1
 // --track@offset_x:Offset x,-5000,5000,0,1

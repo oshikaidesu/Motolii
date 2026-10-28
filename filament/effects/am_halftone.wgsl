@@ -1,5 +1,6 @@
 // Halftone: AbsentMotion's halftone (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Stylize
+// --about:Printed dots that grow where the picture is dark.
 // --track@cell:Size,2,200,10.0,1
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);

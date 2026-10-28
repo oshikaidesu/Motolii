@@ -1,5 +1,6 @@
 // Offset: AbsentMotion's offset (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Move
+// --about:Shifts the layer's picture, wrapping it round at the edges of the layer's box.
 // --track@offset_x:Offset x,-5000,5000,0,1
 // --track@offset_y:Offset y,-5000,5000,0,1
 // --track@feather:Feather,0,1,0.0,0.001

@@ -1,5 +1,6 @@
 // Flip Layer: AbsentMotion's flip (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:3d
+// --about:Turns the layer like a card in 3D, with its back see-through, a picture or a color.
 // --track@back:Back,0,1,0.0,0.01
 // --track@backColor_x:Back Color R,0,1,1,0.01
 // --track@backColor_y:Back Color G,0,1,1,0.01

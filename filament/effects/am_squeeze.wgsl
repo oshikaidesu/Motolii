@@ -1,5 +1,6 @@
 // Squeeze: AbsentMotion's squeeze (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Distort
+// --about:Pinches the middle of the layer inward with positive Strength and bulges it outward with negative Strength. Legacy preserves the shape of older projects.
 // --track@amount:Strength,-2,2,0.0,0.01
 // --track@shape:Shape,0,1,0.0,0.01
 diagnostic(off, derivative_uniformity);

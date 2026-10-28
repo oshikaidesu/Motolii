@@ -1,5 +1,6 @@
 // Stripes: AbsentMotion's stripes (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Stylize
+// --about:Draws a pattern of stripes over the opaque parts of the layer, or punches the stripes out of it.
 // --track@count:Count,0.5,200,10.0,0.1
 // --track@width:Width,0,1,0.5,0.01
 // --track@phase:Phase,-1000,1000,0.0,0.01

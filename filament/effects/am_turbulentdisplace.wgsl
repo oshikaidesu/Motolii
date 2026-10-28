@@ -1,5 +1,6 @@
 // Turbulent Displace: AbsentMotion's turbulentdisplace (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Distort
+// --about:Pushes the layer around with smooth fractal noise, for fire, water, heat haze or rough natural edges.
 // --track@parallax_x:Parallax x,-5000,5000,0,1
 // --track@parallax_y:Parallax y,-5000,5000,0,1
 // --track@offset_x:Offset x,-5000,5000,0,1

@@ -1,5 +1,6 @@
 // Tile Rotate: AbsentMotion's tilerotate (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Distort
+// --about:Divides the layer into a grid of tiles and turns the picture inside every tile on its own.
 // --track@offset_x:Offset x,-5000,5000,0,1
 // --track@offset_y:Offset y,-5000,5000,0,1
 // --track@count:Count,0.5,200,10.0,0.1

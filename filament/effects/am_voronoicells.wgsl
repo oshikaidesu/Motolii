@@ -1,5 +1,6 @@
 // Voronoi Cells: AbsentMotion's voronoicells (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Stylize
+// --about:Fills the opaque parts of the layer with a pattern of cells around randomly placed points.
 // --track@scale:Scale,0.01,100,1.0,0.01
 // --track@phase:Phase,-99,99,0.0,0.001
 // --track@lineWidth:Line Width,0,1,0.0,0.001

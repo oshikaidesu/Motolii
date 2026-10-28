@@ -1,5 +1,6 @@
 // Invert: AbsentMotion's invert (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Color
+// --about:Inverts the color channels of the image with a blend amount and optional alpha inversion.
 // --track@amount:Amount,0.0,1.0,1.0,0.01
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);

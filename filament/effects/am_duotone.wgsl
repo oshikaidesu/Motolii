@@ -1,5 +1,6 @@
 // Duotone: AbsentMotion's duotone (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Color
+// --about:Applies a two-color gradient map based on luminance with contrast and amount controls.
 // --track@contrast:Contrast,0.0,2.0,1.0,0.05
 // --track@amount:Amount,0.0,1.0,1.0,0.05
 // --track@color1_x:Shadow Color R,0,1,0,0.01

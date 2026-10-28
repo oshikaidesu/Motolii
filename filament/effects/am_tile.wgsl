@@ -1,5 +1,6 @@
 // Tile: AbsentMotion's tile (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Repeat
+// --about:Repeats the picture in a grid.
 // --track@scale:Scale,0.02,1,0.5,0.01
 // --track@offset_x:Offset x,-1,2,0,0.01
 // --track@offset_y:Offset y,-1,2,0,0.01

@@ -1,5 +1,6 @@
 // Radial Wipe: AbsentMotion's radialwipe (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Key
+// --about:Hides a wedge of the layer swept round Center from Start Angle, like a clock hand. Progress is the angle swept, Count repeats the wedge round the circle and Both sweeps both ways. Animate Progress for a transition.
 // --track@R_center_x:Center x,-1,2,0.5,0.01
 // --track@R_center_y:Center y,-1,2,0.5,0.01
 // --track@direction:Direction,0,1,0.0,0.01

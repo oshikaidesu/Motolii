@@ -1,5 +1,6 @@
 // Ellipsoid: AbsentMotion's ellipsoid (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:3d
+// --about:Wraps the layer around a sphere that you can squeeze and flatten.
 // --track@radius:Radius,0.02,5,0.8,0.01
 // --track@squeezeRatio:Squeeze,0.1,1.9,1.0,0.01
 // --track@flattenRatio:Flatten,0.05,1,1.0,0.01

@@ -30,7 +30,7 @@ class EffectsShelf extends StatelessWidget {
           (id: n, name: n, label: m.label(n), on: on.contains(n), apply: () => ws.fxToggle(n), said: _said(ws, n),
            tile: _Tile(n, file: m.picture(n), look: _FxLook(n), on: on.contains(n) ? 'ON' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: () => ws.fxToggle(n), star: c)),
       for (final (n, f) in m.effects)
-        (id: f, name: n, label: m.label(n), on: screen.contains(f), apply: () => ws.screenToggle(f), said: 'On the picked thing',
+        (id: f, name: n, label: m.label(n), on: screen.contains(f), apply: () => ws.screenToggle(f), said: m.about(f).isEmpty ? 'On the picked thing' : m.about(f),
          tile: _Tile(n, key: ValueKey('ws-screen-$f'), file: m.picture(f), same: m.tileSame(f), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, picked: c.sel == f, onTap: () => c.pick(f), onApply: () => ws.screenToggle(f), star: c, starId: f)),
       if (picked)   // (a look kept by its name, Save Look: given to the picked thing, its values, effects and keys)
         for (final (n, f) in m.looks)
@@ -40,7 +40,7 @@ class EffectsShelf extends StatelessWidget {
         for (final (n, f) in m.animators)
           (id: f, name: n, label: 'Motion', on: ws.motion == f, apply: () => ws.motionToggle(f), said: 'A motion for the picked thing',
            tile: _Tile(n, key: ValueKey('ws-motion-$n'), on: ws.motion == f ? 'ON' : null, picked: c.sel == f, onTap: () => c.pick(f), onApply: () => ws.motionToggle(f))),
-    ].where((e) => c.hit(e.name)).toList();
+    ].where((e) => c.hit(e.name) || (c.query.isNotEmpty && c.hit(m.about(e.id)))).toList();   // (by its name, or by what it does in its maker's words, as Alight Motion's search reads the descriptions)
     final kinds = <String, int>{};
     for (final e in all) {
       if (e.label.isNotEmpty) kinds[e.label] = (kinds[e.label] ?? 0) + 1;

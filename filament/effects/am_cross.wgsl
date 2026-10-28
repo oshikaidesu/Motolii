@@ -1,5 +1,6 @@
 // Three-axis Cross: AbsentMotion's cross (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:3d
+// --about:Puts the layer on three bars that cross at the middle.
 // --track@reach:Length,0.02,5,0.9,0.01
 // --track@thickness:Thickness,0.01,2,0.22,0.01
 // --track@smoothing:Smoothing,0,1,0.15,0.01

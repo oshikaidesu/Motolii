@@ -1,5 +1,6 @@
 // Static: AbsentMotion's static (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Noise
+// --about:Flickering gray noise, like a television with no signal.
 // --track@amount:Amount,0,1,0.4,0.01
 // --track@grain:Size,0.5,50,2.0,0.1
 diagnostic(off, derivative_uniformity);

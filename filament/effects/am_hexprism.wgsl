@@ -1,5 +1,6 @@
 // Hexagonal Prism: AbsentMotion's hexprism (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:3d
+// --about:Puts the layer on the front and back of a six-sided prism.
 // --track@radius:Radius,0.02,5,0.75,0.01
 // --track@depth:Depth,0.01,5,0.35,0.01
 // --track@smoothing:Smoothing,0,1,0.15,0.01

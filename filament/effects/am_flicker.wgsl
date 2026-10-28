@@ -1,5 +1,6 @@
 // Flicker: AbsentMotion's flicker (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Stylize
+// --about:Flickers the opacity of the layer at random.
 // --track@speed:Frequency,0.0,60.0,7.0,0.01
 // --track@intensity:Strength,0.0,1.0,0.75,0.01
 // --track@seed:Seed,0.0,100.0,0.0,0.1

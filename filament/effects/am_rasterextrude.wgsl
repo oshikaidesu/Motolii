@@ -1,5 +1,6 @@
 // Raster Extrude: AbsentMotion's rasterextrude (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:3d
+// --about:Pushes the layer's picture out into a solid block; the sides take the interior color.
 // --track@depth:Depth,0.005,5,0.25,0.01
 // --track@interior_x:Interior Color R,0,1,0.2392,0.01
 // --track@interior_y:Interior Color G,0,1,0.2549,0.01

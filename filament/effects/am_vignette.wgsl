@@ -1,5 +1,6 @@
 // Vignette: AbsentMotion's vignette (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Stylize
+// --about:Darkens the layer toward its edges outside a rounded shape: Size sets the shape, Roundness how round it is, Feather how soft its edge is, Strength how dark it gets and Tint how much it takes on Color. Punch Out makes the edges transparent instead.
 // --track@extent:Size,0.001,2,0.95,0.001
 // --track@rounding:Roundness,0,9.9,1.5,0.01
 // --track@feather:Feather,0.001,1,0.5,0.001

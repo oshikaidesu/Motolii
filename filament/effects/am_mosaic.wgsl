@@ -1,5 +1,6 @@
 // Mosaic: AbsentMotion's mosaic (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Stylize
+// --about:Divides the layer into squares and fills each one with its average color.
 // --track@count:Count,1,500,20.0,1
 // --track@stretch_x:Stretch x,0.01,10,1,0.01
 // --track@stretch_y:Stretch y,0.01,10,1,0.01

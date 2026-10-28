@@ -1,5 +1,6 @@
 // Wave Warp: AbsentMotion's wavewarp (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Distort
+// --about:Bends the layer with a sine wave: Spacing sets how many waves cross it, Magnitude how far they push, Angle the direction the waves run and Warp Angle the direction they push.
 // --track@phase:Phase,0,500,0.0,0.01
 // --track@spacing:Spacing,0,500,20.0,0.1
 // --track@magnitude:Magnitude,0,30,4.0,0.1

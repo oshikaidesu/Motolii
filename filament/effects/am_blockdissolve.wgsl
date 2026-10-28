@@ -1,5 +1,6 @@
 // Block Dissolve: AbsentMotion's blockdissolve (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Noise
+// --about:Removes random grid-aligned blocks from the layer. Animate Strength to take away more and more blocks.
 // --track@strength:Strength,0,1,0.75,0.001
 // --track@blockSize:Size,1,500,10.0,0.1
 // --track@stretch_x:Stretch x,0.01,10,1,0.01

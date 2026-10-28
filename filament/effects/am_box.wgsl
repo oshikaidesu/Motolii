@@ -1,5 +1,6 @@
 // Box: AbsentMotion's box (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:3d
+// --about:Wraps the layer onto a box whose width, height and depth you choose.
 // --track@width:Width,0.02,5,0.75,0.01
 // --track@height:Height,0.02,5,0.75,0.01
 // --track@depth:Depth,0.01,5,0.4,0.01

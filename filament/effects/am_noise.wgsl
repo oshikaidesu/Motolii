@@ -1,5 +1,6 @@
 // Noise: AbsentMotion's noise (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Noise
+// --about:Covers the layer with fine grain, one grain per pixel, that changes every frame. Monochrome makes the grain grey, Extremes makes every grain fully light or dark, and Freeze holds the pattern still.
 // --track@amount:Strength,0,1,0.25,0.001
 // --track@offset_x:Offset x,-5000,5000,0,1
 // --track@offset_y:Offset y,-5000,5000,0,1

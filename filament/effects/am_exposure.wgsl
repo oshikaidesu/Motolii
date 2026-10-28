@@ -1,5 +1,6 @@
 // Exposure: AbsentMotion's exposure (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Color
+// --about:Simulates photographic exposure with stops, offset, and gamma correction.
 // --track@stops:Stops,-4.0,4.0,0.7,0.1
 // --track@offset:Offset,-0.5,0.5,0.0,0.01
 // --track@gamma:Gamma,0.1,10.0,1.0,0.1

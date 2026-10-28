@@ -1,5 +1,6 @@
 // Denoise: AbsentMotion's denoise (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Blur
+// --about:Removes image noise with an edge-preserving bilateral filter that averages nearby pixels only when their colors are similar.
 // --track@strength:Strength,0.0,1.0,0.5,0.01
 // --track@radius:Radius,1.0,6.0,2.0,0.5
 // --track@detail:Detail,0.0,1.0,0.5,0.01

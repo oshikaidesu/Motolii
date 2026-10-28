@@ -1,5 +1,6 @@
 // Channel Remap (RGB): AbsentMotion's channelremap (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Color
+// --about:Rebuilds each color channel from another channel of the layer, for false color or for moving luminance into alpha.
 // --track@r:R,0,1,0.0,0.01
 // --track@g:G,0,1,1.0,0.01
 // --track@b:B,0,1,2.0,0.01

@@ -35,6 +35,8 @@ fields = re.findall(r'^\s*(\w+)\s*:', re.search(r'struct Knobs\s*\{([^}]*)\}', w
 named = {re.sub(r'^R_', '', n): n for n in fields}   # (skslc's R_ before a name WGSL keeps for itself: center)
 lines = [f"// {d['name']}: AbsentMotion's {d['id']} (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)"]
 lines.append(f"// --label:{d.get('category', '').capitalize()}")
+if d.get('description'):
+    lines.append(f"// --about:{' '.join(d['description'].split())}")   # (what it does, in AbsentMotion's words: the shelf finds it by them)
 for p in d.get('params', []):
     n = named.get(p['id'])
     if not n:

@@ -1,5 +1,6 @@
 // Heart: AbsentMotion's heart (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:3d
+// --about:Cuts the layer into a puffy heart.
 // --track@heartSize:Size,0.02,5,1.3,0.01
 // --track@depth:Depth,0.01,5,0.3,0.01
 // --track@smoothing:Smoothing,0,1,0.7,0.01

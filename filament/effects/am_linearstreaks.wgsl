@@ -1,5 +1,6 @@
 // Linear Streaks: AbsentMotion's linearstreaks (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Blur
+// --about:Makes straight streaks by sliding copies of the layer along an angle and blending where they overlap.
 // --track@reach:Length,0,4000,100.0,1
 // --track@alpha:Alpha,0,1,1.0,0.001
 // --track@bias:Bias,-1,1,0.0,0.01

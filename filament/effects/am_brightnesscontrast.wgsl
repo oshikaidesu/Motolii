@@ -1,5 +1,6 @@
 // Brightness & Contrast: AbsentMotion's brightnesscontrast (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Color
+// --about:Adjusts the brightness and contrast of the image.
 // --track@brightness:Brightness,-1.0,1.0,0.1,0.01
 // --track@contrast:Contrast,-1.0,1.0,0.3,0.01
 diagnostic(off, derivative_uniformity);

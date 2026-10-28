@@ -1,5 +1,6 @@
 // Fractal Ridges: AbsentMotion's fractalridges (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Noise
+// --about:Fills the opaque parts of the layer with sharp, turbulent ridges of fractal noise.
 // --track@offset_x:Offset x,-5000,5000,0,1
 // --track@offset_y:Offset y,-5000,5000,0,1
 // --track@evolution:Evolution,-50,50,0.0,0.01

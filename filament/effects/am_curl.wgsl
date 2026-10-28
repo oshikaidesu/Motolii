@@ -1,5 +1,6 @@
 // Curl: AbsentMotion's curl (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Distort
+// --about:Rolls one end of the layer around a circle while the other end stays flat; animate Offset to roll or unroll it. Best on wide, thin layers.
 // --track@offset:Offset,-0.5,1.5,0.5,0.001
 // --track@radius:Radius,0,50,1.0,0.01
 // --track@curlFrom:Curl From,0,1,1.0,0.01

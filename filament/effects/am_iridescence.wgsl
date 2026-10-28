@@ -1,5 +1,6 @@
 // Iridescence: AbsentMotion's iridescence (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Stylize
+// --about:Covers the opaque parts of the layer with a flowing rainbow sheen, like oil on water or a soap bubble.
 // --track@scale:Scale,0.01,50,1.0,0.01
 // --track@evolution:Evolution,-50,50,0.0,0.01
 // --track@shift:Hue Shift,-10,10,0.0,0.001

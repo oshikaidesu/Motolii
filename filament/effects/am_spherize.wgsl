@@ -1,5 +1,6 @@
 // Spherize: AbsentMotion's spherize (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:3d
+// --about:Wraps the layer onto a sphere using a front projection or an equirectangular texture.
 // --track@radius:Radius,0.02,5,0.9,0.01
 // --track@coverage:Coverage,0.2,1,0.5,0.01
 // --track@projection:Projection,0,1,0.0,0.01

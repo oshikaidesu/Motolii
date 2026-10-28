@@ -1,5 +1,6 @@
 // Directional Blur: AbsentMotion's directionalblur (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Blur
+// --about:Motion blur by averaging samples along a directional angle.
 // --track@blurLength:Length,0,2000,20.0,1
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);

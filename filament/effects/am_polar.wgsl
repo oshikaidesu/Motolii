@@ -1,5 +1,6 @@
 // Polar Coordinates: AbsentMotion's polar (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Distort
+// --about:Bends the layer around its center, turning straight lines into circles, or unrolls circles into straight lines.
 // --track@amount:Interpolation,0,1,1.0,0.001
 // --track@direction:Type,0,1,0.0,0.01
 diagnostic(off, derivative_uniformity);

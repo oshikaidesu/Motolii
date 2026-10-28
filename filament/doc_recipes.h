@@ -68,12 +68,15 @@ static std::string doc_folder_names(const char* folder, const char* extension) {
         const std::string read = isf_file(f.string());   // (an ISF effect: its head as made WGSL; one that cannot be is not shown)
         if (read.empty()) continue;
         std::ifstream in(read);
-        std::string first, name = f.stem().string(), label;
+        std::string first, name = f.stem().string(), label, about;
         if (std::getline(in, first) && first.rfind("// ", 0) == 0 && first.find(':') != std::string::npos) name = first.substr(3, first.find(':') - 3);
-        for (std::string line; label.empty() && std::getline(in, line) && line.rfind("//", 0) == 0;)
-            if (const size_t at = line.find("--label:"); at != std::string::npos) label = line.substr(at + 8);
+        for (std::string line; std::getline(in, line) && line.rfind("//", 0) == 0;) {
+            if (const size_t at = line.find("--label:"); at != std::string::npos && label.empty()) label = line.substr(at + 8);
+            if (const size_t at = line.find("--about:"); at != std::string::npos && about.empty()) about = line.substr(at + 8);   // (what it does, in its maker's words)
+        }
         if (f.extension() == ".mjs") label = "Points";   // (a PlayCanvas splat effect: for a point cloud)
-        all += (all.empty() ? "" : "\n") + name + "\t" + f.string() + "\t" + label + doc_tile(f.string(), std::filesystem::path(f).replace_extension(".png"));
+        std::replace(about.begin(), about.end(), '\t', ' ');
+        all += (all.empty() ? "" : "\n") + name + "\t" + f.string() + "\t" + label + doc_tile(f.string(), std::filesystem::path(f).replace_extension(".png")) + "\t" + about;
     }
     return all;
 }
