@@ -1,6 +1,9 @@
 // Cylinder: AbsentMotion's cylinder (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:3d
 // --about:Wraps the layer around a cylinder and onto its round ends.
+// --track@rotX:Rotation X,-3600,3600,-20.0,0.1
+// --track@rotY:Rotation Y,-3600,3600,-35.0,0.1
+// --track@rotZ:Rotation Z,-3600,3600,0.0,0.1
 // --track@radius:Radius,0.02,5,0.6,0.01
 // --track@height:Height,0.02,5,0.85,0.01
 // --track@smoothing:Smoothing,0,1,0.15,0.01
@@ -9,6 +12,7 @@
 // --track@scale:Scale,0.05,10,1.0,0.01
 // --track@R_perspective:Perspective,0,1,0.5,0.01
 // --track@shading:Shading,0,1,0.6,0.01
+// --track@light:Light Angle,-3600,3600,135.0,0.1
 // --track@shine:Shine,0,1,0.3,0.01
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);

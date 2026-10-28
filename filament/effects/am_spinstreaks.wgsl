@@ -3,7 +3,7 @@
 // --about:Makes arc-shaped streaks by turning copies of the layer around a point and blending where they overlap. R, G, B and A choose per channel whether the copies keep the lowest, highest or average value, or leave that channel alone.
 // --track@R_center_x:Center x,-1,2,0.5,0.01
 // --track@R_center_y:Center y,-1,2,0.5,0.01
-// --track@sweep:Sweep,0,360,5,0.1
+// --track@sweep:Sweep,0,360,5.0,0.1
 // --track@alpha:Alpha,0,1,1.0,0.001
 // --track@bias:Bias,-1,1,0.0,0.01
 // --track@r:R,0,1,1.0,0.01

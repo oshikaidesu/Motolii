@@ -10,6 +10,7 @@
 // --track@color_y:Color G,0,1,0.1176,0.01
 // --track@color_z:Color B,0,1,0.9647,0.01
 // --track@color_w:Color A,0,1,1,0.01
+// --track@angle:Angle,-3600,3600,0.0,0.5
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);
 struct FSIn {

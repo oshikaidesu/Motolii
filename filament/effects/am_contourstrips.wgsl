@@ -3,6 +3,7 @@
 // --about:Draws stacked paper strips whose height follows the layer's brightness or opacity, like a ridge-line landscape.
 // --track@count:Count,0.5,200,10.0,0.1
 // --track@height:Height,0,15,1.0,0.01
+// --track@angle:Angle,-3600,3600,0.0,0.5
 // --track@thickness:Thickness,0,1,0.005,0.001
 // --track@phase:Phase,-1000,1000,0.0,0.01
 // --track@edgeColor_x:Edge Color R,0,1,0.1333,0.01
@@ -21,6 +22,7 @@
 // --track@light_y:Light Color G,0,1,1,0.01
 // --track@light_z:Light Color B,0,1,1,0.01
 // --track@light_w:Light Color A,0,1,1,0.01
+// --track@lightAngle:Light Angle,0,3600,0.0,0.5
 // --track@map:Height Map,0,1,1.0,0.01
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);

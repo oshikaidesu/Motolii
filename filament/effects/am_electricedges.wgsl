@@ -31,6 +31,7 @@
 // --track@maskColor_w:Mask Color A,0,1,1,0.01
 // --track@count:Contour Count,0,200,20.0,0.1
 // --track@phase:Contour Phase,-999,999,0.0,0.01
+// --track@contourAngle:Contour Angle,-3600,3600,0.0,0.5
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);
 struct FSIn {

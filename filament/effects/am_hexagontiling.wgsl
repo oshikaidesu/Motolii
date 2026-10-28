@@ -2,6 +2,7 @@
 // --label:Distort
 // --about:Repeats the middle of the layer in hexagonal tiles that fill the screen.
 // --track@scale:Scale,0.05,10,1.0,0.01
+// --track@angle:Angle,-3600,3600,0.0,0.5
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);
 struct FSIn {

@@ -5,6 +5,7 @@
 // --pass@:0,0,s1,s1
 // --about:Gives the opaque parts of the layer a smooth, rounded bevel lit from one side.
 // --track@blur:Size,0,300,20.0,0.1
+// --track@angle:Light Angle,-3600,3600,135.0,0.5
 // --track@depth:Depth,0,5,1.0,0.01
 // --track@intensity:Intensity,0,1,0.6,0.001
 // --track@highlight_x:Highlight R,0,1,1,0.01

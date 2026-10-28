@@ -2,8 +2,10 @@
 // --label:Distort
 // --about:Bends the layer with a sine wave: Spacing sets how many waves cross it, Magnitude how far they push, Angle the direction the waves run and Warp Angle the direction they push.
 // --track@phase:Phase,0,500,0.0,0.01
+// --track@angle:Angle,-3600,3600,0.0,1
 // --track@spacing:Spacing,0,500,20.0,0.1
 // --track@magnitude:Magnitude,0,30,4.0,0.1
+// --track@warpAngle:Warp Angle,-3600,3600,90.0,1
 // --track@speed:Speed,0,10,0.0,0.1
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);

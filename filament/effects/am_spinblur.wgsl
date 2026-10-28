@@ -3,7 +3,7 @@
 // --about:Blurs the layer in circles around a point, as if it were spinning.
 // --track@R_center_x:Center x,-1,2,0.5,0.01
 // --track@R_center_y:Center y,-1,2,0.5,0.01
-// --track@sweep:Angle,0,360,5,0.1
+// --track@sweep:Angle,0,360,5.0,0.1
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);
 struct FSIn {

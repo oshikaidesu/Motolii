@@ -6,6 +6,7 @@
 // --track@stretch_y:Stretch y,0.01,100,1,0.01
 // --track@offset_x:Offset x,-5000,5000,0,1
 // --track@offset_y:Offset y,-5000,5000,0,1
+// --track@angle:Angle,-3600,3600,0.0,1
 // --track@vignette:Vignette,0,1,0.0,0.01
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);

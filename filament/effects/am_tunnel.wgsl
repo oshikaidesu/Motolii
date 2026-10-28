@@ -1,6 +1,9 @@
 // Tunnel: AbsentMotion's tunnel (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:3d
 // --about:Lines an endless tunnel with the layer and flies through it. Phase shifts the texture along its length.
+// --track@rotX:Rotation X,-3600,3600,0.0,0.1
+// --track@rotY:Rotation Y,-3600,3600,0.0,0.1
+// --track@rotZ:Rotation Z,-3600,3600,0.0,0.1
 // --track@phase:Phase,-1000,1000,0.0,0.01
 // --track@speed:Speed,-20,20,1.0,0.01
 // --track@twist:Twist,-360,360,0.0,0.1

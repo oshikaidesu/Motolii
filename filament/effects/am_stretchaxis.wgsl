@@ -2,6 +2,7 @@
 // --label:Move
 // --about:Stretches the layer in any direction.
 // --track@scale:Scale,0.01,50,1.0,0.01
+// --track@angle:Angle,-3600,3600,0.0,0.1
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);
 struct FSIn {

@@ -16,6 +16,7 @@
 // --track@tint_z:Tint B,0,1,1,0.01
 // --track@tint_w:Tint A,0,1,1,0.01
 // --track@tintAmount:Tint Amount,0,1,0.0,0.001
+// --track@angle:Angle,-3600,3600,0.0,0.5
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);
 struct FSIn {

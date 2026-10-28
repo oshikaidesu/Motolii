@@ -3,6 +3,7 @@
 // --about:Draws a pattern of stripes over the opaque parts of the layer, or punches the stripes out of it.
 // --track@count:Count,0.5,200,10.0,0.1
 // --track@width:Width,0,1,0.5,0.01
+// --track@angle:Angle,-3600,3600,45.0,0.5
 // --track@phase:Phase,-1000,1000,0.0,0.01
 // --track@color_x:Color R,0,1,0.1765,0.01
 // --track@color_y:Color G,0,1,0.1176,0.01

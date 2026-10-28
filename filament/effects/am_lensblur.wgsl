@@ -3,9 +3,9 @@
 // --about:A spinning blur that leaves a sharp area around the center and grows towards the edges.
 // --track@R_center_x:Center x,-1,2,0.5,0.01
 // --track@R_center_y:Center y,-1,2,0.5,0.01
+// --track@sweep:Angle,0,360,10.0,0.1
 // --track@radius:Radius,0,2,0.25,0.001
 // --track@feather:Feather,0,2,0.25,0.001
-// --track@sweep:Angle,0,360,10,0.1
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);
 struct FSIn {

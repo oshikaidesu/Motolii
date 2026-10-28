@@ -3,6 +3,7 @@
 // --about:Hides the layer from two opposite sides. Animate Start or End for a wipe transition.
 // --track@start:Start,-0.5,1.5,0.0,0.001
 // --track@end:End,-0.5,1.5,1.0,0.001
+// --track@angle:Angle,-3600,3600,0.0,0.5
 // --track@feather:Feather,0,100,0.0,0.1
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);

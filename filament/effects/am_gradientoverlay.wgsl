@@ -10,6 +10,7 @@
 // --track@color2_z:Color 2 B,0,1,0.4824,0.01
 // --track@color2_w:Color 2 A,0,1,1,0.01
 // --track@shape:Shape,0,1,0.0,0.01
+// --track@angle:Angle,-360,360,90.0,1
 // --track@scale:Scale,0.05,10,1.0,0.01
 // --track@opacity:Opacity,0,1,0.6,0.01
 // --track@blend:Blend,0,1,0.0,0.01

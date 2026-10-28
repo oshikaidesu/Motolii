@@ -2,6 +2,7 @@
 // --label:Blur
 // --about:Motion blur by averaging samples along a directional angle.
 // --track@blurLength:Length,0,2000,20.0,1
+// --track@angle:Angle,0,360,0.0,1
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);
 struct FSIn {

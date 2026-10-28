@@ -2,6 +2,7 @@
 // --label:Move
 // --about:Scales, turns and moves the finished picture of the layer, after the effects above it, so their result can be transformed too. Fill keeps some of the original underneath and Mask To Layer keeps the result inside the original shape.
 // --track@scale:Scale,0.01,50,1.0,0.01
+// --track@angle:Angle,-3600,3600,0.0,0.1
 // --track@offset_x:Offset x,-5000,5000,0,1
 // --track@offset_y:Offset y,-5000,5000,0,1
 // --track@alpha:Alpha,0,1,1.0,0.01

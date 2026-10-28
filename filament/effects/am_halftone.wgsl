@@ -2,6 +2,7 @@
 // --label:Stylize
 // --about:Printed dots that grow where the picture is dark.
 // --track@cell:Size,2,200,10.0,1
+// --track@angle:Angle,-360,360,45.0,1
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);
 struct FSIn {

@@ -4,6 +4,7 @@
 // --track@amount:Amount,0,500,100.0,0.1
 // --track@strength:Strength,0,1,0.5,0.001
 // --track@black:Black,0,1,0.0,0.001
+// --track@angle:Angle,0,3600,45.0,0.5
 // --track@phase:Phase,-1000,1000,0.5,0.001
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);

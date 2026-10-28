@@ -3,6 +3,7 @@
 // --about:Repeats the layer to fill the screen. Raise Crop to make smaller tiles, with optional mirroring, row offset and rotation. Legacy Scale preserves older projects.
 // --track@zoom:Crop,0.005,20,1.0,0.005
 // --track@offset:Offset,-100,100,0.0,0.01
+// --track@angle:Angle,-1800,1800,0.0,0.5
 // --track@sizing:Sizing,0,1,0.0,0.01
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);

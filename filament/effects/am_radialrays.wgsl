@@ -5,6 +5,7 @@
 // --track@R_center_y:Center y,-1,2,0.5,0.01
 // --track@count:Count,1,200,5.0,1
 // --track@width:Width,0,1,0.5,0.001
+// --track@angle:Angle,-3600,3600,0.0,0.5
 // --track@color_x:Color R,0,1,0.1765,0.01
 // --track@color_y:Color G,0,1,0.1176,0.01
 // --track@color_z:Color B,0,1,0.9647,0.01

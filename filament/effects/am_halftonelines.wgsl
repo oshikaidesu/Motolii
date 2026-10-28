@@ -3,6 +3,7 @@
 // --about:Redraws the layer as printed lines that get thicker in dark areas and thinner in light ones.
 // --track@amount:Amount,0,500,100.0,0.1
 // --track@strength:Strength,0,1,0.5,0.001
+// --track@angle:Angle,0,3600,45.0,0.5
 // --track@phase:Phase,-1000,1000,0.0,0.001
 // --track@color1_x:Color 1 R,0,1,0.06667,0.01
 // --track@color1_y:Color 1 G,0,1,0.2,0.01

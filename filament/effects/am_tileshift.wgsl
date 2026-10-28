@@ -7,6 +7,7 @@
 // --track@count:Count,0.5,200,10.0,0.1
 // --track@stretch_x:Stretch x,0.01,10,1,0.01
 // --track@stretch_y:Stretch y,0.01,10,1,0.01
+// --track@angle:Angle,-3600,3600,0.0,0.5
 // --track@seed:Seed,0,5,0.0,0.01
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);

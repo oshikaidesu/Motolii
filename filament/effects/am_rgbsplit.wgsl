@@ -2,6 +2,7 @@
 // --label:Stylize
 // --about:Splits the red, green and blue channels: the Center channel stays put and the other two shift in opposite directions along Angle. Light adds the shifted colors, Dark keeps them solid, Mask keeps only where all three overlap and Luma makes the fringes as opaque as they are bright.
 // --track@strength:Strength,-8,8,0.15,0.01
+// --track@angle:Angle,-3600,3600,0.0,1
 // --track@R_center:Center,0,1,1.0,0.01
 // --track@mode:Mode,0,1,0.0,0.01
 diagnostic(off, derivative_uniformity);

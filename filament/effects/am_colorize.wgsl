@@ -1,6 +1,7 @@
 // Colorize: AbsentMotion's colorize (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Color
 // --about:Tints the whole layer with one hue while keeping its light and shade.
+// --track@hue:Hue,0,360,0.0,0.5
 // --track@amount:Amount,0,1,0.5,0.001
 diagnostic(off, derivative_uniformity);
 diagnostic(off, chromium.unreachable_code);
