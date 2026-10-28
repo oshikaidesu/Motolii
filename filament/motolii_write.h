@@ -2,7 +2,7 @@
 int motolii_write(Motolii* m, const char* mp4) {
     return by_hand(m, [m, mp4] {
         doc(m);
-        if (!told(m, ends(mp4, ".mp4") || ends(mp4, ".mov") || ends(mp4, ".gif") || ends(mp4, ".png"), "a film is written as an .mp4, .mov (HEVC), .gif or .png (a picture each)") || !told(m, placed(mp4), "there is no such folder") || !told(m, !m->d->writing, "it is being written already")) return 0;
+        if (!told(m, ends(mp4, ".mp4") || ends(mp4, ".mov") || ends(mp4, ".gif") || ends(mp4, ".png") || ends(mp4, ".jpg"), "a film is written as an .mp4, .mov (HEVC), .gif, .png or .jpg (a picture each)") || !told(m, placed(mp4), "there is no such folder") || !told(m, !m->d->writing, "it is being written already")) return 0;
         double from = 0.0, to = 0.0;
         doc_work(*m->d, &from, &to);   // (the work area is what is written)
         const int pictures = (int)std::lround((to - from) * RATE);

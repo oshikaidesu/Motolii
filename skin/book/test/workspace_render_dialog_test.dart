@@ -58,6 +58,13 @@ void main() {
     await t.tap(find.text('Render').last);
     await t.pumpAndSettle();
     expect(asked, endsWith('.mov'), reason: 'HEVC: written as a .mov');
+    wsAskRender.value++;
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('render-JPEG')));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Render').last);
+    await t.pumpAndSettle();
+    expect(asked, endsWith('.jpg'), reason: 'JPEG: a picture each, as a .jpg');
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 

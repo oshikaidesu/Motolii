@@ -281,9 +281,9 @@ class _RenderState extends State<_Render> {
   }
 
   // (the kinds the inside writes, by the file's ending: kit_draw.h; Alight Motion's own four)
-  static const _formats = [('MP4', '.mp4', "H.264, with the films' sound"), ('HEVC', '.mov', "HEVC by the Mac's own encoder, with the films' sound"), ('GIF', '.gif', '15 frames a second, no sound'), ('PNG', '.png', 'a picture each, name_0001.png on')];
+  static const _formats = [('MP4', '.mp4', "H.264, with the films' sound"), ('HEVC', '.mov', "HEVC by the Mac's own encoder, with the films' sound"), ('GIF', '.gif', '15 frames a second, no sound'), ('PNG', '.png', 'a picture each, name_0001.png on'), ('JPEG', '.jpg', 'a JPEG each, name_0001.jpg on')];
   String get _ending => _formats.map((f) => f.$2).firstWhere((e) => _name.text.trim().toLowerCase().endsWith(e), orElse: () => '.mp4');
-  void _as(String ending) => setState(() => _name.text = '${_name.text.trim().replaceFirst(RegExp(r'\.(mp4|mov|gif|png)$', caseSensitive: false), '')}$ending');
+  void _as(String ending) => setState(() => _name.text = '${_name.text.trim().replaceFirst(RegExp(r'\.(mp4|mov|gif|png|jpg)$', caseSensitive: false), '')}$ending');
 
   void _go(Ws ws) {
     var name = _name.text.trim();
@@ -359,12 +359,12 @@ class _RenderState extends State<_Render> {
                             DeskChip(key: ValueKey('render-$name-$v'), label: said, on: now == v, onTap: m == null ? null : () => ws.after(m.later('set', thing: 0, name: name, number: v.toDouble()), (_, _) => mounted ? again(() {}) : null)),
                         ]);
                       })),
-                    row('Format', StatefulBuilder(builder: (context, again) => Row(children: [
-                      for (final (label, ending, _) in _formats) ...[
-                        DeskChip(key: ValueKey('render-$label'), label: label, on: _ending == ending, onTap: () => again(() => _as(ending))),
-                        SizedBox(width: Shape.s(6)),
-                      ],
-                      Expanded(child: fact(_formats.firstWhere((f) => f.$2 == _ending).$3)),
+                    row('Format', StatefulBuilder(builder: (context, again) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Wrap(spacing: Shape.s(6), runSpacing: Shape.s(4), children: [
+                        for (final (label, ending, _) in _formats) DeskChip(key: ValueKey('render-$label'), label: label, on: _ending == ending, onTap: () => again(() => _as(ending))),
+                      ]),
+                      SizedBox(height: Shape.s(4)),
+                      Text(_formats.firstWhere((f) => f.$2 == _ending).$3, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g76)),   // (under them, one line: five chips leave no room beside)
                     ]))),
                     SizedBox(height: Shape.s(4)),
                     Row(
