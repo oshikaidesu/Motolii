@@ -315,7 +315,7 @@
 - [ ] Ring
 - [ ] Scale Assist
 - [ ] Scatter Field
-- [ ] Streak Strips
+- [ ] Streak Strips — 見た（10/28、SECTION=BO）：`effects/am_pixelate.wgsl` の Stretch x 8・Stretch y 1 と Stretch x 1・Stretch y 8（どちらも範囲 0.01〜100、既定 1）、Block Size 24（範囲 1〜500）。写真は size 0.28・x -0.88。正方形のマス（Stretch 1）は残るが、伸ばすと層の左 3/4 が黒になり、右端の約 84px だけが写真のまま（色は 7000 種以上で、同じ幅の帯ではない）。Stretch x と Stretch y は同じ絵。右の気球の内側は差の強い画素 610。出典 https://github.com/Comett1225/AbsentMotion/blob/0f5d891b7e6fd7260ca6191b4eafef23141230c8/app/src/main/assets/effects/pixelate.json Apache-2.0
 - [ ] Warp Blur
 
 
