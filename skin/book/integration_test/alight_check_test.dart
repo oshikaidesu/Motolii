@@ -246,7 +246,14 @@ final _rowsR = <(String, String, Map<String, Object>)>[
   ('clock', 'Digital Clock', const {'clockMode': 2}),
   ('along', 'along', const {'@copies': 8, '@size': .1}),
 ];
-final _rows = switch (_section) { 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+// (section T: a matte the shader already fills, letters shown part way through an animator, letters moved each their own, one copy on an outline.)
+final _rowsT = <(String, String, Map<String, Object>)>[
+  ('matte', 'text+effects/am_solidmatte.wgsl', const {'@size': .32}),
+  ('progress', 'text+animators/print_on.js', const {'@size': .32}),
+  ('xform', 'text', const {'@split': 'letters', '@copy_y': .045, '@size': .32}),
+  ('move', 'along', const {'@copies': 1, '@size': .12, '@copy_on_offset': .25}),
+];
+final _rows = switch (_section) { 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -286,6 +293,13 @@ void main() {
         left = effect == 'text' ? m.add('text', '/System/Library/Fonts/Supplemental/Arial Unicode.ttf') : m.add('shape', effect.substring('shape:'.length));
         expect(m.set(left, 'x', -.5), isTrue, reason: m.trouble);
         if (effect == 'text') expect(m.say(left, 'text', 'MOTOLII'), isTrue, reason: m.trouble);
+      } else if (effect.startsWith('text+')) {
+        expect(m.remove(left), isTrue, reason: m.trouble);
+        left = m.add('text', '/System/Library/Fonts/Supplemental/Arial Unicode.ttf');
+        expect(m.set(left, 'x', -.5), isTrue, reason: m.trouble);
+        expect(m.say(left, 'text', 'MOTOLII'), isTrue, reason: m.trouble);
+        final file = '$motoliiDir/${effect.substring('text+'.length)}';
+        expect(m.say(left, file.endsWith('.js') ? 'script' : 'fx', file), isTrue, reason: '$row: ${m.trouble}');
       } else if (effect == 'along') {
         expect(m.remove(left), isTrue, reason: m.trouble);
         path = m.add('shape', 'circle');
@@ -308,7 +322,9 @@ void main() {
         expect(value is String ? m.say(left, name, value) : m.set(left, name, (value as num).toDouble()), isTrue, reason: '$row $key: ${m.trouble}');
       }
       ws.reread();
+      if (effect.contains('print_on.js')) expect(m.at(.35), isTrue, reason: m.trouble);   // (inside the animator's own length, 0.67: some letters on)
       await shot('${i + 1}_${row.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}.png');
+      if (effect.contains('print_on.js')) expect(m.at(0), isTrue, reason: m.trouble);
       if (path != 0) expect(m.remove(path), isTrue, reason: m.trouble);
       expect(m.remove(left), isTrue, reason: m.trouble);   // (the next row on a photo as it comes)
       left = m.add('picture', '$motoliiDir/fx_sample.jpg');
