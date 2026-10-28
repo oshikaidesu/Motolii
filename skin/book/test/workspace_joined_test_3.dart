@@ -510,6 +510,24 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a film\'s sound is drawn on its bar: its loudness, read by the inside, laid where the film shows it (Alight Motion\'s waveform on a sound strip)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final film = m.add('film', '$motoliiDir/check/beats.mp4');
+    expect(film, isNot(0), reason: m.trouble);
+    ws.reread();
+    await t.pumpAndSettle();
+    List<double>? wave() => [for (final e in find.byWidgetPredicate((w) => w is CustomPaint && w.painter is WtTracksPainter).evaluate()) ...(((e.widget as CustomPaint).painter as WtTracksPainter).rows)].where((r) => r.wave != null).firstOrNull?.wave;
+    for (var i = 0; i < 400 && wave() == null; i++) {   // (read on another isolate: laid on the bar when it comes)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    final w = wave();
+    expect(w, isNotNull, reason: 'its bar has its sound');
+    expect([w!.length, w.reduce(math.max)], [ws.layers.single.outF - ws.layers.single.inF, greaterThan(-60)], reason: 'one loudness a frame, and heard');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

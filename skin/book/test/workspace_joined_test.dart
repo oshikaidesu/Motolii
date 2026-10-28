@@ -3,6 +3,7 @@
 // built these are skipped.
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:ffi/ffi.dart';
 
@@ -26,6 +27,7 @@ import 'package:lab_book/workspace/dock_parts.dart' show DockFooter, DockHover, 
 import 'package:lab_book/workspace/workspace.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/ws.dart';
+import 'package:lab_book/workspace/timeline_paint.dart' show WtTracksPainter;
 part 'workspace_joined_test_2.dart';
 part 'workspace_joined_test_3.dart';
 part 'workspace_joined_test_4.dart';
