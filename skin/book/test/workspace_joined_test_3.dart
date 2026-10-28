@@ -387,6 +387,33 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Scale with the link on grows width and height together; with it off, the width alone (Alight Motion\'s size link)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$rect');
+    await t.pumpAndSettle();
+    final link = find.byType(LinkMark).first, width = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_scale_x');
+    await seen(t, width);
+    Future<void> turn(bool on) async {
+      if (t.widget<LinkMark>(link).on != on) await t.tap(link);
+      await t.pumpAndSettle();
+    }
+    double v(String n) => m.value(rect, n, 0) ?? 1;
+    await turn(true);
+    await t.dragFrom(t.getCenter(width.first), const Offset(40, 0));
+    await settled(t, ws);
+    expect([v('scale_x'), v('scale_y')], [greaterThan(1), closeTo(v('scale_x'), 1e-6)], reason: 'both, the same: ${m.trouble}');
+    final tall = v('scale_y');
+    await turn(false);
+    await t.dragFrom(t.getCenter(width.first), const Offset(40, 0));
+    await settled(t, ws);
+    expect([v('scale_x'), v('scale_y')], [greaterThan(tall), closeTo(tall, 1e-6)], reason: 'the width alone');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

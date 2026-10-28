@@ -265,11 +265,11 @@
 - [ ] 色：スポイト、小さいピッカー、パレット、自分の色を足す
 - [ ] 線の始点・終点の形 10 種と大きさ
 - [x] 縁を何重にも足す（Multi-Border）：効果の棚の Multi-Border（pixi-filters の OutlineFilter、3 重まで） — 済（10/28）：G の行と同じ
-- [ ] 影：色・大きさ・アルファ・位置
+- [x] 影：色・大きさ・アルファ・位置：Drop Shadow のカード（色 shadow、ぼかし shadow_blur、不透明度 shadow_opacity、位置は距離と角度、絵を引いて決める） — 済：窓の試験（`workspace_drawings_test.dart`：引くと向きと距離、つまみでぼかし）
 - [ ] 重ね方 28 を 7 分類で畳み、見本の絵で選ぶ
 - [ ] Mask・Exclude の重ね方
 - [ ] 回転をダイヤルで
-- [ ] 大きさの幅・高さのつなぎ
+- [x] 大きさの幅・高さのつなぎ：Transform カードの Scale の横の鎖（入れると縦横が同じ割合で、外すと押した方だけ） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 傾き X・Y と、傾き・変形を戻す：傾きは Deform カードの Skew と Skew axis（どの向きにも傾く）。戻すのはカードの頭の Reset（そのカードの値とキーを初めの状態へ、1 歩で。After Effects の効果の Reset と同じ）。Deform 以外の窓のカードにも同じ Reset — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [ ] こする帯でレイヤーと点を動かす（指で隠れない）
 - [ ] 点を順に送って選ぶ、点を足す・消す、曲線の種類、閉じる・開く
