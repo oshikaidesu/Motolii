@@ -286,6 +286,16 @@ final _rowsAA = <(String, String, Map<String, Object>)>[
   ('rd3', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .55}),
   ('rd4', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .8}),
 ];
+// (section BD: a white shape's own glow, a child's share of its parent's turn and size, and a flat colour cut by the photo's brightness.)
+final _rowsBD = <(String, String, Map<String, Object>)>[
+  ('plain', 'shape:circle', const {'@fill': 'ffffff', '@size': 0.22, '@x': -.72}),
+  ('glow', 'shape:circle', const {'@fill': 'ffffff', '@size': 0.22, '@x': -.72, '@glow': 'ffffff', '@glow_opacity': 1, '@glow_blur': 80}),
+  ('follow', 'help', const {'@turn': 40, '@parent_rotate': 1}),
+  ('lock', 'help', const {'@turn': 40, '@parent_rotate': 0}),
+  ('grown', 'help', const {'@wide': 2.2, '@parent_size': 1}),
+  ('kept', 'help', const {'@wide': 2.2, '@parent_size': 0}),
+  ('stamp', 'stamp', const <String, Object>{}),
+];
 // (section BC: a shape squashed so its area stays, and copies sat on a circle.)
 final _rowsBC = <(String, String, Map<String, Object>)>[
   ('box', 'shape:rect', const {'@fill': 'ffcc33', '@size': 0.36, '@x': -.72}),
@@ -456,7 +466,7 @@ final _rowsAB = <(String, String, Map<String, Object>)>[
   ('zoomHi', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .25}),
   ('zoomLo', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .75}),
 ];
-final _rows = switch (_section) { 'BC' => _rowsBC, 'BB' => _rowsBB, 'BA' => _rowsBA, 'AZ' => _rowsAZ, 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+final _rows = switch (_section) { 'BD' => _rowsBD, 'BC' => _rowsBC, 'BB' => _rowsBB, 'BA' => _rowsBA, 'AZ' => _rowsAZ, 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -519,6 +529,24 @@ void main() {
         expect(m.key(left, 'x', 0, -.85) && m.key(right, 'x', 0, .35), isTrue, reason: m.trouble);
         expect(m.key(left, 'x', 1, -.45) && m.key(right, 'x', 1, .75), isTrue, reason: m.trouble);
         expect(m.set(left, 'frame_rate', 4), isTrue, reason: m.trouble);
+      } else if (effect == 'help') {
+        expect(m.remove(left), isTrue, reason: m.trouble);
+        path = m.add('shape', 'rect');
+        expect(m.set(path, 'x', -.72) && m.set(path, 'size', .2), isTrue, reason: m.trouble);
+        expect(m.say(path, 'fill', '88ddff'), isTrue, reason: m.trouble);
+        if (knobs['@turn'] is num) expect(m.set(path, 'rotate', (knobs['@turn'] as num).toDouble()), isTrue, reason: m.trouble);
+        if (knobs['@wide'] is num) expect(m.set(path, 'scale_x', (knobs['@wide'] as num).toDouble()), isTrue, reason: m.trouble);
+        left = m.add('shape', 'rect');
+        expect(m.set(left, 'size', .14), isTrue, reason: m.trouble);
+        expect(m.say(left, 'fill', 'ffcc33'), isTrue, reason: m.trouble);
+        expect(m.set(left, 'parent', path.toDouble()), isTrue, reason: m.trouble);
+      } else if (effect == 'stamp') {
+        expect(m.remove(right), isTrue, reason: m.trouble);
+        path = m.add('shape', 'rect');
+        expect(m.set(path, 'x', -.5) && m.set(path, 'size', .55) && m.set(path, 'clip', 1), isTrue, reason: m.trouble);
+        expect(m.say(path, 'fill', 'ff2200') && m.say(path, 'clip_matte', 'luma'), isTrue, reason: m.trouble);
+        final again = m.add('picture', '$motoliiDir/fx_sample.jpg');
+        expect(m.set(again, 'x', .5), isTrue, reason: m.trouble);
       } else if (effect == 'behind') {
         path = m.add('shape', 'rect');
         expect(path, isNot(0), reason: m.trouble);
@@ -572,7 +600,7 @@ void main() {
       }
       final stem = effect.split('/').last.replaceFirst(RegExp(r'\.(js|wgsl|fs)$'), '').replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_');
       for (final MapEntry(:key, :value) in knobs.entries) {
-        if (key == '@when' || key == '@minimum' || key == '@maximum' || key == '@step' || key == '@ymin' || key == '@ymax' || key == '@frequency') continue;   // (the behaviour's own, or when the playhead sits)
+        if (key == '@when' || key == '@minimum' || key == '@maximum' || key == '@step' || key == '@ymin' || key == '@ymax' || key == '@frequency' || key == '@turn' || key == '@wide') continue;   // (the behaviour's own, or when the playhead sits)
         final name = key.startsWith('@') ? key.substring(1) : 'js_${stem}_$key';   // (@: the thing's own value)
         expect(value is String ? m.say(left, name, value) : m.set(left, name, (value as num).toDouble()), isTrue, reason: '$row $key: ${m.trouble}');
       }
