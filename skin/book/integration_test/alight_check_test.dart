@@ -275,7 +275,18 @@ final _rowsV = <(String, String, Map<String, Object>)>[
   ('swHi', 'wave:rotate', const {'@minimum': -8, '@maximum': 8, '@size': .5, '@when': .25}),
   ('swLo', 'wave:rotate', const {'@minimum': -8, '@maximum': 8, '@size': .5, '@when': .75}),
 ];
-final _rows = switch (_section) { 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+// (section AA: named ISF files at a value each file already declares, and noise at four moments.)
+final _rowsAA = <(String, String, Map<String, Object>)>[
+  ('scroll', 'effects/Side Scroller And Flip.fs', const {'slide': .35, 'shift': .15, 'mirrorHorizontal_on': 0, 'mirrorVertical_on': 0}),
+  ('pixels', 'effects/Pixel Shifter.fs', const {'hFrequency': 4, 'vFrequency': 3}),
+  ('hyper', 'effects/Hyperspace.fs', const {'scrollAmount': .8}),
+  ('fade', 'effects/Fade.fs', const {'progress': .5}),
+  ('rd1', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .05}),
+  ('rd2', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .3}),
+  ('rd3', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .55}),
+  ('rd4', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .8}),
+];
+final _rows = switch (_section) { 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
