@@ -352,7 +352,7 @@
 ## L. 隠れた操作とタイムライン・Element（実機。Alight Motion で長押しに隠れている物は「無い」扱い。Motolii は見える所に置く）（7）
 
 - [x] アンカーポイントを動かす（Alight Motion は隠れている。Motolii は見える所に）：Transform カードの下の Anchor カード（立方体の点を押す・数字） — 済：窓の試験（`workspace_joined_test_2.dart` の Anchor）
-- [ ] Z を動かす帯
+- [x] Z を動かす帯：Transform カードの Position の Z（2.5D と 3D の物で出る、こすって動かす） — 済：窓の試験（`workspace_joined_test_2.dart` の Space）
 - [x] 値を動かすと次のキーが自動で入る：キーのある値を動かすと、その時点にキーが入る — 済：窓の試験（`workspace_joined_test.dart` の Trim：手を離した所にキー）
 - [ ] 有料の機能を使うと書き出しに鍵（Motolii は真似しない）
 - [ ] Element の伸ばし方の印（イントロの終わり・アウトロの始まり）

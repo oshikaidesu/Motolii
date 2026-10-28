@@ -254,6 +254,14 @@ void _tests2() {
     await t.tap(plate);
     await settled(t, ws);
     expect(m.word(rect, 'space'), '2.5d', reason: m.trouble);
+    ws.reread();
+    await t.pumpAndSettle();
+    final z = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_z');   // (in the world: its depth, scrubbed as any number: Alight Motion's Z strip)
+    await seen(t, z);
+    await t.timedDragFrom(t.getCenter(z.first), const Offset(60, 0), const Duration(milliseconds: 300));
+    await settled(t, ws);
+    expect(m.value(rect, 'z', 0), isNot(0), reason: 'moved in depth: ${m.trouble}');
+    expect(m.undo(), isTrue, reason: 'the depth back');
     expect(m.undo() && m.word(rect, 'space').isEmpty, isTrue, reason: 'one step');
     ws.select('$ring');
     await t.pumpAndSettle();
