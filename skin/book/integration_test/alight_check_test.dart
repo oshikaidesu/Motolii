@@ -238,7 +238,15 @@ final _rowsQ = <(String, String, Map<String, Object>)>[
   ('trim', 'shape:circle', const {'@fill': '', '@stroke': 'ffffff', '@stroke_width': 20, '@trim_begin': .1, '@trim': .4, '@size': .55}),
   ('radial', '-', const {'@copies': 8, '@copy_turn': 360, '@size': .28}),
 ];
-final _rows = switch (_section) { 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+// (section R: a spin the ISF already names, the ISF an open row names, and copies laid on a shape's outline.)
+final _rowsR = <(String, String, Map<String, Object>)>[
+  ('spinblur', 'Radial Blur', const {'mode': 1, 'amount': .4, 'samples': 2}),
+  ('unsharp', 'Unsharp Mask', const {'intensity': 6}),
+  ('chars', 'Random Characters', const {}),
+  ('clock', 'Digital Clock', const {'clockMode': 2}),
+  ('along', 'along', const {'@copies': 8, '@size': .1}),
+];
+final _rows = switch (_section) { 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -272,11 +280,24 @@ void main() {
     ws.reread();
     await shot('0_none.png');
     for (final (i, (row, effect, knobs)) in _rows.indexed) {
+      var path = 0;
       if (effect == 'text' || effect.startsWith('shape:')) {
         expect(m.remove(left), isTrue, reason: m.trouble);
         left = effect == 'text' ? m.add('text', '/System/Library/Fonts/Supplemental/Arial Unicode.ttf') : m.add('shape', effect.substring('shape:'.length));
         expect(m.set(left, 'x', -.5), isTrue, reason: m.trouble);
         if (effect == 'text') expect(m.say(left, 'text', 'MOTOLII'), isTrue, reason: m.trouble);
+      } else if (effect == 'along') {
+        expect(m.remove(left), isTrue, reason: m.trouble);
+        path = m.add('shape', 'circle');
+        expect(m.set(path, 'x', -.5), isTrue, reason: m.trouble);
+        expect(m.set(path, 'size', .55), isTrue, reason: m.trouble);
+        expect(m.say(path, 'fill', ''), isTrue, reason: m.trouble);
+        expect(m.say(path, 'stroke', '88ddff'), isTrue, reason: m.trouble);
+        expect(m.set(path, 'stroke_width', 8), isTrue, reason: m.trouble);
+        left = m.add('shape', 'rect');
+        expect(m.set(left, 'x', -.5), isTrue, reason: m.trouble);
+        expect(m.say(left, 'fill', 'ffcc33'), isTrue, reason: m.trouble);
+        expect(m.set(left, 'copy_on', path.toDouble()), isTrue, reason: m.trouble);
       } else if (effect != '-') {
         final file = effect.contains('/') ? '$motoliiDir/$effect' : '$motoliiDir/effects/$effect.fs';
         expect(m.say(left, 'fx', file), isTrue, reason: '$row: ${m.trouble}');
@@ -288,6 +309,7 @@ void main() {
       }
       ws.reread();
       await shot('${i + 1}_${row.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}.png');
+      if (path != 0) expect(m.remove(path), isTrue, reason: m.trouble);
       expect(m.remove(left), isTrue, reason: m.trouble);   // (the next row on a photo as it comes)
       left = m.add('picture', '$motoliiDir/fx_sample.jpg');
       m.set(left, 'x', -.5);
