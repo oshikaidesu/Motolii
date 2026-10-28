@@ -421,6 +421,18 @@ static bool doc_effect(Doc& d, int thing, const char* name, double at) {
     d.trouble = std::string("no effect is called ") + name;
     return false;
 }
+// One of a thing's effects (by its card's title, or its own name) taken off, as the shelf takes it off when pressed
+// again: an effect file out of its list (doc_fx_file), one of ThorVG's own unsaid (doc_effect). Alight Motion's
+// Delete on an effect's card (one step).
+static bool doc_fx_out(Doc& d, int thing, const char* name) {
+    const std::vector<std::string> list = doc_fx_list(d, thing);
+    auto at = std::find(list.begin(), list.end(), name);
+    if (at == list.end()) at = std::find_if(list.begin(), list.end(), [&](const std::string& w) { return doc_fx_title(w) == name; });
+    if (at == list.end()) return d.trouble = std::string(name) + " is not among its effects", false;
+    if (!doc_thor_letter(*at)) return doc_fx_file(d, thing, at->c_str());
+    for (const DocEffect& e : doc_effects) if (*at == e.value) return doc_effect(d, thing, e.name, 0.0);
+    return d.trouble = *at + " is put on by no effect", false;
+}
 static bool doc_unkey(Doc& d, int thing, const char* name, double at) {
     if (!doc_knows(d, thing, name)) return false;
     if (!doc_keys(d, thing, name) || !doc_keys(d, thing, name, at)) return d.trouble = std::string(name) + " has no key at that moment", false;

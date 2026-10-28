@@ -39,4 +39,34 @@ void main() {
     expect(m.word(rect, 'fx'), 'blur $halftone', reason: 'one step back');
     await closeWorkspace(t);
   }, skip: !insideBuilt);
+
+  testWidgets('Remove on an effect\'s card takes that effect off, a file\'s or ThorVG\'s own, one step (Alight Motion\'s Delete on an effect)', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final halftone = '$motoliiDir/effects/halftone.wgsl';
+    final rect = m.add('shape', 'rect');
+    expect(m.effect(rect, 'Gaussian Blur', 0), isTrue, reason: m.trouble);
+    ws..reread()..select('$rect');
+    expect(ws.screenToggle(halftone), isTrue);
+    await t.pumpAndSettle();
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('card-remove:Transform')), findsNothing, reason: 'the thing\'s own cards are not taken off');
+    for (final (card, left) in [('Halftone', 'blur'), ('Gaussian Blur', '')]) {
+      final remove = find.byKey(ValueKey('card-remove:$card'));
+      await seen(t, remove);
+      await t.tap(remove);
+      for (var i = 0; i < 100 && m.word(rect, 'fx') != left; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await t.pump();
+      }
+      expect(m.word(rect, 'fx'), left, reason: '$card taken off: ${m.trouble}');
+      await t.pumpAndSettle();
+      expect(_cards(t), isNot(contains(card)), reason: 'and its card gone');
+    }
+    expect(m.value(rect, 'blur', 0) ?? 0, 0, reason: 'the blur unsaid, as before it was put on');
+    expect(m.undo(), isTrue);
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    expect(m.value(rect, 'blur', 0), 12, reason: 'one step back: the blur on again');
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
 }

@@ -128,6 +128,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         onAim: (at) => ws.aim = at.startsWith('v_') ? at.substring(2) : null, // (a colour link of a card is aimed at that value)
         movable: int.tryParse(l?.id ?? '') == null ? const [] : m.fxTitles(int.parse(l!.id)), // (its effects, up or down their stack)
         onCardMove: int.tryParse(l?.id ?? '') == null ? null : (title, by) => ws.after(m.later('fx_move', thing: int.parse(l!.id), word: title, number: by.toDouble())),
+        onCardRemove: int.tryParse(l?.id ?? '') == null ? null : (title) => ws.after(m.later('fx_out', thing: int.parse(l!.id), word: title), (_, _) => ws.reread()),
         onCardReset: int.tryParse(l?.id ?? '') == null ? null : (names) => ws.after(m.later('reset', thing: int.parse(l!.id), word: names.join(' ')), (_, _) => ws.reread()),
         onCardCopy: int.tryParse(l?.id ?? '') == null ? null : (names) => m.later('copy_style', thing: int.parse(l!.id), name: names.join(' '), word: _WorkspaceState._clipboard('card')),   // (that card's values alone: Alight Motion's copy of one effect)
         onCardPaste: int.tryParse(l?.id ?? '') == null ? null : () => File(_WorkspaceState._clipboard('card')).existsSync() ? ws.after(m.later('paste_style', thing: int.parse(l!.id), word: _WorkspaceState._clipboard('card')), (_, _) => ws.reread()) : null,
