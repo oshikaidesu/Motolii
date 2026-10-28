@@ -16,6 +16,8 @@ import 'door.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show Ctx, Chooser, GlyphPlate, AnchorCube, AnchorGeometry, LinkMark, ValuesCard, FillStroke, InspHeader, KeyS, NumField, OnOff, PropRow, Space, TextGroup;
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart' show Sect;
+import 'package:lab_book/sets/inspector/inspector_direct_transform_canvas.dart' show TransformCanvas;
+import 'package:lab_book/sets/inspector/inspector_direct_transform_layout.dart' show TransformLayout;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart';
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;

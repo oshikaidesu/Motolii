@@ -491,6 +491,25 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('the Transform card\'s knob turns the layer, as a dial (Alight Motion\'s rotation dial)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$rect');
+    await t.pumpAndSettle();
+    final canvas = find.byType(TransformCanvas);
+    await seen(t, canvas);
+    final paint = find.descendant(of: canvas, matching: find.byType(LayoutBuilder)).first, at = t.getRect(paint);
+    final doc = Ctx.of(t.element(paint)).doc, values = Map.of(doc.v);
+    final knob = at.topLeft + TransformLayout(at.size, values, space: doc.space).knob;   // (where the canvas draws it: its own layout)
+    await t.timedDragFrom(knob, const Offset(60, 30), const Duration(milliseconds: 300));
+    await settled(t, ws);
+    expect((m.value(rect, 'rotate', 0) ?? 0).abs(), greaterThan(10), reason: 'turned by the knob: ${m.trouble}');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

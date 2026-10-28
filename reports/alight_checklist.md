@@ -268,7 +268,7 @@
 - [x] 影：色・大きさ・アルファ・位置：Drop Shadow のカード（色 shadow、ぼかし shadow_blur、不透明度 shadow_opacity、位置は距離と角度、絵を引いて決める） — 済：窓の試験（`workspace_drawings_test.dart`：引くと向きと距離、つまみでぼかし）
 - [x] 重ね方 28 を 7 分類で畳み、見本の絵で選ぶ：机の Blend。レイヤーごとの札を押すと、25 種を After Effects の 6 分類で並べ、それぞれ 2 つの円の重なりの絵で選ぶ — 済（10/28）：窓の試験（`workspace_desk_test.dart`）
 - [x] Mask・Exclude の重ね方：Mask は Clip to below、Exclude はその Matte カードの Invert（下の物の外だけ見える）。alpha・luma とぼかしも — 済（10/28）：`check/clip_matte.sh`（赤い四角を青い円に切り抜き、反転で外だけ）
-- [ ] 回転をダイヤルで
+- [x] 回転をダイヤルで：Transform カードの絵の上のつまみを回す（下と左のつまみで X・Y の傾きも） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 大きさの幅・高さのつなぎ：Transform カードの Scale の横の鎖（入れると縦横が同じ割合で、外すと押した方だけ） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 傾き X・Y と、傾き・変形を戻す：傾きは Deform カードの Skew と Skew axis（どの向きにも傾く）。戻すのはカードの頭の Reset（そのカードの値とキーを初めの状態へ、1 歩で。After Effects の効果の Reset と同じ）。Deform 以外の窓のカードにも同じ Reset — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [ ] こする帯でレイヤーと点を動かす（指で隠れない）
