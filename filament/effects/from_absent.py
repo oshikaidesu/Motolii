@@ -41,7 +41,8 @@ if blur:   # (a Gaussian across then down, sigma blur/3 in pixels, three sigmas 
              '    half4 c = from == 0 ? sample(image, (p + by * x) / resolution) : sample(h, (p + by * x) / resolution);\n'
              + ('    if (from == 0) c = half4(clamp(dot(c.rgb, half3(0.2126, 0.7152, 0.0722)) - threshold, 0, 1).xxx, c.a);\n' if blur == 'bright' else '') +
              '    all += c * w; weight += w; }\n  return all / weight;\n}\n')
-s = head + re.sub(r'\b(blurred|bright)\.eval\(', blur + 'At(' if blur else r'\1.eval(', re.sub(r'\bimage\.eval\(', 'imageAt(', s)).replace('half4 main(float2 coord)', 'half4 effect_(float2 coord)')
+s = head + re.sub(r'\b(blurred|bright)\.eval\(', blur + 'At(' if blur else r'\1.eval(', re.sub(r'\bimage\.eval\(', 'imageAt(', s))
+s = re.sub(r'\bhalf4 main\(float2 (\w+)\)', r'half4 effect_(float2 \1)', s)   # (the file's own pixel function, whatever it names the pixel: the wrapper's main calls it)
 s += ('\nvoid main() { sk_FragColor = passindex < 0.5 ? gauss_(sk_FragCoord.xy, float2(1, 0), 0) : passindex < 1.5 ? gauss_(sk_FragCoord.xy, float2(0, 1), 1) : effect_(sk_FragCoord.xy); }\n' if blur
       else '\nvoid main() { sk_FragColor = effect_(sk_FragCoord.xy); }\n')
 open(out + '.frag', 'w').write(s)
