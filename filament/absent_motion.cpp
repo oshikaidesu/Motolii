@@ -30,6 +30,9 @@ AbsentMoved absent_motion(const std::vector<AbsentEffect>& effects, int64_t thin
     am::ApplyMotion(l, nowMs, &p);
     return {p.location.fX, p.location.fY, p.z, p.rotation, p.scale.fX, p.scale.fY};
 }
+float absent_opacity(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs) {
+    return am::MotionOpacity(absent_layer(effects, thing, startMs, endMs), nowMs);
+}
 // As AbsentMotion's CopiesOf (styles.cpp) lays them, its layer's matrix one that moves nothing: outer by local.
 std::vector<AbsentCopy> absent_copies(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs, float wide, float high) {
     const am::Layer l = absent_layer(effects, thing, startMs, endMs);

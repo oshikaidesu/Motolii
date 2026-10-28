@@ -1,0 +1,8 @@
+// Pulse Opacity: AbsentMotion's pulseopacity (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), moved by its own motion.cpp (filament/absent_motion.cpp)
+// --label:Move
+// --absent:pulseopacity
+// --about:Fades the layer out and in over and over, on a sine or triangle wave.
+// --track@frequency:Frequency,0.1,16,2.0,0.01
+// --track@strength:Strength,0,1,1.0,0.01
+// --track@phase:Starting Phase,0,2,0.0,0.01
+// --track@wave:Wave,0,1,0.0,1

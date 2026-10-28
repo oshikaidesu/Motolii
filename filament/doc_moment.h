@@ -332,8 +332,8 @@ static void doc_moment(Doc& d, double now) {
                 }
             }
         }
-        if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
-        if (t.drawn && t.drawn->edgeLook) t.drawn->edgeLook->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
+        if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)(doc_number(d, thing, "opacity", now, 1) * doc_absent_opacity(d, thing, now)));   // (AbsentMotion's Pulse Opacity too)
+        if (t.drawn && t.drawn->edgeLook) t.drawn->edgeLook->setParameter("opacity", (float)(doc_number(d, thing, "opacity", now, 1) * doc_absent_opacity(d, thing, now)));
         if (MaterialInstance* main = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) {   // (its copies coloured each their own, along a ramp in their order: a look of its own each, told what the thing's is)
             std::vector<float3> ramp;
             std::istringstream said(doc_word(d, thing, "copy_fill"));
@@ -373,7 +373,7 @@ static void doc_moment(Doc& d, double now) {
                     const double clear = scripted != d.scripted.end() && (size_t)made.nth < scripted->second.copies.size() ? scripted->second.copies[(size_t)made.nth].opacity : 1.0;
                     const math::double3 here{made.place[3].x, made.place[3].y, made.place[3].z};
                     const int clearBy = doc_driven_by(d, thing, "opacity");
-                    const double opacity = !clearEach ? doc_number(d, thing, "opacity", now, 1)
+                    const double opacity = !clearEach ? doc_number(d, thing, "opacity", now, 1) * doc_absent_opacity(d, thing, now)
                                          : doc_among(doc_relations, doc_word(d, clearBy, "file")) ? std::clamp(doc_literal(d, thing, "opacity", now, 1), 0.0, 1.0)   // (a relation's: by the thing's place among its things)
                                          : std::clamp(doc_given(d, clearBy, made.nth, n, now, doc_number(d, thing, "opacity", now, 1), &here), 0.0, 1.0);
                     const double fade = n > 1 ? 1 + (fadeTo - 1) * (double)made.nth / (double)(n - 1) : 1.0;
