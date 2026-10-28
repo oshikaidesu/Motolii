@@ -209,7 +209,18 @@ final _rowsY = <(String, String, Map<String, Object>)>[
   ('scales', 'Color Scales', const {'iAuthor': 1}),
   ('motionblur', 'VVMotionBlur 3.0', const {}),
 ];
-final _rows = switch (_section) { 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+// (section Z: open rows shot again at a value the file already declares, or with the ISF the row names.)
+final _rowsZ = <(String, String, Map<String, Object>)>[
+  ('wipe', 'effects/am_wipe.wgsl', const {'start': .2, 'end': .75}),
+  ('stretch', 'effects/am_stretch.wgsl', const {'stretch': 400}),
+  ('lensblur', 'effects/am_lensblur.wgsl', const {'radius': 1.5}),
+  ('star', 'effects/am_simplestarfield.wgsl', const {'starSize': 3}),
+  ('omino', 'effects/am_ominodiffusion.wgsl', const {'weight': 8}),
+  ('graph', 'Graph Paper', const {}),
+  ('dotscreen', 'effects/dot_screen.wgsl', const {}),
+  ('sine', 'Sine Warp Tile', const {'angle': .35}),
+];
+final _rows = switch (_section) { 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
