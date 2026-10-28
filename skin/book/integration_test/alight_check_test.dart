@@ -286,6 +286,14 @@ final _rowsAA = <(String, String, Map<String, Object>)>[
   ('rd3', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .55}),
   ('rd4', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .8}),
 ];
+// (section AZ: one copy on a circle, once stagger makes it a member, and a layer whose keys step.)
+final _rowsAZ = <(String, String, Map<String, Object>)>[
+  ('path25', 'along', const {'@stagger': 0.01, '@copy_on_offset': 0.25, '@size': 0.1}),
+  ('path50', 'along', const {'@stagger': 0.01, '@copy_on_offset': 0.5, '@size': 0.1}),
+  ('q1', 'quant', const {'@when': 0.1}),
+  ('q2', 'quant', const {'@when': 0.2}),
+  ('q3', 'quant', const {'@when': 0.3}),
+];
 // (section AY: a vignette whose size sits inside the photo, a vertical stretch, and noise that steps.)
 final _rowsAY = <(String, String, Map<String, Object>)>[
   ('vig', 'effects/am_vignette.wgsl', const {'extent': 0.18, 'strength': 1, 'feather': 0.3}),
@@ -429,7 +437,7 @@ final _rowsAB = <(String, String, Map<String, Object>)>[
   ('zoomHi', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .25}),
   ('zoomLo', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .75}),
 ];
-final _rows = switch (_section) { 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+final _rows = switch (_section) { 'AZ' => _rowsAZ, 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -488,6 +496,10 @@ void main() {
         expect(m.set(left, 'x', -.5), isTrue, reason: m.trouble);
         expect(m.say(left, 'fill', 'ffcc33'), isTrue, reason: m.trouble);
         expect(m.set(left, 'copy_on', path.toDouble()), isTrue, reason: m.trouble);
+      } else if (effect == 'quant') {
+        expect(m.key(left, 'x', 0, -.85) && m.key(right, 'x', 0, .35), isTrue, reason: m.trouble);
+        expect(m.key(left, 'x', 1, -.45) && m.key(right, 'x', 1, .75), isTrue, reason: m.trouble);
+        expect(m.set(left, 'frame_rate', 4), isTrue, reason: m.trouble);
       } else if (effect == 'behind') {
         path = m.add('shape', 'rect');
         expect(path, isNot(0), reason: m.trouble);
