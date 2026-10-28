@@ -97,6 +97,7 @@ class _WorkspaceState extends State<Workspace> {
     return '${dir.path}/clipboard_$what.motolii';
   }
 
+  static const _times = [('Align Starts', 'start'), ('Align Ends', 'end'), ('Move to Playhead', 'playhead'), ('Stagger', 'stagger'), ('Extend Start to Playhead', 'extend')];
   static const _aligns = [('Align Left', 'left'), ('Align Centre', 'centre'), ('Align Right', 'right'), ('Align Top', 'top'), ('Align Middle', 'middle'), ('Align Bottom', 'bottom'), ('Spread Across', 'across'), ('Spread Down', 'down')];
 
   /// The things picked: together if more than one is, else the one.
@@ -235,6 +236,10 @@ class _WorkspaceState extends State<Workspace> {
         if (all.isNotEmpty) ws.after(m.later('align', word: '$how ${all.join(' ')}'));
       },
       for (final how in const ['fit', 'fill', 'stretch']) 'arrange.$how': () => _eachPicked((t) => m.later('fit', thing: t, word: how)),
+      for (final (_, how) in _times) 'time.$how': () {   // (the picked, in the order picked: Alight Motion's timing)
+        final all = _picked();
+        if (all.isNotEmpty) ws.after(m.later('time_align', word: '$how ${all.join(' ')}', number: ws.frame / Ws.fps));
+      },
       'arrange.flipX': () => _eachPicked((t) => m.later('flip', thing: t, word: 'x')),
       'arrange.flipY': () => _eachPicked((t) => m.later('flip', thing: t, word: 'y')),
       'layers.sequence': () => ws.after(m.later('sequence')),   // (After Effects' Keyframe Assistant: one after another, from the top)
@@ -345,6 +350,7 @@ class _WorkspaceState extends State<Workspace> {
         label: 'Animation',
         menus: [
           item('Sequence Layers', 'layers.sequence'),
+          PlatformMenuItemGroup(members: [for (final (label, how) in _times) item(label, 'time.$how')]),
         ],
       ),
     ];

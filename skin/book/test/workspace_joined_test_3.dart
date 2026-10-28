@@ -234,6 +234,32 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('timing: starts and ends lined up, to the playhead, staggered, a start drawn out; keys go with a thing moved (Alight Motion\'s timing)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final a = m.add('shape', 'rect'), b = m.add('shape', 'rect');
+    expect(m.set(a, 'start', 1) && m.set(a, 'duration', 2) && m.set(b, 'start', 2.5) && m.set(b, 'duration', 1) && m.key(b, 'x', 3, 0) && m.key(b, 'x', 3.5, 1), isTrue, reason: m.trouble);
+    ws.reread();
+    await t.pumpAndSettle();
+    Future<void> tell(String how, {double at = 0}) async {
+      ws.after(m.later('time_align', word: '$how $a $b', number: at));
+      await settled(t, ws);
+    }
+    double s(int th) => m.value(th, 'start', 0)!;
+    await tell('start');
+    expect([s(a), s(b)], [1, 1], reason: 'to the earliest: ${m.trouble}');
+    expect(m.keyMoments(b, 'x'), [closeTo(1.5, 1e-9), closeTo(2, 1e-9)], reason: 'its keys with it');
+    await tell('end');
+    expect([s(a) + 2, s(b) + 1], [3, 3], reason: 'ends at the latest');
+    await tell('playhead', at: .5);
+    expect([s(a), s(b)], [.5, .5]);
+    await tell('stagger');
+    expect([s(a), s(b)], [.5, 2.5], reason: 'one after the other, in the order picked');
+    await tell('extend', at: 2);
+    expect([s(a), m.value(a, 'duration', 0), s(b), m.value(b, 'duration', 0)], [2, closeTo(.5, 1e-9), 2, closeTo(1.5, 1e-9)], reason: 'each start to the playhead, either way, the ends staying (Final Cut Pro\'s Extend Edit)');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Arrange: lined up on the picture, against their own box, spread evenly; made to fit the picture; turned over (Keynote\'s Align, Alight Motion\'s Fit and Flip)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final a = m.add('shape', 'rect'), b = m.add('shape', 'rect'), c = m.add('shape', 'rect');

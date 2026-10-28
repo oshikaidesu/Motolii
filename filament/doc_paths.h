@@ -426,5 +426,36 @@ static bool doc_sequence(Doc& d, double overlap, double rate) {
     if (!ok) d.act_ok = false;
     return doc_acted(d) && ok;
 }
+// The picked things lined up in time (Alight Motion's timing: Extend Start, Move to Playhead, Align Left, Stagger,
+// Align Right): starts to the earliest; ends to the latest; each to begin at the playhead; one after another in the
+// order picked; or its start brought to the playhead either way, its end staying (Final Cut Pro's Extend Edit; a film from as far in it as the head's
+// trim takes it). A thing moved takes its keys with it, as Sequence moves them. One step.
+static bool doc_time_align(Doc& d, const std::vector<int>& things, const std::string& how, double now) {
+    if (things.empty()) return d.trouble = "nothing to line up", false;
+    double first = 1e18, last = -1e18;
+    for (const int t : things) first = std::min(first, doc_number(d, t, "start", 0, 0)), last = std::max(last, doc_number(d, t, "start", 0, 0) + doc_lasts(d, t));
+    doc_act(d);
+    bool ok = true;
+    double after = doc_number(d, things[0], "start", 0, 0);
+    for (const int t : things) {
+        if (!ok) break;
+        const double was = doc_number(d, t, "start", 0, 0), lasts = doc_lasts(d, t);
+        double to = was;
+        if (how == "start") to = first;
+        else if (how == "end") to = last - lasts;
+        else if (how == "playhead") to = now;
+        else if (how == "stagger") to = after, after += lasts;
+        else if (how == "extend") {
+            if (now >= was + lasts - 1e-3) continue;   // (the playhead past its end: nothing to draw out to)
+            ok = doc_set(d, t, "start", std::max(0.0, now)) && doc_set(d, t, "duration", was + lasts - std::max(0.0, now));
+            if (ok && doc_word(d, t, "kind") == "film") ok = doc_set(d, t, "begin", std::max(0.0, doc_number(d, t, "begin", 0, 0) + (std::max(0.0, now) - was) * std::fabs(doc_number(d, t, "speed", 0, 1))));
+            continue;
+        } else { ok = false, d.trouble = "lined up by start, end, playhead, stagger or extend"; break; }
+        to = std::max(0.0, to);
+        if (std::fabs(to - was) > 1e-9) ok = doc_set(d, t, "start", to) && doc_keys_by(d, t, to - was);
+    }
+    if (!ok) d.act_ok = false;
+    return doc_acted(d) && ok;
+}
 static bool doc_undo(Doc& d) { return doc_step(d, true); }
 static bool doc_redo(Doc& d) { return doc_step(d, false); }

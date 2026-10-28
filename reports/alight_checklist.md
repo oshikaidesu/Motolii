@@ -284,7 +284,7 @@
 - [ ] フォント：分類（Serif…）、言語、並べ替え、読み込む
 - [ ] 複数選ぶと上の帯が変わり、数が出る
 - [ ] グループにする・グループにしてマスク・グループにして抜く
-- [ ] 時間の揃え：始まりを伸ばす・再生位置へ寄せる・左揃え・ずらして並べる・右揃え
+- [x] 時間の揃え：始まりを伸ばす・再生位置へ寄せる・左揃え・ずらして並べる・右揃え：Animation メニューの Align Starts・Align Ends・Move to Playhead・Stagger・Extend Start to Playhead（選んだ物に、選んだ順で。動かした物はキーも一緒。始まりを伸ばすは Final Cut Pro の Extend Edit と同じく両向き、終わりは動かない） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 画面の揃え：左・中・右・上・中・下・等間隔 2 種：Arrange > Align Left〜Bottom・Spread Across・Spread Down（Keynote・Figma の Align：1 つなら絵に、いくつかならその箱に、3 つ以上を等間隔に） — 済（10/28）：窓の試験
 - [ ] グループに入って編集、パンくず
 - [ ] グループの設定：幅・高さ・背景・Precompose・伸び方（Freeze・Stretch・Loop・Loop & Stretch・Blank）
