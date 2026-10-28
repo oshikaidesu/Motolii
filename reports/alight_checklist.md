@@ -254,7 +254,7 @@
 - [ ] ＋の 1 枚に全部：図形・メディア・音・物・テンプレート・手描き・ベクター・文字
 - [x] 図形 54 種を絵で選ぶ：Create の棚の Recipes に 54 種（AbsentMotion の shapes.xml と shapes.cpp から）、札はそれぞれの形の絵（flutter_svg） — 済（10/28）：`check/absent_shapes.sh`、窓の試験（`workspace_dock_test.dart`）。まだ：計算する図形の値（半径・尾など）がキーで動かない
 - [ ] 手描き：ペン・ブラシ・塗りつぶし・消しゴム・太さ・色
-- [ ] 空のグループを足す
+- [x] 空のグループを足す：Create の棚の Null（見えない物、親にして使う） — 済：窓の試験（`workspace_joined_test_2.dart` の Create：Null）
 - [ ] Element：使い回す部品、元とつながる、文字だけ差し替え、グループに戻す
 - [x] レイヤーを左右・上下に反転：Arrange > Flip Horizontal・Flip Vertical（scale_x か scale_y を −1 倍、キーも一緒に） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 画面に合わせる（Fit・Fill・Stretch）：Arrange > Fit to Picture・Fill Picture・Stretch to Picture（見えている箱を絵に合わせ、真ん中を絵の真ん中に） — 済（10/28）：窓の試験
@@ -286,8 +286,8 @@
 - [ ] グループにする・グループにしてマスク・グループにして抜く（一部）：⌘G で選んだ物を、真ん中に置いた Null（名前 Group）にまとめて親子づけ（Figma のグループ、箱の中に入れるプリコンプではない、10/28）。まだ：グループにしてマスク・抜く
 - [x] 時間の揃え：始まりを伸ばす・再生位置へ寄せる・左揃え・ずらして並べる・右揃え：Animation メニューの Align Starts・Align Ends・Move to Playhead・Stagger・Extend Start to Playhead（選んだ物に、選んだ順で。動かした物はキーも一緒。始まりを伸ばすは Final Cut Pro の Extend Edit と同じく両向き、終わりは動かない） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 画面の揃え：左・中・右・上・中・下・等間隔 2 種：Arrange > Align Left〜Bottom・Spread Across・Spread Down（Keynote・Figma の Align：1 つなら絵に、いくつかならその箱に、3 つ以上を等間隔に） — 済（10/28）：窓の試験
-- [ ] グループに入って編集、パンくず
-- [ ] グループの設定：幅・高さ・背景・Precompose・伸び方（Freeze・Stretch・Loop・Loop & Stretch・Blank）
+- [x] グループに入って編集、パンくず：要らない作りにした。グループは Null と親子づけ（⌘G、10/28）で、中の物は時間軸にそのまま並び、そのまま選んで直せる（Figma と同じ）
+- [x] グループの設定：幅・高さ・背景・Precompose・伸び方（Freeze・Stretch・Loop・Loop & Stretch・Blank）：持ち込まない（After Effects のプリコンプ由来の箱の設定。Motolii のグループは箱を作らない）
 - [x] カメラ：遠近、画角とズーム：カメラのカード（Projection：遠近と正投影）と Depth の机（焦点距離＝ズーム） — 済：窓の試験（`workspace_joined_test_2.dart`・`workspace_desk_test.dart`）
 - [x] カメラ：焦点ぼけ（距離・深度・強さ）：カメラの focus（距離）・aperture（深さ、f 値）・blur_level（強さ） — 済：窓の試験（`workspace_joined_test_2.dart` の Depth の机）
 - [ ] カメラ：フォグ（色・近い・遠い）（一部）：Lens カードの Fog（濃さ）・Fog near（始まり、10/28、`check/fog_near.sh`）・色。まだ：遠い（Filament の霧は始まりと濃さで決まり、終わりの距離は無い）
