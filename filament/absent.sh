@@ -12,7 +12,7 @@ A=third_party/AbsentMotion K=third_party/skia_src
     skia_enable_skottie=false skia_use_dawn=false skia_use_gl=false skia_use_metal=false skia_enable_ganesh=false skia_enable_graphite=false' > /dev/null)
 PATH=/opt/homebrew/bin:$PATH ninja -C $K/out/sksl skslc > /dev/null || exit 1
 cp $K/src/sksl/sksl_*.sksl $K/out/sksl/   # (the modules skslc reads beside itself: Skia's BUILD.gn copies them so)
-rm -f effects/am_*.wgsl
+rm -f effects/am_*.wgsl effects/am_*.am
 made=0 why=()
 for f in $A/app/src/main/assets/effects/*.json(N); do
     n=${f:t:r}

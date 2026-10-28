@@ -1,0 +1,10 @@
+// Random Jitter: AbsentMotion's randomjitter (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), moved by its own motion.cpp (filament/absent_motion.cpp)
+// --label:Move
+// --absent:randomjitter
+// --about:Makes the layer jump back and forth at random along an angle.
+// --track@angle:Angle,-3600,3600,45.0,1
+// --track@frequency:Frequency,1,60,30.0,0.1
+// --track@magnitude:Magnitude,1,2000,25.0,1
+// --track@seed:Seed,0,1,0.0,0.01
+// --track@slack:Slack,0,1,0.0,0.01
+// --track@zjitter:Z Jitter,0,2000,0.0,1

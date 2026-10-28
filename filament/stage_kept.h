@@ -15,6 +15,7 @@
 struct StageKept {
     uint64_t key = 0;               // (the document as it is)
     long revision = -1;             // (the revision the key was taken at)
+    int seen = -1;                  // (files_changed when the key was taken: a file written over takes it again)
     std::vector<uint8_t> state;     // (each picture of the document: 0 not looked at, 1 drawn in time (not kept), 2 kept)
     int w = 0, h = 0;
     RenderTarget* target = nullptr; // (where a picture to keep is drawn, as large as the stage)
@@ -46,10 +47,12 @@ static uint64_t stage_kept_key(Doc& d, int w, int h) {
     add(std::to_string(w) + "x" + std::to_string(h));
     doc_rows(d, sqlite3_mprintf("select thing, name, at, value, coalesce(way, '') from fact order by thing, name, at"), [&](sqlite3_stmt* row) {
         for (int i = 0; i < 5; ++i) add(sqlite3_column_text(row, i) ? (const char*)sqlite3_column_text(row, i) : "");
-        if (!strcmp((const char*)sqlite3_column_text(row, 1), "file")) {   // (a file it uses, as it is now)
-            struct stat st {};
-            if (sqlite3_column_text(row, 3) && stat((const char*)sqlite3_column_text(row, 3), &st) == 0) add(std::to_string(st.st_mtimespec.tv_sec) + "." + std::to_string(st.st_size));
-        }
+        const char* name = (const char*)sqlite3_column_text(row, 1);
+        if (sqlite3_column_text(row, 3) && (!strcmp(name, "file") || !strcmp(name, "fx") || !strcmp(name, "script")))   // (a file it uses, as it is now: a picture's, and its effects' and script's)
+            for (const std::string& one : !strcmp(name, "file") ? std::vector<std::string>{(const char*)sqlite3_column_text(row, 3)} : script_files((const char*)sqlite3_column_text(row, 3))) {
+                struct stat st {};
+                if (stat(one.c_str(), &st) == 0) add(std::to_string(st.st_mtimespec.tv_sec) + "." + std::to_string(st.st_mtimespec.tv_nsec) + "." + std::to_string(st.st_size));
+            }
     });
     doc_rows(d, sqlite3_mprintf("select name, coalesce(goes, '') from way order by name"), [&](sqlite3_stmt* row) { add((const char*)sqlite3_column_text(row, 0)); add((const char*)sqlite3_column_text(row, 1)); });
     return hash;
@@ -63,8 +66,8 @@ static std::filesystem::path stage_kept_file(const StageKept& k, int picture) {
 
 // The key taken again once the document has changed; what is on disk for it already is found as it is asked.
 static void stage_kept_fresh(StageKept& k, Doc& d, Stage& s, long revision, int rate) {
-    if (k.revision == revision && k.w == s.w && k.h == s.h) return;
-    k.revision = revision, k.w = s.w, k.h = s.h;
+    if (k.revision == revision && k.seen == files_changed() && k.w == s.w && k.h == s.h) return;
+    k.revision = revision, k.seen = files_changed(), k.w = s.w, k.h = s.h;
     k.key = stage_kept_key(d, s.w, s.h);
     std::erase(k.keys, k.key);
     k.keys.push_back(k.key);

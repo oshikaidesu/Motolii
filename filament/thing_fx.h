@@ -23,6 +23,7 @@ static void thing_effects(Stage& s, ScreenStack& st, const std::string& files) {
         }
         if (const char k = doc_thor_letter(file)) { st.steps.push_back(k); continue; }   // (one of ThorVG's own: drawn by ThorVG, in its place)
         if (std::filesystem::path(file).extension() == ".mjs") continue;   // (a splat effect: in the cloud's own look, points.h)
+        if (const std::string ext = std::filesystem::path(file).extension().string(); ext == ".am" || ext == ".json") continue;   // (AbsentMotion's own motion, the thing moved: absent_motion.h; Filament's own settings, the stage's: viewer_settings.h)
         if (solid_is(file)) continue;   // (a solid's shape: its picture laid on it, not an effect on its picture: thing_fx_solid)
         ScreenFx*& made = st.made[file];
         if (!made) {

@@ -182,7 +182,7 @@ int motolii_range(Motolii* m, int thing, const char* name, double* low, double* 
 const char* motolii_recipes(Motolii* m) { return by_look(m, [=] { return (said_word() = doc_recipe_names()).c_str(); }); }
 const char* motolii_effects(Motolii* m) {   // (the effects folder's, then AviUtl2's scripts)
     return by_look(m, [=] {
-        const std::string files = doc_folder_names("effects", ".wgsl .fs .mjs .js .json"), aviutl = doc_aviutl_names();   // (.json: Filament's own settings, viewer_settings.h)
+        const std::string files = doc_folder_names("effects", ".wgsl .fs .mjs .js .json .am"), aviutl = doc_aviutl_names();   // (.json: Filament's own settings, viewer_settings.h; .am: AbsentMotion's own motion, absent_motion.h)
         return (said_word() = files + (files.empty() || aviutl.empty() ? "" : "\n") + aviutl).c_str();
     });
 }

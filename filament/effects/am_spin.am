@@ -1,0 +1,5 @@
+// Spin: AbsentMotion's spin (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), moved by its own motion.cpp (filament/absent_motion.cpp)
+// --label:Move
+// --absent:spin
+// --about:Turns the layer round and round at a steady speed; below zero it turns the other way.
+// --track@rpm:RPM,-3600,3600,60.0,1

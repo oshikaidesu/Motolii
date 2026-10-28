@@ -1,0 +1,10 @@
+// Oscillate: AbsentMotion's oscillate (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), moved by its own motion.cpp (filament/absent_motion.cpp)
+// --label:Move
+// --absent:oscillate
+// --about:Moves the layer back and forth along an angle, in depth or round in an orbit.
+// --track@direction:Direction,0,2,0.0,1
+// --track@angle:Angle,-3600,3600,45.0,0.1
+// --track@frequency:Frequency,0,16,2.0,0.01
+// --track@magnitude:Magnitude,0,4000,25.0,1
+// --track@wave:Wave,0,1,0.0,1
+// --track@phase:Phase,0,1000,0.0,0.01

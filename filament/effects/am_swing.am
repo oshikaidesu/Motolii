@@ -1,0 +1,9 @@
+// Swing: AbsentMotion's swing (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), moved by its own motion.cpp (filament/absent_motion.cpp)
+// --label:Move
+// --absent:swing
+// --about:Turns the layer back and forth between two angles.
+// --track@frequency:Frequency,0.1,16,2.0,0.01
+// --track@angle1:Angle 1,-3600,3600,-30.0,0.1
+// --track@angle2:Angle 2,-3600,3600,30.0,0.1
+// --track@phase:Phase,0,2,0.0,0.01
+// --track@wave:Wave,0,1,0.0,1

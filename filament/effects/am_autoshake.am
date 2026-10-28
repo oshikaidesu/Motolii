@@ -1,0 +1,12 @@
+// Auto-Shake: AbsentMotion's autoshake (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), moved by its own motion.cpp (filament/absent_motion.cpp)
+// --label:Move
+// --absent:autoshake
+// --about:Moves the layer randomly over time within the set limits.
+// --track@magnitude:Magnitude,0,2000,50.0,1
+// --track@frequency:Frequency,0,16,2.0,0.01
+// --track@evolution:Evolution,0,2000,0.0,0.01
+// --track@seed:Seed,0,5,0.0,0.01
+// --track@angle:Angle,-3600,3600,45.0,0.1
+// --track@slack:Slack,0,1,0.25,0.01
+// --track@zshake:Z Shake,0,2000,0.0,1
+// --track@pattern:Pattern,0,1,1.0,1

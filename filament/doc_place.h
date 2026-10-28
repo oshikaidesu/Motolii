@@ -117,6 +117,13 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
             own = own * math::mat4::rotation(c.rotate * (double)TAU / 360.0, math::double3{0, 0, 1}) * math::mat4::rotation(c.rotate_y * (double)TAU / 360.0, math::double3{0, 1, 0}) *
                   math::mat4::rotation(c.rotate_x * (double)TAU / 360.0, math::double3{1, 0, 0}) * math::mat4::scaling(c.size);
         }
+    if (const std::vector<AbsentEffect> moving = doc_absent_on(d, thing, said); !moving.empty()) {   // (AbsentMotion's own motion, its stack in order, as AbsentMotion moves a layer: absent_motion.h)
+        const double begins = doc_literal(d, thing, "start", 0, 0), lasts = doc_literal(d, thing, "duration", 0, -1);
+        const AbsentMoved m = absent_motion(moving, thing, 1000.0 * begins, 1000.0 * (begins + (lasts > 0 ? lasts : doc_seconds(d))), 1000.0 * said);
+        const double pixel = (double)d.stage->h / std::max(1.0, doc_number(d, 0, "high", 0, 1080) * doc_point(d, thing, said));   // (a pixel of the document where the thing stands, as a script's copies are told)
+        shift += math::double3{m.x * pixel, -m.y * pixel, m.z * pixel};   // (its y down, the stage's up)
+        own = own * math::mat4::rotation(-m.rotate * (double)TAU / 360.0, math::double3{0, 0, 1}) * math::mat4::scaling(math::double3{m.scale_x, m.scale_y, 1.0});   // (its turn clockwise)
+    }
     double tall = doc_literal(d, thing, "tall", now, 1);   // (taller, its anchor staying: a copy as its number in copy_tall says too)
     if (member) {
         auto found = d.talls.find(thing);
@@ -439,7 +446,7 @@ static std::vector<std::string> doc_fx_list(Doc& d, int thing) {
 // Whether a thing's effects are laid on it as the camera sees it (one of them a file: then all of them, in turn, there:
 // screen.h thing_effects_draw), not in its own picture as ThorVG draws it.
 static bool doc_fx_files(const std::vector<std::string>& list) {
-    return std::any_of(list.begin(), list.end(), [](const std::string& w) { return !doc_thor_letter(w) && std::filesystem::path(w).extension() != ".mjs"; });   // (a splat effect is in the cloud's own look)
+    return std::any_of(list.begin(), list.end(), [](const std::string& w) { const std::string ext = std::filesystem::path(w).extension().string(); return !doc_thor_letter(w) && ext != ".mjs" && ext != ".am" && ext != ".json"; });   // (a splat effect is in the cloud's own look; AbsentMotion's motion moves the thing, absent_motion.h; Filament's own settings are the stage's)
 }
 static std::string doc_fx_join(const std::vector<std::string>& list) {
     std::string all;

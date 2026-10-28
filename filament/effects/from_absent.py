@@ -7,13 +7,45 @@
 # One reading the picture blurred (`blurred`), or its bright part blurred (`bright`), is given it as AbsentMotion's
 # effects.cpp gives it: a Gaussian blur of sigma blur/3 (bright: luma less its threshold first), here in two passes
 # (screen.h's ISF passes: across into `h`, then down into the blurred picture), as Skia's own blur goes, then its own.
-# usage: from_absent.py <id>.json out.wgsl skslc   (an effect reading another picture, or native, is refused)
-import json, re, subprocess, sys
+# One AbsentMotion moves by its own C++ (its motion.cpp ApplyMotion: a native effect it names below) made a file of its
+# knobs alone, out with .am for .wgsl: run as AbsentMotion runs it (absent_motion.cpp), its knobs written as below.
+# usage: from_absent.py <id>.json out.wgsl skslc   (an effect reading another picture, or another native, is refused)
+import json, os, re, subprocess, sys
 
 src, out, skslc = sys.argv[1], sys.argv[2], sys.argv[3]
 d = json.load(open(src))
+moves = ('autoshake', 'randomdisplace', 'randomjitter', 'oscillate', 'swing', 'spin', 'pulsesize')   # (AbsentMotion's motion.cpp ApplyMotion: what it moves the layer by)
+
+
+def knob_lines(named, numbers):   # (each param a knob or more, by the name the effect reads it by; numbers: the kinds one number each)
+    lines = []
+    for p in d.get('params', []):
+        n = named.get(p['id'])
+        if not n:
+            continue
+        lo, hi, step = p.get('min', 0), p.get('max', 1), p.get('step', 0.01)
+        if p['type'] == 'choice' and 'switch' in numbers:   # (a native one's choice is the number of its option, as its C++ reads it)
+            lo, hi, step = 0, len(p.get('options', [])) - 1, 1
+        if p['type'] in numbers:   # (an angle is degrees, as the shader's radians() reads it; a switch 0 or 1)
+            lines.append(f"// --track@{n}:{p['label']},{lo},{hi},{float(p['default'])},{step}")
+        elif p['type'] == 'point':
+            lines += [f"// --track@{n}_{a}:{p['label']} {a},{lo},{hi},{p['default'][i]},{step}" for i, a in enumerate('xy')]
+        elif p['type'] == 'color':
+            c = p['default']
+            rgba = [int(c[i:i + 2], 16) / 255 for i in (3, 5, 7, 1)] if len(c) == 9 else [int(c[i:i + 2], 16) / 255 for i in (1, 3, 5)] + [1]   # (#AARRGGBB or #RRGGBB)
+            lines += [f"// --track@{n}_{a}:{p['label']} {'RGBA'[i]},0,1,{rgba[i]:.4g},0.01" for i, a in enumerate('xyzw')]
+    return lines
+
+
 if 'sksl' not in d:
-    sys.exit(f"{src}: drawn by AbsentMotion's own C++, no shader")
+    if not d.get('native') or d['id'] not in moves:
+        sys.exit(f"{src}: drawn by AbsentMotion's own C++, no shader")
+    head = [f"// {d['name']}: AbsentMotion's {d['id']} (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), moved by its own motion.cpp (filament/absent_motion.cpp)",
+            f"// --label:{d.get('category', '').capitalize()}", f"// --absent:{d['id']}"]
+    if d.get('description'):
+        head.append(f"// --about:{' '.join(d['description'].split())}")
+    open(os.path.splitext(out)[0] + '.am', 'w').write('\n'.join(head + knob_lines({p['id']: p['id'] for p in d.get('params', [])}, ('float', 'int', 'bool', 'switch', 'choice', 'angle'))) + '\n')
+    sys.exit(0)
 s = d['sksl']
 pictures = re.findall(r'^\s*uniform\s+shader\s+(\w+)\s*;', s, re.M)
 blur = next((p for p in pictures if p in ('blurred', 'bright')), None)
@@ -58,17 +90,5 @@ if blur:
     lines += ['// --pass@h:0,1,s1,s1', '// --pass@blurPicture:0,1,s1,s1', '// --pass@:0,0,s1,s1']   # (across, down, then the effect itself)
 if d.get('description'):
     lines.append(f"// --about:{' '.join(d['description'].split())}")   # (what it does, in AbsentMotion's words: the shelf finds it by them)
-for p in d.get('params', []):
-    n = named.get(p['id'])
-    if not n:
-        continue
-    lo, hi, step = p.get('min', 0), p.get('max', 1), p.get('step', 0.01)
-    if p['type'] in ('float', 'int', 'bool', 'choice', 'angle'):   # (an angle is degrees, as the shader's radians() reads it)
-        lines.append(f"// --track@{n}:{p['label']},{lo},{hi},{float(p['default'])},{step}")
-    elif p['type'] == 'point':
-        lines += [f"// --track@{n}_{a}:{p['label']} {a},{lo},{hi},{p['default'][i]},{step}" for i, a in enumerate('xy')]
-    elif p['type'] == 'color':
-        c = p['default']
-        rgba = [int(c[i:i + 2], 16) / 255 for i in (3, 5, 7, 1)] if len(c) == 9 else [int(c[i:i + 2], 16) / 255 for i in (1, 3, 5)] + [1]   # (#AARRGGBB or #RRGGBB)
-        lines += [f"// --track@{n}_{a}:{p['label']} {'RGBA'[i]},0,1,{rgba[i]:.4g},0.01" for i, a in enumerate('xyzw')]
+lines += knob_lines(named, ('float', 'int', 'bool', 'choice', 'angle'))
 open(out, 'w').write('\n'.join(lines) + '\n' + wgsl)

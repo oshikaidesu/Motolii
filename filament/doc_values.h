@@ -214,6 +214,7 @@ struct DocScript {
     long long stamp = -1;
     int seen = -1;   // (files_changed when the file was last asked whether it changed: asked again only after another)
     bool viewer = false;   // (Filament's own settings file: read and laid on the stage's view, not drawn: viewer_settings.h)
+    std::string absent;    // (AbsentMotion's own motion effect, its id: the thing moved by AbsentMotion's C++, absent_motion.h)
     std::vector<ScriptKnob> knobs;
     std::vector<std::string> names;
     std::vector<DocValue> values;
@@ -252,6 +253,7 @@ static DocScript* doc_script_of(Doc& d, const std::string& file) {
     if (file.empty() || file == "none" || std::filesystem::path(file).extension() == ".mid") return nullptr;   // (a MIDI file's notes are copies, not a script: midi.h)
     const std::string ext = std::filesystem::path(file).extension().string();
     const bool screen = ext == ".wgsl" || ext == ".fs" || ext == ".mjs" || three_is(file) || solid_is(file) || aviutl_is(file);   // (a three.js effect: as an ISF one, three_isf.cpp; a solid's shape: its knobs named by it too, not run as a script, solid_three.cpp; an AviUtl2 script: run by its own Lua, aviutl_fx.h)
+    const bool absent = ext == ".am";   // (AbsentMotion's own motion: its knobs in its head, the thing moved by AbsentMotion's C++: absent_motion.h)
     const bool lottie = ext == ".json" || ext == ".lot";   // (an After Effects file: its slots its knobs, lottie_slots.h)   // (.mjs: a PlayCanvas splat effect, its knobs its attributes: splatfx.h)   // (a whole-screen effect's knobs: named by the effect too)
     DocScript& s = doc_scripts(d)[file];
     if (s.stamp >= 0 && s.seen == files_changed()) return &s;
@@ -265,11 +267,16 @@ static DocScript* doc_script_of(Doc& d, const std::string& file) {
         s.stamp = stamp, s.seen = files_changed(), s.knobs = ext == ".mjs" ? SplatEffect(file).knobs() : s.viewer ? viewer_knobs(file) : lottie ? lottie_knobs(file) : script_knobs(screen ? isf_file(file) : file);
         if (screen) script_first(file, s.knobs);   // (the values it comes with, where its own show nothing: fx_first.sh)
         doc_scripts_made(d)++;   // (what was worked out from the old one is forgotten)
-        for (const ScriptKnob& k : s.knobs) s.names.push_back(screen || lottie ? doc_screen_knob(file, k.name) : "js_" + k.name);
+        for (const ScriptKnob& k : s.knobs) s.names.push_back(screen || lottie || absent ? doc_screen_knob(file, k.name) : "js_" + k.name);
         for (size_t i = 0; i < s.knobs.size(); ++i) {   // (the names are all made first: what points into them stays put)
             const ScriptKnob& k = s.knobs[i];
             s.values.push_back(DocValue{s.names[i].c_str(), "film picture text shape solid stage", k.kind == "select" ? 0.0 : k.low, k.kind == "select" ? 0.0 : k.high, k.kind == "track", k.kind == "select" ? k.words.c_str() : nullptr});
             s.shown.push_back(DocShown{s.names[i].c_str(), k.kind == "check" ? "onoff" : k.kind == "picture" || k.kind == "sound" ? "thing" : "", "", k.label.c_str(), k.low, k.high, nullptr});
+        }
+        if (absent) {   // (read, not run: which of AbsentMotion's its head says)
+            std::ifstream in(file);
+            for (std::string line; std::getline(in, line);) if (line.rfind("// --absent:", 0) == 0) s.absent = line.substr(12);
+            return &s;
         }
         if (lottie) return &s;   // (read, not run)
         if (!screen) s.run = std::make_unique<Script>(file);   // (a .wgsl or an ISF .fs is drawn, not run: screen.h)
@@ -280,6 +287,7 @@ static DocScript* doc_script_of(Doc& d, const std::string& file) {
 // A thing's scripts: its one (a path may have spaces) and its own effects (paths with spaces between), or the stage's
 // effects, one over another.
 static std::string doc_word(Doc& d, int thing, const char* name);
+static double doc_number(Doc& d, int thing, const char* name, double at, double otherwise);
 static std::vector<DocScript*> doc_scripts_on(Doc& d, int thing) {
     const std::string said = doc_word(d, thing, "script");
     std::vector<DocScript*> all;
@@ -292,6 +300,27 @@ static std::vector<DocScript*> doc_scripts_on(Doc& d, int thing) {
         return all;
     }
     for (const std::string& file : script_files(said)) if (DocScript* sc = doc_script_of(d, file)) all.push_back(sc);
+    return all;
+}
+// AbsentMotion's own motion effects on a thing (.am files in its fx), in order, each its knobs' values now by the names
+// AbsentMotion reads them by: a point's x and y and a colour's x to w one param of numbers in turn (effects/from_absent.py).
+static std::vector<AbsentEffect> doc_absent_on(Doc& d, int thing, double now) {
+    std::vector<AbsentEffect> all;
+    for (const std::string& file : script_files(doc_word(d, thing, "fx")))
+        if (std::filesystem::path(file).extension() == ".am")
+            if (DocScript* sc = doc_script_of(d, file); sc && !sc->absent.empty()) {
+                AbsentEffect e{sc->absent, {}};
+                for (size_t i = 0; i < sc->knobs.size(); ++i) {
+                    std::string name = sc->knobs[i].name;
+                    const size_t cut = name.rfind('_');
+                    const bool part = cut != std::string::npos && cut + 2 == name.size() && std::string("xyzw").find(name[cut + 1]) != std::string::npos;
+                    if (part) name = name.substr(0, cut);
+                    const float v = (float)doc_number(d, thing, sc->names[i].c_str(), now, sc->knobs[i].usual);
+                    if (part && !e.params.empty() && e.params.back().first == name) e.params.back().second.push_back(v);
+                    else e.params.push_back({name, {v}});
+                }
+                all.push_back(e);
+            }
     return all;
 }
 static const DocCard doc_cards[] = {
