@@ -8,6 +8,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/desk_ease_library.dart';
+import 'package:lab_book/workspace/desk_ease_graph.dart';
+import 'package:lab_book/tokens.dart' show Shape;
 
 import 'door.dart';
 
@@ -104,6 +106,28 @@ void main() {
     await t.tap(find.byKey(const ValueKey('ease-previous')));
     await t.pumpAndSettle();
     expect(ws.keys, {(layer: '$cube', frame: 0)}, reason: 'back to the first');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  });
+
+  testWidgets('a handle of the Ease graph is pulled past the top: the curve goes beyond the next key\'s value and comes back (Alight Motion\'s overshoot)', (t) async {
+    final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    expect(m.key(cube, 'x', 0, 0) && m.key(cube, 'x', 1, 1) && m.way(cube, 'x', 0, 'Bezier 0.42 0 0.58 1'), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..pickKey((layer: '$cube', frame: 0))
+      ..front('Ease');
+    await t.pumpAndSettle();
+    final graph = find.byType(EaseGraph), r = t.getRect(graph), p2 = t.widget<EaseGraph>(graph).ease.p2;
+    final g = EdgeInsets.fromLTRB(Shape.s(30), Shape.s(10), Shape.s(14), Shape.s(22)).deflateRect(r);   // (the graph's own box, desk_ease_graph.dart)
+    const lo = -.42, hi = 1.62;
+    Offset px(Offset v) => Offset(g.left + v.dx * g.width, g.bottom - (v.dy - lo) / (hi - lo) * g.height);
+    await t.timedDragFrom(px(p2), px(Offset(p2.dx, 1.4)) - px(p2), const Duration(milliseconds: 300));
+    await settled(t, ws);
+    final way = m.wayOf(cube, 'x', 0).split(' ');
+    expect(double.parse(way[4]), greaterThan(1.2), reason: 'its second handle above the top: $way');
+    expect((await m.shownAt([(cube, 'x', .8)])).single, greaterThan(1), reason: 'past where it goes, before it comes back');
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   });
