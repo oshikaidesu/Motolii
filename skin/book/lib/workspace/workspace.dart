@@ -8,6 +8,7 @@ import 'dart:math' as math;
 import 'package:docking/docking.dart';
 import 'package:flutter/widgets.dart';
 import '../parts/skin_parts.dart';
+import 'stage_art.dart' show WsArt;
 import 'zoom.dart';
 import 'effect_tiles.dart';
 import 'ableton.dart';
@@ -258,6 +259,33 @@ class _WorkspaceState extends State<Workspace> {
         if (t == null || m.word(t, 'kind') != 'film') return;
         ws.after(m.later('extract_sound', thing: t), null, (made) => ws.select('$made'));
       },
+      'thing.group': () {   // (the picked held together by a Null they all go with, made in their middle: Figma's group, not a box of its own; one step)
+        final m = _inside, all = _picked();
+        final frames = [for (final t in all) ?m?.frame(t)];
+        if (m == null || frames.isEmpty) return;
+        final c = Offset(frames.map((f) => f[0]).reduce((a, b) => a + b) / frames.length, frames.map((f) => f[1]).reduce((a, b) => a + b) / frames.length);
+        m.later('together', number: 1);
+        ws.after(m.later('add', name: 'shape', word: 'null'), null, (g) => ws.select('$g'));
+        m.later('say', thing: -1, name: 'name', word: 'Group');
+        m.later('set', thing: -1, name: 'x', number: (c.dx - WsArt.centre.dx) / m.point);
+        m.later('set', thing: -1, name: 'y', number: (WsArt.centre.dy - c.dy) / m.point);
+        for (final t in all) {
+          m.later('set', thing: t, name: 'parent', word: 'made');   // (each goes with it, where it is)
+        }
+        ws.after(m.later('together'), (_, _) => ws.reread());
+      },
+      'thing.ungroup': () {   // (the picked group's things on their own again, where they are; the Null gone; one step)
+        final m = _inside, g = int.tryParse(ws.selected ?? '');
+        if (m == null || g == null || m.word(g, 'shape') != 'null') return;
+        final kids = [for (final t in m.things) if ((m.value(t, 'parent', 0) ?? 0).round() == g) t];
+        m.later('together', number: 1);
+        for (final t in kids) {
+          m.later('set', thing: t, name: 'parent', number: 0);
+        }
+        m.later('remove', thing: g);
+        ws.after(m.later('together'), (_, _) => ws.reread());
+        ws.pickMany([for (final t in kids) '$t']);
+      },
       'thing.split': () {
         final t = int.tryParse(ws.selected ?? '');
         if (t == null) return;
@@ -330,6 +358,8 @@ class _WorkspaceState extends State<Workspace> {
           PlatformMenuItemGroup(
             members: [
               item('Duplicate', 'thing.duplicate'),
+              item('Group', 'thing.group'),
+              item('Ungroup', 'thing.ungroup'),
               item('Split', 'thing.split'),
               item('Extract Sound', 'thing.extractSound'),
               item('Rename', 'thing.rename'),

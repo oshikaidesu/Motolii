@@ -23,6 +23,8 @@ const defaultKeys = <(String, String)>[
   ('cmd+alt+v', 'edit.pasteStyle'),
   ('cmd+a', 'edit.selectAll'),
   ('cmd+d', 'thing.duplicate'),   // (Live 42.5)
+  ('cmd+g', 'thing.group'),   // (Figma's, Keynote's: Group)
+  ('cmd+shift+g', 'thing.ungroup'),
   ('cmd+e', 'thing.split'),   // (Live 42.5: Split)
   ('alt+[', 'time.extend'),   // (Final Cut Pro: Trim Start, Trim End)
   ('alt+]', 'time.trim_end'),

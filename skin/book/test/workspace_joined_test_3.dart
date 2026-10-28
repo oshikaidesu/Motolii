@@ -754,6 +754,44 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('⌘G holds the picked together by a Null in their middle: moved, they go with it; ⌘⇧G lets them go where they are (Figma\'s group)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final a = m.add('shape', 'rect'), b = m.add('shape', 'circle');
+    expect(m.set(a, 'x', -1) && m.set(b, 'x', 1) && m.set(b, 'y', .4), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..pickMany(['$a', '$b']);
+    await t.pumpAndSettle();
+    Future<void> press(LogicalKeyboardKey k, {bool shift = false}) async {
+      await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      if (shift) await t.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await t.sendKeyEvent(k);
+      if (shift) await t.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await settled(t, ws);
+    }
+    await press(LogicalKeyboardKey.keyG);
+    final g = m.things.firstWhere((x) => x != a && x != b);
+    expect([m.word(g, 'shape'), m.word(g, 'name'), m.value(a, 'parent', 0), m.value(b, 'parent', 0), ws.selected], ['null', 'Group', g, g, '$g'], reason: m.trouble);
+    expect([m.value(g, 'x', 0)!, m.value(g, 'y', 0)!], [closeTo(0, .01), closeTo(.2, .01)], reason: 'in their middle');
+    final fa = m.frame(a)!;
+    expect(m.set(g, 'x', .5), isTrue);
+    expect(m.frame(a)![0], closeTo(fa[0] + .5 * m.point, 1), reason: 'the group moved: they go with it');
+    final moved = [m.frame(a)!.take(2).toList(), m.frame(b)!.take(2).toList()];
+    ws
+      ..reread()
+      ..select('$g');
+    await t.pumpAndSettle();
+    await press(LogicalKeyboardKey.keyG, shift: true);
+    expect([m.things.contains(g), m.value(a, 'parent', 0), m.value(b, 'parent', 0)], [false, 0, 0], reason: 'let go: ${m.trouble}');
+    for (final (i, x) in [a, b].indexed) {
+      expect(m.frame(x)![0], closeTo(moved[i][0], 1), reason: 'where it was');
+      expect(m.frame(x)![1], closeTo(moved[i][1], 1));
+    }
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

@@ -283,7 +283,7 @@
 - [x] フォント：最近使ったもの、太さごと、星：Fonts の棚の Recent（最近当てた 8 個、新しい順、次に開いても残る、10/28）、Starred、太さは CoreText の読む bold・light の札 — 済：窓の試験（`workspace_joined_test_2.dart`）
 - [x] フォント：分類（Serif…）、言語、並べ替え、読み込む：Fonts の棚の札。分類は CoreText の serif・sans・script・mono など、言語は CoreText の対応言語からラテン以外（japanese・korean・chinese・russian・greek・arabic・hebrew・thai・hindi、10/28）、並べ替えは名前と Recent（新しい順）、読み込みは ~/Library/Fonts や書類の隣に置く — 済：窓の試験（`workspace_joined_test_2.dart`）
 - [x] 複数選ぶと上の帯が変わり、数が出る：舞台の上の帯が「N picked」と結びつけ（関係）の札に変わり、下の帯も「N picked」（先に 1 つ選んでいても、10/28） — 済：窓の試験（`workspace_joined_test_3.dart`）
-- [ ] グループにする・グループにしてマスク・グループにして抜く
+- [ ] グループにする・グループにしてマスク・グループにして抜く（一部）：⌘G で選んだ物を、真ん中に置いた Null（名前 Group）にまとめて親子づけ（Figma のグループ、箱の中に入れるプリコンプではない、10/28）。まだ：グループにしてマスク・抜く
 - [x] 時間の揃え：始まりを伸ばす・再生位置へ寄せる・左揃え・ずらして並べる・右揃え：Animation メニューの Align Starts・Align Ends・Move to Playhead・Stagger・Extend Start to Playhead（選んだ物に、選んだ順で。動かした物はキーも一緒。始まりを伸ばすは Final Cut Pro の Extend Edit と同じく両向き、終わりは動かない） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 画面の揃え：左・中・右・上・中・下・等間隔 2 種：Arrange > Align Left〜Bottom・Spread Across・Spread Down（Keynote・Figma の Align：1 つなら絵に、いくつかならその箱に、3 つ以上を等間隔に） — 済（10/28）：窓の試験
 - [ ] グループに入って編集、パンくず
@@ -376,7 +376,7 @@
 - [x] クリッピングマスク：型の塗りは消え、型を動かすと切る場所が動く：舞台の Mask の道具で作る型は見えない（opacity 0）、型は物なので動かせば切る所も動く — 済：窓の試験（`workspace_joined_test_3.dart`）
 - [ ] グループにしてマスク：グループの一番上が型、その下を切る
 - [ ] グループにして抜く：一番上と重なる所を抜く
-- [ ] グループを解く（Ungroup）
+- [x] グループを解く（Ungroup）：⌘⇧G（Figma と同じ）。物は今の場所のまま、まとめていた Null が消える — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [ ] 図形の取っ手で角の数・角の丸みをキャンバスで変える
 - [x] 取り消しの履歴を開き直しても残す（Alight Motion は消える）：取り消しは書類（SQLite）に残る — 済：窓の試験（`workspace_joined_test.dart`：大きさを変えて開き直した後に取り消すと戻る）
 
