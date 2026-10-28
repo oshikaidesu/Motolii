@@ -196,7 +196,7 @@
 
 ## G. 効果以外の機能（32）
 
-- [ ] 図形・文字・画像・動画・音のレイヤー（有る）：いま film・picture・text・shape
+- [x] 図形・文字・画像・動画・音のレイヤー（有る）：film・picture・text・shape（音は film） — 済：窓の試験（`workspace_joined_test_2.dart` の Create・Media の棚）
 - [x] ベクター描画（ペン）（有る）：いま ペン（Skia でパスを読む） — 済：窓の試験（`workspace_joined_test_2.dart`：押した所に点、最初の点で閉じる、10/28）
 - [x] **手描き（フリーハンド）**（無い→有る）：段の道具の Brush（B、Photoshop・After Effects のブラシのキー）。なぞった道を perfect-freehand（MIT、Steve Ruiz、Dart 版 Adil Hanney）が輪郭にし、閉じたパスの形 1 つに（中点を通る 2 次曲線、perfect-freehand の見本どおり）。太さは Thin・Medium・Thick、色はインク（無ければ白）。1 回で取り消せる — 済（10/28）：窓で Brush でなぞり、文書から読んで確かめた（`skin/book/test/workspace_joined_test_2.dart`）
 - [ ] グループ（一部）：いま 関係の group（並びだけ）
@@ -207,8 +207,8 @@
 - [ ] カメラに親子づけ（字幕を画面に固定）（有る）：いま parent
 - [x] 親子づけ（有る）：いま parent — 済：窓の試験（`workspace_joined_test_2.dart` の Parent、`workspace_joined_test_3.dart` の Parent カード）
 - [x] **Parenting Helper**（親の回転・大きさを無視・倍に、車輪の自動回転）（無い→有る）：親がある間だけ出る Parent の札。Its turn・Its size（親の回転・大きさをどれだけ受けるか、0〜200%、キー可）、Roll（x か y に進んだ分だけ車輪として回る）と Roll radius。手本：bevy_alight_motion の parenthelper.rs（MIT/Apache-2.0）の式 — 済（10/28）：親を 45° 回して子の棒が 1・0・2 で 45°・水平・90°、親 150% で子の大きさ 0 なら元の大きさを絵で確かめた。札の出方は窓の試験（`skin/book/test/workspace_joined_test_3.dart`）
-- [ ] 全部の値にキー（有る）
-- [ ] イーズ 9 種（ベジェ・Bounce・Elastic・Cyclic・Random・Steps・Elastic Steps）（有る）：いま `filament/interp.h`（Alight Motion を手本に作ったもの。出典をそう直した）
+- [x] 全部の値にキー（有る）：キーの打てる値は内側の一覧（doc_kinds.h の moves）すべて — 済：`check/doc.sh`（キーの打てない値は断る、の確かめ）、窓の試験（キーの帯）
+- [x] イーズ 9 種（ベジェ・Bounce・Elastic・Cyclic・Random・Steps・Elastic Steps）（有る）：`filament/interp.h` — 済：`check/interp_twin.sh`・`check/doc.sh`、窓の試験（`workspace_ease_library_test.dart`）。Steps は 10/28 に Alight の 4 段に合わせた
 - [x] 曲線エディタとプリセット（有る）：いま Ease の机、利用者のプリセット — 済：窓の試験（`workspace_ease_library_test.dart`、`workspace_desk_test.dart`）
 - [x] **曲線のコピー・貼り付け、全部のキーに貼る**（無い→有る）：Ease の机の上の帯に Copy・Paste・Paste All。Copy は今の曲線を窓を開いている間とっておく、Paste は選んだキーへ（プリセットを押した時と同じ道）、Paste All は選んだキーの層の全部のキーの後ろへ、1 回で取り消せる。手本：Alight Motion の Copy・Paste・Paste to All Keyframes — 済（10/28）：窓で押して文書から読んで確かめた（`skin/book/test/workspace_ease_library_test.dart`）
 - [x] **レイヤー・見た目・効果のコピー・貼り付け**（無い→有る）：⌘C・⌘X・⌘V（文字を打っていない時）は選んだ物をまるごと（親だけ除く）写して、再生位置に貼る。キーも一緒に動く（Ableton Live が挿入位置に貼るのと同じ）。⌥⌘C・⌥⌘V（Mac の Copy Style・Paste Style）は見た目（効果・色・線・ふるまい）を選んだ物すべてに。何の物か・形・位置は運ばない。手本：Motolii のルック（doc_looks.h、SQLite の ATTACH）、Alight Motion の Paste Style — 済（10/28）：窓でキーを押し、文書から読んで確かめた（`skin/book/test/workspace_joined_test_3.dart`）
@@ -223,10 +223,10 @@
 - [x] **Time Quantization（コマ落とし。ポスタリゼーション時間）**（無い→一部）：物の Frame rate（Play の札、0 は段と同じ滑らかさ）。キーで動く値は、その物の始まりから数えたコマの時刻で読む（doc_stepped：doc_number と doc_literal の両方の読みに）。After Effects の Posterize Time と同じ考え。まだ：映像そのものの再生と、キーでない動き（揺れ・ふるまい）は段のまま — 済（10/28）：窓で 4 コマ/秒にして値が 0.25・0.25・0.5・0.75 と段になるのを確かめた（`skin/book/test/workspace_joined_test_3.dart`）
 - [x] **レイヤーを切る**（無い→有る）：⌘E（Ableton Live の Split）とメニューの Split。選んだ物を再生位置で 2 つに：前は再生位置で終わり、後ろはそこから元の終わりまで、映像は前を切った分だけ先から（左端を詰める時と同じ計算）。キーは画面の時刻のまま。1 回で取り消せる。手本：AbsentMotion の Scene.splitAt（Apache-2.0） — 済（10/28）：窓で映像を選んで ⌘E、文書から両方を読んで確かめた（`skin/book/test/workspace_joined_test_3.dart`）
 - [x] 動画から音を取り出す（無い→有る）：Edit > Extract Sound。映像の写しを隠して音だけ聞こえる物にし（隠した映像も音は鳴る）、元の映像は Volume 0。名前は「… (sound)」。1 回で取り消せる。映像に Volume（0〜200%、Sound の札）を足した：書き出しは ffmpeg の volume、再生は GStreamer の playbin の volume — 済（10/28）：窓で文書から読んで確かめた（`skin/book/test/workspace_joined_test_3.dart`）、書き出しの音量を ffmpeg の volumedetect で測った（1・0.5・0 で -10.6・-16.7・-91 dB）
-- [ ] 作った後でプロジェクトの設定（大きさ・コマの速さ）を変える（一部）：いま 大きさは上の札を 2 回押して打ち直す（workspace_joined_test「a document says its own size」）。コマの速さは読むだけ
+- [ ] 作った後でプロジェクトの設定（大きさ・コマの速さ）を変える（一部）：大きさは上の帯の札で（1 回押すと縦横比と解像度の箱、2 回で数字、10/28）。まだ：コマの速さ（内側が 60 の決まり）
 - [x] プレビューの拡大・手のひら（有る）：いま トラックパッド 2 本指・ピンチ — 済：窓の試験（`workspace_trackpad_test.dart`）
-- [ ] 書き出し MP4（H.264）（一部）：いま ffmpeg で決め打ち（export_map.md）
-- [ ] **書き出し HEVC・GIF・PNG 連番・静止画・透明**（無い→一部）：HEVC（.mov）・GIF（1 秒 15 枚）・PNG 連番は有る（書き出しの画面の Format の札、ファイルの終わりで決める。kit_draw.h）。まだ：透明（段の絵が今は不透明）、静止画を書き出しの画面から — 見た（10/28）：同じ文書を 4 つで書いて ffprobe で確かめた
+- [x] 書き出し MP4（H.264）（一部）：書き出しの箱の Resolution・Rate・Quality を ffmpeg にそのまま（10/28） — 済：`check/film_way.sh`
+- [ ] **書き出し HEVC・GIF・PNG 連番・静止画・透明**（無い→一部）：HEVC（.mov）・GIF・PNG と JPEG の連番・今のコマの PNG（⇧E）は有る（10/28、`check/film_way.sh`）。まだ：透明（段の絵が不透明）
 - [ ] **プロジェクトを包んで共有（リンク・QR）**（無い）
 
 
