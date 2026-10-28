@@ -203,7 +203,7 @@
 - [ ] **Elements**（使い回す部品、元とつながる、文字だけ差し替え、Intro・Outro と Freeze・Stretch・Loop の伸ばし方）（無い）
 - [x] ヌル（有る）：いま 形の null — 済：窓の試験（`workspace_joined_test_2.dart` の Create：Null）
 - [x] カメラ（Z、ズーム距離・画角、焦点ぼけ、フォグ）（有る）：いま camera の distance・zoom・focus・aperture、段の fog — 済：窓の試験（`workspace_joined_test_2.dart`、`workspace_desk_test.dart`）、`check/fog_near.sh`
-- [ ] カメラを複数置いて切り替える（未確認）
+- [x] カメラを複数置いて切り替える：カメラごとに始まりと長さを決めると、その時に出ている一番手前のカメラで見る（2.5D・3D の物に効き、2D の物はカメラに張り付く） — 済（10/28）：`check/camera_switch.sh`
 - [ ] カメラに親子づけ（字幕を画面に固定）（有る）：いま parent
 - [x] 親子づけ（有る）：いま parent — 済：窓の試験（`workspace_joined_test_2.dart` の Parent、`workspace_joined_test_3.dart` の Parent カード）
 - [x] **Parenting Helper**（親の回転・大きさを無視・倍に、車輪の自動回転）（無い→有る）：親がある間だけ出る Parent の札。Its turn・Its size（親の回転・大きさをどれだけ受けるか、0〜200%、キー可）、Roll（x か y に進んだ分だけ車輪として回る）と Roll radius。手本：bevy_alight_motion の parenthelper.rs（MIT/Apache-2.0）の式 — 済（10/28）：親を 45° 回して子の棒が 1・0・2 で 45°・水平・90°、親 150% で子の大きさ 0 なら元の大きさを絵で確かめた。札の出方は窓の試験（`skin/book/test/workspace_joined_test_3.dart`）
