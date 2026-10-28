@@ -287,6 +287,12 @@ final _rowsAA = <(String, String, Map<String, Object>)>[
   ('rd3', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .55}),
   ('rd4', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .8}),
 ];
+// (section BK: a keyed rect, then the same move mixed with the frame it just left. An arrow head on a line.)
+final _rowsBK = <(String, String, Map<String, Object>)>[
+  ('still', 'echo', const {'@when': 0.4}),
+  ('ghost', 'echo', const {'@when': 0.4}),
+  ('arrow', 'shape:line', const {'@fill': 'none', '@stroke': 'ffffff', '@stroke_width': 8, '@heads': 'both', '@head_shape': 'arrow', '@head_size': 6, '@size': 0.22, '@x': -.84}),
+];
 // (section BJ: a separable box of two equal-weight blurs, and a matte behind small text.)
 final _rowsBJ = <(String, String, Map<String, Object>)>[
   ('plain', 'shape:rect', const {'@fill': 'ffcc33', '@size': 0.28, '@x': -.88}),
@@ -500,7 +506,7 @@ final _rowsAB = <(String, String, Map<String, Object>)>[
   ('zoomHi', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .25}),
   ('zoomLo', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .75}),
 ];
-final _rows = switch (_section) { 'BJ' => _rowsBJ, 'BI' => _rowsBI, 'BH' => _rowsBH, 'BG' => _rowsBG, 'BF' => _rowsBF, 'BE' => _rowsBE, 'BD' => _rowsBD, 'BC' => _rowsBC, 'BB' => _rowsBB, 'BA' => _rowsBA, 'AZ' => _rowsAZ, 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+final _rows = switch (_section) { 'BK' => _rowsBK, 'BJ' => _rowsBJ, 'BI' => _rowsBI, 'BH' => _rowsBH, 'BG' => _rowsBG, 'BF' => _rowsBF, 'BE' => _rowsBE, 'BD' => _rowsBD, 'BC' => _rowsBC, 'BB' => _rowsBB, 'BA' => _rowsBA, 'AZ' => _rowsAZ, 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -622,6 +628,21 @@ void main() {
         expect(m.say(path3, 'text', 'SUB') && m.say(path3, 'space', '2.5d'), isTrue, reason: m.trouble);
         expect(m.set(path3, 'y', .35) && m.set(path3, 'size', .25) && m.set(path3, 'parent', path2.toDouble()), isTrue, reason: m.trouble);
         expect(m.set(path2, '${effect.substring('cam:'.length)}_by', path.toDouble()), isTrue, reason: '$row: ${m.trouble}');
+      } else if (effect == 'echo') {
+        expect(m.remove(left), isTrue, reason: m.trouble);
+        left = m.add('shape', 'rect');
+        expect(m.set(left, 'size', .12) && m.set(left, 'y', .42), isTrue, reason: m.trouble);
+        expect(m.say(left, 'fill', 'ffcc33'), isTrue, reason: m.trouble);
+        expect(m.key(left, 'x', 0, -.9) && m.key(left, 'x', .4, -.62), isTrue, reason: m.trouble);
+        if (row == 'ghost') {
+          expect(m.say(left, 'fx', '$motoliiDir/effects/VVMotionBlur 3.0.fs'), isTrue, reason: m.trouble);
+          expect(m.set(left, 'js_VVMotionBlur_3_0_blurAmount', .5), isTrue, reason: m.trouble);
+        }
+        expect(m.at(0), isTrue, reason: m.trouble);
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 800)));
+        for (var k = 0; k < 8; k++) {
+          await t.pump(const Duration(milliseconds: 50));
+        }
       } else if (effect == 'box2') {
         expect(m.remove(left), isTrue, reason: m.trouble);
         left = m.add('shape', 'rect');
