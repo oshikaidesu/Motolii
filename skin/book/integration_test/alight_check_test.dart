@@ -286,6 +286,11 @@ final _rowsAA = <(String, String, Map<String, Object>)>[
   ('rd3', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .55}),
   ('rd4', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .8}),
 ];
+// (section AO: shadows from a circle, short enough to stay off the right photo. The shadow colour is one the file allows, so it shows on the black stage.)
+final _rowsAO = <(String, String, Map<String, Object>)>[
+  ('long', 'circle+effects/am_longshadow.wgsl', const {'@fill': 'ffcc33', '@size': .42, 'reach': 40, 'alpha': .9, 'fade': .3, 'color_x': 1, 'color_y': 1, 'color_z': 1, 'color_w': 1}),
+  ('radial', 'circle+effects/am_radialshadow.wgsl', const {'@fill': 'ffcc33', '@size': .42, 'light_x': .15, 'light_y': .5, 'reach': .4, 'alpha': .85, 'color_x': 1, 'color_y': 1, 'color_z': 1, 'color_w': 1}),
+];
 // (section AN: a cut the file's stretch can open, and a small wrap the file's offset allows.)
 final _rowsAN = <(String, String, Map<String, Object>)>[
   ('cut', 'effects/am_stretch.wgsl', const {'stretch': 48, 'spread': 16}),
@@ -354,7 +359,7 @@ final _rowsAB = <(String, String, Map<String, Object>)>[
   ('zoomHi', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .25}),
   ('zoomLo', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .75}),
 ];
-final _rows = switch (_section) { 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+final _rows = switch (_section) { 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -454,6 +459,12 @@ void main() {
         expect(m.say(path3, 'text', 'SUB') && m.say(path3, 'space', '2.5d'), isTrue, reason: m.trouble);
         expect(m.set(path3, 'y', .35) && m.set(path3, 'size', .25) && m.set(path3, 'parent', path2.toDouble()), isTrue, reason: m.trouble);
         expect(m.set(path2, '${effect.substring('cam:'.length)}_by', path.toDouble()), isTrue, reason: '$row: ${m.trouble}');
+      } else if (effect.startsWith('circle+')) {
+        expect(m.remove(left), isTrue, reason: m.trouble);
+        left = m.add('shape', 'circle');
+        expect(m.set(left, 'x', -.5), isTrue, reason: m.trouble);
+        final file = '$motoliiDir/${effect.substring('circle+'.length)}';
+        expect(m.say(left, 'fx', file), isTrue, reason: '$row: ${m.trouble}');
       } else if (effect != '-') {
         final file = effect.contains('/') ? '$motoliiDir/$effect' : '$motoliiDir/effects/$effect.fs';
         expect(m.say(left, 'fx', file), isTrue, reason: '$row: ${m.trouble}');
