@@ -34,8 +34,10 @@ jobs:
       - run: filament/check/all.sh
       - run: cd skin/book && flutter analyze lib test integration_test --no-fatal-infos --no-fatal-warnings
         if: success() || failure()   # (the window's checks told even when the engine's failed)
-      - run: cd skin/book && flutter test
+      - run: cd skin/book && flutter test --file-reporter json:test_events.json
         if: success() || failure()
+      - run: python3 -c "import json; ev=[json.loads(l) for l in open('skin/book/test_events.json') if l.startswith('{')]; name={e['test']['id']:e['test']['name'] for e in ev if e['type']=='testStart'}; done={e['testID']:e for e in ev if e['type']=='testDone'}; [print('never done:', n) for i,n in name.items() if i not in done]; [print('not passed:', name[i], d['result']) for i,d in done.items() if d['result']!='success']; [print('error in', name.get(e['testID']), ':', e['error'][:300]) for e in ev if e['type']=='error']"   # (what the test package counts as not passed while its github lines say nothing: its own json, read)
+        if: failure()
       - run: for f in $(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -3); do echo "== $f"; head -c 6000 "$f"; echo; done   # (a test process that died says nothing in its own log: the Mac's crash report says where)
         if: failure()
       - uses: actions/cache/save@v4   # (kept even when a check before failed)
