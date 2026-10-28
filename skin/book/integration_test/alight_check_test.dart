@@ -264,7 +264,18 @@ final _rowsU = <(String, String, Map<String, Object>)>[
   ('swHi', 'wave:rotate', const {'@minimum': -18, '@maximum': 18, '@when': .25}),
   ('swLo', 'wave:rotate', const {'@minimum': -18, '@maximum': 18, '@when': .75}),
 ];
-final _rows = switch (_section) { 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+// (section V: the same behaviours, on opacity with a step, on noise, on random, and a smaller swing.)
+final _rowsV = <(String, String, Map<String, Object>)>[
+  ('blinkOn', 'wave:opacity', const {'@minimum': 0, '@maximum': 1, '@step': 1, '@when': .25}),
+  ('blinkOff', 'wave:opacity', const {'@minimum': 0, '@maximum': 1, '@step': 1, '@when': .75}),
+  ('shakeA', 'noise:xy', const {'@minimum': -.75, '@maximum': -.35, '@ymin': -.12, '@ymax': .12, '@when': .2}),
+  ('shakeB', 'noise:xy', const {'@minimum': -.75, '@maximum': -.35, '@ymin': -.12, '@ymax': .12, '@when': .85}),
+  ('jitterA', 'random:x', const {'@minimum': -.75, '@maximum': -.35, '@when': 0}),
+  ('jitterB', 'random:x', const {'@minimum': -.75, '@maximum': -.35, '@when': 1}),
+  ('swHi', 'wave:rotate', const {'@minimum': -8, '@maximum': 8, '@size': .5, '@when': .25}),
+  ('swLo', 'wave:rotate', const {'@minimum': -8, '@maximum': 8, '@size': .5, '@when': .75}),
+];
+final _rows = switch (_section) { 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -298,7 +309,7 @@ void main() {
     ws.reread();
     await shot('0_none.png');
     for (final (i, (row, effect, knobs)) in _rows.indexed) {
-      var path = 0;
+      var path = 0, path2 = 0;
       if (effect == 'text' || effect.startsWith('shape:')) {
         expect(m.remove(left), isTrue, reason: m.trouble);
         left = effect == 'text' ? m.add('text', '/System/Library/Fonts/Supplemental/Arial Unicode.ttf') : m.add('shape', effect.substring('shape:'.length));
@@ -323,20 +334,33 @@ void main() {
         expect(m.set(left, 'x', -.5), isTrue, reason: m.trouble);
         expect(m.say(left, 'fill', 'ffcc33'), isTrue, reason: m.trouble);
         expect(m.set(left, 'copy_on', path.toDouble()), isTrue, reason: m.trouble);
-      } else if (effect.startsWith('wave:')) {
-        path = m.add('behaviour', 'oscillator');
+      } else if (effect.startsWith('wave:') || effect.startsWith('noise:') || effect.startsWith('random:')) {
+        final kind = effect.startsWith('wave:') ? 'oscillator' : effect.startsWith('noise:') ? 'noise' : 'random';
+        final name = effect.substring(effect.indexOf(':') + 1);
+        path = m.add('behaviour', kind);
         expect(path, isNot(0), reason: m.trouble);
         expect(m.set(path, 'minimum', (knobs['@minimum'] as num).toDouble()), isTrue, reason: m.trouble);
         expect(m.set(path, 'maximum', (knobs['@maximum'] as num).toDouble()), isTrue, reason: m.trouble);
         expect(m.set(path, 'frequency', 1), isTrue, reason: m.trouble);
-        expect(m.set(left, '${effect.substring('wave:'.length)}_by', path.toDouble()), isTrue, reason: '$row: ${m.trouble}');
+        if (knobs['@step'] is num) expect(m.set(path, 'step', (knobs['@step'] as num).toDouble()), isTrue, reason: m.trouble);
+        if (name == 'xy') {
+          expect(m.set(left, 'x_by', path.toDouble()), isTrue, reason: '$row: ${m.trouble}');
+          path2 = m.add('behaviour', kind);
+          expect(m.set(path2, 'minimum', (knobs['@ymin'] as num).toDouble()), isTrue, reason: m.trouble);
+          expect(m.set(path2, 'maximum', (knobs['@ymax'] as num).toDouble()), isTrue, reason: m.trouble);
+          expect(m.set(path2, 'frequency', 1), isTrue, reason: m.trouble);
+          expect(m.set(path2, 'seed', 7), isTrue, reason: m.trouble);
+          expect(m.set(left, 'y_by', path2.toDouble()), isTrue, reason: '$row: ${m.trouble}');
+        } else {
+          expect(m.set(left, '${name}_by', path.toDouble()), isTrue, reason: '$row: ${m.trouble}');
+        }
       } else if (effect != '-') {
         final file = effect.contains('/') ? '$motoliiDir/$effect' : '$motoliiDir/effects/$effect.fs';
         expect(m.say(left, 'fx', file), isTrue, reason: '$row: ${m.trouble}');
       }
       final stem = effect.split('/').last.replaceFirst(RegExp(r'\.(js|wgsl|fs)$'), '').replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_');
       for (final MapEntry(:key, :value) in knobs.entries) {
-        if (key == '@when' || key == '@minimum' || key == '@maximum') continue;   // (the behaviour's own, or when the playhead sits)
+        if (key == '@when' || key == '@minimum' || key == '@maximum' || key == '@step' || key == '@ymin' || key == '@ymax') continue;   // (the behaviour's own, or when the playhead sits)
         final name = key.startsWith('@') ? key.substring(1) : 'js_${stem}_$key';   // (@: the thing's own value)
         expect(value is String ? m.say(left, name, value) : m.set(left, name, (value as num).toDouble()), isTrue, reason: '$row $key: ${m.trouble}');
       }
@@ -346,6 +370,7 @@ void main() {
       else if (effect.contains('print_on.js')) expect(m.at(.35), isTrue, reason: m.trouble);   // (inside the animator's own length, 0.67: some letters on)
       await shot('${i + 1}_${row.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}.png');
       if (when is num || effect.contains('print_on.js')) expect(m.at(0), isTrue, reason: m.trouble);
+      if (path2 != 0) expect(m.remove(path2), isTrue, reason: m.trouble);
       if (path != 0) expect(m.remove(path), isTrue, reason: m.trouble);
       expect(m.remove(left), isTrue, reason: m.trouble);   // (the next row on a photo as it comes)
       left = m.add('picture', '$motoliiDir/fx_sample.jpg');
