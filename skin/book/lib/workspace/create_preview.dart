@@ -10,39 +10,50 @@ import 'dart:typed_data';
 import 'dart:ui' show PointMode;
 
 import 'package:flutter/widgets.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:vector_math/vector_math_64.dart' show Matrix4, Vector3;
 
 import '../motolii.dart';
 
-/// Each moving part of a recipe: its colour, and per copy its places (n moments, x y z size).
-typedef RecipeMotion = List<({int colour, List<Float32List> copies})>;
+/// Each moving part of a recipe: its colour, per copy its places (n moments, x y z size), and a path shape's outline
+/// as its path says it ('' another kind), taken out even-odd or drawn by its edge alone as it says.
+typedef RecipeMotion = List<({int colour, List<Float32List> copies, String outline, bool evenOdd, bool edge})>;
 
 const _moments = 24, _seconds = 3.0, _mostCopies = 160;
 
 abstract final class RecipeMotions {
   static final _all = <String, RecipeMotion>{};
-  static Future<void>? _asked;
+  static bool _asked = false;
   static final ready = ValueNotifier<int>(0);
 
   static RecipeMotion? of(String recipe) => _all[recipe];
 
-  /// Asked once: every recipe made on a document of its own, its motion read, the document shut.
+  /// Asked once: every recipe made on a document of its own, its motion read, the document shut; each one's tile
+  /// shown as soon as it is read (a recipe of many copies takes seconds: those after it do not wait for all).
   static void ask(String libDir, List<String> recipes) {
-    _asked ??= Isolate.run(() => _reckon(libDir, recipes)).then((got) {
-      _all.addAll(got);
-      ready.value++;
+    if (_asked) return;
+    _asked = true;
+    final port = ReceivePort();
+    port.listen((got) {
+      if (got case (final String r, final RecipeMotion motion)) {
+        _all[r] = motion;
+        ready.value++;
+      } else {
+        port.close();
+      }
     });
+    Isolate.spawn(_reckon, (libDir, recipes, port.sendPort));
   }
 
-  static Map<String, RecipeMotion> _reckon(String dir, List<String> recipes) {
+  static void _reckon((String, List<String>, SendPort) asked) {
+    final (dir, recipes, tell) = asked;
     final folder = Directory.systemTemp.createTempSync('motolii_previews');
     final m = Motolii.open('${folder.path}/previews.motolii', wide: 1080, high: 1080, dir: dir);
-    final out = <String, RecipeMotion>{};
-    if (m == null) return out;
+    if (m == null) return tell.send(null);
     for (final r in recipes) {
       final before = m.things.toSet();
       if (m.make(r) == 0) continue;
-      final parts = <({int colour, List<Float32List> copies})>[];
+      final parts = <({int colour, List<Float32List> copies, String outline, bool evenOdd, bool edge})>[];
       for (final t in m.things.where((t) => !before.contains(t))) {
         if (const {'behaviour', 'camera', 'light'}.contains(m.word(t, 'kind'))) continue;
         final n = math.max(1, (m.value(t, 'copies', 0) ?? 1).round());
@@ -52,16 +63,17 @@ abstract final class RecipeMotions {
           final p = m.path3(t, copy: c, to: _seconds, n: _moments);
           if (p != null) copies.add(Float32List.fromList(p));
         }
-        final fill = m.word(t, 'fill').split(' ').first;
-        parts.add((colour: 0xFF000000 | (int.tryParse(fill, radix: 16) ?? 0xD9D2C3), copies: copies));
+        final fill = m.word(t, 'fill').split(' ').first, edge = fill == 'none';
+        final outline = m.word(t, 'shape') == 'path' ? m.word(t, 'path') : '';
+        parts.add((colour: 0xFF000000 | (int.tryParse(edge ? m.word(t, 'stroke') : fill, radix: 16) ?? 0xD9D2C3), copies: copies, outline: outline, evenOdd: m.word(t, 'fill_rule') == 'evenodd', edge: edge));
       }
-      out[r] = parts;
+      tell.send((r, parts));
     }
     m.close();
     try {
       folder.deleteSync(recursive: true);
     } catch (_) {}
-    return out;
+    tell.send(null);
   }
 }
 
@@ -80,6 +92,7 @@ class RecipeMotionView extends StatelessWidget {
       builder: (context, _, _) {
         final motion = RecipeMotions.of(recipe);
         if (motion == null || motion.isEmpty) return const SizedBox.shrink();
+        if (motion case [final one] when one.outline.isNotEmpty && one.copies.length <= 1) return _Outline(one);   // (one path shape, still: its outline)
         return ValueListenableBuilder<int>(
           valueListenable: _clock,
           builder: (context, k, _) => CustomPaint(painter: _MotionPainter(motion, k % _moments, k)),
@@ -128,4 +141,24 @@ class _MotionPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_MotionPainter o) => o.at != at || o.tick != tick || !identical(o.motion, motion);
+}
+
+/// A path shape's outline in its tile, its own colour, fitted to the tile (its numbers are x and y in turn: the path
+/// is said in M, L, C and Z) and drawn by flutter_svg.
+class _Outline extends StatelessWidget {
+  const _Outline(this.part);
+  final ({int colour, List<Float32List> copies, String outline, bool evenOdd, bool edge}) part;
+  @override
+  Widget build(BuildContext context) {
+    final n = [for (final m in RegExp(r'-?[0-9.]+(?:e-?[0-9]+)?').allMatches(part.outline)) double.parse(m.group(0)!)];
+    if (n.length < 2) return const SizedBox.shrink();
+    final xs = [for (var i = 0; i + 1 < n.length; i += 2) n[i]], ys = [for (var i = 1; i < n.length; i += 2) n[i]];
+    final lo = (xs.reduce(math.min), ys.reduce(math.min)), side = math.max(xs.reduce(math.max) - lo.$1, ys.reduce(math.max) - lo.$2), pad = side * .12 + .05;
+    final hex = (part.colour & 0xFFFFFF).toRadixString(16).padLeft(6, '0');
+    final paint = part.edge ? 'fill="none" stroke="#$hex" stroke-width="${side * .08}" stroke-linecap="round"' : 'fill="#$hex"${part.evenOdd ? ' fill-rule="evenodd"' : ''}';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),   // (above its name)
+      child: SvgPicture.string('<svg xmlns="http://www.w3.org/2000/svg" viewBox="${lo.$1 - pad} ${lo.$2 - pad} ${side + 2 * pad} ${side + 2 * pad}"><path d="${part.outline}" $paint/></svg>'),
+    );
+  }
 }

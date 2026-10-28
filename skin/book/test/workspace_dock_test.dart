@@ -4,10 +4,12 @@ import 'dart:io';
 
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/widgets.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/workspace/dock.dart';
-import 'package:lab_book/workspace/dock_parts.dart' show dockStarsAt;
+import 'package:lab_book/workspace/create_preview.dart';
+import 'package:lab_book/workspace/dock_parts.dart' show DockSearch, dockStarsAt;
 
 import 'door.dart';
 
@@ -96,6 +98,19 @@ void main() {
     await t.tap(find.text('★'));
     await t.pumpAndSettle();
     expect(find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('ws-screen-')), findsOneWidget, reason: 'the starred alone');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
+  testWidgets('a shape among the recipes (AbsentMotion\'s Heart) shows its own outline on its tile', (t) async {
+    final ws = _joined();
+    await _shelf(t, ws, const Size(240, 918), 'Create');
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Heart');
+    for (var i = 0; i < 1200 && RecipeMotions.of('Heart') == null; i++) {   // (the previews are made in an isolate of their own: waited for in real time)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    }
+    await t.pumpAndSettle();
+    expect(RecipeMotions.of('Heart')?.single.outline, startsWith('M '), reason: 'its path, as the recipe says it');
+    expect(find.byType(SvgPicture), findsOneWidget, reason: 'drawn on its tile');
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 }
