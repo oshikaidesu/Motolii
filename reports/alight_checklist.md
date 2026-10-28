@@ -262,7 +262,7 @@
 - [x] レイヤーのラベルの色：Note カードの Label colour（Ableton Live のクリップの 16 色と auto）。選ぶと時間軸の行・関係の図・舞台の枠が同じ色に。文書の値なので取り消しも複製も効く — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [ ] 塗りの種類 4 つ（なし・単色・グラデーション・メディア）
 - [ ] メディアで塗る
-- [ ] 色：スポイト、小さいピッカー、パレット、自分の色を足す
+- [x] 色：スポイト、小さいピッカー、パレット、自分の色を足す：Colors の棚。スポイトは Wheel の Sample（Mac の NSColorSampler、画面のどこからでも。取った色を選んだ物に）、ピッカーは Wheel、パレットは棚の一覧、自分の色は Saved — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`、スポイトの答えは試験で肩代わり）。実際の画面から取るのは手ではまだ試していない
 - [ ] 線の始点・終点の形 10 種と大きさ
 - [x] 縁を何重にも足す（Multi-Border）：効果の棚の Multi-Border（pixi-filters の OutlineFilter、3 重まで） — 済（10/28）：G の行と同じ
 - [x] 影：色・大きさ・アルファ・位置：Drop Shadow のカード（色 shadow、ぼかし shadow_blur、不透明度 shadow_opacity、位置は距離と角度、絵を引いて決める） — 済：窓の試験（`workspace_drawings_test.dart`：引くと向きと距離、つまみでぼかし）

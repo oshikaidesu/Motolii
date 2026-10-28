@@ -414,6 +414,24 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Sample on the Colors shelf takes a colour off the screen (the Mac\'s eyedropper) and fills the picked thing with it', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    t.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('motolii/sampler'), (call) async => call.method == 'sample' ? '3a86ff' : null);   // (NSColorSampler's answer: a hand cannot point at the screen here)
+    addTearDown(() => t.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('motolii/sampler'), null));
+    ws
+      ..reread()
+      ..select('$rect')
+      ..shelf = 'Colors';
+    await t.pumpAndSettle();
+    await seen(t, find.byKey(const ValueKey('colour-sample')));
+    await t.tap(find.byKey(const ValueKey('colour-sample')));
+    await settled(t, ws);
+    expect(m.word(rect, 'fill'), '3a86ff', reason: m.trouble);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

@@ -6,12 +6,14 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:auto_size_text/auto_size_text.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
 
 import '../sets/inspector/inspector_parts.dart' show Pop;
 import '../tokens.dart';
+import 'desk_kit.dart' show DeskChip;
 import 'dock_glyphs.dart';
 import 'dock_parts.dart';
 import 'dock_tags.dart';
@@ -446,6 +448,15 @@ class _WheelBlock extends StatelessWidget {
     c.mem.sel[c.shelf] = 'wheel-0';
   });
 
+  /// The Mac's eyedropper (NSColorSampler, MainFlutterWindow.swift): the colour taken is the wheel's, and given to the
+  /// picked thing at once (or the ink, none picked), as Keynote's eyedropper gives it.
+  Future<void> _sample() async {
+    final hex = await const MethodChannel('motolii/sampler').invokeMethod<String>('sample');
+    if (hex == null || int.tryParse(hex, radix: 16) == null) return;
+    _to(HSVColor.fromColor(Color(0xFF000000 | int.parse(hex, radix: 16))));
+    _fill(c, hex);
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = Shape.z(128), v = _wheel;
@@ -466,6 +477,8 @@ class _WheelBlock extends StatelessWidget {
                 SizedBox(height: Shape.s(6)),
                 Text(_hex(v.toColor()), style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w700)),
                 Text('H ${v.hue.round()}°  S ${(v.saturation * 100).round()}%  V ${(v.value * 100).round()}%', style: T.label(Grey.g56)),
+                SizedBox(height: Shape.s(6)),
+                DeskChip(key: const ValueKey('colour-sample'), label: 'Sample', onTap: _sample),   // (a colour from anywhere on the screen: the Mac's own eyedropper)
               ],
             ),
           ),

@@ -12,6 +12,7 @@ class MainFlutterWindow: NSWindow {
     RegisterGeneratedPlugins(registry: flutterViewController)
     GlassTexture.attach(to: flutterViewController)
     StageTexture.attach(to: flutterViewController)
+    ColourSampler.attach(to: flutterViewController)
 
     super.awakeFromNib()
     // after the xib has restored its own frame
@@ -128,6 +129,25 @@ enum StageTexture {
         }
       }
       result(shared[frontName]?.id ?? -1)
+    }
+  }
+}
+
+/// A colour taken from anywhere on the screen by the Mac's own eyedropper (NSColorSampler, as Keynote's and Pages'
+/// colour wells take one): "sample" answers it as six hex digits in sRGB, or nil when the hand let it be (Esc).
+enum ColourSampler {
+  private static var sampler: NSColorSampler?
+
+  static func attach(to controller: FlutterViewController) {
+    let channel = FlutterMethodChannel(name: "motolii/sampler", binaryMessenger: controller.registrar(forPlugin: "MotoliiSampler").messenger)
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "sample" else { return result(FlutterMethodNotImplemented) }
+      sampler = NSColorSampler()
+      sampler?.show { picked in
+        sampler = nil
+        guard let c = picked?.usingColorSpace(.sRGB) else { return result(nil) }
+        result(String(format: "%02x%02x%02x", Int((c.redComponent * 255).rounded()), Int((c.greenComponent * 255).rounded()), Int((c.blueComponent * 255).rounded())))
+      }
     }
   }
 }
