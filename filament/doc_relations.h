@@ -208,14 +208,15 @@ static double doc_literal(Doc& d, int thing, const char* literal, double at, dou
         return by && doc_among(doc_relations, doc_word(d, by, "file")) ? doc_related(d, by, thing, literal, at, own) : own;
     }
     if (const int by = doc_driven_by(d, thing, literal)) {   // (given by a behaviour: the copy being placed's own, where it lies weighed by its falloff)
-        const double own = doc_keys_at(d, doc_keys_of(d, thing, literal), at, otherwise);
+        const Doc::Keys& k = doc_keys_of(d, thing, literal);
+        const double own = doc_keys_at(d, k, doc_stepped(d, thing, k, at), otherwise);
         if (doc_among(doc_relations, doc_word(d, by, "file"))) return doc_related(d, by, thing, literal, at, own);   // (a relation: by the thing's place among its things, not a copy's)
         return doc_given(d, by, d.ctxCopy, d.ctxN, at, own, d.ctxHasAt ? &d.ctxAt : nullptr);
     }
     const auto key = std::make_pair(thing, literal);
     auto kept = d.literals.find(key);
     if (kept == d.literals.end()) kept = d.literals.emplace(key, &doc_keys_of(d, thing, literal)).first;
-    return doc_keys_at(d, *kept->second, at, otherwise);
+    return doc_keys_at(d, *kept->second, doc_stepped(d, thing, *kept->second, at), otherwise);
 }
 static const std::string& doc_literal_word(Doc& d, int thing, const char* literal) {   // (a word so, kept the same way)
     const auto key = std::make_pair(thing, literal);

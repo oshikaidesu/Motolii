@@ -234,6 +234,23 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Frame rate on the Play card: a thing\'s moving values seen only at its own frames (Alight Motion\'s Time Quantization)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    expect(m.key(rect, 'x', 0, 0) && m.key(rect, 'x', 1, 1), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$rect');
+    await t.pumpAndSettle();
+    expect([for (final c in m.cards(rect)) if (c.$1 == 'Play') ...c.$2], contains('frame_rate'), reason: 'its card: ${m.cards(rect)}');
+    expect((await m.shownAt([(rect, 'x', .45)])).single, closeTo(.45, 1e-9), reason: 'as smooth as the stage');
+    ws.after(m.later('set', thing: rect, name: 'frame_rate', number: 4));
+    await settled(t, ws);
+    expect(await m.shownAt([for (final at in [.3, .45, .5, .99]) (rect, 'x', at)]), [closeTo(.25, 1e-9), closeTo(.25, 1e-9), closeTo(.5, 1e-9), closeTo(.75, 1e-9)], reason: 'four frames a second');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a film\'s Volume on its Sound card; Extract Sound: a hidden copy heard, the film itself silent (Alight Motion\'s Extract Audio)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final film = m.add('', '$motoliiDir/out/vid/check_film.mp4');
@@ -355,11 +372,11 @@ void _tests3() {
     await t.pumpAndSettle();
     expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Surface')), findsOneWidget, reason: 'Filament\'s own surface of a solid');
     expect(m.say(cube, 'fill', 'glass'), isTrue, reason: m.trouble);
-    expect(m.cards(cube).map((c) => c.$1), ['Fill', 'Transform', 'Blending', 'Motion', 'Glass', 'Lit', 'Physics', 'Note'], reason: 'filled with glass: the glass\'s own card, not the surface\'s');
+    expect(m.cards(cube).map((c) => c.$1), ['Fill', 'Transform', 'Blending', 'Motion', 'Play', 'Glass', 'Lit', 'Physics', 'Note'], reason: 'filled with glass: the glass\'s own card, not the surface\'s');
     expect(m.cards(rect).map((c) => c.$1).contains('Matte'), isFalse, reason: 'not clipped: no matte to say how');
     expect(m.set(rect, 'clip', 1) && m.cards(rect).map((c) => c.$1).contains('Matte'), isTrue);
     expect(m.set(cube, 'ior', 2.2) && m.value(cube, 'ior', 0) == 2.2, isTrue, reason: m.trouble);
-    expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join(' ') == 'Fill Transform Blending Motion Surface Lit Physics Note', isTrue);
+    expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join(' ') == 'Fill Transform Blending Motion Play Surface Lit Physics Note', isTrue);
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_metallic'), findsOneWidget);
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
@@ -457,7 +474,7 @@ void _tests3() {
     await t.pumpAndSettle();
     expect(m.words(fox, 'animation'), ['Survey', 'Walk', 'Run'], reason: 'its file\'s own movements');
     expect(m.say(fox, 'animation', 'Run') && m.set(fox, 'speed', 2), isTrue, reason: m.trouble);
-    expect(m.cards(fox).firstWhere((c) => c.$1 == 'Play').$2, ['animation', 'speed']);
+    expect(m.cards(fox).firstWhere((c) => c.$1 == 'Play').$2, ['animation', 'speed', 'frame_rate']);
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);

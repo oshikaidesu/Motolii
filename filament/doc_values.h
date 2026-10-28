@@ -104,6 +104,7 @@ static const DocShown doc_shown[] = {
     {"marker", "", "", "Part", 0, 0, nullptr},
     {"animation", "", "", "Movement", 0, 0, nullptr},
     {"speed", "", "×", "Speed", -4, 4, nullptr},
+    {"frame_rate", "", "fps", "Frame rate", 0, 60, nullptr},   // (0: as smooth as the stage)
     {"volume", "share", "%", "Volume", 0, 2, nullptr},   // (1 shown as 100%, as Alight Motion shows it)
     {"beats", "", "dB", "Beats", 0, 30, nullptr},
     {"clip_matte", "", "", "Cut by", 0, 0, nullptr},
@@ -300,7 +301,7 @@ static const DocCard doc_cards[] = {
     {"Scatter", "scatter_x scatter_y scatter_z scatter_rotate scatter_size seed drift_x drift_y"},
     {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
     {"Motion", "orient", "kind", "!camera"},   // (how it goes along its way: turned the way it is going, After Effects' Auto-Orient)
-    {"Play", "marker animation speed"},
+    {"Play", "marker animation speed frame_rate"},
     {"Sound", "volume beats", "kind", "film"},   // (its beats: shown on the timeline's ruler where it strikes)
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Connect", "connect connect_to connect_reach"},
@@ -400,10 +401,21 @@ static double doc_went_by(Doc& d, const std::string& own, double u, double t, do
 static double doc_keys_at(Doc& d, const Doc::Keys& k, double at, double otherwise);
 // Where a value's keys are kept (read from the facts once, as doc_number reads them): kept until the document changes.
 static const Doc::Keys& doc_keys_of(Doc& d, int thing, const char* name);
+// Time Quantization (Alight Motion's; After Effects' Posterize Time): a thing with a frame_rate is seen only at its own
+// frames, counted from its start: a value that moves is read at the frame the moment is in. 0: as smooth as the stage.
+static double doc_stepped(Doc& d, int thing, const Doc::Keys& k, double at) {
+    if (k.at.size() < 2 || !thing) return at;
+    const Doc::Keys& rate = doc_keys_of(d, thing, "frame_rate");
+    if (rate.value.empty() || !(rate.value.front() > 0.0)) return at;
+    const Doc::Keys& from = doc_keys_of(d, thing, "start");
+    const double start = from.value.empty() ? 0.0 : from.value.front(), r = rate.value.front();
+    return at <= start ? at : start + std::floor((at - start) * r + 1e-9) / r;
+}
 static double doc_number(Doc& d, int thing, const char* name, double at, double otherwise) {
     if (d.held.thing == thing)   // (what a hand is carrying shows in place of the document's own)
         if (const auto tried = d.held.tried.find(name); tried != d.held.tried.end()) return tried->second;
-    return doc_keys_at(d, doc_keys_of(d, thing, name), at, otherwise);
+    const Doc::Keys& k = doc_keys_of(d, thing, name);
+    return doc_keys_at(d, k, doc_stepped(d, thing, k, at), otherwise);
 }
 static const Doc::Keys& doc_keys_of(Doc& d, int thing, const char* name) {
     auto& of = d.moving[thing];

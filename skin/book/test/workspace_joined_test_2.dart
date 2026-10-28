@@ -99,7 +99,7 @@ void _tests2() {
     expect(m.value(cube, 'stroke_width', 0), isNull, reason: 'a solid thing has no edge to say');
     // (a value the thing has not, changed in the inspector: the top bar says why it was not taken)
     ws.select('$cube');
-    await t.pumpAndSettle();
+    await settled(t, ws);   // (what the window told the inside on the way, answered: the words below are this change's own)
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'op'), findsNothing, reason: 'a solid has no opacity: no knob for it');
     expect(m.set(rect, 'opacity', .5), isTrue);
     expect(m.say(rect, 'stroke', 'grey'), isFalse);

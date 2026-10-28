@@ -220,7 +220,7 @@
 - [ ] ブックマーク（有る）：いま ロケーター（Ableton どおり）
 - [ ] お気に入り（一部）：いま ★ はイーズの棚と中の効果（workspace_ease_library_test）。ファイルの効果には無い
 - [ ] **速度に応じたモーションブラー**（無い）
-- [ ] **Time Quantization（コマ落とし。ポスタリゼーション時間）**（無い）
+- [x] **Time Quantization（コマ落とし。ポスタリゼーション時間）**（無い→一部）：物の Frame rate（Play の札、0 は段と同じ滑らかさ）。キーで動く値は、その物の始まりから数えたコマの時刻で読む（doc_stepped：doc_number と doc_literal の両方の読みに）。After Effects の Posterize Time と同じ考え。まだ：映像そのものの再生と、キーでない動き（揺れ・ふるまい）は段のまま — 済（10/28）：窓で 4 コマ/秒にして値が 0.25・0.25・0.5・0.75 と段になるのを確かめた（`skin/book/test/workspace_joined_test_3.dart`）
 - [x] **レイヤーを切る**（無い→有る）：⌘E（Ableton Live の Split）とメニューの Split。選んだ物を再生位置で 2 つに：前は再生位置で終わり、後ろはそこから元の終わりまで、映像は前を切った分だけ先から（左端を詰める時と同じ計算）。キーは画面の時刻のまま。1 回で取り消せる。手本：AbsentMotion の Scene.splitAt（Apache-2.0） — 済（10/28）：窓で映像を選んで ⌘E、文書から両方を読んで確かめた（`skin/book/test/workspace_joined_test_3.dart`）
 - [x] 動画から音を取り出す（無い→有る）：Edit > Extract Sound。映像の写しを隠して音だけ聞こえる物にし（隠した映像も音は鳴る）、元の映像は Volume 0。名前は「… (sound)」。1 回で取り消せる。映像に Volume（0〜200%、Sound の札）を足した：書き出しは ffmpeg の volume、再生は GStreamer の playbin の volume — 済（10/28）：窓で文書から読んで確かめた（`skin/book/test/workspace_joined_test_3.dart`）、書き出しの音量を ffmpeg の volumedetect で測った（1・0.5・0 で -10.6・-16.7・-91 dB）
 - [ ] 作った後でプロジェクトの設定（大きさ・コマの速さ）を変える（一部）：いま 大きさは上の札を 2 回押して打ち直す（workspace_joined_test「a document says its own size」）。コマの速さは読むだけ
