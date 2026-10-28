@@ -346,7 +346,19 @@ class _RenderState extends State<_Render> {
                     row('Folder', Text(ws.documentFolder ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g76))),
                     row('Range', fact('Work area  ${t(from)} – ${t(to)}  ·  $frames frames')),
                     row('Size', fact('${WsArt.comp.width.round()} × ${WsArt.comp.height.round()}')),
-                    row('Rate', fact('${Ws.fps} frames a second')),
+                    // (how it is written, the document's own and kept with it: Alight Motion's export rows; 0 as the stage is)
+                    for (final (label, name, choices) in [
+                      ('Resolution', 'render_height', [(0, 'Full'), for (final p in sizeResolutions) if (p < math.min(WsArt.comp.width, WsArt.comp.height)) (p, '${p}p')]),
+                      ('Rate', 'render_rate', [(0, '${Ws.fps}'), for (final r in const [30, 24, 15]) if (r < Ws.fps) (r, '$r')]),
+                      ('Quality', 'render_mbps', [(0, 'Auto'), for (final b in const [4, 8, 16, 32]) (b, '$b Mbps')]),
+                    ])
+                      row(label, StatefulBuilder(builder: (context, again) {
+                        final m = ws.inside, now = (m?.value(0, name, 0) ?? 0).round();
+                        return Wrap(spacing: Shape.s(6), runSpacing: Shape.s(4), children: [
+                          for (final (v, said) in choices)
+                            DeskChip(key: ValueKey('render-$name-$v'), label: said, on: now == v, onTap: m == null ? null : () => ws.after(m.later('set', thing: 0, name: name, number: v.toDouble()), (_, _) => mounted ? again(() {}) : null)),
+                        ]);
+                      })),
                     row('Format', StatefulBuilder(builder: (context, again) => Row(children: [
                       for (final (label, ending, _) in _formats) ...[
                         DeskChip(key: ValueKey('render-$label'), label: label, on: _ending == ending, onTap: () => again(() => _as(ending))),

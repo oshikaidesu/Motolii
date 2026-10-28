@@ -235,7 +235,7 @@
 - [ ] 新しい文書の箱：縦横比 6 種＋自由、解像度 7 段、fps 10 段、背景、PROJECT か ELEMENT（一部）：上の帯の大きさの札を 1 回押すと箱（Shape 16:9・9:16・4:5・1:1・4:3、Resolution 2160p〜270p、押すとその大きさで開き直す。自由な大きさは 2 回押して打つ、10/28、`workspace_joined_test_3.dart`）。背景は Room カード。まだ：fps（中の決まった 60）、New を押した時に出ること、ELEMENT
 - [ ] 文書の設定を後から変える（同じ箱）と、編集した時間（一部）：大きさは同じ箱でいつでも変えられる（10/28）。まだ：fps、編集した時間
 - [ ] 書き出し：形式ごとの行、空き容量と大きさの見積もり
-- [ ] 書き出し Video：解像度、H.264 / H.265、fps 3 段、画質 Mbps
+- [x] 書き出し Video：解像度、H.264 / H.265、fps 3 段、画質 Mbps：書き出しの箱の Format（MP4 H.264・HEVC・GIF・PNG）、Resolution（Full と 2160p〜）、Rate（60・30・24・15）、Quality（Auto と 4〜32 Mbps）。値は書類に残る — 済（10/28）：`check/film_way.sh`、窓の試験（`workspace_render_dialog_test.dart`）
 - [x] 書き出し：今のコマを PNG：File メニューの Export Frame・⇧E（Premiere Pro と同じ）。再生位置の絵を文書の隣に「文書名_コマ.png」で — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [ ] 書き出し：画像の連番（PNG / JPEG、解像度、fps、画質）
 - [ ] 書き出し：プロジェクトを素材ごと包んで共有（リンク）

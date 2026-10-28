@@ -17,7 +17,7 @@ int motolii_write(Motolii* m, const char* mp4) {
             { std::lock_guard<std::mutex> hold(m->asked_lock); todo.swap(m->asked); }
             for (auto& does : todo) does();
             time_is(*m->s, from + (double)std::lround(done * (float)pictures) / RATE);   // (the picture's moment: from the work area's start)
-        }), "the file could not be written");
+        }, FilmWay{(int)doc_number(*m->d, 0, "render_height", 0, 0), (int)doc_number(*m->d, 0, "render_rate", 0, 0), doc_number(*m->d, 0, "render_mbps", 0, 0)}), "the file could not be written");
         m->d->lock.lock();
         m->d->writing = false;
         m->d->written_from = 0.0;

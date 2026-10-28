@@ -19,7 +19,11 @@ static void move(Stage& s, const Mesh* m, const std::function<mat4f(int, const m
 // name_0001.png on (no sound in the last two). Before each picture `pose` is told how far through
 // the film it is (0 up to 1): where the end meets the start, the film loops. What is heard is the things' own sound
 // (Stage::sounding), cut, sped, gone round, made as loud as it says (ffmpeg's volume) and mixed by ffmpeg as each thing says.
-static bool film(Stage& s, const char* path, int pictures, const std::function<void(float)>& pose) {
+// How it is written, as Alight Motion's export asks (0: as it was): how high (ffmpeg's scale, the shape kept, Lanczos),
+// how many pictures a second (ffmpeg's -r: some of the 60 left out), how many megabits a second (-b:v, in place of
+// x264's -crf 17 or VideoToolbox's -q:v 65).
+struct FilmWay { int high = 0, rate = 0; double mbps = 0.0; };
+static bool film(Stage& s, const char* path, int pictures, const std::function<void(float)>& pose, const FilmWay& said = {}) {
     const auto quoted = [](std::string name) {   // (a file's name as a shell takes it)
         for (size_t at = 0; (at = name.find('\'', at)) != std::string::npos; at += 4) name.replace(at, 1, "'\\''");
         return "'" + name + "'";
@@ -43,10 +47,12 @@ static bool film(Stage& s, const char* path, int pictures, const std::function<v
     const std::string ending = std::filesystem::path(path).extension().string();
     const bool silent = ending == ".gif" || ending == ".png";
     const std::string sound = n && !silent ? files + " -filter_complex \"" + each + all + "amix=inputs=" + std::to_string(n) + ":normalize=0:duration=longest,alimiter[a]\" -map 0:v -map '[a]' -c:a aac -b:a 160k -t " + std::to_string(pictures / 60.0) : "";
-    const std::string way = ending == ".gif" ? " -an -vf \"fps=15,split[a][b];[a]palettegen[p];[b][p]paletteuse\" " + quoted(path)
-                            : ending == ".png" ? " -an -c:v png " + quoted(std::filesystem::path(path).replace_extension().string() + "_%04d.png")
-                            : ending == ".mov" ? " -c:v hevc_videotoolbox -q:v 65 -tag:v hvc1 -pix_fmt yuv420p -movflags +faststart " + quoted(path)
-                                               : " -c:v libx264 -crf 17 -g 60 -pix_fmt yuv420p -movflags +faststart " + quoted(path);
+    const std::string scale = said.high > 0 ? "scale=-2:" + std::to_string(said.high) + ":flags=lanczos" : "", mbps = std::to_string(said.mbps) + "M";
+    const std::string sized = scale.empty() || ending == ".gif" ? "" : " -vf " + scale, rate = said.rate > 0 && ending != ".gif" ? " -r " + std::to_string(said.rate) : "";
+    const std::string way = ending == ".gif" ? " -an -vf \"fps=15," + (scale.empty() ? "" : scale + ",") + "split[a][b];[a]palettegen[p];[b][p]paletteuse\" " + quoted(path)
+                            : ending == ".png" ? " -an" + sized + rate + " -c:v png " + quoted(std::filesystem::path(path).replace_extension().string() + "_%04d.png")
+                            : ending == ".mov" ? sized + rate + " -c:v hevc_videotoolbox " + (said.mbps > 0.0 ? "-b:v " + mbps : std::string("-q:v 65")) + " -tag:v hvc1 -pix_fmt yuv420p -movflags +faststart " + quoted(path)
+                                               : sized + rate + " -c:v libx264 " + (said.mbps > 0.0 ? "-b:v " + mbps + " -maxrate " + mbps + " -bufsize " + std::to_string(2.0 * said.mbps) + "M" : std::string("-crf 17")) + " -g 60 -pix_fmt yuv420p -movflags +faststart " + quoted(path);
     const std::string cmd = "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgba -s " + std::to_string(s.w) + "x" + std::to_string(s.h) + " -r 60 -i -" + sound + way;
     std::signal(SIGPIPE, SIG_IGN);   // (if ffmpeg gives up, writing to it fails and that is told, instead of this program ending with it)
     FILE* to = popen(cmd.c_str(), "w");
