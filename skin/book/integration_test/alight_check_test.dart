@@ -220,7 +220,18 @@ final _rowsZ = <(String, String, Map<String, Object>)>[
   ('dotscreen', 'effects/dot_screen.wgsl', const {}),
   ('sine', 'Sine Warp Tile', const {'angle': .35}),
 ];
-final _rows = switch (_section) { 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+// (section P: the ISF the open row names, or a value that file already declares when the head default is the unchanged picture.)
+final _rowsP = <(String, String, Map<String, Object>)>[
+  ('frost', 'Frosted Glass', const {'magnitude': .1}),
+  ('displace', 'Displace', const {'uDisplaceAmt': 1}),
+  ('chromamask', 'Chroma Mask', const {}),
+  ('desat', 'Chroma Desaturation Mask', const {}),
+  ('gridflip', 'Grid Flip', const {'progress': .5}),
+  ('echo', 'Echo Trace', const {}),
+  ('rotate', 'Rotate', const {'angle': .25}),
+  ('chromakey', 'effects/am_chromakey.wgsl', const {'tolerance': .7}),
+];
+final _rows = switch (_section) { 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
