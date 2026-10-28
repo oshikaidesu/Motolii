@@ -105,7 +105,8 @@ static bool doc_match(Doc& d) {
         if (ramp.size() > 1) fx.ramp = ramp;
         fx.radial = doc_word(d, thing, "gradient") == "radial", fx.rampAngle = (float)doc_number(d, thing, "gradient_angle", 0, 0), fx.rampScale = (float)doc_number(d, thing, "gradient_scale", 0, 1);
         fx.spread = doc_word(d, thing, "gradient_spread") == "reflect" ? 1 : doc_word(d, thing, "gradient_spread") == "repeat" ? 2 : 0;
-        fx.copies = (int)doc_number(d, thing, "copies", 0, 1);
+        const std::vector<AbsentCopy>& repeated = doc_absent_copies(d, thing, d.stage->now);
+        fx.copies = repeated.empty() ? (int)doc_number(d, thing, "copies", 0, 1) : (int)repeated.size();   // (as many as AbsentMotion's repeat lays, as doc_members says)
         {   // (its copies drawn in one go where none is cleared of its own (no script that says opacity) and their colours are a ramp flat.mat knows; a picture's own 3D layers neither)
             const std::string fills = doc_word(d, thing, "copy_fill"), script = doc_word(d, thing, "script");
             std::istringstream said(fills);

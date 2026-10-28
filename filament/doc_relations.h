@@ -223,9 +223,23 @@ static const std::string& doc_literal_word(Doc& d, int thing, const char* litera
     if (const auto kept = d.heardWords.find(key); kept != d.heardWords.end()) return kept->second;
     return d.heardWords.emplace(key, doc_word(d, thing, literal)).first->second;
 }
+// A thing's copies as AbsentMotion's repeat effects on it lay them (absent_motion.h), at a moment: made again only when
+// the moment, the document or a file has changed. None: no repeat effect on it.
+static const std::vector<AbsentCopy>& doc_absent_copies(Doc& d, int thing, double now) {
+    Doc::AbsentKept& k = d.absentKept[thing];
+    const long changes = d.file ? (long)sqlite3_total_changes(d.file) : 0;
+    if (k.at == now && k.changes == changes && k.seen == files_changed()) return k.copies;
+    k.at = now, k.changes = changes, k.seen = files_changed();
+    k.copies.clear();
+    if (doc_word(d, thing, "fx").find(".am") == std::string::npos) return k.copies;
+    const double begins = doc_literal(d, thing, "start", 0, 0), lasts = doc_literal(d, thing, "duration", 0, -1);
+    k.copies = absent_copies(doc_absent_on(d, thing, now), thing, 1000.0 * begins, 1000.0 * (begins + (lasts > 0 ? lasts : doc_seconds(d))), 1000.0 * now, 0, 0);
+    return k.copies;
+}
 static int doc_members(Doc& d, int thing) {
     const auto t = d.shown.find(thing);
     if (t != d.shown.end() && t->second.drawn && !t->second.drawn->letters.empty()) return (int)t->second.drawn->letters.size();
+    if (const std::vector<AbsentCopy>& copies = doc_absent_copies(d, thing, d.stage->now); !copies.empty()) return (int)copies.size();   // (as many as AbsentMotion's repeat lays)
     return std::max(1, (int)doc_literal(d, thing, "copies", 0, 1));
 }
 // How much later a thing's nth copy moves than it is said to (the past repository's order law, GSAP's stagger: the

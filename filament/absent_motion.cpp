@@ -5,8 +5,9 @@
 // they are (what of scene.cpp draws or reads a scene is not reached: the library is linked dead-stripped).
 #include "absent_motion.h"
 #include "scene.h"
+#include <cmath>
 
-AbsentMoved absent_motion(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs) {
+static am::Layer absent_layer(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs) {
     am::Layer l;
     l.id = l.noiseId = thing;
     l.startTime = (int)startMs, l.endTime = (int)endMs;
@@ -20,8 +21,28 @@ AbsentMoved absent_motion(const std::vector<AbsentEffect>& effects, int64_t thin
         }
         l.effects.push_back(one);
     }
+    return l;
+}
+AbsentMoved absent_motion(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs) {
+    const am::Layer l = absent_layer(effects, thing, startMs, endMs);
     am::Placement p{};
     p.location = SkPoint{0, 0}, p.pivot = SkPoint{0, 0}, p.scale = SkPoint{1, 1}, p.rotation = 0, p.z = 0;
     am::ApplyMotion(l, nowMs, &p);
     return {p.location.fX, p.location.fY, p.z, p.rotation, p.scale.fX, p.scale.fY};
+}
+// As AbsentMotion's CopiesOf (styles.cpp) lays them, its layer's matrix one that moves nothing: outer by local.
+std::vector<AbsentCopy> absent_copies(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs, float wide, float high) {
+    const am::Layer l = absent_layer(effects, thing, startMs, endMs);
+    if (!am::HasRepeat(l)) return {};
+    am::RepeatSpace space;
+    space.width = wide, space.height = high, space.radius = std::max(wide, high) * 0.5f * 1.415f;
+    std::vector<am::RepeatCopy> copies;
+    am::RepeatCopies(l, nowMs, space, &copies);
+    std::vector<AbsentCopy> out;
+    out.reserve(copies.size());
+    for (const am::RepeatCopy& c : copies) {
+        const SkMatrix m = c.outer * c.local;
+        out.push_back({m.getTranslateX(), m.getTranslateY(), std::atan2(m.getSkewY(), m.getScaleX()) * 180.0 / M_PI, std::hypot(m.getScaleX(), m.getSkewY()), c.alpha});
+    }
+    return out;
 }

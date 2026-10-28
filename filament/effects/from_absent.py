@@ -15,6 +15,7 @@ import json, os, re, subprocess, sys
 src, out, skslc = sys.argv[1], sys.argv[2], sys.argv[3]
 d = json.load(open(src))
 moves = ('autoshake', 'randomdisplace', 'randomjitter', 'oscillate', 'swing', 'spin', 'pulsesize')   # (AbsentMotion's motion.cpp ApplyMotion: what it moves the layer by)
+moves += ('repeat', 'linearrepeat', 'gridrepeat', 'radialrepeat')   # (its RepeatCopies: copies of the layer; along a path needs the layer beneath, a scatter field its size and camera: not yet)
 
 
 def knob_lines(named, numbers):   # (each param a knob or more, by the name the effect reads it by; numbers: the kinds one number each)

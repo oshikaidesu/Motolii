@@ -69,6 +69,8 @@ struct Doc {
     std::string phys_made;              // all the world was made of, as the document said it then (made again only when that changes)
     struct Scripted { double at = -1; int made = -1; std::vector<ScriptCopy> copies; };
     std::map<int, Scripted> scripted;
+    struct AbsentKept { double at = -1; long changes = -1; int seen = -1; std::vector<AbsentCopy> copies; };
+    std::map<int, AbsentKept> absentKept;   // (each thing's copies as AbsentMotion's repeat effects lay them, at the moment last asked: doc_absent_copies)
     std::shared_ptr<struct DocScripts> scripts;   // (its scripts, each run as its file says: doc_values.h)
     std::map<int, ThingFx> thingFx;     // the things with effects of their own (thing_fx.h): each drawn alone, its effects on, laid where it lies
     ScreenStack screen;                 // the stage's whole-screen effects, its script .wgsl files one over another (screen.h)   // each thing's copies as its script said them, at one moment (worked out once a picture)

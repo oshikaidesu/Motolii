@@ -355,7 +355,7 @@ class Ws extends ChangeNotifier {
   /// Joined: the effects on the picked thing (its fx: as the camera sees it, After Effects' effects on a layer), nearest
   /// the picture first. Effects are always a thing's: there is no stage-wide one (a whole picture's is a 2D plate showing
   /// what is behind it, as a lens, with the effect on the plate).
-  static final _files = RegExp(r'/.*?\.(?:wgsl|fs|js|mjs)(?= |$)|[^ ]+'); // (as the inside reads the list: a path, spaces and all, to its extension: script.h script_files)
+  static final _files = RegExp(r'/.*?\.(?:wgsl|fs|js|mjs|json|am)(?= |$)|[^ ]+'); // (as the inside reads the list: a path, spaces and all, to its extension: script.h script_files)
   List<String> get screenFx {
     final t = int.tryParse(selected ?? '');
     if (t == null) return const [];

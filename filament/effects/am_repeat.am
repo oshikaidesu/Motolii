@@ -1,0 +1,11 @@
+// Repeat: AbsentMotion's repeat (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), moved by its own motion.cpp (filament/absent_motion.cpp)
+// --label:Repeat
+// --absent:repeat
+// --about:Dynamically generates multiple copies of the layer.
+// --track@count:Count,0,9999,10.0,1
+// --track@time:Time,0,9999,0.0,0.1
+// --track@offset_x:Offset x,-99999,99999,0,1
+// --track@offset_y:Offset y,-99999,99999,0,1
+// --track@angle:Angle,-3600,3600,0.0,0.1
+// --track@scale:Scale,0,10,1.0,0.01
+// --track@alpha:Alpha,0,1,1.0,0.001

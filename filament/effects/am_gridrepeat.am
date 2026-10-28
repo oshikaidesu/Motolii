@@ -1,0 +1,24 @@
+// Grid Repeat: AbsentMotion's gridrepeat (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), moved by its own motion.cpp (filament/absent_motion.cpp)
+// --label:Repeat
+// --absent:gridrepeat
+// --about:Dynamically generates multiple copies of the layer, arranged in a grid.
+// --track@count:Count,0,150,5.0,1
+// --track@position_x:Position x,-99999,99999,500,1
+// --track@position_y:Position y,-99999,99999,500,1
+// --track@stagger:Stagger,-9999,9999,0.0,1
+// --track@rangePosition_x:Range Position x,-99999,99999,0,1
+// --track@rangePosition_y:Range Position y,-99999,99999,0,1
+// --track@rangeScale:Range Scale,0,10,1.0,0.01
+// --track@rangeRotation:Range Rotation,-3600,3600,0.0,0.1
+// --track@rangeOpacity:Range Opacity,0,1,1.0,0.001
+// --track@fillColor_x:Fill Color R,0,1,1,0.01
+// --track@fillColor_y:Fill Color G,0,1,1,0.01
+// --track@fillColor_z:Fill Color B,0,1,1,0.01
+// --track@fillColor_w:Fill Color A,0,1,1,0.01
+// --track@fillAmount:Fill Amount,0,1,0.0,0.001
+// --track@rangeStart:Range Start,0,1,0.0,0.001
+// --track@rangeEnd:Range End,0,1,1.0,0.001
+// --track@rangeOffset:Range Offset,-10,10,0.0,0.001
+// --track@easing:Easing,0,3,0.0,1
+// --track@randomOrder:Random Order,0,1,0.0,0.01
+// --track@seed:Seed,0,9999,0.0,1

@@ -123,6 +123,11 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         const double pixel = (double)d.stage->h / std::max(1.0, doc_number(d, 0, "high", 0, 1080) * doc_point(d, thing, said));   // (a pixel of the document where the thing stands, as a script's copies are told)
         shift += math::double3{m.x * pixel, -m.y * pixel, m.z * pixel};   // (its y down, the stage's up)
         own = own * math::mat4::rotation(-m.rotate * (double)TAU / 360.0, math::double3{0, 0, 1}) * math::mat4::scaling(math::double3{m.scale_x, m.scale_y, 1.0});   // (its turn clockwise)
+        if (const std::vector<AbsentCopy>& copies = doc_absent_copies(d, thing, said); member && copy < (int)copies.size()) {   // (each copy where AbsentMotion's repeat lays it)
+            const AbsentCopy& c = copies[(size_t)copy];
+            shift += math::double3{c.x * pixel, -c.y * pixel, 0.0};
+            own = own * math::mat4::rotation(-c.rotate * (double)TAU / 360.0, math::double3{0, 0, 1}) * math::mat4::scaling(c.scale);
+        }
     }
     double tall = doc_literal(d, thing, "tall", now, 1);   // (taller, its anchor staying: a copy as its number in copy_tall says too)
     if (member) {
@@ -299,10 +304,13 @@ static void doc_look(Doc& d) {
     std::snprintf(grade, sizeof grade, "%s %g %g %g %g %g %g %g %g", mapper.c_str(), doc_number(d, 0, "exposure", 0, 0), doc_number(d, 0, "contrast", 0, 1), doc_number(d, 0, "saturation", 0, 1), doc_number(d, 0, "vibrance", 0, 1), doc_number(d, 0, "temperature", 0, 0), slope, offset, power);
     const auto tint = [&](const char* name) { const float3 c = hex(name, float3{1.f}); std::strncat(grade, (" " + doc_word(d, 0, name)).c_str(), 20); return float4{Color::toLinear<ACCURATE>(sRGBColor{c}), 0.f}; };
     const float4 low = tint("shadows_color"), mid = tint("midtones_color"), high = tint("highlights_color");
-    std::vector<std::string> told;   // (Filament's own settings files on the stage, its knobs' values put in: viewer_settings.h)
-    for (const std::string& file : script_files(doc_word(d, 0, "script")))
-        if (DocScript* sc = doc_script_of(d, file); sc && sc->viewer)
-            told.push_back(viewer_said(file, sc->knobs, [&](size_t k) { return doc_number(d, 0, sc->names[k].c_str(), s.now, sc->knobs[k].usual); }));
+    std::vector<std::string> told;   // (Filament's own settings files, their knobs' values put in: viewer_settings.h; the whole view's, on the stage or on any thing's effects, as the shelf puts them)
+    std::vector<int> holders{0};
+    doc_rows(d, sqlite3_mprintf("select distinct thing from fact where name = 'fx' and value like '%%.json%%'"), [&](sqlite3_stmt* row) { holders.push_back(sqlite3_column_int(row, 0)); });
+    for (const int h : holders)
+        for (const std::string& file : script_files(doc_word(d, h, h == 0 ? "script" : "fx")))
+            if (DocScript* sc = doc_script_of(d, file); sc && sc->viewer)
+                told.push_back(viewer_said(file, sc->knobs, [&](size_t k) { return doc_number(d, h, sc->names[k].c_str(), s.now, sc->knobs[k].usual); }));
     const bool theirs = std::any_of(told.begin(), told.end(), [](const std::string& t) { return t.find("\"colorGrading\"") != std::string::npos; });
     std::string key = grade;
     if (theirs) for (const std::string& t : told) key += t;
