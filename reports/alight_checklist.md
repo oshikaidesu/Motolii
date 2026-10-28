@@ -366,7 +366,7 @@
 - [ ] 動かしている最中に数字を出す（Alight Motion に無い）
 - [ ] 吸い付きとガイドの線（Alight Motion に無い）
 - [ ] 反対側を止めて伸ばす（Alight Motion は真ん中からだけ）
-- [ ] キャンバスに動きの道筋とその取っ手（Alight Motion に無い）
+- [ ] キャンバスに動きの道筋とその取っ手（Alight Motion に無い）（一部）：道筋は出る（10/28）。まだ：その取っ手で道を曲げる
 - [x] 再生位置で切って後ろ半分を別のレイヤーに：⌘E（Split） — 済：窓の試験（`workspace_joined_test_3.dart`）
 
 
@@ -393,7 +393,7 @@
 - [ ] ベジェの 4 つのプリセット
 - [x] 親：一覧で選ぶ（None・自分は灰色・音は出ない）：Transform カードの Parent（None と他の物の名前、自分は出ない） — 済：窓の試験（`workspace_joined_test_2.dart` の Parent）
 - [ ] 親：子を選ぶと親の外枠を出す
-- [ ] 動きの道筋を細い線と向きの矢印で出す
+- [x] 動きの道筋を細い線と向きの矢印で出す：選んだ物が動くと、舞台にその道筋（内側の位置の計算 motolii_path、揺れも含む）を細い線と矢印で（10/28） — 済：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 書き出し GIF：書き出しの箱の GIF（ffmpeg の palettegen・paletteuse、15 コマ毎秒） — 済：`check/film_way.sh`（10/28）、窓の試験（`workspace_render_dialog_test.dart`）
 
 合計：337 箱。

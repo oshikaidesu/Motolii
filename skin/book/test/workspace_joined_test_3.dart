@@ -573,6 +573,34 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a picked thing that moves shows its way on the stage, from where it begins to where it ends (Alight Motion\'s motion path)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    expect(m.key(rect, 'x', 0, -1) && m.key(rect, 'x', 1, 1), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$rect');
+    await t.pumpAndSettle();
+    List<Offset>? trail() => [for (final e in find.byWidgetPredicate((w) => w is CustomPaint && w.painter?.runtimeType.toString() == '_ViewPainter').evaluate()) (((e.widget as CustomPaint).painter as dynamic).trail as List<Offset>?)].nonNulls.firstOrNull;
+    for (var i = 0; i < 200 && trail() == null; i++) {   // (the inside's reckoning, on another isolate)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    final w = trail();
+    expect(w, isNotNull, reason: 'its way drawn');
+    expect([w!.first.dx, w.last.dx, w.first.dy], [closeTo(960 - m.point, 2), closeTo(960 + m.point, 6), closeTo(540, 1)], reason: 'from x -1 to x 1, level');
+    final still = m.add('shape', 'circle');
+    ws
+      ..reread()
+      ..select('$still');
+    await t.pumpAndSettle();
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await t.pump();
+    expect(trail(), isNull, reason: 'one that stays put has none');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

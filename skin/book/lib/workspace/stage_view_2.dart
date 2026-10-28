@@ -387,10 +387,32 @@ class _StageViewState extends State<StageView> implements StageHandles {
     setState(() => _pan = Offset(p.dx.clamp(-lim.dx, lim.dx), p.dy.clamp(-lim.dy, lim.dy)));
   }
 
+  // The picked thing's way over its time: where the inside places it, moment by moment (motolii_path, its wave and all),
+  // in points of the picture, drawn thin with arrows the way it goes (Alight Motion's motion path). Asked again only
+  // when the document or the pick changes; none when it stays put.
+  (Object?, List<Offset>?) _trail = (null, null);
+  List<Offset>? _trailOf() {
+    final ws = WsScope.read(context), m = ws.inside, t = int.tryParse(widget.selected ?? '');
+    if (m == null || t == null || const {'behaviour', 'camera', 'light'}.contains(m.word(t, 'kind'))) return null;
+    final key = (ws.rev, t);
+    if (_trail.$1 != key) {
+      _trail = (key, null);
+      final start = m.value(t, 'start', 0) ?? 0, lasts = m.lasts(t), end = lasts > 0 ? start + lasts : m.seconds;
+      if (end > start) {
+        m.path(t, from: start, to: end, n: 90).then((p) {
+          if (!mounted || _trail.$1 != key || p == null) return;
+          final c = WsArt.centre, pts = [for (var i = 0; i + 1 < p.length; i += 4) c + Offset(p[i], -p[i + 1]) * m.point];
+          setState(() => _trail = (key, pts.any((q) => (q - pts.first).distance > 1) ? pts : null));
+        });
+      }
+    }
+    return _trail.$2;
+  }
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
-      final v = _shown = _view(box.biggest), scene = widget.scene;
+      final v = _shown = _view(box.biggest), scene = widget.scene, trail = _trailOf();
       _deskTo(v);
       _pickTo();
       return Listener(
@@ -445,7 +467,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
               children: [
                 RepaintBoundary(
                   child: CustomPaint(
-                    painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: widget.texture == null ? _Part.all : _Part.under, pivots: widget.pivots, met: _met),
+                    painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: widget.texture == null ? _Part.all : _Part.under, pivots: widget.pivots, met: _met, trail: trail),
                   ),
                 ),
                 if (_desk case final desk? when widget.texture != null) ...[ // (the whole pane as the inside draws it: off the stage covered half way, the picked thing marked)
@@ -473,7 +495,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
                 if (widget.texture != null)
                   IgnorePointer(
                     child: CustomPaint(
-                      painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: _Part.over, pivots: widget.pivots, met: _met, marked: _desk != null),
+                      painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: _Part.over, pivots: widget.pivots, met: _met, marked: _desk != null, trail: trail),
                     ),
                   ),
                 IgnorePointer(child: CustomPaint(painter: _RulerPainter(v, widget.cursor, scene))),

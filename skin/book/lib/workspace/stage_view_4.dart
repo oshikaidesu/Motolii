@@ -2,7 +2,7 @@
 part of 'stage_view.dart';
 
 class _ViewPainter extends CustomPainter {
-  _ViewPainter(this.scene, this.v, this.sel, this.hover, {required this.grid, required this.safe, this.part = _Part.all, this.pivots = false, this.met = (null, null), this.marked = false});
+  _ViewPainter(this.scene, this.v, this.sel, this.hover, {required this.grid, required this.safe, this.part = _Part.all, this.pivots = false, this.met = (null, null), this.marked = false, this.trail});
 
   /// The inside marks the picked thing and the one under the hand on its desk: not drawn here.
   final bool marked;
@@ -11,6 +11,9 @@ class _ViewPainter extends CustomPainter {
   /// Joined: every thing's point it turns about shown (Pivots), and the lines a carried thing has stuck to (Snap).
   final bool pivots;
   final (double?, double?) met;
+
+  /// The picked thing's way over its time, in points of the picture (null: it stays put, or not read yet).
+  final List<Offset>? trail;
   final ArtScene scene;
   final _View v;
   final String? sel, hover;
@@ -36,6 +39,16 @@ class _ViewPainter extends CustomPainter {
     if (safe) _safe(c, comp);
     c.restore();
     _guides(c);
+    if (trail case final w? when w.length > 1) {   // (thin, an arrow every so often the way it goes)
+      final line = _line(WsT.accent.withValues(alpha: .75), 1.2), pts = [for (final q in w) _scr(q)];
+      c.drawPoints(PointMode.polygon, pts, line);
+      for (var i = 6; i + 1 < pts.length; i += 12) {
+        final d = pts[i + 1] - pts[i];
+        if (d.distance < .5) continue;
+        final u = d / d.distance, n = Offset(-u.dy, u.dx), tip = pts[i];
+        c.drawPath(Path()..moveTo((tip - u * 6 + n * 4).dx, (tip - u * 6 + n * 4).dy)..lineTo(tip.dx, tip.dy)..lineTo((tip - u * 6 - n * 4).dx, (tip - u * 6 - n * 4).dy), line);
+      }
+    }
     if (met.$1 case final x?) c.drawLine(Offset(v.toScreen(Offset(x, 0)).dx, v.area.top), Offset(v.toScreen(Offset(x, 0)).dx, v.area.bottom), _line(WsT.accent));
     if (met.$2 case final y?) c.drawLine(Offset(v.area.left, v.toScreen(Offset(0, y)).dy), Offset(v.area.right, v.toScreen(Offset(0, y)).dy), _line(WsT.accent));
     if (pivots) {
@@ -158,7 +171,7 @@ class _ViewPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ViewPainter o) => o.scene != scene || o.v != v || o.sel != sel || o.hover != hover || o.grid != grid || o.safe != safe || o.part != part || o.pivots != pivots || o.met != met || o.marked != marked;
+  bool shouldRepaint(_ViewPainter o) => o.scene != scene || o.v != v || o.sel != sel || o.hover != hover || o.grid != grid || o.safe != safe || o.part != part || o.pivots != pivots || o.met != met || o.marked != marked || !identical(o.trail, trail);
 }
 
 // ---- rulers -----------------------------------------------------------------------------------------------------------
