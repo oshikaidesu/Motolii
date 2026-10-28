@@ -291,7 +291,7 @@ class DockFooter extends StatelessWidget {
                       ),
                     ] else
                       Flexible(child: Text('new layer', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g91))),
-                    if (lasts case final w?) ...[SizedBox(width: Shape.s(8)), w],
+                    if (lasts case final w?) ...[SizedBox(width: Shape.s(8)), Flexible(flex: 3, child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: w))],   // (smaller rather than cut, when the shelf is narrow)
                   ],
                 ),
               ],

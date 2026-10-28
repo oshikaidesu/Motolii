@@ -54,11 +54,17 @@ Future<void> _placeAll(DockCtx c, List<String> files) async {
 
 /// A file put on the stage as a new thing, picked. Not done: the foot of the shelf says why.
 void _place(DockCtx c, FileNode n) {
-  final m = c.ws.inside!, still = _kindOfFile(n.id) == 'picture' && _stillSeconds > 0; // (the inside makes of it what the file is; without waiting, picked once made)
-  if (still) m.later('together', number: 1);   // (made and given its length: one step)
+  final m = c.ws.inside!, still = _kindOfFile(n.id) == 'picture' && _stillSeconds > 0, cut = _kindOfFile(n.id) == 'film' ? _filmRanges[n.id] : null; // (the inside makes of it what the file is; without waiting, picked once made)
+  if (still || cut != null) m.later('together', number: 1);   // (made and given its length: one step)
   c.ws.after(m.later('add', word: n.id), (done, why) => c.set(() => done ? c.mem.trouble.remove(n.id) : c.mem.trouble[n.id] = why), (made) => c.ws.select('$made'));
-  if (still) {
-    m.later('set', thing: -1, name: 'duration', number: _stillSeconds);   // (the one just added: as long as chosen under it)
+  if (still) m.later('set', thing: -1, name: 'duration', number: _stillSeconds);   // (the one just added: as long as chosen under it)
+  if (cut case (final a, final b)) {
+    mediaSecondsOf(m.libPath, n.id).then((len) {   // (known already: the band drew it)
+      m.later('set', thing: -1, name: 'begin', number: a * len);   // (from where the band's left end is in the film)
+      m.later('set', thing: -1, name: 'duration', number: (b - a) * len);
+      c.ws.after(m.later('together'), (_, _) => c.ws.reread());
+    });
+  } else if (still) {
     c.ws.after(m.later('together'), (_, _) => c.ws.reread());
   }
 }

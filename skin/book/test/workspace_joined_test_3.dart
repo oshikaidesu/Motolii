@@ -615,6 +615,49 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a film picked on the Media shelf is cut before it is placed: the band\'s left end drawn to its middle, it plays from there (Alight Motion\'s band under a video)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    File('$motoliiDir/check/beats.mp4').copySync('${ws.documentFolder}/cut.mp4');
+    ws.shelf = 'Media';
+    await t.pumpAndSettle();
+    final folder = find.byKey(ValueKey('browser:file:${ws.documentFolder}'));
+    await t.ensureVisible(folder.first);
+    await t.tap(folder.first);
+    await t.pumpAndSettle();
+    final tile = find.byKey(ValueKey('browser:file:${ws.documentFolder}/cut.mp4'));
+    for (var i = 0; i < 20 && tile.evaluate().isEmpty; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pumpAndSettle();
+    }
+    await t.tap(tile.first);
+    await t.pump(kDoubleTapTimeout);
+    final band = find.byKey(const ValueKey('media-film-range'));
+    for (var i = 0; i < 100 && band.evaluate().isEmpty; i++) {   // (drawn once the discoverer has said its length)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump();
+    }
+    final len = await t.runAsync(() => mediaSecondsOf(m.libPath, '${ws.documentFolder}/cut.mp4')) ?? 0;
+    expect(len, greaterThan(0), reason: 'its length known');
+    final r = t.getRect(band);
+    await t.dragFrom(r.centerLeft + const Offset(1, 0), Offset(r.width / 2 - 1, 0));
+    await t.pump();
+    expect(t.widget<Text>(find.byKey(const ValueKey('media-film-said'))).data, startsWith('0:'), reason: 'the part used, in its seconds');
+    final before = m.things.length;
+    await t.tap(find.text('Place'));
+    for (var i = 0; i < 200 && (m.things.length == before || (m.value(m.things.last, 'begin', 0) ?? 0) == 0); i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    await settled(t, ws);
+    final film = m.things.last;
+    expect(m.value(film, 'begin', 0), closeTo(len / 2, len * .05), reason: 'it plays from the middle of the film: ${m.trouble}');
+    expect(m.value(film, 'duration', 0), closeTo(len / 2, len * .05), reason: 'to its end');
+    expect(m.undo(), isTrue);
+    expect(m.things.length, before, reason: 'placed and cut: one step');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a picked thing that moves shows its way on the stage, from where it begins to where it ends (Alight Motion\'s motion path)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

@@ -311,7 +311,7 @@ class _Footer extends StatelessWidget {
       done: !can && layer == null,
       doneLabel: 'Folder', // (the shelf lists only folders and files the inside can place: what cannot be placed is a folder)
       fresh: can, // (placed, it is a new thing)
-      lasts: _kindOfFile(n.id) == 'picture' ? _StillSeconds(c) : null,
+      lasts: switch (_kindOfFile(n.id)) { 'picture' => _StillSeconds(c), 'film' when m != null => _FilmRange(c, n.id, mediaSecondsOf(m.libPath, n.id)), _ => null },
       onAction: () => can ? _place(c, n) : c.ws.select(layer),
       ),
     );
@@ -339,6 +339,63 @@ class _StillSeconds extends StatelessWidget {
     ]);
   }
 }
+
+/// The part of a film used, cut before it is placed: Alight Motion's band under a video, its two ends drawn in; the
+/// stretch said in seconds of the film. Kept for that file while the shelf is open.
+class _FilmRange extends StatelessWidget {
+  const _FilmRange(this.c, this.file, this.seconds);
+  final DockCtx c;
+  final String file;
+  final Future<double> seconds;
+  @override
+  Widget build(BuildContext context) => FutureBuilder<double>(
+    future: seconds,
+    builder: (context, got) {
+      final len = got.data ?? 0;
+      if (len <= 0) return const SizedBox.shrink();   // (a length not known: all of it, as before)
+      final (a, b) = _filmRanges[file] ?? (0.0, 1.0);
+      final w = Shape.z(84);
+      String t(double f) => '${(f * len ~/ 60)}:${(f * len % 60).toStringAsFixed(1).padLeft(4, '0')}';
+      int? end;   // (the end a drag holds: the nearer when it began)
+      void to(double x) {
+        final f = (x / w).clamp(0.0, 1.0);
+        final (p, q) = _filmRanges[file] ?? (0.0, 1.0);
+        c.set(() => _filmRanges[file] = end == 0 ? (math.min(f, q - .01), q) : (p, math.max(f, p + .01)));
+      }
+      return Row(mainAxisSize: MainAxisSize.min, children: [
+        Text('use', style: T.label(Grey.g56)),
+        SizedBox(width: Shape.s(4)),
+        GestureDetector(
+          key: const ValueKey('media-film-range'),
+          onHorizontalDragStart: (d) => end = ((d.localPosition.dx / w) - a).abs() <= ((d.localPosition.dx / w) - b).abs() ? 0 : 1,
+          onHorizontalDragUpdate: (d) => to(d.localPosition.dx),
+          child: CustomPaint(size: Size(w, Shape.z(10)), painter: _RangePaint(a, b)),
+        ),
+        SizedBox(width: Shape.s(4)),
+        Text('${t(a)}–${t(b)}', key: const ValueKey('media-film-said'), style: T.label(Grey.g91)),
+      ]);
+    },
+  );
+}
+
+/// The film's whole length as a dim track, the part used bright between its two ends.
+class _RangePaint extends CustomPainter {
+  _RangePaint(this.a, this.b);
+  final double a, b;
+  @override
+  void paint(Canvas c, Size s) {
+    final p = Paint();
+    c.drawRRect(RRect.fromLTRBR(0, s.height / 2 - 2, s.width, s.height / 2 + 2, const Radius.circular(2)), p..color = Grey.g26);
+    c.drawRect(Rect.fromLTRB(a * s.width, s.height / 2 - 2, b * s.width, s.height / 2 + 2), p..color = WsT.accent);
+    for (final f in [a, b]) {
+      c.drawRRect(RRect.fromLTRBR(f * s.width - 1.5, 0, f * s.width + 1.5, s.height, const Radius.circular(1)), p..color = Grey.g95);
+    }
+  }
+  @override
+  bool shouldRepaint(_RangePaint o) => o.a != a || o.b != b;
+}
+
+final _filmRanges = <String, (double, double)>{};
 
 const _stillSteps = [0.5, 1.0, 2.0, 3.0, 5.0, 10.0, 0.0];   // (0: to the document's end)
 var _stillSeconds = 2.0;
