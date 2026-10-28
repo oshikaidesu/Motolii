@@ -6,7 +6,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
-import '../motolii.dart' show mediaInfoOf;
+import '../motolii.dart' show mediaInfoOf, mediaSecondsOf;
 import '../sets/inspector/inspector_parts.dart' show Pop;
 import '../tokens.dart';
 import 'dock_resizable.dart';

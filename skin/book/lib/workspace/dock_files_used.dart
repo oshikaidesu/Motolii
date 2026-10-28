@@ -21,6 +21,37 @@ String? _layerOf(FileNode n, DockCtx c) => _used(c.ws)[n.id];
 
 bool _inUse(FileNode n, DockCtx c) => _layerOf(n, c) != null;
 
+/// The files picked together (⌘ and a press, as Finder adds to what is picked): placed together, one after another.
+final _filesPicked = <String>{};
+
+/// The files picked together put on the stage, each a new thing from the present moment, each film as long as it plays
+/// (the discoverer's length: a film said no length lasts to the document's end), then, all of them films, laid one after
+/// another in the order picked (the inside's Stagger: Alight Motion adds several so); all of them picked. A still has no
+/// length of its own: stills are laid together.
+Future<void> _placeAll(DockCtx c, List<String> files) async {
+  final m = c.ws.inside!;
+  final lengths = await Future.wait([for (final f in files) mediaSecondsOf(m.libPath, f)]);
+  m.later('together', number: 1);
+  final made = <Future<int>>[];
+  for (final (i, f) in files.indexed) {
+    final asked = Completer<int>();
+    c.ws.after(m.later('add', word: f), (done, why) {
+      if (done) return;
+      c.set(() => c.mem.trouble[f] = why);
+      asked.complete(0);
+    }, asked.complete);
+    if (lengths[i] > 0) m.later('set', thing: -1, name: 'duration', number: lengths[i]);   // (the one just added)
+    made.add(asked.future);
+  }
+  c.ws.after(m.later('together'));
+  Future.wait(made).then((ids) {
+    final all = [for (final i in ids) if (i > 0) i];
+    if (all.length > 1 && lengths.every((s) => s > 0)) c.ws.after(m.later('time_align', word: 'stagger ${all.join(' ')}'), (_, _) => c.ws.reread());
+    c.ws.pickMany([for (final i in all) '$i']);
+    _filesPicked.clear();
+  });
+}
+
 /// A file put on the stage as a new thing, picked. Not done: the foot of the shelf says why.
 void _place(DockCtx c, FileNode n) {
   final m = c.ws.inside!; // (the inside makes of it what the file is; without waiting, picked once made)

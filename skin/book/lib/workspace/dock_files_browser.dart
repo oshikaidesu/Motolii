@@ -85,7 +85,16 @@ void _go(DockCtx c, String id) => c.set(() {
   c.mem.open.add(id);
 });
 
-void _open(FileNode n, DockCtx c) => n.folder ? _go(c, n.id) : c.pick(n.id);
+void _open(FileNode n, DockCtx c) {
+  if (n.folder) return _go(c, n.id);
+  if (DockHover.cmdAtPress && _kindOfFile(n.id).isNotEmpty) {   // (⌘: one more picked, or one less, as Finder)
+    if (_filesPicked.isEmpty && c.sel != null && _kindOfFile(c.sel!).isNotEmpty) _filesPicked.add(c.sel!);
+    _filesPicked.contains(n.id) ? _filesPicked.remove(n.id) : _filesPicked.add(n.id);
+  } else {
+    _filesPicked.clear();
+  }
+  c.pick(n.id);
+}
 
 class _Tree extends StatelessWidget {
   const _Tree(this.c);

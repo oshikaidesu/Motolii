@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'package:flutter/widgets.dart';
 
 import '../forms/forms.dart';
@@ -64,6 +65,10 @@ class DockCtx {
 /// Hover + tap, nothing else: repaints only when the pointer enters or leaves.
 class DockHover extends StatefulWidget {
   const DockHover({super.key, required this.builder, this.onTap, this.onDoubleTap});
+
+  /// Whether ⌘ was held as the last tile was pressed: read there, as the press is told only once a second press could
+  /// no longer come (a hand lets ⌘ go before that).
+  static bool cmdAtPress = false;
   final Widget Function(BuildContext context, bool hover) builder;
   final VoidCallback? onTap;
 
@@ -80,7 +85,10 @@ class _DockHoverState extends State<DockHover> {
     cursor: widget.onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
     onEnter: (_) => setState(() => _h = true),
     onExit: (_) => setState(() => _h = false),
-    child: _carried(GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onTap, onDoubleTap: widget.onDoubleTap, child: widget.builder(context, _h))),
+    child: _carried(Listener(   // (the press as it comes, before the gestures settle which it is)
+      onPointerDown: (_) => DockHover.cmdAtPress = HardwareKeyboard.instance.isMetaPressed,
+      child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onTap, onDoubleTap: widget.onDoubleTap, child: widget.builder(context, _h)),
+    )),
   );
 
   /// A tile that has an action of its own can be carried to the stage: dropped there, it does what two presses do.

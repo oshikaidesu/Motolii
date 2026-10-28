@@ -534,6 +534,45 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('two films picked with ⌘ on the Media shelf are placed together, one after another (Alight Motion\'s adding several)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    for (final n in ['one.mp4', 'two.mp4']) {
+      File('$motoliiDir/check/beats.mp4').copySync('${ws.documentFolder}/$n');
+    }
+    ws.shelf = 'Media';
+    await t.pumpAndSettle();
+    final folder = find.byKey(ValueKey('browser:file:${ws.documentFolder}'));
+    await t.ensureVisible(folder.first);
+    await t.tap(folder.first);
+    await t.pumpAndSettle();
+    Finder tile(String n) => find.byKey(ValueKey('browser:file:${ws.documentFolder}/$n'));
+    for (var i = 0; i < 20 && tile('two.mp4').evaluate().isEmpty; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pumpAndSettle();
+    }
+    await t.tap(tile('one.mp4').first);
+    await t.pump(kDoubleTapTimeout);
+    await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await t.tap(tile('two.mp4').first);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await t.pump(kDoubleTapTimeout);
+    await t.pumpAndSettle();
+    expect(find.text('Place 2'), findsOneWidget, reason: 'two picked: placed together');
+    await t.tap(find.text('Place 2'));
+    for (var i = 0; i < 200 && (m.things.length < 2 || ws.many.length < 2); i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    await settled(t, ws);   // (laid one after another once both are there)
+    ws.reread();
+    final (a, b) = (m.things[0], m.things[1]);
+    expect([m.word(a, 'file'), m.word(b, 'file')].map((f) => f.split('/').last), ['one.mp4', 'two.mp4'], reason: m.trouble);
+    expect(m.value(b, 'start', 0), closeTo((m.value(a, 'start', 0) ?? 0) + m.lasts(a), 1e-6), reason: 'the second begins as the first ends');
+    expect(ws.many, {'$a', '$b'}, reason: 'both picked');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

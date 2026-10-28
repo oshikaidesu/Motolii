@@ -65,11 +65,19 @@ Future<String?> _thumbnail(String lib, String film, [int step = 0, int steps = 1
 
 /// What a media file is, as the inside's GStreamer discoverer tells it, said for a hand: its size, its rate and length
 /// (a film), its kind ('' when it cannot be read). On another isolate: the call asks nothing of a document.
-final _mediaInfos = <String, Future<String>>{};
-Future<String> mediaInfoOf(String lib, String file) => _mediaInfos[file] ??= Isolate.run(() {
+final _mediaInfos = <String, Future<List<String>>>{};
+Future<List<String>> _mediaSaid(String lib, String file) => _mediaInfos[file] ??= Isolate.run(() {
   final from = file.toNativeUtf8();
   final said = c.MotoliiBindings(DynamicLibrary.open(lib)).motolii_media_info(from).toDartString().split(' ');
   malloc.free(from);
+  return said;
+});
+
+/// How long a media file plays, as the discoverer tells it (0: a still, or it cannot be read).
+Future<double> mediaSecondsOf(String lib, String file) async => switch (await _mediaSaid(lib, file)) { final s when s.length >= 5 => double.parse(s[3]), _ => 0 };
+
+Future<String> mediaInfoOf(String lib, String file) async {
+  final said = await _mediaSaid(lib, file);
   if (said.length < 5) return '';
   final rate = double.parse(said[2]), seconds = double.parse(said[3]);
   return [
@@ -78,7 +86,7 @@ Future<String> mediaInfoOf(String lib, String file) => _mediaInfos[file] ??= Iso
     if (seconds > 0) '${seconds.toStringAsFixed(1)} s',
     said.skip(4).join(' '),
   ].where((s) => s.isNotEmpty).join(' · ');
-});
+}
 
 class Motolii {
   Motolii._(this._lib, this._m, this.libPath, this.home);

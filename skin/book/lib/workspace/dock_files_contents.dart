@@ -162,7 +162,7 @@ class _TileState extends State<_Tile> {
 
   @override
   Widget build(BuildContext context) {
-    final c = widget.c, sel = c.sel == n.id, t = _typeOf(n.g), can = _kindOfFile(n.id).isNotEmpty;
+    final c = widget.c, sel = c.sel == n.id || _filesPicked.contains(n.id), t = _typeOf(n.g), can = _kindOfFile(n.id).isNotEmpty;
     return DockHover(
       key: ValueKey('browser:file:${n.id}'),
       onTap: () => _open(n, c),
@@ -297,6 +297,9 @@ class _Footer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // A file the inside can show is placed (as often as wanted, each a new thing from the present moment); one in use says so.
+    if (_filesPicked.length > 1) {   // (several picked: placed together)
+      return DockFooter(title: '${_filesPicked.length} files', meta: 'Placed one after another, in the order picked', action: 'Place ${_filesPicked.length}', fresh: true, onAction: () => _placeAll(c, _filesPicked.toList()));
+    }
     final layer = _layerOf(n, c), can = _kindOfFile(n.id).isNotEmpty, m = c.ws.inside;
     return FutureBuilder<String>(   // (what the media is, as GStreamer's discoverer tells it: Alight Motion's Media Info; its file's kind and size until then)
       future: can && m != null ? mediaInfoOf(m.libPath, n.id) : null,
