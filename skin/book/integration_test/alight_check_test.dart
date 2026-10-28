@@ -154,7 +154,12 @@ final _rowsS = <(String, String, Map<String, Object>)>[
   for (final n in const ['threshold', 'mosaic', 'grid', 'dissolve', 'dots', 'palettemap'])
     (n, 'effects/am_$n.wgsl', const {}),
 ];
-final _rows = switch (_section) { 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+// (section S2: the next shelf effects whose head defaults are not the unchanged picture)
+final _rowsS2 = <(String, String, Map<String, Object>)>[
+  for (final n in const ['wavewarp', 'directionalblur', 'gradientmap', 'radialblur', 'hexagontiling', 'flicker'])
+    (n, 'effects/am_$n.wgsl', const {}),
+];
+final _rows = switch (_section) { 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
