@@ -310,6 +310,24 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a layer\'s label colour chosen on the Note card: its row wears it, auto gives it back its own (Ableton Live\'s clip colours, Alight Motion\'s label colour)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$rect');
+    await t.pumpAndSettle();
+    final own = ws.layers.firstWhere((l) => l.id == '$rect').tone;
+    await seen(t, find.byWidgetPredicate((w) => w is Chooser && w.id == 'v_label'));   // (the Note card, the last)
+    await pick(t, 'v_label', 'red');
+    expect(m.word(rect, 'label'), 'red', reason: m.trouble);
+    expect(ws.layers.firstWhere((l) => l.id == '$rect').tone, const Color(0xFFFF3636), reason: 'its row in Live\'s red');
+    await pick(t, 'v_label', 'auto');
+    expect(ws.layers.firstWhere((l) => l.id == '$rect').tone, own, reason: 'its own again');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Arrange: lined up on the picture, against their own box, spread evenly; made to fit the picture; turned over (Keynote\'s Align, Alight Motion\'s Fit and Flip)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final a = m.add('shape', 'rect'), b = m.add('shape', 'rect'), c = m.add('shape', 'rect');

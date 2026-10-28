@@ -76,9 +76,12 @@ enum WsKind { shape, text, image, camera, group, particles, audio }
 /// neighbours differ, the same each time the document is opened; its row, its dot on the Relations map, its frame on
 /// the stage and its name in a list wear it, so a photo or a model is told apart as well as a red dot. A skin may say
 /// each (Label1 ... Label16).
+/// The colours chosen on the Note card (the document's label: its place among Live's colours), read with the document.
+final wsChosenLabels = <String, int>{};
+
 Color wsLabel(String id) {
   const live = [0xFFFF94A6, 0xFFFFA529, 0xFFF7F47C, 0xFFBFFB00, 0xFF1AFF2F, 0xFF25FFA8, 0xFF5CFFE8, 0xFF8BC5FF, 0xFF5480E4, 0xFF92A7FF, 0xFFD86CE4, 0xFFE553A0, 0xFFFF3636, 0xFFF66C03, 0xFF10A4EE, 0xFF00BFAF];   // (Ableton Live's clip colours)
-  final k = ((int.tryParse(id) ?? 0) * 5) % live.length;
+  final k = wsChosenLabels[id] ?? ((int.tryParse(id) ?? 0) * 5) % live.length;
   return ColorTheme.of('Label${k + 1}', Color(live[k]));
 }
 

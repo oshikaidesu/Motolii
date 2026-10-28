@@ -259,7 +259,7 @@
 - [x] レイヤーを左右・上下に反転：Arrange > Flip Horizontal・Flip Vertical（scale_x か scale_y を −1 倍、キーも一緒に） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 画面に合わせる（Fit・Fill・Stretch）：Arrange > Fit to Picture・Fill Picture・Stretch to Picture（見えている箱を絵に合わせ、真ん中を絵の真ん中に） — 済（10/28）：窓の試験
 - [ ] クリッピングマスクを作る
-- [ ] レイヤーのラベルの色
+- [x] レイヤーのラベルの色：Note カードの Label colour（Ableton Live のクリップの 16 色と auto）。選ぶと時間軸の行・関係の図・舞台の枠が同じ色に。文書の値なので取り消しも複製も効く — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [ ] 塗りの種類 4 つ（なし・単色・グラデーション・メディア）
 - [ ] メディアで塗る
 - [ ] 色：スポイト、小さいピッカー、パレット、自分の色を足す

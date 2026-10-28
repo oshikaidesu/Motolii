@@ -125,6 +125,9 @@ class Ws extends ChangeNotifier {
     rev++;
     reads++;
     duration = Timeline.timeSync('MARK seconds', () => (m.seconds * fps).round().clamp(1, 1 << 20));
+    wsChosenLabels
+      ..clear()
+      ..addAll({for (final t in m.things) if (m.words(t, 'label').indexOf(m.word(t, 'label')) case final i when i > 0) '$t': i - 1});
     final tl = TimelineTask()..start('MARK layers');
     layers
       ..clear()

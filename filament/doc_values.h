@@ -118,7 +118,7 @@ static const DocShown doc_shown[] = {
     {"rotate", "angle", "°", "Rotation", -180, 180, nullptr}, {"rotate_x", "angle", "°", "X Rotation", -180, 180, nullptr}, {"rotate_y", "angle", "°", "Y Rotation", -180, 180, nullptr},
     {"opacity", "share", "%", "Opacity", 0, 1, nullptr},
     {"blend", "", "", "Blend", 0, 0, nullptr}, {"clip", "onoff", "", "Clip to below", 0, 1, nullptr},
-    {"orient", "onoff", "", "Auto-orient", 0, 1, nullptr}, {"note", "words", "", "Note", 0, 0, nullptr},
+    {"orient", "onoff", "", "Auto-orient", 0, 1, nullptr}, {"note", "words", "", "Note", 0, 0, nullptr}, {"label", "", "", "Label colour", 0, 0, nullptr},
     {"distance", "", "px", "Distance", 0.05, 4, nullptr}, {"zoom", "share", "%", "Zoom", 0.1, 4, nullptr},
     {"anchor_x", "", "%", "Anchor X", -1, 1, "Anchor"}, {"anchor_y", "", "%", "Anchor Y", -1, 1, "Anchor"}, {"anchor_z", "", "%", "Anchor Z", -1, 1, "Anchor"},
     {"parent", "thing", "", "Parent", 0, 0, nullptr},
@@ -327,7 +327,7 @@ static const DocCard doc_cards[] = {
     {"Follow", "strength leader lag leader_b hand", "file", "follow"},
     {"Push", "strength leader radius", "file", "push"},
     {"Group", "strength lag x y spread scatter rotate rotate_y size opacity", "file", "group"},   // (things in an order and nothing else: away by its own move, turn, size and opacity, each in turn)
-    {"Note", "note"},   // (what a maker wrote of it: After Effects' layer comment)
+    {"Note", "label note"},   // (what a maker wrote of it: After Effects' layer comment)
     {"Trim Paths", "trim trim_begin trim_offset", "trim", "+"},
     {"Datamosh", "mosh_with mosh_at", "mosh", "+"},
     {"Points", "dissolve grain", "file", "~.ply"},   // (a point cloud's own: points.h)   // (the film's own compressed pictures, mosh.h)   // (After Effects' shape operator: added from the shelf)
