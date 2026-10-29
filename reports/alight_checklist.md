@@ -239,10 +239,10 @@
 - [x] 書き出し：今のコマを PNG：File メニューの Export Frame・⇧E（Premiere Pro と同じ）。再生位置の絵を文書の隣に「文書名_コマ.png」で — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 書き出し：画像の連番（PNG / JPEG、解像度、fps、画質）：書き出しの箱の Format の PNG・JPEG（名前_0001 から 1 枚ずつ）、Resolution・Rate の行が効く。JPEG の画質は ffmpeg の -q:v 2（決まり） — 済（10/28）：`check/film_way.sh`、窓の試験（`workspace_render_dialog_test.dart`）
 - [ ] 書き出し：プロジェクトを素材ごと包んで共有（リンク）（一部）：File › Package Project で書類と素材を 1 つのフォルダに（10/28）。リンクは無い
-- [ ] 書き出し：テンプレートとしても書き出す
+- [x] 書き出し：テンプレートとしても書き出す — 持ち込まない（10/29）：型の仕組みは足さない。人に渡すのは File › Package Project（書類と素材を 1 つのフォルダに、別の所で開ける：check の「a document packed opens elsewhere whole」）、自分の型はホームの ••• › Duplicate（「名前 Copy」）で足りる。表現を使い回す単位は動画まるごとではなく、棚の Elements（Alight Motion の My Elements：motolii_shelves.dart の elements）
 - [x] プロジェクト一覧：カードに長さ・縦横比・解像度・大きさ・fps、日付の見出し — 済（10/29）：⌘O・File › Projects… で、開いている書類と同じフォルダの書類を、PC の CapCut のホームの並べ方（横いっぱいの New Project、検索、正方形の絵の格子、下に名前と「容量 | 長さ」）に、AbsentMotion のホーム（HomeScreen.kt、Apache-2.0）の中身で：縦横比と短辺（16:9・1080p、名前の無い形は 1080x1350）、容量（formatBytes）、fps（書類の frame_rate）、最後に変えた日の見出し（d MMMM yyyy、新しい順）。絵と大きさ・長さは一覧を開くときや窓を閉じるときに自分の中にしまった物（motolii_poster、AbsentMotion の saveThumbnail：閉じるときの再生ヘッドのコマ、256）を開かずに読む（motolii_doc_facts）。窓の試験（`workspace_joined_test_3.dart` の ⌘O lists the documents）
 - [ ] プロジェクト一覧：並べ替え（名前・日付）、選ぶ・書き出す・複製・消す（一部）：並べ替え（Date・Name、AbsentMotion の ListHeader）、押して開く、•••で開く・複製（「名前 Copy」、AbsentMotion の edit_layer_copy_name）・ゴミ箱へ（聞いてから、~/.Trash へ移すので戻せる。開いている書類には出さない）— 済（10/29、窓の試験）。まだ：一覧からの書き出し（今は開いてから File › Package Project）
-- [ ] プロジェクト一覧：Templates・Elements のタブ、XML を読み込む
+- [ ] プロジェクト一覧：Templates・Elements のタブ、XML を読み込む（一部）：Templates のタブは持ち込まない（242 と同じ）。Elements は棚の My Elements に有る。まだ：Alight Motion の XML を読む。手掛かり：AbsentMotion の `assets/effects/foreign.json`（Alight Motion の効果の名前 180 個を AbsentMotion の効果に対応させる表、Apache-2.0）。その先の効果は棚に am_* として有る
 - [ ] 環境設定：低画質のプレビュー、既定のレイヤーの長さ、音の変換の質（一部）：低画質のプレビューは設定でなく、再生中に描くのが間に合わない時に内側が自動で縮めて描く（Filament の dynamic resolution と同じ考え、止まると元の大きさ：motolii_hand.h の stage_scale）。まだ：既定のレイヤーの長さ（今は書類の終わりまで）、音の変換の質 — 既定のレイヤーの長さも（10/29）：大きさの箱（書類の設定）に New layer length（End と 1〜60 秒、AbsentMotion の設定の New Layer Length と同じ並び：AppSettings.LAYER_DURATIONS）。決めると後から置く図形・文字・写真・手描きがその長さになる（グループの Null と動画は除く、doc_add）。Motolii に環境設定の画面が無いので書類ごとの値。まだ：音の変換の質
 - [x] 取り消し・やり直しが常に画面にある：上の帯の左右の矢印（押すと 1 歩戻る・進む） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 全部のレイヤーを選ぶ：⌘A（Edit メニューの Select All） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
