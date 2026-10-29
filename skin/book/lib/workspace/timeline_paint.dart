@@ -283,7 +283,12 @@ class WtTracksPainter extends CustomPainter {
     final notch = ink.withAlpha(r.selected ? 200 : 120);
     c.drawRect(Rect.fromLTWH(x0 + 2, bar.top + 4, 1.5, bar.height - 8), p..color = notch);
     c.drawRect(Rect.fromLTWH(x1 - 3.5, bar.top + 4, 1.5, bar.height - 8), p..color = notch);
-    if (r.frames case final f? when f.isNotEmpty) {   // (each picture filling its part of the bar, its middle kept: a strip of frames, as Alight Motion's)
+    if (r.frames case final f? when f.length == 1) {   // (a photo: itself again and again along the bar at its own shape, as Alight Motion's photo bar)
+      final im = f.single, step = math.max(4.0, bar.height * im.width / math.max(1, im.height));
+      for (var x = bar.left + 5; x < bar.right - 5; x += step) {
+        paintImage(canvas: c, rect: Rect.fromLTWH(x, bar.top, step, bar.height), image: im, fit: BoxFit.cover, opacity: r.dim ? .35 : .8, filterQuality: FilterQuality.low);
+      }
+    } else if (r.frames case final f? when f.isNotEmpty) {   // (each picture filling its part of the bar, its middle kept: a strip of frames, as Alight Motion's)
       final step = (bar.width - 10) / f.length;
       for (final (i, im) in f.indexed) {
         final at = Rect.fromLTWH(bar.left + 5 + i * step, bar.top, step, bar.height);

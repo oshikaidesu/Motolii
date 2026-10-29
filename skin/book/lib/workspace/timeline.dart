@@ -341,6 +341,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   final _framesAsked = <String, Object>{};
   List<ui.Image>? _framesOf(Ws ws, WsLayer l) {
     final m = ws.inside, t = int.tryParse(l.id);
+    if (m != null && t != null && m.word(t, 'kind') == 'picture') return _stillOf(m.whole(m.word(t, 'file')), l.id);
     if (m == null || t == null || m.word(t, 'kind') != 'film') return null;
     final file = m.whole(m.word(t, 'file')), begin = m.value(t, 'begin', 0) ?? 0, speed = m.value(t, 'speed', 0) ?? 1, start = m.value(t, 'start', 0) ?? 0;
     final key = (file, begin, speed, start, l.inF, l.outF);
@@ -357,6 +358,24 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
       });
     }
     return _frames[l.id]?.$2;
+  }
+
+  // A photo on its bar: itself, read once small (as tall as a bar needs), laid along the bar again and again as
+  // Alight Motion's photo bar is (reports/alight_ui.md: タイムラインの絵); one Flutter cannot read: none.
+  List<ui.Image>? _stillOf(String file, String id) {
+    if (_frames[id] case (final k, final f) when k == file) return f;
+    if (_framesAsked[id] != file) {
+      _framesAsked[id] = file;
+      () async {
+        try {
+          final read = (await (await ui.instantiateImageCodec(await File(file).readAsBytes(), targetHeight: 48)).getNextFrame()).image;
+          if (mounted) setState(() => _frames[id] = (file, [read]));
+        } catch (_) {
+          if (mounted) setState(() => _frames[id] = (file, null));
+        }
+      }();
+    }
+    return _frames[id]?.$2;
   }
 
   final _waves = <String, (int, int, int, List<double>?)>{};   // (thing: document read, from, to, loudness a frame)

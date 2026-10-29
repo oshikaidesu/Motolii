@@ -182,6 +182,21 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('a photo\'s bar shows the photo along it, as Alight Motion\'s photo bar (its own picture, read small)', (t) async {
+    final j = _joined(), m = j.ws.inside!;
+    m.add('picture', '$motoliiDir/fx_sample.jpg');
+    j.ws.reread();
+    await _pump(t, j.ws);
+    final tracks = find.byWidgetPredicate((w) => w is CustomPaint && w.painter is WtTracksPainter);
+    WtRow row() => (t.widget<CustomPaint>(tracks).painter! as WtTracksPainter).rows.firstWhere((r) => r.lane == null && r.name == 'fx_sample.jpg');
+    for (var i = 0; i < 100 && row().frames == null; i++) {   // (read on Flutter's own decoder: waited for in real time)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await t.pump();
+    }
+    expect([row().frames?.length, row().frames?.single.height], [1, 48], reason: 'one picture, 48 high, laid along the bar again and again');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
   testWidgets('the transport steps and the zoom buttons', (t) async {
     final j = _joined();
     await _pump(t, j.ws);
