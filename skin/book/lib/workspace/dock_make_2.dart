@@ -507,7 +507,7 @@ void _make(DockCtx c, _Make tile) {
   }
   final asked = _asked[name]!;
   m.later('together', number: 1);   // (one step: the thing and its inks)
-  c.ws.after(m.later('add', name: asked.$1, word: asked.$2), null, (made) => c.ws.select('$made'));   // (without waiting: picked once made)
+  c.ws.after(m.later('add', name: asked.$1, word: asked.$1 == 'text' ? c.ws.bodyFace : asked.$2), null, (made) => c.ws.select('$made'));   // (without waiting: picked once made; a text in the body's font)
   wsInked(c.ws, asked.$1, asked.$2);
   c.ws.after(m.later('together'), (done, why) => c.set(() => done ? c.mem.trouble.remove(name) : c.mem.trouble[name] = why));
 }

@@ -239,7 +239,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
     final before = m.things.length;
     m.later('together', number: 1);
     var made = 0;
-    ws.after(m.later('add', name: kind == 'text' ? '' : 'shape', word: kind == 'text' ? wsTextFont : kind), null, (t) => made = t);   // (a text in the font the Create shelf's Text has)
+    ws.after(m.later('add', name: kind == 'text' ? '' : 'shape', word: kind == 'text' ? ws.bodyFace : kind), null, (t) => made = t);   // (a text in the body's font, as a text box is in PowerPoint's Body font)
     m
       ..later('set', thing: -1, name: 'x', number: x)
       ..later('set', thing: -1, name: 'y', number: y);

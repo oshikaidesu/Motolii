@@ -51,6 +51,13 @@ class Ws extends ChangeNotifier {
   /// the ink's colours are mixed when it is a gradient (gradient_blend; '': sRGB).
   String ink = '', edge = '', inkBlend = '';
 
+  /// The fonts a title and a body text are set in as they are added, and which of the two the Fonts shelf sets now:
+  /// PowerPoint's theme fonts (Headings and Body, a text box in Body), Canva's brand fonts (a heading's, a body's).
+  /// '': the usual one (golf_noise.md ㉚). Kept by the window while it is open (engine_needs.md E4: in the document).
+  String titleFont = '', bodyFont = '', fontRole = 'title';
+  String get bodyFace => bodyFont.isEmpty ? wsTextFont : bodyFont;
+  String get titleFace => titleFont.isEmpty ? bodyFace : titleFont;
+
   String? _notice;
   String? get notice => _notice;
   set notice(String? said) {

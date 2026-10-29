@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 
 import '../tokens.dart';
+import 'desk_kit.dart' show DeskChip;
 import 'dock_files.dart' show dockRead;
 import 'dock_parts.dart';
 import 'dock_tags.dart';
@@ -85,6 +86,74 @@ void _setFont(DockCtx c, _Font f) {
   c.ws.after(m.later('together'), told);
 }
 
+/// With no text picked, a font pressed is the font of the role the shelf sets now (one press, as a colour pressed
+/// colours on the Colors shelf); a picked text's own font is set as before, by two presses or Apply.
+void _toRole(DockCtx c, _Font f) {
+  final m = c.ws.inside, t = int.tryParse(c.ws.selected ?? '');
+  if (m == null || f.path == null || (t != null && m.word(t, 'kind') == 'text')) return;
+  _used(f.family);
+  c.set(() => c.ws.fontRole == 'body' ? c.ws.bodyFont = f.path! : c.ws.titleFont = f.path!);
+}
+
+/// A new text in a role's font, at the playhead, in the inks, picked: Canva's Add a heading, Add a little bit of body text.
+void _addIn(DockCtx c, String font) {
+  final m = c.ws.inside!;
+  m.later('together', number: 1);   // (one step: the text and its inks)
+  c.ws.after(m.later('add', name: 'text', word: font), null, (made) => c.ws.select('$made'));
+  wsInked(c.ws, 'text', '');
+  c.ws.after(m.later('together'), (done, why) => c.set(() => done ? c.mem.trouble.remove('role') : c.mem.trouble['role'] = why));
+}
+
+/// The two fonts a title and a body text are set in, first on the shelf as PowerPoint's Headings and Body theme fonts are
+/// first in its list of fonts (and as Canva's brand fonts, a heading's and a body's): with no text picked, a press on one
+/// says which role a font pressed now is for; with a text picked, it puts that role's font on it (Canva's brand text
+/// styles); its + adds a text in it (golf_noise.md ㉚, P04).
+class _Roles extends StatelessWidget {
+  const _Roles(this.c, this.fonts);
+  final DockCtx c;
+  final List<_Font> fonts;
+  @override
+  Widget build(BuildContext context) {
+    final m = c.ws.inside!, t = int.tryParse(c.ws.selected ?? ''), onText = t != null && m.word(t, 'kind') == 'text';
+    Widget role(String r, String label, String face) {
+      final f = fonts.where((f) => f.path == face).firstOrNull ?? _Font(face.split('/').last.replaceFirst(RegExp(r'\.[^.]*$'), ''), path: face);
+      final on = !onText && c.ws.fontRole == r;
+      return Expanded(
+        child: DockHover(
+          key: ValueKey('font-role-$r'),
+          onTap: () => onText ? c.ws.after(m.later('say', thing: t, name: 'file', word: face)) : c.set(() => c.ws.fontRole = r),
+          builder: (context, h) => Container(
+            height: Shape.z(46),
+            padding: EdgeInsets.only(left: Shape.s(8), right: Shape.s(4)),
+            color: dockFill(on, h, WsT.card),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(label, style: T.label(dockInk(on, Grey.g63))),
+                      SizedBox(height: Shape.s(2)),
+                      Text(f.family, maxLines: 1, overflow: TextOverflow.ellipsis, style: _face(f, 14, dockInk(on, Grey.g95))),
+                    ],
+                  ),
+                ),
+                DeskChip(key: ValueKey('font-add-$r'), label: '+', onTap: () => _addIn(c, face)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: WsT.gutter),
+      child: Row(children: [role('title', 'Title', c.ws.titleFace), SizedBox(width: WsT.gutter), role('body', 'Body', c.ws.bodyFace)]),
+    );
+  }
+}
+
 const _sample = 'Motion for more relations';
 
 class FontsShelf extends StatelessWidget {
@@ -126,6 +195,7 @@ class FontsShelf extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _Roles(c, fonts),
         DockChips(
           [
             ('All', hits.length),
@@ -208,7 +278,10 @@ class _FontRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final sel = c.sel == f.family, star = c.starred(f.family);
     return DockHover(
-      onTap: () => c.pick(f.family),
+      onTap: () {
+        c.pick(f.family);
+        _toRole(c, f);
+      },
       onDoubleTap: () => _setFont(c, f),   // (two presses set it; carried to the stage it does the same)
       builder: (context, h) => AnimatedContainer(
         duration: Mo.dur,
@@ -255,7 +328,10 @@ class _FontCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final sel = c.sel == f.family, star = c.starred(f.family);
     return DockHover(
-      onTap: () => c.pick(f.family),
+      onTap: () {
+        c.pick(f.family);
+        _toRole(c, f);
+      },
       onDoubleTap: () => _setFont(c, f),
       builder: (context, h) => AnimatedContainer(
         duration: Mo.dur,

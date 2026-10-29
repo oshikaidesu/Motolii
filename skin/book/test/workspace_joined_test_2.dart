@@ -79,6 +79,61 @@ void _tests2() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('P04: a title\'s font and a body\'s, kept for the texts added next (PowerPoint\'s theme fonts, Canva\'s brand fonts: golf_noise.md ㉚)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    fontRecentAt(File('${Directory.systemTemp.createTempSync('fonts').path}/font_recent.json'));   // (not the maker's own list)
+    await t.runAsync(() => fontsRead(ws));
+    ws
+      ..reread()
+      ..select(null)
+      ..shelf = 'Fonts';
+    await t.pumpAndSettle();
+    Future<void> press(String family) async {   // (one press on its row, past a double press's wait)
+      final row = find.descendant(of: find.byType(FontsShelf), matching: find.textContaining('$family  ·')), list = find.descendant(of: find.byType(FontsShelf), matching: find.byType(Scrollable)).last;
+      t.state<ScrollableState>(list).position.jumpTo(0);   // (from the top: the list is in the families' order)
+      await t.pump();
+      await t.scrollUntilVisible(row, 300, scrollable: list, maxScrolls: 200);
+      await t.pumpAndSettle();
+      await t.tap(row.first);
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pumpAndSettle();
+    }
+    Future<int> added(String? was) async {
+      await settled(t, ws);
+      for (var i = 0; i < 200 && ws.selected == was; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+        await t.pump();
+      }
+      return int.parse(ws.selected!);
+    }
+    await t.tap(find.byKey(const ValueKey('font-role-title')));
+    await t.pumpAndSettle();
+    await press('Arial Black');
+    await t.tap(find.byKey(const ValueKey('font-role-body')));
+    await t.pumpAndSettle();
+    await press('Andale Mono');
+    expect([ws.titleFont, ws.bodyFont], [endsWith('/Arial Black.ttf'), endsWith('/Andale Mono.ttf')], reason: 'nothing picked: a role pressed, then its font, two presses each');
+    await t.tap(find.byKey(const ValueKey('font-add-title')));
+    final title = await added(null);
+    expect(m.word(title, 'file'), endsWith('/Arial Black.ttf'), reason: 'the title\'s + adds a text in its font (Canva\'s Add a heading)');
+    ws
+      ..select(null)
+      ..shelf = 'Create';
+    await t.pumpAndSettle();
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Text');
+    await t.pumpAndSettle();
+    await doubleTap(t, find.descendant(of: find.byType(CreateShelf), matching: find.text('Text')).last);
+    final body = await added(null);
+    expect(m.word(body, 'file'), endsWith('/Andale Mono.ttf'), reason: 'a text added as it usually is comes in the body\'s font (PowerPoint\'s text box)');
+    ws.shelf = 'Fonts';
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('font-role-title')));   // (a text picked: the role's font put on it, Canva's brand text style)
+    await settled(t, ws);
+    expect(m.word(body, 'file'), endsWith('/Arial Black.ttf'));
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Stroke in the inspector is the edge of a flat shape or a text: a colour, None, and a width', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect'), cube = m.add('solid', 'cube');
