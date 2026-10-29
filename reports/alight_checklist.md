@@ -199,7 +199,7 @@
 - [x] 図形・文字・画像・動画・音のレイヤー（有る）：film・picture・text・shape（音は film） — 済：窓の試験（`workspace_joined_test_2.dart` の Create・Media の棚）
 - [x] ベクター描画（ペン）（有る）：いま ペン（Skia でパスを読む） — 済：窓の試験（`workspace_joined_test_2.dart`：押した所に点、最初の点で閉じる、10/28）
 - [x] **手描き（フリーハンド）**（無い→有る）：段の道具の Brush（B、Photoshop・After Effects のブラシのキー）。なぞった道を perfect-freehand（MIT、Steve Ruiz、Dart 版 Adil Hanney）が輪郭にし、閉じたパスの形 1 つに（中点を通る 2 次曲線、perfect-freehand の見本どおり）。太さは Thin・Medium・Thick、色はインク（無ければ白）。1 回で取り消せる — 済（10/28）：窓で Brush でなぞり、文書から読んで確かめた（`skin/book/test/workspace_joined_test_2.dart`）
-- [ ] グループ（一部）：いま 関係の group（並びだけ）
+- [x] グループ（一部→有る）：いま 関係の group（並びだけ） — 済（10/29）：物のメニューの Group（選んだ物をその真ん中の Null の子にする、1 手）・Group and Mask・Group and Exclude・Ungroup。グループを動かす・回すと中身がついて行く（親子づけ）。グループの不透明度と表示の入り切りも中身全体に効くようにした（Alight Motion のグループと同じ。Null は自分では何も描かないので、その不透明度は中身のもの：`filament/doc_relations.h` の doc_group_opacity）。edit.sh で四角と円をグループにし、グループの不透明度 0.4 で中身が 255 → 170（リニアの 0.4）、隠すと中身も消える
 - [ ] **Elements**（使い回す部品、元とつながる、文字だけ差し替え、Intro・Outro と Freeze・Stretch・Loop の伸ばし方）（無い）
 - [x] ヌル（有る）：いま 形の null — 済：窓の試験（`workspace_joined_test_2.dart` の Create：Null）
 - [x] カメラ（Z、ズーム距離・画角、焦点ぼけ、フォグ）（有る）：いま camera の distance・zoom・focus・aperture、段の fog — 済：窓の試験（`workspace_joined_test_2.dart`、`workspace_desk_test.dart`）、`check/fog_near.sh`

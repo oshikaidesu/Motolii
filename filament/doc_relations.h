@@ -260,6 +260,15 @@ static bool doc_shutter(Doc& d, int thing, double now, double* open, bool* moves
     const double begins = doc_literal(d, thing, "start", 0, 0), lasts = doc_literal(d, thing, "duration", 0, -1);
     return absent_shutter(doc_absent_on(d, thing, now), thing, 1000.0 * begins, 1000.0 * (begins + (lasts > 0 ? lasts : doc_seconds(d))), 1000.0 * now, 60, open, moves);
 }
+// How a thing's groups leave it (Alight Motion's group: its opacity and whether it is shown hold for all it holds): the
+// Nulls it goes with, up to the top (a Null draws nothing of its own, so its opacity is its group's), their opacities
+// one into another; 0 if one of them is hidden. 1 with none.
+static double doc_group_opacity(Doc& d, int thing, double now) {
+    double k = 1.0;
+    for (int up = (int)doc_number(d, thing, "parent", 0, 0), n = 0; up && n < 64 && k > 0.0; up = (int)doc_number(d, up, "parent", 0, 0), ++n)
+        if (doc_word(d, up, "shape") == "null") k *= doc_number(d, up, "visible", 0, 1) > 0.5 ? std::clamp(doc_number(d, up, "opacity", now, 1), 0.0, 1.0) : 0.0;
+    return k;
+}
 // A thing's opacity as AbsentMotion's opacity effects on it leave it (a share, 1 with none: absent_motion.h).
 static double doc_absent_opacity(Doc& d, int thing, double now) {
     if (doc_word(d, thing, "fx").find(".am") == std::string::npos) return 1.0;
