@@ -37,6 +37,7 @@
 | `BandA` `BandB` | 行の縞（交互） |
 | `RowLine` | 行の間の線 |
 | `Clip1` `Clip2` `Clip3` `Clip4` `Clip5` `Clip6` `Clip7` | 層の種類の色：1 形、2 文字、3 画像・動画、4 カメラ、5 グループ、6 粒子、7 音。タイムラインの帯のほか、その種類の札や印（Camera パネルの「Camera」の札は 4、作る棚の印）にも使う。選んでいない帯はこの色を少し地の色へ寄せて描く。帯の上の文字は `ControlOnForeground` |
+| `ElementMark` | 部品（Element）のイントロの終わり・アウトロの始まりの印：選んだグループのルーラーの上の小さな三角（Alight Motion の黄色い印） |
 | `Keyframe` | キーの印 |
 
 ### 差し色
