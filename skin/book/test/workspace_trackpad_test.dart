@@ -29,7 +29,7 @@ Future<void> _pump(WidgetTester t, Ws ws, Size size, Widget seat) async {
   await t.pumpWidget(
     WidgetsApp(
       color: const Color(0xFF000000),
-      builder: (_, _) => WsScope(ws: ws, child: Align(alignment: Alignment.topLeft, child: SizedBox(width: size.width, height: size.height, child: seat))),
+      builder: (_, _) => WsScope(ws: ws, child: Align(alignment: Alignment.topLeft, child: SizedBox(width: size.width, height: size.height, child: Overlay(initialEntries: [OverlayEntry(builder: (_) => seat)])))),   // (the window brings its own overlay: workspace.dart)
     ),
   );
   await t.pumpAndSettle();

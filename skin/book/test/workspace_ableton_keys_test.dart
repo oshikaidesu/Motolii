@@ -3,7 +3,7 @@
 // between rows; Cmd+R renames in the row; Cmd+L loops; + and - zoom, Z zooms to what is picked and X goes back.
 import 'dart:io';
 
-import 'package:flutter/gestures.dart' show kSecondaryButton;
+import 'package:flutter/gestures.dart' show kSecondaryButton, PointerDeviceKind;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,7 +33,7 @@ Future<void> _pump(WidgetTester t, Ws ws) async {
   await t.binding.setSurfaceSize(_size);
   await t.pumpWidget(WidgetsApp(
     color: const Color(0xFF000000),
-    builder: (_, _) => WsScope(ws: ws, child: Align(alignment: Alignment.topLeft, child: SizedBox(width: _size.width, height: _size.height, child: WsTimeline()))),
+    builder: (_, _) => WsScope(ws: ws, child: Align(alignment: Alignment.topLeft, child: SizedBox(width: _size.width, height: _size.height, child: Overlay(initialEntries: [OverlayEntry(builder: (_) => WsTimeline())])))),   // (the window brings its own overlay: workspace.dart)
   ));
   await t.pumpAndSettle();
 }
@@ -164,31 +164,72 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
-  testWidgets('locators as Live\'s: a right click puts one, a click goes to it and picks it, Cmd+R names it', (t) async {
+  testWidgets('locators as Live\'s, by the mouse alone: the ruler\'s right-click menu adds one, a click goes to it and picks it, its own menu names it, carried it keeps where it was taken, the Marker button sets and takes away', (t) async {
     final j = _joined(), ws = j.ws, does = wsAbletonCommands(ws);
     await _pump(t, ws);
-    final y = WtM.header + WtM.ruler - 6;
-    await t.tapAt(Offset(600, WtM.header + WtM.ruler - 6), buttons: kSecondaryButton);
-    await t.pumpAndSettle();
-    ws.reread();
-    expect(ws.marks.length, 1, reason: 'a right click adds a locator');
+    Future<void> menu(Offset at, String item) async {
+      await t.tapAt(at, buttons: kSecondaryButton);
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(ValueKey('ws-menu-$item')));
+      await t.pumpAndSettle();
+      ws.reread();
+    }
+    await menu(Offset(600, WtM.header + WtM.ruler - 6), 'Add Marker');
+    expect(ws.marks.length, 1, reason: 'the ruler\'s menu adds a locator (6.4: Add Locator in the scrub area\'s context menu)');
     final (at, name) = ws.marks.single;
     expect(name, 'M1');
+    expect(wsMarkPicked.value, ws.marks.single, reason: 'picked once added');
     ws.frame = 0;
-    final flagX = 600.0 + 3;   // (on its flag, just right of where it stands)
+    final flag = Offset(600.0 + 3, WtM.header + WtM.band + 6);   // (on its flag, just right of where it stands)
     await t.pump(const Duration(seconds: 1));
-    await t.tapAt(Offset(flagX, WtM.header + WtM.band + 6));
+    await t.tapAt(flag);
     await t.pump(const Duration(milliseconds: 400));
     expect(ws.frame, (at * Ws.fps).round(), reason: 'a click on the flag goes there');
     expect(wsMarkPicked.value, isNotNull, reason: 'and picks it');
-    does['thing.rename']!();
-    await t.pumpAndSettle();
+    await menu(flag, 'Rename…');
+    final words = t.widget<EditableText>(find.byKey(const ValueKey('ws-tl-mark-name'))).controller;
+    expect(words.selection, const TextSelection(baseOffset: 0, extentOffset: 2), reason: 'its words picked: what is typed takes their place (Final Cut Pro\'s marker)');
     await t.enterText(find.byKey(const ValueKey('ws-tl-mark-name')), 'Drop');
     await t.testTextInput.receiveAction(TextInputAction.done);
     await t.pumpAndSettle();
     ws.reread();
-    expect(ws.marks.single.$2, 'Drop', reason: 'Cmd+R names the picked locator');
-    expect(y, greaterThan(0));
+    expect(ws.marks.single.$2, 'Drop', reason: 'the flag\'s menu names it');
+    Future<double> carry(Offset from) async {   // (20 points to the right, then put back)
+      final g = await t.startGesture(from, kind: PointerDeviceKind.mouse);
+      await t.pump();
+      for (var i = 1; i <= 4; i++) {
+        await g.moveBy(const Offset(5, 0));
+        await t.pump();
+      }
+      await g.up();
+      await t.pumpAndSettle();
+      ws.reread();
+      final moved = (ws.marks.single.$1 - at) * Ws.fps;
+      ws.inside!.undo();
+      await t.pumpAndSettle();
+      ws.reread();
+      return moved;
+    }
+    final nearLine = await carry(flag), farRight = await carry(flag + const Offset(14, 0));
+    expect(nearLine, greaterThan(3), reason: 'carried');
+    expect(farRight, closeTo(nearLine, 1), reason: 'carried as far as the hand went wherever on its flag it was taken, not to where the hand is');
+    ws.frame = (ws.marks.single.$1 * Ws.fps).round();
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('ws-tl-mark')));
+    await t.pumpAndSettle();
+    ws.reread();
+    expect(ws.marks, isEmpty, reason: 'on a marker, the Marker button takes it away (Live\'s Set becomes Delete Locator)');
+    await t.tap(find.byKey(const ValueKey('ws-tl-mark')));
+    await t.pumpAndSettle();
+    ws.reread();
+    expect(ws.marks.single.$1 * Ws.fps, closeTo(ws.frame, .5), reason: 'elsewhere it sets one where the playhead is (Set Locator)');
+    await menu(Offset(300, WtM.header + WtM.ruler - 6), 'Add Marker and Name…');
+    expect(find.byKey(const ValueKey('ws-tl-mark-name')), findsOneWidget, reason: 'added with its name opened (Final Cut Pro\'s Add Marker and Modify)');
+    await t.enterText(find.byKey(const ValueKey('ws-tl-mark-name')), 'Build');
+    await t.testTextInput.receiveAction(TextInputAction.done);
+    await t.pumpAndSettle();
+    ws.reread();
+    expect(ws.marks.map((k) => k.$2), contains('Build'));
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 }

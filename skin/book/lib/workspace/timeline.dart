@@ -20,6 +20,7 @@ import 'timeline_kept.dart';
 import 'timeline_paint.dart';
 import 'relate.dart';
 import 'ws.dart';
+import 'ws_menu.dart';
 part 'timeline_asked.dart';
 part 'timeline_view.dart';
 part 'timeline_hand.dart';
@@ -229,6 +230,8 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   // ruler, up or down, it is taken away. Each one step.
   (double, String)? _markHeld;
   int _markTo = 0;
+  double _markGrab = 0;   // (where on its flag it was taken, in frames: kept while carried, as Live's locators are dragged (6.4) and as the work area here keeps _workGrab; carried to the hand's own spot, one taken by its name's end jumped 0.47 s)
+  final _rulerMenu = GlobalKey<WsMenuState>();
   bool _markOff = false;
   (double, String)? _naming;
   final _markWords = TextEditingController();
@@ -245,7 +248,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     final f = _view.frameAt(p.dx).round();
     if (_markHeld != null) {
       return setState(() {
-        _markTo = f.clamp(0, Ws.duration);
+        _markTo = (_view.frameAt(p.dx) - _markGrab).round().clamp(0, Ws.duration);
         _markOff = p.dy < -WtM.ruler * .6 || p.dy > WtM.ruler * 1.6;   // (carried off the ruler: taken away when let go)
       });
     }
@@ -421,7 +424,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Header(ws: ws, loop: ws.inside!.looping, zoom: _zoom, onToggle: _toggle, onStep: _step, onLoop: () => setState(() => ws.inside!.looping = !ws.inside!.looping), onZoom: _setZoom),
+              _Header(ws: ws, loop: ws.inside!.looping, zoom: _zoom, onToggle: _toggle, onStep: _step, onLoop: () => setState(() => ws.inside!.looping = !ws.inside!.looping), onZoom: _setZoom, onMark: _setMark),
               Expanded(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -454,7 +457,9 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              GestureDetector(
+              WsMenu(
+                key: _rulerMenu,
+                child: GestureDetector(
                 key: const ValueKey('ws-tl-ruler'),
                 behavior: HitTestBehavior.opaque,
                 supportedDevices: wsPressing,
@@ -473,6 +478,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                     foregroundPainter: WtKeptPainter(view: v, kept: ws.kept), // (the pictures kept on disk for playing)
                   ),
                 ),
+              ),
               ),
               Expanded(
                 child: MouseRegion(
@@ -535,15 +541,19 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                 ),
               ),
             ),
-          if (_naming case (final at, _)?)   // (a mark's name written over its flag)
+          if (_naming case (final at, _)?)   // (the flag itself written in, as wide as its words, as Figma's layer name is written where it stands)
             Positioned(
-              left: v.x((at * Ws.fps).round()),
-              top: WtM.band + 1,
-              width: Shape.z(120),
-              height: Shape.z(15),
-              child: Container(
-                color: Grey.g91,
-                padding: EdgeInsets.symmetric(horizontal: Shape.s(4)),
+              left: v.x((at * Ws.fps).round()).roundToDouble(),
+              top: WtM.band + 2,
+              height: 12,
+              child: ListenableBuilder(
+                listenable: _markWords,
+                builder: (_, child) => Container(
+                  width: wtFlagWidth('${_markWords.text}  '),
+                  color: WsT.toneText,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: child,
+                ),
                 child: EditableText(
                   key: const ValueKey('ws-tl-mark-name'),
                   controller: _markWords,
@@ -551,6 +561,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                   style: T.micro(Grey.g13).copyWith(fontWeight: FontWeight.w700),
                   cursorColor: Grey.g13,
                   backgroundCursorColor: Grey.g38,
+                  selectionColor: Grey.g13.withValues(alpha: .3),   // (its words picked, seen as picked)
                   maxLines: 1,
                   onSubmitted: (_) => _markFocus.unfocus(),
                 ),

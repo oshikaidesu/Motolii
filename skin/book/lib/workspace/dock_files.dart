@@ -48,6 +48,7 @@ String Function(String file) _kindOfFile = (_) => '';
 Future<String?> Function(String film, int step, int steps)? _thumbnailAtOf;
 DockG? _glyphOf(String file) => switch (_kindOfFile(file)) {
   'film' => DockG.video,
+  'sound' => DockG.audio,   // (songs on a tab of their own: Alight Motion's Add has Audio apart from Media, reports/alight_ui.md 176)
   'picture' => DockG.image,
   'solid' => DockG.shape,
   'text' => DockG.font,

@@ -10,11 +10,12 @@ class _Header extends StatelessWidget {
     required this.onStep,
     required this.onLoop,
     required this.onZoom,
+    required this.onMark,
   });
   final Ws ws;
   final bool loop;
   final double zoom;
-  final VoidCallback onToggle, onLoop;
+  final VoidCallback onToggle, onLoop, onMark;
   final ValueChanged<int> onStep;
   final void Function(double z, {int? anchor}) onZoom;
 
@@ -47,6 +48,11 @@ class _Header extends StatelessWidget {
               _Btn(TpGlyph.stepFwd, key: const ValueKey('ws-tl-fwd'), onTap: () => onStep(1)),
               SizedBox(width: Shape.s(2)),
               _Btn(TpGlyph.loop, key: const ValueKey('ws-tl-loop'), on: loop, onTap: onLoop),
+              SizedBox(width: Shape.s(2)),
+              ValueListenableBuilder<int>(   // (Live's Set button, 6.4: a marker where the playhead is; on one, it takes it away)
+                valueListenable: ws.moment,
+                builder: (_, _, _) => _Btn(ws.marks.any((k) => (k.$1 * Ws.fps).round() == ws.frame) ? TpGlyph.minus : TpGlyph.plus, key: const ValueKey('ws-tl-mark'), width: Shape.z(66), label: 'Marker', onTap: onMark),
+              ),
               SizedBox(width: Shape.s(12)),
               ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, _, _) => Text(ws.timecode(), style: big)),   // (one number, one weight: not three colours)
               SizedBox(width: Shape.s(8)),

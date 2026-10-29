@@ -67,10 +67,11 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
 
 // The calls. A new thing of a kind (film, picture, text, solid) from a file (a text: its font; a solid: a file, or ring, gem or cube): its number (0: not
 // made, and no number is used up).
-// What kind of thing a file makes, by its name's end ("": none): the one place that says so.
+// What kind of thing a file makes, by its name's end ("": none): the one place that says so. A sound is a film heard and
+// not seen (doc_add).
 static const char* doc_kind_of(const char* file) {
     static const struct { const char* kind; const char* ends; } made[] = {
-        {"film", "mp4 mov m4v webm mkv mp3 wav m4a aac flac ogg opus"}, {"picture", "png jpg jpeg webp svg json lot mid"}, {"solid", "glb gltf ply"}, {"text", "ttf otf ttc"}};
+        {"film", "mp4 mov m4v webm mkv"}, {"sound", "mp3 wav m4a aac flac ogg opus"}, {"picture", "png jpg jpeg webp svg json lot mid"}, {"solid", "glb gltf ply"}, {"text", "ttf otf ttc"}};
     std::string end = std::filesystem::path(file).extension().string();
     for (char& c : end) c = (char)std::tolower((unsigned char)c);
     if (doc_among(doc_shapes, file)) return "solid";
@@ -82,10 +83,15 @@ static const char* doc_kind_of(const char* file) {
 static int doc_add(Doc& d, const char* kind, const char* file) {
     if (!*kind) kind = doc_kind_of(file);   // (not said: what the file makes)
     if (!*kind) return d.trouble = std::string("no kind of thing is made from ") + file, 0;
+    // (a sound comes in a film that is heard, hidden: Alight Motion's audio layer has no picture, only its wave on the
+    //  timeline (reports/alight_ui.md 177), as Extract Sound's copy (doc_extract_sound) is a hidden film heard; its eye
+    //  shows its wave, video.h)
+    const bool sound = !strcmp(kind, "sound");
+    if (sound) kind = "film";
     if (!doc_among(doc_kinds, kind) && strcmp(kind, "behaviour")) return d.trouble = std::string("a thing is one of: ") + doc_kinds + " behaviour", 0;
     if (!strcmp(kind, "behaviour") && !doc_among("stagger oscillator noise random around row follow push group", file)) return d.trouble = "a behaviour is a stagger, an oscillator, a noise, a random, or a relation: around, row, follow, push", 0;
     if (!strcmp(kind, "light") && !doc_among("sun point spot", file)) return d.trouble = "a light is a sun, a point or a spot", 0;
-    // (it comes on at the stage's present moment)
+    // (it comes on at the stage's present moment, the playhead: AbsentMotion's addAudio and addText, startTime frameStart(frame))
     if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact(thing, name, at, value) values(last_insert_rowid(), 'kind', 0.0, %Q); insert into fact(thing, name, at, value) values(last_insert_rowid(), %Q, 0.0, %Q); insert into fact(thing, name, at, value) select id, 'start', 0.0, %!.17g from thing where %d order by id desc limit 1%s",
                                        kind, (!strcmp(kind, "solid") && doc_among(doc_shapes, file)) || !strcmp(kind, "shape") ? "shape" : "file", file, d.stage->now, d.stage->now > 0.0,
                                        // (a new text comes with a word to read, at a size that fits a stage, in the grey
@@ -93,7 +99,8 @@ static int doc_add(Doc& d, const char* kind, const char* file) {
                                        (std::string(strcmp(kind, "text") ? "" : "; insert into fact(thing, name, at, value) select id, 'text', 0.0, 'Text' from thing order by id desc limit 1; insert into fact(thing, name, at, value) select id, 'size', 0.0, 0.5 from thing order by id desc limit 1; insert into fact(thing, name, at, value) select id, 'fill', 0.0, '7f7f7f' from thing order by id desc limit 1") +
                                         // (and lasts as long as the document says a thing put in lasts, if it says: AbsentMotion's New Layer Length,
                                         //  its StructureActions.kt and TextActions.kt endTimeFor; a film its own length, a group's Null as long as what it holds)
-                                        (doc_among("picture text solid shape", kind) && strcmp(file, "null") ? "; insert into fact(thing, name, at, value) select (select max(id) from thing), 'duration', 0.0, value from fact where thing = 0 and name = 'layer_length' and at = 0 and value > 0" : "")).c_str()))) return 0;
+                                        (doc_among("picture text solid shape", kind) && strcmp(file, "null") ? "; insert into fact(thing, name, at, value) select (select max(id) from thing), 'duration', 0.0, value from fact where thing = 0 and name = 'layer_length' and at = 0 and value > 0" : "") +
+                                        (sound ? "; insert into fact(thing, name, at, value) select max(id), 'visible', 0.0, 0 from thing" : "")).c_str()))) return 0;
     int thing = 0;   // (the newest number: SQLite's own count of things, which a change not made does not move)
     doc_rows(d, sqlite3_mprintf("select max(id) from thing"), [&](sqlite3_stmt* row) { thing = sqlite3_column_int(row, 0); });
     return thing;

@@ -18,6 +18,7 @@ extension _WsTimelineRuler on _WsTimelineState {
     if (_flagAt(p) case final flag?) {
       _markHeld = flag;
       _markTo = (flag.$1 * Ws.fps).round();
+      _markGrab = f - flag.$1 * Ws.fps;
       _markOff = false;
       return;
     }

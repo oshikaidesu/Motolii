@@ -108,6 +108,7 @@ static bool stage_kept_one(StageKept& k, Doc& d, Stage& s, int rate, double budg
         k.target = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, k.into).build(*s.engine);
     }
     const auto t0 = std::chrono::steady_clock::now();
+    const double playhead = s.now;   // (the moment the window shows, where a new thing starts: AbsentMotion's addAudio and addText, startTime frameStart(frame))
     time_is(s, (double)at / rate);
     const double moment = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();   // (the hand's part, as when it plays)
     RenderTarget* wasOut = s.out;
@@ -132,7 +133,8 @@ static bool stage_kept_one(StageKept& k, Doc& d, Stage& s, int rate, double budg
     if (!s.over) {
         s.view->setRenderTarget(nullptr);
     }
-    s.out = wasOut, s.drawnInto = wasInto;   // (left at that moment: the next picture shown is told its own first, and films step on rather than seek back)
+    s.out = wasOut, s.drawnInto = wasInto;   // (its things left at that moment: the next picture shown is told its own first, and films step on rather than seek back)
+    s.now = playhead;   // (but the stage's moment is the playhead again: left at the background's, a song placed with the playhead at 0 started at 4.6 s)
     if (took > budget_ms) {
         ++kept_unwritten;
         kept_write(stage_kept_file(k, at), std::move(*pixels));

@@ -176,6 +176,15 @@ void main() {
     await t.tap(listen);
     await t.pump();
     expect(find.descendant(of: listen, matching: find.text('▶')), findsOneWidget, reason: 'stopped');
+    expect(find.textContaining('Audio'), findsWidgets, reason: 'shelved as Audio, not Video (Alight Motion\'s picker keeps songs apart)');
+    final m = ws.inside!, before = m.things.length;
+    await t.tap(find.text('Place'));
+    for (var i = 0; i < 200 && m.things.length == before; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    expect(m.word(m.things.last, 'kind'), 'film', reason: m.trouble);
+    expect(m.value(m.things.last, 'visible', 0), 0, reason: 'placed heard and not seen, as Alight Motion\'s audio layer: no wave over the picture');
     expect(t.takeException(), isNull);
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);

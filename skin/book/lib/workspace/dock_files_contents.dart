@@ -306,14 +306,14 @@ class _Footer extends StatelessWidget {
     return FutureBuilder<String>(   // (what the media is, as GStreamer's discoverer tells it: Alight Motion's Media Info; its file's kind and size until then)
       future: can && m != null ? mediaInfoOf(m.libPath, n.id) : null,
       builder: (context, info) => DockFooter(
-      preview: n.disk && n.g == DockG.video && (info.data ?? '×').isNotEmpty && !(info.data ?? '×').contains('×') ? _Listen(n) : _Art(n),   // (sound alone, no picture in it: heard before it is placed)
+      preview: n.disk && (n.g == DockG.audio || n.g == DockG.video && (info.data ?? '×').isNotEmpty && !(info.data ?? '×').contains('×')) ? _Listen(n) : _Art(n),   // (sound alone, no picture in it: heard before it is placed)
       title: n.name,
       meta: c.mem.trouble[n.id] ?? [if (layer != null) 'In use', if (info.data case final i? when i.isNotEmpty) i, _metaOf(n)].join(' · '),
       action: fills ? 'Fill shape' : can ? 'Place' : 'Select',
       done: !can && layer == null,
       doneLabel: 'Folder', // (the shelf lists only folders and files the inside can place: what cannot be placed is a folder)
       fresh: can, // (placed, it is a new thing)
-      lasts: switch (_kindOfFile(n.id)) { 'picture' => _StillSeconds(c), 'film' when m != null => _FilmRange(c, n.id, mediaSecondsOf(m.libPath, n.id)), _ => null },
+      lasts: switch (_kindOfFile(n.id)) { 'picture' => _StillSeconds(c), 'film' || 'sound' when m != null => _FilmRange(c, n.id, mediaSecondsOf(m.libPath, n.id)), _ => null },
       onAction: () => fills ? c.ws.after(m.later('say', thing: shape, name: 'fill_media', word: n.id)) : can ? _place(c, n) : c.ws.select(layer),
       ),
     );

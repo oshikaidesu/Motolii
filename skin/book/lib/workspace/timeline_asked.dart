@@ -89,29 +89,65 @@ mixin _TimelineAsked on State<WsTimeline> {
     _t._setZoom(1);
   }
 
-  /// A right click: a locator put there, named by its order (6.4: Add Locator); on one, it is picked.
+  /// A right click: the ruler's menu where it is (6.4: the scrub area's context menu adds a locator, and a locator has
+  /// its own). On a mark, it is picked and the menu acts on it: named (Edit > Rename, Cmd+R), played from, taken away
+  /// (Delete). Elsewhere a mark is added there, named by its order, and picked; or added with its name opened, its
+  /// words picked (Final Cut Pro's Add Marker and Modify).
   void _rulerRight(Offset p) {
     final ws = _t._ws, m = ws?.inside;
     if (ws == null || m == null) return;
     if (_t._flagAt(p) case final flag?) {
       wsMarkPicked.value = flag;
-      return;
+      return _t._rulerMenu.currentState?.show(p, [
+        WsMenuItem('Rename…', _rename, keys: '⌘R'),
+        WsMenuItem('Play from Here', () => _playAt((flag.$1 * Ws.fps).round())),
+        const WsMenuItem.rule(),
+        WsMenuItem('Delete', () {
+          wsMarkPicked.value = null;
+          ws.after(m.later('mark', number: flag.$1));
+        }, keys: '⌫'),
+      ]);
     }
-    final at = _t._view.frameAt(p.dx).round().clamp(0, Ws.duration) / Ws.fps, marks = ws.marks;
-    if (marks.any((k) => (k.$1 - at).abs() < 0.5 / Ws.fps)) return;
+    final at = _t._view.frameAt(p.dx).round().clamp(0, Ws.duration) / Ws.fps, taken = ws.marks.any((k) => (k.$1 - at).abs() < 0.5 / Ws.fps);
+    _t._rulerMenu.currentState?.show(p, [
+      WsMenuItem('Add Marker', taken ? null : () => _addMark(at, named: false), why: 'One is here'),
+      WsMenuItem('Add Marker and Name…', taken ? null : () => _addMark(at, named: true), why: 'One is here'),
+    ]);
+  }
+
+  /// The Marker button (6.4: Set Locator): a mark where the playhead is, picked; on one, it is taken away (the button
+  /// is then Delete Locator).
+  void _setMark() {
+    final ws = _t._ws, m = ws?.inside;
+    if (ws == null || m == null) return;
+    if (ws.marks.where((k) => (k.$1 * Ws.fps).round() == ws.frame).firstOrNull case (final was, _)?) {
+      wsMarkPicked.value = null;
+      return ws.after(m.later('mark', number: was));
+    }
+    _addMark(ws.frame / Ws.fps, named: false);
+  }
+
+  void _addMark(double at, {required bool named}) {
+    final ws = _t._ws!, marks = ws.marks;
     var n = marks.length + 1;
     while (marks.any((k) => k.$2 == 'M$n')) {
       n++;
     }
-    ws.after(m.later('mark', number: at, word: 'M$n'));
+    ws.after(ws.inside!.later('mark', number: at, word: 'M$n'), (done, _) {
+      if (!done || !mounted) return;
+      wsMarkPicked.value = (at, 'M$n');
+      if (named) _rename();
+    });
   }
 
   void _rename() {
     final ws = _t._ws;
     if (!mounted || ws == null) return;
-    if (wsMarkPicked.value case final flag?) {   // (a picked locator is named, in its flag)
+    if (wsMarkPicked.value case final flag?) {   // (a picked locator is named, in its flag, its words picked: Final Cut Pro's marker)
       setState(() => _t._naming = flag);
-      _t._markWords.text = flag.$2;
+      _t._markWords
+        ..text = flag.$2
+        ..selection = TextSelection(baseOffset: 0, extentOffset: flag.$2.length);
       return _t._markFocus.requestFocus();
     }
     if (ws.layer == null) return;
