@@ -281,6 +281,7 @@ class Doc extends ChangeNotifier {
   void setKey(String prop, KeyS s) {
     _undo.clear();
     keys[prop] = s;
+    _watched['key:$prop']?.value++;   // (the field whose mark it is draws it now)
     notifyListeners();
   }
 

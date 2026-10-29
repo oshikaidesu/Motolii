@@ -42,16 +42,23 @@ class NumFieldState extends State<NumField> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final w = _x.doc.watch(widget.id);
+    final w = _x.doc.watch(widget.id), k = _x.doc.watch('key:${widget.id}');   // (and its key mark's news: showAt tells it, so the mark is drawn as the document says it, not a step behind)
     if (w != _watch) {
       _watch?.removeListener(_retold);
       _watch = w..addListener(_retold);
     }
+    if (k != _keyWatch) {
+      _keyWatch?.removeListener(_retold);
+      _keyWatch = k..addListener(_retold);
+    }
   }
+
+  ValueListenable<int>? _keyWatch;
 
   @override
   void dispose() {
     _watch?.removeListener(_retold);
+    _keyWatch?.removeListener(_retold);
     _pending?.cancel();
     _ef.dispose();
     _node.dispose();
@@ -107,8 +114,16 @@ class NumFieldState extends State<NumField> {
 
   double _ladder(double dy) => dy < -24 ? 10 : (dy > 64 ? .01 : (dy > 24 ? .1 : 1));
 
+  // (where the key mark is drawn, and what it says: a press near it keys the value there, or takes the key here away)
+  Offset? _keyAt;
+  KeyS? _keys;
+
   void _onDown(PointerDownEvent e) {
     if (!_on || _editing) return;
+    if (_keyAt case final k? when e.buttons == kPrimaryButton && (e.localPosition - k).distance <= 9) {
+      final now = _x.doc.keys[widget.id] ?? _keys;   // (as the document says it now: the field may not have been built since an undo)
+      return _x.doc.setKey(widget.id, now == KeyS.at ? KeyS.anim : KeyS.at);   // (the row's KeyMark contract: inspector_rows_prop_row.dart)
+    }
     if (widget.glyph != null && widget.glyphOwnsPointer && _inGlyph(e.localPosition)) return;
     if (e.buttons != kPrimaryButton) return;
     final doc = _x.doc;
@@ -395,7 +410,12 @@ class NumFieldState extends State<NumField> {
                           )
                         : null));
         final block = widget.caption != null;
-        // contract: animated = a dim dot, keyed at the playhead = a lit dot (the automation blip, not a column).
+        // contract: animated = a dim dot, keyed at the playhead = a lit dot (the automation blip, not a column). A value
+        // that takes keys shows its mark always, hollow when it has none, and a press on it keys it there (Alight Motion's
+        // diamond beside each value, After Effects' and Premiere Pro's stopwatch: golf_noise.md (59)).
+        final ks = pop ? (x.doc.keys[widget.id] ?? row?.keys) : null;
+        _keyAt = ks != null && (ks != KeyS.off || x.doc.keys.containsKey(widget.id)) ? (block ? Offset(w - Pop.tilePad - 3, Pop.tile - 10) : Offset(w - 6, 6)) : null;
+        _keys = ks;
         final editor = _editing
             ? TextHand(field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
                 controller: _ctl,
@@ -438,7 +458,8 @@ class NumFieldState extends State<NumField> {
             hot: _hover,
             live: live,
             axis: widget.axis,
-            keyDot: row != null && row.keys != KeyS.off ? (row.keys == KeyS.at ? Pop.keyDot : Pop.keyDot.withValues(alpha: .4)) : null,
+            keyDot: _keyAt == null ? null : (ks == KeyS.at ? Pop.keyDot : (ks == KeyS.anim ? Pop.keyDot.withValues(alpha: .5) : Grey.g56)),
+            keyEmpty: ks == KeyS.off,
             pad: Pop.tilePad,
             glyphBox: Pop.glyph,
           ),

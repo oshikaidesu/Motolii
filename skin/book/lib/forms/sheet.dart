@@ -385,7 +385,7 @@ class SheetForms extends Forms {
             ),
           ),
           if (n.glyph != null) Positioned(right: 0, top: 0, bottom: 0, width: n.glyphBox, child: Center(child: n.glyph)),
-          if (n.keyDot != null) Positioned(top: 2, right: 2, child: Container(width: Shape.z(4), height: Shape.z(4), decoration: BoxDecoration(color: n.keyDot, shape: BoxShape.circle))),
+          if (n.keyDot != null) Positioned(top: 2, right: 2, child: keyDiamond(n.keyDot!, empty: n.keyEmpty)),
           if (n.fill != null) Positioned(left: Shape.z(20), right: 0, bottom: 0, height: Shape.z(10), child: CustomPaint(painter: _Range(n.fill, n.live || n.hot))),
         ],
       ),

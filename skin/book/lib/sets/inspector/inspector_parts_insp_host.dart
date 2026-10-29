@@ -292,7 +292,9 @@ class _InspHostState extends State<InspHost> {
         doc.s2.addAll(widget.strs);
         _seenWords.addAll(widget.strs);
       }
-      if (!mapEquals(o.keyMarks, widget.keyMarks)) {
+      // (and where what is shown is not what the document says: a key mark pressed shows lit at once, and an undo that
+      //  takes the key away leaves the document's marks as they were before the press, so only the shown one differs)
+      if (!mapEquals(o.keyMarks, widget.keyMarks) || widget.keyMarks.entries.any((e) => doc.keys[e.key] != e.value)) {
         doc.showAt(const {}, widget.keyMarks);
         _seenKeys.addAll(widget.keyMarks);
       }

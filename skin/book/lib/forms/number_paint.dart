@@ -30,6 +30,7 @@ class NumberSpec {
     this.live = false,
     this.axis,
     this.keyDot,
+    this.keyEmpty = false,
     this.pad = 8,
     this.glyphBox = 22,
   });
@@ -48,7 +49,17 @@ class NumberSpec {
   final bool bipolar, block, pop, editing, glyphTall, on, hot, live;
   final Color fillColor, borderColor, rangeColor;
   final Color? axis, keyDot;
+
+  /// The key mark drawn hollow: the value takes keys and has none here (Alight Motion's diamond beside a value, empty).
+  final bool keyEmpty;
 }
+
+/// A value's key mark: a diamond, as Alight Motion's beside each value and the timeline's keys (filled: a key here;
+/// faint: keys elsewhere; [empty]: none, yet it takes them). Pressed, the field keys the value there (num_field_state).
+Widget keyDiamond(Color colour, {bool empty = false}) => Transform.rotate(
+  angle: math.pi / 4,
+  child: Container(width: Shape.z(5), height: Shape.z(5), decoration: BoxDecoration(color: empty ? null : colour, border: empty ? Border.all(color: colour) : null)),
+);
 
 typedef NumberPaint = Widget Function(BuildContext context, NumberSpec spec);
 
@@ -84,7 +95,7 @@ Widget usualNumber(BuildContext context, NumberSpec n) {
               top: n.block ? null : 3,
               bottom: n.block ? 7 : null,
               right: n.block ? n.pad : 3,
-              child: Container(width: Shape.z(4), height: Shape.z(4), decoration: BoxDecoration(color: n.keyDot, shape: BoxShape.circle)),
+              child: keyDiamond(n.keyDot!, empty: n.keyEmpty),
             ),
           if (n.axis != null && !n.pop) Positioned(left: 0, top: 5, bottom: 5, width: Shape.z(2), child: ColoredBox(color: n.axis!)),
           if (n.glyph != null)

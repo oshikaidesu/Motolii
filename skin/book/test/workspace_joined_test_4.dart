@@ -146,4 +146,34 @@ void _tests4() {
     await expectSameAfterReopen(t);
     await _close(t);
   }, tags: 'main', skip: !_built);
+
+  testWidgets('a value\'s key mark is always on its field, hollow with no key: a press keys it at the playhead, a press on its key there takes that away (Alight Motion\'s diamond, After Effects\' stopwatch: golf_noise.md (59))', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final cube = m.add('shape', 'rect');   // (a solid has no opacity: doc_kinds.h)
+    ws
+      ..reread()
+      ..select('$cube')
+      ..frame = 30;
+    await t.pumpAndSettle();
+    final field = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_opacity');
+    await seen(t, field);
+    await t.pump();
+    final r = t.getRect(field), mark = Offset(r.right - Pop.tilePad - 3, r.top + Pop.tile - 10);   // (a tile's: bottom right, number_paint.dart)
+    expect(m.keyMoments(cube, 'opacity'), isEmpty);
+    await t.tapAt(mark);
+    await settled(t, ws);
+    expect(m.keyMoments(cube, 'opacity'), [.5], reason: 'a key at the playhead, with no Animate all');
+    expect(m.undo(), isTrue);
+    ws.reread();
+    await t.pumpAndSettle();
+    expect(Ctx.read(t.element(field)).doc.keys['v_opacity'], KeyS.off, reason: 'undone, the mark is hollow again (it stayed lit)');
+    await t.tapAt(mark);
+    await settled(t, ws);
+    expect(m.keyMoments(cube, 'opacity'), [.5]);
+    await t.tapAt(mark);
+    await settled(t, ws);
+    expect(m.keyMoments(cube, 'opacity'), isEmpty, reason: 'the key there taken away');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
 }
