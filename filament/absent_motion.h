@@ -12,8 +12,10 @@ struct AbsentEffect { std::string id; std::vector<std::pair<std::string, std::ve
 struct AbsentMoved { double x = 0, y = 0, z = 0, rotate = 0, scale_x = 1, scale_y = 1; };
 AbsentMoved absent_motion(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs);
 // Its repeat effects' copies (Repeat, Linear, Grid, Radial, Scatter Field: motion.cpp RepeatCopies), each where it lies
-// from the layer's own place (AbsentMotion's outer and local, its layer's place none), in its pixels; none: no repeat.
+// from the layer's own place, in its pixels; none: no repeat. The composition's size, where the layer stands on it (from
+// the top left) and how far it reaches from there, as AbsentMotion's CopiesOf tells them (a scatter field is laid on the
+// whole composition, its copies as large as the layer reaches).
 // Its opacity effects' share of the layer's opacity (Pulse Opacity: motion.cpp MotionOpacity), 1 when none.
 float absent_opacity(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs);
 struct AbsentCopy { double x = 0, y = 0, rotate = 0, scale = 1, alpha = 1; };
-std::vector<AbsentCopy> absent_copies(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs, float wide, float high);
+std::vector<AbsentCopy> absent_copies(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs, float wide, float high, float atX, float atY, float reach);

@@ -34,18 +34,20 @@ AbsentMoved absent_motion(const std::vector<AbsentEffect>& effects, int64_t thin
 float absent_opacity(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs) {
     return am::MotionOpacity(absent_layer(effects, thing, startMs, endMs), nowMs);
 }
-// As AbsentMotion's CopiesOf (styles.cpp) lays them, its layer's matrix one that moves nothing: outer by local.
-std::vector<AbsentCopy> absent_copies(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs, float wide, float high) {
+// As AbsentMotion's CopiesOf (styles.cpp) lays them: its layer's matrix where it stands (its turn and size the thing's
+// own), each copy outer by the layer by local, seen from the layer's own place.
+std::vector<AbsentCopy> absent_copies(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs, float wide, float high, float atX, float atY, float reach) {
     const am::Layer l = absent_layer(effects, thing, startMs, endMs);
     if (!am::HasRepeat(l)) return {};
     am::RepeatSpace space;
-    space.width = wide, space.height = high, space.radius = std::max(wide, high) * 0.5f * 1.415f;
+    space.width = wide, space.height = high, space.radius = reach;
+    space.anchor = SkPoint{atX, atY}, space.layer = SkMatrix::Translate(atX, atY);
     std::vector<am::RepeatCopy> copies;
     am::RepeatCopies(l, nowMs, space, &copies);
     std::vector<AbsentCopy> out;
     out.reserve(copies.size());
     for (const am::RepeatCopy& c : copies) {
-        const SkMatrix m = c.outer * c.local;
+        const SkMatrix m = SkMatrix::Translate(-atX, -atY) * c.outer * space.layer * c.local;
         out.push_back({m.getTranslateX(), m.getTranslateY(), std::atan2(m.getSkewY(), m.getScaleX()) * 180.0 / M_PI, std::hypot(m.getScaleX(), m.getSkewY()), c.alpha});
     }
     return out;

@@ -537,6 +537,8 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper = 0, int c
 static math::mat4 doc_shown_at(Doc& d, int thing, double now);
 int sk_along(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, int n, float from, std::vector<float>& out);
 static double doc_point(Doc& d, int thing, double now);
+static math::double2 doc_seen(Doc& d, math::double3 p);
+static math::mat4 doc_above(Doc& d, int thing, double now, int deeper);
 static double doc_seconds(Doc& d);
 // A thing's copies given back its own look, their own looks done away with (no longer coloured each, or taken off).
 // What a behaviour gives the nth of n copies at a moment (Cavalry's stagger, oscillator, noise and random, its names):

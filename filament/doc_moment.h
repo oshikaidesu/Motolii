@@ -341,7 +341,9 @@ static void doc_moment(Doc& d, double now) {
             if (ramp.size() == 1) ramp.push_back(ramp[0]);   // (one colour: every copy in it)
             const std::vector<float2>& letters = t.drawn ? t.drawn->letters : std::vector<float2>{};
             const auto scripted = d.scripted.find(thing);   // (a script's copies each as clear as it says)
-            const bool clears = scripted != d.scripted.end() && std::any_of(scripted->second.copies.begin(), scripted->second.copies.end(), [](const ScriptCopy& c) { return c.opacity != 1.0; });
+            const std::vector<AbsentCopy>& absent = doc_absent_copies(d, thing, now);   // (AbsentMotion's copies each as clear as its repeat lays them: a scatter field's far ones)
+            const bool clears = (scripted != d.scripted.end() && std::any_of(scripted->second.copies.begin(), scripted->second.copies.end(), [](const ScriptCopy& c) { return c.opacity != 1.0; })) ||
+                                std::any_of(absent.begin(), absent.end(), [](const AbsentCopy& c) { return c.alpha < 0.999; });
             const bool clearEach = doc_driven_by(d, thing, "opacity") != 0, pickEach = doc_driven_by(d, thing, "copy_fill_at") != 0;   // (given each copy by a behaviour)
             const double fadeTo = std::clamp(doc_number(d, thing, "copy_opacity_end", now, 1), 0.0, 1.0);   // (the last copy as clear as this, the first as the thing: After Effects' Repeater, End Opacity)
             if (ramp.size() < 2 && letters.empty() && !clears && !t.drivenLooks && !clearEach && !pickEach && fadeTo == 1) doc_copy_looks_off(d, m, main);
@@ -370,7 +372,8 @@ static void doc_moment(Doc& d, double now) {
                         own->setParameter("wash", float4{mix(ramp[i], ramp[i + 1], along - (float)i), 1.f});
                     } else own->setParameter("wash", t.drawn ? t.drawn->wash : float4{0.f});   // (its own: a shape cut in triangles is filled by it)
                     if ((size_t)made.nth < letters.size()) own->setParameter("window", float4{letters[(size_t)made.nth].x, letters[(size_t)made.nth].y, 1.f, 0.f});   // (its own letter)
-                    const double clear = scripted != d.scripted.end() && (size_t)made.nth < scripted->second.copies.size() ? scripted->second.copies[(size_t)made.nth].opacity : 1.0;
+                    const double clear = (scripted != d.scripted.end() && (size_t)made.nth < scripted->second.copies.size() ? scripted->second.copies[(size_t)made.nth].opacity : 1.0) *
+                                         ((size_t)made.nth < absent.size() ? absent[(size_t)made.nth].alpha : 1.0);
                     const math::double3 here{made.place[3].x, made.place[3].y, made.place[3].z};
                     const int clearBy = doc_driven_by(d, thing, "opacity");
                     const double opacity = !clearEach ? doc_number(d, thing, "opacity", now, 1) * doc_absent_opacity(d, thing, now)

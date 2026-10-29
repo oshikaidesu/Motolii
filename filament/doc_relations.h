@@ -233,7 +233,12 @@ static const std::vector<AbsentCopy>& doc_absent_copies(Doc& d, int thing, doubl
     k.copies.clear();
     if (doc_word(d, thing, "fx").find(".am") == std::string::npos) return k.copies;
     const double begins = doc_literal(d, thing, "start", 0, 0), lasts = doc_literal(d, thing, "duration", 0, -1);
-    k.copies = absent_copies(doc_absent_on(d, thing, now), thing, 1000.0 * begins, 1000.0 * (begins + (lasts > 0 ? lasts : doc_seconds(d))), 1000.0 * now, 0, 0);
+    const double high = doc_number(d, 0, "high", 0, 1080), k2 = high / std::max(1, d.stage->h);   // (a point of the picture in the document's pixels)
+    const math::double2 at = doc_seen(d, (doc_above(d, thing, now, 0) * math::double4{doc_literal(d, thing, "x", now, 0), doc_literal(d, thing, "y", now, 0), doc_literal(d, thing, "z", now, 0), 1.0}).xyz) * k2;
+    float2 half{0.5f};
+    doc_half(d, thing, &half);
+    const double reach = std::max(half.x, half.y) * doc_literal(d, thing, "size", now, 1) * doc_point(d, thing, now) * k2 * 1.415;   // (as CopiesOf: its box's farthest from where it stands, by 1.415)
+    k.copies = absent_copies(doc_absent_on(d, thing, now), thing, 1000.0 * begins, 1000.0 * (begins + (lasts > 0 ? lasts : doc_seconds(d))), 1000.0 * now, (float)(d.stage->w * k2), (float)high, (float)at.x, (float)at.y, (float)reach);
     return k.copies;
 }
 // A thing's opacity as AbsentMotion's opacity effects on it leave it (a share, 1 with none: absent_motion.h).

@@ -1,0 +1,36 @@
+// Scatter Field: AbsentMotion's scatterfield (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), moved by its own motion.cpp (filament/absent_motion.cpp)
+// --label:Repeat
+// --absent:scatterfield
+// --about:Scatters copies of the layer within an infinite 3D field while hiding the original layer, and allows simulated motion within the field in three dimensions through keyframe animation.
+// --track@position_x:Position x,-99999,99999,0,1
+// --track@position_y:Position y,-99999,99999,0,1
+// --track@z:Position Z,-99999,99999,0.0,1
+// --track@density:Density,0,1,0.3,0.001
+// --track@evolution:Evolution,-9999,9999,0.0,0.01
+// --track@seed:Seed,0,9999,0.0,0.01
+// --track@scale:Scale,0.05,20,1.0,0.01
+// --track@size:Size,0,10,0.5,0.001
+// --track@angle:Angle,-3600,3600,0.0,0.1
+// --track@sizeVariance:Size Variance,0,1,0.5,0.01
+// --track@angleVariance:Angle Variance,0,1,0.0,0.01
+// --track@amount:Amount,0,40,15.0,0.01
+// --track@fade:Fade,0,1,1.0,0.001
+// --track@alpha:Alpha,0,1,1.0,0.01
+// --track@slack:Slack,0,1,1.0,0.01
+// --track@blending:Blending Mode,0,7,0.0,1
+// --track@coloring:Coloring,0,2,0.0,1
+// --track@color1_x:Color 1 R,0,1,1,0.01
+// --track@color1_y:Color 1 G,0,1,0.3333,0.01
+// --track@color1_z:Color 1 B,0,1,0.6667,0.01
+// --track@color1_w:Color 1 A,0,1,1,0.01
+// --track@color2_x:Color 2 R,0,1,0.3333,0.01
+// --track@color2_y:Color 2 G,0,1,0.6667,0.01
+// --track@color2_z:Color 2 B,0,1,1,0.01
+// --track@color2_w:Color 2 A,0,1,1,0.01
+// --track@color3_x:Color 3 R,0,1,1,0.01
+// --track@color3_y:Color 3 G,0,1,0.6667,0.01
+// --track@color3_z:Color 3 B,0,1,0.3333,0.01
+// --track@color3_w:Color 3 A,0,1,1,0.01
+// --track@lockLuminance:Lock Luminance,0,1,1.0,0.01
+// --track@lockSaturation:Lock Saturation,0,1,0.0,0.01
+// --track@interpolateHue:Interpolate Hue,0,1,0.0,0.01
