@@ -72,7 +72,7 @@ void main() {
     final ws = await _pump(t), m = ws.inside!;
     wsAskRender.value++;
     await t.pumpAndSettle();
-    for (final (key, name, v) in const [('render-render_height-720', 'render_height', 720), ('render-render_rate-30', 'render_rate', 30), ('render-render_mbps-8', 'render_mbps', 8), ('render-render_blur-8', 'render_blur', 8)]) {
+    for (final (key, name, v) in const [('render-render_height-720', 'render_height', 720), ('render-render_rate-30', 'render_rate', 30), ('render-render_mbps-8', 'render_mbps', 8), ('render-render_blur-8', 'render_blur', 8), ('render-render_alpha-1', 'render_alpha', 1)]) {
       await t.tap(find.byKey(ValueKey(key)));
       for (var i = 0; i < 100 && m.value(0, name, 0) != v; i++) {   // (told the inside without waiting: read once it has it)
         await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));

@@ -226,7 +226,7 @@
 - [ ] 作った後でプロジェクトの設定（大きさ・コマの速さ）を変える（一部）：大きさは上の帯の札で（1 回押すと縦横比と解像度の箱、2 回で数字、10/28）。まだ：コマの速さ（内側が 60 の決まり）
 - [x] プレビューの拡大・手のひら（有る）：いま トラックパッド 2 本指・ピンチ — 済：窓の試験（`workspace_trackpad_test.dart`）
 - [x] 書き出し MP4（H.264）（一部）：書き出しの箱の Resolution・Rate・Quality を ffmpeg にそのまま（10/28） — 済：`check/film_way.sh`
-- [ ] **書き出し HEVC・GIF・PNG 連番・静止画・透明**（無い→一部）：HEVC（.mov）・GIF・PNG と JPEG の連番・今のコマの PNG（⇧E）は有る（10/28、`check/film_way.sh`）。まだ：透明（段の絵が不透明）
+- [x] **書き出し HEVC・GIF・PNG 連番・静止画・透明**（無い→一部）：HEVC（.mov）・GIF・PNG と JPEG の連番・今のコマの PNG（⇧E）は有る（10/28、`check/film_way.sh`）。まだ：透明（段の絵が不透明） — 済（10/29）：書き出しの欄に Background（Solid・Clear）。Clear（`render_alpha` 1）なら、書き出す間だけ段の View を Filament の TRANSLUCENT にし（後処理まで透明さを保つ、View.h）、乗算済みの色を戻して ffmpeg に渡す（`filament/kit_draw.h` の film）。PNG 連番は RGBA（円 1 つで透明 2,048,020 画素・不透明 24,786・縁 794）、GIF は bgra、.mov は HEVC の透明つき（VideoToolbox の -alpha_quality 0.75、AVFoundation で読むと透明 2,048,086・不透明 24,834）。背景の色を言った書類は不透明のまま。窓の書き出しの欄の試験（`skin/book/test/workspace_render_dialog_test.dart`）
 - [ ] **プロジェクトを包んで共有（リンク・QR）**（無い）（一部）：File › Package Project で書類と素材を 1 つのフォルダに（10/28、`check/pack.sh`）。まだ：リンク・QR（クラウドが無い）
 
 

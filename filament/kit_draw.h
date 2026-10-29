@@ -25,7 +25,10 @@ static void move(Stage& s, const Mesh* m, const std::function<mat4f(int, const m
 // blur: so many moments drawn for each picture and laid one on another (After Effects' and Blender's motion blur: a
 // 180° shutter round the picture's own moment, as After Effects' shutter angle 180 and phase -90): what moves is smeared
 // along its way, what stays is as sharp as before.
-struct FilmWay { int high = 0, rate = 0; double mbps = 0.0; int blur = 0; };
+// alpha: where nothing is drawn, clear (Filament's own: the stage's view laid as translucent, its pictures as they come
+// out times their alpha, made plain again for ffmpeg); kept by .png and .gif, a .mov's HEVC with its alpha
+// (VideoToolbox's own, as QuickTime and Final Cut read it); .mp4 and .jpg have none.
+struct FilmWay { int high = 0, rate = 0; double mbps = 0.0; int blur = 0; bool alpha = false; };
 static bool film(Stage& s, const char* path, int pictures, const std::function<void(double)>& pose, const FilmWay& said = {}) {
     const auto quoted = [](std::string name) {   // (a file's name as a shell takes it)
         for (size_t at = 0; (at = name.find('\'', at)) != std::string::npos; at += 4) name.replace(at, 1, "'\\''");
@@ -59,7 +62,7 @@ static bool film(Stage& s, const char* path, int pictures, const std::function<v
     const std::string way = ending == ".gif" ? " -an -vf \"fps=15," + (scale.empty() ? "" : scale + ",") + "split[a][b];[a]palettegen[p];[b][p]paletteuse\" " + quoted(path)
                             : ending == ".png" ? " -an" + sized + rate + " -c:v png " + quoted(std::filesystem::path(path).replace_extension().string() + "_%04d.png")
                             : ending == ".jpg" ? " -an" + sized + rate + " -c:v mjpeg -q:v 2 -pix_fmt yuvj420p " + quoted(std::filesystem::path(path).replace_extension().string() + "_%04d.jpg")   // (ffmpeg's JPEG, -q:v 2 its best but one)
-                            : ending == ".mov" ? sized + rate + " -c:v hevc_videotoolbox " + (said.mbps > 0.0 ? "-b:v " + mbps : std::string("-q:v 65")) + " -tag:v hvc1 -pix_fmt yuv420p -movflags +faststart " + quoted(path)
+                            : ending == ".mov" ? sized + rate + " -c:v hevc_videotoolbox " + (said.mbps > 0.0 ? "-b:v " + mbps : std::string("-q:v 65")) + (said.alpha ? " -alpha_quality 0.75 -pix_fmt bgra" : " -pix_fmt yuv420p") + " -tag:v hvc1 -movflags +faststart " + quoted(path)
                                                : sized + rate + " -c:v libx264 " + (said.mbps > 0.0 ? "-b:v " + mbps + " -maxrate " + mbps + " -bufsize " + std::to_string(2.0 * said.mbps) + "M" : std::string("-crf 17")) + " -g 60 -pix_fmt yuv420p -movflags +faststart " + quoted(path);
     const std::string cmd = "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgba -s " + std::to_string(s.w) + "x" + std::to_string(s.h) + " -r 60 -i -" + sound + way;
     std::signal(SIGPIPE, SIG_IGN);   // (if ffmpeg gives up, writing to it fails and that is told, instead of this program ending with it)
@@ -67,6 +70,7 @@ static bool film(Stage& s, const char* path, int pictures, const std::function<v
     if (!to) return false;
     std::vector<uint8_t> pic((size_t)s.w * s.h * 4);
     s.by_clock = false;
+    if (said.alpha) s.view->setBlendMode(View::BlendMode::TRANSLUCENT);   // (Filament keeps the alpha through its post-processing so: View.h)
     const int samples = std::max(1, said.blur);
     std::vector<uint32_t> sum(samples > 1 ? pic.size() : 0);
     for (int i = 0; i < pictures; ++i) {
@@ -79,8 +83,12 @@ static bool film(Stage& s, const char* path, int pictures, const std::function<v
             if (samples > 1) for (size_t j = 0; j < pic.size(); ++j) sum[j] += pic[j];
         }
         if (samples > 1) for (size_t j = 0; j < pic.size(); ++j) pic[j] = (uint8_t)((sum[j] + samples / 2) / samples);
+        if (said.alpha)   // (as plain colour, as ffmpeg's rgba is, not times its alpha as Filament gives it)
+            for (size_t j = 0; j < pic.size(); j += 4)
+                if (const int a = pic[j + 3]; a > 0 && a < 255) for (int c = 0; c < 3; ++c) pic[j + c] = (uint8_t)std::min(255, (pic[j + c] * 255 + a / 2) / a);
         if (std::fwrite(pic.data(), 1, pic.size(), to) != pic.size()) break;
     }
+    if (said.alpha) s.view->setBlendMode(View::BlendMode::OPAQUE);
     return pclose(to) == 0;
 }
 

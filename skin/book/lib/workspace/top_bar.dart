@@ -365,6 +365,7 @@ class _RenderState extends State<_Render> {
                       ('Rate', 'render_rate', [(0, '${Ws.fps}'), for (final r in const [30, 24, 15]) if (r < Ws.fps) (r, '$r')]),
                       ('Quality', 'render_mbps', [(0, 'Auto'), for (final b in const [4, 8, 16, 32]) (b, '$b Mbps')]),
                       ('Motion blur', 'render_blur', const [(0, 'Off'), (8, 'On')]),   // (After Effects' 180° shutter: eight moments laid on each picture)
+                      ('Background', 'render_alpha', const [(0, 'Solid'), (1, 'Clear')]),   // (clear where nothing is drawn: kept by PNG, GIF and a .mov's HEVC, kit_draw.h film)
                     ])
                       row(label, StatefulBuilder(builder: (context, again) {
                         final m = ws.inside, now = (m?.value(0, name, 0) ?? 0).round();
