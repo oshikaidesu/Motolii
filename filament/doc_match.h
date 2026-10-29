@@ -198,12 +198,13 @@ static bool doc_match(Doc& d) {
             } else {   // (a line is long and thin as it comes: 25 times as long as it is thick, a tenth of a unit thick)
                 const bool line = shape == "line", wave = shape == "wave";   // (a wave: a line waving, ten times as long as it is high)
                 fx.hollow = fill == "none";   // (filled with nothing: its edge alone, a frame)
+                fx.media = doc_word(d, thing, "fill_media");   // (filled with a picture's file: drawn_made.h flat)
                 fx.evenOdd = doc_word(d, thing, "fill_rule") == "evenodd";
                 const float high = line ? 0.04f : wave ? 0.3f : 1.f;
                 // (its outline alone, in one colour: cut into triangles and drawn by Filament as the scene's other things
                 //  are, flat_mesh; with an edge, a ramp, a dash, effects, a trim or a bend made on the CPU: ThorVG's picture)
                 const std::string drawn = doc_word(d, thing, "path"), form = shape != "path" ? shape : drawn.empty() ? "M0 0" : drawn;   // (a path shape: its own path is its form; none yet: nothing)
-                const bool plain = !wave && shape != "spiral" && shape != "null" && fx.ramp.size() < 2 && fx.blur <= 0.f && fx.shadow.w <= 0.f && fx.tint <= 0.f && fx.tritone <= 0.f;
+                const bool plain = !wave && shape != "spiral" && shape != "null" && fx.media.empty() && fx.ramp.size() < 2 && fx.blur <= 0.f && fx.shadow.w <= 0.f && fx.tint <= 0.f && fx.tritone <= 0.f;
                 if (plain)
                     made.drawn = flat_mesh(s, form.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
                                            float4{edge.xyz, edge.w / high}, fx.over(high), (int)doc_number(d, thing, "points", 0, shape == "star" ? 5 : shape == "arc" ? 270 : shape == "squircle" ? 4 : shape == "cog" ? 12 : shape == "spiral" ? 3 : 6), (float)doc_number(d, thing, "inner", 0, shape == "cog" ? 0.2 : shape == "arc" ? 0.3 : shape == "spiral" ? 0.1 : shape == "chamfer" ? 0.3 : 0.5), (float)doc_number(d, thing, "round", 0, 0), doc_bends(d, thing));

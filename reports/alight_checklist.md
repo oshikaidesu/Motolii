@@ -260,8 +260,8 @@
 - [x] 画面に合わせる（Fit・Fill・Stretch）：Arrange > Fit to Picture・Fill Picture・Stretch to Picture（見えている箱を絵に合わせ、真ん中を絵の真ん中に） — 済（10/28）：窓の試験
 - [x] クリッピングマスクを作る：舞台の Mask の道具で四角を描く（その物の真後ろに見えない型ができて切り抜く）、または Blending カードの Clip to below で下の物に切り抜く — 済：窓の試験（`workspace_joined_test.dart`・`workspace_joined_test_3.dart`）
 - [x] レイヤーのラベルの色：Note カードの Label colour（Ableton Live のクリップの 16 色と auto）。選ぶと時間軸の行・関係の図・舞台の枠が同じ色に。文書の値なので取り消しも複製も効く — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
-- [ ] 塗りの種類 4 つ（なし・単色・グラデーション・メディア）
-- [ ] メディアで塗る
+- [x] 塗りの種類 4 つ（なし・単色・グラデーション・メディア） — なし（fill none）・単色・グラデーションは前から、メディアは 10/29：図形を選んで Media の棚で写真を選ぶと、足すボタンが「Fill shape」になり、押すとその図形が写真で塗られる（値 fill_media、カードの Fill に Media として出る）。写真は図形を覆い真ん中を残す、図形の形の所だけ見える（ThorVG の Picture を図形の複製でアルファマスク、文字の色の帯と同じ手、`filament/drawn_made.h` flat）。10/29 edit.sh：円と星が写真で塗られ none で戻る、60fps の 7.2 倍
+- [x] メディアで塗る — 図形を選んで Media の棚で写真を選ぶと、足すボタンが「Fill shape」になり、押すとその図形が写真で塗られる（値 fill_media、カードの Fill に Media として出る）。写真は図形を覆い真ん中を残す、図形の形の所だけ見える（ThorVG の Picture を図形の複製でアルファマスク、文字の色の帯と同じ手、`filament/drawn_made.h` flat）。10/29 edit.sh：円と星が写真で塗られ none で戻る、60fps の 7.2 倍
 - [x] 色：スポイト、小さいピッカー、パレット、自分の色を足す：Colors の棚。スポイトは Wheel の Sample（Mac の NSColorSampler、画面のどこからでも。取った色を選んだ物に）、ピッカーは Wheel、パレットは棚の一覧、自分の色は Saved — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`、スポイトの答えは試験で肩代わり）。実際の画面から取るのは手ではまだ試していない
 - [ ] 線の始点・終点の形 10 種と大きさ — 見た（10/28、SECTION=BK）：線に heads both・head_shape arrow・head_size 6・stroke_width 8。先の三角は無く、白い線のまま。heads は開いた輪郭の端に付く既存の描き（`filament/drawn_flat.h`）で、この線の形は閉じた枠なので端が無い。10 種を足す描きは書いていない。右の気球の内側は無変化
 - [x] 縁を何重にも足す（Multi-Border）：効果の棚の Multi-Border（pixi-filters の OutlineFilter、3 重まで） — 済（10/28）：G の行と同じ

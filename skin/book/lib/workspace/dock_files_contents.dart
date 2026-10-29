@@ -301,18 +301,20 @@ class _Footer extends StatelessWidget {
       return DockFooter(title: '${_filesPicked.length} files', meta: 'Placed one after another, in the order picked', action: 'Place ${_filesPicked.length}', fresh: true, onAction: () => _placeAll(c, _filesPicked.toList()));
     }
     final layer = _layerOf(n, c), can = _kindOfFile(n.id).isNotEmpty, m = c.ws.inside;
+    // (a shape picked and a still chosen: it fills that shape, Alight Motion's Fill > Media; the button says so)
+    final shape = int.tryParse(c.ws.selected ?? ''), fills = m != null && shape != null && _kindOfFile(n.id) == 'picture' && m.word(shape, 'kind') == 'shape' && m.word(shape, 'shape') != 'null';
     return FutureBuilder<String>(   // (what the media is, as GStreamer's discoverer tells it: Alight Motion's Media Info; its file's kind and size until then)
       future: can && m != null ? mediaInfoOf(m.libPath, n.id) : null,
       builder: (context, info) => DockFooter(
       preview: n.disk && n.g == DockG.video && (info.data ?? '×').isNotEmpty && !(info.data ?? '×').contains('×') ? _Listen(n) : _Art(n),   // (sound alone, no picture in it: heard before it is placed)
       title: n.name,
       meta: c.mem.trouble[n.id] ?? [if (layer != null) 'In use', if (info.data case final i? when i.isNotEmpty) i, _metaOf(n)].join(' · '),
-      action: can ? 'Place' : 'Select',
+      action: fills ? 'Fill shape' : can ? 'Place' : 'Select',
       done: !can && layer == null,
       doneLabel: 'Folder', // (the shelf lists only folders and files the inside can place: what cannot be placed is a folder)
       fresh: can, // (placed, it is a new thing)
       lasts: switch (_kindOfFile(n.id)) { 'picture' => _StillSeconds(c), 'film' when m != null => _FilmRange(c, n.id, mediaSecondsOf(m.libPath, n.id)), _ => null },
-      onAction: () => can ? _place(c, n) : c.ws.select(layer),
+      onAction: () => fills ? c.ws.after(m.later('say', thing: shape, name: 'fill_media', word: n.id)) : can ? _place(c, n) : c.ws.select(layer),
       ),
     );
   }

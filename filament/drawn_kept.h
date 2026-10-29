@@ -26,6 +26,7 @@ struct DrawnFx { bool split = false;   // (a text's letters each a copy of their
     float blur = 0.f; int blurWay = 0; float overHigh = 1.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; int copies = 1;
                  std::vector<float4> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
                  bool hollow = false;   // (a flat shape filled with nothing: only its edge is seen)
+                 std::string media;     // (a flat shape filled with a picture's file instead of its colour, seen only where it is filled: Alight Motion's Fill > Media)
                  bool evenOdd = false;  // (where its outlines lie over each other, a hole every other time: SVG's fill-rule evenodd; else nonzero)
                  float reach = 0.f;     // (how far a bent shape goes out past its box at its most, a share of its height (bend_at): the picture larger all round by that)
                  float room = 0.f;      // (how far its effects may reach round it, made room for (doc_fx_room), a share of its height: changed within it, drawn again without being made again)

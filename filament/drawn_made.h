@@ -403,6 +403,23 @@ static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, f
         if (fx.cap >= 0) shape->strokeCap((tvg::StrokeCap)fx.cap);
         if (fx.join >= 0) shape->strokeJoin((tvg::StrokeJoin)fx.join);
         if (fx.dash > 0.f) { const float gap[2] = {fx.dash * (float)*h, fx.dash * (float)*h}; shape->strokeDash(gap, 2, fx.dashFrom * (float)*h); }   // (as long as the gaps; in shares of its height)
+        if (!fx.media.empty() && strcmp(form, "null") && !fx.hollow) {   // (filled with a picture: it covers the shape, seen only where the shape is filled, ThorVG's own alpha mask as a ramp on letters is (type); its edge over it)
+            tvg::Picture* pic = tvg::Picture::gen();
+            float pw = 0.f, ph = 0.f;
+            if (pic->load(fx.media.c_str()) == tvg::Result::Success && pic->size(&pw, &ph) == tvg::Result::Success && pw > 0.f && ph > 0.f) {
+                const float k = std::max((float)*w / pw, (float)*h / ph);   // (covering it, the middle kept: cut, not stretched)
+                pic->size(pw * k, ph * k);
+                pic->translate(0.5f * ((float)*w - pw * k), 0.5f * ((float)*h - ph * k));
+                tvg::Shape* cut = static_cast<tvg::Shape*>(shape->duplicate());
+                cut->strokeWidth(0.f), cut->fill(255, 255, 255, 255);
+                pic->mask(cut, tvg::MaskMethod::Alpha);
+                shape->fill(0, 0, 0, 0);   // (its own fill none: the picture is its fill; its edge stays over it)
+                tvg::Scene* both = tvg::Scene::gen();
+                both->add(pic), both->add(shape);
+                return both;
+            }
+            tvg::Paint::rel(pic);
+        }
         return shape;
     }, place, high, float3{-1.f}, true, lay, fx);
 }

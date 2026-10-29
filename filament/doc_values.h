@@ -2,6 +2,7 @@
 static const DocShown doc_shown[] = {
     {"text", "words", "", "Text", 0, 0, nullptr},
     {"file", "file", "", "Font", 0, 0, nullptr},
+    {"fill_media", "file", "", "Media", 0, 0, nullptr},   // (a shape filled with a picture: Alight Motion's Fill > Media; put from the Media shelf's Fill)
     {"size", "", "px", "Size", 0, 2, nullptr},
     {"align", "share", "%", "Align", 0, 1, nullptr},
     {"fill", "colours", "", "Fill", 0, 0, nullptr},
@@ -326,7 +327,7 @@ static std::vector<AbsentEffect> doc_absent_on(Doc& d, int thing, double now) {
 }
 static const DocCard doc_cards[] = {
     {"Text", "text file size align", "kind", "text"},   // (After Effects' Source Text and Character, Cavalry's Text Shape: what it says, in which font, how large, which way it lines up)
-    {"Fill", "fill stroke stroke_width"},   // (After Effects' Fill and Stroke, Cavalry's Fill and Stroke: a colour, colours down it, or the material glass; its edge and how wide)
+    {"Fill", "fill fill_media stroke stroke_width"},   // (After Effects' Fill and Stroke, Cavalry's Fill and Stroke: a colour, colours down it, or the material glass; its edge and how wide)
     {"Transform", "space parent anchor_x anchor_y anchor_z x y z scale_x scale_y scale_z rotate_x rotate_y rotate opacity", "kind", "!camera"},   // (After Effects' Transform group: where it is, how large, how turned, how seen; each its own value)
     {"Camera", "parent x y z rotate_x rotate_y rotate distance zoom", "kind", "camera"},   // (After Effects' camera: what it looks at, where it is and how turned, how far its eye is, its zoom)
     {"Blending", "blend clip"},   // (After Effects' layer mode and its track matte, in its simplest: drawn over what lies below as it says, or only inside the one before it)
