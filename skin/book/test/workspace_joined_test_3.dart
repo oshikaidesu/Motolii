@@ -562,6 +562,13 @@ void _tests3() {
     }
     await settled(t, ws);
     expect([ws.inside!.value(0, 'frame_rate', 0), Ws.fps], [24, 24], reason: 'the document at 24 frames a second, and the timeline: ${ws.inside!.trouble}');
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('size-bg-Light Gray')));   // (and the colour behind it, AbsentMotion's six, in the same box still open)
+    for (var i = 0; i < 100 && ws.inside!.word(0, 'background') != 'd8d8d8'; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await t.pump();
+    }
+    expect(ws.inside!.word(0, 'background'), 'd8d8d8', reason: 'light gray behind it: ${ws.inside!.trouble}');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
