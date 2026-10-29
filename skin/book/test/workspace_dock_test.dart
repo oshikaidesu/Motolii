@@ -11,6 +11,7 @@ import 'package:lab_book/motolii.dart';
 import 'package:lab_book/workspace/dock.dart';
 import 'package:lab_book/workspace/create_preview.dart';
 import 'package:lab_book/workspace/dock_parts.dart' show DockSearch, dockStarsAt;
+import 'package:lab_book/workspace/effect_tiles.dart';
 
 import 'door.dart';
 
@@ -48,6 +49,20 @@ Future<void> _shelf(WidgetTester t, Ws ws, Size size, String shelf) async {
 }
 
 void main() {
+  test('an AbsentMotion effect\'s tile is drawn with the knobs its own table shows it with (tools/effect_showcase.json), split before and after where it says', () {
+    final table = EffectTiles.table(motoliiDir);
+    ({Map<String, double> knobs, double? split})? of(String name) {
+      final f = '$motoliiDir/effects/am_$name.wgsl';
+      return EffectTiles.showcase(f, File(f).readAsStringSync(), table);
+    }
+    expect(of('rays')?.knobs, {'js_am_rays_R_center_x': .5, 'js_am_rays_R_center_y': .5, 'js_am_rays_reach': .6, 'js_am_rays_threshold': .5}, reason: 'center: skslc\'s R_ before it, a vector one knob each way');
+    expect([of('duotone')?.knobs['js_am_duotone_color1_x'], of('duotone')?.knobs['js_am_duotone_color1_w']], [0x2b / 255, 1.0], reason: 'a colour #2b1055: one knob each way, its alpha 1');
+    expect(of('huesaturation')?.split, .4, reason: 'before at its left, up to 0.4');
+    expect(EffectTiles.showcase('$motoliiDir/effects/God Rays.fs', '', table), isNull, reason: 'VIDVOX\'s: not in the table');
+    final all = [for (final n in (table['effects'] as Map).keys) if (File('$motoliiDir/effects/am_$n.wgsl').existsSync()) of('$n')];
+    expect([all.length > 100, all.every((s) => s != null)], [true, true], reason: 'every one of the table\'s with a file of its own read as it is');
+  });
+
   testWidgets('every shelf lays out at the reference size and when smaller', (t) async {
     final ws = _joined();
     for (final size in const [Size(240, 918), Size(240, 600)]) {

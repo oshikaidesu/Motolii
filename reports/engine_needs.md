@@ -79,7 +79,7 @@
 - **効果の数にキーが付かない（P15、10/30 夜、golf_noise.md ㊹）**：手を離した時（doc_let_go、doc_paths.h 487 行）にキーを取れる値かを固定の一覧 doc_values だけで見るので、効果の数（台本のつまみ js_…）は doc_set に回り、キーが付かないうえ、あったキーも消える（doc_edit.h 151 行）。窓の側では直せない（窓は値を運んで離すだけ）。直すなら doc_let_go の見分けを doc_knows(…, key=true) と同じにする 1 行。P15 は物を切って（Split）通した。作らずに止める
 - **【いちばん先に】効果を載せた物が途中で終わると、窓が落ちる（P15、10/30 夜、golf_noise.md ㊽）**：2 度落ちた（~/Library/Logs/DiagnosticReports/lab_book-2026-10-30-031435.ips と -031752.ips、どちらも doc_moment → doc_entities → Filament の PagedArenaBitset::fetchRemove）。物が時間の外へ出ると doc_moment.h 108 行が thing_fx_off（thing_fx.h 199 行）でその物の効果用の Scene を消すが、Doc::Shown::scene が消えた Scene を指したまま残り、131〜132 行が sc->remove(e) で触る（use-after-free）。新しい表現の話ではなく壊れ。窓の側で避ける手は無い（効果を短い物に載せない、しか無い）。直すなら 106〜110 行で、消す Scene を指す物の部品を外して scene を空に戻す。夜の決まりどおり作らずに止め、teaser の書類は効果を外して 1 本のタイトルに戻した
 - **効果の部屋が 128 px の固定（P14、10/30 夜、golf_noise.md ㊿）**：doc_moment_fx.h 145 行。Rays の筋のように物の外へ長く届く効果が、まっすぐ切れる。After Effects は効果ごとに層の箱を広げる（Grow Bounds もある）。作らずに止める
-- **舞台（机）の絵だけが文字の動きを映さない（P10、10/30 夜、golf_noise.md (56)）**：Bounce In（animators/bounce_in.js）を載せたタイトルは、Export Frame（m.still）・Projects の絵・edit.sh では文字が落ちてくるのに、窓の舞台（motolii_hand.h の desk_is が作る机の live の絵）では止まったまま。中身の書類は正しい。人が窓で動きを確かめられないので重い。作らずに止める
+- **舞台（机）の絵だけが文字の動きを映さない（P10、10/30 夜、golf_noise.md (56)）**：Bounce In（animators/bounce_in.js）を載せたタイトルは、Export Frame（m.still）・Projects の絵・edit.sh では文字が落ちてくるのに、窓の舞台（motolii_hand.h の desk_is が作る机の live の絵）では止まったまま。中身の書類は正しい。人が窓で動きを確かめられないので重い。作らずに止める。**訂正**：窓を起動し直すと舞台でも動いた。その起動の間だけの止まり（再現の手はまだ無い）。見つかるまで印だけ
 
 ## 夜の順番
 

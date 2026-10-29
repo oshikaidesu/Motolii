@@ -14,6 +14,7 @@
 // The maker's own folder is watched while the window is open (dart:io's watch, FSEvents on a Mac): a file put in or taken
 // out there and the shelves are read again (BRIDGE.md rule 8, the second half), and its tile drawn, ahead of the rest.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
@@ -26,6 +27,45 @@ abstract final class EffectTiles {
   /// The moments its pictures are drawn at, and the one its still is (fx_tiles.sh's 1.4 s).
   static const moments = [0.1, 0.357, 0.614, 0.871, 1.129, 1.386, 1.643, 1.9];
   static const still = 5;
+
+  /// What AbsentMotion shows each of its effects with (its tools/effect_showcase.json, Apache-2.0): the knobs that make
+  /// the effect plain to see, and where its picture is split into before (left) and after. By the effect's name in the
+  /// table, the file's own `am_<name>.wgsl`; each knob as from_absent.py named it (skslc's R_ before a name WGSL keeps for
+  /// itself, origin_x and the like with _ after), a vector or a colour one knob each way. Null: a file the table has not.
+  static ({Map<String, double> knobs, double? split})? showcase(String file, String head, Map<String, dynamic> table) {
+    final name = RegExp(r'/am_([a-z0-9]+)\.wgsl$').firstMatch(file)?.group(1);
+    final show = name == null ? null : (table['effects'] as Map<String, dynamic>?)?[name] as Map<String, dynamic>?;
+    if (show == null) return null;
+    final tracks = {for (final t in RegExp(r'--track@([A-Za-z0-9_]+):').allMatches(head)) t.group(1)!};
+    final stem = file.split('/').last.replaceFirst(RegExp(r'\.[^.]*$'), '').replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_');
+    final knobs = <String, double>{};
+    for (final MapEntry(key: p, :value) in ((show['params'] as Map<String, dynamic>?) ?? const {}).entries) {
+      final parts = switch (value) {
+        num v => [v.toDouble()],
+        bool v => [v ? 1.0 : 0.0],
+        String v when RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(v) => [for (var i = 1; i < 7; i += 2) int.parse(v.substring(i, i + 2), radix: 16) / 255, 1.0],
+        List v when v.length <= 4 && v.every((x) => x is num) => [for (final x in v) (x as num).toDouble()],   // (a vector; a longer list is not one: left as the file says)
+        _ => const <double>[],
+      };
+      for (final (i, v) in parts.indexed) {
+        final way = parts.length > 1 ? '_${'xyzw'[i]}' : '';
+        if ([for (final n in [p, 'R_$p', '${p}_']) '$n$way'].where(tracks.contains).firstOrNull case final knob?) knobs['js_${stem}_$knob'] = v;
+      }
+    }
+    return (knobs: knobs, split: (show['split'] as num?)?.toDouble());
+  }
+
+  /// AbsentMotion's table, read once (in each isolate that draws): empty where the library has not got it.
+  static Map<String, dynamic> table(String dir) {
+    try {
+      return jsonDecode(File('$dir/third_party/AbsentMotion/tools/effect_showcase.json').readAsStringSync()) as Map<String, dynamic>;
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  static Map<String, dynamic>? _table;
+  static bool _shownBy(String file) => showcase(file, '', _table ??= table(motoliiDir)) != null;
 
   /// Its moving pictures: home_0.jpg … home_7.jpg beside its still (none for a picture not drawn here).
   static String frame(String home, int k) => '${home.substring(0, home.length - 4)}_$k.jpg';
@@ -68,8 +108,9 @@ abstract final class EffectTiles {
     var shown = false;
     for (final (_, f) in m.effects) {
       final home = m.tileHome(f);
-      if (home.isEmpty || m.picture(f) == home) continue;
-      if (File(home).existsSync()) {
+      final stale = home.isNotEmpty && _shownBy(f) && !File('$home.showcase').existsSync();   // (drawn before AbsentMotion's table was read: drawn again by it)
+      if (home.isEmpty || (!stale && m.picture(f) == home)) continue;
+      if (!stale && File(home).existsSync()) {
         m.tileDrawn(home, same: File('$home.same').existsSync());
         shown = true;
       } else if (_asked.add(home)) {
@@ -131,6 +172,7 @@ abstract final class EffectTiles {
       return made;
     }
     final sample = shoot('${folder.path}/sample.png');   // (the sample as it is, to tell a tile that shows nothing done)
+    final shows = table(dir);
     for (final (f, home) in files) {
       try {
         Directory(File(home).parent.path).createSync(recursive: true);
@@ -146,13 +188,24 @@ abstract final class EffectTiles {
           ..key(0, progress, moments.last, 1);
       }
       final plays = f.endsWith('.fs') && RegExp(r'"PERSISTENT"\s*:\s*(true|1)').hasMatch(File(f).readAsStringSync());
+      final show = f.endsWith('.wgsl') ? showcase(f, File(f).readAsStringSync(), shows) : null;
+      for (final MapEntry(:key, :value) in (show?.knobs ?? const <String, double>{}).entries) {
+        m.set(whole ? 0 : photo, key, value);   // (as AbsentMotion shows it: its table's values, not the file's defaults)
+      }
       var made = shoot(home, plays: plays);
       if (whole) m.say(0, 'script', 'none');
       if (onIt) m.say(photo, 'fx', 'none');
       if (made.length < moments.length) made = shoot(home);   // (put on but not drawn, a script that stops: the sample as it is)
       if (made.length < moments.length) continue;
-      File(_drawn(home, still)).copySync(home);
       final same = sample.length == moments.length && _unseen(home, folder.path);
+      if (show?.split case final at? when sample.length == moments.length) {   // (before at its left, as AbsentMotion's effect_thumbs.py lays the photo over it up to there, a white line where they meet)
+        for (final (k, _) in moments.indexed) {
+          Process.runSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', _drawn(home, k), '-i', '${folder.path}/sample_$k.png', '-filter_complex',
+              '[1:v]crop=iw*$at:ih:0:0[b];[0:v][b]overlay=0:0,drawbox=x=iw*$at-2:y=0:w=2:h=ih:color=white:t=fill', '${folder.path}/split.png']);
+          if (File('${folder.path}/split.png').existsSync()) File('${folder.path}/split.png').renameSync(_drawn(home, k));
+        }
+      }
+      File(_drawn(home, still)).copySync(home);
       for (final (k, _) in moments.indexed) {
         Process.runSync('sips', ['-s', 'format', 'jpeg', '-s', 'formatOptions', '70', _drawn(home, k), '--out', frame(home, k)]);
         File(_drawn(home, k)).deleteSync();
@@ -160,6 +213,7 @@ abstract final class EffectTiles {
       try {
         same ? File('$home.same').writeAsStringSync('') : File('$home.same').deleteSync();
       } catch (_) {}
+      if (show != null) File('$home.showcase').writeAsStringSync('');   // (drawn as AbsentMotion shows it)
       drawn.add((home, same));
     }
     m.close();
