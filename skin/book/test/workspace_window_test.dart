@@ -1,5 +1,6 @@
 // The window as a whole, on a real document (test/door.dart): its panes, a pane and a desk tool of your own, the
 // selection reaching the inspector, the shade, the shelves.
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/tokens.dart';
@@ -101,6 +102,25 @@ void main() {
       expect(ws.shelf, shelf);
       expect(find.textContaining(hint), findsWidgets);
     }
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
+  testWidgets('Edit > Deselect All, Cmd+Shift+A (After Effects\', Premiere Pro\'s): nothing picked, with a thing over the whole stage too', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    ws
+      ..reread()
+      ..select('$cube');
+    await t.pumpAndSettle();
+    expect(ws.selected, '$cube');
+    await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await t.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await t.sendKeyEvent(LogicalKeyboardKey.keyA);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await t.pumpAndSettle();
+    expect(ws.selected, isNull, reason: 'golf_noise.md (63): no way back to nothing picked but a click below the rows');
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, skip: !insideBuilt);

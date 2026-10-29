@@ -23,6 +23,7 @@ const defaultKeys = <(String, String)>[
   ('cmd+alt+c', 'edit.copyStyle'),   // (the Mac's own: Pages, Keynote, TextEdit)
   ('cmd+alt+v', 'edit.pasteStyle'),
   ('cmd+a', 'edit.selectAll'),
+  ('cmd+shift+a', 'edit.deselectAll'),   // (After Effects', Premiere Pro's: Deselect All)
   ('cmd+d', 'thing.duplicate'),   // (Live 42.5)
   ('cmd+g', 'thing.group'),   // (Figma's, Keynote's: Group)
   ('cmd+shift+g', 'thing.ungroup'),

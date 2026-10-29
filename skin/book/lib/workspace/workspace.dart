@@ -293,6 +293,9 @@ class _WorkspaceState extends State<Workspace> {
         }
       },
       'edit.selectAll': () => _typed(const SelectAllTextIntent(SelectionChangedCause.keyboard)) ? null : ws.pickMany([for (final l in ws.layers) l.id]),   // (no words being written: every thing, as Ableton's Cmd+A in the arrangement)
+      'edit.deselectAll': () => ws
+        ..clearKeys()
+        ..select(null),   // (nothing picked, as a click below the rows: After Effects' and Premiere Pro's Edit > Deselect All; with a thing over the whole stage, the one way back: golf_noise.md (63))
       'thing.deactivate': () {
         final t = int.tryParse(ws.selected ?? '');
         if (t == null) return;
@@ -420,6 +423,7 @@ class _WorkspaceState extends State<Workspace> {
               item('Save Look', 'thing.saveLook'),
               item('Save to My Elements', 'thing.saveElement'),
               item('Select All', 'edit.selectAll'),
+              item('Deselect All', 'edit.deselectAll'),
             ],
           ),
           PlatformMenuItemGroup(
