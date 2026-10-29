@@ -141,8 +141,19 @@ final _glass = _Make('Glass', DockG.radial, WsT.toneShape, '', 'Thick glass mate
 /// Joined: the picked thing's fill told to the document (a colour as six digits, or a material's name). Not done: the foot says why.
 void _fill(DockCtx c, String word) {
   final m = c.ws.inside!, t = int.tryParse(c.ws.selected ?? '');
+  // (a colour given to a thing is also what the next thing drawn comes in: its fill the ink, its outline the edge, as
+  //  CLIP STUDIO PAINT has one drawing colour that every tool draws in, its text too, the last one chosen; glass fills
+  //  a solid alone, so it is not kept)
+  void keep(String name) {
+    if (word == 'glass') return;
+    if (name == 'fill') c.ws.ink = word;
+    if (name == 'stroke') c.ws.edge = word;
+  }
   if (c.ws.aim case final aim?) { // (a card's colour link aimed it: said to that value, of the picked thing or of the stage)
-    c.ws.after(m.later('say', thing: t ?? 0, name: aim, word: word), (done, why) => c.set(() => done ? c.mem.trouble.remove('fill') : c.mem.trouble['fill'] = why));   // (without waiting)
+    c.ws.after(m.later('say', thing: t ?? 0, name: aim, word: word), (done, why) => c.set(() {
+      if (done && t != null) keep(aim);
+      done ? c.mem.trouble.remove('fill') : c.mem.trouble['fill'] = why;
+    }));   // (without waiting)
     return;
   }
   if (t == null) { // (nothing picked: the drawing tools' ink, what a thing drawn next is filled with)
@@ -150,7 +161,10 @@ void _fill(DockCtx c, String word) {
     c.ws.reread();
     return;
   }
-  c.ws.after(m.later('say', thing: t, name: 'fill', word: word), (done, why) => c.set(() => done ? c.mem.trouble.remove('fill') : c.mem.trouble['fill'] = why));   // (without waiting)
+  c.ws.after(m.later('say', thing: t, name: 'fill', word: word), (done, why) => c.set(() {
+    if (done) keep('fill');
+    done ? c.mem.trouble.remove('fill') : c.mem.trouble['fill'] = why;
+  }));   // (without waiting)
 }
 
 /// The colours of the things, each by the thing's name: what the document's things are filled with (a ramp by its first).

@@ -547,6 +547,20 @@ void _tests2() {
     }
     final rect = int.parse(ws.selected!);
     expect(m.word(rect, 'fill'), ws.ink, reason: 'drawn in the ink');
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Pop Poster');
+    await t.pumpAndSettle();
+    final chip = find.descendant(of: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Strip'), matching: find.byType(DockHover)).first;
+    await seen(t, chip);
+    await doubleTap(t, chip);   // (the rect picked: it is filled)
+    await settled(t, ws);
+    expect([m.word(rect, 'fill') != ink.join(' '), ws.ink], [true, m.word(rect, 'fill')], reason: 'a colour given to a thing is the next one\'s too (CLIP STUDIO PAINT\'s one drawing colour, every tool\'s)');
+    await t.dragFrom(stage.center - Offset(stage.width * .3, stage.height * .3), Offset(stage.width * .1, stage.height * .1));
+    await settled(t, ws);
+    for (var i = 0; i < 200 && ws.selected == '$rect'; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    expect(m.word(int.parse(ws.selected!), 'fill'), m.word(rect, 'fill'), reason: 'the next drawn comes in the colour last used');
     await t.tap(find.byKey(const ValueKey('ws-tool-1')));
     await t.pumpAndSettle();
     await t.tap(find.text('X').first); // (the strip's, before the inspector's)
