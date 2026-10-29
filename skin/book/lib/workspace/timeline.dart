@@ -75,8 +75,14 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
       dim: _isHidden(ws, l.id) || (_anySolo(ws) && !_isSolo(ws, l.id)),
       locked: _isLocked(ws, l.id),
       lane: [for (var i = 0; i < n; i++) ((at[i] * Ws.fps).round(), hi > lo ? (vs[i] - lo) / (hi - lo) : .5)],
+      laneWays: [for (var i = 0; i + 1 < n; i++) _wayShape(ws, m.wayOf(t, name, at[i]))],
     );
   }
+
+  // A way's shape from 0 to 1, as the bar's stretches are drawn (ws_2.dart: wayAt at seventeen points); kept by the way,
+  // which says all of it, so a lane is not reckoned again as the view moves.
+  static final _wayShapes = <String, List<double>>{};
+  List<double> _wayShape(Ws ws, String way) => way.isEmpty ? const [0, 1] : _wayShapes.putIfAbsent(way, () => [for (var i = 0; i <= 16; i++) ws.inside!.wayAt(way, i / 16)]);
 
   @override
   void initState() {

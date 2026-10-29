@@ -84,6 +84,19 @@ void main() {
     await t.tap(find.descendant(of: find.byType(DeskEase), matching: find.byType(DeskIconButton)).last); // (Reverse)
     await settled(t, ws);
     expect(m.wayOf(cube, 'x', 0), startsWith('Bezier 0.42 0 1 1'), reason: 'Out turned is In');
+    // (no key picked: the stretch the playhead is in, of the picked thing, as Alight Motion opens its ease: golf_noise.md ⑫)
+    ws
+      ..clearKeys()
+      ..select('$cube')
+      ..frame = 30;   // (0.5 s, between its keys at 0 and 1 s)
+    await t.pumpAndSettle();
+    expect(find.textContaining('No stretch'), findsNothing, reason: 'the stretch from 0 to 60 is shown');
+    await t.tap(find.descendant(of: find.byType(DeskEase), matching: find.text('Out')).first);
+    await settled(t, ws);
+    expect(m.wayOf(cube, 'x', 0), startsWith('Bezier 0 0 0.58 1'), reason: 'put on the stretch the playhead is in');
+    ws.frame = 90;   // (after the last key: no stretch)
+    await t.pumpAndSettle();
+    expect(find.textContaining('No stretch'), findsOneWidget);
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t); // (what the desk shows is read back from the document, not kept by the window)
     await closeWorkspace(t);

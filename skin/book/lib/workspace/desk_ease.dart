@@ -74,7 +74,12 @@ double bezierY(Offset p1, Offset p2, double x) {
 typedef EaseSpan = ({WsLayer layer, int from, int to, int picked});
 
 EaseSpan? easeSpan(Ws ws) {
-  if (ws.keys.isEmpty) return null;
+  if (ws.keys.isEmpty) {   // (no key picked: the stretch the playhead is in, of the picked thing, as Alight Motion opens its ease when the playhead is between two keys: reports/alight_ui.md, イーズ)
+    final layer = ws.layers.where((l) => l.id == ws.selected).firstOrNull, f = ws.frame;
+    final keys = layer == null ? const <int>[] : ([...layer.keys]..sort());
+    final from = keys.where((k) => k <= f).lastOrNull, to = keys.where((k) => k > f).firstOrNull;
+    return from == null || to == null ? null : (layer: layer!, from: from, to: to, picked: 0);
+  }
   final picked = ws.keys.toList()..sort((a, b) => a.frame.compareTo(b.frame));
   final k = picked.first, layer = ws.layers.where((l) => l.id == k.layer).firstOrNull;
   if (layer == null) return null;

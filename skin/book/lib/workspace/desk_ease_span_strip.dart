@@ -28,7 +28,7 @@ class SpanStrip extends StatelessWidget {
     return DeskStrip(
       left: [
         if (s == null)
-          Text('No keys picked · pick a key on the timeline', style: T.label(Grey.g63)) // (a way is of the stretch after a key; with none picked it is of nothing)
+          Text('No stretch · put the playhead between two keys, or pick a key', style: T.label(Grey.g63)) // (a way is of the stretch after a key, or the one the playhead is in, as Alight Motion's ease)
         else ...[
           step(before, true),   // (first, where the strip never hides them)
           step(after, false),

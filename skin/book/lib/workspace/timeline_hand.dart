@@ -22,10 +22,14 @@ extension _WsTimelineHand on _WsTimelineState {
       if ((v.x((k * Ws.fps).round()) - p.dx).abs() <= WtM.keyPicked + 2) return ws.after(m.later('unkey', thing: t, name: name, number: k));
     }
     final f = v.frameAt(p.dx), top = r.i * WtM.row - _vscroll + 4, h = WtM.row - 9;
-    var at = pts.first.$2;   // (the line: level before the first and after the last, straight between)
+    var at = pts.first.$2;   // (the line: level before the first and after the last, between as it goes, drawn so)
     for (var i = 0; i < pts.length; i++) {
       if (f >= pts[i].$1) at = pts[i].$2;
-      if (i + 1 < pts.length && f >= pts[i].$1 && f < pts[i + 1].$1) at = pts[i].$2 + (pts[i + 1].$2 - pts[i].$2) * (f - pts[i].$1) / (pts[i + 1].$1 - pts[i].$1);
+      if (i + 1 < pts.length && f >= pts[i].$1 && f < pts[i + 1].$1) {
+        final way = row.laneWays?.elementAtOrNull(i) ?? const [0.0, 1.0], u = (f - pts[i].$1) / (pts[i + 1].$1 - pts[i].$1) * (way.length - 1);
+        final j = u.floor().clamp(0, way.length - 2), w = way[j] + (way[j + 1] - way[j]) * (u - j);
+        at = pts[i].$2 + (pts[i + 1].$2 - pts[i].$2) * w;
+      }
     }
     if ((top + (1 - at) * h - p.dy).abs() > 5) return;   // (off the line: Ableton puts one there by a double click)
     ws.after(m.later('key_here', thing: t, name: name, number: f.round().clamp(0, Ws.duration) / Ws.fps));

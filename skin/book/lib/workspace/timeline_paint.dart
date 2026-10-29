@@ -66,12 +66,16 @@ class WtRow {
     this.mix,
     this.stretches = const [],
     this.lane,
+    this.laneWays,
   });
   final List<WsStretch> stretches;   // (how it goes between its keys: each stretch's way drawn between them)
 
   /// A value's own lane in place of a bar (Ableton's automation lane): each key's frame and where its value stands
   /// between the lowest and the highest the value's keys hold (0 to 1); null: a layer's row.
   final List<(int, double)>? lane;
+
+  /// How the lane goes from each key to the next: its way's shape, 0 at the key and 1 at the next (as a stretch's).
+  final List<List<double>>? laneWays;
   final Color? tone;   // (its label colour; none: its kind's)
   final List<Color>? mix;   // (a relation's: its things' label colours, its bar their gradient)
   final String name;
@@ -369,14 +373,21 @@ class WtTracksPainter extends CustomPainter {
   }
 
   /// A value's lane, as Ableton draws an envelope in its own lane (Live 12 manual 25.5): its keys as breakpoints at
-  /// their values, lowest at the bottom, joined by straight segments (an envelope's as they come), level before the
-  /// first and after the last; the line in the bar's colour made lighter, as the bar's own automation line.
+  /// their values, lowest at the bottom, joined as each goes there (its way's shape: Ableton draws a curved segment
+  /// curved, 25.5.2; the bar's own stretches the same), level before the first and after the last; the line in the
+  /// bar's colour made lighter, as the bar's own automation line (golf_noise.md ⑫: it was straight whatever the ease).
   void _lane(Canvas c, Size s, WtRow r, List<(int, double)> pts, double cy) {
     final top = cy - WtM.row / 2 + 4, h = WtM.row - 9, col = Color.lerp(wtBarFill(r), Grey.g100, r.dim ? .25 : .6)!;
     Offset at((int, double) q) => Offset(view.x(q.$1), top + (1 - q.$2) * h);
     final line = Path()..moveTo(0, at(pts.first).dy);
-    for (final q in pts) {
-      line.lineTo(at(q).dx, at(q).dy);
+    for (var i = 0; i < pts.length; i++) {
+      final a = at(pts[i]), way = i + 1 < pts.length ? r.laneWays?.elementAtOrNull(i) : null;
+      line.lineTo(a.dx, a.dy);
+      if (way == null) continue;
+      final b = at(pts[i + 1]);
+      for (var j = 1; j < way.length - 1; j++) {   // (an overshoot kept within its own lane)
+        line.lineTo(a.dx + (b.dx - a.dx) * j / (way.length - 1), (a.dy + (b.dy - a.dy) * way[j]).clamp(top - 3, top + h + 3));
+      }
     }
     line.lineTo(s.width, at(pts.last).dy);
     c.drawPath(line, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.2..strokeJoin = StrokeJoin.round..isAntiAlias = true..color = col);

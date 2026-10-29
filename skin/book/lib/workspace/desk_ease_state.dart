@@ -19,9 +19,36 @@ class DeskEaseState extends State<DeskEase> {
   Ease? _pending, _waiting;
   String? _trouble;
 
+  // (with no key picked the stretch follows the playhead: built again when it comes into another stretch, not every frame)
+  Ws? _ws;
+  String _spanAt = '';
+  void _moved() {
+    final id = spanId(easeSpan(_ws!));
+    if (id != _spanAt && mounted) setState(() => _spanAt = id);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final ws = WsScope.read(context);
+    if (ws == _ws) return;
+    _ws?.moment.removeListener(_moved);
+    _ws = ws..moment.addListener(_moved);
+    _spanAt = spanId(easeSpan(ws));
+  }
+
+  @override
+  void dispose() {
+    _ws?.moment.removeListener(_moved);
+    super.dispose();
+  }
+
   // Every picked key's stretch, on whatever bar it is: each value keyed there. A last key has no stretch after it: the
   // one that ends at it, as the desk shows.
   List<(int, String, double)> _stretches(Ws ws) => [
+      if (ws.keys.isEmpty)   // (none picked: the stretch the playhead is in)
+        if (easeSpan(ws) case final s?)
+          for (final at in keysAt(ws, s).entries) (int.parse(s.layer.id), at.key, at.value),
       for (final k in ws.keys)
         if (ws.layers.where((l) => l.id == k.layer).firstOrNull case final l?)
           for (final at in keysAt(ws, (layer: l, from: l.keys.any((f) => f > k.frame) ? k.frame : (l.keys.where((f) => f < k.frame).fold<int?>(null, (a, f) => a == null || f > a ? f : a) ?? k.frame), to: k.frame, picked: k.frame)).entries)
