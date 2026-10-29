@@ -361,6 +361,8 @@ static void doc_look(Doc& d) {
     s.view->setVignetteOptions(corners);
     View::FogOptions haze = s.view->getFogOptions();
     haze.enabled = doc_number(d, 0, "fog", 0, 0) > 0.0, haze.density = 0.5f * (float)doc_number(d, 0, "fog", 0, 0), haze.distance = (float)doc_number(d, 0, "fog_near", 0, 2), haze.height = -1e3f, haze.heightFalloff = 0.f, haze.color = hex("fog_color", float3{0.85f, 0.85f, 0.9f}), haze.fogColorFromIbl = false;
+    if (const double far = doc_number(d, 0, "fog_far", 0, 0); far > haze.distance)   // (a far said, Alight Motion's: as thick as makes it 98% whole there, its fog times that (1 - e^-(density x the way past its start): Filament's own fog, uniform in height); as three.js's linear Fog's far set on its FogExp2)
+        haze.density = (float)(doc_number(d, 0, "fog", 0, 0) * std::log(50.0) / (far - haze.distance));
     s.view->setFogOptions(haze);
     View::AmbientOcclusionOptions folds = s.view->getAmbientOcclusionOptions();
     folds.enabled = doc_number(d, 0, "ambient_occlusion", 0, 0) > 0.0, folds.intensity = 2.f * (float)doc_number(d, 0, "ambient_occlusion", 0, 0);

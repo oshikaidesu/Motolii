@@ -196,6 +196,7 @@ static const DocShown doc_shown[] = {
     {"vignette_color", "colour", "", "Vignette", 0, 0, "Tints"},
     {"fog", "share", "%", "Fog", 0, 1, nullptr},
     {"fog_near", "", "", "Fog near", 0, 20, nullptr},
+    {"fog_far", "", "", "Fog far", 0, 60, nullptr},   // (where it is all but whole: Alight Motion's far; 0 not said, the fog's own thickness)
     {"fog_color", "colour", "", "Fog", 0, 0, "Tints"},
     {"lens_flare", "share", "%", "Flare", 0, 1, nullptr},
     {"anti_aliasing", "", "", "Smooth", 0, 0, nullptr},
@@ -359,7 +360,7 @@ static const DocCard doc_cards[] = {
     {"Light", "intensity falloff cone shadows shadow_softness contact_shadows light_group sun_size sun_halo", "kind", "light"},
     {"Projection", "projection shift_x shift_y"},
     {"Grade", "tone_mapper exposure contrast saturation vibrance temperature slope offset power shadows_color midtones_color highlights_color"},
-    {"Lens", "bloom ambient_occlusion reflections lens_flare vignette vignette_color fog fog_near fog_color anti_aliasing"},
+    {"Lens", "bloom ambient_occlusion reflections lens_flare vignette vignette_color fog fog_near fog_far fog_color anti_aliasing"},
     {"Room", "room environment environment_rotate behind background"},
     {"Physics", "physics bounce friction gravity"},
     {"Around", "strength radius offset tilt leader centre_x centre_y rotate rotate_y lag", "file", "around"},   // (a relation's card: its things round a middle, or round a leader; turned in turn, lag apart)
