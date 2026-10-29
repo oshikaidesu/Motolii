@@ -192,7 +192,7 @@ class _TextBoxState extends State<TextBox> {
               Expanded(
                 child: Stack(alignment: Alignment.centerLeft, children: [
                   if (_c.text.isEmpty) IgnorePointer(child: Text(widget.hint, style: T.name(N.g44), maxLines: 1)),
-                  EditableText(
+                  TextHand(field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
                     controller: _c,
                     focusNode: _n,
                     style: style,
@@ -208,7 +208,7 @@ class _TextBoxState extends State<TextBox> {
                       widget.onSubmit?.call(s);
                       _n.requestFocus();
                     },
-                  ),
+                  )),
                 ]),
               ),
               if (widget.invalid) const ErrMark(lead: 6),

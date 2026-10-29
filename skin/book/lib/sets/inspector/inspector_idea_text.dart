@@ -3,6 +3,7 @@ import 'inspector_studies.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import '../../tokens.dart';
+import '../foundations/text_hand.dart';
 
 // ---- idea: text -------------------------------------------------------------------------------------------------------
 /// contract: mirrors motolii-doc store/text.rs — runs over the content, each with its own style (size, wght axis, fill);
@@ -247,7 +248,7 @@ class _TxEditState extends State<_TxEdit> {
             borderRadius: BorderRadius.circular(6),
             border: Border.all(color: _focus.hasFocus ? Grey.g38 : const Color(0x00000000)),
           ),
-          child: EditableText(
+          child: TextHand(field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
             controller: _ctl,
             focusNode: _focus,
             style: _txStyle(_txBase, doc, _txBase.size),
@@ -256,7 +257,7 @@ class _TxEditState extends State<_TxEdit> {
             selectionColor: _txHi,
             textAlign: _txAligns[(doc.get('tx_align') ?? 0).round().clamp(0, 2)],
             maxLines: null,
-          ),
+          )),
         ),
         const SizedBox(height: 6),
         _TxTarget(s == null ? null : _txQuote(t.substring(s.start, s.end)), () => setState(() => _sel = null)),

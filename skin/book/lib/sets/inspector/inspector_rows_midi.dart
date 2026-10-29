@@ -5,6 +5,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
 import 'package:lab_book/tokens.dart';
+import '../foundations/text_hand.dart';
 
 /// om_midi's kinds of keys, by the inside's names (midi.h: midi_keys), in its panel's words.
 const midiKinds = [('velocity', 'Velocity'), ('pitch', 'Pitch'), ('count', 'Count'), ('on', 'Note on'), ('bool', 'Bool')];
@@ -93,7 +94,7 @@ class _MidiKeysState extends State<MidiKeys> {
               padding: EdgeInsets.symmetric(horizontal: Shape.s(6)),
               alignment: Alignment.centerLeft,
               decoration: BoxDecoration(color: Grey.g15, borderRadius: BorderRadius.all(Shape.r(4))),
-              child: EditableText(controller: _bpm, focusNode: _f, style: T.name(Grey.g95), cursorColor: Grey.g95, backgroundCursorColor: Grey.g20, maxLines: 1),
+              child: TextHand(field: (k) => EditableText(key: k, rendererIgnoresPointer: true,controller: _bpm, focusNode: _f, style: T.name(Grey.g95), cursorColor: Grey.g95, backgroundCursorColor: Grey.g20, maxLines: 1)),
             ),
           ),
           line(

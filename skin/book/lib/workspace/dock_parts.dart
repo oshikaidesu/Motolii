@@ -11,6 +11,7 @@ import '../sets/panels/media_parts.dart' show drawStar, glyph;
 import '../tokens.dart';
 import 'dock_glyphs.dart';
 import 'ws.dart';
+import '../sets/foundations/text_hand.dart';
 
 const dockFilterHeight = 168.0;
 
@@ -375,7 +376,7 @@ class _DockSearchState extends State<DockSearch> {
                     IgnorePointer(
                       child: Text(widget.hint, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(Grey.g56)),
                     ),
-                  EditableText(
+                  TextHand(field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
                     controller: c,
                     focusNode: _focus,
                     style: T.name(Grey.g95),
@@ -384,7 +385,7 @@ class _DockSearchState extends State<DockSearch> {
                     selectionColor: Grey.g38,
                     cursorWidth: 1.5,
                     maxLines: 1,
-                  ),
+                  )),
                 ],
               ),
             ),

@@ -9,6 +9,7 @@ import 'package:lab_book/forms/number_paint.dart';
 import 'package:lab_book/parts/controls.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
 import 'package:lab_book/tokens.dart';
+import '../foundations/text_hand.dart';
 
 class NumFieldState extends State<NumField> {
   final _node = FocusNode(debugLabel: 'num');
@@ -396,7 +397,7 @@ class NumFieldState extends State<NumField> {
         final block = widget.caption != null;
         // contract: animated = a dim dot, keyed at the playhead = a lit dot (the automation blip, not a column).
         final editor = _editing
-            ? EditableText(
+            ? TextHand(field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
                 controller: _ctl,
                 focusNode: _ef,
                 style: block ? blockValue(Grey.g95) : T.value(Grey.g95),
@@ -410,7 +411,7 @@ class NumFieldState extends State<NumField> {
                 onChanged: (_) {
                   if (_err) setState(() => _err = false);
                 },
-              )
+              ))
             : null;
         final body = paintNumber(
           context,

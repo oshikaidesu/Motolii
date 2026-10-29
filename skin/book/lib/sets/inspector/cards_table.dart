@@ -17,6 +17,7 @@ import 'package:flutter/widgets.dart';
 import '../../tokens.dart';
 import '../../parts/controls.dart' show Segmented;
 import 'inspector_parts.dart' show Pop;
+import '../foundations/text_hand.dart';
 part 'cards_table_2.dart';
 part 'cards_table_3.dart';
 part 'cards_table_4.dart';

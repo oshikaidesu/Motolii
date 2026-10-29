@@ -187,7 +187,7 @@ void main() {
     expect(ws.frame, (at * Ws.fps).round(), reason: 'a click on the flag goes there');
     expect(wsMarkPicked.value, isNotNull, reason: 'and picks it');
     await menu(flag, 'Rename…');
-    final words = t.widget<EditableText>(find.byKey(const ValueKey('ws-tl-mark-name'))).controller;
+    final words = t.widget<EditableText>(find.descendant(of: find.byKey(const ValueKey('ws-tl-mark-name')), matching: find.byType(EditableText))).controller;
     expect(words.selection, const TextSelection(baseOffset: 0, extentOffset: 2), reason: 'its words picked: what is typed takes their place (Final Cut Pro\'s marker)');
     await t.enterText(find.byKey(const ValueKey('ws-tl-mark-name')), 'Drop');
     await t.testTextInput.receiveAction(TextInputAction.done);

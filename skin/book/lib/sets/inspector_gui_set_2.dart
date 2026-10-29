@@ -162,7 +162,7 @@ class _XyzStackState extends State<XyzStack> {
     final ink = !on ? N.g56 : (locked ? N.g56 : N.g95);
     Widget value;
     if (edit == i) {
-      final field = EditableText(
+      final field = TextHand(field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
         controller: ctrl,
         focusNode: editFocus,
         style: T.value(N.g95),
@@ -171,7 +171,7 @@ class _XyzStackState extends State<XyzStack> {
         textAlign: TextAlign.right,
         onSubmitted: (_) => _commitEdit(),
         onTapOutside: (_) => _commitEdit(),
-      );
+      ));
       value = mixed
           ? Stack(alignment: Alignment.centerRight, children: [
               ValueListenableBuilder<TextEditingValue>(valueListenable: ctrl, builder: (_, v, _) => v.text.isEmpty ? Text('—', style: T.value(N.g63)) : const SizedBox.shrink()),

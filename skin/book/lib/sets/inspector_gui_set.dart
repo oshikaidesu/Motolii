@@ -16,6 +16,7 @@ import '../kit.dart';
 import '../parts/controls.dart' show PillSwitch, Segmented;
 import '../tokens.dart';
 import 'inspector_parts.dart' show Cap, Chip;
+import 'foundations/text_hand.dart';
 part 'inspector_gui_set_2.dart';
 part 'inspector_gui_set_3.dart';
 part 'inspector_gui_set_4.dart';

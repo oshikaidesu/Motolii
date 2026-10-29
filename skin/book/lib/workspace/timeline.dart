@@ -21,6 +21,7 @@ import 'timeline_paint.dart';
 import 'relate.dart';
 import 'ws.dart';
 import 'ws_menu.dart';
+import '../sets/foundations/text_hand.dart';
 part 'timeline_asked.dart';
 part 'timeline_view.dart';
 part 'timeline_hand.dart';
@@ -554,8 +555,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: child,
                 ),
-                child: EditableText(
-                  key: const ValueKey('ws-tl-mark-name'),
+                child: TextHand(key: const ValueKey('ws-tl-mark-name'), field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
                   controller: _markWords,
                   focusNode: _markFocus,
                   style: T.micro(Grey.g13).copyWith(fontWeight: FontWeight.w700),
@@ -564,7 +564,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                   selectionColor: Grey.g13.withValues(alpha: .3),   // (its words picked, seen as picked)
                   maxLines: 1,
                   onSubmitted: (_) => _markFocus.unfocus(),
-                ),
+                )),
               ),
             ),
         ],

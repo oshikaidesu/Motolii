@@ -161,7 +161,7 @@ class _NumEditState extends State<_NumEdit> {
         }
         return KeyEventResult.ignored;
       },
-      child: EditableText(
+      child: TextHand(field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
         controller: c,
         focusNode: f,
         autofocus: true,
@@ -171,7 +171,7 @@ class _NumEditState extends State<_NumEdit> {
         selectionColor: Pop.accent.withValues(alpha: .3),
         onSubmitted: (_) => _keep(),
         onTapOutside: (_) => widget.t.type(null),
-      ),
+      )),
     ),
   );
 }

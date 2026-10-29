@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../parts/controls.dart';
 import '../../tokens.dart';
+import 'text_hand.dart';
 part 'inputs_parts_2.dart';
 part 'inputs_parts_3.dart';
 part 'inputs_parts_4.dart';
@@ -309,7 +310,7 @@ class _InlineEditState extends State<InlineEdit> {
           }
           return KeyEventResult.ignored;
         },
-        child: EditableText(
+        child: TextHand(field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
           controller: _c,
           focusNode: _n,
           style: widget.style ?? T.value(N.g100),
@@ -320,7 +321,7 @@ class _InlineEditState extends State<InlineEdit> {
           maxLines: 1,
           cursorWidth: 1,
           onSubmitted: (_) => _finish(true),
-        ),
+        )),
       );
 }
 

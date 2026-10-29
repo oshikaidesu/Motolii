@@ -15,6 +15,7 @@ import 'package:flutter/widgets.dart';
 import '../motolii.dart' show docFactsOf;
 import '../tokens.dart';
 import 'ws.dart';
+import '../sets/foundations/text_hand.dart';
 
 /// One document listed: its file, and what it kept (null: none yet, or not read yet).
 class HomeDoc {
@@ -158,15 +159,14 @@ class _WsHomeState extends State<WsHome> {
                   child: Container(
                     padding: EdgeInsets.symmetric(horizontal: WsT.inset, vertical: 4),
                     decoration: BoxDecoration(color: WsT.card, borderRadius: BorderRadius.circular(6)),
-                    child: EditableText(
-                      key: const ValueKey('home-find'),
+                    child: TextHand(key: const ValueKey('home-find'), field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
                       controller: _findText,
                       focusNode: _findFocus,
                       style: T.label(Grey.g91),
                       cursorColor: WsT.accent,
                       backgroundCursorColor: Grey.g63,
                       onChanged: (v) => setState(() => _find = v),
-                    ),
+                    )),
                   ),
                 ),
                 const SizedBox(width: 8),

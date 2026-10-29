@@ -445,7 +445,7 @@ class _TagInputState extends State<TagInput> {
                     if (!_focus && tags.isEmpty) IgnorePointer(child: Text('Add tag', style: T.label(N.g44))),
                     Padding(
                       padding: const EdgeInsets.only(left: 2),
-                      child: EditableText(
+                      child: TextHand(field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
                         controller: _c,
                         focusNode: _n,
                         style: T.label(N.g95),
@@ -458,7 +458,7 @@ class _TagInputState extends State<TagInput> {
                           if (s.endsWith(',')) _add();
                         },
                         onEditingComplete: _add,
-                      ),
+                      )),
                     ),
                   ]),
                 ),

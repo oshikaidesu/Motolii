@@ -189,8 +189,7 @@ mixin _TimelineAsked on State<WsTimeline> {
               color: Grey.g91,
               padding: EdgeInsets.symmetric(horizontal: Shape.s(4)),
               alignment: Alignment.centerLeft,
-              child: EditableText(
-                key: ValueKey('ws-tl-rename-$id'),
+              child: TextHand(key: ValueKey('ws-tl-rename-$id'), field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
                 controller: _renameWords,
                 focusNode: _renameFocus,
                 style: T.label(Grey.g13).copyWith(fontWeight: FontWeight.w700),
@@ -198,7 +197,7 @@ mixin _TimelineAsked on State<WsTimeline> {
                 backgroundCursorColor: Grey.g38,
                 maxLines: 1,
                 onSubmitted: (_) => _renameFocus.unfocus(),
-              ),
+              )),
             ),
           ),
         );

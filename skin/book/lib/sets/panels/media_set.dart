@@ -9,6 +9,7 @@ import '../../kit.dart';
 import '../../parts/controls.dart';
 import '../../tokens.dart';
 import 'media_parts.dart';
+import '../foundations/text_hand.dart';
 part 'media_set_2.dart';
 part 'media_set_3.dart';
 
@@ -334,7 +335,7 @@ class _SearchBarState extends State<_SearchBar> {
             const SizedBox(width: 8),
             Expanded(child: Stack(alignment: Alignment.centerLeft, children: [
               if (_ctl.text.isEmpty) IgnorePointer(child: Text('Search media, tags', style: T.name(N.g44))),
-              EditableText(controller: _ctl, focusNode: _focus, style: T.name(N.g95), cursorColor: N.g95, backgroundCursorColor: N.g20, selectionColor: Role.selected.withValues(alpha: .4), maxLines: 1, onChanged: (_) => setState(() {})),
+              TextHand(field: (k) => EditableText(key: k, rendererIgnoresPointer: true,controller: _ctl, focusNode: _focus, style: T.name(N.g95), cursorColor: N.g95, backgroundCursorColor: N.g20, selectionColor: Role.selected.withValues(alpha: .4), maxLines: 1, onChanged: (_) => setState(() {}))),
             ])),
             if (_ctl.text.isNotEmpty)
               Press(

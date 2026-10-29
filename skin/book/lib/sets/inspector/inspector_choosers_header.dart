@@ -8,6 +8,7 @@ import '../../parts/controls.dart';
 import '../../parts/glyphs.dart';
 import '../../tokens.dart';
 import 'inspector_parts.dart';
+import '../foundations/text_hand.dart';
 
 // ---- 6. choosers and hand-overs -------------------------------------------------------------------------------------
 /// A short list lives in a segmented control; a long one opens a searchable list (G2, G3). Never prev/next cycling (do-not-repeat 6, 7).
@@ -86,7 +87,7 @@ class ChooserState extends State<Chooser> {
                 alignment: Alignment.centerLeft,
                 children: [
                   if (_q.text.isEmpty) Text('Search', style: T.label(Grey.g56)),
-                  EditableText(
+                  TextHand(field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
                     controller: _q,
                     focusNode: _qf,
                     style: T.name(Grey.g95),
@@ -97,7 +98,7 @@ class ChooserState extends State<Chooser> {
                     onSubmitted: (_) {
                       if (hits.isNotEmpty) pick(hits.first);
                     },
-                  ),
+                  )),
                 ],
               ),
             ),

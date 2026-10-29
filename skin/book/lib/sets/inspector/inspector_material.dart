@@ -6,6 +6,7 @@ import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import '../../parts/controls.dart';
 import '../../tokens.dart';
 import 'inspector_parts.dart';
+import '../foundations/text_hand.dart';
 
 // ---- 9. material -------------------------------------------------------------------------------------------------------
 const _blends = ['Normal', 'Add', 'Multiply', 'Screen', 'Overlay', 'Soft light', 'Hard light', 'Difference'];
@@ -189,7 +190,7 @@ class _TextGroupState extends State<TextGroup> {
                   borderRadius: BorderRadius.all(Shape.r(4)),
                   border: Border.all(color: _f.hasFocus ? Grey.g63 : Grey.g26), // (a box you type in, seen as one even with nothing written)
                 ),
-                child: EditableText(
+                child: TextHand(field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
                   controller: _c,
                   focusNode: _f,
                   style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w400, height: 1.4),
@@ -198,7 +199,7 @@ class _TextGroupState extends State<TextGroup> {
                   minLines: 2,
                   maxLines: 4,
                   selectionColor: Role.selected.withValues(alpha: .4),
-                ),
+                )),
               ),
             ),
           ),

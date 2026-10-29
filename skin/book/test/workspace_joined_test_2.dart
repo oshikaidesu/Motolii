@@ -351,8 +351,21 @@ void _tests2() {
       ..select('$rect')
       ..shelf = 'Colors';
     await t.pumpAndSettle();
-    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Hot pink');   // (found by its name)
+    final search = find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText));
+    await t.enterText(search, 'Hot pink');   // (found by its name)
     await t.pumpAndSettle();
+    // (a double click on a word in a field picks that word, as Flutter's TextField does: golf_noise.md ④)
+    final caret = t.state<EditableTextState>(search).renderEditable, pink = caret.localToGlobal(caret.getLocalRectForCaret(const TextPosition(offset: 6)).center);
+    final twice = await t.createGesture(kind: PointerDeviceKind.mouse);
+    for (var i = 0; i < 2; i++) {
+      await twice.down(pink);
+      await twice.up();
+      await t.pump(const Duration(milliseconds: 50));
+    }
+    await twice.removePointer();
+    await t.pumpAndSettle();
+    final picked = t.widget<EditableText>(search).controller;
+    expect(picked.selection.textInside(picked.text), 'pink', reason: 'the word under the double click');
     final tile = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Grad').first; // (a starter gradient: Hot pink)
     await seen(t, tile);
     await t.tap(tile);   // (a press puts it on, as the best-selling editors' swatches)

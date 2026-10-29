@@ -15,6 +15,7 @@ import 'stage_art.dart' show WsArt;
 import 'ws.dart';
 import 'desk_kit.dart' show DeskChip;
 import 'two_fingers.dart';
+import '../sets/foundations/text_hand.dart';
 part 'top_bar_2.dart';
 
 class WsTopBar extends StatelessWidget {
@@ -345,7 +346,7 @@ class _RenderState extends State<_Render> {
                       Container(
                         padding: EdgeInsets.symmetric(horizontal: Shape.s(8), vertical: Shape.s(5)),
                         decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(4))),
-                        child: EditableText(
+                        child: TextHand(field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
                           controller: _name,
                           focusNode: _focus,
                           style: T.value(Grey.g95),
@@ -353,7 +354,7 @@ class _RenderState extends State<_Render> {
                           backgroundCursorColor: Grey.g38,
                           maxLines: 1,
                           onSubmitted: (_) => _go(ws),
-                        ),
+                        )),
                       ),
                     ),
                     row('Folder', Text('${ws.documentFolder ?? ''}${_free.isEmpty ? '' : '  ·  $_free'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g76))),
@@ -477,7 +478,7 @@ class _SizeChipState extends State<_SizeChip> {
         padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
         alignment: Alignment.centerLeft,
         decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius)), border: Border.all(color: WsT.accent)),
-        child: EditableText(
+        child: TextHand(field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
           controller: _text,
           focusNode: _focus,
           style: T.value(Grey.g95).copyWith(fontSize: T.px(10)),
@@ -486,7 +487,7 @@ class _SizeChipState extends State<_SizeChip> {
           maxLines: 1,
           onSubmitted: (_) => _commit(ws),
           onTapOutside: (_) => _commit(ws),
-        ),
+        )),
       );
     }
     // (pressed once: the shapes and resolutions; the one it is now lit, a shape of its own said as it is)

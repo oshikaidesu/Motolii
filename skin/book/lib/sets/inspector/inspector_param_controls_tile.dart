@@ -10,6 +10,7 @@ import 'package:lab_book/sets/inspector/inspector_parts.dart';
 import 'package:lab_book/sets/inspector/inspector_value_marks.dart';
 import 'package:lab_book/tokens.dart';
 import '../../workspace/two_fingers.dart';
+import '../foundations/text_hand.dart';
 
 /// One parameter as a block: the name on top, the number large under it, a picture of the value in the top-right corner.
 /// contract: every block still shows the number and takes typing, scrubbing and the sideways slide; the picture is added, never a replacement.
@@ -429,8 +430,7 @@ class _WordsState extends State<_Words> {
     if (!_f.hasFocus && _c.text != now) _c.text = now; // (out of the field it is what the host has now: another thing picked, an undo)
     return IgnorePointer(
       ignoring: !widget.on,
-      child: EditableText(
-        key: ValueKey('words:${widget.id}'),
+      child: TextHand(key: ValueKey('words:${widget.id}'), field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
         controller: _c,
         focusNode: _f,
         style: T.name(widget.on ? Grey.g95 : Grey.g44).copyWith(fontWeight: FontWeight.w400),
@@ -439,7 +439,7 @@ class _WordsState extends State<_Words> {
         minLines: 2,
         maxLines: 2,
         selectionColor: Role.selected.withValues(alpha: .4),
-      ),
+      )),
     );
   }
 }
