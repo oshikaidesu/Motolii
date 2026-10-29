@@ -48,6 +48,8 @@ if 'sksl' not in d:
     open(os.path.splitext(out)[0] + '.am', 'w').write('\n'.join(head + knob_lines({p['id']: p['id'] for p in d.get('params', [])}, ('float', 'int', 'bool', 'switch', 'choice', 'angle'))) + '\n')
     sys.exit(0)
 s = d['sksl']
+reserved = ('origin_x', 'origin_y', 'turn', 'extent')   # (names the inside gives a thing's effect of its own accord, doc_moment_fx.h: an effect's own knob by one is renamed, its own still)
+s = re.sub(r'\b(' + '|'.join(reserved) + r')\b', r'\1_', s)
 pictures = re.findall(r'^\s*uniform\s+shader\s+(\w+)\s*;', s, re.M)
 blur = next((p for p in pictures if p in ('blurred', 'bright')), None)
 across = 'h_' if re.search(r'\bh\b', s) else 'h'   # (the blur's pass across: a name the effect's own lines do not use)
@@ -107,7 +109,8 @@ if made.returncode:
     sys.exit(f"{src}: {made.stdout.strip().splitlines()[0] if made.stdout.strip() else made.stderr}")
 wgsl = open(out + '.raw.wgsl').read()
 fields = re.findall(r'^\s*(\w+)\s*:', re.search(r'struct Knobs\s*\{([^}]*)\}', wgsl).group(1), re.M)
-named = {re.sub(r'^R_', '', n): n for n in fields}   # (skslc's R_ before a name WGSL keeps for itself: center)
+named = {re.sub(r'^R_', '', n): n for n in fields}
+named.update({r: r + '_' for r in reserved if r + '_' in fields})   # (its own param by that name, as its JSON says it)   # (skslc's R_ before a name WGSL keeps for itself: center)
 lines = [f"// {d['name']}: AbsentMotion's {d['id']} (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)"]
 lines.append(f"// --label:{d.get('category', '').capitalize()}")
 if blur:

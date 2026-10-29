@@ -1,7 +1,7 @@
 // Vignette: AbsentMotion's vignette (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Stylize
 // --about:Darkens the layer toward its edges outside a rounded shape: Size sets the shape, Roundness how round it is, Feather how soft its edge is, Strength how dark it gets and Tint how much it takes on Color. Punch Out makes the edges transparent instead.
-// --track@extent:Size,0.001,2,0.95,0.001
+// --track@extent_:Size,0.001,2,0.95,0.001
 // --track@rounding:Roundness,0,9.9,1.5,0.01
 // --track@feather:Feather,0.001,1,0.5,0.001
 // --track@strength:Strength,0,1,0.8,0.001
@@ -21,7 +21,7 @@ struct FSOut {
 struct Knobs {
   resolution: vec2<f32>,
   time: f32,
-  extent: f32,
+  extent_: f32,
   strength: f32,
   rounding: f32,
   feather: f32,
@@ -42,7 +42,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
     let n: vec2<f32> = abs((coord / max(select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0)), vec2<f32>(1.0)) - 0.5) * 2.0);
     let p: f32 = max(_uniform0.rounding, 0.5);
     let d: f32 = pow(pow(n.x, p) + pow(n.y, p), 1.0 / p);
-    let s: f32 = max(_uniform0.extent, 0.001);
+    let s: f32 = max(_uniform0.extent_, 0.001);
     let v: f32 = smoothstep(s * (1.0 - _uniform0.feather * 0.25), s * (1.0 + _uniform0.feather * 3.0) + 0.001, d) * clamp(_uniform0.strength, 0.0, 1.0);
     if _uniform0.punch > 0.5 {
       return c * f32(1.0 - v);
