@@ -25,7 +25,7 @@ import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart';
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;
 import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
-import 'package:lab_book/workspace/dock_parts.dart' show DockFooter, DockHover, DockSearch;
+import 'package:lab_book/workspace/dock_parts.dart' show DockChips, DockFooter, DockHover, DockSearch;
 import 'package:lab_book/workspace/workspace.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/ws.dart';

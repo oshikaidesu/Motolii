@@ -322,7 +322,7 @@
 ## J. 写真・動画・音（実機、alight_ui.md）（16）
 
 - [ ] Media のタブに見本の素材（Sample Media）
-- [ ] アルバムの切り替えと数
+- [x] アルバムの切り替えと数 — 有る（10/29 に確かめた）：Media の棚の上の札（All と Images・Video・Audio・Fonts・3D… それぞれの数）で見せる物を切り替え、フォルダの木で場所を切り替える（Alight Motion の All・Pictures・Movies と数に当たる）。窓の試験（`workspace_joined_test_3.dart` の Media shelf switches：写真 2 枚と動画 1 本で Images 2・Video 1、Images を押すと写真だけ）。Sample Media は下の行
 - [x] 写真は足す前に長さを決める（無い→有る）：Media の棚で写真を選ぶと、下の欄に「for − 2 s +」（0.5・1・2・3・5・10 秒と End、既定は Alight Motion と同じ 2 秒、次の写真にも残る）。置くとその長さ、何枚かまとめて置く時も同じ長さで並ぶ。置くのと長さは 1 回で取り消せる — 済（10/28）：窓で PNG を置いて 2 秒、End で書類の終わりまでを確かめた（`skin/book/test/workspace_joined_test_3.dart`）
 - [x] 動画は足す前に使う範囲を切る（再生できる）（無い→一部）：Media の棚で動画を選ぶと、下の欄に use と細い帯（左右の端を引く）と秒の範囲。置くとその範囲の頭から（begin）その長さで、置くのと切るのが 1 回で取り消せる。まだ：帯の上での試し再生 — 済（10/28）：窓で左端を真ん中まで引いて置き、begin と長さが半分になるのを確かめた（`skin/book/test/workspace_joined_test_3.dart`）
 - [x] 写真・動画を複数選んで足す：Media の棚で ⌘ を押しながら選ぶ（Finder と同じ）と下の欄が「Place N」。動画はそれぞれの長さ（Discoverer）で、選んだ順に続けて並ぶ。写真は長さが無いので同じ所に（10/28） — 済：窓の試験（`workspace_joined_test_3.dart`）

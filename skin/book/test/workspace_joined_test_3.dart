@@ -747,6 +747,30 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('the Media shelf switches what it shows as Alight Motion\'s albums do, each with how many it has (All, Images, Video)', (t) async {
+    final ws = await _pump(t);
+    for (final n in ['a.jpg', 'b.jpg']) {
+      File('$motoliiDir/fx_sample.jpg').copySync('${ws.documentFolder}/$n');
+    }
+    File('$motoliiDir/check/beats.mp4').copySync('${ws.documentFolder}/c.mp4');
+    ws.shelf = 'Media';
+    await t.pumpAndSettle();
+    final folder = find.byKey(ValueKey('browser:file:${ws.documentFolder}'));
+    await t.ensureVisible(folder.first);
+    await t.tap(folder.first);
+    for (var i = 0; i < 20 && find.byKey(ValueKey('browser:file:${ws.documentFolder}/c.mp4')).evaluate().isEmpty; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pumpAndSettle();
+    }
+    final chips = {for (final (n, k) in t.widget<DockChips>(find.byType(DockChips).first).chips) n: k};
+    expect([chips['Images'], chips['Video'], (chips['All'] ?? 0) >= 3], [2, 1, true], reason: '$chips');
+    await t.tap(find.text('Images').first);   // (only the pictures: Alight Motion's Pictures album)
+    await t.pumpAndSettle();
+    expect([find.byKey(ValueKey('browser:file:${ws.documentFolder}/a.jpg')).evaluate().isNotEmpty, find.byKey(ValueKey('browser:file:${ws.documentFolder}/c.mp4')).evaluate().isEmpty], [true, true]);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('two films picked with ⌘ on the Media shelf are placed together, one after another (Alight Motion\'s adding several)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     for (final n in ['one.mp4', 'two.mp4']) {
