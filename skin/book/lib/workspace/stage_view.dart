@@ -1,5 +1,6 @@
 // The stage's viewport: the composition centred on a dark surround, rulers and guides, overlays, the selection, the zoom HUD and the navigator.
 // contract: paints only when the scene, the selection, the hover or the view changes; the pointer readout repaints the rulers alone.
+import 'dart:async' show Timer;
 import 'dart:io' show File;
 import 'dart:math' as math;
 import 'dart:ui' show PointMode;

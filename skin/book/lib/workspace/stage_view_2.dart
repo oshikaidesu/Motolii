@@ -82,6 +82,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
   @override
   void dispose() {
     _deskOf?.desk(0, 0, 0, 0, 0, 0); // (the stage's own picture again)
+    _dollyRest?.cancel();
     super.dispose();
   }
 
@@ -331,7 +332,53 @@ class _StageViewState extends State<StageView> implements StageHandles {
     ws.after(m.later('together'), (done, _) => done && made > 0 ? ws.select('$made') : null);
   }
 
+  /// The camera the Camera tool turns: the picked one, else the document's first.
+  int? _cameraOf(Ws ws) {
+    final m = ws.inside, picked = int.tryParse(widget.selected ?? '');
+    if (m == null) return null;
+    if (picked != null && m.word(picked, 'kind') == 'camera') return picked;
+    for (final l in ws.layers) {
+      if (int.tryParse(l.id) case final t? when m.word(t, 'kind') == 'camera') return t;
+    }
+    return null;
+  }
+
+  ({double x, double y})? _orbitFrom;   // (the camera's turn when the hand took hold)
+  double? _dollyAt;   // (its distance while the wheel turns)
+  Timer? _dollyRest;
+
+  /// After Effects' Unified Camera tool's wheel: the camera nearer or further from where it looks, the wheel's turning
+  /// one step once it rests (golf_noise.md ㊲: no hand on the stage turned or brought the camera).
+  void _dolly(double by) {
+    final ws = WsScope.read(context), m = ws.inside, cam = _cameraOf(ws);
+    if (m == null || cam == null) return;
+    if (_dollyAt == null) {
+      m.take(cam);
+      _dollyAt = m.value(cam, 'distance', ws.frame / Ws.fps) ?? 1;
+    }
+    _dollyAt = (_dollyAt! * math.exp(by * .002)).clamp(.01, 100.0);
+    m.carry('distance', _dollyAt!);
+    _dollyRest?.cancel();
+    _dollyRest = Timer(const Duration(milliseconds: 300), () {
+      _dollyAt = null;
+      ws.after(m.later('let_go', number: 1));
+    });
+  }
+
   void _hold(_View v, Offset local) {
+    if (widget.make == 'camera') {   // (After Effects' Unified Camera tool: a drag turns the camera round where it looks)
+      final ws = WsScope.read(context), m = ws.inside, cam = _cameraOf(ws);
+      if (m == null || cam == null) {
+        ws.notice = 'No camera: add one from Create › Layers';
+        return;
+      }
+      final at = ws.frame / Ws.fps;
+      m.take(cam);
+      if (ws.playing) ws.playing = false;
+      _orbitFrom = (x: m.value(cam, 'rotate_x', at) ?? 0, y: m.value(cam, 'rotate_y', at) ?? 0);
+      _held = (from: local, moved: false, by: 'orbit');
+      return;
+    }
     if (widget.make == 'brush') {
       setState(() => _brush = [local]);
       return;
@@ -388,6 +435,14 @@ class _StageViewState extends State<StageView> implements StageHandles {
   void _carry(_View v, Offset local) {
     final h = _held, ws = WsScope.read(context), m = ws.inside;
     if (h == null || m == null) return;
+    if (h.by == 'orbit' && _orbitFrom != null) {   // (sideways round it, up and down over it: a quarter of a degree a pixel)
+      final d = local - h.from, o = _orbitFrom!;
+      m.carry('rotate_y', o.y - d.dx * .25);
+      m.carry('rotate_x', (o.x - d.dy * .25).clamp(-89.0, 89.0));
+      _held = (from: h.from, moved: true, by: 'orbit');
+      setState(() {});
+      return;
+    }
     final all = (local - h.from) / v.s; // (screen px -> points of the picture)
     if (h.by case final way? when way.startsWith('crop ')) {   // (a photo's side cut in as far as the hand goes in from where it is cut, no further than leaves some of it)
       final side = int.parse(way.substring(5)), c = [for (var i = 0; i < 4; i++) handles['corner $i'] ?? Offset.zero], crop = _cropOf();
@@ -423,6 +478,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
   void _letGo({bool keep = true}) {
     final h = _held, ws = WsScope.read(context), m = ws.inside;
     _held = null;
+    _orbitFrom = null;
     _snapTo = null;
     if (_grip != null) setState(() => _grip = null);
     if (_met != (null, null)) setState(() => _met = (null, null));
@@ -431,6 +487,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
   }
 
   void _scroll(PointerSignalEvent e, _View v) {
+    if (e is PointerScrollEvent && widget.make == 'camera') return _dolly(e.scrollDelta.dy);
     if (e is PointerScrollEvent) _panBy(-e.scrollDelta, v);
   }
 

@@ -29,6 +29,7 @@ const _tools = [
   (G.pen, 'Pen', 'P'),
   (G.text, 'Text', 'T'),
   (G.brush, 'Brush', 'B'),   // (a path drawn by hand, Alight Motion's freehand; B as Photoshop's and After Effects' brush)
+  (G.camera, 'Camera', 'C'),   // (After Effects' Unified Camera tool, C: a drag turns the camera round where it looks, the wheel brings it nearer)
 ];
 
 class _Stage extends StatefulWidget {
@@ -143,7 +144,7 @@ class _StageState extends State<_Stage> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      WsTwoFingers(onPinchStep: (step) => setState(() => _zoom = (_zoom + step).clamp(0, stageZooms.length - 1)), child: StageView(scene: scene, selected: ws.selected, zoom: _zoom, grid: _grid, safe: _safe, cursor: _cursor, onPoke: _focus.requestFocus, texture: ws.stageTexture, snapshot: _showing ? _shot : null, make: const [null, null, 'rect', 'circle', 'pen', 'text', 'brush'][_tool], brushSize: const [8.0, 16.0, 32.0][_opts['brush.size'] ?? 1], brushTool: const [1, 0, 2, 3][_opts['brush.kind'] ?? 0], axis: _tool == 1 ? _opts['move.axis'] ?? 0 : 0, fromCentre: (_opts['ell.from'] ?? 0) == 1, snap: _tool < 2 && (_opts[_tool == 0 ? 'sel.snap' : 'move.snap'] ?? 1) == 1, pivots: (_opts['sel.pivot'] ?? 0) == 1, group: _tool == 0 && (_opts['sel.level'] ?? 0) == 1, mask: (_opts[_tool == 2 ? 'rect.mode' : 'pen.mode'] ?? 0) == 1 && (_tool == 2 || _tool == 4))), // (joined: the tool in hand draws a thing of the document)
+                      WsTwoFingers(onPinchStep: (step) => setState(() => _zoom = (_zoom + step).clamp(0, stageZooms.length - 1)), child: StageView(scene: scene, selected: ws.selected, zoom: _zoom, grid: _grid, safe: _safe, cursor: _cursor, onPoke: _focus.requestFocus, texture: ws.stageTexture, snapshot: _showing ? _shot : null, make: const [null, null, 'rect', 'circle', 'pen', 'text', 'brush', 'camera'][_tool], brushSize: const [8.0, 16.0, 32.0][_opts['brush.size'] ?? 1], brushTool: const [1, 0, 2, 3][_opts['brush.kind'] ?? 0], axis: _tool == 1 ? _opts['move.axis'] ?? 0 : 0, fromCentre: (_opts['ell.from'] ?? 0) == 1, snap: _tool < 2 && (_opts[_tool == 0 ? 'sel.snap' : 'move.snap'] ?? 1) == 1, pivots: (_opts['sel.pivot'] ?? 0) == 1, group: _tool == 0 && (_opts['sel.level'] ?? 0) == 1, mask: (_opts[_tool == 2 ? 'rect.mode' : 'pen.mode'] ?? 0) == 1 && (_tool == 2 || _tool == 4))), // (joined: the tool in hand draws a thing of the document)
                     ],
                   ),
                 ),
@@ -273,8 +274,8 @@ class _ToolColumn extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (var i = 0; i < _tools.length; i++) ...[
-                if (i == 2 || i == 4) Container(width: Shape.z(20), height: 1, margin: EdgeInsets.symmetric(vertical: Shape.s(5)), color: WsT.line),
-                if (i != 0 && i != 2 && i != 4) SizedBox(height: Shape.s(3)),
+                if (i == 2 || i == 4 || i == 7) Container(width: Shape.z(20), height: 1, margin: EdgeInsets.symmetric(vertical: Shape.s(5)), color: WsT.line),
+                if (i != 0 && i != 2 && i != 4 && i != 7) SizedBox(height: Shape.s(3)),
                 _ToolButton(key: ValueKey('ws-tool-$i'), glyph: _tools[i].$1, on: i == active, onTap: () => onChanged(i)),
               ],
               Container(width: Shape.z(20), height: 1, margin: EdgeInsets.symmetric(vertical: Shape.s(8)), color: WsT.line),
@@ -407,6 +408,7 @@ class _OptionsStrip extends StatelessWidget {
     2 => [_Field('Fill', swatch: p.fill ?? WsT.body), _Field('Stroke', value: p.width), _Field('Radius', value: p.round), _seg('rect.mode', const ['Shape', 'Mask'])],
     3 => [_Field('Fill', swatch: p.fill ?? WsT.body), _Field('Stroke', value: p.width), _seg('ell.from', const ['Corner', 'Centre'])],
     4 => [_seg('pen.mode', const ['Path', 'Mask']), _flag('pen.close', 'Close path', initial: true)],
+    7 => [_Field('Drag', value: 'Orbit'), _Field('Wheel', value: 'Dolly')],   // (what the hand does with it, as After Effects' camera tools are named)
     6 => [_Field('Fill', swatch: p.fill ?? WsT.body), _seg('brush.kind', const ['Brush', 'Pen', 'Fill', 'Eraser'], initial: 0), _seg('brush.size', const ['Thin', 'Medium', 'Thick'], initial: 1)],   // (Alight Motion's drawing tools: as the pressure says, as wide all along, the way gone round filled, and its eraser, of the picked drawing)
     _ => [
       _Field('Font', value: p.font),

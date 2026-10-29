@@ -2,6 +2,7 @@
 // says it lies on the picture, repaints at any frame and view, its tools switch the options strip, it fits small seats.
 import 'dart:io';
 
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -103,6 +104,36 @@ void main() {
     await hand.up();
     await t.pump();
     expect(shot, findsNothing, reason: 'let go: the picture as it is now');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
+  testWidgets('the Camera tool (After Effects\' Unified Camera tool, C): a drag turns the camera round where it looks, the wheel brings it nearer; each one step', (t) async {
+    final ws = _joined(), m = ws.inside!;
+    final cam = m.add('camera', 'camera');
+    m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select(null);
+    await _stage(t, ws, const Size(924, 616));
+    await t.tap(find.byKey(const ValueKey('ws-tool-7')));
+    await t.pump();
+    expect(find.text('CAMERA'), findsOneWidget, reason: 'its options strip');
+    final comp = t.getRect(find.byKey(const ValueKey('ws-stage-comp')));
+    final yaw = m.value(cam, 'rotate_y', 0) ?? 0, far = m.value(cam, 'distance', 0) ?? 1;
+    await t.dragFrom(comp.center, const Offset(80, 0));
+    await t.pump();
+    for (var i = 0; i < 100 && ws.waiting; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+    }
+    expect((m.value(cam, 'rotate_y', 0) ?? 0) - yaw, closeTo(-20, 3), reason: '80 px sideways: about 20 degrees round');
+    final mouse = TestPointer(1, PointerDeviceKind.mouse);
+    await t.sendEventToBinding(mouse.hover(comp.center));
+    await t.sendEventToBinding(mouse.scroll(const Offset(0, -200)));
+    await t.pump(const Duration(milliseconds: 400));   // (the wheel at rest: let go)
+    for (var i = 0; i < 100 && ws.waiting; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+    }
+    expect(m.value(cam, 'distance', 0)!, lessThan(far), reason: 'the wheel turned up: nearer');
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
