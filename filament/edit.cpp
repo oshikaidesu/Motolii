@@ -44,6 +44,10 @@ int main(int argc, char** argv) {
             while ((ok = motolii_answer(m, ticket)) < 0) std::this_thread::sleep_for(std::chrono::milliseconds(2));
             if (ok) std::printf("thing %d\n", ok);
         }
+        else if (call == "outline" && w.size() == 2) {   // (Convert to Outline, as the window's thing menu asks it)
+            const int n = thing(), ticket = numbers ? motolii_later(m, "outline", n, "", "", 0) : 0;
+            while (numbers && (ok = motolii_answer(m, ticket)) < 0) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
         else if (call == "remove" && w.size() == 2) { const int n = thing(); if (numbers) ok = motolii_remove(m, n); }
         else if (call == "set" && w.size() == 4) {
             const int n = thing(), keys = numbers ? motolii_keys(m, n, w[2].c_str()) : 0;

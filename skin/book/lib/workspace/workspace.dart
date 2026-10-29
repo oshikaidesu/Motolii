@@ -274,6 +274,11 @@ class _WorkspaceState extends State<Workspace> {
         if (t == null) return;
         ws.after(m.later('duplicate', thing: t), null, (made) => ws.select('$made'));   // (the new one picked, as After Effects does)
       },
+      'thing.outline': () {   // (Alight Motion's Convert to Outline: a shape a path of the outline it shows, its points then the Pen's: doc_to_path)
+        final t = int.tryParse(ws.selected ?? '');
+        if (t == null || m.word(t, 'kind') != 'shape' || const ['path', 'null', 'solid'].contains(m.word(t, 'shape'))) return;
+        ws.after(m.later('outline', thing: t), (_, _) => ws.reread());
+      },
       'thing.extractSound': () {   // (a film's sound to a thing of its own, the film no longer heard: Alight Motion's Extract Audio)
         final t = int.tryParse(ws.selected ?? '');
         if (t == null || m.word(t, 'kind') != 'film') return;
@@ -366,6 +371,7 @@ class _WorkspaceState extends State<Workspace> {
           PlatformMenuItemGroup(
             members: [
               item('Duplicate', 'thing.duplicate'),
+              item('Convert to Outline', 'thing.outline'),
               item('Group', 'thing.group'),
               item('Group and Mask', 'thing.groupMask'),
               item('Group and Exclude', 'thing.groupExclude'),

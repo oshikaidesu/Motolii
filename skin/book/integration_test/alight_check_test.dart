@@ -295,6 +295,7 @@ final _rowsBR = <(String, String, Map<String, Object>)>[
   ('beam', 'look:Energy Beam', const {'~over': 1}),
   ('stamper', 'look:Luma Stamper', const <String, Object>{}),
   ('strips', 'look:Streak Strips', const <String, Object>{}),
+  ('outline', 'outline:star', const <String, Object>{}),
 ];
 // (section BQ: AbsentMotion's text effects from the shelf on the words MOTOLII: a running clock, a count, letters at random.)
 final _rowsBQ = <(String, String, Map<String, Object>)>[
@@ -710,6 +711,16 @@ void main() {
         expect(m.say(left, 'fx', '$blur $dir'), isTrue, reason: m.trouble);
         expect(m.set(left, 'js_Diagonal_Blur_width', .02) && m.set(left, 'js_Diagonal_Blur_angle', 0) && m.set(left, 'js_Diagonal_Blur_quality', 2), isTrue, reason: m.trouble);
         expect(m.set(left, 'js_am_directionalblur_blurLength', 20) && m.set(left, 'js_am_directionalblur_angle', 90), isTrue, reason: m.trouble);
+      } else if (effect.startsWith('outline:')) {   // (a shape made a path of its outline, as the thing menu's Convert to Outline asks it: workspace.dart)
+        expect(m.remove(left), isTrue, reason: m.trouble);
+        left = m.add('shape', effect.substring('outline:'.length));
+        expect(m.set(left, 'x', -.5) && m.set(left, 'size', .45) && m.say(left, 'fill', '44aaff') && m.say(left, 'stroke', 'ffffff') && m.set(left, 'stroke_width', 6), isTrue, reason: m.trouble);
+        m.later('outline', thing: left);
+        for (var k = 0; k < 200 && m.word(left, 'shape') != 'path'; k++) {
+          await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+          await t.pump();
+        }
+        expect([m.word(left, 'shape'), m.word(left, 'path').startsWith('M')], ['path', true], reason: m.trouble);
       } else if (effect.startsWith('look:')) {   // (a look from the Effects shelf, as its tile's Apply gives it: dock_effects.dart's paste_style)
         var on = left;
         if (knobs.containsKey('~over')) {   // (on a rect of its own over the left photo)

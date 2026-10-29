@@ -148,6 +148,42 @@ static int doc_brush(Doc& d, const char* said) {
     if (!thing) d.act_ok = false;
     return doc_acted(d) ? thing : 0;
 }
+// A flat shape made a path shape of the outline it shows (Alight Motion's Convert to Outline): its form drawn again as
+// it is drawn (flat_path, its corners rounded, puckered, zigzagged and offset by ThorVG's own path operators: tvg_bend,
+// as cut_at bends it), its points then its own, in its height from its middle (SVG's way down); those operators then
+// none, made part of its path. Its fill, edge and all else as they were.
+static bool doc_to_path(Doc& d, int thing) {
+    const std::string form = doc_word(d, thing, "shape");
+    if (doc_word(d, thing, "kind") != "shape" || form.empty() || form == "path" || form == "null" || form == "solid") return d.trouble = "only a shape of a kind of its own is made a path (not a path, a null or a solid)", false;
+    const bool line = form == "line", wave = form == "wave";
+    const double high = line ? 0.04 : wave ? 0.3 : 1.0, wide = doc_number(d, thing, "wide", 0, line ? 25 : wave ? 10 : 1);   // (as doc_match makes it)
+    const int h = 1024, w = std::max(2, (int)std::lround(1024.0 * wide));
+    Drawn made;
+    tvg::Shape* shape = tvg::Shape::gen();
+    flat_path(&made, shape, form.c_str(), w, h, 0.f, (int)doc_number(d, thing, "points", 0, form == "star" ? 5 : form == "arc" ? 270 : form == "squircle" ? 4 : form == "cog" ? 12 : form == "spiral" ? 3 : wave ? 4 : 6),
+              (float)doc_number(d, thing, "inner", 0, form == "cog" ? 0.2 : form == "arc" ? 0.3 : form == "spiral" ? 0.1 : form == "chamfer" ? 0.3 : 0.5), 0.f, 0.f);
+    const auto num = [&](const char* name, double usual) { return (float)doc_number(d, thing, name, d.stage->now, usual); };
+    tvg_bend(shape, made.plain.data(), (uint32_t)made.plain.size(), made.plainAt.data(), (uint32_t)made.plainAt.size(), line ? 0.f : std::clamp(num("round", 0), 0.f, 0.5f) * made.plainSide,
+             100.f * std::clamp(num("bloat", 0), -1.f, 1.f), num("zigzag", 0) * (float)h, (int)std::clamp(num("zigzag_ridges", 5), 0.f, 100.f), num("zigzag_smooth", 0) > 0.5f, num("offset", 0) * (float)h, 0.f);
+    const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
+    shape->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
+    std::string path;
+    char one[96];
+    const auto at = [&](const tvg::Point& p) { std::snprintf(one, sizeof one, "%.5f %.5f", (p.x - 0.5 * w) / h * high, (p.y - 0.5 * h) / h * high); return std::string(one); };
+    for (uint32_t c = 0, p = 0; c < cmdsCnt; ++c) switch (cmds[c]) {
+        case tvg::PathCommand::MoveTo: path += (path.empty() ? "M" : " M") + at(pts[p++]); break;
+        case tvg::PathCommand::LineTo: path += " L" + at(pts[p++]); break;
+        case tvg::PathCommand::CubicTo: path += " C" + at(pts[p]) + " " + at(pts[p + 1]) + " " + at(pts[p + 2]), p += 3; break;
+        case tvg::PathCommand::Close: path += " Z"; break;
+    }
+    tvg::Paint::rel(shape);
+    if (path.empty()) return d.trouble = "it has no outline to make a path of", false;
+    doc_act(d);
+    bool ok = doc_say(d, thing, "shape", "path") && doc_say(d, thing, "path", path.c_str()) && doc_set(d, thing, "wide", wide * high);
+    for (const char* name : {"round", "bloat", "zigzag", "offset"}) if (ok && doc_number(d, thing, name, 0, 0) != 0.0) ok = doc_set(d, thing, name, 0.0);
+    if (!ok) d.act_ok = false;
+    return doc_acted(d) && ok;
+}
 // What of a thing is seen at a moment: the upright box of its outline on the picture (its own points where they are at
 // hand, else its box's corners), left, top, right, bottom in points of the picture. false: it is not shown.
 static bool doc_seen_box(Doc& d, int thing, double now, double* box) {

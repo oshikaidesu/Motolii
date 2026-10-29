@@ -331,7 +331,7 @@
 - [x] 動画の帯にコマの絵：動画の帯を 6 つに分け、それぞれの真ん中で流れる絵（begin・speed・逆向きも）を内側が GStreamer で小さく作り、帯いっぱいに並べる — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 音量のつまみにキー・イーズ（無い→有る）：動画の Volume にキーとイーズが打てる。再生中は今の時刻の大きさで鳴り（heard.h、GStreamer の playbin の volume を毎コマ）、書き出しは 1/30 秒ごとの大きさを ffmpeg の asendcmd で volume に伝える — 済（10/28）：0 秒で 0・2 秒で 1 のキーで書き出し、キーなしより早い所が −12.6 dB、遅い所が −0.1 dB（`filament/check/volume_keys.sh`）
 - [x] 動画から音を別のレイヤーに取り出す — 済（10/28）：G の「動画から音を取り出す」と同じ（Edit > Extract Sound）
-- [ ] Convert to Outline（輪郭に変換）
+- [x] Convert to Outline（輪郭に変換） — 済（10/29、SECTION=BR）：物のメニューの Convert to Outline。図形をその見えている輪郭のパスの物にする（`filament/doc_paths.h` の doc_to_path：形を描くのと同じ flat_path で描き直し、角丸・膨らみ・ジグザグ・オフセットは ThorVG の Lottie のパス演算 tvg_bend でそのまま焼き込んで 0 に戻す）。塗り・縁・ほかはそのまま、点はペンで動かせる。edit.sh で星・角丸の四角・膨らませた多角形・線の 4 つが見た目を保ってパスになる（変わった画素は縁の位置の差だけ：パスの縁は輪郭の上、図形の縁は内寄せ）。窓で星を変えて shape が path に。文字の輪郭は、ThorVG の文字が形の点を出さないのでまだ
 - [x] Media Info（大きさ・fps・長さ・形式・ファイルの大きさ）：Media の棚で選ぶと下の欄に「幅 × 高さ · fps · 秒 · 形式 · 拡張子 · ファイルの大きさ」（GStreamer の Discoverer、10/28） — 済：窓の試験（`workspace_dock_test.dart`）
 - [x] 数字の欄を押すと数字のキーパッド（＋/−・小数点）：Mac ではキーボードがその役。数字の欄を押して数字を打つと、その数字から打ち始める（Ableton Live の決まり）、Delete で既定に — 済：窓の試験（`workspace_ableton_fields_test.dart`）
 - [ ] 音の棚（曲・アルバム・アーティスト・ジャンル）
