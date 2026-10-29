@@ -89,7 +89,10 @@ static int doc_add(Doc& d, const char* kind, const char* file) {
     if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact(thing, name, at, value) values(last_insert_rowid(), 'kind', 0.0, %Q); insert into fact(thing, name, at, value) values(last_insert_rowid(), %Q, 0.0, %Q); insert into fact(thing, name, at, value) select id, 'start', 0.0, %!.17g from thing where %d order by id desc limit 1%s",
                                        kind, (!strcmp(kind, "solid") && doc_among(doc_shapes, file)) || !strcmp(kind, "shape") ? "shape" : "file", file, d.stage->now, d.stage->now > 0.0,
                                        // (a new text comes with a word to read, at a size that fits a stage)
-                                       strcmp(kind, "text") ? "" : "; insert into fact(thing, name, at, value) select id, 'text', 0.0, 'Text' from thing order by id desc limit 1; insert into fact(thing, name, at, value) select id, 'size', 0.0, 0.5 from thing order by id desc limit 1"))) return 0;
+                                       (std::string(strcmp(kind, "text") ? "" : "; insert into fact(thing, name, at, value) select id, 'text', 0.0, 'Text' from thing order by id desc limit 1; insert into fact(thing, name, at, value) select id, 'size', 0.0, 0.5 from thing order by id desc limit 1") +
+                                        // (and lasts as long as the document says a thing put in lasts, if it says: AbsentMotion's New Layer Length,
+                                        //  its StructureActions.kt and TextActions.kt endTimeFor; a film its own length, a group's Null as long as what it holds)
+                                        (doc_among("picture text solid shape", kind) && strcmp(file, "null") ? "; insert into fact(thing, name, at, value) select (select max(id) from thing), 'duration', 0.0, value from fact where thing = 0 and name = 'layer_length' and at = 0 and value > 0" : "")).c_str()))) return 0;
     int thing = 0;   // (the newest number: SQLite's own count of things, which a change not made does not move)
     doc_rows(d, sqlite3_mprintf("select max(id) from thing"), [&](sqlite3_stmt* row) { thing = sqlite3_column_int(row, 0); });
     return thing;

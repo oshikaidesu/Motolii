@@ -547,6 +547,18 @@ class _SizeChipState extends State<_SizeChip> {
                     ),
                 ]),
                 SizedBox(height: Shape.s(12)),
+                Text('New layer length', style: T.label(Grey.g56)),   // (how long a thing put in lasts: AbsentMotion's settings' New Layer Length, its AppSettings.LAYER_DURATIONS; End, to the document's end)
+                SizedBox(height: Shape.s(6)),
+                Wrap(spacing: Shape.s(6), runSpacing: Shape.s(6), children: [
+                  for (final n in const [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30, 45, 60])
+                    DeskChip(
+                      key: ValueKey('size-len-$n'),
+                      label: n == 0 ? 'End' : '${n}s',
+                      on: (ws.inside?.value(0, 'layer_length', 0) ?? 0).round() == n,
+                      onTap: ws.inside == null ? null : () => ws.after(ws.inside!.later('set', thing: 0, name: 'layer_length', number: n.toDouble()), (_, _) => ws.reread()),
+                    ),
+                ]),
+                SizedBox(height: Shape.s(12)),
                 Text('$shownW × $shownH  ·  ${Ws.fps} frames a second', style: T.value(Grey.g76)),
                 if (ws.inside case final m?) ...[   // (Alight Motion's Total Edit Time, in its settings: how long the document has been worked on)
                   SizedBox(height: Shape.s(6)),

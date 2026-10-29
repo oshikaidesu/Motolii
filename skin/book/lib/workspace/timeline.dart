@@ -263,6 +263,15 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   // of the inside (another isolate), shown when it comes.
   (int, List<int>)? _beats;
   int? _beatsAsked;
+  // The picked group's end of intro and start of outro, kept with it as an element (its Element card's End of intro,
+  // Start of outro: doc_element_clock), where they fall on the ruler.
+  List<int> _retimedOf(Ws ws) {
+    final m = ws.inside, t = int.tryParse(ws.selected ?? '');
+    if (m == null || t == null) return const [];
+    final start = m.value(t, 'start', 0) ?? 0;
+    return [for (final n in const ['retime_in', 'retime_out']) if ((m.value(t, n, 0) ?? 0) > 0) ((start + m.value(t, n, 0)!) * Ws.fps).round()];
+  }
+
   List<int> _beatsOf(Ws ws) {
     final m = ws.inside;
     if (m == null) return const [];
@@ -416,7 +425,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                 child: SizedBox(
                   height: WtM.ruler,
                   child: CustomPaint(
-                    painter: WtRulerPainter(view: v, fps: Ws.fps, workIn: _workIn, workOut: _workOut, markers: _marksOf(_ws!), beats: _beatsOf(ws)),
+                    painter: WtRulerPainter(view: v, fps: Ws.fps, workIn: _workIn, workOut: _workOut, markers: _marksOf(_ws!), beats: _beatsOf(ws), retimed: _retimedOf(ws)),
                     foregroundPainter: WtKeptPainter(view: v, kept: ws.kept), // (the pictures kept on disk for playing)
                   ),
                 ),

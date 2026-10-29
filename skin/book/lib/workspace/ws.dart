@@ -65,6 +65,7 @@ abstract final class WsT {
   static Color get toneGroup => ColorTheme.of('Clip5', const Color(0xFFB0A6F0));
   static Color get toneParticles => ColorTheme.of('Clip6', const Color(0xFFF2A65A));
   static Color get toneAudio => ColorTheme.of('Clip7', const Color(0xFF5CC8E8));
+  static Color get toneMark => ColorTheme.of('ElementMark', const Color(0xFFF2C94C));   // (an element's intro and outro marks on the ruler: Alight Motion's small yellow ones)
 
   /// The playhead line: the accent, so "now" is the loudest line in the window. Its head is an [accent] fill.
   static Color get playhead => accentInk;

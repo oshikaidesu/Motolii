@@ -135,13 +135,14 @@ void _vLines(Canvas c, WtView v, int fps, double w, double top, double bottom, {
 // ---------------------------------------------------------------- ruler
 
 class WtRulerPainter extends CustomPainter {
-  const WtRulerPainter({required this.view, required this.fps, required this.workIn, required this.workOut, required this.markers, this.beats = const []});
+  const WtRulerPainter({required this.view, required this.fps, required this.workIn, required this.workOut, required this.markers, this.beats = const [], this.retimed = const []});
   final WtView view;
   final int fps, workIn, workOut;
   final List<(int, String)> markers;
 
   /// Where the films' sound strikes (their Beats), frames: a short tick each at the ruler's foot.
   final List<int> beats;
+  final List<int> retimed;   // (the picked element's end of intro and start of outro, frames: small yellow marks at the ruler's top, as Alight Motion shows them)
 
   @override
   void paint(Canvas c, Size s) {
@@ -160,6 +161,10 @@ class WtRulerPainter extends CustomPainter {
     for (final f in beats) {
       final x = view.x(f).roundToDouble();
       if (x >= 0 && x <= s.width) c.drawRect(Rect.fromLTWH(x, bottom - 7, 2, 7), p..color = WsT.toneAudio);
+    }
+    for (final f in retimed) {
+      final x = view.x(f).roundToDouble();
+      if (x >= -4 && x <= s.width + 4) c.drawPath(Path()..moveTo(x - 4, 0)..lineTo(x + 4, 0)..lineTo(x, 6)..close(), p..color = WsT.toneMark);
     }
     final flags = <(Rect, TextPainter)>[];
     for (final (f, name) in markers) {

@@ -485,6 +485,10 @@ void _tests3() {
     await t.pumpAndSettle();
     expect(m.cards(g).map((c) => c.$1), contains('Element'), reason: 'a group\'s Element card');
     expect(m.say(g, 'retime', 'stretch') && m.set(g, 'retime_in', .5) && m.set(g, 'retime_out', 1.5), isTrue, reason: m.trouble);
+    ws.reread();
+    await t.pumpAndSettle();
+    final ruler = t.widgetList<CustomPaint>(find.byType(CustomPaint)).map((c) => c.painter).whereType<WtRulerPainter>().first;
+    expect(ruler.retimed, [(.5 * Ws.fps).round(), (1.5 * Ws.fps).round()], reason: 'its intro\'s end and outro\'s start marked on the ruler, as Alight Motion\'s yellow marks');
     final edit = t.widget<PlatformMenuBar>(find.byType(PlatformMenuBar)).menus.whereType<PlatformMenu>().firstWhere((e) => e.label == 'Edit');
     edit.menus.expand((e) => e is PlatformMenuItemGroup ? e.members : [e]).firstWhere((e) => e.label == 'Save to My Elements').onSelected!();
     await settled(t, ws);
@@ -700,6 +704,10 @@ void _tests3() {
     expect(ws.inside!.word(0, 'background'), 'd8d8d8', reason: 'light gray behind it: ${ws.inside!.trouble}');
     await t.pumpAndSettle();
     expect(t.widget<Text>(find.byKey(const ValueKey('size-edited'))).data, startsWith('Total Edit Time  0h 0m'), reason: 'Alight Motion\'s Total Edit Time: the steps just made, under a minute');
+    await t.tap(find.byKey(const ValueKey('size-len-2')));   // (AbsentMotion's New Layer Length: a thing put in lasts 2 s)
+    await settled(t, ws);
+    final made = ws.inside!.add('shape', 'rect');
+    expect([ws.inside!.value(0, 'layer_length', 0), ws.inside!.value(made, 'duration', 0)], [2, 2], reason: ws.inside!.trouble);
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
