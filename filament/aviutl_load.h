@@ -1,4 +1,4 @@
-// aviutl_load.h: part of aviutl_fx.h. obj.load as lua.txt says it, for a figure and a picture file (the AviUtl2 script
+// aviutl_load.h: part of aviutl_fx.h. obj.load as lua.txt says it, for a figure and a picture file (and obj.copybuffer's "image:") (the AviUtl2 script
 // skill's references/api.md, gasdyueer, MIT: "figure", name[, color, size, line, round]; "image", file, true or false).
 // Drawn by ThorVG's own CPU canvas (SwCanvas, in Motolii's ThorVG), its premultiplied pixels laid in the object as
 // they are, kept by what was asked (the same asked again is not drawn again).
@@ -40,6 +40,23 @@ static tvg::Shape* aviutl_figure(int corners, float w, float h) {
     return s->close(), s;
 }
 
+// A picture file, read by ThorVG and kept (none chosen, not there or not read: none, false to the script, as lua.txt says).
+static const AviutlBuf* aviutl_image(AviutlRun& r, std::string file) {
+    if (!file.empty() && file[0] != '/') file = (std::filesystem::path(r.file).parent_path() / file).string();   // (a name of its own beside the script)
+    std::error_code wrong;
+    if (file.empty() || !std::filesystem::is_regular_file(file, wrong)) return nullptr;
+    float w = 0, h = 0;
+    tvg::Picture* p = tvg::Picture::gen();
+    const bool read = p->load(file.c_str()) == tvg::Result::Success && p->size(&w, &h) == tvg::Result::Success && w >= 1 && h >= 1;
+    delete p;
+    if (!read) return nullptr;
+    const auto at = std::filesystem::last_write_time(file, wrong);
+    return aviutl_drawn(r, "image|" + file + "|" + std::to_string((long long)at.time_since_epoch().count()), (uint32_t)std::lround(w), (uint32_t)std::lround(h), [&](tvg::SwCanvas* c) {
+        tvg::Picture* q = tvg::Picture::gen();
+        return q->load(file.c_str()) == tvg::Result::Success && c->add(q) == tvg::Result::Success;
+    });
+}
+
 static int aviutl_load(lua_State* L) {
     AviutlRun& r = aviutl_of(L);
     const std::string kind = aviutl_str(L, 1);
@@ -72,21 +89,6 @@ static int aviutl_load(lua_State* L) {
             return c->add(s) == tvg::Result::Success;
         }));
     }
-    if (kind == "image") {
-        std::string file = aviutl_str(L, 2);
-        if (!file.empty() && file[0] != '/') file = (std::filesystem::path(r.file).parent_path() / file).string();   // (a name of its own beside the script)
-        std::error_code wrong;
-        if (file.empty() || !std::filesystem::is_regular_file(file, wrong)) return lua_pushboolean(L, 0), 1;   // (none chosen, or not there: false, as lua.txt says)
-        float w = 0, h = 0;
-        tvg::Picture* p = tvg::Picture::gen();
-        const bool read = p->load(file.c_str()) == tvg::Result::Success && p->size(&w, &h) == tvg::Result::Success && w >= 1 && h >= 1;
-        delete p;
-        if (!read) return lua_pushboolean(L, 0), 1;
-        const auto at = std::filesystem::last_write_time(file, wrong);
-        return lay(aviutl_drawn(r, "image|" + file + "|" + std::to_string((long long)at.time_since_epoch().count()), (uint32_t)std::lround(w), (uint32_t)std::lround(h), [&](tvg::SwCanvas* c) {
-            tvg::Picture* q = tvg::Picture::gen();
-            return q->load(file.c_str()) == tvg::Result::Success && c->add(q) == tvg::Result::Success;
-        }));
-    }
+    if (kind == "image") return lay(aviutl_image(r, aviutl_str(L, 2)));
     return aviutl_no(L, "obj.load " + kind + (kind == "figure" ? " " + aviutl_str(L, 2) : ""));
 }

@@ -193,10 +193,18 @@ static int aviutl_clearbuffer(lua_State* L) {   // (target[, w, h][, colour])
     aviutl_clear(r, b, aviutl_num(L, sized ? 4 : 2), lua_isnumber(L, sized ? 4 : 2));
     return 0;
 }
-static int aviutl_copybuffer(lua_State* L) {   // (dst, src)
+static const AviutlBuf* aviutl_image(AviutlRun& r, std::string file);   // (aviutl_load.h)
+static int aviutl_copybuffer(lua_State* L) {   // (dst, src; src "image:" a picture file, read as obj.load reads one: lua.txt)
     AviutlRun& r = aviutl_of(L);
     const std::string to = aviutl_name(luaL_checkstring(L, 1)), from = aviutl_name(luaL_checkstring(L, 2));
-    if (from == "framebuffer" || from.rfind("image:", 0) == 0 || to == "framebuffer") return aviutl_no(L, "obj.copybuffer " + to + " from " + from);
+    if (from.rfind("image:", 0) == 0 && to != "framebuffer") {
+        const AviutlBuf* const picture = aviutl_image(r, from.substr(6));
+        if (!picture) return lua_pushboolean(L, 0), 1;
+        const AviutlBuf& t = aviutl_buf(r, to, picture->w, picture->h);
+        aviutl_lay(r, *picture, t.rt, t.w, t.h, 0, 0, 1, 1, 0, 1, 0, 0, -1, 1);
+        return lua_pushboolean(L, 1), 1;
+    }
+    if (from == "framebuffer" || to == "framebuffer") return aviutl_no(L, "obj.copybuffer " + to + " from " + from);
     if (!r.bufs.count(from)) return lua_pushboolean(L, 0), 1;
     aviutl_copy(r, to, from);
     return lua_pushboolean(L, 1), 1;
