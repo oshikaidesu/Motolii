@@ -390,6 +390,25 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Scale Assist is put on from the Effects shelf, as Alight Motion\'s effect is; its card only then', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$rect');
+    await t.pumpAndSettle();
+    expect(m.cards(rect).map((c) => c.$1), isNot(contains('Scale Assist')), reason: 'not put on: no card');
+    ws.shelf = 'Effects';
+    await t.pumpAndSettle();
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Scale Assist');
+    await t.pumpAndSettle();
+    await doubleTap(t, find.byKey(const ValueKey('ws-look-Scale Assist')));
+    await settled(t, ws);
+    expect([m.word(rect, 'scale_assist'), m.cards(rect).map((c) => c.$1).contains('Scale Assist')], ['both', true], reason: 'put on, its card there: ${m.trouble}');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Save on an effect\'s card keeps that effect\'s values and keys alone on the Effects shelf, each press another (Alight Motion\'s presets of an effect)', (t) async {
     final own = Directory.systemTemp.createTempSync('own');
     final setenv = DynamicLibrary.process().lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32), int Function(Pointer<Utf8>, Pointer<Utf8>, int)>('setenv');
@@ -1246,11 +1265,11 @@ void _tests3() {
     await t.pumpAndSettle();
     expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Surface')), findsOneWidget, reason: 'Filament\'s own surface of a solid');
     expect(m.say(cube, 'fill', 'glass'), isTrue, reason: m.trouble);
-    expect(m.cards(cube).map((c) => c.$1), ['Fill', 'Transform', 'Blending', 'Motion', 'Play', 'Scale Assist', 'Glass', 'Lit', 'Physics', 'Note'], reason: 'filled with glass: the glass\'s own card, not the surface\'s');
+    expect(m.cards(cube).map((c) => c.$1), ['Fill', 'Transform', 'Blending', 'Motion', 'Play', 'Glass', 'Lit', 'Physics', 'Note'], reason: 'filled with glass: the glass\'s own card, not the surface\'s');
     expect(m.cards(rect).map((c) => c.$1).contains('Matte'), isFalse, reason: 'not clipped: no matte to say how');
     expect(m.set(rect, 'clip', 1) && m.cards(rect).map((c) => c.$1).contains('Matte'), isTrue);
     expect(m.set(cube, 'ior', 2.2) && m.value(cube, 'ior', 0) == 2.2, isTrue, reason: m.trouble);
-    expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join(' ') == 'Fill Transform Blending Motion Play Scale Assist Surface Lit Physics Note', isTrue);
+    expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join(' ') == 'Fill Transform Blending Motion Play Surface Lit Physics Note', isTrue);
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_metallic'), findsOneWidget);
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);

@@ -348,13 +348,12 @@ static const DocCard doc_cards[] = {
     {"Play", "marker animation speed speed_hold frame_rate", "kind", "!stage"},   // (a thing's; the stage's own frame rate is said in the size box)
     {"Sound", "volume beats", "kind", "film"},   // (its beats: shown on the timeline's ruler where it strikes)
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
-    {"Parent", "parent_rotate parent_size roll roll_radius", "parent", "!0"},
-    {"Scale Assist", "scale_assist scale_assist_amount scale_assist_damp", "kind", "!camera"},   // (Alight Motion's Scale Assist: one way grown alone, or both, kept as bulky as it was)   // (Alight Motion's Parenting Helper: how much of its parent's turn and size it takes, and rolling as a wheel; while it has a parent)
+    {"Parent", "parent_rotate parent_size roll roll_radius", "parent", "!0"},   // (Alight Motion's Parenting Helper: how much of its parent's turn and size it takes, and rolling as a wheel; while it has a parent)
+    {"Scale Assist", "scale_assist scale_assist_amount scale_assist_damp", "scale_assist", "!"},   // (Alight Motion's Scale Assist: one way grown alone, or both, kept as bulky as it was; once put on from the Effects shelf, as its effect is: looks/Scale Assist.motolii)
     {"Connect", "connect connect_to connect_reach"},
     {"Line", "cap join dash dash_offset heads head_shape head_start head_size"},   // (and its open ends' shapes: Cavalry's heads, Alight Motion's line start and end)
-    {"Path", "round bloat offset zigzag zigzag_ridges zigzag_smooth", "kind", "shape"},
-    {"Corners", "round", "kind", "picture"},
-    {"Crop", "crop_left crop_top crop_right crop_bottom", "kind", "picture"},   // (a photo cut in from its sides, what is left where it was: Alight Motion's crop)   // (a photo's corners rounded, as a rect's: drawn as a rect its own file fills, doc_match)   // (its path made anew: After Effects' shape operators, ThorVG's own)
+    {"Path", "round bloat offset zigzag zigzag_ridges zigzag_smooth", "kind", "shape"},   // (its path made anew: After Effects' shape operators, ThorVG's own)
+    {"Edit Shape", "crop_left crop_top crop_right crop_bottom round", "kind", "picture"},   // (a photo's rect, Alight Motion's Edit Shape, AbsentMotion's Shape Options: cut in from its sides, what is left where it was, and its corners rounded; drawn as a rect its own file fills, doc_match)
     {"Deform", "warp bend twist pinch skew squash wiggle stretch bend_direction pin_tl_x pin_tl_y pin_tr_x pin_tr_y pin_bl_x pin_bl_y pin_br_x pin_br_y warp_width warp_angle warp_speed skew_axis wiggle_detail wiggle_speed", "kind", "shape"},   // (its points moved as it is drawn: Cavalry's deformers)
     {"Surface", "shading metallic roughness reflectance clear_coat clear_coat_roughness sheen anisotropy thickness emissive", "fill", "!glass"},
     {"Glass", "ior dispersion swim dark vivid", "fill", "glass"},
