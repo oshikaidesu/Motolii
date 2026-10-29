@@ -125,7 +125,8 @@ abstract interface class StageHandles {
 /// A shape's own too (Alight Motion's, on the canvas): its corners' roundness, in from its first corner along its
 /// diagonal as far as they are round (round: a share of its shorter side); a polygon's or star's points, out from the
 /// middle of its right side.
-Map<String, Offset> _handles(Offset Function(Offset doc) scr, ArtBox b, {required bool knob, String form = '', double round = 0}) {
+/// A photo's crop (its left, top, right and bottom cut in, shares of its width or height): a bar on each side where it is cut.
+Map<String, Offset> _handles(Offset Function(Offset doc) scr, ArtBox b, {required bool knob, String form = '', double round = 0, List<double> crop = const []}) {
   final top = scr(b.top), dir = top - scr(b.c), n = dir.distance < 1 ? const Offset(0, -1) : dir / dir.distance;
   final c = [for (final p in b.corners) scr(p)];
   return {
@@ -135,6 +136,12 @@ Map<String, Offset> _handles(Offset Function(Offset doc) scr, ArtBox b, {require
     'body': scr(b.c),
     if (const ['rect', 'polygon', 'star', 'squircle', 'chamfer', 'cog'].contains(form)) 'round': _shapeGrip(c).roundAt(round),
     if (const ['polygon', 'star', 'cog'].contains(form)) 'points': (c[1] + c[2]) / 2 + _shapeGrip(c).u * 18,
+    if (crop.length == 4) ...{
+      'crop 0': (c[0] + c[3]) / 2 + (c[1] - c[0]) * crop[0],
+      'crop 1': (c[0] + c[1]) / 2 + (c[3] - c[0]) * crop[1],
+      'crop 2': (c[1] + c[2]) / 2 - (c[1] - c[0]) * crop[2],
+      'crop 3': (c[3] + c[2]) / 2 - (c[3] - c[0]) * crop[3],
+    },
   };
 }
 

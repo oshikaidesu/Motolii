@@ -11,7 +11,15 @@ class _StageViewState extends State<StageView> implements StageHandles {
     final v = _shown, scene = widget.scene, b = WsArt.boxOf(scene, widget.selected), l = scene.layer(widget.selected);
     if (v == null || b == null || l == null) return const {};
     final (form, round) = _formOf();
-    return _handles((d) => v.toScreen(WsArt.toView(scene, d)), b, knob: l.kind != WsKind.camera && l.id != 'bg', form: form, round: round);
+    return _handles((d) => v.toScreen(WsArt.toView(scene, d)), b, knob: l.kind != WsKind.camera && l.id != 'bg', form: form, round: round, crop: _cropOf());
+  }
+
+  static const _crops = ['crop_left', 'crop_top', 'crop_right', 'crop_bottom'];
+  /// The picked photo's crop, each side's share cut in (the inside's): none for anything else.
+  List<double> _cropOf() {
+    final m = WsScope.read(context).inside, t = int.tryParse(widget.selected ?? '');
+    if (m == null || t == null || m.word(t, 'kind') != 'picture' || !RegExp(r'\.(jpe?g|png|webp|bmp)$', caseSensitive: false).hasMatch(m.word(t, 'file'))) return const [];
+    return [for (final n in _crops) m.value(t, n, 0) ?? 0];
   }
 
   /// The picked shape's form and how round its corners are (the inside's), for its own handles.
@@ -331,7 +339,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
         final d = (value - local).distance;
         if (d > near) continue;
         near = d;
-        by = switch (key.split(' ').first) { 'corner' => 'scale', 'turn' => 'turn', 'anchor' => 'pivot', 'round' => 'round', 'points' => 'points', _ => null };
+        by = switch (key.split(' ').first) { 'corner' => 'scale', 'turn' => 'turn', 'anchor' => 'pivot', 'round' => 'round', 'points' => 'points', 'crop' => key, _ => null };
         grip = key;
       }
       for (final p in [...m.points(picked), for (final (h, _) in m.handles(picked)) h]) { // (a path's own point, moved with its handles; or a handle alone: the inside takes the nearest)
@@ -370,6 +378,15 @@ class _StageViewState extends State<StageView> implements StageHandles {
     final h = _held, ws = WsScope.read(context), m = ws.inside;
     if (h == null || m == null) return;
     final all = (local - h.from) / v.s; // (screen px -> points of the picture)
+    if (h.by case final way? when way.startsWith('crop ')) {   // (a photo's side cut in as far as the hand goes in from where it is cut, no further than leaves some of it)
+      final side = int.parse(way.substring(5)), c = [for (var i = 0; i < 4; i++) handles['corner $i'] ?? Offset.zero], crop = _cropOf();
+      final across = side.isEven ? c[1] - c[0] : c[3] - c[0], len = math.max(1.0, across.distance), dir = across / len * (side < 2 ? 1.0 : -1.0);
+      final at = handles[way] ?? h.from, inBy = ((local - at).dx * dir.dx + (local - at).dy * dir.dy) / len;
+      if (crop.length == 4) m.carry(_crops[side], (crop[side] + inBy).clamp(0.0, .95 - crop[(side + 2) % 4]));
+      _held = (from: h.from, moved: true, by: way);
+      setState(() {});
+      return;
+    }
     if (h.by case final way? when way == 'round' || way == 'points') {   // (a shape's own: its corners' roundness, or its points, as far as the hand goes)
       final c = [for (var i = 0; i < 4; i++) handles['corner $i'] ?? Offset.zero], g = _gripOf(c), t = int.tryParse(widget.selected ?? '');
       if (way == 'round') m.carry('round', g.roundOf(local));
@@ -516,7 +533,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
               children: [
                 RepaintBoundary(
                   child: CustomPaint(
-                    painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: widget.texture == null ? _Part.all : _Part.under, pivots: widget.pivots, met: _met, trail: trail, parent: _parentOf(), grip: _grip, form: _formOf()),
+                    painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: widget.texture == null ? _Part.all : _Part.under, pivots: widget.pivots, met: _met, trail: trail, parent: _parentOf(), grip: _grip, form: _formOf(), crop: _cropOf()),
                   ),
                 ),
                 if (_desk case final desk? when widget.texture != null) ...[ // (the whole pane as the inside draws it: off the stage covered half way, the picked thing marked)
@@ -558,7 +575,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
                 if (widget.texture != null)
                   IgnorePointer(
                     child: CustomPaint(
-                      painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: _Part.over, pivots: widget.pivots, met: _met, marked: _desk != null, trail: trail, parent: _parentOf(), grip: _grip, form: _formOf()),
+                      painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: _Part.over, pivots: widget.pivots, met: _met, marked: _desk != null, trail: trail, parent: _parentOf(), grip: _grip, form: _formOf(), crop: _cropOf()),
                     ),
                   ),
                 IgnorePointer(child: CustomPaint(painter: _RulerPainter(v, widget.cursor, scene))),

@@ -799,6 +799,27 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a photo\'s crop bars on the canvas: its left side pulled in cuts it, what is left staying (Alight Motion\'s crop)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final photo = m.add('picture', '$motoliiDir/fx_sample.jpg');
+    expect(m.set(photo, 'size', .5), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$photo');
+    await t.pumpAndSettle();
+    final stage = find.byType(StageView), origin = t.getTopLeft(stage);
+    Map<String, Offset> h() => (t.state(stage) as StageHandles).handles;
+    expect(h().keys, containsAll(['crop 0', 'crop 1', 'crop 2', 'crop 3']), reason: 'a bar on each side');
+    final wide = (h()['corner 1']! - h()['corner 0']!).distance;
+    await t.timedDragFrom(origin + h()['crop 0']!, Offset(wide * .3, 0), const Duration(milliseconds: 300));
+    await settled(t, ws);
+    expect(m.value(photo, 'crop_left', 0) ?? 0, closeTo(.3, .05), reason: 'cut in a third from the left: ${m.trouble}');
+    expect(h()['crop 0']!.dx, closeTo(h()['corner 0']!.dx + wide * .3, 4), reason: 'its bar where it is cut');
+    expect(m.undo() && (m.value(photo, 'crop_left', 0) ?? 0) == 0, isTrue, reason: 'one step back');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a handle in hand alone is shown, larger; the others come back when it is let go (Alight Motion\'s handles)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

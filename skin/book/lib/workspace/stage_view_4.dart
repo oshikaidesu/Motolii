@@ -2,9 +2,10 @@
 part of 'stage_view.dart';
 
 class _ViewPainter extends CustomPainter {
-  _ViewPainter(this.scene, this.v, this.sel, this.hover, {required this.grid, required this.safe, this.part = _Part.all, this.pivots = false, this.met = (null, null), this.marked = false, this.trail, this.parent, this.grip, this.form = ('', 0)});
+  _ViewPainter(this.scene, this.v, this.sel, this.hover, {required this.grid, required this.safe, this.part = _Part.all, this.pivots = false, this.met = (null, null), this.marked = false, this.trail, this.parent, this.grip, this.form = ('', 0), this.crop = const []});
   final String? grip;   // (the handle in hand: it alone shown, lit; the others gone till it is let go)
   final (String, double) form;   // (the picked shape's form and roundness: its own handles)
+  final List<double> crop;   // (the picked photo's crop: a bar on each side)
 
   /// The inside marks the picked thing and the one under the hand on its desk: not drawn here.
   final bool marked;
@@ -124,7 +125,7 @@ class _ViewPainter extends CustomPainter {
   }
 
   void _selection(Canvas c, ArtBox b, ArtLayer l) {
-    final h = _handles(_scr, b, knob: l.kind != WsKind.camera && l.id != 'bg', form: form.$1, round: form.$2), pts = [for (var i = 0; i < 4; i++) h['corner $i']!];
+    final h = _handles(_scr, b, knob: l.kind != WsKind.camera && l.id != 'bg', form: form.$1, round: form.$2, crop: crop), pts = [for (var i = 0; i < 4; i++) h['corner $i']!];
     _legible(c, Path()..addPolygon(pts, true), WsT.accent);
     final top = _scr(b.top);
     final lit = WsT.accent.withValues(alpha: 1), seen = (String k) => grip == null || grip == k;
@@ -156,6 +157,13 @@ class _ViewPainter extends CustomPainter {
       final big = grip == 'points' ? 1.6 : 1.0, d = Path()..addPolygon([p + Offset(0, -5 * big), p + Offset(5 * big, 0), p + Offset(0, 5 * big), p + Offset(-5 * big, 0)], true);
       c.drawPath(d, _line(Grey.g00, 3));
       c.drawPath(d, Paint()..color = lit);
+    }
+    for (var i = 0; i < 4; i++) {   // (a photo's crop: a bar along each side where it is cut)
+      if (h['crop $i'] case final p? when seen('crop $i')) {
+        final big = grip == 'crop $i' ? 1.6 : 1.0, along = i.isEven ? Offset(0, 7 * big) : Offset(7 * big, 0);
+        c.drawLine(p - along, p + along, _line(Grey.g00, 6));
+        c.drawLine(p - along, p + along, _line(lit, 3));
+      }
     }
     final a = h['anchor']!;
     if (seen('anchor')) {
@@ -193,7 +201,7 @@ class _ViewPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ViewPainter o) => o.scene != scene || o.v != v || o.sel != sel || o.hover != hover || o.grid != grid || o.safe != safe || o.part != part || o.pivots != pivots || o.met != met || o.marked != marked || !identical(o.trail, trail) || o.parent != parent || o.grip != grip || o.form != form;
+  bool shouldRepaint(_ViewPainter o) => o.scene != scene || o.v != v || o.sel != sel || o.hover != hover || o.grid != grid || o.safe != safe || o.part != part || o.pivots != pivots || o.met != met || o.marked != marked || !identical(o.trail, trail) || o.parent != parent || o.grip != grip || o.form != form || !listEquals(o.crop, crop);
 }
 
 // ---- rulers -----------------------------------------------------------------------------------------------------------

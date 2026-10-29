@@ -27,6 +27,7 @@ const _handleFor = {
   'body': {'x', 'y', 'z'},
   'round': {'round'}, // (a shape's own: its corners' roundness, Alight Motion's on the canvas)
   'points': {'points'}, // (a polygon's or star's points)
+  'crop': {'crop_left', 'crop_top', 'crop_right', 'crop_bottom'}, // (a photo's side cut in)
 };
 
 Future<Ws> _pump(WidgetTester t) => openWorkspace(t, size: const Size(1600, 2400), document: '${Directory.systemTemp.createTempSync('sweep').path}/sweep.motolii');   // (the test door's own opening, tall: every card shows)
@@ -121,7 +122,7 @@ void main() {
       expect(handles, isNotEmpty, reason: 'the picked thing shows its handles');
       for (final MapEntry(key: name, value: at0) in handles.entries) {
         final want = _handleFor[name.split(' ').first]!, before = _all(m, at);
-        await t.timedDragFrom(origin + at0, const Offset(30, 20), const Duration(milliseconds: 300));   // (Flutter's own drag in steps, as a hand drags: in real time one jump is not always taken)
+        await t.timedDragFrom(origin + at0, name == 'crop 2' || name == 'crop 3' ? const Offset(-30, -20) : const Offset(30, 20), const Duration(milliseconds: 300));   // (a crop's right and bottom bars cut in going back)   // (Flutter's own drag in steps, as a hand drags: in real time one jump is not always taken)
         await settled(t, wsOf(t));
         await t.pumpAndSettle();
         final moved = _moved(before, _all(m, at));
