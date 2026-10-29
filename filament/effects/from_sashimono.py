@@ -10,7 +10,7 @@
 # gives an effect sRGB (screen.h screen_tone): its colours are read as given.
 # usage (Python 3.12 or later, numpy and packaging: what Sashimono's effects import):
 #   uv run --no-project --python 3.13 --with numpy --with packaging python -I from_sashimono.py <Sashimono's src> <out dir> [kind ...]
-# (an effect of more than one pass, of pieces, of a picture file, a gradient, a value of its own kind, or a sound: refused)
+# (an effect of pieces, of a picture file, a gradient, a value of its own kind, or a sound: refused)
 import json, os, re, sys
 
 src, out, wanted = sys.argv[1], sys.argv[2], sys.argv[3:]
@@ -58,8 +58,8 @@ def args_at(code, open_at):   # (a call's or a header's arguments from its '(' o
 
 def one_picture(code):
     # (Vulkan's GLSL makes a picture's sampler where it is read, not handed to a function, so a function taking a
-    #  sampler2D takes none: it reads the picture in by its name (inputImage), and each call to it drops that argument;
-    #  every picture Sashimono hands one, for an effect of one pass, is the picture in)
+    #  sampler2D takes none: it reads the picture before it (u_texture), and each call to it drops that argument;
+    #  every picture Sashimono hands one is the pass before's)
     header = re.compile(r'\b(?:void|float|int|bool|[iu]?vec[234]|mat[234])\s+(\w+)\s*\(')
     takes = {}
     for m in header.finditer(code):
@@ -83,7 +83,7 @@ def one_picture(code):
                 if depth == 0:
                     break
             params = [code[a:b] for j, (a, b) in enumerate(spans) if j != k]
-            body = re.sub(rf'\b{name}\b', 'inputImage', code[body_open:end + 1])
+            body = re.sub(rf'\b{name}\b', 'u_texture', code[body_open:end + 1])
             code = code[:m.start()] + code[m.start():m.end() - 1] + '(' + ','.join(params).strip() + ')' + code[close + 1:body_open] + body + code[end + 1:]
             break
         else:
@@ -127,19 +127,35 @@ def title(kind):   # (its name: its own word for it, in words; in and out, its I
     return ' '.join(['In-Out'] + [w.capitalize() for w in words[1:]]) if words[0] == 'inout' else ' '.join(w.capitalize() for w in words)
 
 
+def passes_of(n):   # (more than one pass: each but the last into a picture of its own, the pass before's read where it reads u_texture)
+    if n == 1:
+        return '', {}
+    targets = [f'sm_pass{k}' for k in range(n - 1)]
+    pick = lambda read: ''.join(f'    if (PASSINDEX == {k + 1}) return {read(f"isf_img_{t}")};\n' for k, t in enumerate(targets))
+    helpers = ('vec4 sm_prev_texture(vec2 uv) {\n' + pick(lambda t: f'texture({t}, uv)') + '    return texture(inputImage, uv);\n}\n'
+               'vec4 sm_prev_texelFetch(ivec2 p, int l) {\n' + pick(lambda t: f'texelFetch({t}, p, l)') + '    return texelFetch(inputImage, p, l);\n}\n'
+               'ivec2 sm_prev_textureSize(int l) { return textureSize(inputImage, l); }\n')
+    return helpers, {'PASSES': [{'TARGET': t} for t in targets] + [{}]}
+
+
 made, refused = [], []
 for d in definition.registry.all():
     if wanted and d.kind not in wanted:
         continue
     said = inputs(d)
-    if said is None or d.audio_process or d.pieces or d.scopes_following or not d.fragment_shader or d.passes != 1:
+    if said is None or d.audio_process or d.pieces or d.scopes_following or not d.fragment_shader:
         refused.append(d.kind)
         continue
     head = {'DESCRIPTION': f"Sashimono Edit's {d.label} ({d.kind}, {d.category}; MIT, src/sashimono/effects/builtin.py), made an ISF effect by filament/effects/from_sashimono.py", 'CREDIT': 'Sashimono Edit (MIT)', 'CATEGORIES': [shelf.get(d.category, d.category)], 'ISFVSN': '2', 'INPUTS': said}
     body = d.fragment_shader[len(PRELUDE):] if d.fragment_shader.startswith(PRELUDE) else d.fragment_shader
     body = re.sub(r'^[ \t]*uniform[ \t]+\w+[ \t]+\w+[ \t]*;.*$', '', body, flags=re.M)   # (its params: ISF's inputs, declared by the door)
     with open(os.path.join(out, f'{title(d.kind)} (Sashimono).fs'), 'w') as f:   # (its name on the shelf the file's: Sashimono's beside ISF's own of a name, Emboss, Mosaic)
-        f.write('/*' + json.dumps(head, ensure_ascii=False, indent=1) + '*/\n' + words + one_picture(kept + body))
+        helpers, passes = passes_of(d.passes)
+        head.update(passes)
+        code = one_picture(kept + body)
+        if passes:
+            code = re.sub(r'\b(texture|texelFetch|textureSize)\s*\(\s*u_texture\s*,', r'sm_prev_\1(', code)
+        f.write('/*' + json.dumps(head, ensure_ascii=False, indent=1) + '*/\n' + words + helpers + code)
     made.append(d.kind)
 if not wanted:   # (and AviUtl's built-in effects as Sashimono takes them, for AviUtl2's scripts' obj.effect (aviutl_fx.h): its
     #  compat/aviutl/mapping.py's own tables, an effect's name to its kind, each param's name to its own (and how its

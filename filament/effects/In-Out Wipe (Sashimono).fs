@@ -157,8 +157,8 @@ const float PI = 3.14159265358979;
 // 1 画素を事前乗算で読む 外は端の画素（CLAMP_TO_EDGE と同じ） 外を透明にすると、
 // 画面いっぱいの素材を拡大して置いたときに端の 1 列が薄れる
 vec4 texel_premul(ivec2 p, bool premultiplied) {
-    ivec2 size = textureSize(inputImage, 0);
-    vec4 c = texelFetch(inputImage, clamp(p, ivec2(0), size - 1), 0);
+    ivec2 size = textureSize(u_texture, 0);
+    vec4 c = texelFetch(u_texture, clamp(p, ivec2(0), size - 1), 0);
     return premultiplied ? c : vec4(c.rgb * c.a, c.a);
 }
 
@@ -184,7 +184,7 @@ vec4 bilinear_premul(vec2 pixel, bool premultiplied) {
 // uv の動き（dFdx と dFdy） 分かれ道の中では測れないので、呼ぶ側が先に測って渡す
 // 読む数は覆う画素の数に合わせ、極端に縮めたときも 8x8 で止めて重くしすぎない
 vec4 area_premul(vec2 uv, vec2 du, vec2 dv, bool premultiplied) {
-    vec2 size = vec2(textureSize(inputImage, 0));
+    vec2 size = vec2(textureSize(u_texture, 0));
     vec2 pixel = uv * size;
     vec2 dx = du * size;
     vec2 dy = dv * size;
@@ -310,17 +310,17 @@ vec4 unpremul(vec4 c) { return c.a > 0.0001 ? vec4(c.rgb / c.a, c.a) : vec4(0.0)
 // 事前乗算アルファでぼかす ストレートのまま畳むと、透明な画素の色が
 // 混ざって縁が黒ずむ
 vec4 blur1d(vec2 uv, vec2 direction, float radius) {
-    if (radius < 0.5) return texture(inputImage, uv);
+    if (radius < 0.5) return texture(u_texture, uv);
     float sigma = max(radius * 0.5, 0.5);
     vec2 step = direction / u_size;
-    vec4 sum = premul(texture(inputImage, uv));
+    vec4 sum = premul(texture(u_texture, uv));
     float total = 1.0;
     int taps = int(min(radius, 96.0));
     for (int i = 1; i <= taps; ++i) {
         float offset = float(i);
         float w = exp(-0.5 * offset * offset / (sigma * sigma));
-        sum += premul(texture(inputImage, uv + step * offset)) * w;
-        sum += premul(texture(inputImage, uv - step * offset)) * w;
+        sum += premul(texture(u_texture, uv + step * offset)) * w;
+        sum += premul(texture(u_texture, uv - step * offset)) * w;
         total += 2.0 * w;
     }
     return unpremul(sum / total);
@@ -343,7 +343,7 @@ vec4 image_pixel(vec2 size, vec2 p, bool loop) {
     } else if (uv.x < 0.0 || uv.y < 0.0 || uv.x >= 1.0 || uv.y >= 1.0) {
         return vec4(0.0);
     }
-    return texture(inputImage, uv);
+    return texture(u_texture, uv);
 }
 
 vec3 to_srgb(vec3 c) {

@@ -1,4 +1,74 @@
 {
+ "ぼかし": {
+  "file": "Blur (Sashimono).fs",
+  "params": {
+   "範囲": [
+    "radius",
+    "",
+    ""
+   ],
+   "サイズ固定": [
+    "fixed_size",
+    "",
+    ""
+   ]
+  }
+ },
+ "発光": {
+  "file": "Glow (Sashimono).fs",
+  "params": {
+   "強さ": [
+    "intensity",
+    "",
+    ""
+   ],
+   "しきい値": [
+    "threshold",
+    "",
+    ""
+   ],
+   "範囲": [
+    "radius",
+    "",
+    ""
+   ]
+  }
+ },
+ "グロー": {
+  "file": "Glow (Sashimono).fs",
+  "params": {
+   "強さ": [
+    "intensity",
+    "",
+    ""
+   ],
+   "しきい値": [
+    "threshold",
+    "",
+    ""
+   ],
+   "拡散": [
+    "radius",
+    "",
+    ""
+   ]
+  }
+ },
+ "拡散光": {
+  "file": "Glow (Sashimono).fs",
+  "params": {
+   "強さ": [
+    "intensity",
+    "",
+    ""
+   ],
+   "拡散": [
+    "radius",
+    "",
+    ""
+   ]
+  }
+ },
  "色調補正": {
   "file": "Color Correct (Sashimono).fs",
   "params": {
@@ -54,6 +124,71 @@
    ]
   }
  },
+ "影": {
+  "file": "Shadow (Sashimono).fs",
+  "params": {
+   "X": [
+    "offset_x",
+    "",
+    ""
+   ],
+   "Y": [
+    "offset_y",
+    "flip",
+    ""
+   ],
+   "濃さ": [
+    "opacity",
+    "",
+    ""
+   ]
+  }
+ },
+ "シャドー": {
+  "file": "Shadow (Sashimono).fs",
+  "params": {
+   "X": [
+    "offset_x",
+    "",
+    ""
+   ],
+   "Y": [
+    "offset_y",
+    "flip",
+    ""
+   ],
+   "濃さ": [
+    "opacity",
+    "",
+    ""
+   ]
+  }
+ },
+ "ドロップシャドウ": {
+  "file": "Shadow (Sashimono).fs",
+  "params": {
+   "X": [
+    "offset_x",
+    "",
+    ""
+   ],
+   "Y": [
+    "offset_y",
+    "flip",
+    ""
+   ],
+   "濃さ": [
+    "opacity",
+    "",
+    ""
+   ],
+   "拡散": [
+    "blur",
+    "",
+    ""
+   ]
+  }
+ },
  "シャープ": {
   "file": "Sharpen (Sashimono).fs",
   "params": {
@@ -64,6 +199,21 @@
    ],
    "範囲": [
     "radius",
+    "",
+    ""
+   ]
+  }
+ },
+ "閃光": {
+  "file": "Flash (Sashimono).fs",
+  "params": {
+   "強さ": [
+    "strength",
+    "",
+    ""
+   ],
+   "サイズ固定": [
+    "fixed_size",
     "",
     ""
    ]
@@ -352,6 +502,16 @@
   "file": "Transform (Sashimono).fs",
   "params": {}
  },
+ "境界ぼかし": {
+  "file": "Border Blur (Sashimono).fs",
+  "params": {
+   "範囲": [
+    "blur",
+    "",
+    ""
+   ]
+  }
+ },
  "エッジ抽出": {
   "file": "Edge Detect (Sashimono).fs",
   "params": {
@@ -362,6 +522,26 @@
    ],
    "しきい値": [
     "radius",
+    "",
+    ""
+   ]
+  }
+ },
+ "凸エッジ": {
+  "file": "Bevel Light (Sashimono).fs",
+  "params": {
+   "幅": [
+    "thickness",
+    "",
+    ""
+   ],
+   "高さ": [
+    "elevation",
+    "",
+    ""
+   ],
+   "角度": [
+    "azimuth",
     "",
     ""
    ]
