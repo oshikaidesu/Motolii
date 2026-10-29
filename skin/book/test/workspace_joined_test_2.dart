@@ -394,9 +394,9 @@ void _tests2() {
       ..select('$rect');
     await t.pumpAndSettle();
     Finder animateAll() => find.descendant(of: find.ancestor(of: find.text('Animate all'), matching: find.byType(Row)).first, matching: find.byType(OnOff));
-    await t.tap(animateAll());
+    await t.tap(find.descendant(of: animateAll(), matching: find.text('Off')));
     await settled(t, ws);
-    expect(m.keyingNow, isTrue, reason: 'Animate all keys every change');
+    expect(m.keyingNow, isTrue, reason: 'Animate all keys every change; its word is pressed as its switch (AbsentMotion\'s SwitchRow)');
     ws.select('$cube');
     await t.pumpAndSettle();
     expect(m.keyingNow, isTrue, reason: 'another kind picked does not turn it off');

@@ -67,11 +67,15 @@ class OwnForms extends Forms {
     ),
   );
 
-  /// The word and a switch: the state is a word, never colour alone.
+  /// The word and a switch: the state is a word, never colour alone. The word is pressed as the switch is, the two one
+  /// control, as AbsentMotion's SwitchRow (SettingsDrawer.kt: the whole row toggleable, its label with it).
   @override
   Widget onOff(BuildContext context, SwitchSpec s) => IgnorePointer(
     ignoring: !s.enabled,
-    child: Row(
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => s.onChanged(!s.on),
+      child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
@@ -84,6 +88,7 @@ class OwnForms extends Forms {
           child: Pop.on(context) ? PopSwitch(on: s.on, onChanged: s.onChanged) : PillSwitch(on: s.on, onChanged: s.onChanged),
         ),
       ],
+    ),
     ),
   );
 
