@@ -430,8 +430,10 @@ class WtPlayheadPainter extends CustomPainter {
     final x = view.x(frame).roundToDouble();
     if (x < -40 || x > s.width + 40) return;
     final p = Paint()..color = WsT.playhead;
-    final t = _text('$frame', T.value(WsT.onAccent).copyWith(fontSize: T.px(10), fontWeight: FontWeight.w700));
-    final w = math.max(t.width + 10, 22.0), cx = (x + .5).clamp(w / 2, s.width - w / 2);
+    // (a small head, no number on it: Premiere Pro's playhead, After Effects' time indicator, Ableton's and Alight
+    //  Motion's, the moment read in the transport's time; one that carries its frame hid a marker's name under it,
+    //  golf_noise.md ⑱ (Blender and Cavalry number theirs, their markers on a row of their own))
+    final w = Shape.z(9), cx = (x + .5).clamp(w / 2, s.width - w / 2);
     final pill = RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(cx, headTop + 8), width: w, height: Shape.z(15)), Shape.r(4));
     c.drawRect(Rect.fromLTWH(x, headTop + 8, 1, s.height - headTop - 8), p);
     p.color = WsT.accent;
@@ -444,8 +446,6 @@ class WtPlayheadPainter extends CustomPainter {
         ..close(),
       p,
     );
-    t.paint(c, Offset(cx - t.width / 2, pill.center.dy - t.height / 2));
-    t.dispose();
   }
 
   @override
