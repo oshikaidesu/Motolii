@@ -25,6 +25,7 @@ struct DrawnFx { bool split = false;   // (a text's letters each a copy of their
     int heads = 0; float headSize = 4.f; int headShape = 0, headStart = -1;   // (heads on an open edge's ends, as Cavalry's: 1 its end, 2 its start, 3 both; so many times its edge long; 0 arrow, 1 circle, 2 box, 3 chevron, 4 bar; from 5 Alight Motion's, drawn by AbsentMotion (drawn_flat.h); its start's own, -1 as its end's)
     float blur = 0.f; int blurWay = 0; float overHigh = 1.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; int copies = 1;
                  std::vector<float4> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
+                 std::vector<float> rampAt;   // (where each of them stands, a share of the way, as CSS's colour stop positions and SVG's stop offset; none said: evenly)
                  bool hollow = false;   // (a flat shape filled with nothing: only its edge is seen)
                  std::string media;     // (a flat shape filled with a picture's file instead of its colour, seen only where it is filled: Alight Motion's Fill > Media)
                  bool evenOdd = false;  // (where its outlines lie over each other, a hole every other time: SVG's fill-rule evenodd; else nonzero)

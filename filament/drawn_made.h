@@ -167,8 +167,8 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
 
 // Words put in the scene, set by ThorVG in the font of `fontFile` (a .ttf): a sheet `high` tall for each line, as
 // wide as the words make it, its middle at `place`.
-// The colours of a ramp as ThorVG's linear gradient, from the first at y0 to the last at y1 (evenly spaced).
-static tvg::Fill* ramp_of(const std::vector<float4>& ramp, float w, float h, bool radial = false, float angle = 0.f, float scale = 1.f, int spread = 0) {
+// The colours of a ramp as ThorVG's linear gradient, from the first at y0 to the last at y1 (evenly spaced, or where `at` says).
+static tvg::Fill* ramp_of(const std::vector<float4>& ramp, float w, float h, bool radial = false, float angle = 0.f, float scale = 1.f, int spread = 0, const std::vector<float>& at = {}) {
     tvg::Fill* g = nullptr;
     const float cx = 0.5f * w, cy = 0.5f * h, k = std::max(scale, 0.01f);
     if (radial) {   // (from its middle out to its corners)
@@ -185,7 +185,7 @@ static tvg::Fill* ramp_of(const std::vector<float4>& ramp, float w, float h, boo
     g->spread((tvg::FillSpread)std::clamp(spread, 0, 2));
     std::vector<tvg::Fill::ColorStop> stops;
     for (size_t i = 0; i < ramp.size(); ++i)
-        stops.push_back({(float)i / (float)(ramp.size() - 1), (uint8_t)std::lround(255.f * ramp[i].x), (uint8_t)std::lround(255.f * ramp[i].y), (uint8_t)std::lround(255.f * ramp[i].z), (uint8_t)std::lround(255.f * ramp[i].w)});   // (a colour's own see-through: eight digits)
+        stops.push_back({at.size() == ramp.size() ? at[i] : (float)i / (float)(ramp.size() - 1), (uint8_t)std::lround(255.f * ramp[i].x), (uint8_t)std::lround(255.f * ramp[i].y), (uint8_t)std::lround(255.f * ramp[i].z), (uint8_t)std::lround(255.f * ramp[i].w)});   // (a colour's own see-through: eight digits)
     g->colorStops(stops.data(), (uint32_t)stops.size());
     return g;
 }
@@ -272,7 +272,7 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
         //  mask; ThorVG counts a text's own gradient in the font's units, which are not to be had from outside)
         tvg::Shape* ramp = tvg::Shape::gen();
         ramp->appendRect(0.f, 0.f, (float)*w, (float)*h);
-        ramp->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread));
+        ramp->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread, fx.rampAt));
         ramp->mask(t, tvg::MaskMethod::Alpha);
         return ramp;
     }, place, high, float3{-1.f}, true, lay, fx);
@@ -407,7 +407,7 @@ static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, f
         tvg::Shape* shape = d->shape = tvg::Shape::gen();
         flat_path(d, shape, form, *w, *h, in, points, inner, round, 0.f);
         shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z), strcmp(form, "null") && !fx.hollow ? 255 : 0);
-        if (fx.ramp.size() > 1 && strcmp(form, "null")) shape->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread));
+        if (fx.ramp.size() > 1 && strcmp(form, "null")) shape->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread, fx.rampAt));
         if (in > 0.f) shape->strokeWidth(2.f * in), shape->strokeFill((uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
         if (!strcmp(form, "wave") || !strcmp(form, "spiral")) {   // (only its line is seen: in its edge's colour, or its fill's; round at its ends)
             const float3 ink = in > 0.f ? float3{edge.x, edge.y, edge.z} : colour;

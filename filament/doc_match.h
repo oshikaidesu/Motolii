@@ -79,12 +79,17 @@ static bool doc_match(Doc& d) {
         std::string why = "it could not be read";
         const std::string fill = doc_word(d, thing, "fill");
         // (a fill is a colour, six digits; or, of a text or a flat shape, two colours or more: a ramp down it, each of
-        //  them six digits or eight, the last two how much of it is there: a colour fading to clear)
+        //  them six digits or eight, the last two how much of it is there: a colour fading to clear; each may say where
+        //  it stands, @ and a share of the way, as CSS's colour stop positions: ff3366@0.35)
         std::vector<float4> ramp;
+        std::vector<float> rampAt;
         long rgb = -1;
         {
             std::istringstream said(fill);
-            for (std::string one; said >> one;) {
+            for (std::string word; said >> word;) {
+                const size_t mark = word.find('@');
+                const std::string one = word.substr(0, mark);
+                rampAt.push_back(mark == std::string::npos ? -1.f : std::clamp(std::strtof(word.c_str() + mark + 1, nullptr), 0.f, 1.f));
                 const bool hex = (one.size() == 6 || one.size() == 8) && one.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos;
                 const long c = hex ? std::strtol(one.substr(0, 6).c_str(), nullptr, 16) : -1;
                 if (c < 0) { ramp.clear(), rgb = -1; break; }
@@ -105,6 +110,13 @@ static bool doc_match(Doc& d) {
         const double units = 0.5 * s.h * up.y / up.w;   // (points of the picture to one unit of the stage, where things stand at first)
         DrawnFx fx;
         if (ramp.size() > 1) fx.ramp = ramp;
+        if (ramp.size() > 1 && std::any_of(rampAt.begin(), rampAt.end(), [](float a) { return a >= 0.f; })) {   // (placed: one not said stands evenly; one before the one ahead of it stands where that one does, CSS Images 3's colour stop fix-up)
+            for (size_t i = 0; i < rampAt.size(); ++i) {
+                if (rampAt[i] < 0.f) rampAt[i] = (float)i / (float)(rampAt.size() - 1);
+                if (i > 0) rampAt[i] = std::max(rampAt[i], rampAt[i - 1]);
+            }
+            fx.rampAt = rampAt;
+        }
         fx.radial = doc_word(d, thing, "gradient") == "radial", fx.rampAngle = (float)doc_number(d, thing, "gradient_angle", 0, 0), fx.rampScale = (float)doc_number(d, thing, "gradient_scale", 0, 1);
         fx.spread = doc_word(d, thing, "gradient_spread") == "reflect" ? 1 : doc_word(d, thing, "gradient_spread") == "repeat" ? 2 : 0;
         const std::vector<AbsentCopy>& repeated = doc_absent_copies(d, thing, d.stage->now);
