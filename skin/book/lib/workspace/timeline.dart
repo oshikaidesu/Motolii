@@ -37,6 +37,7 @@ class WsTimeline extends StatefulWidget {
 
 class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateMixin, _TimelineAsked {
   late final Ticker _ticker = createTicker(_tick);
+  late final VoidCallback _listener = _changed;   // (one closure, added and removed: an extension's method torn off is a new closure each time, never equal to the last, so removing it took nothing off)
   final _focus = FocusNode(debugLabel: 'timeline');
   Ws? _ws;
   double _zoom = 1, _scroll = 0, _vscroll = 0, _trackW = 1000, _rowsH = 200;
@@ -54,18 +55,18 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     super.didChangeDependencies();
     final ws = WsScope.read(context);
     if (ws != _ws) {
-      _ws?.on[WsAspect.playing]!.removeListener(_changed);
-      _ws?.moment.removeListener(_changed);
-      _ws = ws..on[WsAspect.playing]!.addListener(_changed);
-      ws.moment.addListener(_changed);
+      _ws?.on[WsAspect.playing]!.removeListener(_listener);
+      _ws?.moment.removeListener(_listener);
+      _ws = ws..on[WsAspect.playing]!.addListener(_listener);
+      ws.moment.addListener(_listener);
       if (ws.playing) SchedulerBinding.instance.addPostFrameCallback((_) => mounted ? _changed() : null);
     }
   }
 
   @override
   void dispose() {
-    _ws?.on[WsAspect.playing]!.removeListener(_changed);
-    _ws?.moment.removeListener(_changed);
+    _ws?.on[WsAspect.playing]!.removeListener(_listener);
+    _ws?.moment.removeListener(_listener);
     _ticker.dispose();
     _focus.dispose();
     _stopAsks();

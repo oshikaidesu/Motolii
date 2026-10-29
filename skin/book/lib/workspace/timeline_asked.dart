@@ -59,21 +59,23 @@ mixin _TimelineAsked on State<WsTimeline> {
     ws.playing = true;
   }
 
-  /// A click on the ruler: on a locator, it is picked and the playhead goes there (6.4); elsewhere play starts there
-  /// (6.3: "Clicking anywhere in the scrub area makes play jump to that point"); the work area's band is the work area's.
+  /// A click on the ruler: on a locator, it is picked and the playhead goes there (6.4); elsewhere the playhead goes
+  /// there, as a video editor's time ruler puts its current-time indicator (Premiere Pro, After Effects): played on from
+  /// there if it was playing, else left standing; the work area's band is the work area's.
   void _rulerTap(Offset p) {
     final t = _t, ws = t._ws;
     if (ws == null) return;
+    final int f;
     if (t._flagAt(p) case final flag?) {
       wsMarkPicked.value = flag;
-      final f = (flag.$1 * Ws.fps).round();
-      if (ws.playing) return _playAt(f);
-      ws.frame = f;
-      return;
+      f = (flag.$1 * Ws.fps).round();
+    } else {
+      wsMarkPicked.value = null;
+      if (p.dy <= WtM.band + 2) return;
+      f = t._view.frameAt(p.dx).round().clamp(0, Ws.duration);
     }
-    wsMarkPicked.value = null;
-    if (p.dy <= WtM.band + 2) return;
-    _playAt(t._view.frameAt(p.dx).round().clamp(0, Ws.duration));
+    if (ws.playing) return _playAt(f);
+    ws.frame = f;
   }
 
   /// A double click: on a locator, play from it (6.4); elsewhere, zoom to what is picked, else to the whole (6.1).

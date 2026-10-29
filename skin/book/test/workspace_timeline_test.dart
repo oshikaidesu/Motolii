@@ -82,14 +82,26 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
-  testWidgets('a click on the ruler plays from there and a drag scrubs the moment', (t) async {
+  testWidgets('a timeline put away stops hearing the window: played after it is made again, nothing is thrown', (t) async {
+    final j = _joined();
+    await _pump(t, j.ws);
+    await t.pumpWidget(const SizedBox());   // (put away: its ticker disposed)
+    await _pump(t, j.ws);
+    j.ws.playing = true;
+    await t.pump();
+    j.ws.playing = false;
+    await t.pump();
+    expect(t.takeException(), isNull, reason: 'the one put away no longer starts its disposed ticker (Ticker.start\'s _startTime == null)');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
+  testWidgets('a click on the ruler puts the playhead there without playing, and a drag scrubs the moment', (t) async {
     final j = _joined();
     await _pump(t, j.ws);
     final y = WtM.header + WtM.ruler - 6;
     await t.tapAt(Offset(_at(j.ws, j.rect, 50).dx, y));
     await t.pump(const Duration(milliseconds: 400));   // (a click is known once no second click came)
-    expect(j.ws.playing, isTrue, reason: 'a click plays from there, as Live\'s scrub area (where it plays from is the clock\'s: none moves here)');
-    j.ws.playing = false;
+    expect([j.ws.frame, j.ws.playing], [50, false], reason: 'the playhead goes there and stands, as a video editor\'s time ruler puts its current-time indicator (Premiere Pro, After Effects)');
     await t.pump(const Duration(seconds: 1));
     final g = await t.startGesture(Offset(_at(j.ws, j.rect, 20).dx, y));
     for (final f in const [30, 55, 80]) {   // (a hand moves in steps: the first past the slop starts the drag, the rest carry it)

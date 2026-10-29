@@ -38,8 +38,7 @@ Future<void> _pump(WidgetTester t, Ws ws) async {
   await t.pumpAndSettle();
 }
 
-/// The frame the ruler is at, at x: a hand comes down there and drags a little away and back (a drag scrubs; a click
-/// would play, as Live's scrub area does, and the test's clock does not move).
+/// The frame the ruler is at, at x: a hand comes down there and drags a little away and back (a drag scrubs).
 Future<int> _scrubAt(WidgetTester t, Ws ws, double x) async {
   final y = WtM.header + WtM.ruler - 6;
   final g = await t.startGesture(Offset(x, y));
