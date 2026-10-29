@@ -8,6 +8,7 @@
 // After Effects' animation presets (.ffx: effects and their keys), Alight Motion's Save as Preset and Paste Style.
 static const char* const doc_look_kept_out = "'kind','file','text','shape','path','x','y','z','parent'";   // (what it is: a shape's own figure and drawn path too)
 static const char* const doc_look_placed = "'size','scale_x','scale_y','rotate','rotate_x','rotate_y','orient'";   // (kept only when keyed: a pulse is a look, a size is not)
+static const char* const doc_look_links = "'parent','mosh_with','copy_on','connect','connect_to','boolean_with','trail','morph_to'";   // (values that are another thing's number: doc_kinds.h)
 
 // The library's folder and the maker's own, as a look's words for them say them (doc_folders: the same order).
 static std::pair<std::string, std::string> doc_look_roots() {
@@ -37,21 +38,42 @@ static bool doc_look_save(Doc& d, int thing, const char* path, bool whole = fals
     sqlite3_free(copy);
     if (!ok) d.trouble = sqlite3_errmsg(d.file);
     // (the behaviours moving it, a wave, a noise, a random, a stagger, carried with it as things 2, 3, ...; a relation,
-    //  which ties it to others, is not: its _by left out)
-    std::vector<int> by;
-    sqlite3_stmt* q = nullptr;
-    sqlite3_prepare_v2(d.file, "select distinct cast(value as integer) from look.fact where thing = 1 and name like '%\\_by' escape '\\'", -1, &q, nullptr);
-    while (q && sqlite3_step(q) == SQLITE_ROW) by.push_back(sqlite3_column_int(q, 0));
-    sqlite3_finalize(q);
+    //  which ties it to others, is not: its _by left out. Whole, what a group holds too (the things whose parent it is),
+    //  and theirs, each telling another carried by its number here: Alight Motion copies a group with what is in it, as
+    //  AbsentMotion's group is a scene of its own copied whole, its ElementActions.kt elementNodes)
+    std::map<int, int> here{{thing, 1}};   // (a thing of the document: its number in the look)
+    std::vector<int> walk{thing};
     int next = 2;
-    for (const int b : by) {
-        const bool carried = b && doc_word(d, b, "kind") == "behaviour" && doc_among("stagger oscillator noise random", doc_word(d, b, "file"));
-        char* move = carried ? sqlite3_mprintf("insert into look.fact select %d, name, at, value, way from main.fact where thing = %d; insert into look.thing(id) values(%d);"
-                                               "update look.fact set value = %d where thing = 1 and name like '%%\\_by' escape '\\' and value = %d;", next, b, next, next, b)
-                             : sqlite3_mprintf("delete from look.fact where thing = 1 and name like '%%\\_by' escape '\\' and value = %d;", b);
-        ok = ok && sqlite3_exec(d.file, move, nullptr, nullptr, nullptr) == SQLITE_OK;
-        sqlite3_free(move);
-        next += carried;
+    const auto carry = [&](int was) {
+        char* one = sqlite3_mprintf("insert into look.fact select %d, name, at, case typeof(value) when 'text' then replace(replace(value, %Q, '{motolii}/'), %Q, '{own}/') else value end, way from main.fact where thing = %d;"
+                                    "insert into look.thing(id) values(%d);", next, roots.first.c_str(), roots.second.c_str(), was, next);
+        ok = ok && sqlite3_exec(d.file, one, nullptr, nullptr, nullptr) == SQLITE_OK;
+        sqlite3_free(one);
+        here[was] = next++;
+    };
+    for (size_t i = 0; ok && i < walk.size(); ++i) {
+        const int at = here[walk[i]];
+        std::vector<int> by, held;
+        doc_rows(d, sqlite3_mprintf("select distinct cast(value as integer) from look.fact where thing = %d and name like '%%\\_by' escape '\\'", at), [&](sqlite3_stmt* q) { by.push_back(sqlite3_column_int(q, 0)); });
+        for (const int b : by) {
+            const bool carried = b && doc_word(d, b, "kind") == "behaviour" && doc_among("stagger oscillator noise random", doc_word(d, b, "file"));
+            if (carried && !here.count(b)) carry(b);
+            char* gone = carried ? nullptr : sqlite3_mprintf("delete from look.fact where thing = %d and name like '%%\\_by' escape '\\' and value = %d;", at, b);
+            ok = ok && (!gone || sqlite3_exec(d.file, gone, nullptr, nullptr, nullptr) == SQLITE_OK);
+            sqlite3_free(gone);
+        }
+        if (whole) doc_rows(d, sqlite3_mprintf("select distinct thing from main.fact where name = 'parent' and cast(value as integer) = %d and thing != %d order by thing", walk[i], walk[i]), [&](sqlite3_stmt* q) { held.push_back(sqlite3_column_int(q, 0)); });
+        for (const int h : held)
+            if (!here.count(h)) carry(h), walk.push_back(h);
+    }
+    if (ok && here.size() > 1) {   // (each link from one carried to another carried told its number here; a link of a held thing to one not carried, gone)
+        std::string cases, carried;
+        for (const auto& [was, at] : here) cases += " when " + std::to_string(was) + " then " + std::to_string(at), carried += (carried.empty() ? "" : ",") + std::to_string(was);
+        char* told = sqlite3_mprintf("delete from look.fact where thing != 1 and name in (%s) and cast(value as integer) not in (%s);"
+                                     "update look.fact set value = case cast(value as integer)%s end where (name like '%%\\_by' escape '\\' or (thing != 1 and name in (%s))) and cast(value as integer) in (%s);",
+                                     doc_look_links, carried.c_str(), cases.c_str(), doc_look_links, carried.c_str());
+        ok = sqlite3_exec(d.file, told, nullptr, nullptr, nullptr) == SQLITE_OK;
+        sqlite3_free(told);
     }
     sqlite3_exec(d.file, "detach database look", nullptr, nullptr, nullptr);
     return ok;
@@ -84,8 +106,9 @@ static bool doc_look_put(Doc& d, int thing, const char* path) {
     return ok;
 }
 // A copy (doc_look_save whole) made a thing again, the newest number (Edit > Paste): it begins at `now`, its keys moved
-// with it (as doc_keys_by moves a thing's), as Ableton Live pastes at the insert marker; the behaviours it carried made
-// anew as doc_look_put makes them. One step.
+// with it (as doc_keys_by moves a thing's), as Ableton Live pastes at the insert marker; the behaviours it carried and
+// what a group held made anew after it, in their order, moved in time with it, each link among them told the new
+// numbers. One step.
 static int doc_look_paste(Doc& d, const char* path, double now) {
     if (d.act) return d.trouble = "a copy is pasted by itself, not within another act", 0;   // (SQLite attaches outside a transaction)
     const auto roots = doc_look_roots();
@@ -95,7 +118,6 @@ static int doc_look_paste(Doc& d, const char* path, double now) {
     if (!attached) return d.trouble = sqlite3_errmsg(d.file), 0;
     double was = 0;
     bool kind = false;
-    std::string carried;   // (each behaviour it carried a thing anew, the copy's _by of it told the new one)
     sqlite3_stmt* q = nullptr;
     sqlite3_prepare_v2(d.file, "select name, value from look.fact where thing = 1 and name in ('start', 'kind') and at = 0", -1, &q, nullptr);
     while (q && sqlite3_step(q) == SQLITE_ROW) {
@@ -103,12 +125,11 @@ static int doc_look_paste(Doc& d, const char* path, double now) {
         else kind = true;
     }
     sqlite3_finalize(q);
-    sqlite3_prepare_v2(d.file, "select distinct thing from look.fact where thing != 1", -1, &q, nullptr);
+    std::string made_all;   // (each thing of the copy a thing anew: its number there, its number here)
+    sqlite3_prepare_v2(d.file, "select distinct thing from look.fact order by thing", -1, &q, nullptr);
     while (q && sqlite3_step(q) == SQLITE_ROW) {
-        const int k = sqlite3_column_int(q, 0);
-        char* one = sqlite3_mprintf("insert into thing default values; insert into fact select last_insert_rowid(), name, at, value, way from look.fact where thing = %d;"
-                                    "update fact set value = (select max(id) from thing) where thing = (select id from pasted) and name like '%%\\_by' escape '\\' and value = %d;", k, k);
-        carried += one;
+        char* one = sqlite3_mprintf("insert into thing default values; insert into pasted_as values(%d, last_insert_rowid());", sqlite3_column_int(q, 0));
+        made_all += one;
         sqlite3_free(one);
     }
     sqlite3_finalize(q);
@@ -116,11 +137,13 @@ static int doc_look_paste(Doc& d, const char* path, double now) {
     const double by = now - was;
     if (!kind) d.trouble = "that is no copy of a thing";
     else if (doc_change(d, sqlite3_mprintf(
-                 "insert into thing default values; create temp table if not exists pasted(id integer); delete from pasted; insert into pasted select max(id) from thing;"
-                 "insert into fact select (select id from pasted), name, case when name in (select name from look.fact where thing = 1 group by name having count(*) > 1 or max(at) <> 0 or max(way) is not null) then at + %!.17g else at end,"
-                 " case when name = 'start' then max(0, value + %!.17g) when typeof(value) = 'text' then replace(replace(value, '{motolii}/', %Q), '{own}/', %Q) else value end, way from look.fact where thing = 1;"
-                 "insert or ignore into way select * from look.way;%s", by, by, roots.first.c_str(), roots.second.c_str(), carried.c_str())))
-        doc_rows(d, sqlite3_mprintf("select id from pasted"), [&](sqlite3_stmt* row) { made = sqlite3_column_int(row, 0); });
+                 "create temp table if not exists pasted_as(was integer, id integer); delete from pasted_as;%s"
+                 "insert into fact select p.id, name, case when exists (select 1 from look.fact as o where o.thing = f.thing and o.name = f.name and (o.at <> 0 or o.way is not null)) then at + %!.17g else at end,"
+                 " case when name = 'start' then max(0, value + %!.17g) when typeof(value) = 'text' then replace(replace(value, '{motolii}/', %Q), '{own}/', %Q) else value end, way from look.fact as f join pasted_as as p on p.was = f.thing;"
+                 "update fact set value = (select id from pasted_as where was = cast(fact.value as integer)) where thing in (select id from pasted_as)"
+                 " and (name like '%%\\_by' escape '\\' or (thing != (select id from pasted_as where was = 1) and name in (%s))) and cast(value as integer) in (select was from pasted_as);"
+                 "insert or ignore into way select * from look.way;", made_all.c_str(), by, by, roots.first.c_str(), roots.second.c_str(), doc_look_links)))
+        doc_rows(d, sqlite3_mprintf("select id from pasted_as where was = 1"), [&](sqlite3_stmt* row) { made = sqlite3_column_int(row, 0); });
     sqlite3_exec(d.file, "detach database look", nullptr, nullptr, nullptr);
     return made;
 }

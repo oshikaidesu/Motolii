@@ -247,7 +247,7 @@
 - [x] 取り消し・やり直しが常に画面にある：上の帯の左右の矢印（押すと 1 歩戻る・進む） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 全部のレイヤーを選ぶ：⌘A（Edit メニューの Select All） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] レイヤーを複製：⌘D（新しい方が選ばれる） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
-- [x] レイヤーを見た目ごとコピー・貼り付け：⌘C・⌘V（まるごと、再生位置に） — 済（10/28）：G の行と同じ
+- [x] レイヤーを見た目ごとコピー・貼り付け：⌘C・⌘V（まるごと、再生位置に） — 済（10/28）：G の行と同じ — 10/29：グループは中身ごと（Alight Motion のグループのコピー、AbsentMotion ではグループが場面ごと写る：ElementActions.kt の elementNodes）。中の物の親・Boolean の相手などは写した先の番号に付け替え、1 回で取り消せる（`workspace_joined_test_3.dart` の ⌘G の試験）
 - [x] 見た目だけ貼る（何を貼るか選ぶ）（別の形で有る）：Edit › Paste Style（⌥⌘V）で見た目を全部、何を貼るかはカードの頭の Copy・Paste でそのカードの値だけ（10/28）。Alight Motion の矢印の先の一覧は写真で灰色、中身が分からないので並びは借りていない
 - [x] プリセットとして保存（値とキー）、読み込む：Edit メニューの Save Look（レイヤーの名前で、作り手のフォルダの looks/ に）。Effects の棚に Look の札で出て、2 回押すと選んだ物に当たる（値・効果・キー。形や位置は運ばない）。同梱のルック 10 個も同じ棚に — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 見え方：Pixel、Grid、Solo、カメラ越し、拡大縮小と %：舞台の上の帯の Fit・50%・100%（等倍）と今の %、Grid、Safe、Camera（カメラ越しと自由）。Solo は S の鍵と時間軸 — 済：窓の試験（`workspace_stage_test.dart`、Solo は `workspace_joined_test_3.dart`）

@@ -1059,6 +1059,12 @@ void _tests3() {
     final g = m.things.firstWhere((x) => x != a && x != b);
     expect([m.word(g, 'shape'), m.word(g, 'name'), m.value(a, 'parent', 0), m.value(b, 'parent', 0), ws.selected], ['null', 'Group', g, g, '$g'], reason: m.trouble);
     expect([m.value(g, 'x', 0)!, m.value(g, 'y', 0)!], [closeTo(0, .01), closeTo(.2, .01)], reason: 'in their middle');
+    await press(LogicalKeyboardKey.keyC);
+    await press(LogicalKeyboardKey.keyV);
+    final pasted = int.parse(ws.selected!), held = m.things.where((x) => m.value(x, 'parent', 0) == pasted);
+    expect([pasted != g, m.word(pasted, 'shape'), [for (final x in held) m.word(x, 'shape')]], [true, 'null', ['rect', 'circle']], reason: 'copied with what it holds, as Alight Motion copies a group: ${m.trouble}');
+    await press(LogicalKeyboardKey.keyZ);
+    expect([m.things.contains(pasted), m.things.length], [false, 3], reason: 'one step back');
     final fa = m.frame(a)!;
     expect(m.set(g, 'x', .5), isTrue);
     expect(m.frame(a)![0], closeTo(fa[0] + .5 * m.point, 1), reason: 'the group moved: they go with it');
