@@ -208,6 +208,10 @@ void draw(Engine* engine, Screen* s, Texture* const* from, RenderTarget* to, uin
         pipeline.rasterState.blendFunctionDstRGB = BlendFunction::ONE_MINUS_SRC_ALPHA, pipeline.rasterState.blendFunctionDstAlpha = BlendFunction::ONE_MINUS_SRC_ALPHA;
         if (blend == 1) pipeline.rasterState.blendFunctionDstRGB = pipeline.rasterState.blendFunctionDstAlpha = BlendFunction::ONE;
         if (blend == 2) pipeline.rasterState.blendFunctionSrcRGB = pipeline.rasterState.blendFunctionSrcAlpha = BlendFunction::ZERO, pipeline.rasterState.blendFunctionDstRGB = pipeline.rasterState.blendFunctionDstAlpha = BlendFunction::SRC_ALPHA;
+        if (blend == 3) pipeline.rasterState.blendFunctionSrcRGB = pipeline.rasterState.blendFunctionSrcAlpha = BlendFunction::ZERO;   // (what is there kept outside what is drawn: Porter-Duff's "out", the W3C's destination-out)
+        if (blend == 4) pipeline.rasterState.blendFunctionDstAlpha = BlendFunction::ONE;   // (colours laid over as ever, their alphas added)
+        if (blend == 5) pipeline.rasterState.blendFunctionDstRGB = BlendFunction::ONE_MINUS_SRC_COLOR;   // (screen: Filament's own BlendingMode::SCREEN, MaterialDefinition.cpp)
+        if (blend == 6) pipeline.rasterState.blendFunctionSrcRGB = BlendFunction::DST_COLOR;   // (multiply, what is under taken as opaque: Cs Cb + Cb (1 - as), as flat.mat's LAY_multiply lays a sheet)
     }
     d.bindDescriptorSet(set, 0, {});
     d.beginRenderPass(to ? downcast(to)->getHwHandle() : downcast(engine)->getDefaultRenderTarget(), params);   // (none: the screen, as the frame's swap chain is)

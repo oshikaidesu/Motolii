@@ -36,7 +36,8 @@ struct Screen;
 Screen* screen(filament::Engine*, const char* name, const char* fragment, uint32_t knobBytes, std::string* why = nullptr, int pictures = 1, unsigned layered = 0, bool mesh = false);
 void knobs(filament::Engine*, Screen*, const void* data, uint32_t bytes, int pass = 0);
 void draw(filament::Engine*, Screen*, filament::Texture* const* from, filament::RenderTarget* to, uint32_t w, uint32_t h, int pass = 0, const int* at = nullptr, bool over = false, int blend = 0, int sampler = 0, const float* corners = nullptr, uint32_t count = 0);   // corners: a mesh's `count` of MESH_CORNER (x, y, z, w, r, g, b, a, u, v); to null: the screen; at: only there (left, bottom, wide, high), the rest cleared; over: laid over what `to` holds (its alpha premultiplied, as Filament's own pictures are), not drawn in its place
-// (blend, with over: 1 added to what is there, 2 what is there times the alpha drawn (AviUtl2's "add" and "mask");
+// (blend, with over: 1 added to what is there, 2 what is there times the alpha drawn (AviUtl2's "add" and "mask"),
+//  3 what is there kept outside what is drawn, 4 laid over with the alphas added, 5 screened, 6 multiplied;
 //  sampler: 0 linear and clamped, 1 nearest, 2 repeated, 3 mirrored (its SamplerState's ways))
 inline void draw(filament::Engine* e, Screen* s, filament::Texture* from, filament::RenderTarget* to, uint32_t w, uint32_t h, const int* at = nullptr) { draw(e, s, &from, to, w, h, 0, at); }
 void drop(filament::Engine*, Screen*);

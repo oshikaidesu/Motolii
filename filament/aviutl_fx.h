@@ -313,6 +313,21 @@ static void aviutl_mesh(AviutlRun& r, const AviutlBuf& from, const AviutlBuf& to
     Texture* picture = from.t ? from.t : r.none;
     door::draw(r.s->engine, r.poly, &picture, to.rt, to.w, to.h, pass, nullptr, true, way, sampler, corners.data(), (uint32_t)(corners.size() / door::MESH_CORNER));
 }
+// obj.setoption "blend" as the door lays it (screen_door.h's blend), as lua.txt's words are read by sashimono-edit
+// (MIT, compat/aviutl/raster.py _over): the buffers premultiplied, so "alpha_add" (colours weighed by their alphas,
+// the alphas added) is what is there plus what is drawn; "alpha_sub" (colours kept, the alpha drawn taken away)
+// Porter-Duff's "out", the same where either is opaque (their a_b - a_t is a_b (1 - a_t) there); "alpha_add2"
+// (colours laid over, the alphas added); "screen" (AviUtl's 4) Filament's own screen; AviUtl's 3 (multiply) as
+// Motolii's own sheets multiply (flat.mat), what is under taken as opaque. Others not yet: -1.
+static int aviutl_way(const std::string& b) {
+    if (b.empty() || b == "none" || b == "0") return 0;
+    if (b == "add" || b == "1" || b == "rgba_add" || b == "alpha_add") return 1;
+    if (b == "alpha_sub") return 3;
+    if (b == "alpha_add2") return 4;
+    if (b == "screen" || b == "4") return 5;
+    if (b == "3") return 6;
+    return -1;
+}
 static int aviutl_sampling(const AviutlRun& r) { return r.sampler == "dot" ? 1 : r.sampler == "loop" ? 2 : r.sampler == "mirror" ? 3 : 0; }
 // The object put in depth, as obj.draw and the frame's own placing do with z, rx or ry: its four corners turned about
 // its centre (cx, cy) by X, then Y, then Z, in degrees, and moved (sashimono-edit's engine/gpu/compositor.py
@@ -333,7 +348,7 @@ static void aviutl_placed(AviutlRun& r, const AviutlBuf& from, const AviutlBuf& 
 
 static int aviutl_draw(lua_State* L) {   // (ox, oy, oz, zoom, alpha, rx, ry, rz): in depth when oz, rx or ry, the object's own added (aviutl_placed)
     AviutlRun& r = aviutl_of(L);
-    const int way = r.blend == "none" || r.blend == "0" || r.blend.empty() ? 0 : r.blend == "add" || r.blend == "1" || r.blend == "rgba_add" || r.blend == "alpha_add" ? 1 : -1;
+    const int way = aviutl_way(r.blend);
     if (way < 0) return aviutl_no(L, "obj.draw blend " + r.blend);
     lua_getglobal(L, "obj");
     const auto f = [&](const char* k, double otherwise) { lua_getfield(L, -1, k); const double v = aviutl_num(L, -1, otherwise); lua_pop(L, 1); return v; };
@@ -402,7 +417,7 @@ static int aviutl_drawpoly(lua_State* L) {
         alpha = n == 13 ? aviutl_num(L, 13, 1) : n >= 21 ? aviutl_num(L, 21, 1) : 1;
         faces.push_back(face(p));
     }
-    const int way = r.blend == "none" || r.blend == "0" || r.blend.empty() ? 0 : r.blend == "add" || r.blend == "1" || r.blend == "rgba_add" || r.blend == "alpha_add" ? 1 : -1;
+    const int way = aviutl_way(r.blend);
     if (way < 0) return aviutl_no(L, "obj.drawpoly blend " + r.blend);
     const AviutlBuf& to = r.bufs[r.target];
     if (!to.t) return aviutl_no(L, "obj.drawpoly into a temporary buffer never made");
