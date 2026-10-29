@@ -21,6 +21,8 @@ class RenderTarget;
 }  // namespace filament
 
 namespace door {
+
+constexpr uint32_t MESH_CORNER = 10;   // (a mesh corner's numbers: x, y, z, w, r, g, b, a, u, v)
 struct Screen;
 // A fragment shader Dawn would refuse is not made (nullptr, `why` says what Dawn said): it is tried first on Filament's
 // own device, inside an error scope, so a shader written wrong takes nothing else down.
@@ -28,11 +30,12 @@ struct Screen;
 // `2 * pictures`), and be drawn several times a frame as passes, each pass with knobs of its own (`pass`).
 // `layered`: which pictures are arrays of layers (bit k: picture k is a `texture_2d_array<f32>`, a stage's past frames).
 // `mesh`: drawn on triangles given to `draw` (`corners`), not on the whole target: each corner its place in the target
-// (-1 to 1, up) and the uv it hands the shader, as Filament's own full-screen triangle is given (a vertex buffer of
-// float4 at POSITION and an index buffer made a render primitive: details/Engine.cpp).
+// (x, y, z, w: -1 to 1 up once divided by w, the picture between laid in perspective), its colour (handed the shader at
+// @location(1)) and the uv it hands it, as Filament's own full-screen triangle is given (a vertex buffer and an index
+// buffer made a render primitive: details/Engine.cpp).
 Screen* screen(filament::Engine*, const char* name, const char* fragment, uint32_t knobBytes, std::string* why = nullptr, int pictures = 1, unsigned layered = 0, bool mesh = false);
 void knobs(filament::Engine*, Screen*, const void* data, uint32_t bytes, int pass = 0);
-void draw(filament::Engine*, Screen*, filament::Texture* const* from, filament::RenderTarget* to, uint32_t w, uint32_t h, int pass = 0, const int* at = nullptr, bool over = false, int blend = 0, int sampler = 0, const float* corners = nullptr, uint32_t count = 0);   // corners: a mesh's `count` (x, y, u, v); to null: the screen; at: only there (left, bottom, wide, high), the rest cleared; over: laid over what `to` holds (its alpha premultiplied, as Filament's own pictures are), not drawn in its place
+void draw(filament::Engine*, Screen*, filament::Texture* const* from, filament::RenderTarget* to, uint32_t w, uint32_t h, int pass = 0, const int* at = nullptr, bool over = false, int blend = 0, int sampler = 0, const float* corners = nullptr, uint32_t count = 0);   // corners: a mesh's `count` of MESH_CORNER (x, y, z, w, r, g, b, a, u, v); to null: the screen; at: only there (left, bottom, wide, high), the rest cleared; over: laid over what `to` holds (its alpha premultiplied, as Filament's own pictures are), not drawn in its place
 // (blend, with over: 1 added to what is there, 2 what is there times the alpha drawn (AviUtl2's "add" and "mask");
 //  sampler: 0 linear and clamped, 1 nearest, 2 repeated, 3 mirrored (its SamplerState's ways))
 inline void draw(filament::Engine* e, Screen* s, filament::Texture* from, filament::RenderTarget* to, uint32_t w, uint32_t h, const int* at = nullptr) { draw(e, s, &from, to, w, h, 0, at); }

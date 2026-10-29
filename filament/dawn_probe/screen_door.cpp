@@ -41,13 +41,16 @@ struct Out { @builtin(position) position: vec4f, @location(0) uv: vec2f };
 }
 )";
 
-// A mesh's: each corner's place as it is, its uv the two numbers after.
+// A mesh's: each corner's place as it is (x, y, z, w: its w the GPU's own divide, the picture between them laid in
+// perspective), its colour and uv after it; at the locations Filament's WebGPU gives its attributes, their own
+// numbers (WebGPUVertexBufferInfo.cpp: shaderLocation = attributeIndex; POSITION 0, COLOR 2, UV0 3).
 static const char* const sMeshVertex = R"(
-struct Out { @builtin(position) position: vec4f, @location(0) uv: vec2f };
-@vertex fn main(@location(0) p: vec4f) -> Out {
+struct Out { @builtin(position) position: vec4f, @location(0) uv: vec2f, @location(1) colour: vec4f };
+@vertex fn main(@location(0) p: vec4f, @location(2) c: vec4f, @location(3) uv: vec2f) -> Out {
   var o: Out;
-  o.position = vec4f(p.xy, 0.0, 1.0);
-  o.uv = p.zw;
+  o.position = p;
+  o.uv = uv;
+  o.colour = c;
   return o;
 }
 )";
@@ -156,16 +159,19 @@ static RenderPrimitiveHandle meshOf(Engine* engine, Screen* s, int pass, const f
         if (m.vb) driver(engine).destroyRenderPrimitive(m.primitive), engine->destroy(m.vb), engine->destroy(m.ib);
         m.room = 64;
         while (m.room < count) m.room *= 2;
-        m.vb = VertexBuffer::Builder().vertexCount(m.room).bufferCount(1).attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT4, 0).build(*engine);
+        m.vb = VertexBuffer::Builder().vertexCount(m.room).bufferCount(1)
+                   .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT4, 0, MESH_CORNER * sizeof(float))
+                   .attribute(VertexAttribute::COLOR, 0, VertexBuffer::AttributeType::FLOAT4, 4 * sizeof(float), MESH_CORNER * sizeof(float))
+                   .attribute(VertexAttribute::UV0, 0, VertexBuffer::AttributeType::FLOAT2, 8 * sizeof(float), MESH_CORNER * sizeof(float)).build(*engine);
         m.ib = IndexBuffer::Builder().indexCount(m.room).bufferType(IndexBuffer::IndexType::UINT).build(*engine);
         auto* order = (uint32_t*)std::malloc(m.room * sizeof(uint32_t));
         for (uint32_t i = 0; i < m.room; ++i) order[i] = i;
         m.ib->setBuffer(*engine, IndexBuffer::BufferDescriptor(order, m.room * sizeof(uint32_t), [](void* p, size_t, void*) { std::free(p); }));
         m.primitive = driver(engine).createRenderPrimitive(downcast(m.vb)->getHwHandle(), downcast(m.ib)->getHwHandle(), PrimitiveType::TRIANGLES);
     }
-    void* copy = std::malloc(count * 4 * sizeof(float));
-    std::memcpy(copy, corners, count * 4 * sizeof(float));
-    m.vb->setBufferAt(*engine, 0, VertexBuffer::BufferDescriptor(copy, count * 4 * sizeof(float), [](void* p, size_t, void*) { std::free(p); }));
+    void* copy = std::malloc(count * MESH_CORNER * sizeof(float));
+    std::memcpy(copy, corners, count * MESH_CORNER * sizeof(float));
+    m.vb->setBufferAt(*engine, 0, VertexBuffer::BufferDescriptor(copy, count * MESH_CORNER * sizeof(float), [](void* p, size_t, void*) { std::free(p); }));
     return m.primitive;
 }
 
