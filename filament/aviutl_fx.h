@@ -36,6 +36,7 @@ struct AviutlRun {
     int ground = -1;                                // (the stage's colour behind everything, 0xRRGGBB; -1 none)
     bool wide = false;                              // (it draws the object (obj.draw, drawpoly): its frame the stage's, the object the thing's own picture where it is seen)
     const ScreenNumbers* numbers = nullptr;         // (this frame's: what it asks of the other things, the document's answers (doc_moment_fx.h doc_aviutl_asked))
+    const std::function<std::vector<float>(const std::string&, const std::string&, bool, int)>* sounds = nullptr;   // (the thing's: the sound heard now, ScreenStack's sounds)
     std::vector<std::string> chain;                 // (the effects on the thing in their order, by name, and which is this one: obj.getoption "script_name")
     std::string pixelFrom = "object", pixelType = "col";   // (what obj.getpixel reads, and how it tells a pixel: obj.pixeloption)
     std::vector<uint8_t> pixelSeen;                 // (that buffer read back, once, till pixeloption "get" again: aviutl_pixels.h)
@@ -297,6 +298,29 @@ static int aviutl_getvalue(lua_State* L) {   // (target): its own tracks, and th
     if (n == "scale") return lua_pushnumber(L, 1), lua_pushnumber(L, 1), lua_pushnumber(L, 1), 3;
     return aviutl_no(L, "obj.getvalue " + n);
 }
+// obj.getaudio(buffer, "audiobuffer"[, kind[, count]]) as YMM4-LuaScript's LuaScript.ja-jp.txt tells it (routersys,
+// MIT): the scene's sound now (the document's films heard, doc_place.h doc_sound_now), "pcm" its wave at 16 bits'
+// scale, "spectrum" count bands (32; at most 512) of 0 to 32768, "fourier" (1024) of 0 to 1, as Motolii reads a
+// sound for ISF (sound.h: GStreamer's spectrum made the Web's AnalyserNode, 512 bands, the wave 1024 samples at
+// 24000); ".l" and ".r" as both. Into buffer[1..n], or a table of its own as the third; none heard, 0. Any other
+// file: 0 (YMM4's own: "取得できない場合はデータ数 0 を返し、エラーにはなりません").
+static int aviutl_getaudio(lua_State* L) {
+    AviutlRun& r = aviutl_of(L);
+    std::string kind = lua_isstring(L, 3) ? lua_tostring(L, 3) : "pcm";
+    if (kind.size() > 2 && (kind.ends_with(".l") || kind.ends_with(".r"))) kind.resize(kind.size() - 2);
+    const bool fft = kind != "pcm";
+    const int most = kind == "spectrum" ? 512 : 1024, count = std::clamp(lua_isnumber(L, 4) ? (int)lua_tonumber(L, 4) : kind == "spectrum" ? 32 : 1024, 1, most);
+    std::vector<float> v = aviutl_str(L, 2) == "audiobuffer" && r.sounds && *r.sounds ? (*r.sounds)(r.file, "aviutl.audiobuffer", fft, std::min(count, fft ? 512 : 1024)) : std::vector<float>();
+    const bool own = !lua_istable(L, 1);
+    if (own) lua_newtable(L);
+    const int into = own ? lua_gettop(L) : 1;
+    for (size_t i = 0; i < v.size(); ++i)
+        lua_pushnumber(L, kind == "pcm" ? (v[i] - 0.5) * 2 * 32767 : kind == "spectrum" ? v[i] * 32768.0 : v[i]), lua_rawseti(L, into, (int)i + 1);
+    lua_pushinteger(L, (lua_Integer)v.size()), lua_pushinteger(L, 24000);
+    if (own) lua_pushvalue(L, into);
+    return own ? 3 : 2;
+}
+static int aviutl_data(lua_State* L) { return lua_pushnil(L), 1; }   // (obj.data: what was kept with the object; none kept here, nil, as 波形ライン.obj2 asks it in a pcall and draws by its knobs without)
 static int aviutl_setanchor(lua_State* L) { return lua_pushinteger(L, std::max(1, (int)aviutl_num(L, 2))), 1; }   // (its points are not on the screen yet: the values stay the knobs')
 // (name, size, decoration, colour, edge colour, bold, italic): the nine of obj.getfont as sashimono-edit reads AviUtl2's
 // lua.txt (MIT, objapi.py lua_getfont), the spacings after them not read yet; defaults its own (48, white, black).
@@ -699,7 +723,7 @@ static std::shared_ptr<AviutlRun> aviutl_made(Stage& s, const std::string& file)
     lua_newtable(L);
     const std::pair<const char*, lua_CFunction> calls[] = {{"pixelshader", aviutl_pixelshader}, {"clearbuffer", aviutl_clearbuffer}, {"copybuffer", aviutl_copybuffer}, {"load", aviutl_load}, {"setoption", aviutl_setoption}, {"getoption", aviutl_getoption},
         {"getinfo", aviutl_getinfo}, {"getvalue", aviutl_getvalue}, {"setanchor", aviutl_setanchor}, {"getpixel", aviutl_getpixel}, {"setfont", aviutl_setfont}, {"draw", aviutl_draw}, {"drawpoly", aviutl_drawpoly}, {"effect", aviutl_effect},
-        {"getpixeldata", aviutl_getpixeldata}, {"putpixeldata", aviutl_putpixeldata}, {"pixeloption", aviutl_pixeloption}};
+        {"getpixeldata", aviutl_getpixeldata}, {"putpixeldata", aviutl_putpixeldata}, {"pixeloption", aviutl_pixeloption}, {"getaudio", aviutl_getaudio}, {"data", aviutl_data}};
     for (const auto& [n, f] : calls) lua_pushlightuserdata(L, r.get()), lua_pushcclosure(L, f, 1), lua_setfield(L, -2, n);
     luaL_dostring(L, "return { __index = function(_, k) error('not yet: obj.' .. tostring(k), 2) end }");   // (any other name of obj)
     lua_setmetatable(L, -2);

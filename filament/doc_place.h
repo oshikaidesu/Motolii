@@ -293,6 +293,21 @@ static bool doc_frame(Doc& d, int thing, double now, double* frame);
 static std::vector<float> doc_sound_now(Doc& d, int thing, const std::string& file, const std::string& name, bool fft, int wide) {
     std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn)
     const double now = d.stage->now;
+    if (name == "aviutl.audiobuffer") {   // (the scene's whole sound, as AviUtl2's "audiobuffer" is every item's mixed: each film heard now, each at its own moment as below; the waves added, the bands the loudest)
+        std::vector<float> all;
+        for (const int t : doc_laid(d)) {
+            if (doc_word(d, t, "kind") != "film" || doc_number(d, t, "volume", now, 1) <= 0) continue;
+            const double start = doc_number(d, t, "start", 0, 0), lasts = doc_number(d, t, "duration", 0, -1);
+            if (now < start || (lasts > 0 && now >= start + lasts)) continue;
+            const std::string heard = doc_word(d, t, "file");
+            const SoundRead* read = heard.empty() ? nullptr : sound_of(heard);
+            if (!read) continue;
+            const std::vector<float> one = sound_at(read, fft, wide, doc_number(d, t, "begin", 0, 0) + (now - start) * doc_number(d, t, "speed", 0, 1));
+            if (all.empty()) all = one;
+            else for (size_t i = 0; i < all.size() && i < one.size(); ++i) all[i] = fft ? std::max(all[i], one[i]) : std::clamp(all[i] + one[i] - 0.5f, 0.f, 1.f);
+        }
+        return all;
+    }
     const int t = (int)doc_number(d, thing, doc_screen_knob(file, name).c_str(), now, 0);
     if (t <= 0 || !doc_knows(d, t, nullptr, nullptr, nullptr, false)) return {};
     const std::string heard = doc_word(d, t, "file");

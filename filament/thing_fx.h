@@ -126,7 +126,7 @@ static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenN
     screen_tone(s, st.shot, st.betweenTarget[1], w, h, true);   // (its picture as its colours are said, sRGB, for the effects: screen.h screen_tone)
     for (size_t i = 0, f = 0, a = 0; i < st.steps.size(); ++i) {   // (each into a picture between: the effects take the whole picture as theirs, and fill what is clear)
         Texture* from = i == 0 ? st.between[1] : st.between[(i - 1) % 2];
-        if (st.steps[i] == 'a') { std::copy(st.box, st.box + 4, st.aviutl[a]->box), std::copy(st.thingSeen, st.thingSeen + 4, st.aviutl[a]->seen), st.aviutl[a]->ground = st.ground; aviutl_draw_step(s, *st.aviutl[a++], from, st.betweenTarget[i % 2], numbers, w, h); continue; }   // (an AviUtl2 script, told where the thing is seen)
+        if (st.steps[i] == 'a') { std::copy(st.box, st.box + 4, st.aviutl[a]->box), std::copy(st.thingSeen, st.thingSeen + 4, st.aviutl[a]->seen), st.aviutl[a]->ground = st.ground, st.aviutl[a]->sounds = &st.sounds; aviutl_draw_step(s, *st.aviutl[a++], from, st.betweenTarget[i % 2], numbers, w, h); continue; }   // (an AviUtl2 script, told where the thing is seen)
         if (st.steps[i]) { thing_thor(s, st, st.steps[i], st.device[i == 0 ? 2 : 1 + (i - 1) % 2], (int)(i % 2), w, h, thor, ppp); continue; }   // (one of ThorVG's own)
         screen_fresh(s, *st.fx[f]);
         ScreenFx& one = *st.fx[f++];
