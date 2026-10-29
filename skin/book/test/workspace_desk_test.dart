@@ -1,8 +1,11 @@
 // The desk on a real document (test/door.dart): it follows the selection, a tool opened by hand stays, Ease writes the
 // document's way of a stretch, Depth the camera's lens.
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lab_book/tokens.dart' show Shape;
 import 'package:lab_book/workspace/desk_ease.dart';
+import 'package:lab_book/workspace/desk_ease_graph.dart';
 import 'package:lab_book/workspace/desk_kit.dart';
 import 'package:lab_book/workspace/ws.dart' show WsHeader;
 
@@ -99,6 +102,40 @@ void main() {
     expect(find.textContaining('No stretch'), findsOneWidget);
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t); // (what the desk shows is read back from the document, not kept by the window)
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
+  testWidgets('Ease: the keys at the two ends are pulled up and down; with Jump on a key a frame outside keeps the value as it was (three points), off only the key moves', (t) async {
+    final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    expect(m.key(cube, 'x', .5, 0) && m.key(cube, 'x', 1, 0), isTrue, reason: m.trouble);   // (a flat stretch: the hit is made from it)
+    ws
+      ..reread()
+      ..pickKey((layer: '$cube', frame: 30))
+      ..front('Ease');
+    await t.pumpAndSettle();
+    final r = t.getRect(find.byType(EaseGraph)), g = Rect.fromLTRB(r.left + Shape.s(30), r.top + Shape.s(10), r.right - Shape.s(14), r.bottom - Shape.s(22));
+    double y(double v) => g.bottom - (v + .42) / 2.04 * g.height;   // (the graph's measure: desk_ease_graph.dart _ymin, _ymax)
+    Future<void> pull(Offset from, double to) async {
+      final hand = await t.startGesture(from, kind: PointerDeviceKind.mouse);
+      await hand.moveBy(const Offset(0, -6));   // (up and down first: the key, not the handle on it)
+      await hand.moveTo(Offset(from.dx, y(to)));
+      await hand.up();
+      await settled(t, ws);
+    }
+    List<double> keys() => [for (final s in m.keyMoments(cube, 'x')) (s * 60).roundToDouble()];
+    await pull(Offset(g.left, y(0)), .25);   // (the start up a quarter: a quarter of x's knob span, 8, as the stretch is flat)
+    expect(keys(), [29, 30, 60], reason: 'a key a frame before keeps the value as it was');
+    expect(m.keyValues(cube, 'x')[0], closeTo(0, 1e-9));
+    expect(m.keyValues(cube, 'x')[1], closeTo(2, .1), reason: 'the start key moved up: it jumps there');
+    expect(m.keyValues(cube, 'x')[2], closeTo(0, 1e-9), reason: 'and the stretch goes down to the end key\'s value, as it was');
+    await t.tap(find.byKey(const ValueKey('ease-jump')));
+    await t.pumpAndSettle();
+    expect(find.text('Jump Off'), findsOneWidget);
+    await pull(Offset(g.right, y(1)), .5);   // (the end down half the way to the start's value: 2 to 0, so 1)
+    expect(keys(), [29, 30, 60], reason: 'Jump off: no key after it');
+    expect(m.keyValues(cube, 'x')[2], closeTo(1, .1));
+    expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, skip: !insideBuilt);
 

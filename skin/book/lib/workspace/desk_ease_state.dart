@@ -1,5 +1,7 @@
 // The desk's Ease tool: the curve between the picked key and the next one, its two handles, presets as thumbnails, and the numbers.
 
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/tokens.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
@@ -11,6 +13,12 @@ import 'package:lab_book/workspace/ws.dart';
 
 /// The curve copied in the Ease desk, kept while the window is open (Alight Motion's Copy of a curve).
 Ease? easeCopied;
+
+/// Whether an end of a stretch pulled up or down jumps there: a key a frame outside keeps the value as it was, so the
+/// value jumps at the key (three points, as the user drew it, 10/30); off, only the key's value moves and the stretch
+/// beside follows. The user's to choose, on the desk (10/30: "飛びたくないなら後でおしりの点を消せばいい、もしくは設定で
+/// 決めれると良い、ユーザに託す", "easeにon/offであるといい"). Kept while the window is open.
+bool easeJump = true;
 
 class DeskEaseState extends State<DeskEase> {
   // Joined: while a hand is down the ease is told to the document as it goes (the stage and the bars follow), the newest
@@ -107,6 +115,30 @@ class DeskEaseState extends State<DeskEase> {
     ws.after(m.later('together'), (done, why) => mounted ? setState(() => _trouble = done ? null : why) : null);
   }
 
+  // (an end of the stretch pulled [by], in the graph's measure: each value keyed at both its ends moves its key there by
+  //  so much of the way from the one key's value to the other's, or of its knob's span where the two are the same, as
+  //  far as a hand takes it; with Jump on, a key a frame outside first keeps the key's value as it was. One step.)
+  void _moveEnd(Ws ws, EaseSpan? span, bool start, double by) {
+    final m = ws.inside;
+    if (m == null || span == null || by.abs() < 1e-4) return;
+    final t = int.parse(span.layer.id), key = start ? span.from : span.to, outside = start ? span.from - 1 : span.to + 1;
+    m.later('together', number: 1);
+    var told = 0;
+    for (final name in m.moving(t)) {
+      final at = [for (final s in m.keyMoments(t, name)) (s * Ws.fps).round()], vs = m.keyValues(t, name);
+      final i = at.indexOf(span.from), j = at.indexOf(span.to), k = start ? i : j;
+      if (i < 0 || j < 0 || k >= vs.length || j >= vs.length) continue;
+      final shown = m.shown(name), lo = shown?.low ?? -double.infinity, hi = shown?.high ?? double.infinity;
+      final scale = (vs[j] - vs[i]).abs() > 1e-9 ? vs[j] - vs[i] : (shown == null ? 1.0 : hi - lo);
+      if (easeJump && outside >= 0 && !at.contains(outside)) {
+        m.later('key', thing: t, name: name, word: '${outside / Ws.fps}', number: vs[k]);   // (the key's value before it moved: a frame off, what the value was there)
+      }
+      m.later('key', thing: t, name: name, word: '${key / Ws.fps}', number: (vs[k] + by * scale).clamp(math.min(lo, vs[k]), math.max(hi, vs[k])));
+      told++;
+    }
+    ws.after(m.later('together'), (done, why) => mounted ? setState(() => _trouble = done ? (told == 0 ? 'No value keyed at both ends' : null) : why) : null);
+  }
+
   // (the curve after every key of each picked key's layer, every value keyed there: one step)
   void _onEveryKey(Ws ws, Ease e) {
     final m = ws.inside!, layers = {for (final k in ws.keys) k.layer};
@@ -159,6 +191,8 @@ class DeskEaseState extends State<DeskEase> {
       children: [
         SpanStrip(
           span: span,
+          jump: easeJump,
+          onJump: () => setState(() => easeJump = !easeJump),
           onReverse: () => set(ease.reversed()),
           onCopy: () => setState(() => easeCopied = ease),
           onPaste: easeCopied == null ? null : () => set(easeCopied!),
@@ -173,7 +207,7 @@ class DeskEaseState extends State<DeskEase> {
               Expanded(
                 child: ColoredBox(
                   color: WsT.card,
-                  child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: ease, span: span, frame: frame, onChanged: set))   // (only the graph follows the playhead),
+                  child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: ease, span: span, frame: frame, onChanged: set, jump: easeJump, onEnd: ws.inside == null ? null : (start, by) => _moveEnd(ws, span, start, by)))   // (only the graph follows the playhead),
                 ),
               ),
               const SizedBox(width: WsT.gutter),
