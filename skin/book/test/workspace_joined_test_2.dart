@@ -572,5 +572,5 @@ void _tests2() {
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
-  }, skip: !_built);
+  }, tags: 'main', skip: !_built);
 }

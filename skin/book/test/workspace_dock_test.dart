@@ -187,6 +187,6 @@ void main() {
     expect(m.value(m.things.last, 'visible', 0), 0, reason: 'placed heard and not seen, as Alight Motion\'s audio layer: no wave over the picture');
     expect(t.takeException(), isNull);
     await t.pumpWidget(const SizedBox());
-  }, skip: !insideBuilt);
+  }, tags: 'main', skip: !insideBuilt);
 
 }

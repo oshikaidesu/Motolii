@@ -231,5 +231,5 @@ void main() {
     ws.reread();
     expect(ws.marks.map((k) => k.$2), contains('Build'));
     await t.pumpWidget(const SizedBox());
-  }, skip: !insideBuilt);
+  }, tags: 'main', skip: !insideBuilt);
 }

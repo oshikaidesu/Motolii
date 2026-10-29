@@ -89,7 +89,7 @@ void _tests3() {
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
-  }, skip: !_built);
+  }, tags: 'main', skip: !_built);
 
   testWidgets('scale is three numbers of the document, each its own; a flat thing has no scale z (its thickness to come), a solid has', (t) async {
     final ws = await _pump(t), m = ws.inside!;
@@ -531,7 +531,7 @@ void _tests3() {
     expect(m.word(text, 'text'), 'HELLO');
     expect(t.takeException(), isNull);
     await _close(t);
-  }, skip: !_built);
+  }, tags: 'main', skip: !_built);
 
   testWidgets('the Text tool\'s row has its font, size, alignment and colour in one row, as Alight Motion\'s text bar', (t) async {
     final ws = await _pump(t), m = ws.inside!;

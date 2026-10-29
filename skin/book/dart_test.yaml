@@ -1,0 +1,7 @@
+# Tags the window tests are run by (package:test's Tagging tests). "main": the main few of each part of the window
+# (inspector, stage, timeline bars, keys, shelves, the Text tool, colours, undo, markers, a song), run after each fix in
+# under a minute:
+#   flutter test --tags main test/workspace_joined_test.dart test/workspace_ableton_keys_test.dart test/workspace_dock_test.dart
+# The whole set (about ten minutes) runs once before a stage of the golf is pushed.
+tags:
+  main:

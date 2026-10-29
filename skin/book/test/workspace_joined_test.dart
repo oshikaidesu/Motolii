@@ -82,7 +82,7 @@ void main() {
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
-  }, skip: !_built);
+  }, tags: 'main', skip: !_built);
 
   testWidgets('what the judges broke: keys of every value that moves are on the bar; a way reads back in one form; one act is one step', (t) async {
     final ws = await _pump(t), m = ws.inside!;
@@ -161,7 +161,7 @@ void main() {
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
-  }, skip: !_built);
+  }, tags: 'main', skip: !_built);
 
   testWidgets('a bar slid on the timeline is when the thing comes on; cut at its tail it is on that long; each is one step', (t) async {
     final ws = await _pump(t), m = ws.inside!;
@@ -187,7 +187,7 @@ void main() {
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
-  }, skip: !_built);
+  }, tags: 'main', skip: !_built);
 
   testWidgets('a document says its own size: the size chip turns the stage tall, and it is tall when opened again', (t) async {
     final ws = await _pump(t), m = ws.inside!;
@@ -294,7 +294,7 @@ void main() {
     expect(m.value(box, 'trim_offset', .25), closeTo(-.6, 1e-9), reason: 'holding what the hand made, not what was before');
     await expectSameAfterReopen(t);
     await _close(t);
-  }, skip: !_built);
+  }, tags: 'main', skip: !_built);
 
   testWidgets('a preset is in the maker\'s own folder, not the program\'s: one put there is a tile at once', (t) async {
     final own = Directory.systemTemp.createTempSync('own');
