@@ -15,6 +15,10 @@ class EffectsShelf extends StatelessWidget {
   const EffectsShelf(this.c, {super.key});
   final DockCtx c;
 
+  /// The files' effects by their names, as After Effects' Effects & Presets lists each kind: the inside gives them by
+  /// file, so VIDVOX's capitals came before AbsentMotion's am_ files, two runs of A to Z (golf_noise.md ㊾). Once a shelf.
+  static final _byName = Expando<List<(String, String)>>();
+
   @override
   Widget build(BuildContext context) {
     final ws = c.ws, m = ws.inside;
@@ -29,7 +33,7 @@ class EffectsShelf extends StatelessWidget {
         for (final (n, _) in m.thingEffects)
           (id: n, name: n, label: m.label(n), on: on.contains(n), apply: () => ws.fxToggle(n), said: _said(ws, n),
            tile: _Tile(n, file: m.picture(n), look: _FxLook(n), on: on.contains(n) ? 'ON' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: () => ws.fxToggle(n), star: c)),
-      for (final (n, f) in m.effects)
+      for (final (n, f) in _byName[m.effects] ??= ([...m.effects]..sort((a, b) => a.$1.toLowerCase().compareTo(b.$1.toLowerCase()))))
         (id: f, name: n, label: m.label(n), on: screen.contains(f), apply: () => ws.screenToggle(f), said: m.about(f).isEmpty ? 'On the picked thing' : m.about(f),
          tile: _Tile(n, key: ValueKey('ws-screen-$f'), file: m.picture(f), same: m.tileSame(f), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, picked: c.sel == f, onTap: () => c.pick(f), onApply: () => ws.screenToggle(f), star: c, starId: f)),
       if (picked)   // (a look kept by its name, Save Look: given to the picked thing, its values, effects and keys)

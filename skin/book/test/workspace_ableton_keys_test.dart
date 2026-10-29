@@ -172,6 +172,10 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(find.byKey(ValueKey('ws-menu-$item')));
       await t.pumpAndSettle();
+      for (var i = 0; i < 200 && ws.waiting; i++) {   // (asked without waiting (later): done in the inside's turn, later under a loaded machine)
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await t.pump();
+      }
       ws.reread();
     }
     await menu(Offset(600, WtM.header + WtM.ruler - 6), 'Add Marker');

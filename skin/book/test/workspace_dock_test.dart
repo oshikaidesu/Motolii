@@ -146,6 +146,20 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('the Effects shelf lists the files\' effects by their names, one run of A to Z (After Effects\' Effects & Presets), not by file', (t) async {
+    final ws = _joined(), m = ws.inside!, nameOf = {for (final (n, f) in m.effects) f: n};
+    await _shelf(t, ws, const Size(240, 918), 'Effects');
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'glow');
+    await t.pumpAndSettle();
+    final names = [
+      for (final e in find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('ws-screen-')).evaluate())
+        nameOf[(e.widget.key! as ValueKey<String>).value.substring('ws-screen-'.length)]!,
+    ];
+    expect(names, containsAll(['Edge Glow', 'Glow']), reason: 'AbsentMotion\'s am_edgeglow.wgsl and VIDVOX\'s Glow.fs');
+    expect(names, [...names]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase())), reason: 'by name: before, the capitals of VIDVOX\'s files came before all of AbsentMotion\'s am_');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
   testWidgets('a sound file picked on the Media shelf is heard before it is placed: pressed, the Mac plays it; pressed again, it stops (Alight Motion\'s song preview)', (t) async {
     final ws = _joined();
     final wav = File('${ws.documentFolder}/tone.wav');   // (half a second of silence, as a WAV file says it: 16-bit mono at 8000)
