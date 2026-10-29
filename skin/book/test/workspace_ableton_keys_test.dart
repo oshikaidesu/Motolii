@@ -194,6 +194,15 @@ void main() {
     await t.pumpAndSettle();
     ws.reread();
     expect(ws.marks.single.$2, 'Drop', reason: 'the flag\'s menu names it');
+    await t.tapAt(flag);
+    await t.pump(const Duration(milliseconds: 50));
+    await t.tapAt(flag);
+    await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ws-tl-mark-name')), findsOneWidget, reason: 'a double click on a marker writes its name, as the best-selling editors (Premiere Pro, Resolve, Final Cut Pro)');
+    await t.testTextInput.receiveAction(TextInputAction.done);
+    await t.pumpAndSettle();
+    ws.reread();
+    expect(ws.marks.single.$2, 'Drop', reason: 'left as it was');
     Future<double> carry(Offset from) async {   // (20 points to the right, then put back)
       final g = await t.startGesture(from, kind: PointerDeviceKind.mouse);
       await t.pump();

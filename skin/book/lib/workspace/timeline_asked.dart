@@ -81,9 +81,14 @@ mixin _TimelineAsked on State<WsTimeline> {
       ..frame = f;
   }
 
-  /// A double click: on a locator, play from it (6.4); elsewhere, zoom to what is picked, else to the whole (6.1).
+  /// A double click: on a marker, its name is written (the best-selling editors agree: Premiere Pro's and DaVinci
+  /// Resolve's open the marker's dialog, Final Cut Pro's its words, picked; Live's plays from it, the one apart, so
+  /// playing from it is on its right-click menu); elsewhere, zoom to what is picked, else to the whole (Live 6.1).
   void _rulerDouble(Offset p) {
-    if (_t._flagAt(p) case final flag?) return _playAt((flag.$1 * Ws.fps).round());
+    if (_t._flagAt(p) case final flag?) {
+      wsMarkPicked.value = flag;
+      return _rename();
+    }
     final ws = _t._ws;
     if (ws != null && (ws.keys.isNotEmpty || ws.layer != null)) return wsAskTimeline('selection');
     _t._setZoom(1);

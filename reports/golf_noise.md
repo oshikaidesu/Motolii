@@ -7,6 +7,11 @@
 【入口】は、ショートカットやメニューバーの奥にしか入口が無く、触っている物の上で（右クリックで）完結しない所（ユーザー 10/29：「ショートカットキーにしか入り口がないのも違和感…マウスだけで完結するように右クリックのメニューもちゃんと考えて」）。
 【見た目】は、押せば動くけれど見た目が気持ち悪い所（ユーザー 10/29：UI の気持ち悪さも記録する。美的センスに関わる）。
 
+**直し方の決め方（10/29〜）**：操作の仕方は、その分野で売れているソフトの最大公約数（ユーザー：「思想の最大公約数をまとめるだけ…下手に OSS を探さずに売れてるソフトで見た方がいい」）。
+- 分野ごとに売れているソフトを並べ、各社の公式の説明書を出典にする。動画（時間軸・素材・印・書き出し）：CapCut・Premiere Pro・DaVinci Resolve・Final Cut Pro。動き（キー・イーズ）：After Effects・Alight Motion・Apple Motion・CapCut。舞台（形・色・文字・レイヤー）：Figma・Canva・Illustrator・CLIP STUDIO PAINT。音と時間（Inspector のキー）：Ableton Live・Logic Pro・FL Studio
+- 多くが同じなら採る。Adobe も 1 票として数えるが、Adobe だけの癖は採らない。割れたら Alight Motion（床）。Alight Motion にも無ければ「出典なし」で止めて残す
+- 機能で拾った OSS（reports/reference_code.md）は仕様にしない。作り方の参考だけ
+
 ## スコア（10/29、1 回目、⑧ の落ちで中断）
 
 | ホール | 打数 | 当たり | 外れた所 |
@@ -41,3 +46,5 @@
 - [x] ㉑ [P02]【見た目】印の名前を打つ欄が、札とは別の明るい灰色の箱（幅 120 で決め打ち）として定規の上に被さり、隣の札（M1）まで隠す。ユーザー（10/29）：「テキストボックスが完全に上に乗っかった形になったのは少し違和感」。札そのものが打てるようになる形でなく、上に別物が載る形（timeline.dart 538 行） — 済（10/29）：名前の欄を札そのものにした（札と同じ色・高さで、打った字の幅だけ伸びる。Figma のレイヤーの名前はその場で打つ）。窓で M8 → 確認 と打って、札がそのまま書き換わった
 - [ ] ㉒ [P02]【入口】窓のどこにも右クリックのメニューが無い（workspace の右クリックは定規の「印を打つ」だけ。メニューの形は試作 sets/studies/panel_browser_b.dart などにだけある）。名前を変える・消す・複製などは、メニューバーかショートカット（⌘R など）からしか入れない。出典：Ableton Live は、ほぼどこでも右クリックでその物に効くコマンドが出る（Live 12 manual「Context Menus」、印なら Rename・Delete など）。Figma も物・レイヤー・キャンバスの右クリックで同じ。メニューバーのコマンド（workspace.dart の item、ableton.dart の名前）を、その場の物に効く分だけ右クリックに出す形 — 一部済（10/29）：右クリックのメニューの部品を 1 つ作った（workspace/ws_menu.dart：Flutter 自身の RawMenuAnchor で手の所に開き、外を押すと閉じる。行は Inspector の右クリックと同じ形、押せない行は理由を出す）。まず定規と印に使った。レイヤー・キー・舞台の物・棚へは、ゴルフでそこに当たった時に mouse_map.md の表（Ableton・Figma の右クリック）どおりに足す
 - [x] ㉓ [P01] 物を置くと、見えている再生位置でなく別の時刻から始まる（曲を置いたら、再生位置 0 秒なのに 4.58 秒から。P01 で曲が途中から置かれたのも同じ） — 済（10/29）：裏で先の絵を描いておく所（stage_kept.h、Final Cut Pro の裏の書き出し）が、描いたコマの時刻に中身の「今」を置いたままにしていて、置く時（doc_add）はその「今」を使っていた。描き終えたら「今」を再生位置に戻す。出典：AbsentMotion の addAudio・addText は新しいレイヤーを再生位置のコマから始める（AudioActions.kt・TextActions.kt の startTime frameStart(frame)）。出典の無い 1 行が原因だった
+- [x] ㉔ [P02] 印のダブルクリックがそこから再生（Ableton だけの決まり） — 済（10/29、売れているソフトの最大公約数で見直し）：Premiere Pro（公式 helpx の view marker comments：ダブルクリックで Marker の窓）・Final Cut Pro（Apple の説明書：ダブルクリックで名前の字が選ばれて開く）・DaVinci Resolve・CapCut（名前・色を編集）がそろって「名前などを編集」。ダブルクリックで札に名前を打つ形にし、そこから再生は右クリックのメニューに残した。試験：workspace_ableton_keys_test.dart の locators
+- [ ] ㉕ [P02] 印に色が無い：Premiere Pro・DaVinci Resolve・CapCut は印の色を選べる（Final Cut Pro は種類で色が変わる）。区切り（P02）とヒット（P01）を色で分けられない
