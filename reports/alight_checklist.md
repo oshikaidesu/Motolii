@@ -293,8 +293,8 @@
 - [x] カメラ：フォグ（色・近い・遠い）（一部）：Lens カードの Fog（濃さ）・Fog near（始まり、10/28、`check/fog_near.sh`）・色。まだ：遠い（Filament の霧は始まりと濃さで決まり、終わりの距離は無い） — 済（10/29）：Lens カードに Fog far。言うと、遠い所で霧が 98% になる濃さを Filament の霧に渡す（Filament の霧は 1 − e^−(濃さ × 始まりからの距離) なので、濃さ ＝ Fog × ln 50 ÷（遠い − 近い）。three.js の線の Fog の far を FogExp2 の濃さにする考え）。edit.sh で赤い立方体 2 つ（近い・遠い）に Fog near 4・Fog far 18：近い方は薄い桃色、遠い方は霧で真っ白。言わなければ前の Fog の濃さのまま（`check/fog_near.sh` も前どおり） 入口も Alight Motion と同じくカメラに（10/29）：カメラを選ぶと Fog カード（Fog・Fog near・Fog far・色）。そのカメラで見ている間はカメラの霧、言っていなければ段の霧。edit.sh で赤い立方体にカメラの青い霧：(255,63,68) → (169,160,255)、霧 0 で戻る
 - [ ] 初めての所で押す場所を吹き出しで指す
 - [x] 効果の検索（説明文の中まで）：Effects の棚の検索が名前と、効果の作り手の説明（頭の --about:。AbsentMotion の description 126 本、ISF の DESCRIPTION）を読む。下の欄にも説明 — 済（10/28）：窓の試験（`workspace_dock_test.dart`、「checkerboard」で Checker）
-- [ ] 効果のおすすめ、分類、動く絵
-- [ ] 効果の大きな動く見本・説明・タグ・Guide
+- [ ] 効果のおすすめ、分類、動く絵（一部）：分類は棚の上の札（効果の --label、AbsentMotion の category から：Blur・Color & Light…とそれぞれの数）、動く絵はタイルに乗ると 8 コマが回る（fx_tiles.sh と同じ気球の見本）、説明の中まで探す検索、★。まだ：おすすめ（Alight Motion の上の 6 本。AbsentMotion にも無い）
+- [ ] 効果の大きな動く見本・説明・タグ・Guide（一部）：効果を 1 回押すと、下の欄の上にその 8 コマが大きく回る（10/29、Alight Motion の効果を押すと開く大きな動く見本。`skin/book/test/workspace_dock_test.dart`）、下の欄に名前・分類・説明（効果の頭の --about、ISF の DESCRIPTION）。まだ：タグ、Guide
 - [x] 効果ごとのプリセット、お気に入り — 済（10/29）：効果のカードの頭の Save で、その効果の値とキーだけを効果の棚の見た目（プリセット）として残す（「効果名 1」「効果名 2」…、押すたびに次の番号：`filament/doc_looks.h` の doc_look_keep）。棚のタイルからそのまま別の物に付けられる。お気に入りは棚のタイルの星（前から）。窓の試験で Gaussian Blur の Save を 2 回押して 2 つでき、1 つ目を円に付けるとぼかしのキーだけが付く（`skin/book/test/workspace_joined_test_3.dart`）
 - [ ] 効果の札：畳む、詳しく、既定に戻す、複製、コピー、消す（一部）：窓のカードは名前を押して畳む、Advanced で詳しく、頭の Copy・Paste（そのカードの値だけを別の物に、10/28）・Reset。Remove（効果のカードだけ。棚で押して外すのと同じ外し方、1 回で取り消せる、10/28、`skin/book/test/workspace_fx_order_test.dart`）。まだ：複製（同じ効果を 2 つ持つと値が 1 組しか無いので、効果ごとに値を分ける仕組みが先）
 - [x] レイヤーの種類ごとの帯の色（別の形で有る）：Motolii の帯は物ごとに違う色（Ableton のクリップの色、Note カードの label で選べる）。関係図・ステージの枠・Ease の線で隣の物を見分けるのに使っているので、種類で揃えない。種類は帯の頭の種類の札（WtKindChip の印）で分かる

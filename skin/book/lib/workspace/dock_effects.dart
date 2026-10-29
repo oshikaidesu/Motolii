@@ -64,6 +64,8 @@ class EffectsShelf extends StatelessWidget {
                   ),
                 ),
         ),
+        if (sel != null && m.picture(sel.id).isNotEmpty)   // (its pictures large and moving, as Alight Motion's effect browser opens a large moving sample of the one pressed)
+          SizedBox(key: const ValueKey('ws-fx-preview'), height: Shape.z(140), child: _Moving(m.picture(sel.id), playing: true)),
         if (sel != null) _FxFooter(sel.name, kind: sel.label, said: sel.said, done: sel.on, ws: ws, onAction: sel.apply, needs: !picked),   // (an effect is always a thing's: none picked, none put on)
       ],
     );
