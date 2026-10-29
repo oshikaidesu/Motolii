@@ -437,7 +437,9 @@ static bool doc_parent(Doc& d, int thing, double to) {
     const double turnBy = turnWas - turnTo;
     if (ok && turnBy != 0.0) ok = doc_keys(d, thing, "rotate") ? doc_change(d, sqlite3_mprintf("update fact set value = value + %!.17g where thing = %d and name = 'rotate'", turnBy, thing))
                                                                : doc_set(d, thing, "rotate", doc_number(d, thing, "rotate", now, 0) + turnBy);
-    if (ok && !doc_keys(d, thing, "size")) ok = doc_set(d, thing, "size", std::clamp(size * sizeWas / sizeTo, 1e-3, 1e4));
+    // (a thing with no size, a camera, keeps none: its parent is its Target's layer in the inspector, and was refused for a
+    //  size it has not, "a camera has no size": golf P08, golf_noise.md (68); as doc_relations.h skips what a thing has not)
+    if (ok && doc_knows(d, thing, "size") && !doc_keys(d, thing, "size")) ok = doc_set(d, thing, "size", std::clamp(size * sizeWas / sizeTo, 1e-3, 1e4));
     return doc_acted(d) && ok;
 }
 static bool doc_key_here(Doc& d, int thing, const char* name, double at) {

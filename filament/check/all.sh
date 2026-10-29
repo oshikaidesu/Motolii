@@ -20,6 +20,7 @@ run film_way.sh
 run volume_keys.sh
 run motion_blur.sh
 run camera_switch.sh
+run camera_parent.sh
 run pack.sh
 run letters_move.sh
 run ramp_stops.sh
