@@ -265,7 +265,7 @@ static DocScript* doc_script_of(Doc& d, const std::string& file) {
     if (s.stamp >= 0 && s.seen == files_changed()) return &s;
     s.seen = files_changed();
     std::error_code wrong;
-    const long long stamp = (long long)std::filesystem::last_write_time(aviutl_is(file) ? aviutl_path(file) : file, wrong).time_since_epoch().count();
+    const long long stamp = (long long)std::filesystem::last_write_time(aviutl_is(file) ? aviutl_path(file) : fx_source(file), wrong).time_since_epoch().count();
     if (wrong) return s.stamp >= 0 ? &s : nullptr;
     if (s.stamp != stamp) {
         s = DocScript{};

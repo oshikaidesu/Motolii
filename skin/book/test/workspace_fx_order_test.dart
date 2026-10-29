@@ -99,4 +99,32 @@ void main() {
     expect(ws.notice, startsWith('Halftone: '), reason: 'what it does said');
     await closeWorkspace(t);
   }, skip: !insideBuilt);
+
+  testWidgets('Duplicate in an effect card\'s ⋮ puts it on again after it, its values with it and its own after (Alight Motion\'s Duplicate)', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final halftone = '$motoliiDir/effects/halftone.wgsl';
+    final rect = m.add('shape', 'rect');
+    ws..reread()..select('$rect');
+    expect(ws.screenToggle(halftone), isTrue);
+    await t.pumpAndSettle();
+    const knob = 'js_halftone_radius';   // (one of its values, as the document names it: its file's name before the knob's)
+    expect(m.set(rect, knob, 0.3), isTrue, reason: m.trouble);
+    ws.reread();
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await t.pumpAndSettle();
+    await seen(t, find.byKey(const ValueKey('card-more:Halftone')));
+    await t.tap(find.byKey(const ValueKey('card-more:Halftone')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('card-duplicate:Halftone')));
+    for (var i = 0; i < 100 && !m.word(rect, 'fx').contains('~2'); i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await t.pump();
+    }
+    final copy = '$motoliiDir/effects/halftone~2.wgsl', copied = knob.replaceFirst('js_halftone_', 'js_halftone_2_');
+    expect([m.word(rect, 'fx'), m.value(rect, copied, 0)], ['$halftone $copy', 0.3], reason: 'after it, its value with it: ${m.trouble}');
+    await t.pumpAndSettle();
+    expect(_cards(t), containsAll(['Halftone', 'Halftone 2']), reason: 'a card of its own');
+    expect(m.set(rect, copied, 0.8) && m.value(rect, knob, 0) == 0.3, isTrue, reason: 'its values its own');
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
 }

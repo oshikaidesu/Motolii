@@ -212,7 +212,8 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
     return top + lines + "\n" + wgsl->wgsl;
 }
 
-std::string isf_file(const std::string& file) {
+std::string isf_file(const std::string& asked) {
+    const std::string file = fx_source(asked);   // (one put on again, Glow~2.fs: Glow.fs's own, script.h)
     if (std::filesystem::path(file).extension() != ".fs" && !three_is(file)) return file;   // (a three.js effect: made ISF first, three_isf.cpp)
     struct stat st {};
     if (stat(file.c_str(), &st) != 0) return "";

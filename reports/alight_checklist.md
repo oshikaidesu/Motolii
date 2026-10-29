@@ -296,7 +296,7 @@
 - [ ] 効果のおすすめ、分類、動く絵（一部）：分類は棚の上の札（効果の --label、AbsentMotion の category から：Blur・Color & Light…とそれぞれの数）、動く絵はタイルに乗ると 8 コマが回る（fx_tiles.sh と同じ気球の見本）、説明の中まで探す検索、★。まだ：おすすめ（Alight Motion の上の 6 本。AbsentMotion にも無い）
 - [ ] 効果の大きな動く見本・説明・タグ・Guide（一部）：効果を 1 回押すと、下の欄の上にその 8 コマが大きく回る（10/29、Alight Motion の効果を押すと開く大きな動く見本。`skin/book/test/workspace_dock_test.dart`）、下の欄に名前・分類・説明（効果の頭の --about、ISF の DESCRIPTION）。まだ：タグ、Guide
 - [x] 効果ごとのプリセット、お気に入り — 済（10/29）：効果のカードの頭の Save で、その効果の値とキーだけを効果の棚の見た目（プリセット）として残す（「効果名 1」「効果名 2」…、押すたびに次の番号：`filament/doc_looks.h` の doc_look_keep）。棚のタイルからそのまま別の物に付けられる。お気に入りは棚のタイルの星（前から）。窓の試験で Gaussian Blur の Save を 2 回押して 2 つでき、1 つ目を円に付けるとぼかしのキーだけが付く（`skin/book/test/workspace_joined_test_3.dart`）
-- [ ] 効果の札：畳む、詳しく、既定に戻す、複製、コピー、消す（一部）：窓のカードは名前を押して畳む、Advanced で詳しく、頭の Copy・Paste（そのカードの値だけを別の物に、10/28）・Reset。Remove（効果のカードだけ。棚で押して外すのと同じ外し方、1 回で取り消せる、10/28、`skin/book/test/workspace_fx_order_test.dart`）。まだ：複製（同じ効果を 2 つ持つと値が 1 組しか無いので、効果ごとに値を分ける仕組みが先）
+- [x] 効果の札：畳む、詳しく、既定に戻す、複製、コピー、消す（一部）：窓のカードは名前を押して畳む、Advanced で詳しく、頭の Copy・Paste（そのカードの値だけを別の物に、10/28）・Reset。Remove（効果のカードだけ。棚で押して外すのと同じ外し方、1 回で取り消せる、10/28、`skin/book/test/workspace_fx_order_test.dart`）。まだ：複製（同じ効果を 2 つ持つと値が 1 組しか無いので、効果ごとに値を分ける仕組みが先） — 複製も済（10/29）：札の ⋮ に Duplicate（Alight Motion の ⋮ と同じ名前）。その効果をすぐ後ろにもう 1 つ、値（キーも）を写して置く。2 つ目は「Glow~2.fs」のように番号を入れた言葉で、読むのは元のファイル（fx_source）、値の名前はその言葉のもの（js_halftone_2_radius）なので別々に動く。札は「Halftone 2」。ISF と .wgsl の効果。窓の試験（`workspace_fx_order_test.dart` の Duplicate）
 - [x] レイヤーの種類ごとの帯の色（別の形で有る）：Motolii の帯は物ごとに違う色（Ableton のクリップの色、Note カードの label で選べる）。関係図・ステージの枠・Ease の線で隣の物を見分けるのに使っているので、種類で揃えない。種類は帯の頭の種類の札（WtKindChip の印）で分かる
 
 ## I. アプリだけにある効果（公式ガイドに無い 16）（16）

@@ -55,7 +55,7 @@ struct ScreenFx {
 };
 static std::filesystem::file_time_type screen_stamp(const std::string& file) {
     std::error_code wrong;
-    return std::filesystem::last_write_time(file, wrong);
+    return std::filesystem::last_write_time(fx_source(file), wrong);
 }
 
 // The file as Filament's driver takes it: the picture at binding 0, its sampler at 1, the knobs at 2 (Filament's

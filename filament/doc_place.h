@@ -523,7 +523,7 @@ static bool doc_fx(Doc& d, int thing, double at, bool most, double units, DrawnF
         int n = 0;
         for (const std::string& w : list) {
             if (doc_thor_letter(w)) continue;
-            if (!std::filesystem::is_regular_file(aviutl_is(w) ? aviutl_path(w) : w)) ok = false, why = "there is no such file: " + w;   // (as a picture's own file: doc_match)
+            if (!std::filesystem::is_regular_file(aviutl_is(w) ? aviutl_path(w) : fx_source(w))) ok = false, why = "there is no such file: " + w;   // (as a picture's own file: doc_match; one put on again, its file's: fx_source)
             else if (isf_file(w).empty()) ok = false, why = "the ISF effect could not be made WGSL: " + w;   // (made once and kept, as the stage reads it: isf.cpp)
         }
         if (!doc_fx_files(list))

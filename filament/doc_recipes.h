@@ -254,6 +254,10 @@ static bool doc_on(Doc& d, int thing, const char* name);
 // An effect of a thing's list as its card is called: ThorVG's own by its card's title (Gaussian Blur...), a file by its
 // name made a title (halftone -> Halftone).
 static std::string doc_fx_title(const std::string& name) {
+    if (const std::string source = fx_source(name); source != name) {   // (one put on again: its file's name and its number, "Glow 2", a card of its own)
+        const std::string stem = std::filesystem::path(name).stem().string();
+        return doc_fx_title(source) + " " + stem.substr(stem.rfind('~') + 1);
+    }
     if (doc_thor_letter(name))
         for (const DocCard& card : doc_cards) if (card.when && card.is[0] == '+' && name == card.when) return card.title;
     static std::map<std::string, std::pair<int, std::string>> named;   // (as the shelf names it: its head's own name, its maker's (doc_folder_names); read again once a file has changed)
@@ -266,6 +270,30 @@ static std::string doc_fx_title(const std::string& name) {
     for (char& c : t) if (c == '_') c = ' ';
     if (!t.empty()) t[0] = (char)std::toupper((unsigned char)t[0]);
     return t;
+}
+// An effect of the thing (by its card's title) put on it again right after it, its values as they are, keys and all:
+// Alight Motion's effect card ⋮ Duplicate (AbsentMotion's EffectsPanel: a copy of the effect with its params). Its
+// word the file's with ~n before its ending ("Glow~2.fs": read as the file, fx_source), so its values are its own
+// (a value's name is its word's: doc_screen_knob). An ISF or a .wgsl file's alone. The new word ("" none).
+static std::string doc_fx_duplicate(Doc& d, int thing, const std::string& title) {
+    std::vector<std::string> list = script_files(doc_word(d, thing, "fx"));
+    const auto at = std::find_if(list.begin(), list.end(), [&](const std::string& w) { return doc_fx_title(w) == title; });
+    if (at == list.end()) return d.trouble = "no effect of that name is on it", "";
+    const std::string word = *at;
+    const std::filesystem::path source(fx_source(word));
+    if (source.extension() != ".fs" && source.extension() != ".wgsl") return d.trouble = "only an ISF or a .wgsl effect is put on again so far", "";
+    std::string made;
+    for (int n = 2; made.empty() || std::find(list.begin(), list.end(), made) != list.end(); ++n) made = (source.parent_path() / (source.stem().string() + "~" + std::to_string(n) + source.extension().string())).string();
+    list.insert(at + 1, made);
+    std::string fx;
+    for (const std::string& w : list) fx += (fx.empty() ? "" : " ") + w;
+    const DocScript* script = doc_script_of(d, word);
+    doc_act(d);
+    bool ok = doc_say(d, thing, "fx", fx.c_str());
+    if (script)
+        for (const ScriptKnob& k : script->knobs)
+            ok = ok && doc_change(d, sqlite3_mprintf("insert or replace into fact select thing, %Q, at, value, way from fact where thing = %d and name = %Q", doc_screen_knob(made, k.name).c_str(), thing, doc_screen_knob(word, k.name).c_str()));
+    return doc_acted(d) && ok ? made : "";
 }
 // The titles of a thing's effect cards in the order its effects are laid ("Halftone;Gaussian Blur").
 static std::string doc_fx_titles(Doc& d, int thing) {
