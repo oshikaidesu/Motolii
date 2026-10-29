@@ -370,6 +370,7 @@ class Doc extends ChangeNotifier {
   void Function(List<String> names)? onCardReset;
   void Function(String title)? onCardRemove;
   void Function(String title)? onCardEye;
+  void Function(String title, List<String> names)? onCardSave;
   List<String> cardsOff = const [];
   void Function(List<String> names)? onCardCopy;
   VoidCallback? onCardPaste;

@@ -390,6 +390,50 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Save on an effect\'s card keeps that effect\'s values and keys alone on the Effects shelf, each press another (Alight Motion\'s presets of an effect)', (t) async {
+    final own = Directory.systemTemp.createTempSync('own');
+    final setenv = DynamicLibrary.process().lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32), int Function(Pointer<Utf8>, Pointer<Utf8>, int)>('setenv');
+    final name = 'MOTOLII_OWN'.toNativeUtf8(), path = own.path.toNativeUtf8();
+    setenv(name, path, 1); // (the maker's folder here: a test does not write into the real one)
+    malloc
+      ..free(name)
+      ..free(path);
+    addTearDown(() {
+      final unsetenv = DynamicLibrary.process().lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>('unsetenv');
+      final n = 'MOTOLII_OWN'.toNativeUtf8();
+      unsetenv(n);
+      malloc.free(n);
+    });
+    final ws = await _pump(t), m = ws.inside!;
+    final a = m.add('shape', 'rect'), b = m.add('shape', 'circle');
+    expect(m.say(a, 'fill', 'ff3366') && m.effect(a, 'Gaussian Blur', 0) && m.key(a, 'blur', 0, 0) && m.key(a, 'blur', 1, 24), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$a');
+    await t.pumpAndSettle();
+    for (final n in [1, 2]) {
+      final save = find.byKey(const ValueKey('card-save:Gaussian Blur'));
+      await seen(t, save);
+      await t.tap(save);
+      for (var i = 0; i < 100 && !File('${own.path}/looks/Gaussian Blur $n.motolii').existsSync(); i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await t.pump();
+      }
+      expect(File('${own.path}/looks/Gaussian Blur $n.motolii').existsSync(), isTrue, reason: 'preset $n: ${m.trouble}');
+    }
+    ws
+      ..select('$b')
+      ..shelf = 'Effects';
+    await t.pumpAndSettle();
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Gaussian Blur 1');
+    await t.pumpAndSettle();
+    await doubleTap(t, find.byKey(const ValueKey('ws-look-Gaussian Blur 1')));
+    await settled(t, ws);
+    expect([m.keyMoments(b, 'blur'), m.word(b, 'fill')], [[0, 1], ''], reason: 'the blur and its keys, not the rect\'s fill: ${m.trouble}');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Scale with the link on grows width and height together; with it off, the width alone (Alight Motion\'s size link)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

@@ -125,13 +125,16 @@ static int doc_look_paste(Doc& d, const char* path, double now) {
     return made;
 }
 // The thing's look kept on the shelf by a name: in the maker's own looks folder (doc_folders), one of that name written
-// over (Alight Motion's Save as Preset, After Effects' Save Animation Preset).
-static bool doc_look_keep(Doc& d, int thing, const std::string& name) {
+// over (Alight Motion's Save as Preset, After Effects' Save Animation Preset); only: these values alone, an effect's card
+// (Alight Motion's preset of one effect), their keys with them.
+static bool doc_look_keep(Doc& d, int thing, const std::string& name, const std::string& only = "") {
     if (name.empty() || name.find_first_of("/\\:") != std::string::npos) return d.trouble = "a look's name is a file's name", false;
     std::error_code wrong;
     const std::filesystem::path dir = doc_folders("looks").back();
     std::filesystem::create_directories(dir, wrong);
-    return doc_look_save(d, thing, (dir / (name + ".motolii")).string().c_str());
+    std::string named = name;   // (an effect's: the first number its name has not yet, so each kept is another of its presets)
+    for (int n = 1; !only.empty() && (named.empty() || named == name || std::filesystem::exists(dir / (named + ".motolii"))); ++n) named = name + " " + std::to_string(n);
+    return doc_look_save(d, thing, (dir / (named + ".motolii")).string().c_str(), false, only);
 }
 // The document and the files it is made of gathered in one folder, to be taken elsewhere whole (Alight Motion's project
 // package; After Effects' Collect Files): the document copied as SQLite copies a database (VACUUM INTO), each file a thing

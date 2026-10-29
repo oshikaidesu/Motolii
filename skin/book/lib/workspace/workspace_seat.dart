@@ -130,6 +130,11 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         onCardMove: int.tryParse(l?.id ?? '') == null ? null : (title, by) => ws.after(m.later('fx_move', thing: int.parse(l!.id), word: title, number: by.toDouble())),
         onCardRemove: int.tryParse(l?.id ?? '') == null ? null : (title) => ws.after(m.later('fx_out', thing: int.parse(l!.id), word: title), (_, _) => ws.reread()),
         onCardEye: int.tryParse(l?.id ?? '') == null ? null : (title) => ws.after(m.later('fx_eye', thing: int.parse(l!.id), word: title), (_, _) => ws.reread()),
+        onCardSave: int.tryParse(l?.id ?? '') == null ? null : (title, names) => ws.after(m.later('keep_look', thing: int.parse(l!.id), name: names.join(' '), word: title), (done, why) {   // (that effect's values and keys a look on the Effects shelf, by its name and a number the inside gives it)
+          m.forgetFolders();
+          ws.notice = done ? 'Preset kept: $title' : 'Not kept: $why';
+          ws.reread();
+        }),
         cardsOff: int.tryParse(l?.id ?? '') == null ? const [] : [for (final t in m.word(int.parse(l!.id), 'fx_off').split(';')) if (t.isNotEmpty) t],
         onCardReset: int.tryParse(l?.id ?? '') == null ? null : (names) => ws.after(m.later('reset', thing: int.parse(l!.id), word: names.join(' ')), (_, _) => ws.reread()),
         onCardCopy: int.tryParse(l?.id ?? '') == null ? null : (names) => m.later('copy_style', thing: int.parse(l!.id), name: names.join(' '), word: _WorkspaceState._clipboard('card')),   // (that card's values alone: Alight Motion's copy of one effect)

@@ -295,7 +295,7 @@
 - [x] 効果の検索（説明文の中まで）：Effects の棚の検索が名前と、効果の作り手の説明（頭の --about:。AbsentMotion の description 126 本、ISF の DESCRIPTION）を読む。下の欄にも説明 — 済（10/28）：窓の試験（`workspace_dock_test.dart`、「checkerboard」で Checker）
 - [ ] 効果のおすすめ、分類、動く絵
 - [ ] 効果の大きな動く見本・説明・タグ・Guide
-- [ ] 効果ごとのプリセット、お気に入り
+- [x] 効果ごとのプリセット、お気に入り — 済（10/29）：効果のカードの頭の Save で、その効果の値とキーだけを効果の棚の見た目（プリセット）として残す（「効果名 1」「効果名 2」…、押すたびに次の番号：`filament/doc_looks.h` の doc_look_keep）。棚のタイルからそのまま別の物に付けられる。お気に入りは棚のタイルの星（前から）。窓の試験で Gaussian Blur の Save を 2 回押して 2 つでき、1 つ目を円に付けるとぼかしのキーだけが付く（`skin/book/test/workspace_joined_test_3.dart`）
 - [ ] 効果の札：畳む、詳しく、既定に戻す、複製、コピー、消す（一部）：窓のカードは名前を押して畳む、Advanced で詳しく、頭の Copy・Paste（そのカードの値だけを別の物に、10/28）・Reset。Remove（効果のカードだけ。棚で押して外すのと同じ外し方、1 回で取り消せる、10/28、`skin/book/test/workspace_fx_order_test.dart`）。まだ：複製（同じ効果を 2 つ持つと値が 1 組しか無いので、効果ごとに値を分ける仕組みが先）
 - [x] レイヤーの種類ごとの帯の色（別の形で有る）：Motolii の帯は物ごとに違う色（Ableton のクリップの色、Note カードの label で選べる）。関係図・ステージの枠・Ease の線で隣の物を見分けるのに使っているので、種類で揃えない。種類は帯の頭の種類の札（WtKindChip の印）で分かる
 
@@ -343,7 +343,7 @@
 
 - [x] 効果が 2 つ以上なら札の一覧（入り切りの目・並べ替え） — 済（10/29）：効果の札は重ねた順に並び、頭の上下の矢印で並べ替え（fx_move、前から）、頭の Hide で切り Show で戻す（Alight Motion の目。`fx_off` に札の名前を残し、効果と値はそのまま：`filament/doc_place.h` の doc_fx_list が描く時だけ除く、`filament/doc_recipes.h` の doc_fx_eye）。edit.sh で写真に反転を付けて切ると元の写真と同じ（違う画素 90272 → 0）、戻すとまた 90272。窓で Hide・Show を押して札が残るのを見た（`skin/book/test/workspace_fx_order_test.dart`）
 - [x] 効果の小見出しを畳む — 効果の札は名前を押して畳む（`skin/book/lib/sets/inspector/inspector_rows_sect.dart`、畳んだかは fold.<名前> で覚える）、あまり変えない値は札の足の Advanced の下に畳む（`inspector_effects.dart`、`inspector_advanced.dart`）。10/29 コードで確かめ（窓の試験はまだ無い）
-- [ ] 効果ごとに複数のプリセット（動きつきも）
+- [x] 効果ごとに複数のプリセット（動きつきも） — 済（10/29）：上の行と同じ Save。キーごと残るので、動きつきのプリセットになる（edit.sh でも、Pixelate のブロックの大きさを 0 秒 4 → 1 秒 60 とキーにした見た目を別の物に付けると、同じキーで動く）
 - [x] 効果の最初の値を「掛かって見える値」に — 既にある仕組み（`filament/fx_first.sh` が測り `effects/first.tsv` に書き、script.cpp の script_first が重ねる）。10/29 に棚の全部（画面の効果 285）を測り直し：そのままで何も見えない 68 のうち 35 に見える値、12 は場面転換で動きのまま、21 は既定の 1 枚の絵では見えない物（別の絵・過去のコマ・時間を読む物）
 - [x] タイムラインの帯にコマの絵：動画の帯を 6 つに分け、それぞれの真ん中で流れる絵（begin・speed・逆向きも）を内側が GStreamer で小さく作り、帯いっぱいに並べる — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 音の帯に波形：動画の帯にその音の大きさ（内側が別スレッドで読み、帯の見えている所に 1 コマ 1 つ）、拍も定規に — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）

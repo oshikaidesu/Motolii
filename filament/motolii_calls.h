@@ -504,7 +504,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "copy") ok = (int)doc_look_save(doc(m), thing, w.c_str(), true);   // (word: the file it is kept in, whole)
             else if (c == "paste") ok = m->made = changes(m, doc_look_paste(doc(m), w.c_str(), number));   // (word: that file; number: when it begins; the answer is the new thing)
             else if (c == "copy_style") ok = (int)doc_look_save(doc(m), thing, w.c_str(), false, n);   // (its look: doc_looks.h; name: only these values, a card's)
-            else if (c == "keep_look") ok = (int)doc_look_keep(doc(m), thing, w);   // (word: its name on the shelf)
+            else if (c == "keep_look") ok = (int)doc_look_keep(doc(m), thing, w, n);   // (word: its name on the shelf; name: only these values, a card's)
             else if (c == "paste_style") ok = changes(m, (int)doc_look_put(doc(m), thing, w.c_str()));
             else if (c == "remove") ok = changes(m, (int)doc_remove(doc(m), thing));
             else if (c == "relate") ok = changes(m, (int)doc_relate(doc(m), thing, w.c_str(), m->now));
