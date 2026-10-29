@@ -302,7 +302,9 @@ class ColorsShelf extends StatelessWidget {
     //  the main or sub colour)
     if (word != _wheelFrom) {
       _wheelFrom = word;
-      if (gradient) {
+      if (_wheelHeld) {
+        // (a hand on the wheel: it keeps the hue the hand gave, which a grey written as hex would lose)
+      } else if (gradient) {
         _wheel = HSVColor.fromColor(stops[_stop].$1.withValues(alpha: 1));
       } else if (_colourOf(word.split(' ').first.split('@').first) case final col?) {
         _wheel = HSVColor.fromColor(col);
@@ -384,9 +386,8 @@ class ColorsShelf extends StatelessWidget {
               aspectRatio: 1,
               child: WsColourWheel(
                 key: const ValueKey('colour-square'),
-                color: _wheel.toColor(),
-                held: _wheelHeld,
-                onChanged: (col) => to(HSVColor.fromColor(col)),
+                color: _wheel,
+                onChanged: to,
                 onStart: () {
                   _wheelHeld = true;
                   m.later('together', number: 1);
@@ -413,17 +414,21 @@ class ColorsShelf extends StatelessWidget {
             Expanded(child: Text('Colours', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g76).copyWith(fontWeight: FontWeight.w600))),
             Text('size', style: T.label(Grey.g76)),
             SizedBox(width: Shape.s(4)),
-            MiniSlider(   // (the boxes' size, any the maker likes; kept once the hand rests, not written every frame)
-              key: const ValueKey('colour-size'),
-              value: _tile,
-              min: _tileLeast,
-              max: _tileMost,
-              width: Shape.z(64),
-              onChanged: (v) {
-                c.set(() => _tile = v);
-                _tileKept?.cancel();
-                _tileKept = Timer(const Duration(milliseconds: 400), _keepMine);
-              },
+            Flexible(   // (shorter in a narrow shelf, never pushing the row out)
+              child: LayoutBuilder(
+                builder: (context, b) => MiniSlider(   // (the boxes' size, any the maker likes; kept once the hand rests, not written every frame)
+                  key: const ValueKey('colour-size'),
+                  value: _tile,
+                  min: _tileLeast,
+                  max: _tileMost,
+                  width: math.min(Shape.z(64), b.maxWidth),
+                  onChanged: (v) {
+                    c.set(() => _tile = v);
+                    _tileKept?.cancel();
+                    _tileKept = Timer(const Duration(milliseconds: 400), _keepMine);
+                  },
+                ),
+              ),
             ),
             SizedBox(width: Shape.s(6)),
             DeskChip(key: const ValueKey('colour-add'), label: '+', onTap: () => c.set(() => _keepNow(c))),   // (the colour now kept as one's own, or the gradient whole: CLIP STUDIO PAINT's Add Color)

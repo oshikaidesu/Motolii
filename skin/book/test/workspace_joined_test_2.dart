@@ -364,9 +364,39 @@ void _tests2() {
     await t.tap(find.byKey(const ValueKey('colour-kind-Solid')));
     await settled(t, ws);
     expect(m.word(rect, 'fill'), 'e974ab', reason: 'Solid: the stop picked, the first');
+    // (the wheel, by a mouse as the maker's: a click on its square, a drag round its ring; each colours the picked thing,
+    //  in a window drawn smaller as the maker's is (WsZoom, 76%: the user, "カラーサークルが選べん"))
+    WsZoom.value.value = .76;
+    await t.pumpAndSettle();
+    final wheel = t.getRect(find.byKey(const ValueKey('colour-square'))), mouse = await t.createGesture(kind: PointerDeviceKind.mouse);
+    HSVColor now() => HSVColor.fromColor(Color(0xFF000000 | int.parse(m.word(rect, 'fill'), radix: 16)));
+    Future<void> click(Offset at) async {
+      await mouse.down(at);
+      await mouse.up();
+      await settled(t, ws);
+    }
+    await click(wheel.center + Offset(wheel.width * .2, -wheel.height * .2));   // (the square's top right: a full colour)
+    expect([now().saturation, now().value], everyElement(greaterThan(.8)), reason: 'a click on the square takes the colour there: ${m.word(rect, 'fill')}');
+    await click(wheel.centerLeft + Offset(wheel.width * .04, 0));   // (the ring's left, then its right: hues half way round from each other)
+    final left = now().hue;
+    await click(wheel.centerRight - Offset(wheel.width * .04, 0));
+    expect(((now().hue - left).abs() - 180).abs(), lessThan(20), reason: 'the ring where it is pressed: ${now().hue} then $left');
+    final right = now().hue;
+    await mouse.down(wheel.topCenter + Offset(0, wheel.height * .04));   // (and dragged round it)
+    for (var i = 1; i <= 6; i++) {
+      await mouse.moveBy(Offset(wheel.width * .06, wheel.height * .03));
+      await t.pump();
+    }
+    await mouse.up();
+    await mouse.removePointer();
+    await settled(t, ws);
+    expect(((now().hue - right) % 360 - 180).abs(), lessThan(160), reason: 'a drag round the ring turns its hue: $right then ${now().hue}');
+    WsZoom.value.value = 1;
+    await t.pumpAndSettle();
+    final turned = m.word(rect, 'fill');
     await t.tap(find.byKey(const ValueKey('colour-kind-Gradient')));
     await settled(t, ws);
-    expect(m.word(rect, 'fill'), 'e974ab@0.000 e974ab00@1.000', reason: 'the colour to clear');
+    expect(m.word(rect, 'fill'), '$turned@0.000 ${turned}00@1.000', reason: 'the colour to clear');
     await t.tap(find.byKey(const ValueKey('colour-blend-steps')));   // (how it mixes: each colour held till the next, Blender's Constant)
     await settled(t, ws);
     expect(m.word(rect, 'gradient_blend'), 'steps');
