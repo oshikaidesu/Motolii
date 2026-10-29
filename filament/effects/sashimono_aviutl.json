@@ -204,6 +204,16 @@
    ]
   }
  },
+ "ノイズ": {
+  "file": "Noise (Sashimono).fs",
+  "params": {
+   "強さ": [
+    "strength",
+    "",
+    ""
+   ]
+  }
+ },
  "閃光": {
   "file": "Flash (Sashimono).fs",
   "params": {
@@ -597,6 +607,10 @@
    ]
   }
  },
+ "モーションブラー": {
+  "file": "After Image (Sashimono).fs",
+  "params": {}
+ },
  "色ずれ": {
   "file": "Color Shift (Sashimono).fs",
   "params": {
@@ -817,6 +831,46 @@
    ]
   }
  },
+ "振動": {
+  "file": "Random Move (Sashimono).fs",
+  "params": {
+   "X": [
+    "range_x",
+    "",
+    ""
+   ],
+   "Y": [
+    "range_y",
+    "",
+    ""
+   ],
+   "Z": [
+    "range_z",
+    "",
+    ""
+   ],
+   "周期": [
+    "interval",
+    "",
+    ""
+   ]
+  }
+ },
+ "震える": {
+  "file": "Random Move (Sashimono).fs",
+  "params": {
+   "振幅": [
+    "range_x",
+    "",
+    "range_y"
+   ],
+   "間隔": [
+    "interval",
+    "",
+    ""
+   ]
+  }
+ },
  "反復移動": {
   "file": "Repeat Move (Sashimono).fs",
   "params": {
@@ -857,6 +911,26 @@
    ],
    "高さ": [
     "height",
+    "",
+    ""
+   ]
+  }
+ },
+ "円形配置": {
+  "file": "Circular Duplicate (Sashimono).fs",
+  "params": {
+   "円周": [
+    "circumference",
+    "",
+    ""
+   ],
+   "半径": [
+    "radius",
+    "",
+    ""
+   ],
+   "数": [
+    "count",
     "",
     ""
    ]

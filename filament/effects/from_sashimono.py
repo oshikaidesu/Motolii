@@ -6,11 +6,11 @@
 # `v_uv` ISF's place, `u_size` the picture's size, `u_pass` the pass), the clip's own (`u_object`, `u_origin`,
 # `u_content`) the whole picture, a pixel read by texelFetch turned over as ISF's places are (isf.cpp: up from the
 # bottom left). Its params ISF's inputs by their own names: a track a float, a check a bool (a check read as a number a
-# float of 0 or 1), a colour a colour, a choice a long of its choices' numbers. Sashimono draws in linear light; Motolii
-# gives an effect sRGB (screen.h screen_tone): its colours are read as given.
+# float of 0 or 1), a colour a colour, a choice a long of its choices' numbers, a whole number (a seed, a count) a long.
+# Sashimono draws in linear light; Motolii gives an effect sRGB (screen.h screen_tone): its colours are read as given.
 # usage (Python 3.12 or later, numpy and packaging: what Sashimono's effects import):
 #   uv run --no-project --python 3.13 --with numpy --with packaging python -I from_sashimono.py <Sashimono's src> <out dir> [kind ...]
-# (an effect of pieces, of a picture file, a gradient, a value of its own kind, or a sound: refused)
+# (an effect of pieces, of a picture file, a gradient, a grid, or a sound: refused)
 import json, os, re, sys
 
 src, out, wanted = sys.argv[1], sys.argv[2], sys.argv[3:]
@@ -114,6 +114,8 @@ def inputs(d):
         elif isinstance(p, spec.SelectSpec):
             values = [v for v, _ in p.choices]
             said.append({'NAME': p.name, 'LABEL': p.label, 'TYPE': 'long', 'VALUES': list(range(len(values))), 'LABELS': [l for _, l in p.choices], 'DEFAULT': values.index(p.default) if p.default in values else 0})
+        elif isinstance(p, spec.ValueSpec):   # (a whole number with no slider, a seed or a count: an int, as its shader takes it)
+            said.append({'NAME': p.name, 'LABEL': p.label, 'TYPE': 'long', 'DEFAULT': p.default, 'MIN': p.minimum, 'MAX': p.maximum})
         else:
             return None
     return said
