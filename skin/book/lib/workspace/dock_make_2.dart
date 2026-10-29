@@ -1,51 +1,204 @@
 // Part of dock_make.dart (cut there by size, as it was).
 part of 'dock_make.dart';
 
-/// A palette, one small card of its colours in stripes, side by side (Coolors', Adobe Color's and Canva's palette
-/// cards): however many are kept they stay a block of rows, and a press on a stripe colours at once. Only colours on it:
-/// its name, where it came from and its photo are in the shelf's foot, for the card the hand is on or last pressed
-/// (the shelf's details, as the Media shelf's foot tells a file's). The colour in use is framed.
-class _Strip extends StatelessWidget {
-  const _Strip(this.id, this.colors, this.c, {required this.name});
-  final String id, name;
-  final List<Color> colors;
+/// One box of the colour bento: a colour or a gradient, the group it is of (the document's, one's own, a palette, the
+/// gradients), and how much of the picture it is beside the others of its group (1: as much as each).
+class _Box {
+  const _Box(this.group, this.i, this.weight, {this.colour, this.grad});
+  final String group;
+  final int i;
+  final double weight;
+  final Color? colour;
+  final _Gradient? grad;
+}
+
+int _dice = 0;   // (the dice's last throw: the boxes' shapes)
+final _hovered = ValueNotifier<String?>(null);   // (the group of the box the hand is on)
+
+/// Where each box lies, in cells: its shape thrown by the dice (a colour that is more of the picture, a larger box; a
+/// gradient wide), then each put where it first fits from the top left and the gaps filled by later ones (CSS Grid's
+/// auto-placement, dense: CSS Grid Layout 1, 8.5).
+List<(int, int, int, int)> _packed(List<_Box> boxes, int cols, int seed) {
+  final taken = <int, Set<int>>{}, out = <(int, int, int, int)>[];
+  bool free(int x, int y, int w, int h) {
+    if (x + w > cols) return false;
+    for (var j = y; j < y + h; j++) {
+      for (var i = x; i < x + w; i++) {
+        if (taken[j]?.contains(i) ?? false) return false;
+      }
+    }
+    return true;
+  }
+  for (final b in boxes) {
+    final r = math.Random(Object.hash(seed, b.group, b.i));
+    final shapes = b.group == 'add' ? const [(1, 1)] : b.grad != null ? const [(2, 1), (3, 1), (2, 2)] : b.weight >= 1.6 ? const [(2, 2), (3, 2), (2, 3), (3, 3)] : b.weight >= .9 ? const [(2, 1), (1, 2), (2, 2), (1, 1)] : const [(1, 1), (1, 1), (1, 2), (2, 1)];
+    final (w0, h) = shapes[r.nextInt(shapes.length)];
+    final w = math.min(w0, cols);
+    for (var y = 0;; y++) {
+      final x = [for (var x = 0; x < cols; x++) if (free(x, y, w, h)) x].firstOrNull;
+      if (x == null) continue;
+      for (var j = y; j < y + h; j++) {
+        taken.putIfAbsent(j, () => {}).addAll([for (var i = x; i < x + w; i++) i]);
+      }
+      out.add((x, y, w, h));
+      break;
+    }
+  }
+  return out;
+}
+
+final _boxMenu = GlobalKey<WsMenuState>();
+
+/// The colours as a bento of boxes of many sizes, wide and tall, packed with no holes, as many to a row as the shelf is
+/// wide (the user: a poster's colours come with the space they take, so not all squares; a dice throws the shapes
+/// again). Boxes move briskly to where they now lie, without overshooting (Flutter's AnimatedPositioned, easeOutCubic).
+class _Bento extends StatelessWidget {
+  const _Bento(this.boxes, this.c);
+  final List<_Box> boxes;
   final DockCtx c;
   @override
-  Widget build(BuildContext context) => MouseRegion(
-    onEnter: (_) => _named.value = id,
-    onExit: (_) => _named.value = _pressed,
-    child: Semantics(
-      label: name,
-      child: ClipRRect(
-        borderRadius: BorderRadius.all(Shape.r(4)),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      final cols = math.max(4, (box.maxWidth / Shape.z(30)).floor()), unit = box.maxWidth / cols, all = [...boxes, const _Box('add', 0, 0)];
+      final laid = _packed(all, cols, _dice), rows = laid.fold(0, (a, l) => math.max(a, l.$2 + l.$4)), gap = Shape.s(3);
+      return WsMenu(
+        key: _boxMenu,
         child: SizedBox(
-          width: Shape.z(112),
-          height: Shape.z(22),
-          child: Row(
+          height: rows * unit,
+          child: Stack(
             children: [
-              for (final (i, col) in colors.indexed)
-                Expanded(
-                  child: DockHover(
-                    key: ValueKey('$id-$i'),
-                    onTap: () {
-                      _named.value = _pressed = id;
-                      _take(c, col);
-                    },
-                    builder: (context, h) {
-                      final sel = _wheelFrom == _hex(col).substring(1).toLowerCase();
-                      return Container(
-                        color: col,
-                        foregroundDecoration: sel || h ? BoxDecoration(border: Border.all(color: sel ? Grey.g95 : Grey.g76, width: sel ? 2 : 1)) : null,
-                      );
-                    },
-                  ),
+              for (final (k, b) in all.indexed)
+                AnimatedPositioned(
+                  key: ValueKey('${b.group}-${b.i}'),
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutCubic,
+                  left: laid[k].$1 * unit,
+                  top: laid[k].$2 * unit,
+                  width: laid[k].$3 * unit - gap,
+                  height: laid[k].$4 * unit - gap,
+                  child: b.group == 'add' ? _AddBox(c) : b.grad != null ? _Grad('grad-${b.i}', b.grad!, c) : _ColourBox(b, c),
                 ),
             ],
           ),
         ),
+      );
+    },
+  );
+}
+
+/// A colour's box: pressed, it colours (or the stop picked, while a gradient is coloured); the hand on it rings its
+/// group and tells the group in the shelf's foot; its right-click menu, for one's own, replaces or deletes it.
+class _ColourBox extends StatelessWidget {
+  const _ColourBox(this.b, this.c);
+  final _Box b;
+  final DockCtx c;
+  @override
+  Widget build(BuildContext context) {
+    final col = b.colour!, own = b.group == 'mine', pal = _pals.where((p) => p.id == b.group).firstOrNull;
+    return MouseRegion(
+      onEnter: (_) => _named.value = _hovered.value = b.group,
+      onExit: (_) {
+        _named.value = _pressed;
+        _hovered.value = null;
+      },
+      child: GestureDetector(
+        onSecondaryTapDown: (d) {
+          final items = [
+            if (own) ...[
+              WsMenuItem('Replace with ${_hex(_wheel.toColor())}', () => c.set(() {
+                _mineColours[b.i] = _wheel.toColor();
+                _keepMine();
+              })),
+              WsMenuItem('Delete', () => c.set(() {
+                _mineColours.removeAt(b.i);
+                _keepMine();
+              })),
+            ],
+            if (pal != null && pal.saved) WsMenuItem('Delete this palette', () => c.set(() {
+              _minePals.remove(pal);
+              _named.value = _pressed = null;
+              _keepMine();
+            })),
+          ];
+          if (items.isEmpty) return;
+          final box = _boxMenu.currentContext?.findRenderObject() as RenderBox?;
+          _boxMenu.currentState?.show(box?.globalToLocal(d.globalPosition) ?? Offset.zero, items);
+        },
+        child: DockHover(
+          key: ValueKey('colour-box-${b.group}-${b.i}'),
+          onTap: () {
+            _named.value = _pressed = b.group;
+            _take(c, col);
+          },
+          builder: (context, h) => ValueListenableBuilder<String?>(
+            valueListenable: _hovered,
+            builder: (context, over, _) => AnimatedOpacity(   // (the hand on a box: its group stays bright, the others step back, so a palette is seen whole with no gap kept round it)
+              opacity: over == null || over == b.group ? 1 : .3,
+              duration: const Duration(milliseconds: 120),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: col,
+                  borderRadius: BorderRadius.all(Shape.r(5)),
+                  border: _wheelFrom == _hex(col).substring(1).toLowerCase() ? Border.all(color: Grey.g95, width: 2) : null,
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
+    );
+  }
+}
+
+/// The last box: the colour now kept as one's own (CLIP STUDIO PAINT's colour set: Add Color).
+class _AddBox extends StatelessWidget {
+  const _AddBox(this.c);
+  final DockCtx c;
+  @override
+  Widget build(BuildContext context) => DockHover(
+    key: const ValueKey('colour-add'),
+    onTap: () => c.set(() {
+      _mineColours.add(_wheel.toColor());
+      _keepMine();
+    }),
+    builder: (context, h) => Container(
+      alignment: Alignment.center,
+      decoration: BoxDecoration(borderRadius: BorderRadius.all(Shape.r(5)), border: Border.all(color: h ? Grey.g76 : Grey.g38)),
+      child: Text('+', style: T.name(h ? Grey.g95 : Grey.g63)),
     ),
   );
+}
+
+/// The dice: a die's face of five; pressed, the boxes are thrown again.
+class _Dice extends StatelessWidget {
+  const _Dice(this.onTap);
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => DockHover(
+    key: const ValueKey('colour-dice'),
+    onTap: onTap,
+    builder: (context, h) => Container(
+      width: Shape.z(22),
+      height: Shape.z(22),
+      decoration: BoxDecoration(color: h ? WsT.raised : WsT.well, borderRadius: BorderRadius.all(Shape.r(5))),
+      child: CustomPaint(painter: _DiePaint(h ? Grey.g95 : Grey.g76)),
+    ),
+  );
+}
+
+class _DiePaint extends CustomPainter {
+  const _DiePaint(this.ink);
+  final Color ink;
+  @override
+  void paint(Canvas c, Size s) {
+    final p = Paint()..color = ink, d = s.width / 4.5;
+    for (final o in const [Offset(-1, -1), Offset(1, -1), Offset(0, 0), Offset(-1, 1), Offset(1, 1)]) {
+      c.drawCircle(s.center(Offset.zero) + o * d, s.width / 14, p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DiePaint o) => o.ink != ink;
 }
 
 /// A gradient's colours and where each stands, as the document says its fill ("ff3366@0.35 ..."; one with no @ stands
@@ -178,18 +331,16 @@ class _Grad extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final word = [for (final k in _stopsOf(g.colors, g.oklab)) _hex(k).substring(1).toLowerCase()].join(' ');
-    final sel = _wheelFrom == word;
     return Semantics(
       label: g.name,
       child: DockHover(
-        onTap: () => _fill(c, word),   // (a press puts it on, as a swatch)
+        key: ValueKey('colour-$id'),
+        onTap: () => _fill(c, word),   // (a press puts it on, as a colour's box)
         builder: (context, h) => Container(
-          width: Shape.z(46),
-          height: Shape.z(22),
           decoration: BoxDecoration(
             gradient: LinearGradient(colors: _stopsOf(g.colors, g.oklab)),
-            borderRadius: BorderRadius.all(Shape.r(4)),
-            border: sel ? Border.all(color: Grey.g95, width: 2) : (h ? Border.all(color: Grey.g76) : null),
+            borderRadius: BorderRadius.all(Shape.r(5)),
+            border: _wheelFrom == word ? Border.all(color: Grey.g95, width: 2) : (h ? Border.all(color: Grey.g76) : null),
           ),
         ),
       ),

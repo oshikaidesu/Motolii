@@ -372,22 +372,35 @@ void _tests2() {
     await settled(t, ws);
     expect(m.word(rect, 'fill').split(' '), hasLength(3), reason: 'a stop put a quarter along: ${m.word(rect, 'fill')}');
     expect(m.word(rect, 'fill').split(' ')[1], endsWith('@0.250'));
-    final night = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Strip' && (w as dynamic).name == 'Night Market');
+    final night = find.byKey(const ValueKey('colour-box-market-2'));   // (Night Market's third colour, a box of the bento)
     await seen(t, night);
-    await t.tap(find.descendant(of: night, matching: find.byType(DockHover)).at(2));
+    await t.tap(night);
     await settled(t, ws);
     expect(m.word(rect, 'fill').split(' ')[1], 'e84545@0.250', reason: 'the swatch colours the stop picked, the one just put');
     expect(find.descendant(of: find.byKey(const ValueKey('colour-details')), matching: find.text('Night Market')), findsOneWidget, reason: 'the shelf\'s foot tells the palette pressed');
+    final hand = await t.createGesture(kind: PointerDeviceKind.mouse);   // (the hand on a box: its palette bright, the others back)
+    await hand.addPointer(location: t.getCenter(find.byKey(const ValueKey('colour-box-market-2'))));
+    await t.pumpAndSettle();
+    double lit(String key) => t.widget<AnimatedOpacity>(find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(AnimatedOpacity)).first).opacity;
+    expect([lit('colour-box-market-0'), lit('colour-box-pop-0')], [1, .3], reason: 'the palette under the hand is seen whole, with no gap kept round it');
+    await hand.removePointer();
+    await t.pumpAndSettle();
+    await t.scrollUntilVisible(find.byKey(const ValueKey('colour-stop-0')), -200, scrollable: find.descendant(of: find.byType(ColorsShelf), matching: find.byType(Scrollable)).first);   // (the shelf scrolled down to the bento: back up to the stops)
+    await t.ensureVisible(find.byKey(const ValueKey('colour-stop-0')));
+    await t.pumpAndSettle();
     await t.tap(find.byKey(const ValueKey('colour-stop-0')));   // (the stop picked is the window's, not the document's: the first, as a document opens)
     await t.pumpAndSettle();
     // (one's own colours, CLIP STUDIO PAINT's colour set: + keeps the colour now; its menu deletes it again, so the
     //  maker's own file is left as it was)
-    final mine = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('colour-mine-'));
+    final mine = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('colour-box-mine-'));
     final before = mine.evaluate().length;
+    await t.scrollUntilVisible(find.byKey(const ValueKey('colour-add')), 200, scrollable: find.descendant(of: find.byType(ColorsShelf), matching: find.byType(Scrollable)).first);
+    await t.ensureVisible(find.byKey(const ValueKey('colour-add')));
+    await t.pumpAndSettle();
     await t.tap(find.byKey(const ValueKey('colour-add')));
     await t.pumpAndSettle();
     expect(mine.evaluate().length, before + 1, reason: 'kept');
-    await t.tapAt(t.getCenter(find.byKey(ValueKey('colour-mine-$before'))), buttons: kSecondaryButton);
+    await t.tapAt(t.getCenter(find.byKey(ValueKey('colour-box-mine-$before'))), buttons: kSecondaryButton);
     await t.pumpAndSettle();
     await t.tap(find.byKey(const ValueKey('ws-menu-Delete')));
     await t.pumpAndSettle();
@@ -575,7 +588,7 @@ void _tests2() {
     expect(find.text('Stroke of the next thing drawn'), findsOneWidget, reason: 'the shelf says it colours the edge');
     await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Night Market');
     await t.pumpAndSettle();
-    final red = find.descendant(of: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Strip'), matching: find.byType(DockHover)).at(2);
+    final red = find.byKey(const ValueKey('colour-box-market-2'));   // (Night Market's red, a box of the bento)
     await seen(t, red);
     await t.tap(red);
     await settled(t, ws);
@@ -596,7 +609,7 @@ void _tests2() {
     expect(m.word(rect, 'stroke'), 'e84545', reason: 'and edged in the edge');
     await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Pop Poster');
     await t.pumpAndSettle();
-    final chip = find.descendant(of: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Strip'), matching: find.byType(DockHover)).first;
+    final chip = find.byKey(const ValueKey('colour-box-pop-0'));   // (Pop Poster's first colour)
     await seen(t, chip);
     await t.tap(chip);   // (the rect picked: it is filled)
     await settled(t, ws);

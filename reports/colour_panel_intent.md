@@ -56,6 +56,10 @@
 - 動く試作：reports/screen/colour_bento_1029.gif（8 列、密に詰める並べ方＝CSS grid の dense と同じ、動きは elasticOut）。
 - 作る時の部品の候補：箱の詰め方は flutter_staggered_grid_view（StaggeredGrid の Quilted・Staggered）、動きは Flutter 自身の暗黙のアニメーション（AnimatedPositioned など）とバネの曲線（Curves.elasticOut）。
 
+## 作った所（10/30）
+
+弁当グリッド（サイコロ、幅に合わせて列が増える、弾まずキビキビ：ユーザー「弾まずにキビキビ動く感じがいい」）、CLIP のような色相の輪と四角、手を乗せたパレットだけ明るく残る（パレットの間に隙間は開けない：開けると幅やサイコロで穴が出る）。まだ：グラデーションのつなぎ方をプリセットごと残す、写真を落として取り込む。
+
 ## まだ聞けていないこと
 
 （ユーザー：「全部説明するの難しいね」。ここから一緒に埋める）

@@ -16,7 +16,7 @@ import 'desk_kit.dart' show DeskChip;
 import 'dock_glyphs.dart';
 import 'dock_parts.dart';
 import '../theme.dart' show ColorTheme;
-import 'package:flutter_colorpicker/flutter_colorpicker.dart' show ColorPickerArea, ColorPickerSlider, PaletteType, TrackType;
+import 'colour_wheel.dart';
 import 'ws_menu.dart';
 import 'create_preview.dart';
 import 'ws.dart';
@@ -229,7 +229,7 @@ String? _pickedPhoto(DockCtx c) {
 /// The palette whose details the shelf's foot tells: the one the hand is on, else the one last pressed.
 final _named = ValueNotifier<String?>(null);
 String? _pressed;
-final _mineMenu = GlobalKey<WsMenuState>();
+bool _wheelHeld = false;   // (a hand on the wheel: it follows the hand)
 
 /// The Colors shelf, laid out to stay small however much is kept in it, and to colour in one press: what is coloured,
 /// in one line; the colour now, its square and hue full width (flutter_colorpicker's own, as Figma's picker) and its
@@ -250,7 +250,11 @@ class ColorsShelf extends StatelessWidget {
   Widget build(BuildContext context) {
     WsScope.of(context, {WsAspect.picked, WsAspect.document});   // (what it colours is said at its top: built again when a link or the tool strip aims it, or a thing is picked)
     _readMine();
-    final m = c.ws.inside!, used = usedColours(c.ws).values.toSet().toList();
+    final m = c.ws.inside!, usedCount = <Color, int>{};
+    for (final col in usedColours(c.ws).values) {
+      usedCount[col] = (usedCount[col] ?? 0) + 1;   // (how many things are of it: how much of the picture, roughly)
+    }
+    final used = usedCount.keys.toList();
     final (t, name) = _target();
     final word = t == null ? (name == 'stroke' ? c.ws.edge : c.ws.ink) : m.word(t, name);
     final stops = _stopsIn(word), gradient = stops.length > 1, none = name == 'stroke' ? word.isEmpty : word == 'none';
@@ -316,17 +320,26 @@ class ColorsShelf extends StatelessWidget {
           ),
           SizedBox(height: Shape.s(8)),
         ],
-        Listener(   // (a hand on the square or the hue: what it does till it lets go is one step)
-          onPointerDown: (_) => m.later('together', number: 1),
-          onPointerUp: (_) => c.ws.after(m.later('together')),
-          onPointerCancel: (_) => c.ws.after(m.later('together')),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ClipRRect(borderRadius: BorderRadius.all(Shape.r(4)), child: SizedBox(key: const ValueKey('colour-square'), height: Shape.z(112), child: ColorPickerArea(_wheel, to, PaletteType.hsvWithHue))),
-              SizedBox(height: Shape.s(6)),
-              SizedBox(height: Shape.z(18), child: ColorPickerSlider(TrackType.hue, _wheel, to, displayThumbColor: true)),
-            ],
+        Center(   // (CLIP STUDIO PAINT's colour wheel: a hand on it, what it does till it lets go is one step)
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: Shape.z(220)),
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: WsColourWheel(
+                key: const ValueKey('colour-square'),
+                color: _wheel.toColor(),
+                held: _wheelHeld,
+                onChanged: (col) => to(HSVColor.fromColor(col)),
+                onStart: () {
+                  _wheelHeld = true;
+                  m.later('together', number: 1);
+                },
+                onEnd: () {
+                  _wheelHeld = false;
+                  c.ws.after(m.later('together'));
+                },
+              ),
+            ),
           ),
         ),
         SizedBox(height: Shape.s(6)),
@@ -338,91 +351,35 @@ class ColorsShelf extends StatelessWidget {
           ],
         ),
         SizedBox(height: Shape.s(12)),
-        Text('Mine', style: T.label(Grey.g76).copyWith(fontWeight: FontWeight.w600)),
-        SizedBox(height: Shape.s(6)),
-        WsMenu(
-          key: _mineMenu,
-          child: Wrap(
-            spacing: Shape.s(3),
-            runSpacing: Shape.s(3),
-            children: [
-              for (final (i, col) in _mineColours.indexed)
-                GestureDetector(
-                  onSecondaryTapDown: (d) {   // (a tile's own menu, as CLIP STUDIO PAINT's colour set's long-press)
-                    final box = _mineMenu.currentContext?.findRenderObject() as RenderBox?;
-                    _mineMenu.currentState?.show(box?.globalToLocal(d.globalPosition) ?? Offset.zero, [
-                      WsMenuItem('Replace with ${_hex(_wheel.toColor())}', () => c.set(() {
-                        _mineColours[i] = _wheel.toColor();
-                        _keepMine();
-                      })),
-                      WsMenuItem('Delete', () => c.set(() {
-                        _mineColours.removeAt(i);
-                        _keepMine();
-                      })),
-                    ]);
-                  },
-                  child: DockHover(
-                    key: ValueKey('colour-mine-$i'),
-                    onTap: () => _take(c, col),
-                    builder: (context, h) => Container(
-                      width: Shape.z(22),
-                      height: Shape.z(22),
-                      decoration: BoxDecoration(
-                        color: col,
-                        borderRadius: BorderRadius.all(Shape.r(4)),
-                        border: _wheelFrom == hexOf(col) ? Border.all(color: Grey.g95, width: 2) : (h ? Border.all(color: Grey.g76) : null),
-                      ),
-                    ),
-                  ),
-                ),
-              DockHover(   // (the colour now put in at the end: CLIP STUDIO PAINT's Add Color)
-                key: const ValueKey('colour-add'),
-                onTap: () => c.set(() {
-                  _mineColours.add(_wheel.toColor());
-                  _keepMine();
-                }),
-                builder: (context, h) => Container(
-                  width: Shape.z(22),
-                  height: Shape.z(22),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(borderRadius: BorderRadius.all(Shape.r(4)), border: Border.all(color: h ? Grey.g76 : Grey.g38)),
-                  child: Text('+', style: T.name(h ? Grey.g95 : Grey.g63)),
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(height: Shape.s(12)),
         Row(
-            children: [
-              Expanded(child: Text('Palettes', style: T.label(Grey.g76).copyWith(fontWeight: FontWeight.w600))),
-              DeskChip(key: const ValueKey('colour-keep'), label: 'Keep', onTap: used.isEmpty ? null : () => c.set(() {   // (the document's colours kept as a palette of one's own)
-                _minePals.insert(0, _Pal('mine${_minePals.length}', 'Used ${_minePals.length + 1}', used, saved: true));
-                _keepMine();
-              })),
-              SizedBox(width: Shape.s(4)),
-              DeskChip(key: const ValueKey('colour-photo'), label: 'Photo', onTap: photo == null ? null : () async {   // (taken from the photo picked in Media)
-                final p = await _paletteFrom(photo);
-                if (p != null) c.set(() {
-                  _minePals.insert(0, p);
-                  _keepMine();
-                });
-              }),
-            ],
-        ),
-        SizedBox(height: Shape.s(6)),
-        Wrap(
-          spacing: Shape.s(4),
-          runSpacing: Shape.s(4),
           children: [
-            if (used.isNotEmpty && q.isEmpty) _Strip('used', used, c, name: 'In this document'),
-            for (final p in pals) _Strip(p.id, p.colors, c, name: p.name),
+            Expanded(child: Text('Colours', style: T.label(Grey.g76).copyWith(fontWeight: FontWeight.w600))),
+            DeskChip(key: const ValueKey('colour-keep'), label: 'Keep', onTap: used.isEmpty ? null : () => c.set(() {   // (the document's colours kept as a palette of one's own)
+              _minePals.insert(0, _Pal('mine${_minePals.length}', 'Used ${_minePals.length + 1}', used, saved: true));
+              _keepMine();
+            })),
+            SizedBox(width: Shape.s(4)),
+            DeskChip(key: const ValueKey('colour-photo'), label: 'Photo', onTap: photo == null ? null : () async {   // (taken from the photo picked in Media)
+              final p = await _paletteFrom(photo);
+              if (p != null) c.set(() {
+                _minePals.insert(0, p);
+                _keepMine();
+              });
+            }),
+            SizedBox(width: Shape.s(6)),
+            _Dice(() => c.set(() => _dice++)),
           ],
         ),
-        SizedBox(height: Shape.s(12)),
-        Text('Gradients', style: T.label(Grey.g76).copyWith(fontWeight: FontWeight.w600)),
         SizedBox(height: Shape.s(6)),
-        Wrap(spacing: Shape.s(4), runSpacing: Shape.s(4), children: [for (final (i, g) in grads) _Grad('grad-$i', g, c)]),
+        _Bento([
+          if (q.isEmpty) ...[
+            for (final (i, col) in used.indexed) _Box('used', i, usedCount[col]! * used.length / usedCount.values.fold(0, (a, b) => a + b), colour: col),
+            for (final (i, col) in _mineColours.indexed) _Box('mine', i, 1, colour: col),
+          ],
+          for (final p in pals)
+            for (final (i, col) in p.colors.indexed) _Box(p.id, i, (p.shares?[i] ?? 1 / p.colors.length) * p.colors.length, colour: col),
+          for (final (i, g) in grads) _Box('grads', i, 1, grad: g),
+        ], c),
       ],
     );
     return Column(

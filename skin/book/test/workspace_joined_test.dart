@@ -23,7 +23,7 @@ import 'package:lab_book/sets/inspector/inspector_direct_transform_canvas.dart' 
 import 'package:lab_book/sets/inspector/inspector_direct_transform_layout.dart' show TransformLayout;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart';
 import 'package:lab_book/workspace/dock_fonts.dart';
-import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;
+import 'package:lab_book/workspace/dock_make.dart' show ColorsShelf, CreateShelf;
 import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
 import 'package:lab_book/workspace/dock_parts.dart' show DockChips, DockFooter, DockHover, DockSearch;
 import 'package:lab_book/workspace/workspace.dart';

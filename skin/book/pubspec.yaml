@@ -11,6 +11,7 @@ dependencies:
   docking: ^1.16.2
   ffi: ^2.1.0
   file_selector: ^1.1.0
+  flex_color_picker: ^4.0.0
   flutter:
     sdk: flutter
   flutter_colorpicker: ^1.1.0

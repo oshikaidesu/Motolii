@@ -1509,7 +1509,7 @@ void _tests3() {
     await t.pumpAndSettle();
     expect(ws.aim, 'background');
     expect(find.text('Background of the stage'), findsOneWidget, reason: 'the shelf says what it colours');
-    await t.tap(find.descendant(of: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Strip'), matching: find.byType(DockHover)).first);   // (a press colours at once: Figma's, Canva's, Alight Motion's swatches)
+    await t.tap(find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('colour-box-')).first);   // (a press colours at once: Figma's, Canva's, Alight Motion's swatches)
     await settled(t, ws);   // (set by the inside, not waited for by the window)
     expect(m.word(0, 'background'), hasLength(6), reason: 'the stage\'s colour behind everything: ${m.trouble}');
     expect(m.say(0, 'tone_mapper', 'agx') && m.word(0, 'tone_mapper') == 'agx', isTrue, reason: m.trouble);
