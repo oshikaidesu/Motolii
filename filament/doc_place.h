@@ -195,9 +195,16 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         const double r = std::min(half.x, half.y) * doc_literal(d, thing, "size", now, 1) + doc_literal(d, thing, "roll_radius", now, 0);
         if (std::fabs(r) > 1e-6) helped = helped * math::mat4::rotation(-(roll == "x" ? at.x : -at.y) / r, math::double3{0, 0, 1});
     }
+    math::double2 assisted{doc_literal(d, thing, "scale_x", now, 1), doc_literal(d, thing, "scale_y", now, 1)};
+    if (const std::string assist = doc_literal_word(d, thing, "scale_assist"); !assist.empty()) {   // (Alight Motion's Scale Assist, as bevy_alight_motion works it (MIT/Apache-2.0, src/animation/parenthelper.rs
+        const double k = doc_literal(d, thing, "scale_assist_amount", now, 1), damp = std::max(1.0, doc_literal(d, thing, "scale_assist_damp", now, 1));   //  resolve_parenthelper_visual_scale): its axis 1 y, 2 x, 3 both)
+        if (assist == "y") assisted.y *= k;
+        else if (assist == "x") assisted.x *= k;
+        else if (assist == "both") assisted.x *= k, assisted.y /= std::max(1e-9, std::pow(k, 1.71) * std::pow(damp, 1.0 + 2.75 * std::pow(damp - 1.0, 1.93)));
+    }
     math::mat4 place = there * helped *
                        heading * turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::translation(shift) * math::mat4::scaling(doc_literal(d, thing, "size", now, 1)) *
-                       math::mat4::scaling(math::double3{doc_literal(d, thing, "scale_x", now, 1), doc_literal(d, thing, "scale_y", now, 1), doc_literal(d, thing, "scale_z", now, 1)}) *
+                       math::mat4::scaling(math::double3{assisted.x, assisted.y, doc_literal(d, thing, "scale_z", now, 1)}) *
                        own * math::mat4::translation(-anchor);
     const double reach = member ? doc_literal(d, thing, "field_radius", said, 0) : 0.0;
     if (reach > 0.0) {   // (within the field: larger and turned about where it is seen, its picture's middle, as near the field's middle as it is)

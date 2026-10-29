@@ -127,6 +127,7 @@ static const DocShown doc_shown[] = {
     {"parent_rotate", "share", "%", "Its turn", 0, 2, nullptr},
     {"parent_size", "share", "%", "Its size", 0, 2, nullptr},
     {"roll", "", "", "Roll", 0, 0, nullptr},
+    {"scale_assist", "", "", "Assist", 0, 0, nullptr}, {"scale_assist_amount", "share", "%", "Scale", 0, 4, nullptr}, {"scale_assist_damp", "share", "%", "Damp", 1, 3, nullptr},
     {"roll_radius", "", "", "Roll radius", -5, 5, nullptr},   // (the thing it goes with: shown by its name)
     {"mosh_with", "thing", "", "Motion of", 0, 0, nullptr}, {"dissolve", "", "", "Dissolve", 0, 2, nullptr}, {"grain", "share", "%", "Grain", 0.1, 4, nullptr}, {"mosh_at", "", "s", "From", 0, 10, nullptr},
     {"connect_to", "thing", "", "With", 0, 0, nullptr},
@@ -342,7 +343,8 @@ static const DocCard doc_cards[] = {
     {"Play", "marker animation speed speed_hold frame_rate"},
     {"Sound", "volume beats", "kind", "film"},   // (its beats: shown on the timeline's ruler where it strikes)
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
-    {"Parent", "parent_rotate parent_size roll roll_radius", "parent", "!0"},   // (Alight Motion's Parenting Helper: how much of its parent's turn and size it takes, and rolling as a wheel; while it has a parent)
+    {"Parent", "parent_rotate parent_size roll roll_radius", "parent", "!0"},
+    {"Scale Assist", "scale_assist scale_assist_amount scale_assist_damp", "kind", "!camera"},   // (Alight Motion's Scale Assist: one way grown alone, or both, kept as bulky as it was)   // (Alight Motion's Parenting Helper: how much of its parent's turn and size it takes, and rolling as a wheel; while it has a parent)
     {"Connect", "connect connect_to connect_reach"},
     {"Line", "cap join dash dash_offset"},
     {"Path", "round bloat offset zigzag zigzag_ridges zigzag_smooth", "kind", "shape"},   // (its path made anew: After Effects' shape operators, ThorVG's own)
