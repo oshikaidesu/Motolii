@@ -1,0 +1,899 @@
+{
+ "色調補正": {
+  "file": "Color Correct (Sashimono).fs",
+  "params": {
+   "明るさ": [
+    "brightness",
+    "",
+    ""
+   ],
+   "コントラスト": [
+    "contrast",
+    "",
+    ""
+   ],
+   "ｺﾝﾄﾗｽﾄ": [
+    "contrast",
+    "",
+    ""
+   ],
+   "色相": [
+    "hue",
+    "",
+    ""
+   ],
+   "輝度": [
+    "luma",
+    "",
+    ""
+   ],
+   "彩度": [
+    "saturation",
+    "",
+    ""
+   ]
+  }
+ },
+ "クロマキー": {
+  "file": "Chroma Key (Sashimono).fs",
+  "params": {
+   "色相範囲": [
+    "hue_range",
+    "",
+    ""
+   ],
+   "彩度範囲": [
+    "saturation_range",
+    "",
+    ""
+   ],
+   "境界補正": [
+    "softness",
+    "",
+    ""
+   ]
+  }
+ },
+ "シャープ": {
+  "file": "Sharpen (Sashimono).fs",
+  "params": {
+   "強さ": [
+    "strength",
+    "",
+    ""
+   ],
+   "範囲": [
+    "radius",
+    "",
+    ""
+   ]
+  }
+ },
+ "拡張色調補正": {
+  "file": "Color Grade (Sashimono).fs",
+  "params": {
+   "輝度::ゲイン": [
+    "luma_gain",
+    "",
+    ""
+   ],
+   "輝度::ガンマ": [
+    "luma_gamma",
+    "",
+    ""
+   ],
+   "輝度::リフト": [
+    "luma_lift",
+    "",
+    ""
+   ],
+   "輝度::オフセット": [
+    "luma_offset",
+    "",
+    ""
+   ],
+   "彩度::ゲイン": [
+    "sat_gain",
+    "",
+    ""
+   ],
+   "彩度::ガンマ": [
+    "sat_gamma",
+    "",
+    ""
+   ],
+   "彩度::リフト": [
+    "sat_lift",
+    "",
+    ""
+   ],
+   "彩度::オフセット": [
+    "sat_offset",
+    "",
+    ""
+   ],
+   "赤::ゲイン": [
+    "red_gain",
+    "",
+    ""
+   ],
+   "赤::ガンマ": [
+    "red_gamma",
+    "",
+    ""
+   ],
+   "赤::リフト": [
+    "red_lift",
+    "",
+    ""
+   ],
+   "赤::オフセット": [
+    "red_offset",
+    "",
+    ""
+   ],
+   "緑::ゲイン": [
+    "green_gain",
+    "",
+    ""
+   ],
+   "緑::ガンマ": [
+    "green_gamma",
+    "",
+    ""
+   ],
+   "緑::リフト": [
+    "green_lift",
+    "",
+    ""
+   ],
+   "緑::オフセット": [
+    "green_offset",
+    "",
+    ""
+   ],
+   "青::ゲイン": [
+    "blue_gain",
+    "",
+    ""
+   ],
+   "青::ガンマ": [
+    "blue_gamma",
+    "",
+    ""
+   ],
+   "青::リフト": [
+    "blue_lift",
+    "",
+    ""
+   ],
+   "青::オフセット": [
+    "blue_offset",
+    "",
+    ""
+   ],
+   "色相::オフセット": [
+    "hue_offset",
+    "",
+    ""
+   ],
+   "飽和する": [
+    "clamped",
+    "",
+    ""
+   ]
+  }
+ },
+ "特定色域変換": {
+  "file": "Color Range Shift (Sashimono).fs",
+  "params": {
+   "色相範囲": [
+    "hue_range",
+    "",
+    ""
+   ],
+   "彩度範囲": [
+    "saturation_range",
+    "byte_percent",
+    ""
+   ],
+   "境界補正": [
+    "feather",
+    "",
+    ""
+   ]
+  }
+ },
+ "領域拡張": {
+  "file": "Expand Area (Sashimono).fs",
+  "params": {
+   "上": [
+    "top",
+    "",
+    ""
+   ],
+   "下": [
+    "bottom",
+    "",
+    ""
+   ],
+   "左": [
+    "left",
+    "",
+    ""
+   ],
+   "右": [
+    "right",
+    "",
+    ""
+   ],
+   "塗りつぶし": [
+    "fill",
+    "",
+    ""
+   ]
+  }
+ },
+ "ミラー": {
+  "file": "Mirror (Sashimono).fs",
+  "params": {
+   "透明度": [
+    "opacity",
+    "",
+    ""
+   ],
+   "減衰": [
+    "falloff",
+    "",
+    ""
+   ],
+   "境目調整": [
+    "gap",
+    "",
+    ""
+   ]
+  }
+ },
+ "ディスプレイスメントマップ": {
+  "file": "Displacement Map (Sashimono).fs",
+  "params": {
+   "サイズ": [
+    "size",
+    "",
+    ""
+   ],
+   "ぼかし": [
+    "blur",
+    "",
+    ""
+   ],
+   "変形X": [
+    "move_x",
+    "",
+    ""
+   ],
+   "変形Y": [
+    "move_y",
+    "flip",
+    ""
+   ]
+  }
+ },
+ "ランダム配置": {
+  "file": "Scatter (Sashimono).fs",
+  "params": {
+   "数": [
+    "count",
+    "",
+    ""
+   ],
+   "範囲": [
+    "span",
+    "",
+    ""
+   ],
+   "回転": [
+    "angle",
+    "",
+    ""
+   ],
+   "拡散": [
+    "spread",
+    "",
+    ""
+   ],
+   "ランダム角度": [
+    "random_angle",
+    "",
+    ""
+   ]
+  }
+ },
+ "モザイク": {
+  "file": "Mosaic (Sashimono).fs",
+  "params": {
+   "サイズ": [
+    "size",
+    "",
+    ""
+   ]
+  }
+ },
+ "マスク": {
+  "file": "Mask (Sashimono).fs",
+  "params": {}
+ },
+ "クリッピング": {
+  "file": "Crop (Sashimono).fs",
+  "params": {
+   "上": [
+    "top",
+    "",
+    ""
+   ],
+   "下": [
+    "bottom",
+    "",
+    ""
+   ],
+   "左": [
+    "left",
+    "",
+    ""
+   ],
+   "右": [
+    "right",
+    "",
+    ""
+   ]
+  }
+ },
+ "リサイズ": {
+  "file": "Transform (Sashimono).fs",
+  "params": {}
+ },
+ "エッジ抽出": {
+  "file": "Edge Detect (Sashimono).fs",
+  "params": {
+   "強さ": [
+    "strength",
+    "",
+    ""
+   ],
+   "しきい値": [
+    "radius",
+    "",
+    ""
+   ]
+  }
+ },
+ "方向ブラー": {
+  "file": "Directional Blur (Sashimono).fs",
+  "params": {
+   "範囲": [
+    "radius",
+    "",
+    ""
+   ],
+   "角度": [
+    "angle",
+    "",
+    ""
+   ]
+  }
+ },
+ "放射ブラー": {
+  "file": "Radial Blur (Sashimono).fs",
+  "params": {
+   "範囲": [
+    "amount",
+    "",
+    ""
+   ],
+   "X": [
+    "center_x",
+    "",
+    ""
+   ],
+   "Y": [
+    "center_y",
+    "flip",
+    ""
+   ]
+  }
+ },
+ "レンズブラー": {
+  "file": "Lens Blur (Sashimono).fs",
+  "params": {
+   "範囲": [
+    "radius",
+    "",
+    ""
+   ],
+   "サイズ固定": [
+    "fixed_size",
+    "",
+    ""
+   ]
+  }
+ },
+ "色ずれ": {
+  "file": "Color Shift (Sashimono).fs",
+  "params": {
+   "ずれ幅": [
+    "shift",
+    "",
+    ""
+   ],
+   "角度": [
+    "angle",
+    "",
+    ""
+   ],
+   "強さ": [
+    "strength",
+    "",
+    ""
+   ]
+  }
+ },
+ "単色化": {
+  "file": "Fill (Sashimono).fs",
+  "params": {
+   "強さ": [
+    "amount",
+    "",
+    ""
+   ],
+   "輝度を保持する": [
+    "keep_luma",
+    "",
+    ""
+   ]
+  }
+ },
+ "反転": {
+  "file": "Flip (Sashimono).fs",
+  "params": {
+   "上下反転": [
+    "vertical",
+    "",
+    ""
+   ],
+   "左右反転": [
+    "horizontal",
+    "",
+    ""
+   ]
+  }
+ },
+ "カラーキー": {
+  "file": "Color Key (Sashimono).fs",
+  "params": {
+   "色差範囲": [
+    "tolerance",
+    "",
+    ""
+   ],
+   "境界補正": [
+    "feather",
+    "",
+    ""
+   ]
+  }
+ },
+ "ルミナンスキー": {
+  "file": "Luminance Key (Sashimono).fs",
+  "params": {
+   "基準輝度": [
+    "threshold",
+    "",
+    ""
+   ],
+   "輝度範囲": [
+    "smoothness",
+    "",
+    ""
+   ]
+  }
+ },
+ "斜めクリッピング": {
+  "file": "Crop Slant (Sashimono).fs",
+  "params": {
+   "中心X": [
+    "center_x",
+    "",
+    ""
+   ],
+   "中心Y": [
+    "center_y",
+    "flip",
+    ""
+   ],
+   "角度": [
+    "angle",
+    "",
+    ""
+   ],
+   "ぼかし": [
+    "blur",
+    "",
+    ""
+   ],
+   "幅": [
+    "width",
+    "",
+    ""
+   ]
+  }
+ },
+ "波紋": {
+  "file": "Ripple (Sashimono).fs",
+  "params": {
+   "中心X": [
+    "center_x",
+    "",
+    ""
+   ],
+   "中心Y": [
+    "center_y",
+    "flip",
+    ""
+   ],
+   "幅": [
+    "amplitude",
+    "",
+    ""
+   ],
+   "高さ": [
+    "wavelength",
+    "",
+    ""
+   ],
+   "速度": [
+    "period",
+    "",
+    ""
+   ]
+  }
+ },
+ "ラスター": {
+  "file": "Wave (Sashimono).fs",
+  "params": {
+   "横幅": [
+    "wavelength",
+    "",
+    ""
+   ],
+   "高さ": [
+    "amplitude",
+    "",
+    ""
+   ],
+   "周期": [
+    "period",
+    "",
+    ""
+   ]
+  }
+ },
+ "極座標変換": {
+  "file": "Polar (Sashimono).fs",
+  "params": {
+   "中心幅": [
+    "core",
+    "",
+    ""
+   ],
+   "渦巻": [
+    "twist",
+    "",
+    ""
+   ]
+  }
+ },
+ "リール回転": {
+  "file": "Reel Spin (Sashimono).fs",
+  "params": {
+   "回転数": [
+    "rotation",
+    "",
+    ""
+   ]
+  }
+ },
+ "粒子化": {
+  "file": "Particles (Sashimono).fs",
+  "params": {
+   "開始時間": [
+    "preroll",
+    "",
+    ""
+   ],
+   "起点X": [
+    "emitter_x",
+    "",
+    ""
+   ],
+   "起点Y": [
+    "emitter_y",
+    "",
+    ""
+   ],
+   "粒子速度": [
+    "speed",
+    "",
+    ""
+   ],
+   "角度": [
+    "emit_angle",
+    "",
+    ""
+   ],
+   "ゆらぎ": [
+    "turbulence",
+    "",
+    ""
+   ]
+  }
+ },
+ "反復移動": {
+  "file": "Repeat Move (Sashimono).fs",
+  "params": {
+   "距離": [
+    "move_x",
+    "",
+    ""
+   ],
+   "速さ": [
+    "interval",
+    "",
+    ""
+   ]
+  }
+ },
+ "点滅": {
+  "file": "Repeat Opacity (Sashimono).fs",
+  "params": {
+   "速さ": [
+    "interval",
+    "",
+    ""
+   ],
+   "点滅割合": [
+    "opacity",
+    "",
+    ""
+   ]
+  }
+ },
+ "弾む": {
+  "file": "Jump (Sashimono).fs",
+  "params": {
+   "速さ": [
+    "period",
+    "",
+    ""
+   ],
+   "高さ": [
+    "height",
+    "",
+    ""
+   ]
+  }
+ },
+ "画像ループ": {
+  "file": "Tile (Sashimono).fs",
+  "params": {
+   "横回数": [
+    "count_x",
+    "",
+    ""
+   ],
+   "縦回数": [
+    "count_y",
+    "",
+    ""
+   ]
+  }
+ },
+ "振り子": {
+  "file": "Repeat Rotate (Sashimono).fs",
+  "params": {
+   "角度": [
+    "angle_z",
+    "",
+    ""
+   ],
+   "速さ": [
+    "interval",
+    "",
+    ""
+   ]
+  }
+ },
+ "ローテーション": {
+  "file": "Transform (Sashimono).fs",
+  "params": {
+   "90度回転": [
+    "rotation",
+    "quarter",
+    ""
+   ]
+  }
+ },
+ "扇クリッピング": {
+  "file": "Shape Mask (Sashimono).fs",
+  "params": {
+   "中心X": [
+    "center_x",
+    "",
+    ""
+   ],
+   "中心Y": [
+    "center_y",
+    "flip",
+    ""
+   ],
+   "基準角": [
+    "rotation",
+    "",
+    ""
+   ],
+   "範囲角": [
+    "span",
+    "",
+    ""
+   ],
+   "ぼかし": [
+    "blur",
+    "",
+    ""
+   ]
+  }
+ },
+ "座標": {
+  "file": "Transform (Sashimono).fs",
+  "params": {
+   "X": [
+    "pos_x",
+    "",
+    ""
+   ],
+   "Y": [
+    "pos_y",
+    "flip",
+    ""
+   ]
+  }
+ },
+ "拡大率": {
+  "file": "Transform (Sashimono).fs",
+  "params": {}
+ },
+ "透明度": {
+  "file": "Opacity (Sashimono).fs",
+  "params": {
+   "透明度": [
+    "amount",
+    "rest",
+    ""
+   ]
+  }
+ },
+ "回転": {
+  "file": "Transform (Sashimono).fs",
+  "params": {
+   "Z": [
+    "rotation",
+    "",
+    ""
+   ],
+   "X": [
+    "rotation_x",
+    "",
+    ""
+   ],
+   "Y": [
+    "rotation_y",
+    "",
+    ""
+   ]
+  }
+ },
+ "万華鏡": {
+  "file": "Kaleidoscope (Sashimono).fs",
+  "params": {
+   "中心X": [
+    "center_x",
+    "",
+    ""
+   ],
+   "中心Y": [
+    "center_y",
+    "flip",
+    ""
+   ],
+   "長さ": [
+    "span",
+    "",
+    ""
+   ],
+   "回転": [
+    "angle",
+    "",
+    ""
+   ],
+   "角数(偶数)": [
+    "corners",
+    "",
+    ""
+   ],
+   "繰り返し回数": [
+    "repeats",
+    "",
+    ""
+   ],
+   "固定サイズ": [
+    "fixed_size",
+    "",
+    ""
+   ],
+   "円形マスク": [
+    "circle_mask",
+    "",
+    ""
+   ],
+   "回転同期": [
+    "spin_pattern",
+    "",
+    ""
+   ],
+   "領域外を透過": [
+    "clip_outside",
+    "",
+    ""
+   ]
+  }
+ },
+ "座標の拡大縮小(個別オブジェクト)": {
+  "file": "Split Pieces (Sashimono).fs",
+  "params": {
+   "拡大率": [
+    "scale",
+    "",
+    ""
+   ],
+   "中心X": [
+    "center_x",
+    "",
+    ""
+   ],
+   "中心Y": [
+    "center_y",
+    "flip",
+    ""
+   ]
+  }
+ },
+ "座標の回転(個別オブジェクト)": {
+  "file": "Split Pieces (Sashimono).fs",
+  "params": {
+   "角度": [
+    "angle",
+    "",
+    ""
+   ],
+   "中心X": [
+    "center_x",
+    "",
+    ""
+   ],
+   "中心Y": [
+    "center_y",
+    "flip",
+    ""
+   ]
+  }
+ }
+}

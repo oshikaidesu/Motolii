@@ -141,5 +141,18 @@ for d in definition.registry.all():
     with open(os.path.join(out, f'{title(d.kind)} (Sashimono).fs'), 'w') as f:   # (its name on the shelf the file's: Sashimono's beside ISF's own of a name, Emboss, Mosaic)
         f.write('/*' + json.dumps(head, ensure_ascii=False, indent=1) + '*/\n' + words + one_picture(kept + body))
     made.append(d.kind)
+if not wanted:   # (and AviUtl's built-in effects as Sashimono takes them, for AviUtl2's scripts' obj.effect (aviutl_fx.h): its
+    #  compat/aviutl/mapping.py's own tables, an effect's name to its kind, each param's name to its own (and how its
+    #  number is said again: turned over, the rest of 100, quarter turns, a byte a share), for those made here)
+    from sashimono.compat.aviutl import mapping
+    table = {}
+    for name, kind in mapping._FILTERS.items():
+        if kind not in made:
+            continue
+        params = {k: [p.name, (p.convert.__name__.lstrip('_') if p.convert else ''), p.also or ''] for k, p in mapping._PARAMS.get(name, {}).items()}
+        table[name] = {'file': f'{title(kind)} (Sashimono).fs', 'params': params}
+    with open(os.path.join(out, 'sashimono_aviutl.json'), 'w') as f:
+        json.dump(table, f, ensure_ascii=False, indent=1)
+    print(len(table), 'of AviUtl\'s effects:', ' '.join(table))
 print(len(made), 'made:', ' '.join(made))
 print(len(refused), 'refused:', ' '.join(refused))

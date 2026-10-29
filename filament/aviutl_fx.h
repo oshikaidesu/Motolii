@@ -9,6 +9,7 @@
 #include <lua.hpp>
 #include <array>
 #include <random>
+#include "third_party/filament_src/third_party/libassimp/contrib/rapidjson/include/rapidjson/document.h"
 
 struct AviutlBuf { Texture* t = nullptr; RenderTarget* rt = nullptr; uint32_t w = 0, h = 0; };
 struct AviutlRun {
@@ -33,6 +34,8 @@ struct AviutlRun {
     bool behind = false;                            // (it reads the frame: the stage behind the thing, as AviUtl2's framebuffer holds what is drawn before it)
     double box[4] = {0, 0, 0, 0};                   // (where the thing is seen, points of the stage: its frame is that of the stage's)
     int ground = -1;                                // (the stage's colour behind everything, 0xRRGGBB; -1 none)
+    std::map<std::string, ScreenFx*> isf;           // (Sashimono's remakes of AviUtl's built-in effects it ran, by their files: aviutl_sashimono)
+    ScreenStack isfStack;
 };
 
 // The placing shader: a picture (`size` pixels) put with its pixel `from` at `at` of the target, turned and sized by
@@ -363,6 +366,69 @@ static int aviutl_drawpoly(lua_State* L) {
     if (own) r.drew = true;
     return 0;
 }
+// AviUtl's built-in effects as Sashimono Edit remakes them (MIT): their ISF files and how their params are said
+// (effects/sashimono_aviutl.json, written by from_sashimono.py from Sashimono's own compat/aviutl/mapping.py), read once.
+static std::vector<std::filesystem::path> doc_folders(const char* folder);   // (doc_edit.h)
+struct AviutlRemade { std::string file; std::map<std::string, std::array<std::string, 3>> params; };   // (each param: its name there, how its number is said again, a second name it also goes to)
+static const std::map<std::string, AviutlRemade>& aviutl_remakes() {
+    static const std::map<std::string, AviutlRemade> all = [] {
+        std::map<std::string, AviutlRemade> read;
+        const std::filesystem::path dir = doc_folders("effects").front();
+        std::ifstream in(dir / "sashimono_aviutl.json");
+        std::stringstream text;
+        text << in.rdbuf();
+        rapidjson::Document d;
+        if (d.Parse(text.str().c_str()).HasParseError() || !d.IsObject()) return read;
+        for (const auto& e : d.GetObject()) {
+            AviutlRemade& one = read[e.name.GetString()];
+            one.file = (dir / e.value["file"].GetString()).string();
+            for (const auto& p : e.value["params"].GetObject()) one.params[p.name.GetString()] = {p.value[0].GetString(), p.value[1].GetString(), p.value[2].GetString()};
+        }
+        return read;
+    }();
+    return all;
+}
+// One of them on the object, as a thing's ISF effect is drawn (screen.h screen_draw): its knobs the params said (each
+// said again as Sashimono says it; a check its _on, a colour its parts), the rest as its file says; the object made
+// straight for it and premultiplied again after, as the thing's picture is given to its effects. -1: none of them.
+static int aviutl_sashimono(lua_State* L, AviutlRun& r, const std::string& n, const std::map<std::string, double>& said) {
+    const auto found = aviutl_remakes().find(n);
+    if (found == aviutl_remakes().end()) return -1;
+    ScreenFx*& fx = r.isf[found->second.file];
+    if (!fx) {
+        fx = new ScreenFx;
+        fx->file = found->second.file;
+        std::string code;
+        if (screen_read(*fx, code)) fx->door = door::screen(r.s->engine, fx->file.c_str(), code.c_str(), fx->bytes, &fx->trouble, fx->pictures, fx->layered);
+    }
+    if (!fx->door) return aviutl_no(L, "obj.effect " + n + ": " + fx->trouble.substr(0, 300));
+    std::map<std::string, double> v;
+    for (const auto& [k, x] : said)
+        if (const auto p = found->second.params.find(k); p != found->second.params.end()) {
+            const std::string& how = p->second[1];
+            const double y = how == "flip" ? -x : how == "rest" ? 100 - x : how == "quarter" ? x * 90 : how == "byte_percent" ? x * 100 / 255 : x;
+            v[p->second[0]] = y;
+            if (!p->second[2].empty()) v[p->second[2]] = y;
+        }
+    const ScreenNumbers numbers = [&](const std::string&, const std::string& knob, double usual) {
+        if (const auto it = v.find(knob); it != v.end()) return it->second;
+        const std::string base = knob.size() > 2 ? knob.substr(0, knob.size() - 2) : std::string();
+        if (knob.size() > 3 && knob.compare(knob.size() - 3, 3, "_on") == 0 && v.count(knob.substr(0, knob.size() - 3))) return v[knob.substr(0, knob.size() - 3)] != 0 ? 1.0 : 0.0;
+        if (const auto it = v.find(base); it != v.end() && knob[knob.size() - 2] == '_') {   // (a colour, AviUtl's 0xRRGGBB)
+            const int c = (int)it->second;
+            const char part = knob.back();
+            return part == 'x' ? ((c >> 16) & 255) / 255.0 : part == 'y' ? ((c >> 8) & 255) / 255.0 : part == 'z' ? (c & 255) / 255.0 : 1.0;
+        }
+        return usual;
+    };
+    const AviutlBuf object = r.bufs["object"];
+    const AviutlBuf& in = aviutl_buf(r, "~sashimono_in", object.w, object.h);
+    aviutl_lay(r, object, in.rt, object.w, object.h, 0, 0, 1, 1, 0, 1, 0, 0, -1, 1, 0, 2);   // (straight, as a thing's effects are given its picture)
+    const AviutlBuf& out = aviutl_buf(r, "~sashimono_out", object.w, object.h);
+    screen_draw(*r.s, r.isfStack, *fx, in.t, out.rt, numbers, object.w, object.h);
+    aviutl_lay(r, out, r.bufs["object"].rt, object.w, object.h, 0, 0, 1, 1, 0, 1, 0, 0, -1, 1, 0, 1);   // (premultiplied again, as AviUtl2's pictures are)
+    return 0;
+}
 static int aviutl_effect(lua_State* L) {   // (a built-in effect by its name: these, as sashimono-edit makes them)
     AviutlRun& r = aviutl_of(L);
     const std::string n = aviutl_str(L, 1);
@@ -428,6 +494,7 @@ static int aviutl_effect(lua_State* L) {   // (a built-in effect by its name: th
         }
         return 0;
     }
+    if (const auto made = aviutl_sashimono(L, r, n, said); made >= 0) return made;   // (one Sashimono Edit remakes)
     if (n == "オフスクリーン描画") return 0;   // (sashimono-edit objapi.py _offscreen: the effects laid up so far made into the picture; here each is made at once, so none wait)
     if (n.empty()) return 0;   // (no name: lua.txt says the filters after the script, which run after it here anyway; YMM4-LuaScript native/worker.lua and sashimono-edit objapi.py lua_effect return the same)
     return aviutl_no(L, "obj.effect " + n);
