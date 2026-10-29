@@ -381,7 +381,7 @@ void main() {
   testWidgets('round 2 of the judges: a thing put aside is in the document; every way has a seat; a new text has a word; acts within acts', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final text = m.add('', _font);
-    expect([m.word(text, 'kind'), m.word(text, 'text'), m.value(text, 'size', 0)], ['text', 'Text', .5], reason: 'a font placed is a text with a word, at a size that fits');
+    expect([m.word(text, 'kind'), m.word(text, 'text'), m.value(text, 'size', 0), m.word(text, 'fill')], ['text', 'Text', .5, '7f7f7f'], reason: 'a font placed is a text with a word, at a size that fits, in AbsentMotion\'s grey (TextActions.kt)');
     expect(m.set(text, 'visible', 0), isTrue, reason: m.trouble);
     expect(m.value(text, 'visible', 0), 0);
     expect(m.undo() && m.value(text, 'visible', 0) == 1, isTrue);
