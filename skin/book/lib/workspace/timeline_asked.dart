@@ -59,9 +59,11 @@ mixin _TimelineAsked on State<WsTimeline> {
     ws.playing = true;
   }
 
-  /// A click on the ruler: on a locator, it is picked and the playhead goes there (6.4); elsewhere the playhead goes
-  /// there, as a video editor's time ruler puts its current-time indicator (Premiere Pro, After Effects): played on from
-  /// there if it was playing, else left standing; the work area's band is the work area's.
+  /// A click on the ruler: on a locator, it is picked; the playhead goes where it is clicked, and play stops, as any
+  /// touch of Alight Motion's timeline stops it (AbsentMotion's Timeline.kt: a scrub, a key or an end grabbed, the
+  /// wheel, each sets playing false). Its playhead stands in the middle and the time is drawn under it; a PC's moves
+  /// instead, so it goes where the click is, as Audacity's ruler puts it without playing (its manual: "Click ruler to
+  /// start playback" is a setting, off as it comes). The work area's band is the work area's.
   void _rulerTap(Offset p) {
     final t = _t, ws = t._ws;
     if (ws == null) return;
@@ -74,8 +76,9 @@ mixin _TimelineAsked on State<WsTimeline> {
       if (p.dy <= WtM.band + 2) return;
       f = t._view.frameAt(p.dx).round().clamp(0, Ws.duration);
     }
-    if (ws.playing) return _playAt(f);
-    ws.frame = f;
+    ws
+      ..playing = false
+      ..frame = f;
   }
 
   /// A double click: on a locator, play from it (6.4); elsewhere, zoom to what is picked, else to the whole (6.1).

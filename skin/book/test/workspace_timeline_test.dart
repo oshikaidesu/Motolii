@@ -95,13 +95,18 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
-  testWidgets('a click on the ruler puts the playhead there without playing, and a drag scrubs the moment', (t) async {
+  testWidgets('a click on the ruler puts the playhead there and stops play, and a drag scrubs the moment', (t) async {
     final j = _joined();
     await _pump(t, j.ws);
     final y = WtM.header + WtM.ruler - 6;
     await t.tapAt(Offset(_at(j.ws, j.rect, 50).dx, y));
     await t.pump(const Duration(milliseconds: 400));   // (a click is known once no second click came)
-    expect([j.ws.frame, j.ws.playing], [50, false], reason: 'the playhead goes there and stands, as a video editor\'s time ruler puts its current-time indicator (Premiere Pro, After Effects)');
+    expect([j.ws.frame, j.ws.playing], [50, false], reason: 'the playhead goes there and stands (Audacity\'s ruler as it comes)');
+    j.ws.playing = true;
+    await t.pump();
+    await t.tapAt(Offset(_at(j.ws, j.rect, 30).dx, y));
+    await t.pump(const Duration(milliseconds: 400));
+    expect([j.ws.frame, j.ws.playing], [30, false], reason: 'playing, a click puts it there and stops play, as any touch of Alight Motion\'s timeline does (AbsentMotion\'s Timeline.kt)');
     await t.pump(const Duration(seconds: 1));
     final g = await t.startGesture(Offset(_at(j.ws, j.rect, 20).dx, y));
     for (final f in const [30, 55, 80]) {   // (a hand moves in steps: the first past the slop starts the drag, the rest carry it)
