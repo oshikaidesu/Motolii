@@ -34,6 +34,8 @@ struct AviutlRun {
     bool behind = false;                            // (it reads the frame: the stage behind the thing, as AviUtl2's framebuffer holds what is drawn before it)
     double box[4] = {0, 0, 0, 0};                   // (where the thing is seen, points of the stage: its frame is that of the stage's)
     int ground = -1;                                // (the stage's colour behind everything, 0xRRGGBB; -1 none)
+    bool wide = false;                              // (it draws the object (obj.draw, drawpoly): its frame the stage's, the object the thing's own picture where it is seen)
+    double seen[4] = {0, 0, 0, 0};                  // (then where the thing is seen, points of the stage)
     std::map<std::string, ScreenFx*> isf;           // (Sashimono's remakes of AviUtl's built-in effects it ran, by their files: aviutl_sashimono)
     ScreenStack isfStack;
     struct { std::string name; double size = 48, deco = 0, colour = 0xffffff, edge = 0; bool bold = false, italic = false; } font;   // (obj.setfont's, for obj.load "text": aviutl_load.h)
@@ -359,9 +361,9 @@ static int aviutl_draw(lua_State* L) {   // (ox, oy, oz, zoom, alpha, rx, ry, rz
     const double z = aviutl_num(L, 3) + (own ? f("oz", 0) : 0), rx = aviutl_num(L, 6) + (own ? f("rx", 0) : 0), ry = aviutl_num(L, 7) + (own ? f("ry", 0) : 0);
     if (z != 0 || rx != 0 || ry != 0) {
         if (!r.poly) return aviutl_no(L, "obj.draw in depth: " + r.trouble);
-        aviutl_placed(r, r.bufs["object"], to, aviutl_num(L, 1) + (own ? f("ox", 0) : 0), aviutl_num(L, 2) + (own ? f("oy", 0) : 0), z, zoom * (aspect > 0 ? 1 - aspect : 1), zoom * (aspect < 0 ? 1 + aspect : 1), rx, ry,
+        aviutl_placed(r, r.bufs["object"], to, aviutl_num(L, 1) + (own ? f("x", 0) + f("ox", 0) : 0), aviutl_num(L, 2) + (own ? f("y", 0) + f("oy", 0) : 0), z, zoom * (aspect > 0 ? 1 - aspect : 1), zoom * (aspect < 0 ? 1 + aspect : 1), rx, ry,
             aviutl_num(L, 8) + (own ? f("rz", 0) : 0), own ? f("cx", 0) : 0, own ? f("cy", 0) : 0, aviutl_num(L, 5, 1) * (own ? f("alpha", 1) : 1), way, aviutl_sampling(r));
-    } else aviutl_lay(r, r.bufs["object"], to.rt, to.w, to.h, aviutl_num(L, 1) + (own ? f("ox", 0) : 0), aviutl_num(L, 2) + (own ? f("oy", 0) : 0), zoom * (aspect > 0 ? 1 - aspect : 1), zoom * (aspect < 0 ? 1 + aspect : 1),
+    } else aviutl_lay(r, r.bufs["object"], to.rt, to.w, to.h, aviutl_num(L, 1) + (own ? f("x", 0) + f("ox", 0) : 0), aviutl_num(L, 2) + (own ? f("y", 0) + f("oy", 0) : 0), zoom * (aspect > 0 ? 1 - aspect : 1), zoom * (aspect < 0 ? 1 + aspect : 1),
         aviutl_num(L, 8) + (own ? f("rz", 0) : 0), aviutl_num(L, 5, 1) * (own ? f("alpha", 1) : 1), own ? f("cx", 0) : 0, own ? f("cy", 0) : 0, way, aviutl_sampling(r), r.sampler == "clamp" || r.sampler == "loop" || r.sampler == "mirror" ? 2.f : 0.f);
     lua_pop(L, 1);
     if (own) r.drew = true;
@@ -425,7 +427,7 @@ static int aviutl_drawpoly(lua_State* L) {
     const bool own = r.target == "framebuffer";
     lua_getglobal(L, "obj");
     const auto f = [&](const char* k, double otherwise) { lua_getfield(L, -1, k); const double v = aviutl_num(L, -1, otherwise); lua_pop(L, 1); return v; };
-    const double ox = own ? f("ox", 0) : 0, oy = own ? f("oy", 0) : 0, oz = own ? f("oz", 0) : 0, fade = alpha * (own ? f("alpha", 1) : 1);
+    const double ox = own ? f("x", 0) + f("ox", 0) : 0, oy = own ? f("y", 0) + f("oy", 0) : 0, oz = own ? f("oz", 0) : 0, fade = alpha * (own ? f("alpha", 1) : 1);
     lua_pop(L, 1);
     aviutl_mesh(r, from, to, faces, ox, oy, oz, fade, way, aviutl_sampling(r));
     if (own) r.drew = true;
@@ -645,6 +647,7 @@ static std::shared_ptr<AviutlRun> aviutl_made(Stage& s, const std::string& file)
     if (!aviutl_text(file, r->own, r->all, r->trouble)) return std::fprintf(stderr, "the AviUtl2 script %s is not taken: %s\n", file.c_str(), r->trouble.c_str()), r;
     r->vars = aviutl_vars(r->own);
     r->behind = std::regex_search(r->all, std::regex(R"re(copybuffer\s*\([^)]*"(framebuffer|frm)"|getoption\s*\(\s*"drawtarget"\s*\))re"));   // (it reads the frame: its picture there is the stage's behind it)
+    r->wide = std::regex_search(r->all, std::regex(R"(obj\.draw(poly)?\s*\()"));   // (it draws the object itself: where it will on the screen)
     for (const ScriptKnob& k : aviutl_knobs(file)) r->usual[k.name] = k.usual;
     lua_State* L = r->L = luaL_newstate();
     luaL_openlibs(L);
@@ -696,8 +699,15 @@ static void aviutl_draw_step(Stage& s, AviutlRun& r, Texture* from, RenderTarget
     r.worded.clear();
     if (!r.place) return screen_place(s, from, to, w, h, nullptr);   // (none made: the picture as it came)
     AviutlBuf in{from, nullptr, w, h};
-    const AviutlBuf& object = aviutl_buf(r, "object", w, h);
-    aviutl_lay(r, in, object.rt, w, h, 0, 0, 1, 1, 0, 1, 0, 0, -1, 1, 0, 1);   // (premultiplied, as AviUtl2's pictures are)
+    // (one that draws: the object the thing's own picture, as large as it is seen, at obj.x, obj.y from the frame's
+    //  middle, the frame the stage's: AviUtl2's object, its coordinates from the screen's middle, lua.txt's obj.x)
+    const bool tight = r.wide && r.seen[2] > r.seen[0] && r.seen[3] > r.seen[1] && r.box[2] > r.box[0] && r.box[3] > r.box[1];
+    const double kx = tight ? w / (r.box[2] - r.box[0]) : 1, ky = tight ? h / (r.box[3] - r.box[1]) : 1;   // (its edges on whole pixels of the frame: cut out and laid back, not blurred)
+    const long left = tight ? std::lround((r.seen[0] - r.box[0]) * kx) : 0, top = tight ? std::lround((r.seen[1] - r.box[1]) * ky) : 0;
+    const uint32_t ow = tight ? (uint32_t)std::max(1L, std::lround((r.seen[2] - r.box[0]) * kx) - left) : w, oh = tight ? (uint32_t)std::max(1L, std::lround((r.seen[3] - r.box[1]) * ky) - top) : h;
+    const double atX = left + ow / 2.0 - w / 2.0, atY = top + oh / 2.0 - h / 2.0;
+    const AviutlBuf& object = aviutl_buf(r, "object", ow, oh);
+    aviutl_lay(r, in, object.rt, ow, oh, -atX, -atY, 1, 1, 0, 1, 0, 0, -1, 1, 0, 1);   // (premultiplied, as AviUtl2's pictures are)
     const AviutlBuf& frame = aviutl_buf(r, "framebuffer", w, h);
     const bool behind = r.behind && s.behind && r.box[2] > r.box[0] && r.box[3] > r.box[1];
     aviutl_clear(r, frame, behind ? std::max(r.ground, 0) : 0, behind && r.ground >= 0);
@@ -728,7 +738,7 @@ static void aviutl_draw_step(Stage& s, AviutlRun& r, Texture* from, RenderTarget
         lua_getglobal(L, "obj");
         const double frame = std::round(s.now * 60);
         const std::pair<const char*, double> values[] = {{"ox", 0}, {"oy", 0}, {"oz", 0}, {"rx", 0}, {"ry", 0}, {"rz", 0}, {"cx", 0}, {"cy", 0}, {"cz", 0}, {"sx", 1}, {"sy", 1}, {"sz", 1}, {"zoom", 1}, {"aspect", 0}, {"alpha", 1},
-            {"x", 0}, {"y", 0}, {"z", 0}, {"w", (double)w}, {"h", (double)h}, {"screen_w", (double)s.w}, {"screen_h", (double)s.h}, {"framerate", 60}, {"frame", frame}, {"time", s.now}, {"totalframe", frame + 1}, {"totaltime", s.now},
+            {"x", atX}, {"y", atY}, {"z", 0}, {"w", (double)ow}, {"h", (double)oh}, {"screen_w", (double)s.w}, {"screen_h", (double)s.h}, {"framerate", 60}, {"frame", frame}, {"time", s.now}, {"totalframe", frame + 1}, {"totaltime", s.now},
             {"layer", 1}, {"index", 0}, {"num", 1}, {"id", 1}, {"effect_id", 1}, {"frame_s", 0}, {"frame_e", frame}, {"effect_layer", 1}, {"originframe", 0}, {"scene_id", 0}};
         for (const auto& [n, v] : values) lua_pushnumber(L, v), lua_setfield(L, -2, n);
         lua_pop(L, 1);
@@ -745,8 +755,8 @@ static void aviutl_draw_step(Stage& s, AviutlRun& r, Texture* from, RenderTarget
     const auto f = [&](const char* k, double otherwise) { lua_getfield(L, -1, k); const double v = aviutl_num(L, -1, otherwise); lua_pop(L, 1); return v; };
     const double zoom = f("zoom", 1), aspect = f("aspect", 0);
     if (!r.drew && r.poly && (f("rx", 0) != 0 || f("ry", 0) != 0 || f("oz", 0) != 0))   // (in depth: aviutl_placed)
-        aviutl_placed(r, r.bufs["object"], out, f("ox", 0), f("oy", 0), f("oz", 0), zoom * f("sx", 1) * (aspect > 0 ? 1 - aspect : 1), zoom * f("sy", 1) * (aspect < 0 ? 1 + aspect : 1), f("rx", 0), f("ry", 0), f("rz", 0), f("cx", 0), f("cy", 0), f("alpha", 1), 0, 0);
-    else if (!r.drew) aviutl_lay(r, r.bufs["object"], out.rt, w, h, f("ox", 0), f("oy", 0), zoom * f("sx", 1) * (aspect > 0 ? 1 - aspect : 1), zoom * f("sy", 1) * (aspect < 0 ? 1 + aspect : 1), f("rz", 0), f("alpha", 1), f("cx", 0), f("cy", 0), 0, 0);
+        aviutl_placed(r, r.bufs["object"], out, f("x", 0) + f("ox", 0), f("y", 0) + f("oy", 0), f("oz", 0), zoom * f("sx", 1) * (aspect > 0 ? 1 - aspect : 1), zoom * f("sy", 1) * (aspect < 0 ? 1 + aspect : 1), f("rx", 0), f("ry", 0), f("rz", 0), f("cx", 0), f("cy", 0), f("alpha", 1), 0, 0);
+    else if (!r.drew) aviutl_lay(r, r.bufs["object"], out.rt, w, h, f("x", 0) + f("ox", 0), f("y", 0) + f("oy", 0), zoom * f("sx", 1) * (aspect > 0 ? 1 - aspect : 1), zoom * f("sy", 1) * (aspect < 0 ? 1 + aspect : 1), f("rz", 0), f("alpha", 1), f("cx", 0), f("cy", 0), 0, 0);
     lua_pop(L, 1);
     aviutl_lay(r, out, to, w, h, 0, 0, 1, 1, 0, 1, 0, 0, -1, 1, 0, 2);
 }
