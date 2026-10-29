@@ -11,7 +11,8 @@
 # Sashimono draws in linear light; Motolii gives an effect sRGB (screen.h screen_tone): its colours are read as given.
 # usage (Python 3.12 or later, numpy and packaging: what Sashimono's effects import):
 #   uv run --no-project --python 3.13 --with numpy --with packaging python -I from_sashimono.py <Sashimono's src> <out dir> [kind ...]
-# (an effect of pieces, of a picture file, a gradient, a grid, or a sound: refused)
+# (a picture file a param: none given, its size 0, as Sashimono's own when it cannot be read: drawn without it)
+# (an effect of pieces, of a gradient, a grid, or a sound: refused)
 import json, os, re, sys
 
 src, out, wanted = sys.argv[1], sys.argv[2], sys.argv[3:]
@@ -103,7 +104,7 @@ def one_picture(code):
     return code
 
 
-def inputs(d):
+def inputs(d, files):
     said = [{'NAME': 'inputImage', 'TYPE': 'image'}]
     for p in d.parameters:
         if isinstance(p, spec.TrackSpec):
@@ -115,6 +116,8 @@ def inputs(d):
         elif isinstance(p, spec.SelectSpec):
             values = [v for v, _ in p.choices]
             said.append({'NAME': p.name, 'LABEL': p.label, 'TYPE': 'long', 'VALUES': list(range(len(values))), 'LABELS': [l for _, l in p.choices], 'DEFAULT': values.index(p.default) if p.default in values else 0})
+        elif isinstance(p, spec.FileSpec) and getattr(p, 'texture', False) and d.parameters.index(p) > 0:   # (a picture file, a border's pattern: none given, its size 0, as Sashimono's own when it cannot be read, so it draws without one; one first is what the effect is, Image Blend's: not made)
+            files.append(p.name)
         elif isinstance(p, spec.ValueSpec):   # (a whole number with no slider, a seed or a count: an int, as its shader takes it)
             said.append({'NAME': p.name, 'LABEL': p.label, 'TYPE': 'long', 'DEFAULT': p.default, 'MIN': p.minimum, 'MAX': p.maximum})
         else:
@@ -145,7 +148,8 @@ made, refused = [], []
 for d in definition.registry.all():
     if wanted and d.kind not in wanted:
         continue
-    said = inputs(d)
+    files = []
+    said = inputs(d, files)
     if said is None or d.audio_process or d.pieces or d.scopes_following or not d.fragment_shader:
         refused.append(d.kind)
         continue
@@ -154,6 +158,7 @@ for d in definition.registry.all():
     body = re.sub(r'^[ \t]*uniform[ \t]+\w+[ \t]+\w+[ \t]*;.*$', '', body, flags=re.M)   # (its params: ISF's inputs, declared by the door)
     with open(os.path.join(out, f'{title(d.kind)} (Sashimono).fs'), 'w') as f:   # (its name on the shelf the file's: Sashimono's beside ISF's own of a name, Emboss, Mosaic)
         helpers, passes = passes_of(d.passes)
+        helpers = ''.join(f'#define {n}_size vec2(0.0)\n#define {n} u_texture\n' for n in files) + helpers
         head.update(passes)
         code = one_picture(kept + body)
         if passes:

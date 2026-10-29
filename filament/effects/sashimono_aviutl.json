@@ -124,6 +124,31 @@
    ]
   }
  },
+ "縁取り": {
+  "file": "Border (Sashimono).fs",
+  "params": {
+   "サイズ": [
+    "width",
+    "",
+    ""
+   ],
+   "パターン画像": [
+    "pattern",
+    "",
+    ""
+   ]
+  }
+ },
+ "枠線": {
+  "file": "Border (Sashimono).fs",
+  "params": {
+   "サイズ": [
+    "width",
+    "",
+    ""
+   ]
+  }
+ },
  "影": {
   "file": "Shadow (Sashimono).fs",
   "params": {
@@ -224,6 +249,21 @@
    ],
    "サイズ固定": [
     "fixed_size",
+    "",
+    ""
+   ]
+  }
+ },
+ "グラデーションマップ": {
+  "file": "Gradient Map (Sashimono).fs",
+  "params": {
+   "強さ": [
+    "strength",
+    "",
+    ""
+   ],
+   "パターン画像": [
+    "pattern",
     "",
     ""
    ]
