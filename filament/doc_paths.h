@@ -116,6 +116,38 @@ static int doc_freehand(Doc& d, const char* points) {
     if (!thing) d.act_ok = false;
     return doc_acted(d) ? thing : 0;
 }
+// A brush's stroke as the window drew it (perfect-freehand's points, each with the pressure its radius comes from): a
+// path shape whose stroke is kept as drawn (`drawing`: brush, how wide, each point and its pressure, in the plane's own
+// units) and whose outline AbsentMotion makes of it (absent_drawing: Alight Motion's brush, a band of round pieces, its
+// drawing effects on it as time goes: doc_moment). size: how wide, in points of the picture; then x y pressure each.
+static int doc_brush(Doc& d, const char* said) {
+    std::istringstream in(said);
+    double size = 0.0;
+    in >> size;
+    std::vector<double> xyp;
+    for (double v; in >> v;) xyp.push_back(v);
+    if (!(size > 0.0) || xyp.size() < 6) return d.trouble = "a stroke of fewer than two points", 0;
+    doc_act(d);
+    int thing = doc_add(d, "shape", "path");
+    const DocPlane plane(d, thing, d.stage->now);
+    if (thing && !plane.seen) d.trouble = "its plane is seen edge on", thing = 0;
+    if (thing) {
+        const double wide = length(plane.own(xyp[0] + size, xyp[1]) - plane.own(xyp[0], xyp[1]));
+        std::vector<float> own;
+        std::string kept;
+        char one[96];
+        std::snprintf(one, sizeof one, "1 %.5f", wide), kept = one;
+        for (size_t i = 0; i + 2 < xyp.size(); i += 3) {
+            const math::double2 p = plane.own(xyp[i], xyp[i + 1]);
+            own.insert(own.end(), {(float)p.x, (float)p.y, (float)xyp[i + 2]});
+            std::snprintf(one, sizeof one, " %.5f %.5f %.3f", p.x, p.y, xyp[i + 2]), kept += one;
+        }
+        const std::string outline = absent_drawing(own, (float)wide, 1, {}, thing, 0.0, 1000.0, 0.0, true);
+        if (outline.empty() || !doc_say(d, thing, "drawing", kept.c_str()) || !doc_say(d, thing, "path", outline.c_str())) thing = 0;
+    }
+    if (!thing) d.act_ok = false;
+    return doc_acted(d) ? thing : 0;
+}
 // What of a thing is seen at a moment: the upright box of its outline on the picture (its own points where they are at
 // hand, else its box's corners), left, top, right, bottom in points of the picture. false: it is not shown.
 static bool doc_seen_box(Doc& d, int thing, double now, double* box) {

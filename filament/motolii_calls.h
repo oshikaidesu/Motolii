@@ -499,6 +499,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "fit") ok = changes(m, (int)doc_fit(doc(m), thing, w));   // (word: fit, fill or stretch)
             else if (c == "extract_sound") ok = m->made = changes(m, doc_extract_sound(doc(m), thing));   // (the answer is the copy that is heard)
             else if (c == "freehand") ok = m->made = changes(m, doc_freehand(doc(m), w.c_str()));   // (word: the outline's points of the picture, x y each; the answer is the new shape)
+            else if (c == "brush") ok = m->made = changes(m, doc_brush(doc(m), w.c_str()));   // (word: how wide, then each point of the picture x y and its pressure; the answer is the new shape)
             else if (c == "copy") ok = (int)doc_look_save(doc(m), thing, w.c_str(), true);   // (word: the file it is kept in, whole)
             else if (c == "paste") ok = m->made = changes(m, doc_look_paste(doc(m), w.c_str(), number));   // (word: that file; number: when it begins; the answer is the new thing)
             else if (c == "copy_style") ok = (int)doc_look_save(doc(m), thing, w.c_str(), false, n);   // (its look: doc_looks.h; name: only these values, a card's)

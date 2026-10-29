@@ -282,18 +282,23 @@ class _StageViewState extends State<StageView> implements StageHandles {
     }
   }
 
-  // (the Brush's way so far, in points of the window; its outline perfect-freehand's (MIT, Steve Ruiz; Dart port, Adil
-  //  Hanney) in points of the picture, given to the inside as a path when let go: doc_freehand)
+  // (the Brush's way so far, in points of the window; when let go, its points as perfect-freehand (MIT, Steve Ruiz; Dart
+  //  port, Adil Hanney) evens them and the pressure it simulates from their speed, given to the inside, which keeps the
+  //  stroke and has AbsentMotion make its outline as Alight Motion's brush does (doc_brush): each point's pressure, as
+  //  AbsentMotion's brush reads it, its radius here over half the brush)
   List<Offset>? _brush;
   void _brushLetGo(_View v) {
     final way = _brush, ws = WsScope.read(context), m = ws.inside;
     setState(() => _brush = null);
     if (way == null || way.length < 2 || m == null) return;
-    final outline = getStroke([for (final p in way) PointVector.fromOffset(offset: _doc(v, p))], options: StrokeOptions(size: widget.brushSize, simulatePressure: true, isComplete: true));
-    if (outline.length < 3) return;
+    final options = StrokeOptions(size: widget.brushSize, simulatePressure: true, isComplete: true);
+    final points = getStrokePoints([for (final p in way) PointVector.fromOffset(offset: _doc(v, p))], options: options);
+    if (points.length < 2) return;
+    getStrokeOutlinePoints(points, options: options, rememberSimulatedPressure: true);
     m.later('together', number: 1);
     var made = 0;
-    ws.after(m.later('freehand', word: [for (final p in outline) '${p.dx} ${p.dy}'].join(' ')), null, (t) => made = t);
+    final said = [for (final p in points) '${p.point.x} ${p.point.y} ${2 * getStrokeRadius(options.size, options.thinning, p.pressure, options.easing) / options.size}'];
+    ws.after(m.later('brush', word: '${options.size} ${said.join(' ')}'), null, (t) => made = t);
     m.later('say', thing: -1, name: 'fill', word: ws.ink.isEmpty ? 'ffffff' : ws.ink);   // (an outline with no fill shows nothing: white, as a drawing app's brush begins, when no ink is chosen)
     ws.after(m.later('together'), (done, _) => done && made > 0 ? ws.select('$made') : null);
   }

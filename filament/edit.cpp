@@ -4,6 +4,7 @@
 // A call that is not done says why, and leaves the document as it was.
 #include "motolii.h"
 #include <chrono>
+#include <thread>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -38,6 +39,11 @@ int main(int argc, char** argv) {
         int ok = 1;
         bool known = true;
         if (call == "add" && w.size() >= 3) { if ((ok = motolii_add(m, w[1].c_str(), rest(2).c_str()))) std::printf("thing %d\n", ok); }   // (a file's name may have spaces)
+        else if (call == "brush" && w.size() >= 8) {   // (a brush's stroke as the window gives it: how wide, then x y pressure each, points of the picture)
+            const int ticket = motolii_later(m, "brush", 0, "", rest(1).c_str(), 0);
+            while ((ok = motolii_answer(m, ticket)) < 0) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            if (ok) std::printf("thing %d\n", ok);
+        }
         else if (call == "remove" && w.size() == 2) { const int n = thing(); if (numbers) ok = motolii_remove(m, n); }
         else if (call == "set" && w.size() == 4) {
             const int n = thing(), keys = numbers ? motolii_keys(m, n, w[2].c_str()) : 0;

@@ -11,7 +11,7 @@
 #include <cmath>
 #include <cstring>
 
-static am::Layer absent_layer(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs) {
+am::Layer absent_layer(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs) {
     am::Layer l;
     l.id = l.noiseId = thing;
     l.startTime = (int)startMs, l.endTime = (int)endMs;

@@ -268,6 +268,31 @@ static void doc_moment(Doc& d, double now) {
                 for (long long k = (long long)last - 63; k <= (long long)last; ++k) if ((double)k * step > now - length) put(was((double)k * step, k));
                 put(was(now, -1));
             }
+            if (const std::string drawn = trace.by.empty() ? doc_word(d, thing, "drawing") : std::string(); !drawn.empty() && doc_word(d, thing, "fx").find(".am") != std::string::npos) {
+                // (a freehand stroke with AbsentMotion's drawing effects on it, Stroke Taper, Drawing Progress: its outline as they make it now
+                //  (absent_drawing), its path's own units as its points; made again only when they say otherwise)
+                std::vector<AbsentEffect> on = doc_absent_on(d, thing, now);
+                std::erase_if(on, [](const AbsentEffect& e) { return e.id != "stroketaper" && e.id != "drawingprogress"; });
+                std::string key = std::to_string(std::hash<std::string>{}(drawn));
+                for (const AbsentEffect& e : on) for (const auto& [name, v] : e.params) for (const float one : v) key += " " + std::to_string(one);
+                auto& kept = d.drawingKept[thing];
+                if (!on.empty() && kept.first != key) {
+                    std::istringstream in(drawn);
+                    int tool = 1;
+                    float wide = 0.f;
+                    in >> tool >> wide;
+                    std::vector<float> xyp;
+                    for (float v; in >> v;) xyp.push_back(v);
+                    kept = {key, absent_drawing(xyp, wide, tool, on, thing, 0.0, 1000.0, 0.0, false)};
+                }
+                std::vector<tvg::PathCommand> c;
+                std::vector<tvg::Point> p;
+                if (!on.empty() && sk_svg(kept.second.c_str(), c, p)) {
+                    const Drawn* a = t.drawn;
+                    for (tvg::Point& at : p) at = {0.5f * a->cutW + at.x * a->plainHigh, 0.5f * a->plainHigh + at.y * a->plainHigh};
+                    trace.by = std::move(c), trace.at = std::move(p);
+                }
+            }
             cut_at(s, t.drawn, float3{num("trim", 0), num("trim_begin", 0), num("trim_offset", 0)},   // (its path anew, if it is told otherwise: cut again)
                    {num("round", 0), num("bloat", 0), num("zigzag", 0), num("zigzag_ridges", 5), num("zigzag_smooth", 0), num("offset", 0), num("rough", 0), num("rough_detail", 0.03), std::round(num("resample", 0)), num("voxel", 0)}, join, morph, trace);
             t.drivenLooks = driven;

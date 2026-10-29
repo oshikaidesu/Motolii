@@ -1,0 +1,6 @@
+// Drawing Progress: AbsentMotion's drawingprogress (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), moved by its own motion.cpp (filament/absent_motion.cpp)
+// --label:Stylize
+// --absent:drawingprogress
+// --about:Draws a freehand drawing stroke by stroke, or the outline of a shape, from Start to End. Keyframe End from 0% to 100% to watch it being drawn. Works best on shapes with Fill off and a Stroke.
+// --track@start:Start,0,1,0.0,0.001
+// --track@end:End,0,1,1.0,0.001

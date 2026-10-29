@@ -449,7 +449,7 @@ void _tests2() {
     await _close(t);
   }, skip: !_built);
 
-  testWidgets('the Brush draws a path by hand: perfect-freehand\'s outline round the stroke, a closed path in the ink', (t) async {
+  testWidgets('the Brush draws a path by hand: its stroke kept, its outline AbsentMotion\'s brush round it, a closed path in the ink', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     ws
       ..reread()
@@ -473,7 +473,9 @@ void _tests2() {
     expect(m.things.length, before + 1, reason: m.trouble);
     expect([m.word(made, 'kind'), m.word(made, 'shape')], ['shape', 'path']);
     final path = m.word(made, 'path');
-    expect(path.startsWith('M') && path.contains(' Q') && path.endsWith(' Z'), isTrue, reason: 'one closed outline of curves: ${path.length > 80 ? path.substring(0, 80) : path}');
+    expect(path.startsWith('M') && path.endsWith('Z'), isTrue, reason: 'a closed outline: ${path.length > 80 ? path.substring(0, 80) : path}');
+    final drawing = m.word(made, 'drawing').split(' ');
+    expect(drawing.first == '1' && drawing.length > 8 && (drawing.length - 2) % 3 == 0, isTrue, reason: 'the stroke kept as drawn, a brush: how wide, then each point and its pressure');
     expect(m.word(made, 'fill'), ws.ink.isEmpty ? 'ffffff' : ws.ink, reason: 'drawn in the ink, white with none');
     expect(t.takeException(), isNull);
     await _close(t);

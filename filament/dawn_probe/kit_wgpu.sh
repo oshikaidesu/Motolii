@@ -49,10 +49,11 @@ SKIA=third_party/skia_src
 AM=third_party/AbsentMotion/app/src/main/cpp
 for f in motion scene easing textanim; do [ out/am_$f.o -nt $AM/$f.cpp ] || clang++ -c -std=c++20 -O2 -DNDEBUG -fno-rtti -fvisibility=hidden -I $SKIA -I $AM $AM/$f.cpp -o out/am_$f.o; done
 [ out/absent_motion.o -nt absent_motion.cpp ] && [ out/absent_motion.o -nt absent_motion.h ] || clang++ -c -std=c++20 -O2 -DNDEBUG -fno-rtti -fvisibility=hidden -I $SKIA -I $AM absent_motion.cpp -o out/absent_motion.o
+[ out/absent_drawing.o -nt absent_drawing.cpp ] && [ out/absent_drawing.o -nt $AM/drawing.cpp ] || clang++ -c -std=c++20 -O2 -DNDEBUG -fno-rtti -fvisibility=hidden -I $SKIA -I $AM absent_drawing.cpp -o out/absent_drawing.o   # (its drawing.cpp read whole: absent_drawing.cpp)
 [ out/absent_ends.o -nt absent_ends.cpp ] && [ out/absent_ends.o -nt $AM/styles.cpp ] || clang++ -c -std=c++20 -O2 -DNDEBUG -fno-rtti -fvisibility=hidden -I $SKIA -I $AM absent_ends.cpp -o out/absent_ends.o   # (its styles.cpp read whole: absent_ends.cpp)
 (cd $SRC/out/wgpu && ninja motolii_door > /dev/null)
 clang++ -std=c++20 -fobjc-arc -O2 -I "$SDK/include" -I $THOR/inc -I $THOR/src/loaders/lottie -I $SRC/third_party/dawn/include -I $SRC/out/wgpu/third_party/dawn/gen/include ${KIT_SRC:-$n.mm} ${=KIT_EXTRA} \
-    $THOR/build_dawn/src/libthorvg-1.a out/bend.o out/skpath.o out/absent_motion.o out/absent_ends.o out/am_motion.o out/am_scene.o out/am_easing.o out/am_textanim.o $SKIA/out/path/libpathops.a $SKIA/out/path/libskia.a -I third_party/libtess2/Include third_party/libtess2/build/libtess2.a $SRC/out/wgpu/filament/motolii_probe/libmotolii_door.a -L "$SDK/lib/arm64" \
+    $THOR/build_dawn/src/libthorvg-1.a out/bend.o out/skpath.o out/absent_motion.o out/absent_ends.o out/absent_drawing.o out/am_motion.o out/am_scene.o out/am_easing.o out/am_textanim.o $SKIA/out/path/libpathops.a $SKIA/out/path/libskia.a -I third_party/libtess2/Include third_party/libtess2/build/libtess2.a $SRC/out/wgpu/filament/motolii_probe/libmotolii_door.a -L "$SDK/lib/arm64" \
     -lfilament -lbackend -lwebgpu_dawn -lbluegl -lbluevk -lfilabridge -lfilaflat \
     -lutils -lgeometry -lsmol-v -libl -lktxreader -lstb -luberzlib -lzstd \
     -lshaders -lperfetto -labseil -lmeshoptimizer -lcamutils -limage -lbasis_transcoder -luberarchive -lmatdbg -lfilamat -lcivetweb -lviewer \

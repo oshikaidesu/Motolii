@@ -11,7 +11,9 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:lab_book/motolii.dart' show motoliiDir;
-import 'package:perfect_freehand/perfect_freehand.dart' show PointVector, StrokeOptions, getStroke;
+import 'package:perfect_freehand/perfect_freehand.dart' show PointVector, StrokeOptions, getStrokeOutlinePoints, getStrokePoints;
+// ignore: implementation_imports
+import 'package:perfect_freehand/src/get_stroke_radius.dart' show getStrokeRadius;
 import 'package:lab_book/theme.dart';
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart' show Workspace;
@@ -334,9 +336,11 @@ final _rowsBJ = <(String, String, Map<String, Object>)>[
   ('box', 'box2', const <String, Object>{}),
   ('matte', 'text+effects/am_solidmatte.wgsl', const {'@x': -.92, '@size': 0.16}),
 ];
-// (section BI: a freehand stroke, the brush's own outline.)
+// (section BI: a freehand stroke, the brush's own outline; tapered at both ends, and drawn half way, by AbsentMotion's own.)
 final _rowsBI = <(String, String, Map<String, Object>)>[
   ('ink', 'ink', const <String, Object>{}),
+  ('taper', 'ink+effects/am_stroketaper.am', const {'~start': .3, '~end': .7}),
+  ('half', 'ink+effects/am_drawingprogress.am', const {'~end': .5}),
 ];
 // (section BH: color balance, a raster scale, and a curl on a wide thin rect. Each file's own numbers.)
 final _rowsBH = <(String, String, Map<String, Object>)>[
@@ -699,14 +703,27 @@ void main() {
         expect(m.say(left, 'fx', '$blur $dir'), isTrue, reason: m.trouble);
         expect(m.set(left, 'js_Diagonal_Blur_width', .02) && m.set(left, 'js_Diagonal_Blur_angle', 0) && m.set(left, 'js_Diagonal_Blur_quality', 2), isTrue, reason: m.trouble);
         expect(m.set(left, 'js_am_directionalblur_blurLength', 20) && m.set(left, 'js_am_directionalblur_angle', 90), isTrue, reason: m.trouble);
-      } else if (effect == 'ink') {
-        final way = [for (var i = 0; i <= 48; i++) PointVector.fromOffset(offset: Offset(1180 + i * 7, 760))];
-        final outline = getStroke(way, options: StrokeOptions(size: 32, simulatePressure: true, isComplete: true));
-        expect(outline.length, greaterThan(3), reason: 'ink');
+      } else if (effect == 'ink' || effect.startsWith('ink+')) {   // (as the Brush gives it when let go: stage_view_2.dart _brushLetGo)
+        final options = StrokeOptions(size: 32, simulatePressure: true, isComplete: true);
+        final points = getStrokePoints([for (var i = 0; i <= 48; i++) PointVector.fromOffset(offset: Offset(1180 + i * 7, 760))], options: options);
+        expect(points.length, greaterThan(3), reason: 'ink');
+        getStrokeOutlinePoints(points, options: options, rememberSimulatedPressure: true);
+        var made = 0;
         m.later('together', number: 1);
-        m.later('freehand', word: [for (final p in outline) '${p.dx} ${p.dy}'].join(' '));
+        ws.after(m.later('brush', word: '${options.size} ${[for (final p in points) '${p.point.x} ${p.point.y} ${2 * getStrokeRadius(options.size, options.thinning, p.pressure, options.easing) / options.size}'].join(' ')}'), null, (n) => made = n);
         m.later('say', thing: -1, name: 'fill', word: 'ffcc33');
         m.later('together');
+        for (var k = 0; k < 200 && made == 0; k++) {   // (made by the inside: its effect said on it once it is there, as a hand picks it from the shelf)
+          await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+          await t.pump();
+        }
+        expect(made, isNot(0), reason: 'brush: ${m.trouble}');
+        path = made;   // (taken off after the row, as the other made things are)
+        if (effect.startsWith('ink+')) {
+          final file = effect.substring('ink+'.length), stem = file.split('/').last.replaceFirst(RegExp(r'\.am$'), '');
+          expect(m.say(made, 'fx', '$motoliiDir/$file'), isTrue, reason: m.trouble);
+          for (final MapEntry(:key, :value) in knobs.entries) if (key.startsWith('~')) expect(m.set(made, 'js_${stem}_${key.substring(1)}', (value as num).toDouble()), isTrue, reason: '$key: ${m.trouble}');
+        }
       } else if (effect.startsWith('circle+') || effect.startsWith('rect+')) {
         final wide = effect.startsWith('rect+');
         expect(m.remove(left), isTrue, reason: m.trouble);
@@ -720,6 +737,7 @@ void main() {
       }
       final stem = effect.split('/').last.replaceFirst(RegExp(r'\.(js|wgsl|fs|am)$'), '').replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_');
       for (final MapEntry(:key, :value) in knobs.entries) {
+        if (key.startsWith('~')) continue;   // (the brush's own, said as it is made)
         if (key == '@when' || key == '@minimum' || key == '@maximum' || key == '@step' || key == '@ymin' || key == '@ymax' || key == '@frequency' || key == '@turn' || key == '@wide') continue;   // (the behaviour's own, or when the playhead sits)
         final name = key.startsWith('@') ? key.substring(1) : 'js_${stem}_$key';   // (@: the thing's own value)
         expect(value is String ? m.say(left, name, value) : m.set(left, name, (value as num).toDouble()), isTrue, reason: '$row $key: ${m.trouble}');

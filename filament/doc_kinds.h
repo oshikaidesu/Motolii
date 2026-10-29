@@ -70,7 +70,8 @@ struct Doc {
     struct Scripted { double at = -1; int made = -1; std::vector<ScriptCopy> copies; };
     std::map<int, Scripted> scripted;
     struct AbsentKept { double at = -1; long changes = -1; int seen = -1; std::vector<AbsentCopy> copies; };
-    std::map<int, AbsentKept> absentKept;   // (each thing's copies as AbsentMotion's repeat effects lay them, at the moment last asked: doc_absent_copies)
+    std::map<int, AbsentKept> absentKept;
+    std::map<int, std::pair<std::string, std::string>> drawingKept;   // (each freehand stroke's outline as AbsentMotion's drawing effects last made it, by what they were: doc_moment)   // (each thing's copies as AbsentMotion's repeat effects lay them, at the moment last asked: doc_absent_copies)
     std::shared_ptr<struct DocScripts> scripts;   // (its scripts, each run as its file says: doc_values.h)
     std::map<int, ThingFx> thingFx;     // the things with effects of their own (thing_fx.h): each drawn alone, its effects on, laid where it lies
     ScreenStack screen;                 // the stage's whole-screen effects, its script .wgsl files one over another (screen.h)   // each thing's copies as its script said them, at one moment (worked out once a picture)
@@ -314,6 +315,7 @@ static const DocValue doc_values[] = {
     {"trail_length", "shape", 0.001, 60, true, nullptr},
     {"morph_to", "shape", 0, 1e9, false, nullptr},
     {"morph_steps", "shape", 0, 64, false, nullptr},   // (and so many steps from itself to it all at once, a blend; 0 or 1: none)
+    {"drawing", "shape", 0, 0, false, ""},   // (a freehand stroke as it was drawn: its tool (0 pen, 1 brush), how wide, then each point x y and its pressure, in the path's own units: doc_brush, made by AbsentMotion)
     {"path", "shape", 0, 0, false, ""},   // (a path shape's own path, drawn by a pen: SVG's path data, in its height from its middle, down as SVG goes)   // (only those nearer than this, in units of the stage, finer the further apart: a plexus; 0: each to the next in their order)
     // (a wave through it and its copies, Cavalry's oscillator: so far across and up (units), so far turned (degrees),
     //  so much larger (a share), so many times a second, each copy so far behind the one before (turns spread over all)

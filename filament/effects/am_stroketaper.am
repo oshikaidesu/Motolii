@@ -1,0 +1,7 @@
+// Stroke Taper: AbsentMotion's stroketaper (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), moved by its own motion.cpp (filament/absent_motion.cpp)
+// --label:Stylize
+// --absent:stroketaper
+// --about:Thins the pen and brush strokes of a freehand drawing to a point: from nothing up to Start, and from End down to nothing. Squeeze makes the taper sharper.
+// --track@start:Start,0,1,0.0,0.001
+// --track@end:End,0,1,1.0,0.001
+// --track@squeeze:Squeeze,0,100,0.0,0.1
