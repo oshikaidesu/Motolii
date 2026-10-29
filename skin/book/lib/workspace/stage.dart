@@ -1,5 +1,7 @@
 // The Stage seat: header with view controls, the tool column, the viewport (stage_view.dart) and the tool options strip.
 // The picture is the work (stage_art.dart); the chrome around it stays grey and round, with the accent only on what is on.
+import 'dart:io' show Directory, File;
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../forms/forms.dart';
@@ -51,12 +53,35 @@ class _StageState extends State<_Stage> {
   Map<String, int> get _opts => _ws.view.putIfAbsent('stage.options', () => <String, int>{}) as Map<String, int>;
   final _cursor = ValueNotifier<Offset?>(null);
   final _focus = FocusNode(debugLabel: 'stage');
+  String? _shot;   // (the picture as it was when taken: a still among the system's temporary files)
+  bool _showing = false;
 
   @override
   void dispose() {
     _cursor.dispose();
     _focus.dispose();
+    _forget();
     super.dispose();
+  }
+
+  /// After Effects' Take Snapshot: the picture at the playhead kept as a still (the inside's Export Frame), to be seen
+  /// again over the picture while Show Snapshot is held: an earlier look against the one now, nothing undone (P19).
+  void _take() {
+    final m = _ws.inside;
+    if (m == null) return;
+    final png = '${Directory.systemTemp.path}/motolii_snapshot_${DateTime.now().microsecondsSinceEpoch}.png';   // (a new name each time: Flutter's image cache knows a file by its name)
+    if (!m.still(png)) {
+      _ws.notice = 'No snapshot: ${m.trouble}';
+      return;
+    }
+    _forget();
+    setState(() => _shot = png);
+  }
+
+  void _forget() {
+    try {
+      if (_shot case final was?) File(was).deleteSync();
+    } catch (_) {}   // (gone already)
   }
 
   KeyEventResult _key(FocusNode n, KeyEvent e) {
@@ -96,6 +121,17 @@ class _StageState extends State<_Stage> {
               _Toggle(label: 'Grid', icon: _Icon.grid, on: _grid, onTap: () => setState(() => _grid = !_grid)),
               SizedBox(width: Shape.s(6)),
               _Toggle(label: _camera ? 'Camera' : 'Free', glyph: G.camera, on: _camera, onTap: () => setState(() => _camera = !_camera)),
+              SizedBox(width: Shape.s(6)),
+              _Toggle(key: const ValueKey('ws-snapshot-take'), label: 'Snapshot', icon: _Icon.snap, on: false, onTap: _take),
+              if (_shot != null) ...[
+                SizedBox(width: WsT.gap),
+                Listener(   // (After Effects' Show Snapshot: seen while it is held; let go, the picture as it is now)
+                  onPointerDown: (_) => setState(() => _showing = true),
+                  onPointerUp: (_) => setState(() => _showing = false),
+                  onPointerCancel: (_) => setState(() => _showing = false),
+                  child: _Toggle(key: const ValueKey('ws-snapshot-show'), label: 'Show', icon: _Icon.show, on: _showing, onTap: () {}),
+                ),
+              ],
             ],
           ),
           Expanded(
@@ -107,7 +143,7 @@ class _StageState extends State<_Stage> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      WsTwoFingers(onPinchStep: (step) => setState(() => _zoom = (_zoom + step).clamp(0, stageZooms.length - 1)), child: StageView(scene: scene, selected: ws.selected, zoom: _zoom, grid: _grid, safe: _safe, cursor: _cursor, onPoke: _focus.requestFocus, texture: ws.stageTexture, make: const [null, null, 'rect', 'circle', 'pen', 'text', 'brush'][_tool], brushSize: const [8.0, 16.0, 32.0][_opts['brush.size'] ?? 1], brushTool: const [1, 0, 2, 3][_opts['brush.kind'] ?? 0], axis: _tool == 1 ? _opts['move.axis'] ?? 0 : 0, fromCentre: (_opts['ell.from'] ?? 0) == 1, snap: _tool < 2 && (_opts[_tool == 0 ? 'sel.snap' : 'move.snap'] ?? 1) == 1, pivots: (_opts['sel.pivot'] ?? 0) == 1, group: _tool == 0 && (_opts['sel.level'] ?? 0) == 1, mask: (_opts[_tool == 2 ? 'rect.mode' : 'pen.mode'] ?? 0) == 1 && (_tool == 2 || _tool == 4))), // (joined: the tool in hand draws a thing of the document)
+                      WsTwoFingers(onPinchStep: (step) => setState(() => _zoom = (_zoom + step).clamp(0, stageZooms.length - 1)), child: StageView(scene: scene, selected: ws.selected, zoom: _zoom, grid: _grid, safe: _safe, cursor: _cursor, onPoke: _focus.requestFocus, texture: ws.stageTexture, snapshot: _showing ? _shot : null, make: const [null, null, 'rect', 'circle', 'pen', 'text', 'brush'][_tool], brushSize: const [8.0, 16.0, 32.0][_opts['brush.size'] ?? 1], brushTool: const [1, 0, 2, 3][_opts['brush.kind'] ?? 0], axis: _tool == 1 ? _opts['move.axis'] ?? 0 : 0, fromCentre: (_opts['ell.from'] ?? 0) == 1, snap: _tool < 2 && (_opts[_tool == 0 ? 'sel.snap' : 'move.snap'] ?? 1) == 1, pivots: (_opts['sel.pivot'] ?? 0) == 1, group: _tool == 0 && (_opts['sel.level'] ?? 0) == 1, mask: (_opts[_tool == 2 ? 'rect.mode' : 'pen.mode'] ?? 0) == 1 && (_tool == 2 || _tool == 4))), // (joined: the tool in hand draws a thing of the document)
                     ],
                   ),
                 ),
@@ -154,11 +190,11 @@ class _Seg extends StatelessWidget {
   Widget build(BuildContext context) => Forms.worn.segment(context, ChoiceSpec(labels: items, selected: index, onSelect: onChanged));
 }
 
-enum _Icon { safe, grid }
+enum _Icon { safe, grid, snap, show }
 
 /// An on/off chip: raised with an accent mark when on, a quiet well when off.
 class _Toggle extends StatelessWidget {
-  const _Toggle({required this.label, required this.on, required this.onTap, this.icon, this.glyph});
+  const _Toggle({super.key, required this.label, required this.on, required this.onTap, this.icon, this.glyph});
   final String label;
   final bool on;
   final VoidCallback onTap;
@@ -201,6 +237,12 @@ class _IconPainter extends CustomPainter {
           cv.drawLine(Offset(r.left + r.width * t, r.top), Offset(r.left + r.width * t, r.bottom), p);
           cv.drawLine(Offset(r.left, r.top + r.height * t), Offset(r.right, r.top + r.height * t), p);
         }
+      case _Icon.snap:   // (a camera's body and its lens)
+        cv.drawRRect(RRect.fromRectAndRadius(Rect.fromLTRB(r.left, r.top + r.height * .25, r.right, r.bottom), const Radius.circular(1.5)), p);
+        cv.drawCircle(r.center.translate(0, r.height * .12), r.width * .2, p);
+      case _Icon.show:   // (the picture halved: then and now)
+        cv.drawRect(r, p);
+        cv.drawRect(Rect.fromLTRB(r.left, r.top, r.center.dx, r.bottom), p..style = PaintingStyle.fill);
     }
   }
 

@@ -1,5 +1,6 @@
 // The stage's viewport: the composition centred on a dark surround, rulers and guides, overlays, the selection, the zoom HUD and the navigator.
 // contract: paints only when the scene, the selection, the hover or the view changes; the pointer readout repaints the rulers alone.
+import 'dart:io' show File;
 import 'dart:math' as math;
 import 'dart:ui' show PointMode;
 
@@ -82,6 +83,7 @@ class StageView extends StatefulWidget {
     this.mask = false,
     this.brushSize = 16,
     this.brushTool = 1,
+    this.snapshot,
   });
 
   /// Joined: how wide the Brush draws, in points of the picture (perfect-freehand's size).
@@ -103,6 +105,9 @@ class StageView extends StatefulWidget {
 
   /// The inside's picture of the stage (a Flutter texture). null: the stand-in art is painted.
   final int? texture;
+
+  /// A still of the picture taken earlier (After Effects' Take Snapshot), laid over the picture while it is shown.
+  final String? snapshot;
   final ArtScene scene;
   final String? selected;
   final int zoom;

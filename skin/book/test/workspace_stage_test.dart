@@ -86,6 +86,26 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('Snapshot keeps the picture as it is; Show lays it over the picture only while held (After Effects\' Take and Show Snapshot; P19)', (t) async {
+    final ws = _joined(), m = ws.inside!;
+    m.add('shape', 'rect');
+    ws.reread();
+    await _stage(t, ws, const Size(924, 616));
+    expect(find.byKey(const ValueKey('ws-snapshot-show')), findsNothing, reason: 'nothing taken yet');
+    await t.tap(find.byKey(const ValueKey('ws-snapshot-take')));
+    await t.pump();
+    expect(ws.notice, isNot(startsWith('No snapshot')));
+    final hand = await t.startGesture(t.getCenter(find.byKey(const ValueKey('ws-snapshot-show'))));
+    await t.pump();
+    final shot = find.byKey(const ValueKey('ws-stage-snapshot'));
+    expect([shot.evaluate().length, t.getRect(shot) == t.getRect(find.byKey(const ValueKey('ws-stage-comp')))], [1, true], reason: 'held: the still, where the picture lies');
+    expect(File(((t.widget(shot) as Image).image as FileImage).file.path).existsSync(), isTrue);
+    await hand.up();
+    await t.pump();
+    expect(shot, findsNothing, reason: 'let go: the picture as it is now');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
   testWidgets('the tool column switches the options strip', (t) async {
     final ws = _joined();
     await _stage(t, ws, const Size(924, 616));
