@@ -116,15 +116,19 @@ void main() {
     await t.pumpAndSettle();
     final r = t.getRect(find.byType(EaseGraph)), g = Rect.fromLTRB(r.left + Shape.s(30), r.top + Shape.s(10), r.right - Shape.s(14), r.bottom - Shape.s(22));
     double y(double v) => g.bottom - (v + .42) / 2.04 * g.height;   // (the graph's measure: desk_ease_graph.dart _ymin, _ymax)
-    Future<void> pull(Offset from, double to) async {
+    Future<void> pull(Offset from, double to, {String? says}) async {
       final hand = await t.startGesture(from, kind: PointerDeviceKind.mouse);
       await hand.moveBy(const Offset(0, -6));   // (up and down first: the key, not the handle on it)
       await hand.moveTo(Offset(from.dx, y(to)));
+      await t.pump();
+      if (says != null) {   // (while it is pulled, what it makes the value, in the inspector's units: golf_noise.md (70))
+        expect((t.widget(find.byKey(const ValueKey('ease-end-says'))) as Text).data, startsWith(says));
+      }
       await hand.up();
       await settled(t, ws);
     }
     List<double> keys() => [for (final s in m.keyMoments(cube, 'x')) (s * 60).roundToDouble()];
-    await pull(Offset(g.left, y(0)), .25);   // (the start up a quarter: a quarter of x's knob span, 8, as the stretch is flat)
+    await pull(Offset(g.left, y(0)), .25, says: 'Position X');   // (the start up a quarter: a quarter of x's knob span, 8, as the stretch is flat)
     expect(keys(), [29, 30, 60], reason: 'a key a frame before keeps the value as it was');
     expect(m.keyValues(cube, 'x')[0], closeTo(0, 1e-9));
     expect(m.keyValues(cube, 'x')[1], closeTo(2, .1), reason: 'the start key moved up: it jumps there');

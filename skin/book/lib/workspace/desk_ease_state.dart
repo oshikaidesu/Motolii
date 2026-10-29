@@ -3,6 +3,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import 'package:lab_book/motolii.dart';
 import 'package:lab_book/tokens.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/desk_ease_graph.dart';
@@ -118,25 +119,49 @@ class DeskEaseState extends State<DeskEase> {
   // (an end of the stretch pulled [by], in the graph's measure: each value keyed at both its ends moves its key there by
   //  so much of the way from the one key's value to the other's, or of its knob's span where the two are the same, as
   //  far as a hand takes it; with Jump on, a key a frame outside first keeps the key's value as it was. One step.)
-  void _moveEnd(Ws ws, EaseSpan? span, bool start, double by) {
-    final m = ws.inside;
-    if (m == null || span == null || by.abs() < 1e-4) return;
-    final t = int.parse(span.layer.id), key = start ? span.from : span.to, outside = start ? span.from - 1 : span.to + 1;
-    m.later('together', number: 1);
-    var told = 0;
+  // (each value keyed at both ends of the stretch: its keys' frames and values, the one at the end pulled, and where
+  //  [by] takes it: so much of the way from the one key's value to the other's, or of its knob's span where the two are
+  //  the same, as far as a hand takes it)
+  Iterable<(String, List<int>, List<double>, int, double)> _ends(Motolii m, int t, EaseSpan span, bool start, double by) sync* {
     for (final name in m.moving(t)) {
       final at = [for (final s in m.keyMoments(t, name)) (s * Ws.fps).round()], vs = m.keyValues(t, name);
       final i = at.indexOf(span.from), j = at.indexOf(span.to), k = start ? i : j;
       if (i < 0 || j < 0 || k >= vs.length || j >= vs.length) continue;
       final shown = m.shown(name), lo = shown?.low ?? -double.infinity, hi = shown?.high ?? double.infinity;
       final scale = (vs[j] - vs[i]).abs() > 1e-9 ? vs[j] - vs[i] : (shown == null ? 1.0 : hi - lo);
+      yield (name, at, vs, k, (vs[k] + by * scale).clamp(math.min(lo, vs[k]), math.max(hi, vs[k])));
+    }
+  }
+
+  // (an end of the stretch pulled [by]: with Jump on, a key a frame outside first keeps the key's value as it was. One step.)
+  void _moveEnd(Ws ws, EaseSpan? span, bool start, double by) {
+    final m = ws.inside;
+    if (m == null || span == null || by.abs() < 1e-4) return;
+    final t = int.parse(span.layer.id), key = start ? span.from : span.to, outside = start ? span.from - 1 : span.to + 1;
+    m.later('together', number: 1);
+    var told = 0;
+    for (final (name, at, vs, k, now) in _ends(m, t, span, start, by)) {
       if (easeJump && outside >= 0 && !at.contains(outside)) {
         m.later('key', thing: t, name: name, word: '${outside / Ws.fps}', number: vs[k]);   // (the key's value before it moved: a frame off, what the value was there)
       }
-      m.later('key', thing: t, name: name, word: '${key / Ws.fps}', number: (vs[k] + by * scale).clamp(math.min(lo, vs[k]), math.max(hi, vs[k])));
+      m.later('key', thing: t, name: name, word: '${key / Ws.fps}', number: now);
       told++;
     }
     ws.after(m.later('together'), (done, why) => mounted ? setState(() => _trouble = done ? (told == 0 ? 'No value keyed at both ends' : null) : why) : null);
+  }
+
+  // (what the end pulled [by] makes the first value keyed at both ends, as the inspector shows it: its name, its number
+  //  in its units; After Effects' value graph shows the value of the point a hand pulls: golf_noise.md (70))
+  String? _endSays(Ws ws, EaseSpan? span, bool start, double by) {
+    final m = ws.inside;
+    if (m == null || span == null) return null;
+    final t = int.parse(span.layer.id);
+    for (final (name, _, _, _, now) in _ends(m, t, span, start, by)) {
+      final (k, f) = m.reading(t, name);
+      final v = now * k + f, shown = m.shown(name);
+      return '${shown?.label ?? name} ${v.toStringAsFixed(v.abs() >= 100 ? 0 : 2)}${shown?.unit ?? ''}';
+    }
+    return null;
   }
 
   // (the curve after every key of each picked key's layer, every value keyed there: one step)
@@ -207,7 +232,7 @@ class DeskEaseState extends State<DeskEase> {
               Expanded(
                 child: ColoredBox(
                   color: WsT.card,
-                  child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: ease, span: span, frame: frame, onChanged: set, jump: easeJump, onEnd: ws.inside == null ? null : (start, by) => _moveEnd(ws, span, start, by)))   // (only the graph follows the playhead),
+                  child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: ease, span: span, frame: frame, onChanged: set, jump: easeJump, onEnd: ws.inside == null ? null : (start, by) => _moveEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by)))   // (only the graph follows the playhead),
                 ),
               ),
               const SizedBox(width: WsT.gutter),

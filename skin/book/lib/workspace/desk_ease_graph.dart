@@ -14,12 +14,13 @@ import 'two_fingers.dart';
 /// how far, in the graph's own measure (1: from the one key's value to the other's); with [jump] on, a dashed line shows
 /// the value jumping there, as the keys it makes will.
 class EaseGraph extends StatefulWidget {
-  const EaseGraph({super.key, required this.ease, required this.span, required this.frame, required this.onChanged, this.onEnd, this.jump = true});
+  const EaseGraph({super.key, required this.ease, required this.span, required this.frame, required this.onChanged, this.onEnd, this.endSays, this.jump = true});
   final Ease ease;
   final EaseSpan? span;
   final int frame;
   final ValueChanged<Ease> onChanged;
   final void Function(bool start, double by)? onEnd;
+  final String? Function(bool start, double by)? endSays;   // (what the end pulled makes its value, shown beside it while it is pulled)
   final bool jump;
   @override
   State<EaseGraph> createState() => _EaseGraphState();
@@ -93,7 +94,8 @@ class _EaseGraphState extends State<EaseGraph> {
           onPanCancel: () => setState(() {
             _drag = _endAt = _tie = null;
           }),
-          child: CustomPaint(
+          child: Stack(children: [
+          CustomPaint(
             size: box.biggest,
             painter: _GraphPainter(
               ghosts: _ghosts(WsScope.of(context, {WsAspect.document}), widget.span),
@@ -107,6 +109,14 @@ class _EaseGraphState extends State<EaseGraph> {
               jump: widget.jump,
             ),
           ),
+          if (_drag != null && _drag! >= 2 && _endAt != null ? widget.endSays?.call(_drag == 2, _endAt! - (_drag == 2 ? 0 : 1)) : null case final says?)
+            Positioned(
+              left: _drag == 2 ? _px(g, Offset(0, _endAt!)).dx + 10 : null,
+              right: _drag == 3 ? box.maxWidth - _px(g, Offset(1, _endAt!)).dx + 10 : null,
+              top: (_px(g, Offset(0, _endAt!)).dy - 18).clamp(0.0, math.max(0.0, box.maxHeight - 16)),
+              child: IgnorePointer(child: Text(says, key: const ValueKey('ease-end-says'), style: T.value(Grey.g95).copyWith(fontSize: T.px(10)))),
+            ),
+          ]),
         ),
       );
     },
