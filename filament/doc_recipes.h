@@ -256,6 +256,12 @@ static bool doc_on(Doc& d, int thing, const char* name);
 static std::string doc_fx_title(const std::string& name) {
     if (doc_thor_letter(name))
         for (const DocCard& card : doc_cards) if (card.when && card.is[0] == '+' && name == card.when) return card.title;
+    static std::map<std::string, std::pair<int, std::string>> named;   // (as the shelf names it: its head's own name, its maker's (doc_folder_names); read again once a file has changed)
+    if (auto& one = named[name]; one.first == files_changed() && !one.second.empty()) return one.second;
+    else if (std::ifstream in(isf_file(name)); in) {
+        std::string first;
+        if (std::getline(in, first) && first.rfind("// ", 0) == 0 && first.find(':') != std::string::npos) return (one = {files_changed(), first.substr(3, first.find(':') - 3)}).second;
+    }
     std::string t = std::filesystem::path(name).stem().string();
     for (char& c : t) if (c == '_') c = ' ';
     if (!t.empty()) t[0] = (char)std::toupper((unsigned char)t[0]);

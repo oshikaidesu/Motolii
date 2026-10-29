@@ -141,7 +141,8 @@ class ValuesCard extends StatelessWidget {
                     onTap: () => doc.onCardEye!(card.name),
                     builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: TpGlyphView(doc.cardsOff.contains(card.name) ? TpGlyph.eyeOff : TpGlyph.eye, h ? Grey.g95 : Grey.g56)),
                   ),
-                _CardMore(name: card.name, items: [   // (AbsentMotion's More: Reset to Defaults, Copy Effect, Paste Effect Values; and a preset of it kept)
+                _CardMore(name: card.name, items: [   // (AbsentMotion's More: Effect Info, Reset to Defaults, Copy Effect, Paste Effect Values; and a preset of it kept)
+                  if (doc.onCardInfo case final info?) ('info', 'Effect Info', () => info(card.name)),
                   if (doc.onCardReset case final reset?) ('reset', 'Reset to Defaults', () => reset([for (final p in card.params) p.id])),
                   if (doc.onCardCopy case final copy?) ('copy', 'Copy Effect', () => copy([for (final p in card.params) p.id])),
                   if (doc.onCardPaste case final paste?) ('paste', 'Paste Effect Values', paste),

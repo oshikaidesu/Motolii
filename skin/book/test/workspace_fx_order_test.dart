@@ -92,6 +92,11 @@ void main() {
       await t.pumpAndSettle();
       expect(_cards(t), contains('Halftone'), reason: 'and its card, its values there to be changed');
     }
+    await t.tap(find.byKey(const ValueKey('card-more:Halftone')));   // (its ⋮: Effect Info, in its maker's words, as AbsentMotion's)
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('card-info:Halftone')));
+    await t.pumpAndSettle();
+    expect(ws.notice, startsWith('Halftone: '), reason: 'what it does said');
     await closeWorkspace(t);
   }, skip: !insideBuilt);
 }

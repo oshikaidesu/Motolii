@@ -130,6 +130,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         onCardMove: int.tryParse(l?.id ?? '') == null ? null : (title, by) => ws.after(m.later('fx_move', thing: int.parse(l!.id), word: title, number: by.toDouble())),
         onCardRemove: int.tryParse(l?.id ?? '') == null ? null : (title) => ws.after(m.later('fx_out', thing: int.parse(l!.id), word: title), (_, _) => ws.reread()),
         onCardEye: int.tryParse(l?.id ?? '') == null ? null : (title) => ws.after(m.later('fx_eye', thing: int.parse(l!.id), word: title), (_, _) => ws.reread()),
+        onCardInfo: (title) => ws.notice = m.about(title).isEmpty ? '$title: no words of its maker\'s' : '$title: ${m.about(title)}',   // (in its maker's words, as the shelf searches them)
         onCardSave: int.tryParse(l?.id ?? '') == null ? null : (title, names) => ws.after(m.later('keep_look', thing: int.parse(l!.id), name: names.join(' '), word: title), (done, why) {   // (that effect's values and keys a look on the Effects shelf, by its name and a number the inside gives it)
           m.forgetFolders();
           ws.notice = done ? 'Preset kept: $title' : 'Not kept: $why';
