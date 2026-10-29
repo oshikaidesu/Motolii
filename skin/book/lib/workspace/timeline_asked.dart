@@ -120,6 +120,26 @@ mixin _TimelineAsked on State<WsTimeline> {
     ]);
   }
 
+  /// A bar's own menu by a right click (Ableton Live's clip context menu: Rename, Duplicate, Split, Deactivate, Delete;
+  /// mouse_map.md, 7), each the window's own command as the menu bar and the keys say it, its thing picked first so it
+  /// is the one they work on (golf_noise.md ㉒: P15 split the title and took pieces out by the menu bar alone).
+  void _trackRight(Offset p) {
+    final t = _t, ws = t._ws, r = t._rowAt(p.dy);
+    if (ws == null || r == null || r.value != null) return;   // (below the rows, or a lane: no bar)
+    final l = r.l, f = t._view.frameAt(p.dx);
+    if (f < l.inF || f > l.outF) return;   // (beside its bar)
+    ws.select(l.id);
+    void say(String c) => Actions.maybeInvoke(context, CommandIntent(c, false));
+    t._trackMenu.currentState?.show(p, [
+      WsMenuItem('Rename…', () => say('thing.rename'), keys: '⌘R'),
+      WsMenuItem('Duplicate', () => say('thing.duplicate'), keys: '⌘D'),
+      WsMenuItem('Split', ws.frame > l.inF && ws.frame < l.outF ? () => say('thing.split') : null, keys: '⌘E', why: 'The playhead is not inside it'),
+      const WsMenuItem.rule(),
+      WsMenuItem(l.hidden ? 'Activate' : 'Deactivate', () => say('thing.deactivate'), keys: '0'),
+      WsMenuItem('Delete', () => say('thing.remove'), keys: '⌫'),
+    ]);
+  }
+
   /// The Marker button (6.4: Set Locator): a mark where the playhead is, picked; on one, it is taken away (the button
   /// is then Delete Locator).
   void _setMark() {

@@ -16,6 +16,7 @@ import 'ableton.dart' show wsTimelineAsk, wsAskRename, wsAskTimeline, wsMarkPick
 import '../sets/panels/timeline_parts_parts.dart' show TpGlyph, TpGlyphPainter;
 import '../tokens.dart';
 import 'key_drag.dart';
+import 'keys.dart' show CommandIntent;
 import 'timeline_kept.dart';
 import 'timeline_paint.dart';
 import 'relate.dart';
@@ -239,6 +240,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   int _markTo = 0;
   double _markGrab = 0;   // (where on its flag it was taken, in frames: kept while carried, as Live's locators are dragged (6.4) and as the work area here keeps _workGrab; carried to the hand's own spot, one taken by its name's end jumped 0.47 s)
   final _rulerMenu = GlobalKey<WsMenuState>();
+  final _trackMenu = GlobalKey<WsMenuState>();   // (a bar's own menu: timeline_asked.dart _trackRight)
   bool _markOff = false;
   (double, String)? _naming;
   final _markWords = TextEditingController();
@@ -499,12 +501,15 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                   child: WsTwoFingers(
                   onPan: _fingers,
                   onPinch: _pinch,
+                  child: WsMenu(
+                  key: _trackMenu,
                   child: GestureDetector(
                     key: const ValueKey('ws-tl-tracks'),
                     behavior: HitTestBehavior.opaque,
                     supportedDevices: wsPressing,
                     dragStartBehavior: DragStartBehavior.down,
                     onTapDown: (d) => _trackDown(d.localPosition),
+                    onSecondaryTapDown: (d) => _trackRight(d.localPosition),
                     onTapUp: (d) => _laneTap(d.localPosition),   // (a lane's tap, once it is known not to be a drag)
                     onPanStart: (d) => _barDown(d.localPosition),
                     onPanUpdate: (d) => _barMove(d.localPosition),
@@ -516,6 +521,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                         painter: WtTracksPainter(rows: rows, view: v, fps: Ws.fps, vscroll: _vscroll),
                       ),
                     ),
+                  ),
                   ),
                   ),
                 ),

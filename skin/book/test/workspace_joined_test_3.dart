@@ -320,6 +320,29 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a bar\'s right click is its own menu, as Ableton Live\'s clip menu: Split at the playhead, Delete takes it out (the window\'s own commands)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final a = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select(null)
+      ..frame = 60;
+    await t.pumpAndSettle();
+    final tracks = t.getRect(find.byKey(const ValueKey('ws-tl-tracks'))), on = Offset(tracks.left + tracks.width * .3, tracks.top + 14);   // (its bar: the only row)
+    Future<void> menu(String item) async {
+      await t.tapAt(on, buttons: kSecondaryButton);
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(ValueKey('ws-menu-$item')));
+      await settled(t, ws);
+    }
+    await menu('Split');
+    expect([m.things.length, ws.selected], [2, isNot('$a')], reason: 'cut at the playhead (2 s): the copy from there picked, as Edit › Split does');
+    await menu('Delete');
+    expect(m.things.length, 1, reason: 'the bar right-clicked taken out');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('⇧E writes the picture at the playhead beside the document (Premiere Pro\'s Export Frame)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');
