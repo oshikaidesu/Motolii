@@ -179,11 +179,16 @@ static bool doc_match(Doc& d) {
                 if (!shown.empty() && midi_roll_box(shown, w, h)) rollHigh = (float)(h / doc_point(d, thing, 0));
             }
             const std::string ext = std::filesystem::path(file).extension().string();
-            const float aspect = doc_among(".jpg .jpeg .png .webp .bmp .JPG .JPEG .PNG", ext) && (edge.w > 0.f || doc_number(d, thing, "round", 0, 0) > 0.0) ? picture_aspect(s, file.c_str()) : 0.f;
-            if (fxOk && aspect > 0.f) {   // (a photo with an edge or round corners: a rect as wide as it is, its own file its fill, as a shape filled with media is (Alight Motion's media layers take a border as its shapes do))
+            const double cl = doc_number(d, thing, "crop_left", 0, 0), ct = doc_number(d, thing, "crop_top", 0, 0), cr = doc_number(d, thing, "crop_right", 0, 0), cb = doc_number(d, thing, "crop_bottom", 0, 0);
+            const bool cropped = cl + ct + cr + cb > 0.0;
+            const float aspect = doc_among(".jpg .jpeg .png .webp .bmp .JPG .JPEG .PNG", ext) && (edge.w > 0.f || doc_number(d, thing, "round", 0, 0) > 0.0 || cropped) ? picture_aspect(s, file.c_str()) : 0.f;
+            if (fxOk && aspect > 0.f) {   // (a photo with an edge, round corners or cut in: a rect as wide as it is, its own file its fill, as a shape filled with media is (Alight Motion's media layers take a border as its shapes do))
                 DrawnFx own = fx;
                 own.media = file;
-                made.drawn = flat(s, "rect", aspect, mat4f{}, 1.f, float3{1.f}, lay, edge, own.over(1.f), 4, 0.5f, (float)doc_number(d, thing, "round", 0, 0));
+                char cut[256];   // (cut in: the rect it shows a path of its own within the whole photo, in its height from its middle, so what is left stays where it was)
+                std::snprintf(cut, sizeof cut, "M%.5f %.5f L%.5f %.5f L%.5f %.5f L%.5f %.5f Z", aspect * (cl - 0.5), ct - 0.5, aspect * (0.5 - std::min(cr, 0.95 - cl)), ct - 0.5,
+                              aspect * (0.5 - std::min(cr, 0.95 - cl)), 0.5 - std::min(cb, 0.95 - ct), aspect * (cl - 0.5), 0.5 - std::min(cb, 0.95 - ct));
+                made.drawn = flat(s, cropped ? cut : "rect", aspect, mat4f{}, 1.f, float3{1.f}, lay, edge, own.over(1.f), 4, 0.5f, (float)doc_number(d, thing, "round", 0, 0));
             } else if (fxOk && !shown.empty() && (made.drawn = picture(s, shown.c_str(), mat4f{}, rollHigh, float3{-1.f}, true, lay, fx, doc_word(d, thing, "marker").c_str()))) s.playing.erase(made.drawn);
             if (made.drawn && made.drawn->lottie && !picture_deep(s, made.drawn).empty()) {   // (its 3D layers stood up where they are, as After Effects shows them)
                 made.motion = std::make_shared<Motion>();
