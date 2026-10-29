@@ -37,7 +37,7 @@ List<(int, int, int, int)> _packed(List<_Box> boxes, int cols, int seed) {
       if (math.Random(Object.hash(d, b.group, b.i, 7)).nextDouble() < .35) thrown = d;
     }
     final r = math.Random(Object.hash(thrown, b.group, b.i));
-    final shapes = b.group == 'add' ? const [(1, 1)] : b.grad != null ? const [(2, 1), (3, 1), (2, 2)] : b.weight >= 1.6 ? const [(2, 2), (3, 2), (2, 3), (3, 3)] : b.weight >= .9 ? const [(2, 1), (1, 2), (2, 2), (1, 1)] : const [(1, 1), (1, 1), (1, 2), (2, 1)];
+    final shapes = b.grad != null ? const [(2, 1), (3, 1), (2, 2)] : b.weight >= 1.6 ? const [(2, 2), (3, 2), (2, 3), (3, 3)] : b.weight >= .9 ? const [(2, 1), (1, 2), (2, 2), (1, 1)] : const [(1, 1), (1, 1), (1, 2), (2, 1)];
     final (w0, h) = shapes[r.nextInt(shapes.length)];
     final w = math.min(w0, cols);
     for (var y = 0;; y++) {
@@ -54,6 +54,14 @@ List<(int, int, int, int)> _packed(List<_Box> boxes, int cols, int seed) {
 }
 
 final _boxMenu = GlobalKey<WsMenuState>();
+(String, List<(int, int, int, int)>)? _bentoLaid;   // (the last laying out, by what it was laid for)
+
+/// How large a box is, any size the maker likes (the user: not a few steps, "任意で数値を"): a size slider over the
+/// grid, as the Browser study's (sets/studies/panel_browser_b_8.dart, "size"), Finder's icon size, Photoshop's
+/// Swatches panel, Lightroom's thumbnails.
+const _tileLeast = 16.0, _tileMost = 120.0;
+double _tile = 52;
+Timer? _tileKept;
 
 /// The colours as a bento of boxes of many sizes, wide and tall, packed with no holes, as many to a row as the shelf is
 /// wide (the user: a poster's colours come with the space they take, so not all squares; a dice throws the shapes
@@ -65,8 +73,15 @@ class _Bento extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
-      final cols = math.max(4, (box.maxWidth / Shape.z(30)).floor()), unit = box.maxWidth / cols, all = [...boxes, const _Box('add', 0, 0)];
-      final laid = _packed(all, cols, _dice), rows = laid.fold(0, (a, l) => math.max(a, l.$2 + l.$4)), gap = Shape.s(3);
+      // (as many columns as boxes of the size chosen fit, the boxes stretching to fill the row: CLIP STUDIO PAINT's
+      //  Color Set at a fixed tile size, as many a row as the palette is wide; CSS Grid's repeat(auto-fill, minmax()).
+      //  Laid again only when its columns, its colours or the dice change, and only then do the boxes move; widened
+      //  between, they only stretch, nothing laid again: the window's 60 frames a second kept)
+      final cols = math.max(1, box.maxWidth ~/ Shape.z(_tile)), unit = box.maxWidth / cols, all = boxes;
+      final key = '$cols/$_dice/${[for (final b in all) '${b.group}.${b.i}.${b.weight.toStringAsFixed(2)}'].join(',')}';
+      final laid = _bentoLaid?.$1 == key ? _bentoLaid!.$2 : _packed(all, cols, _dice), moved = _bentoLaid?.$1 != key;
+      _bentoLaid = (key, laid);
+      final rows = laid.fold(0, (a, l) => math.max(a, l.$2 + l.$4)), gap = Shape.s(3);
       return WsMenu(
         key: _boxMenu,
         child: SizedBox(
@@ -76,13 +91,13 @@ class _Bento extends StatelessWidget {
               for (final (k, b) in all.indexed)
                 AnimatedPositioned(
                   key: ValueKey('${b.group}-${b.i}'),
-                  duration: const Duration(milliseconds: 200),
+                  duration: moved ? const Duration(milliseconds: 200) : Duration.zero,
                   curve: Curves.easeOutCubic,
                   left: laid[k].$1 * unit,
                   top: laid[k].$2 * unit,
                   width: laid[k].$3 * unit - gap,
                   height: laid[k].$4 * unit - gap,
-                  child: b.group == 'add' ? _AddBox(c) : b.grad != null ? _Grad('grad-${b.i}', b.grad!, c) : _ColourBox(b, c),
+                  child: b.grad != null ? _Grad('grad-${b.i}', b.grad!, c) : _ColourBox(b, c),
                 ),
             ],
           ),
@@ -162,26 +177,14 @@ class _ColourBox extends StatelessWidget {
   }
 }
 
-/// The last box: the colour now kept as one's own (CLIP STUDIO PAINT's colour set: Add Color).
-class _AddBox extends StatelessWidget {
-  const _AddBox(this.c);
-  final DockCtx c;
-  @override
-  Widget build(BuildContext context) => DockHover(
-    key: const ValueKey('colour-add'),
-    onTap: () => c.set(() {   // (a gradient coloured now is kept whole, where its colours stand and how they mix)
-      final stops = _stopsIn(_paintNow(c));
-      stops.length > 1
-          ? _mineGrads.insert(0, _Gradient('Gradient ${_mineGrads.length + 1}', [for (final s in stops) s.$1], at: [for (final s in stops) s.$2], blend: _blendNow(c), saved: true))
-          : _mineColours.add(_wheel.toColor());
-      _keepMine();
-    }),
-    builder: (context, h) => Container(
-      alignment: Alignment.center,
-      decoration: BoxDecoration(borderRadius: BorderRadius.all(Shape.r(5)), border: Border.all(color: h ? Grey.g76 : Grey.g38)),
-      child: Text('+', style: T.name(h ? Grey.g95 : Grey.g63)),
-    ),
-  );
+/// The colour now kept as one's own (CLIP STUDIO PAINT's colour set: Add Color); a gradient coloured now is kept whole,
+/// where its colours stand and how they mix.
+void _keepNow(DockCtx c) {
+  final stops = _stopsIn(_paintNow(c));
+  stops.length > 1
+      ? _mineGrads.insert(0, _Gradient('Gradient ${_mineGrads.length + 1}', [for (final s in stops) s.$1], at: [for (final s in stops) s.$2], blend: _blendNow(c), saved: true))
+      : _mineColours.insert(0, _wheel.toColor());   // (at the top, as the newest)
+  _keepMine();
 }
 
 /// The dice: a die's face of five; pressed, the boxes are thrown again.

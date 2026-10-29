@@ -383,11 +383,6 @@ void _tests2() {
     await settled(t, ws);
     expect(m.word(rect, 'fill').split(' ')[1], 'e84545@0.250', reason: 'the swatch colours the stop picked, the one just put');
     expect(find.descendant(of: find.byKey(const ValueKey('colour-details')), matching: find.text('Night Market')), findsOneWidget, reason: 'the shelf\'s foot tells the palette pressed');
-    Future<void> shelfTo(bool top) async {   // (the shelf moved to its top or its end: a drag in the middle of it would turn the wheel)
-      final at = t.state<ScrollableState>(find.descendant(of: find.byType(ColorsShelf), matching: find.byType(Scrollable)).first).position;
-      at.jumpTo(top ? 0 : at.maxScrollExtent);
-      await t.pumpAndSettle();
-    }
     final hand = await t.createGesture(kind: PointerDeviceKind.mouse);   // (the hand on a box: its palette bright, the others back)
     await hand.addPointer(location: t.getCenter(find.byKey(const ValueKey('colour-box-market-2'))));
     await t.pumpAndSettle();
@@ -395,8 +390,25 @@ void _tests2() {
     expect([rim('colour-box-market-0'), rim('colour-box-pop-0')], [1, 0], reason: 'the palette under the hand has a rainbow rim round each of its boxes; the others are left as they are');
     await hand.removePointer();
     await t.pumpAndSettle();
-    await shelfTo(true);   // (back up to the stops)
-    await t.tap(find.byKey(const ValueKey('colour-stop-0')));   // (the stop picked is the window's, not the document's: the first, as a document opens)
+    // (how large the boxes are, any size the maker likes: the size slider over them, dragged to its least, then its
+    //  most; put back as it was, the maker's file left so)
+    final market = find.byKey(const ValueKey('colour-box-market-2')), size = find.byKey(const ValueKey('colour-size'));
+    final was = t.widget<MiniSlider>(size).value, wide = t.getSize(market).width;
+    Future<void> slideTo(double end) async {   // (0 its left end, 1 its right)
+      final r = t.getRect(size);
+      await t.dragFrom(Offset(r.left + r.width * (end == 0 ? .3 : .7), r.center.dy), Offset(r.width * (end == 0 ? -1 : 1), 0), kind: PointerDeviceKind.mouse);
+      await t.pump(const Duration(milliseconds: 500));   // (kept once the hand rests)
+      await t.pumpAndSettle();
+    }
+    await slideTo(0);
+    expect(t.getSize(market).width, lessThan(wide), reason: 'smaller boxes, more to a row');
+    await slideTo(1);
+    expect(t.getSize(market).width, greaterThan(wide), reason: 'larger boxes, fewer to a row');
+    t.widget<MiniSlider>(size).onChanged(was);
+    await t.pump(const Duration(milliseconds: 500));
+    await t.pumpAndSettle();
+    expect(t.getSize(market).width, wide, reason: 'and back');
+    await t.tap(find.byKey(const ValueKey('colour-stop-0')));   // (the stops, the wheel and + stay at the top as the colours scroll)   // (the stop picked is the window's, not the document's: the first, as a document opens)
     await t.pumpAndSettle();
     // (one's own colours, CLIP STUDIO PAINT's colour set: + keeps the colour now; its menu deletes it again, so the
     //  maker's own file is left as it was)
@@ -404,28 +416,29 @@ void _tests2() {
     await settled(t, ws);
     final mine = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('colour-box-mine-'));
     final before = mine.evaluate().length;
-    await shelfTo(false);
     await t.tap(find.byKey(const ValueKey('colour-add')));
     await t.pumpAndSettle();
     expect(mine.evaluate().length, before + 1, reason: 'kept');
-    await t.tapAt(t.getCenter(find.byKey(ValueKey('colour-box-mine-$before'))), buttons: kSecondaryButton);
+    await t.ensureVisible(find.byKey(const ValueKey('colour-box-mine-0')));
+    await t.pumpAndSettle();
+    await t.tapAt(t.getCenter(find.byKey(const ValueKey('colour-box-mine-0'))), buttons: kSecondaryButton);   // (the newest, at the top)
     await t.pumpAndSettle();
     await t.tap(find.byKey(const ValueKey('ws-menu-Delete')));
     await t.pumpAndSettle();
     expect(mine.evaluate().length, before, reason: 'deleted by its menu');
     // (a gradient coloured now: + keeps it whole, how it mixes with it, each kept gradient its own way; its menu deletes it)
-    await shelfTo(true);
     await t.tap(find.byKey(const ValueKey('colour-kind-Gradient')));
     await settled(t, ws);
     await t.tap(find.byKey(const ValueKey('colour-blend-hue')));
     await settled(t, ws);
     final grads = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Grad');
     final had = grads.evaluate().length;
-    await shelfTo(false);
     await t.tap(find.byKey(const ValueKey('colour-add')));
     await t.pumpAndSettle();
     expect(grads.evaluate().length, had + 1, reason: 'the gradient kept as a box');
     expect((t.widget(grads.first) as dynamic).g.blend, 'hue', reason: 'with the way it mixes');
+    await t.ensureVisible(find.byKey(const ValueKey('colour-grad-0')));
+    await t.pumpAndSettle();
     await t.tapAt(t.getCenter(find.byKey(const ValueKey('colour-grad-0'))), buttons: kSecondaryButton);
     await t.pumpAndSettle();
     await t.tap(find.byKey(const ValueKey('ws-menu-Delete this gradient')));

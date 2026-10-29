@@ -11,6 +11,7 @@ import 'package:flutter/widgets.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
 
 import '../sets/inspector/inspector_parts.dart' show Pop;
+import '../sets/panels/media_parts.dart' show MiniSlider;
 import '../tokens.dart';
 import 'desk_kit.dart' show DeskChip;
 import 'dock_glyphs.dart';
@@ -97,7 +98,7 @@ const _starterGrads = <_Gradient>[
   _Gradient('Deep sea', [Color(0xFF15170D), Color(0xFF2B9EB3), Color(0xFF7DD5B1)]),
 ];
 
-// What the maker has kept: ~/.motolii/colors.json {"palettes": [{"name": "", "colors": ["#rrggbb"]}], "gradients": [{"name": "", "colors": [], "blend": "oklab"}], "colours": []}.
+// What the maker has kept: ~/.motolii/colors.json {"palettes": [{"name": "", "colors": ["#rrggbb"]}], "gradients": [{"name": "", "colors": [], "blend": "oklab"}], "colours": [], "tile": 52}.
 final _minePals = <_Pal>[];
 /// One's own colours, kept one by one (CLIP STUDIO PAINT's colour set: Add Color puts the drawing colour in, a tile
 /// pressed draws with it, a tile's menu replaces or deletes it).
@@ -122,6 +123,7 @@ void _readMine() {
       if (cs.isNotEmpty) _minePals.add(_Pal('mine$i', '${p['name']}', cs, saved: true, reference: p['reference'] as String?, shares: sh != null && sh.length == cs.length ? sh : null));
     }
     _mineColours.addAll([for (final h in (told['colours'] as List?) ?? const []) ?_colourOf(h)]);
+    if (told['tile'] case final num v) _tile = v.toDouble().clamp(_tileLeast, _tileMost);
     for (final g in (told['gradients'] as List?) ?? const []) {
       final cs = [for (final h in (g['colors'] as List)) ?_colourOf(h)];
       final at = (g['at'] as List?)?.map((v) => (v as num).toDouble()).toList();
@@ -137,6 +139,7 @@ void _keepMine() {
       'palettes': [for (final p in _minePals) {'name': p.name, 'colors': [for (final c in p.colors) _hex(c)], 'reference': p.reference, 'shares': p.shares}],
       'gradients': [for (final g in _mineGrads) {'name': g.name, 'colors': [for (final c in g.colors) _hex(c)], 'blend': g.blend, 'at': g.at}],
       'colours': [for (final c in _mineColours) _hex(c)],
+      'tile': _tile,
     }));
   } catch (_) {}
 }
@@ -321,8 +324,15 @@ class ColorsShelf extends StatelessWidget {
     // (what it is painted with: Alight Motion's four tabs, Figma's paint type; a press each. A colour to a gradient
     //  fades to clear, as Figma's first gradient does; a gradient to a colour keeps the stop picked)
     Widget kind(String label, bool on, VoidCallback go) => DeskChip(key: ValueKey('colour-kind-$label'), label: label, on: on, onTap: on ? null : go);
-    final list = ListView(
-      padding: EdgeInsets.fromLTRB(WsT.inset, Shape.s(6), WsT.inset, WsT.inset),
+    // (two blocks, the user's: the top stays where it is, what is coloured, how, the wheel; only the colours below
+    //  scroll, so + and the dice, at the head of them, are always at hand. The picker above, the kept colours under it:
+    //  Procreate's Color Panel, its palette at the bottom of the Disc and Classic tabs; Figma's picker, the document's
+    //  colours below the picker and its hex)
+    final top = Padding(
+      padding: EdgeInsets.fromLTRB(WsT.inset, Shape.s(6), WsT.inset, Shape.s(6)),
+      child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Row(
           children: [
@@ -369,7 +379,7 @@ class ColorsShelf extends StatelessWidget {
         ],
         Center(   // (CLIP STUDIO PAINT's colour wheel: a hand on it, what it does till it lets go is one step)
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: Shape.z(220)),
+            constraints: BoxConstraints(maxWidth: Shape.z(170)),
             child: AspectRatio(
               aspectRatio: 1,
               child: WsColourWheel(
@@ -397,10 +407,27 @@ class ColorsShelf extends StatelessWidget {
             Text(_hex(_wheel.toColor()), style: T.value(Grey.g91).copyWith(fontWeight: FontWeight.w600)),
           ],
         ),
-        SizedBox(height: Shape.s(12)),
+        SizedBox(height: Shape.s(10)),
         Row(
           children: [
-            Expanded(child: Text('Colours', style: T.label(Grey.g76).copyWith(fontWeight: FontWeight.w600))),
+            Expanded(child: Text('Colours', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g76).copyWith(fontWeight: FontWeight.w600))),
+            Text('size', style: T.label(Grey.g76)),
+            SizedBox(width: Shape.s(4)),
+            MiniSlider(   // (the boxes' size, any the maker likes; kept once the hand rests, not written every frame)
+              key: const ValueKey('colour-size'),
+              value: _tile,
+              min: _tileLeast,
+              max: _tileMost,
+              width: Shape.z(64),
+              onChanged: (v) {
+                c.set(() => _tile = v);
+                _tileKept?.cancel();
+                _tileKept = Timer(const Duration(milliseconds: 400), _keepMine);
+              },
+            ),
+            SizedBox(width: Shape.s(6)),
+            DeskChip(key: const ValueKey('colour-add'), label: '+', onTap: () => c.set(() => _keepNow(c))),   // (the colour now kept as one's own, or the gradient whole: CLIP STUDIO PAINT's Add Color)
+            SizedBox(width: Shape.s(4)),
             DeskChip(key: const ValueKey('colour-keep'), label: 'Keep', onTap: used.isEmpty ? null : () => c.set(() {   // (the document's colours kept as a palette of one's own)
               _minePals.insert(0, _Pal('mine${_minePals.length}', 'Used ${_minePals.length + 1}', used, saved: true));
               _keepMine();
@@ -417,20 +444,24 @@ class ColorsShelf extends StatelessWidget {
             _Dice(() => c.set(() => _dice++)),
           ],
         ),
-        SizedBox(height: Shape.s(6)),
-        _Bento([
-          if (q.isEmpty) ...[
-            for (final (i, col) in used.indexed) _Box('used', i, usedCount[col]! * used.length / usedCount.values.fold(0, (a, b) => a + b), colour: col),
-            for (final (i, col) in _mineColours.indexed) _Box('mine', i, 1, colour: col),
-          ],
+      ],
+      ),
+    );
+    final list = SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(WsT.inset, Shape.s(6), WsT.inset, WsT.inset),
+      child: _Bento([   // (what was added last at the top: one's own colours, one's own gradients, newest first; the user, "追加はいつも上から"; no app found doing so: Procreate fills the next empty slot, Canva sorts by hue)
+          if (q.isEmpty) for (final (i, col) in _mineColours.indexed) _Box('mine', i, 1, colour: col),
+          for (final (i, g) in grads) if (g.saved) _Box('grads', i, 1, grad: g),
+          if (q.isEmpty) for (final (i, col) in used.indexed) _Box('used', i, usedCount[col]! * used.length / usedCount.values.fold(0, (a, b) => a + b), colour: col),
           for (final p in pals)
             for (final (i, col) in p.colors.indexed) _Box(p.id, i, (p.shares?[i] ?? 1 / p.colors.length) * p.colors.length, colour: col),
-          for (final (i, g) in grads) _Box('grads', i, 1, grad: g),
+          for (final (i, g) in grads) if (!g.saved) _Box('grads', i, 1, grad: g),
         ], c),
-      ],
     );
     return Column(
       children: [
+        top,
+        Container(height: 1, color: WsT.line),
         Expanded(child: list),
         ValueListenableBuilder<String?>(   // (the details of the palette under the hand or last pressed: its photo, its name, whose it is)
           valueListenable: _named,
