@@ -22,7 +22,7 @@ struct DrawnFx { bool split = false;   // (a text's letters each a copy of their
     bool together = false;   // (its copies drawn in one go, each an instance of one thing: none coloured or cleared each of its own, kit.h add_parts)
     float letters = 1.f, lines = 1.f, italic = 0.f, wrapWidth = 0.f; int wrap = 0;   // (a text's lines broken in a box so many of its letters' heights wide, ThorVG's layout and wrap; 0: as typed)
     float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)
-    int heads = 0; float headSize = 4.f; int headShape = 0;   // (heads on an open edge's ends, as Cavalry's: 1 its end, 2 its start, 3 both; so many times its edge long; 0 arrow, 1 circle, 2 box, 3 chevron, 4 bar)
+    int heads = 0; float headSize = 4.f; int headShape = 0, headStart = -1;   // (heads on an open edge's ends, as Cavalry's: 1 its end, 2 its start, 3 both; so many times its edge long; 0 arrow, 1 circle, 2 box, 3 chevron, 4 bar; from 5 Alight Motion's, drawn by AbsentMotion (drawn_flat.h); its start's own, -1 as its end's)
     float blur = 0.f; int blurWay = 0; float overHigh = 1.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; int copies = 1;
                  std::vector<float4> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
                  bool hollow = false;   // (a flat shape filled with nothing: only its edge is seen)

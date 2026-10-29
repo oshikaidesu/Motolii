@@ -149,6 +149,7 @@ static const DocShown doc_shown[] = {
     {"heads", "", "", "Heads", 0, 0, nullptr},
     {"head_size", "", "×", "Head", 0.5, 12, nullptr},
     {"head_shape", "", "", "Head shape", 0, 0, nullptr},
+    {"head_start", "", "", "Start shape", 0, 0, nullptr},
     {"join", "", "", "Corners", 0, 0, nullptr},
     {"dash", "", "px", "Dash", 0, 100, nullptr},
     {"dash_offset", "", "px", "Offset", -100, 100, nullptr},
@@ -346,7 +347,7 @@ static const DocCard doc_cards[] = {
     {"Parent", "parent_rotate parent_size roll roll_radius", "parent", "!0"},
     {"Scale Assist", "scale_assist scale_assist_amount scale_assist_damp", "kind", "!camera"},   // (Alight Motion's Scale Assist: one way grown alone, or both, kept as bulky as it was)   // (Alight Motion's Parenting Helper: how much of its parent's turn and size it takes, and rolling as a wheel; while it has a parent)
     {"Connect", "connect connect_to connect_reach"},
-    {"Line", "cap join dash dash_offset"},
+    {"Line", "cap join dash dash_offset heads head_shape head_start head_size"},   // (and its open ends' shapes: Cavalry's heads, Alight Motion's line start and end)
     {"Path", "round bloat offset zigzag zigzag_ridges zigzag_smooth", "kind", "shape"},   // (its path made anew: After Effects' shape operators, ThorVG's own)
     {"Deform", "warp bend twist pinch skew squash wiggle stretch bend_direction pin_tl_x pin_tl_y pin_tr_x pin_tr_y pin_bl_x pin_bl_y pin_br_x pin_br_y warp_width warp_angle warp_speed skew_axis wiggle_detail wiggle_speed", "kind", "shape"},   // (its points moved as it is drawn: Cavalry's deformers)
     {"Surface", "shading metallic roughness reflectance clear_coat clear_coat_roughness sheen anisotropy thickness emissive", "fill", "!glass"},

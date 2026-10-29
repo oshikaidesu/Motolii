@@ -56,15 +56,45 @@ static std::vector<uint32_t> shape_cut(Drawn* d, float trimFrom, float trimTo, b
     for (size_t i = 0; i < xy.size(); i += 2) point(xy[i], xy[i + 1]);
     for (uint32_t i : idx) m.idx.push_back(base + i);
     if (d->fx.heads) {   // (an arrow head on each open outline's end, its start, or both, where its trim leaves them: a triangle in its edge's colour, pointing the way the line goes)
-        const auto head = [&](tvg::Point at, tvg::Point back) {
+        static const char* const alight[] = {"t-line", "square", "square-filled", "diamond", "diamond-filled", "arrow-hollow", "arrow-filled", "circle-hollow", "circle-filled", "teardrop-hollow", "teardrop-filled"};
+        const auto head = [&](tvg::Point at, tvg::Point back, int shape) {
             float dx = at.x - back.x, dy = at.y - back.y;
             const float len = std::hypot(dx, dy), l = d->fx.headSize * d->edgeWide;
             if (len < 1e-4f) return;
             dx /= len, dy /= len;
+            if (shape >= 5) {   // (Alight Motion's own, as AbsentMotion draws them (absent_ends.cpp), as long as ours: its outline cut by libtess2 as the fill is, its curves in pieces)
+                std::vector<tvg::PathCommand> c;
+                std::vector<tvg::Point> p;
+                if (!sk_svg(absent_line_end(at.x, at.y, dx, dy, 0.5f * l, d->edgeWide, d->fx.cap, d->fx.join, alight[std::min(shape - 5, 10)]).c_str(), c, p)) return;
+                TESStesselator* t = tessNewTess(nullptr);
+                std::vector<float2> ring;
+                const auto close = [&] { if (ring.size() > 2) tessAddContour(t, 2, ring.data(), sizeof(float2), (int)ring.size()); ring.clear(); };
+                for (size_t i = 0, q = 0; i < c.size(); ++i) switch (c[i]) {
+                    case tvg::PathCommand::MoveTo: close(); ring.push_back({p[q].x, p[q].y}); ++q; break;
+                    case tvg::PathCommand::LineTo: ring.push_back({p[q].x, p[q].y}); ++q; break;
+                    case tvg::PathCommand::CubicTo: {
+                        const float2 a = ring.empty() ? float2{p[q].x, p[q].y} : ring.back(), b{p[q].x, p[q].y}, e{p[q + 1].x, p[q + 1].y}, f{p[q + 2].x, p[q + 2].y};
+                        for (int k = 1; k <= 8; ++k) { const float u = (float)k / 8.f, v = 1.f - u; ring.push_back(v * v * v * a + 3.f * v * v * u * b + 3.f * v * u * u * e + u * u * u * f); }
+                        q += 3;
+                        break;
+                    }
+                    case tvg::PathCommand::Close: close(); break;
+                }
+                close();
+                if (tessTesselate(t, TESS_WINDING_NONZERO, TESS_POLYGONS, 3, 2, nullptr)) {
+                    const uint32_t k = (uint32_t)m.pos.size();
+                    const TESSreal* v = tessGetVertices(t);
+                    for (int i = 0; i < tessGetVertexCount(t); ++i) point(v[2 * i], v[2 * i + 1]);
+                    const TESSindex* e = tessGetElements(t);
+                    for (int i = 0; i < 3 * tessGetElementCount(t); ++i) m.idx.push_back(k + (uint32_t)e[i]);
+                }
+                tessDeleteTess(t);
+                return;
+            }
             const uint32_t k = (uint32_t)m.pos.size();
             const auto put = [&](float along, float across) { point(at.x + along * l * dx - across * l * dy, at.y + along * l * dy + across * l * dx); };   // (in its own ways: along the line, across it; in its lengths)
             const auto quad = [&](uint32_t a) { m.idx.insert(m.idx.end(), {a, a + 1, a + 2, a, a + 2, a + 3}); };
-            switch (d->fx.headShape) {
+            switch (shape) {
                 case 1: {   // (a round on its end: as Cavalry's circleHead)
                     put(0.f, 0.f);
                     for (int i = 0; i <= 24; ++i) put(0.4f * std::cos(TAU * (float)i / 24.f), 0.4f * std::sin(TAU * (float)i / 24.f));
@@ -85,8 +115,8 @@ static std::vector<uint32_t> shape_cut(Drawn* d, float trimFrom, float trimTo, b
         std::vector<float> ends;
         for (int k = 0, n = sk_ends(cmds, cmdsCnt, pts, trimFrom, trimTo, ends); k < n; ++k) {
             const float* e = &ends[8 * (size_t)k];
-            if (d->fx.heads & 1) head({e[0], e[1]}, {e[0] - e[2], e[1] - e[3]});
-            if (d->fx.heads & 2) head({e[4], e[5]}, {e[4] - e[6], e[5] - e[7]});
+            if (d->fx.heads & 1) head({e[0], e[1]}, {e[0] - e[2], e[1] - e[3]}, d->fx.headShape);
+            if (d->fx.heads & 2) head({e[4], e[5]}, {e[4] - e[6], e[5] - e[7]}, d->fx.headStart >= 0 ? d->fx.headStart : d->fx.headShape);
         }
     }
     if (idx.empty()) none();

@@ -21,5 +21,9 @@ float absent_opacity(const std::vector<AbsentEffect>& effects, int64_t thing, do
 // text.cpp Shown, by its textanim.cpp), its frames so many a second; as typed when none of them is on it.
 bool absent_text_on(const std::vector<AbsentEffect>& effects);
 std::string absent_text(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs, int fps, std::string text);
+// An end of a line as AbsentMotion draws it (absent_ends.cpp): where it is, the way the line goes there (a unit), as
+// large as r, in a line as wide as width (cap 0 butt, 1 round, 2 square; join 0 miter, 1 round, 2 bevel; else its own):
+// its outline to be filled, as SVG's path data, in the same points; none for a style it does not know.
+std::string absent_line_end(float x, float y, float dx, float dy, float r, float width, int cap, int join, const char* style);
 struct AbsentCopy { double x = 0, y = 0, rotate = 0, scale = 1, alpha = 1; };
 std::vector<AbsentCopy> absent_copies(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs, float wide, float high, float atX, float atY, float reach);
