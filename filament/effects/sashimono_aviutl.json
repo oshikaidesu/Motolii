@@ -552,6 +552,36 @@
   "file": "Transform (Sashimono).fs",
   "params": {}
  },
+ "グラデーション": {
+  "file": "Gradient (Sashimono).fs",
+  "params": {
+   "強さ": [
+    "strength",
+    "",
+    ""
+   ],
+   "中心X": [
+    "center_x",
+    "",
+    ""
+   ],
+   "中心Y": [
+    "center_y",
+    "flip",
+    ""
+   ],
+   "角度": [
+    "angle",
+    "",
+    ""
+   ],
+   "幅": [
+    "span",
+    "",
+    ""
+   ]
+  }
+ },
  "境界ぼかし": {
   "file": "Border Blur (Sashimono).fs",
   "params": {

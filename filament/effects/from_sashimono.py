@@ -12,7 +12,8 @@
 # usage (Python 3.12 or later, numpy and packaging: what Sashimono's effects import):
 #   uv run --no-project --python 3.13 --with numpy --with packaging python -I from_sashimono.py <Sashimono's src> <out dir> [kind ...]
 # (a picture file a param: none given, its size 0, as Sashimono's own when it cannot be read: drawn without it)
-# (an effect of pieces, of a gradient, a grid, or a sound: refused)
+# (a gradient's stops a param: none, its count 0, as Sashimono's own when empty: drawn by its start and end colours)
+# (an effect of pieces, a grid, or a sound: refused)
 import json, os, re, sys
 
 src, out, wanted = sys.argv[1], sys.argv[2], sys.argv[3:]
@@ -104,7 +105,7 @@ def one_picture(code):
     return code
 
 
-def inputs(d, files):
+def inputs(d, files, gradients):
     said = [{'NAME': 'inputImage', 'TYPE': 'image'}]
     for p in d.parameters:
         if isinstance(p, spec.TrackSpec):
@@ -118,6 +119,8 @@ def inputs(d, files):
             said.append({'NAME': p.name, 'LABEL': p.label, 'TYPE': 'long', 'VALUES': list(range(len(values))), 'LABELS': [l for _, l in p.choices], 'DEFAULT': values.index(p.default) if p.default in values else 0})
         elif isinstance(p, spec.FileSpec) and getattr(p, 'texture', False) and d.parameters.index(p) > 0:   # (a picture file, a border's pattern: none given, its size 0, as Sashimono's own when it cannot be read, so it draws without one; one first is what the effect is, Image Blend's: not made)
             files.append(p.name)
+        elif isinstance(p, spec.GradientSpec):   # (a gradient's stops: none, its count 0, as Sashimono's own when empty, so it draws by its start and end colours)
+            gradients.append(p.name)
         elif isinstance(p, spec.ValueSpec):   # (a whole number with no slider, a seed or a count: an int, as its shader takes it)
             said.append({'NAME': p.name, 'LABEL': p.label, 'TYPE': 'long', 'DEFAULT': p.default, 'MIN': p.minimum, 'MAX': p.maximum})
         else:
@@ -148,17 +151,18 @@ made, refused = [], []
 for d in definition.registry.all():
     if wanted and d.kind not in wanted:
         continue
-    files = []
-    said = inputs(d, files)
+    files, gradients = [], []
+    said = inputs(d, files, gradients)
     if said is None or d.audio_process or d.pieces or d.scopes_following or not d.fragment_shader:
         refused.append(d.kind)
         continue
     head = {'DESCRIPTION': f"Sashimono Edit's {d.label} ({d.kind}, {d.category}; MIT, src/sashimono/effects/builtin.py), made an ISF effect by filament/effects/from_sashimono.py", 'CREDIT': 'Sashimono Edit (MIT)', 'CATEGORIES': [shelf.get(d.category, d.category)], 'ISFVSN': '2', 'INPUTS': said}
     body = d.fragment_shader[len(PRELUDE):] if d.fragment_shader.startswith(PRELUDE) else d.fragment_shader
     body = re.sub(r'^[ \t]*uniform[ \t]+\w+[ \t]+\w+[ \t]*;.*$', '', body, flags=re.M)   # (its params: ISF's inputs, declared by the door)
+    body = re.sub(r'^([ \t]*)uniform[ \t]+(\w+[ \t]+\w+[ \t]*\[)', r'\1\2', body, flags=re.M)   # (a row of them, a gradient's stops: its own, never read with none)
     with open(os.path.join(out, f'{title(d.kind)} (Sashimono).fs'), 'w') as f:   # (its name on the shelf the file's: Sashimono's beside ISF's own of a name, Emboss, Mosaic)
         helpers, passes = passes_of(d.passes)
-        helpers = ''.join(f'#define {n}_size vec2(0.0)\n#define {n} u_texture\n' for n in files) + helpers
+        helpers = ''.join(f'#define {n}_size vec2(0.0)\n#define {n} u_texture\n' for n in files) + ''.join(f'#define {n}_count 0\n' for n in gradients) + helpers
         head.update(passes)
         code = one_picture(kept + body)
         if passes:
