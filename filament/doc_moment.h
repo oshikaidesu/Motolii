@@ -105,8 +105,16 @@ static void doc_moment(Doc& d, double now) {
     }
     for (auto e = d.thingFx.begin(); e != d.thingFx.end();) {   // (no longer with effects of its own, or gone: let go)
         const auto at = std::find_if(lies.begin(), lies.end(), [&](const auto& l) { return l.thing == e->first; });
-        if (at == lies.end() || runOf[(size_t)(at - lies.begin())] < 0 || !doc_fx_files(doc_fx_steps(d, e->first))) thing_fx_off(s, e->second), e = d.thingFx.erase(e);
-        else ++e;
+        if (at == lies.end() || runOf[(size_t)(at - lies.begin())] < 0 || !doc_fx_files(doc_fx_steps(d, e->first))) {
+            // (a thing gone out of its time keeps its effects' scene as the one it is in: its parts taken out of it and it
+            //  in none before the scene is let go, else the next moment takes them out of a scene that is gone; Filament's
+            //  scene, destroyed, is touched no more: golf_noise.md 48, the window let go twice so in P15)
+            if (const auto t = d.shown.find(e->first); t != d.shown.end() && e->second.view && t->second.scene == e->second.view->getScene()) {
+                if (t->second.in) doc_entities(s, t->second, [&](utils::Entity x) { t->second.scene->remove(x); });
+                t->second.scene = nullptr, t->second.in = false;
+            }
+            thing_fx_off(s, e->second), e = d.thingFx.erase(e);
+        } else ++e;
     }
     doc_things_fx(d);   // (each with effects of its own drawn alone first: doc_moment_fx.h)
     {   // (a glow: Filament's own, a thing past 1 bright taken up by the stage's bloom (its threshold), as emissive is)
