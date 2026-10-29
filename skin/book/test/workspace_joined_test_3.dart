@@ -412,9 +412,11 @@ void _tests3() {
       ..select('$a');
     await t.pumpAndSettle();
     for (final n in [1, 2]) {
-      final save = find.byKey(const ValueKey('card-save:Gaussian Blur'));
-      await seen(t, save);
-      await t.tap(save);
+      final more = find.byKey(const ValueKey('card-more:Gaussian Blur'));   // (its ⋮, as AbsentMotion's: Save as Preset in it)
+      await seen(t, more);
+      await t.tap(more);
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('card-save:Gaussian Blur')));
       for (var i = 0; i < 100 && !File('${own.path}/looks/Gaussian Blur $n.motolii').existsSync(); i++) {
         await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
         await t.pump();

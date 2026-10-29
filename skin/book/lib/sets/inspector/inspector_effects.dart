@@ -6,6 +6,7 @@ import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import '../../tokens.dart';
 import 'inspector_motion_preview.dart' show CardOver;
 import 'inspector_parts.dart';
+import '../panels/timeline_parts_parts.dart' show TpGlyph, TpGlyphView;
 
 // ---- 10. effects ------------------------------------------------------------------------------------------------------
 /// An effect as a plugin ships it: a name and a WGSL uniform struct. Its rows are whatever [readParams] makes of the struct.
@@ -122,19 +123,37 @@ class ValuesCard extends StatelessWidget {
       trailing: (at < 0 || doc.onCardMove == null) && doc.onCardReset == null && doc.onCardCopy == null
           ? null
           : Row(mainAxisSize: MainAxisSize.min, children: [
-              for (final (word, does) in [   // (its values copied, given to another, as they come: Alight Motion's Copy and Paste of an effect, After Effects' Reset)
-                if (doc.onCardCopy case final copy?) ('Copy', () => copy([for (final p in card.params) p.id])),
-                if (doc.onCardPaste case final paste?) ('Paste', paste),
-                if (doc.onCardReset case final reset?) ('Reset', () => reset([for (final p in card.params) p.id])),
-                if (at >= 0 && doc.onCardSave != null) ('Save', () => doc.onCardSave!(card.name, [for (final p in card.params) p.id])),   // (its values kept on the shelf as a look of their own)
-                if (at >= 0 && doc.onCardEye != null) (doc.cardsOff.contains(card.name) ? 'Show' : 'Hide', () => doc.onCardEye!(card.name)),   // (turned off and on again, its values kept: Alight Motion's eye)
-                if (at >= 0 && doc.onCardRemove != null) ('Remove', () => doc.onCardRemove!(card.name)),   // (only an effect's card: the thing's own values are not taken off)
-              ])
-                Hov(
-                  key: ValueKey('card-${word.toLowerCase()}:${card.name}'),
-                  onTap: does,
-                  builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: Text(word, style: T.label(h ? Grey.g95 : Grey.g56))),
-                ),
+              if (at < 0)   // (the thing's own card: its values copied, given to another, as they come, After Effects' Reset)
+                for (final (word, does) in [
+                  if (doc.onCardCopy case final copy?) ('Copy', () => copy([for (final p in card.params) p.id])),
+                  if (doc.onCardPaste case final paste?) ('Paste', paste),
+                  if (doc.onCardReset case final reset?) ('Reset', () => reset([for (final p in card.params) p.id])),
+                ])
+                  Hov(
+                    key: ValueKey('card-${word.toLowerCase()}:${card.name}'),
+                    onTap: does,
+                    builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: Text(word, style: T.label(h ? Grey.g95 : Grey.g56))),
+                  ),
+              if (at >= 0) ...[   // (an effect's card, as AbsentMotion's EffectHeader and Alight Motion's: its eye, ⋮ with the rest, the bin)
+                if (doc.onCardEye != null)
+                  Hov(
+                    key: ValueKey('card-${doc.cardsOff.contains(card.name) ? 'show' : 'hide'}:${card.name}'),
+                    onTap: () => doc.onCardEye!(card.name),
+                    builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: TpGlyphView(doc.cardsOff.contains(card.name) ? TpGlyph.eyeOff : TpGlyph.eye, h ? Grey.g95 : Grey.g56)),
+                  ),
+                _CardMore(name: card.name, items: [   // (AbsentMotion's More: Reset to Defaults, Copy Effect, Paste Effect Values; and a preset of it kept)
+                  if (doc.onCardReset case final reset?) ('reset', 'Reset to Defaults', () => reset([for (final p in card.params) p.id])),
+                  if (doc.onCardCopy case final copy?) ('copy', 'Copy Effect', () => copy([for (final p in card.params) p.id])),
+                  if (doc.onCardPaste case final paste?) ('paste', 'Paste Effect Values', paste),
+                  if (doc.onCardSave case final save?) ('save', 'Save as Preset', () => save(card.name, [for (final p in card.params) p.id])),
+                ]),
+                if (doc.onCardRemove != null)
+                  Hov(
+                    key: ValueKey('card-remove:${card.name}'),
+                    onTap: () => doc.onCardRemove!(card.name),
+                    builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: CustomPaint(size: Size.square(Shape.z(12)), painter: _Bin(h ? Grey.g95 : Grey.g56))),
+                  ),
+              ],
               if (at >= 0 && doc.onCardMove != null)
                 for (final (by, up) in const [(-1, true), (1, false)])
                 Hov(
@@ -228,4 +247,81 @@ class _Chevron extends CustomPainter {
 
   @override
   bool shouldRepaint(_Chevron o) => o.up != up || o.ink != ink;
+}
+
+/// An effect card's ⋮ (AbsentMotion's EffectHeader More): what else is done with it, in a short list over the panel,
+/// as Chooser's lists look; one picked, it does that and closes.
+class _CardMore extends StatefulWidget {
+  const _CardMore({required this.name, required this.items});
+  final String name;
+  final List<(String key, String label, VoidCallback does)> items;
+  @override
+  State<_CardMore> createState() => _CardMoreState();
+}
+
+class _CardMoreState extends State<_CardMore> {
+  final _link = LayerLink();
+  final _portal = OverlayPortalController();
+  @override
+  Widget build(BuildContext context) => CompositedTransformTarget(
+        link: _link,
+        child: OverlayPortal(
+          controller: _portal,
+          overlayChildBuilder: (_) => Stack(children: [
+            Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _portal.hide)),
+            CompositedTransformFollower(
+              link: _link,
+              targetAnchor: Alignment.bottomRight,
+              followerAnchor: Alignment.topRight,
+              child: Container(
+                width: Shape.z(150),
+                padding: EdgeInsets.all(Shape.s(3)),
+                decoration: BoxDecoration(color: Grey.g15, borderRadius: BorderRadius.all(Shape.r(8)), border: Border.all(color: Grey.g26)),
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  for (final (key, label, does) in widget.items)
+                    Hov(
+                      key: ValueKey('card-$key:${widget.name}'),
+                      onTap: () {
+                        _portal.hide();
+                        does();
+                      },
+                      builder: (_, h) => Container(
+                        height: Shape.z(22),
+                        padding: EdgeInsets.symmetric(horizontal: Shape.s(8)),
+                        alignment: Alignment.centerLeft,
+                        decoration: BoxDecoration(color: h ? Grey.g26 : null, borderRadius: BorderRadius.all(Shape.r(5))),
+                        child: Text(label, maxLines: 1, style: T.name(h ? Grey.g95 : Grey.g76)),
+                      ),
+                    ),
+                ]),
+              ),
+            ),
+          ]),
+          child: Hov(
+            key: ValueKey('card-more:${widget.name}'),
+            onTap: widget.items.isEmpty ? null : _portal.show,
+            builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: Text('⋮', style: T.label(h ? Grey.g95 : Grey.g56))),
+          ),
+        ),
+      );
+}
+
+/// A bin: an effect taken off by it (AbsentMotion's Trash on its header).
+class _Bin extends CustomPainter {
+  _Bin(this.color);
+  final Color color;
+  @override
+  void paint(Canvas c, Size s) {
+    final p = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    final w = s.width;
+    c.drawLine(Offset(w * .15, w * .25), Offset(w * .85, w * .25), p);
+    c.drawLine(Offset(w * .4, w * .12), Offset(w * .6, w * .12), p);
+    c.drawPath(Path()..moveTo(w * .25, w * .3)..lineTo(w * .3, w * .9)..lineTo(w * .7, w * .9)..lineTo(w * .75, w * .3), p);
+  }
+
+  @override
+  bool shouldRepaint(_Bin o) => o.color != color;
 }
