@@ -130,7 +130,7 @@ static void aviutl_clear(AviutlRun& r, const AviutlBuf& b, double colour, bool o
     const float k[16] = {1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 1, opaque ? ((c >> 16) & 255) / 255.f : 0, opaque ? ((c >> 8) & 255) / 255.f : 0, opaque ? (c & 255) / 255.f : 0, opaque ? 1.f : 0};
     aviutl_put(r, r.none, b.rt, b.w, b.h, k);
 }
-static bool aviutl_old(const AviutlVar& v) { return v.var.size() == 6 && (v.var.rfind("track", 0) == 0 || v.var.rfind("check", 0) == 0) && std::isdigit((unsigned char)v.var[5]); }   // (--track0: is obj.track0)
+static bool aviutl_old(const AviutlVar& v) { return !v.named && v.var.size() == 6 && (v.var.rfind("track", 0) == 0 || v.var.rfind("check", 0) == 0) && std::isdigit((unsigned char)v.var[5]); }   // (--track0: is obj.track0)
 static int aviutl_no(lua_State* L, const std::string& what) { return luaL_error(L, "not yet: %s", what.c_str()); }
 static std::string aviutl_str(lua_State* L, int i) { return lua_type(L, i) == LUA_TSTRING ? lua_tostring(L, i) : ""; }
 static double aviutl_num(lua_State* L, int i, double otherwise = 0) { return lua_isnumber(L, i) ? lua_tonumber(L, i) : lua_isboolean(L, i) ? lua_toboolean(L, i) : otherwise; }

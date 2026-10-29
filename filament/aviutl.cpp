@@ -53,9 +53,39 @@ std::vector<AviutlVar> aviutl_vars(const std::string& text) {
     const std::regex said(R"(^--(track|checksection|check|color|select|value|file|folder|font|figure|text|string)(?:@(\w+)|(\d)):([^\r]*))");
     for (std::string line; std::getline(lines, line);) {
         std::smatch m;
+        if (line.rfind("--dialog:", 0) == 0) {   // (AviUtl's own of before: "label[/kind],name=first;..." as sashimono-edit's control.py _dialog reads it (MIT): /chk a check
+            const std::string body = line.substr(9);   //  of 0 or 1, every other its first a Lua value as it is, one first nil not made; cut at ; outside quotes and [[ ]])
+            std::vector<std::string> items(1);
+            for (size_t i = 0; i < body.size(); ++i) {
+                const char c = body[i];
+                if (c == '"' || c == '\'') {
+                    const size_t end = [&] { size_t j = i + 1; while (j < body.size() && body[j] != c) j += body[j] == '\\' ? 2 : 1; return std::min(j, body.size() - 1); }();
+                    items.back() += body.substr(i, end - i + 1), i = end;
+                } else if (body.compare(i, 2, "[[") == 0) {
+                    const size_t end = body.find("]]", i);
+                    items.back() += body.substr(i, end == std::string::npos ? std::string::npos : end + 2 - i), i = end == std::string::npos ? body.size() : end + 1;
+                } else if (c == ';') items.emplace_back();
+                else if (c != '\r') items.back() += c;
+            }
+            for (const std::string& item : items) {
+                const size_t comma = item.find(','), eq = comma == std::string::npos ? comma : item.find('=', comma);
+                if (eq == std::string::npos) continue;
+                AviutlVar v;
+                v.var = std::regex_replace(item.substr(comma + 1, eq - comma - 1), std::regex(R"(^\s*(local\s+)?|\s+$)"), "");
+                v.expr = std::regex_replace(item.substr(eq + 1), std::regex(R"(^\s+|\s+$)"), "");
+                if (v.var.empty() || v.expr.empty() || v.expr == "nil") continue;
+                v.named = true;
+                const std::string label = item.substr(0, comma);
+                if (label.find("/chk") != std::string::npos) v.kind = "check", v.usual = std::atof(v.expr.c_str()) != 0;
+                else v.kind = "value";
+                vars.push_back(v);
+            }
+            continue;
+        }
         if (!std::regex_search(line, m, said)) continue;
         AviutlVar v;
         v.kind = m[1], v.var = m[2].matched ? m[2].str() : v.kind + m[3].str();   // (--track0: is obj.track0)
+        v.named = m[2].matched;
         if (v.kind == "checksection") v.kind = "check";   // (a check that opens the knobs under it, its third its own folding: as a check)
         std::vector<std::string> parts;
         std::stringstream rest(m[4].str());
@@ -89,9 +119,17 @@ std::vector<ScriptKnob> aviutl_knobs(const std::string& file) {
     std::vector<ScriptKnob> knobs;
     if (!aviutl_text(file, own, all, why)) return knobs;
     std::istringstream lines(own);
-    const std::regex said(R"(^--(track|check|color|select)(?:@(\w+)|(\d)):([^,\r]*)(?:,([^\r]*))?)");
+    const std::regex said(R"(^--(track|checksection|check|color|select)(?:@(\w+)|(\d)):([^,\r]*)(?:,([^\r]*))?)");
     for (std::string line; std::getline(lines, line);) {
         std::smatch m;
+        if (line.rfind("--dialog:", 0) == 0) {   // (its checks: each a knob, its label before its /chk)
+            const std::regex check(R"((?:^|;)\s*([^,;]*)/chk\s*,\s*(?:local\s+)?(\w+))");
+            for (const AviutlVar& v : aviutl_vars(line))
+                if (v.kind == "check")
+                    for (std::sregex_iterator c(line.begin() + 9, line.end(), check), end; c != end; ++c)
+                        if ((*c)[2] == v.var) knobs.push_back({v.var, (*c)[1].str(), "check", 0, 1, v.usual, 1, ""});
+            continue;
+        }
         if (!std::regex_search(line, m, said)) continue;
         const AviutlVar v = aviutl_vars(line)[0];
         std::string label = m[4].str();

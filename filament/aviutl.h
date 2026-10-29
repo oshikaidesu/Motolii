@@ -15,7 +15,7 @@ bool aviutl_text(const std::string& file, std::string& own, std::string& all, st
 // A variable its head says (--track@, --check@, --color@, --select@, --value@; the old --track0: and --check0: as obj's),
 // and the knobs Motolii shows for them: a colour three tracks (0..255, and an on/off when it may be nil), a choice a
 // track of its choices' order.
-struct AviutlVar { std::string var, kind, expr; double usual = 0; bool truth = false, unset = false; std::vector<double> values; };
+struct AviutlVar { std::string var, kind, expr; double usual = 0; bool truth = false, unset = false, named = false; std::vector<double> values; };   // (named: --track@name, a variable of its own; else --track0, obj.track0)
 std::vector<AviutlVar> aviutl_vars(const std::string& text);
 std::vector<ScriptKnob> aviutl_knobs(const std::string& file);
 // One embedded pixel shader made WGSL in the door's manner (screen_door.h: tN at binding 2N, sN at 2N+1, b0 after them,
