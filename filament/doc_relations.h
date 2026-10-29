@@ -258,10 +258,13 @@ static double doc_delay(Doc& d, int thing, int nth) {
     const std::string& from = doc_literal_word(d, thing, "stagger_from");
     return stagger * (from == "centre" ? centre : from == "end" ? 1.0 - along : from == "edges" ? 1.0 - centre : along);
 }
-// Where the thing it goes with is (its parent's place; none, or one not there any more: as the stage is).
+// Where the thing it goes with is (its parent's place; none, or one not there any more: as the stage is). A 2D thing
+// going with the camera is as the stage is: it sticks to the camera already (doc_place), and would take its moves twice.
 static math::mat4 doc_above(Doc& d, int thing, double now, int deeper = 0) {
     const int parent = (int)doc_literal(d, thing, "parent", 0, 0);
-    return parent && d.shown.count(parent) && deeper < 64 ? doc_place(d, parent, now, deeper + 1) : math::mat4{};   // (64: a document written elsewhere with a ring of parents still ends)
+    const auto up = d.shown.find(parent), self = d.shown.find(thing);
+    if (up != d.shown.end() && up->second.camera && self != d.shown.end() && self->second.space == 2) return math::mat4{};
+    return parent && up != d.shown.end() && deeper < 64 ? doc_place(d, parent, now, deeper + 1) : math::mat4{};   // (64: a document written elsewhere with a ring of parents still ends)
 }
 // Where a split text's letter has its middle across the thing, in its own units (0: not a letter of one).
 static double doc_letter_middle(Doc& d, int thing, int copy) {
