@@ -357,7 +357,7 @@ void _tests2() {
     await seen(t, tile);
     await t.tap(tile);   // (a press puts it on, as the best-selling editors' swatches)
     await settled(t, ws);
-    expect(m.word(rect, 'fill').split(' '), allOf(hasLength(11), containsAllInOrder(['e974ab', 'f08a5d', 'efcb4e'])), reason: 'its three colours in order, mixed between as CAM16 mixes them (f052e7e): ${m.trouble}');
+    expect([m.word(rect, 'fill'), m.word(rect, 'gradient_blend')], ['e974ab f08a5d efcb4e', 'oklab'], reason: 'its three colours, mixed as it was kept: OKLab, by the inside (CSS Color 4\'s color-interpolation-method): ${m.trouble}');
     // (made by hand, as Figma's and Canva's gradient editors: Gradient fades the colour to clear; a press on the bar puts a
     //  stop there; a swatch colours the stop picked; Solid keeps the stop picked)
     await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), '');
@@ -367,6 +367,11 @@ void _tests2() {
     await t.tap(find.byKey(const ValueKey('colour-kind-Gradient')));
     await settled(t, ws);
     expect(m.word(rect, 'fill'), 'e974ab@0.000 e974ab00@1.000', reason: 'the colour to clear');
+    await t.tap(find.byKey(const ValueKey('colour-blend-steps')));   // (how it mixes: each colour held till the next, Blender's Constant)
+    await settled(t, ws);
+    expect(m.word(rect, 'gradient_blend'), 'steps');
+    await t.tap(find.byKey(const ValueKey('colour-blend-rgb')));
+    await settled(t, ws);
     final bar = t.getRect(find.byKey(const ValueKey('colour-stops-bar')));
     await t.tapAt(bar.centerLeft + Offset(bar.width * .25, 0));
     await settled(t, ws);
@@ -378,25 +383,28 @@ void _tests2() {
     await settled(t, ws);
     expect(m.word(rect, 'fill').split(' ')[1], 'e84545@0.250', reason: 'the swatch colours the stop picked, the one just put');
     expect(find.descendant(of: find.byKey(const ValueKey('colour-details')), matching: find.text('Night Market')), findsOneWidget, reason: 'the shelf\'s foot tells the palette pressed');
+    Future<void> shelfTo(bool top) async {   // (the shelf moved to its top or its end: a drag in the middle of it would turn the wheel)
+      final at = t.state<ScrollableState>(find.descendant(of: find.byType(ColorsShelf), matching: find.byType(Scrollable)).first).position;
+      at.jumpTo(top ? 0 : at.maxScrollExtent);
+      await t.pumpAndSettle();
+    }
     final hand = await t.createGesture(kind: PointerDeviceKind.mouse);   // (the hand on a box: its palette bright, the others back)
     await hand.addPointer(location: t.getCenter(find.byKey(const ValueKey('colour-box-market-2'))));
     await t.pumpAndSettle();
-    double lit(String key) => t.widget<AnimatedOpacity>(find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(AnimatedOpacity)).first).opacity;
-    expect([lit('colour-box-market-0'), lit('colour-box-pop-0')], [1, .3], reason: 'the palette under the hand is seen whole, with no gap kept round it');
+    int rim(String key) => find.descendant(of: find.byKey(ValueKey(key)), matching: find.byKey(const ValueKey('colour-rim'))).evaluate().length;
+    expect([rim('colour-box-market-0'), rim('colour-box-pop-0')], [1, 0], reason: 'the palette under the hand has a rainbow rim round each of its boxes; the others are left as they are');
     await hand.removePointer();
     await t.pumpAndSettle();
-    await t.scrollUntilVisible(find.byKey(const ValueKey('colour-stop-0')), -200, scrollable: find.descendant(of: find.byType(ColorsShelf), matching: find.byType(Scrollable)).first);   // (the shelf scrolled down to the bento: back up to the stops)
-    await t.ensureVisible(find.byKey(const ValueKey('colour-stop-0')));
-    await t.pumpAndSettle();
+    await shelfTo(true);   // (back up to the stops)
     await t.tap(find.byKey(const ValueKey('colour-stop-0')));   // (the stop picked is the window's, not the document's: the first, as a document opens)
     await t.pumpAndSettle();
     // (one's own colours, CLIP STUDIO PAINT's colour set: + keeps the colour now; its menu deletes it again, so the
     //  maker's own file is left as it was)
+    await t.tap(find.byKey(const ValueKey('colour-kind-Solid')));   // (a colour now, not a gradient: + keeps a colour)
+    await settled(t, ws);
     final mine = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('colour-box-mine-'));
     final before = mine.evaluate().length;
-    await t.scrollUntilVisible(find.byKey(const ValueKey('colour-add')), 200, scrollable: find.descendant(of: find.byType(ColorsShelf), matching: find.byType(Scrollable)).first);
-    await t.ensureVisible(find.byKey(const ValueKey('colour-add')));
-    await t.pumpAndSettle();
+    await shelfTo(false);
     await t.tap(find.byKey(const ValueKey('colour-add')));
     await t.pumpAndSettle();
     expect(mine.evaluate().length, before + 1, reason: 'kept');
@@ -405,6 +413,24 @@ void _tests2() {
     await t.tap(find.byKey(const ValueKey('ws-menu-Delete')));
     await t.pumpAndSettle();
     expect(mine.evaluate().length, before, reason: 'deleted by its menu');
+    // (a gradient coloured now: + keeps it whole, how it mixes with it, each kept gradient its own way; its menu deletes it)
+    await shelfTo(true);
+    await t.tap(find.byKey(const ValueKey('colour-kind-Gradient')));
+    await settled(t, ws);
+    await t.tap(find.byKey(const ValueKey('colour-blend-hue')));
+    await settled(t, ws);
+    final grads = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Grad');
+    final had = grads.evaluate().length;
+    await shelfTo(false);
+    await t.tap(find.byKey(const ValueKey('colour-add')));
+    await t.pumpAndSettle();
+    expect(grads.evaluate().length, had + 1, reason: 'the gradient kept as a box');
+    expect((t.widget(grads.first) as dynamic).g.blend, 'hue', reason: 'with the way it mixes');
+    await t.tapAt(t.getCenter(find.byKey(const ValueKey('colour-grad-0'))), buttons: kSecondaryButton);
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('ws-menu-Delete this gradient')));
+    await t.pumpAndSettle();
+    expect(grads.evaluate().length, had, reason: 'deleted by its menu, the maker\'s file left as it was');
     expect(m.say(m.add('solid', 'cube'), 'fill', 'e974ab f08a5d'), isFalse, reason: 'a solid is filled with one colour');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);

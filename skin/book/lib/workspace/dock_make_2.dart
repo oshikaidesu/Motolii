@@ -13,11 +13,13 @@ class _Box {
 }
 
 int _dice = 0;   // (the dice's last throw: the boxes' shapes)
+const _rainbow = [Color(0xFFFF3B30), Color(0xFFFF9500), Color(0xFFFFCC00), Color(0xFF34C759), Color(0xFF00C7BE), Color(0xFF007AFF), Color(0xFFAF52DE), Color(0xFFFF3B30)];
 final _hovered = ValueNotifier<String?>(null);   // (the group of the box the hand is on)
 
 /// Where each box lies, in cells: its shape thrown by the dice (a colour that is more of the picture, a larger box; a
 /// gradient wide), then each put where it first fits from the top left and the gaps filled by later ones (CSS Grid's
-/// auto-placement, dense: CSS Grid Layout 1, 8.5).
+/// auto-placement, dense: CSS Grid Layout 1, 8.5). A throw takes up about a third of the boxes, the rest keep their
+/// shapes (the user: all of them changing at once was too much).
 List<(int, int, int, int)> _packed(List<_Box> boxes, int cols, int seed) {
   final taken = <int, Set<int>>{}, out = <(int, int, int, int)>[];
   bool free(int x, int y, int w, int h) {
@@ -30,7 +32,11 @@ List<(int, int, int, int)> _packed(List<_Box> boxes, int cols, int seed) {
     return true;
   }
   for (final b in boxes) {
-    final r = math.Random(Object.hash(seed, b.group, b.i));
+    var thrown = 0;   // (the last throw that took this box up)
+    for (var d = 1; d <= seed; d++) {
+      if (math.Random(Object.hash(d, b.group, b.i, 7)).nextDouble() < .35) thrown = d;
+    }
+    final r = math.Random(Object.hash(thrown, b.group, b.i));
     final shapes = b.group == 'add' ? const [(1, 1)] : b.grad != null ? const [(2, 1), (3, 1), (2, 2)] : b.weight >= 1.6 ? const [(2, 2), (3, 2), (2, 3), (3, 3)] : b.weight >= .9 ? const [(2, 1), (1, 2), (2, 2), (1, 1)] : const [(1, 1), (1, 1), (1, 2), (2, 1)];
     final (w0, h) = shapes[r.nextInt(shapes.length)];
     final w = math.min(w0, cols);
@@ -132,17 +138,23 @@ class _ColourBox extends StatelessWidget {
           },
           builder: (context, h) => ValueListenableBuilder<String?>(
             valueListenable: _hovered,
-            builder: (context, over, _) => AnimatedOpacity(   // (the hand on a box: its group stays bright, the others step back, so a palette is seen whole with no gap kept round it)
-              opacity: over == null || over == b.group ? 1 : .3,
-              duration: const Duration(milliseconds: 120),
-              child: Container(
+            builder: (context, over, _) {   // (the hand on a box: a rainbow rim round each box of its palette, so a palette is seen whole with no gap kept round it: the user, a rim, not the others darkened)
+              final box = Container(
                 decoration: BoxDecoration(
                   color: col,
-                  borderRadius: BorderRadius.all(Shape.r(5)),
+                  borderRadius: BorderRadius.all(Shape.r(over == b.group ? 3 : 5)),
                   border: _wheelFrom == _hex(col).substring(1).toLowerCase() ? Border.all(color: Grey.g95, width: 2) : null,
                 ),
-              ),
-            ),
+              );
+              return over != b.group
+                  ? box
+                  : Container(
+                      key: const ValueKey('colour-rim'),
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(borderRadius: BorderRadius.all(Shape.r(5)), gradient: const SweepGradient(colors: _rainbow)),
+                      child: box,
+                    );
+            },
           ),
         ),
       ),
@@ -157,8 +169,11 @@ class _AddBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) => DockHover(
     key: const ValueKey('colour-add'),
-    onTap: () => c.set(() {
-      _mineColours.add(_wheel.toColor());
+    onTap: () => c.set(() {   // (a gradient coloured now is kept whole, where its colours stand and how they mix)
+      final stops = _stopsIn(_paintNow(c));
+      stops.length > 1
+          ? _mineGrads.insert(0, _Gradient('Gradient ${_mineGrads.length + 1}', [for (final s in stops) s.$1], at: [for (final s in stops) s.$2], blend: _blendNow(c), saved: true))
+          : _mineColours.add(_wheel.toColor());
       _keepMine();
     }),
     builder: (context, h) => Container(
@@ -330,19 +345,31 @@ class _Grad extends StatelessWidget {
   final DockCtx c;
   @override
   Widget build(BuildContext context) {
-    final word = [for (final k in _stopsOf(g.colors, g.oklab)) _hex(k).substring(1).toLowerCase()].join(' ');
+    final word = [for (final k in g.colors) _hex(k).substring(1).toLowerCase()].join(' ');
+    final (look, at) = _previewOf(g.colors, g.blend, g.at);
     return Semantics(
       label: g.name,
-      child: DockHover(
+      child: GestureDetector(
+        onSecondaryTapDown: !g.saved ? null : (d) {   // (one's own gradient's menu: deleted, as one's own colour)
+          final box = _boxMenu.currentContext?.findRenderObject() as RenderBox?;
+          _boxMenu.currentState?.show(box?.globalToLocal(d.globalPosition) ?? Offset.zero, [
+            WsMenuItem('Delete this gradient', () => c.set(() {
+              _mineGrads.remove(g);
+              _keepMine();
+            })),
+          ]);
+        },
+        child: DockHover(
         key: ValueKey('colour-$id'),
-        onTap: () => _fill(c, word),   // (a press puts it on, as a colour's box)
+        onTap: () => _putGradient(c, g.colors, g.blend, g.at),   // (a press puts it on, where its colours stand and mixed as it was kept)
         builder: (context, h) => Container(
           decoration: BoxDecoration(
-            gradient: LinearGradient(colors: _stopsOf(g.colors, g.oklab)),
+            gradient: LinearGradient(colors: look, stops: at),
             borderRadius: BorderRadius.all(Shape.r(5)),
             border: _wheelFrom == word ? Border.all(color: Grey.g95, width: 2) : (h ? Border.all(color: Grey.g76) : null),
           ),
         ),
+      ),
       ),
     );
   }

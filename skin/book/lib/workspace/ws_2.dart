@@ -47,8 +47,9 @@ class Ws extends ChangeNotifier {
 
   /// Where the next film is written (set by the settings window; the window's own default when null).
   String? renderTo;
-  /// Joined: the inks the drawing tools give a new thing (a fill word, a stroke colour; '': the document's own).
-  String ink = '', edge = '';
+  /// Joined: the inks the drawing tools give a new thing (a fill word, a stroke colour; '': the document's own), and how
+  /// the ink's colours are mixed when it is a gradient (gradient_blend; '': sRGB).
+  String ink = '', edge = '', inkBlend = '';
 
   String? _notice;
   String? get notice => _notice;

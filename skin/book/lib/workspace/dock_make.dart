@@ -38,13 +38,48 @@ class _Pal {
   final List<double>? shares;
 }
 
-/// A gradient: its colours down the thing (a straight ramp, linear: round or straight is the inspector's), and the
-/// space it is mixed in. CAM16 is how an eye mixes (no muddy middle between blue and yellow); sRGB is a plain mix.
+/// A gradient: its colours down the thing (a straight ramp, linear: round or straight is the inspector's), and how they
+/// are mixed between, kept with it (the user: a gradient's way of mixing is kept in its preset as it is): rgb, oklab (as
+/// an eye mixes, no muddy middle between blue and yellow), hue (round the hue), steps (each held till the next). The
+/// inside mixes them (gradient_blend, CSS Color 4's color-interpolation-method).
 class _Gradient {
-  const _Gradient(this.name, this.colors, {this.oklab = true, this.saved = false});
+  const _Gradient(this.name, this.colors, {this.blend = 'oklab', this.saved = false, this.at});
   final String name;
   final List<Color> colors;
-  final bool oklab, saved;
+  final List<double>? at;   // (where each colour stands, a share of the way; null: evenly)
+  final String blend;
+  final bool saved;
+}
+
+const _blends = {'rgb': 'RGB', 'oklab': 'OKLab', 'hue': 'Hue', 'steps': 'Steps'};
+
+/// How the gradient coloured now is mixed: the picked thing's gradient_blend, or the ink's ('rgb' unsaid).
+String _blendNow(DockCtx c) {
+  final t = int.tryParse(c.ws.selected ?? ''), w = t != null && (c.ws.aim ?? 'fill') == 'fill' ? c.ws.inside!.word(t, 'gradient_blend') : c.ws.inkBlend;
+  return w.isEmpty ? 'rgb' : w;
+}
+
+/// How a gradient looks on the shelf, mixed as the inside will mix it (OKLab drawn by CAM16, the eye's mix Flutter has).
+(List<Color>, List<double>?) _previewOf(List<Color> cs, String blend, [List<double>? at]) => at != null && blend == 'rgb' ? (cs, at) : switch (blend) {
+  'steps' => ([for (final c in cs) ...[c, c]], [for (var i = 0; i < cs.length; i++) ...[i / cs.length, (i + 1) / cs.length]]),
+  'hue' => ([for (var i = 0; i < cs.length - 1; i++) for (var k = 0; k < 6; k++) HSVColor.lerp(HSVColor.fromColor(cs[i]), HSVColor.fromColor(cs[i + 1]), k / 6)!.toColor(), cs.last], null),
+  'oklab' => (_stopsOf(cs, true), null),
+  _ => (cs, null),
+};
+
+/// A gradient put on what is coloured: its colours, and how they are mixed (the picked thing's gradient_blend, or the
+/// ink's, for the next thing drawn); one step.
+void _putGradient(DockCtx c, List<Color> cs, String blend, [List<double>? at]) {
+  final m = c.ws.inside!, t = int.tryParse(c.ws.selected ?? '');
+  final word = at != null && at.length == cs.length ? _wordOfStops([for (var i = 0; i < cs.length; i++) (cs[i], at[i])]) : [for (final k in cs) _hex(k).substring(1).toLowerCase()].join(' ');
+  if (t == null || (c.ws.aim ?? 'fill') != 'fill') {
+    c.ws.inkBlend = blend;
+    return _fill(c, word);
+  }
+  m.later('together', number: 1);
+  _fill(c, word);
+  m.later('say', thing: t, name: 'gradient_blend', word: blend);
+  c.ws.after(m.later('together'));
 }
 
 const _starterPals = <_Pal>[
@@ -62,7 +97,7 @@ const _starterGrads = <_Gradient>[
   _Gradient('Deep sea', [Color(0xFF15170D), Color(0xFF2B9EB3), Color(0xFF7DD5B1)]),
 ];
 
-// What the maker has kept: ~/.motolii/colors.json {"palettes": [{"name": "", "colors": ["#rrggbb"]}], "gradients": [{"name": "", "colors": [], "oklab": true}]}.
+// What the maker has kept: ~/.motolii/colors.json {"palettes": [{"name": "", "colors": ["#rrggbb"]}], "gradients": [{"name": "", "colors": [], "blend": "oklab"}], "colours": []}.
 final _minePals = <_Pal>[];
 /// One's own colours, kept one by one (CLIP STUDIO PAINT's colour set: Add Color puts the drawing colour in, a tile
 /// pressed draws with it, a tile's menu replaces or deletes it).
@@ -89,7 +124,8 @@ void _readMine() {
     _mineColours.addAll([for (final h in (told['colours'] as List?) ?? const []) ?_colourOf(h)]);
     for (final g in (told['gradients'] as List?) ?? const []) {
       final cs = [for (final h in (g['colors'] as List)) ?_colourOf(h)];
-      if (cs.length > 1) _mineGrads.add(_Gradient('${g['name']}', cs, oklab: g['oklab'] != false, saved: true));
+      final at = (g['at'] as List?)?.map((v) => (v as num).toDouble()).toList();
+      if (cs.length > 1) _mineGrads.add(_Gradient('${g['name']}', cs, blend: g['blend'] as String? ?? (g['oklab'] == false ? 'rgb' : 'oklab'), saved: true, at: at != null && at.length == cs.length ? at : null));
     }
   } catch (_) {}   // (no file: only the starters)
 }
@@ -99,7 +135,7 @@ void _keepMine() {
     _mineFile.parent.createSync(recursive: true);
     _mineFile.writeAsStringSync(jsonEncode({
       'palettes': [for (final p in _minePals) {'name': p.name, 'colors': [for (final c in p.colors) _hex(c)], 'reference': p.reference, 'shares': p.shares}],
-      'gradients': [for (final g in _mineGrads) {'name': g.name, 'colors': [for (final c in g.colors) _hex(c)], 'oklab': g.oklab}],
+      'gradients': [for (final g in _mineGrads) {'name': g.name, 'colors': [for (final c in g.colors) _hex(c)], 'blend': g.blend, 'at': g.at}],
       'colours': [for (final c in _mineColours) _hex(c)],
     }));
   } catch (_) {}
@@ -317,6 +353,17 @@ class ColorsShelf extends StatelessWidget {
               _wheelFrom = '';   // (the picker shows the stop picked)
             }),
             onHand: (down) => down ? m.later('together', number: 1) : c.ws.after(m.later('together')),
+          ),
+          SizedBox(height: Shape.s(6)),
+          Wrap(   // (how its colours are mixed between: CSS Color 4's color-interpolation-method, Blender's Constant; kept with it)
+            spacing: Shape.s(4),
+            children: [
+              for (final MapEntry(key: b, value: label) in _blends.entries)
+                DeskChip(key: ValueKey('colour-blend-$b'), label: label, on: _blendNow(c) == b, onTap: () {
+                  final t = int.tryParse(c.ws.selected ?? '');
+                  t != null && name == 'fill' ? c.ws.after(m.later('say', thing: t, name: 'gradient_blend', word: b)) : c.set(() => c.ws.inkBlend = b);
+                }),
+            ],
           ),
           SizedBox(height: Shape.s(8)),
         ],

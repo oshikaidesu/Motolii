@@ -23,6 +23,7 @@ run camera_switch.sh
 run pack.sh
 run letters_move.sh
 run ramp_stops.sh
+run ramp_blend.sh
 twin=$(./interp_twin.sh 2>&1); print -r -- "$twin" | grep -E ': the same|differ'   # (the eases the same as the past repository's own, number by number)
 print -r -- "$twin" | grep -q 'not checked' && print "skip interp_twin.sh (the past repository is private)" || (( $(print -r -- "$twin" | grep -c ': the same') >= 2 )) || { print "FAIL interp_twin.sh (its last lines:)"; print -r -- "$twin" | tail -25 | sed 's/^/    /'; bad=1; }
 rel=$(./relations.sh 2>&1); print -r -- "relations: ${${(f)rel}[-1]}"   # (relations, behaviours between things: PASS or FAIL at its end)

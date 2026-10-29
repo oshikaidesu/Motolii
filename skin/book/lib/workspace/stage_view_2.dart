@@ -244,6 +244,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
       ..later('set', thing: -1, name: 'x', number: x)
       ..later('set', thing: -1, name: 'y', number: y);
     if (ws.ink.isNotEmpty) m.later('say', thing: -1, name: 'fill', word: ws.ink); // (the drawing inks)
+    if (ws.ink.contains(' ') && ws.inkBlend.isNotEmpty && kind != 'line') m.later('say', thing: -1, name: 'gradient_blend', word: ws.inkBlend);   // (a gradient ink, mixed as it was chosen)
     if (ws.edge.isNotEmpty && kind != 'line') {
       m
         ..later('say', thing: -1, name: 'stroke', word: ws.edge)
@@ -294,6 +295,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
     ws.after(m.later('pen', thing: first ? int.tryParse(widget.selected ?? '') ?? 0 : -1, word: '${a.dx} ${a.dy} ${h.dx} ${h.dy}'), null, (t) => made = t); // (first on the picked thing: a closed path gains or loses a point, anything else begins a new one)
     if (first) {
       if (ws.ink.isNotEmpty) m.later('say', thing: -1, name: 'fill', word: ws.ink);
+      if (ws.ink.contains(' ') && ws.inkBlend.isNotEmpty) m.later('say', thing: -1, name: 'gradient_blend', word: ws.inkBlend);
       if (ws.edge.isNotEmpty) {
         m
           ..later('say', thing: -1, name: 'stroke', word: ws.edge)

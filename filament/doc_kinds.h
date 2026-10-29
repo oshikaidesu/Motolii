@@ -357,6 +357,8 @@ static const DocValue doc_values[] = {
     //  reflected or repeated)
     {"gradient", "text shape", 0, 0, false, "linear radial"}, {"gradient_angle", "text shape", -1e6, 1e6, false, nullptr},
     {"gradient_scale", "text shape", 0.01, 100, false, nullptr}, {"gradient_spread", "text shape", 0, 0, false, "pad reflect repeat"},
+    // (how the colours between its stops are mixed: CSS Color 4's color-interpolation-method, drawn_made.h ramp_of)
+    {"gradient_blend", "text shape", 0, 0, false, "rgb oklab hue steps"},
     {"cap", "shape", 0, 0, false, "butt round square"}, {"join", "shape", 0, 0, false, "miter round bevel"},
     // (arrow heads on its edge's open ends, Cavalry's basicArrowHead: which ends, and so many times its edge long)
     {"heads", "shape", 0, 0, false, "none end start both"},

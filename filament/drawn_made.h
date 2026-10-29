@@ -167,8 +167,71 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
 
 // Words put in the scene, set by ThorVG in the font of `fontFile` (a .ttf): a sheet `high` tall for each line, as
 // wide as the words make it, its middle at `place`.
+// How the colours between a ramp's stops are mixed, as CSS Color 4's color-interpolation-method: in sRGB, as ThorVG
+// mixes them (0); in OKLab, as an eye mixes them (1: CSS Color 4's sample code for its conversions, Björn Ottosson's
+// OKLab); round the hue the shorter way, saturation and value straight (2: CSS Color 4, hue interpolation, shorter);
+// or not at all, each colour held till the next (3: Blender's ColorRamp, Constant). A mixed way is laid down as more
+// stops between each two, which ThorVG then mixes plainly.
+static float ramp_lin(float c) { return c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f); }
+static float ramp_gam(float c) { return c <= 0.0031308f ? 12.92f * c : 1.055f * std::pow(c, 1.f / 2.4f) - 0.055f; }
+static float3 ramp_oklab(float3 c) {
+    const float r = ramp_lin(c.x), g = ramp_lin(c.y), b = ramp_lin(c.z);
+    const float l = std::cbrt(0.4122214708f * r + 0.5363325363f * g + 0.0514459929f * b), m = std::cbrt(0.2119034982f * r + 0.6806995451f * g + 0.1073969566f * b), s = std::cbrt(0.0883024619f * r + 0.2817188376f * g + 0.6299787005f * b);
+    return {0.2104542553f * l + 0.7936177850f * m - 0.0040720468f * s, 1.9779984951f * l - 2.4285922050f * m + 0.4505937099f * s, 0.0259040371f * l + 0.7827717662f * m - 0.8086757660f * s};
+}
+static float3 ramp_srgb(float3 o) {
+    const float l = o.x + 0.3963377774f * o.y + 0.2158037573f * o.z, m = o.x - 0.1055613458f * o.y - 0.0638541728f * o.z, s = o.x - 0.0894841775f * o.y - 1.2914855480f * o.z;
+    const float L = l * l * l, M = m * m * m, S = s * s * s;
+    return {std::clamp(ramp_gam(4.0767416621f * L - 3.3077115913f * M + 0.2309699292f * S), 0.f, 1.f), std::clamp(ramp_gam(-1.2684380046f * L + 2.6097574011f * M - 0.3413193965f * S), 0.f, 1.f), std::clamp(ramp_gam(-0.0041960863f * L - 0.7034186147f * M + 1.7076147010f * S), 0.f, 1.f)};
+}
+static float3 ramp_hsv(float3 c) {
+    const float mx = std::max({c.x, c.y, c.z}), mn = std::min({c.x, c.y, c.z}), d = mx - mn;
+    float h = 0.f;
+    if (d > 0.f) h = mx == c.x ? std::fmod((c.y - c.z) / d, 6.f) : mx == c.y ? (c.z - c.x) / d + 2.f : (c.x - c.y) / d + 4.f;
+    return {std::fmod(h * 60.f + 360.f, 360.f), mx > 0.f ? d / mx : 0.f, mx};
+}
+static float3 ramp_rgb(float3 h) {
+    const float c = h.z * h.y, x = c * (1.f - std::fabs(std::fmod(h.x / 60.f, 2.f) - 1.f)), m = h.z - c;
+    const int k = (int)(h.x / 60.f) % 6;
+    const float3 p = k == 0 ? float3{c, x, 0} : k == 1 ? float3{x, c, 0} : k == 2 ? float3{0, c, x} : k == 3 ? float3{0, x, c} : k == 4 ? float3{x, 0, c} : float3{c, 0, x};
+    return p + m;
+}
+static void ramp_blend(std::vector<float4>& ramp, std::vector<float>& at, int blend) {
+    if (blend <= 0 || ramp.size() < 2) return;
+    std::vector<float> pos = at.size() == ramp.size() ? at : std::vector<float>();
+    if (pos.empty()) for (size_t i = 0; i < ramp.size(); ++i) pos.push_back((float)i / (float)(ramp.size() - 1));
+    std::vector<float4> out;
+    std::vector<float> outAt;
+    constexpr int between = 8;
+    for (size_t i = 0; i + 1 < ramp.size(); ++i) {
+        const float4 a = ramp[i], b = ramp[i + 1];
+        if (blend == 3) {   // (held till the next, which begins a hair after: ThorVG keeps one of two stops at one place)
+            out.push_back(a), outAt.push_back(pos[i]), out.push_back(a), outAt.push_back(std::max(pos[i], pos[i + 1] - 1e-4f));
+            continue;
+        }
+        for (int k = 0; k < between; ++k) {
+            const float t = (float)k / between;
+            float3 c;
+            if (blend == 1) {
+                c = ramp_srgb(ramp_oklab(a.xyz) * (1.f - t) + ramp_oklab(b.xyz) * t);
+            } else {
+                float3 p = ramp_hsv(a.xyz), q = ramp_hsv(b.xyz);
+                float dh = q.x - p.x;
+                if (dh > 180.f) dh -= 360.f; else if (dh < -180.f) dh += 360.f;   // (the shorter way round)
+                c = ramp_rgb({std::fmod(p.x + dh * t + 360.f, 360.f), p.y + (q.y - p.y) * t, p.z + (q.z - p.z) * t});
+            }
+            out.push_back({c, a.w + (b.w - a.w) * t}), outAt.push_back(pos[i] + (pos[i + 1] - pos[i]) * t);
+        }
+    }
+    out.push_back(ramp.back()), outAt.push_back(pos.back());
+    ramp = out, at = outAt;
+}
+
 // The colours of a ramp as ThorVG's linear gradient, from the first at y0 to the last at y1 (evenly spaced, or where `at` says).
-static tvg::Fill* ramp_of(const std::vector<float4>& ramp, float w, float h, bool radial = false, float angle = 0.f, float scale = 1.f, int spread = 0, const std::vector<float>& at = {}) {
+static tvg::Fill* ramp_of(const std::vector<float4>& given, float w, float h, bool radial = false, float angle = 0.f, float scale = 1.f, int spread = 0, const std::vector<float>& givenAt = {}, int blend = 0) {
+    std::vector<float4> ramp = given;
+    std::vector<float> at = givenAt;
+    ramp_blend(ramp, at, blend);
     tvg::Fill* g = nullptr;
     const float cx = 0.5f * w, cy = 0.5f * h, k = std::max(scale, 0.01f);
     if (radial) {   // (from its middle out to its corners)
@@ -272,7 +335,7 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
         //  mask; ThorVG counts a text's own gradient in the font's units, which are not to be had from outside)
         tvg::Shape* ramp = tvg::Shape::gen();
         ramp->appendRect(0.f, 0.f, (float)*w, (float)*h);
-        ramp->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread, fx.rampAt));
+        ramp->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread, fx.rampAt, fx.rampBlend));
         ramp->mask(t, tvg::MaskMethod::Alpha);
         return ramp;
     }, place, high, float3{-1.f}, true, lay, fx);
@@ -407,7 +470,7 @@ static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, f
         tvg::Shape* shape = d->shape = tvg::Shape::gen();
         flat_path(d, shape, form, *w, *h, in, points, inner, round, 0.f);
         shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z), strcmp(form, "null") && !fx.hollow ? 255 : 0);
-        if (fx.ramp.size() > 1 && strcmp(form, "null")) shape->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread, fx.rampAt));
+        if (fx.ramp.size() > 1 && strcmp(form, "null")) shape->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread, fx.rampAt, fx.rampBlend));
         if (in > 0.f) shape->strokeWidth(2.f * in), shape->strokeFill((uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
         if (!strcmp(form, "wave") || !strcmp(form, "spiral")) {   // (only its line is seen: in its edge's colour, or its fill's; round at its ends)
             const float3 ink = in > 0.f ? float3{edge.x, edge.y, edge.z} : colour;
