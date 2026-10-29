@@ -1,0 +1,8 @@
+// Timecode: AbsentMotion's timecode (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), moved by its own motion.cpp (filament/absent_motion.cpp)
+// --label:Text
+// --absent:timecode
+// --about:Replaces the text of a layer with a running clock of the layer or project time. Start At and a negative Speed make a countdown.
+// --track@format:Format,0,5,0.0,1
+// --track@source:Time,0,1,0.0,1
+// --track@offset:Start At,-360000,360000,0.0,0.01
+// --track@speed:Speed,-100,100,1.0,0.01

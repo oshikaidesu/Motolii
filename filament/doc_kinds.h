@@ -96,6 +96,7 @@ struct Doc {
                    utils::Entity light;   // (a light, Filament's own: in every scene of the stage while it is on)
                    double units = 1.0;    // (a flat thing's: points of the picture to a unit of the stage as it was made, which its effects are counted in)
                    int space = 3;
+                   std::string words; bool wordsMove = false;   // (a text's words as made, and whether AbsentMotion's text effects change them as time goes: doc_text_shown)
                    Scene* scene = nullptr; int channel = -1;
                    MaterialInstance* look = nullptr;   // (a solid's own look, made by the kit: what a matte cuts)
                    struct Deep { uint32_t id; Drawn* sheet; float4 box; };   // (an After Effects picture's 3D layer: a sheet of its own where it is)

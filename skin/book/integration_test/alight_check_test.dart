@@ -287,6 +287,12 @@ final _rowsAA = <(String, String, Map<String, Object>)>[
   ('rd3', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .55}),
   ('rd4', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .8}),
 ];
+// (section BQ: AbsentMotion's text effects from the shelf on the words MOTOLII: a running clock, a count, letters at random.)
+final _rowsBQ = <(String, String, Map<String, Object>)>[
+  ('clock', 'text+effects/am_timecode.am', const {'@size': .2, '@when': 1.5}),
+  ('count', 'text+effects/am_countupdown.am', const {'@text': '1000', 'multiply': .25, '@size': .2}),
+  ('random', 'text+effects/am_textrandomizer.am', const {'amount': .6, '@size': .2, '@when': .5}),
+];
 // (section BP: the thing's picture on a flat-faced ring, the solid turned a little so its sides are seen.)
 final _rowsBP = <(String, String, Map<String, Object>)>[
   ('side', 'solids/Ring.js', const {'@rotate_x': 25, '@rotate_y': 35, '@size': 0.28, '@x': -.88}),
@@ -535,7 +541,7 @@ final _rowsAB = <(String, String, Map<String, Object>)>[
   ('zoomHi', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .25}),
   ('zoomLo', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .75}),
 ];
-final _rows = switch (_section) { 'BP' => _rowsBP, 'BO' => _rowsBO, 'BN' => _rowsBN, 'BM' => _rowsBM, 'BL' => _rowsBL, 'BK' => _rowsBK, 'BJ' => _rowsBJ, 'BI' => _rowsBI, 'BH' => _rowsBH, 'BG' => _rowsBG, 'BF' => _rowsBF, 'BE' => _rowsBE, 'BD' => _rowsBD, 'BC' => _rowsBC, 'BB' => _rowsBB, 'BA' => _rowsBA, 'AZ' => _rowsAZ, 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+final _rows = switch (_section) { 'BQ' => _rowsBQ, 'BP' => _rowsBP, 'BO' => _rowsBO, 'BN' => _rowsBN, 'BM' => _rowsBM, 'BL' => _rowsBL, 'BK' => _rowsBK, 'BJ' => _rowsBJ, 'BI' => _rowsBI, 'BH' => _rowsBH, 'BG' => _rowsBG, 'BF' => _rowsBF, 'BE' => _rowsBE, 'BD' => _rowsBD, 'BC' => _rowsBC, 'BB' => _rowsBB, 'BA' => _rowsBA, 'AZ' => _rowsAZ, 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -712,7 +718,7 @@ void main() {
       final file = effect.contains('/') ? '$motoliiDir/$effect' : '$motoliiDir/effects/$effect.fs';
         expect(m.say(left, 'fx', file), isTrue, reason: '$row: ${m.trouble}');
       }
-      final stem = effect.split('/').last.replaceFirst(RegExp(r'\.(js|wgsl|fs)$'), '').replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_');
+      final stem = effect.split('/').last.replaceFirst(RegExp(r'\.(js|wgsl|fs|am)$'), '').replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_');
       for (final MapEntry(:key, :value) in knobs.entries) {
         if (key == '@when' || key == '@minimum' || key == '@maximum' || key == '@step' || key == '@ymin' || key == '@ymax' || key == '@frequency' || key == '@turn' || key == '@wide') continue;   // (the behaviour's own, or when the playhead sits)
         final name = key.startsWith('@') ? key.substring(1) : 'js_${stem}_$key';   // (@: the thing's own value)

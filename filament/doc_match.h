@@ -33,6 +33,7 @@ static bool doc_match(Doc& d) {
     for (auto& [thing, of] : told) {   // (its effects: which are on and the room they reach, not their numbers (doc_fxing))
         const auto on = [&](const char* name) { return std::max(doc_most(d, thing, name, 0), doc_number(d, thing, name, 0, 0)) > 0.0; };
         if (doc_on(d, thing, "mosh")) of += " moshed=" + doc_mosh(d, thing);   // (made again once its datamosh is made)
+        if (of.find("kind=text") != std::string::npos) of += " shown=" + doc_text_shown(d, thing, s.now);   // (its words as AbsentMotion's text effects show them now: made again as they change (doc_moment))
         of += " order=" + doc_fx_join(doc_fx_list(d, thing)) + " fx=" + std::to_string((int)on("blur")) + (doc_word(d, thing, "shadow").empty() ? "0" : "1") + (doc_word(d, thing, "glow").empty() ? "0" : "1") + std::to_string((int)on("tint")) + std::to_string((int)on("tritone"))
             + " room=" + std::to_string(doc_fx_room(d, thing));
     }
@@ -49,7 +50,7 @@ static bool doc_match(Doc& d) {
             }
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
-        if (still != told.end() && still->second == it->second.of) { ++it; continue; }
+        if (still != told.end() && still->second == it->second.of && !(it->second.drawn && it->second.drawn->outgrown)) { ++it; continue; }   // (a text told words wider than its picture: made again however it reads)
         if (it->second.scene && it->second.scene != s.scene)   // (out of the scene of its run first: the kit takes things out of the stage's own only)
             doc_entities(s, it->second, [&](utils::Entity e) { it->second.scene->remove(e); });
         if (const Mesh* m = it->second.film ? it->second.film->sheet : it->second.drawn ? it->second.drawn->sheet : nullptr)   // (its copies' own looks first, while its copies are still known)
@@ -187,7 +188,8 @@ static bool doc_match(Doc& d) {
                     }
             }
         } else if (kind == "text") {   // (words in a font: said by `say N text ...`; until then, the font's own name)
-            const std::string words = doc_word(d, thing, "text");
+            const std::string words = doc_text_shown(d, thing, s.now, &made.wordsMove);   // (as typed, or as AbsentMotion's text effects show them now)
+            made.words = words;
             if (!fill.empty() && fill != "behind" && rgb < 0) why = "a text's fill is six digits, as ff3366, or behind (what is behind it)";
             else if ((stroke.empty() || edgeRgb >= 0) && fxOk) made.drawn = type(s, words.empty() ? std::filesystem::path(file).stem().string().c_str() : words.c_str(), file.c_str(), mat4f{}, 1.f, fill.empty() ? float3{0x11 / 255.f} : colour, lay, edge, (float)doc_number(d, thing, "align", 0, 0), fx);
         } else if (kind == "shape") {   // (a flat shape in one colour: ThorVG's own rectangle or circle)

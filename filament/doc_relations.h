@@ -241,6 +241,18 @@ static const std::vector<AbsentCopy>& doc_absent_copies(Doc& d, int thing, doubl
     k.copies = absent_copies(doc_absent_on(d, thing, now), thing, 1000.0 * begins, 1000.0 * (begins + (lasts > 0 ? lasts : doc_seconds(d))), 1000.0 * now, (float)(d.stage->w * k2), (float)high, (float)at.x, (float)at.y, (float)reach);
     return k.copies;
 }
+// A text's words as they are seen at a moment: as typed, or as AbsentMotion's text effects on it change them (Count
+// Up/Down, Timecode, Text Randomizer: absent_motion.h), at the stage's 60 frames a second (motolii_hand.h's RATE).
+static std::string doc_text_shown(Doc& d, int thing, double now, bool* moves = nullptr) {
+    const std::string typed = doc_word(d, thing, "text");
+    if (moves) *moves = false;
+    if (doc_word(d, thing, "fx").find(".am") == std::string::npos) return typed;
+    const std::vector<AbsentEffect> on = doc_absent_on(d, thing, now);
+    if (!absent_text_on(on)) return typed;
+    if (moves) *moves = true;
+    const double begins = doc_literal(d, thing, "start", 0, 0), lasts = doc_literal(d, thing, "duration", 0, -1);
+    return absent_text(on, thing, 1000.0 * begins, 1000.0 * (begins + (lasts > 0 ? lasts : doc_seconds(d))), 1000.0 * now, 60, typed);
+}
 // A thing's opacity as AbsentMotion's opacity effects on it leave it (a share, 1 with none: absent_motion.h).
 static double doc_absent_opacity(Doc& d, int thing, double now) {
     if (doc_word(d, thing, "fx").find(".am") == std::string::npos) return 1.0;

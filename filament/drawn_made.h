@@ -236,6 +236,7 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
         t->translate(-x + 0.5f * outline, -y + 0.5f * outline);
         *w = 2 * (int)std::ceil(0.5f * (wide + outline));
         *h = 2 * (int)std::ceil(0.5f * (tall + outline));
+        if (!fx.split && fx.wrapWidth <= 0.f && align <= 0.f) d->text = t, d->words = words, d->textWide = (float)*w, d->textAt = -y + 0.5f * outline;   // (its words told again in place: words_at)
         if (fx.split && !strchr(words, '\n') && fx.wrapWidth <= 0.f) {   // (one line split into its letters: where each ends, by how wide the words up to it are set)
             const auto across = [&](const std::string& some) {   // (how wide some letters are set, a share of the picture's width; and where their ink ends)
                 tvg::Text* up = tvg::Text::gen();

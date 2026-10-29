@@ -1,0 +1,8 @@
+// Count Up/Down: AbsentMotion's countupdown (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), moved by its own motion.cpp (filament/absent_motion.cpp)
+// --label:Text
+// --absent:countupdown
+// --about:Changes every number in a text layer: multiplies it and adds to it, so keyframing Multiply from 0% to 100% counts up to the number you typed. Words around the numbers stay as they are.
+// --track@add:Add,-100000,100000,0.0,0.01
+// --track@multiply:Multiply,-2,2,1.0,0.001
+// --track@decimals:Decimal Places,0,4,0.0,1
+// --track@separator:Thousands,0,3,0.0,1

@@ -15,6 +15,7 @@ import json, os, re, subprocess, sys
 src, out, skslc = sys.argv[1], sys.argv[2], sys.argv[3]
 d = json.load(open(src))
 moves = ('autoshake', 'randomdisplace', 'randomjitter', 'oscillate', 'swing', 'spin', 'pulsesize', 'pulseopacity')   # (AbsentMotion's motion.cpp ApplyMotion: what it moves the layer by; MotionOpacity: its opacity)
+moves += ('textrandomizer', 'timecode', 'countupdown')   # (its text.cpp Shown: a text's words changed, by textanim.cpp: absent_text)
 moves += ('repeat', 'linearrepeat', 'gridrepeat', 'radialrepeat', 'scatterfield')   # (its RepeatCopies: copies of the layer, a scatter field's over the whole composition; along a path needs the layer beneath: not yet)
 
 

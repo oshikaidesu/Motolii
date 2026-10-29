@@ -1,0 +1,14 @@
+// Text Randomizer: AbsentMotion's textrandomizer (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), moved by its own motion.cpp (filament/absent_motion.cpp)
+// --label:Text
+// --absent:textrandomizer
+// --about:Randomly replaces Amount of the characters between Start and End. Animate Evolution or raise Speed to change the replacements; Reveal settles them back into the original text.
+// --track@amount:Amount,0,1,0.0,0.001
+// --track@evolution:Evolution,-50,50,0.0,0.01
+// --track@progress:Reveal,0,1,0.0,0.001
+// --track@direction:Direction,0,3,0.0,1
+// --track@start:Start,0,1,0.0,0.001
+// --track@end:End,0,1,1.0,0.001
+// --track@charset:Characters,0,6,1.0,1
+// --track@speed:Speed,0,60,0.0,0.1
+// --track@keepSpaces:Keep Spaces,0,1,1.0,0.01
+// --track@seed:Seed,0,1000,0.0,1

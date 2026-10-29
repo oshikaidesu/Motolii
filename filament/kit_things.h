@@ -415,7 +415,10 @@ static Camera* god_view(Stage& s) {
 // The stage's time set: everything that goes on by itself is at that moment for the picture drawn next.
 static void time_is(Stage& s, double seconds) {
     s.now = seconds;
-    for (const auto& [who, goes] : s.playing) goes(seconds);
+    std::vector<const void*> all;   // (each by its key, looked for again as it comes: one may make things again, and take some off, as it goes (doc_moment))
+    for (const auto& [who, goes] : s.playing) all.push_back(who);
+    for (const void* who : all)
+        if (const auto it = s.playing.find(who); it != s.playing.end()) it->second(seconds);
 }
 
 // A frame begins (Filament's beginFrame: false if this one is to be left out). What the looks are told is sent on

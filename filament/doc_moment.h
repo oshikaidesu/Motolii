@@ -2,6 +2,13 @@
 static void doc_moment(Doc& d, double now) {
     Stage& s = *d.stage;
     d.halves.clear(), d.talls.clear();   // (made again since: a flat thing's sheet is as large as its picture now)
+    if (now == s.now)   // (a text whose words AbsentMotion's text effects change as time goes, its Timecode or Count Up: told them in its own picture (words_at),
+        for (auto& [thing, t] : d.shown)   //  or, wider than it, made again as they read now, it alone (doc_match), then seen)
+            if (t.wordsMove)
+                if (const std::string w = doc_text_shown(d, thing, now); w != t.words || (t.drawn && t.drawn->outgrown)) {
+                    if (t.drawn && words_at(s, t.drawn, w)) t.words = w;
+                    else return (void)doc_match(d);
+                }
     const std::vector<int> lie = doc_laid(d);
     // Each thing as it is now, in the order they lie: whether it is on, and whether it is a solid thing.
     struct Lies { int thing; Doc::Shown* shown; bool on, solid; double since; };

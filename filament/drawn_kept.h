@@ -102,6 +102,10 @@ struct Drawn {
     std::vector<tvg::Scene*> effects;  // ThorVG's scene its effects are on (driver thread only)
     float tall = 0.f;                  // how high it was drawn, in its own points: what its effects' lengths are shares of
     DrawnFx fx;                        // its effects as last told
+    tvg::Text* text = nullptr;         // a text's own words, ThorVG's (driver thread only): told again in place (words_at); none when split, wrapped or aligned
+    std::string words;                 // (as last told)
+    float textWide = 0.f, textAt = 0.f;   // (its picture's width and where its words stand down it, in its own points)
+    std::atomic<bool> outgrown{false};    // (words told since that are wider than its picture: it is to be made again)
 };
 
 static void kept_drop(Stage& s, Drawn* d);
@@ -194,6 +198,27 @@ static void lit_at(Stage& s, Drawn* d, const std::vector<float>& lit, const std:
         d->canvas->draw(true);
         d->canvas->sync();
     });
+}
+// A text's words as they are now (AbsentMotion's text effects: doc_text_shown), drawn again in its own picture for the
+// frame that comes next, as slots_at tells a film its slots, across its middle and at the height it was set; nothing is
+// done if they are as they were. false: it has no words of its own to tell, or the last told did not fit (outgrown).
+static bool words_at(Stage& s, Drawn* d, const std::string& words) {
+    if (!d->text || d->outgrown) return false;
+    if (words == d->words) return true;
+    d->words = words;
+    kept_drop(s, d);
+    door::on_driver(s.engine, [d, words] {
+        d->text->translate(0.f, 0.f);
+        d->text->text(words.c_str());
+        float x = 0.f, y = 0.f, wide = 0.f, tall = 0.f;
+        if (d->text->bounds(&x, &y, &wide, &tall) != tvg::Result::Success) return;
+        d->outgrown = wide > d->textWide + 0.5f;
+        d->text->translate(0.5f * (d->textWide - wide) - x, d->textAt);
+        d->canvas->update();
+        d->canvas->draw(true);
+        d->canvas->sync();
+    });
+    return true;
 }
 // A flat thing's effects as they are now (lengths in shares of its height, as it was made), drawn again for the frame
 // that comes next; nothing is done if they are as they were. They reach no further than they did at their most.

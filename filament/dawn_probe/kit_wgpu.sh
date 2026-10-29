@@ -44,14 +44,14 @@ ninja -C $THOR/build_dawn > /dev/null
 SKIA=third_party/skia_src
 [ -f $SKIA/out/path/libpathops.a ] || ./skia.sh
 [ out/skpath.o -nt skpath.cpp ] || clang++ -c -std=c++20 -O2 -DNDEBUG -fno-rtti -fno-exceptions -I $SKIA -I $THOR/inc skpath.cpp -o out/skpath.o
-# (absent_motion.cpp: AbsentMotion's own motion effects, its motion.cpp, scene.cpp and easing.cpp as they are, with
+# (absent_motion.cpp: AbsentMotion's own motion and text effects, its motion.cpp, scene.cpp, easing.cpp and textanim.cpp as they are, with
 #  Skia's headers; what of scene.cpp draws or reads a whole scene is not reached and is stripped: hidden, -dead_strip below)
 AM=third_party/AbsentMotion/app/src/main/cpp
-for f in motion scene easing; do [ out/am_$f.o -nt $AM/$f.cpp ] || clang++ -c -std=c++20 -O2 -DNDEBUG -fno-rtti -fvisibility=hidden -I $SKIA -I $AM $AM/$f.cpp -o out/am_$f.o; done
+for f in motion scene easing textanim; do [ out/am_$f.o -nt $AM/$f.cpp ] || clang++ -c -std=c++20 -O2 -DNDEBUG -fno-rtti -fvisibility=hidden -I $SKIA -I $AM $AM/$f.cpp -o out/am_$f.o; done
 [ out/absent_motion.o -nt absent_motion.cpp ] && [ out/absent_motion.o -nt absent_motion.h ] || clang++ -c -std=c++20 -O2 -DNDEBUG -fno-rtti -fvisibility=hidden -I $SKIA -I $AM absent_motion.cpp -o out/absent_motion.o
 (cd $SRC/out/wgpu && ninja motolii_door > /dev/null)
 clang++ -std=c++20 -fobjc-arc -O2 -I "$SDK/include" -I $THOR/inc -I $THOR/src/loaders/lottie -I $SRC/third_party/dawn/include -I $SRC/out/wgpu/third_party/dawn/gen/include ${KIT_SRC:-$n.mm} ${=KIT_EXTRA} \
-    $THOR/build_dawn/src/libthorvg-1.a out/bend.o out/skpath.o out/absent_motion.o out/am_motion.o out/am_scene.o out/am_easing.o $SKIA/out/path/libpathops.a $SKIA/out/path/libskia.a -I third_party/libtess2/Include third_party/libtess2/build/libtess2.a $SRC/out/wgpu/filament/motolii_probe/libmotolii_door.a -L "$SDK/lib/arm64" \
+    $THOR/build_dawn/src/libthorvg-1.a out/bend.o out/skpath.o out/absent_motion.o out/am_motion.o out/am_scene.o out/am_easing.o out/am_textanim.o $SKIA/out/path/libpathops.a $SKIA/out/path/libskia.a -I third_party/libtess2/Include third_party/libtess2/build/libtess2.a $SRC/out/wgpu/filament/motolii_probe/libmotolii_door.a -L "$SDK/lib/arm64" \
     -lfilament -lbackend -lwebgpu_dawn -lbluegl -lbluevk -lfilabridge -lfilaflat \
     -lutils -lgeometry -lsmol-v -libl -lktxreader -lstb -luberzlib -lzstd \
     -lshaders -lperfetto -labseil -lmeshoptimizer -lcamutils -limage -lbasis_transcoder -luberarchive -lmatdbg -lfilamat -lcivetweb -lviewer \
