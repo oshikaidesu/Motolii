@@ -110,15 +110,15 @@ static std::string aviutl_font_file(const std::string& name, bool bold, bool ita
 // The decorations as sashimono-edit measured AviUtl2 v2.1.6a (MIT, compat/decoration.py DECORATIONS, by obj.setfont's
 // number in its order: mapping.py _DECORATION_BY_INDEX): an edge of 8, 4, 12 and 4 hundredths of the size outside the
 // letters (縁取り, 細, 太, 角), a shadow 5 hundredths right and down (影付き; 薄, half as strong), in the edge colour.
-static const AviutlBuf* aviutl_text(AviutlRun& r, const std::string& words) {
+static const AviutlBuf* aviutl_text(AviutlRun& r, const std::string& words, uint32_t* measured = nullptr) {   // (measured: its size alone, none drawn)
     const auto& f = r.font;
     const double size = std::clamp(f.size, 1.0, 4096.0);
     const int deco = (int)f.deco, colour = (int)f.colour, edge = (int)f.edge;
     static const double edges[] = {0, 0, 0, 0.08, 0.04, 0.12, 0.04};
     const float out = (float)(size * (deco >= 0 && deco <= 6 ? edges[deco] : 0)), down = deco == 1 || deco == 2 ? (float)(0.05 * size) : 0.f;
     const std::string key = "text|" + f.name + "|" + std::to_string(size) + "|" + std::to_string(deco) + "|" + std::to_string(colour) + "|" + std::to_string(edge) + "|" + std::to_string(f.bold) + std::to_string(f.italic) + "|" + words;
-    r.worded.insert(key);
-    if (const auto kept = r.loaded.find(key); kept != r.loaded.end()) return &kept->second;
+    if (!measured) r.worded.insert(key);
+    if (const auto kept = r.loaded.find(key); kept != r.loaded.end()) return measured && (measured[0] = kept->second.w, measured[1] = kept->second.h), &kept->second;
     bool slant = false;
     const std::string file = aviutl_font_file(f.name, f.bold, f.italic, &slant);
     if (tvg::Text::load(file.c_str()) != tvg::Result::Success) return nullptr;
@@ -146,6 +146,7 @@ static const AviutlBuf* aviutl_text(AviutlRun& r, const std::string& words) {
     all->add(set(colour, 255));
     float x = 0, y = 0, w = 0, h = 0;
     if (all->bounds(&x, &y, &w, &h) != tvg::Result::Success || w <= 0.f || h <= 0.f) return tvg::Paint::rel(all), nullptr;
+    if (measured) return measured[0] = (uint32_t)std::ceil(w), measured[1] = (uint32_t)std::ceil(h), tvg::Paint::rel(all), nullptr;
     all->translate(-x, -y);
     bool given = false;
     const AviutlBuf* made = aviutl_drawn(r, key, (uint32_t)std::ceil(w), (uint32_t)std::ceil(h), [&](tvg::SwCanvas* c) { return given = true, c->add(all) == tvg::Result::Success; });
@@ -195,6 +196,11 @@ static int aviutl_load(lua_State* L) {
         aviutl_clear(r, to, 0, !lua_toboolean(L, 6));
         aviutl_lay(r, fb, to.rt, w, h, fb.w / 2.0 - x - w / 2.0, fb.h / 2.0 - y - h / 2.0, 1, 1, 0, 1, 0, 0, 0, 1);
         return lua_pushboolean(L, 1), 1;
+    }
+    if (kind == "text.layout") {   // (words: how large they would be set, the object left as it is: lua.txt's テキストレイアウト, as 枠内自動フィット_H.obj2 reads it)
+        uint32_t size[2] = {0, 0};
+        if (lua_isstring(L, 2) && *lua_tostring(L, 2)) aviutl_text(r, lua_tostring(L, 2), size);
+        return lua_pushinteger(L, size[0]), lua_pushinteger(L, size[1]), 2;
     }
     if (kind == "text") {
         const std::string words = lua_isstring(L, 2) ? lua_tostring(L, 2) : "";
