@@ -414,7 +414,8 @@ static Camera* god_view(Stage& s) {
 // One picture of the stage drawn (the helper pictures first), and read back into `pic` if one is given.
 // The stage's time set: everything that goes on by itself is at that moment for the picture drawn next.
 static void time_is(Stage& s, double seconds) {
-    s.now = seconds;
+    s.now = s.frames > 0.0 ? std::floor(seconds * s.frames + 1e-6) / s.frames : seconds;   // (a document of so many frames a second is seen only at them: Alight Motion's project frame rate, After Effects' composition's)
+    seconds = s.now;
     std::vector<const void*> all;   // (each by its key, looked for again as it comes: one may make things again, and take some off, as it goes (doc_moment))
     for (const auto& [who, goes] : s.playing) all.push_back(who);
     for (const void* who : all)

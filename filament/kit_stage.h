@@ -99,6 +99,7 @@ struct Stage {
     View* view_floor = nullptr;   // the floor from straight above (layer 4 only), drawn before all into `sunlight` (paper_and_sun)
     Texture* sunlight = nullptr;
     double now = 0.0;        // the stage's time, in seconds
+    double frames = 0.0;     // so many frames a second its time is seen at (a document's own frame rate); 0: as smooth as it is drawn
     bool by_clock = false;   // true: played as the clock goes (nothing is waited for); false: picture by picture (each one exact)
     // (a live stage: what a moment asks of its films, kept to be done once the document is let go (motolii.mm), so
     //  that films put back to their start do not hold the shell's reads of it; empty: done at once)

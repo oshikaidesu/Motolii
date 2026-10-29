@@ -520,6 +520,13 @@ class _SizeChipState extends State<_SizeChip> {
                     DeskChip(key: ValueKey('size-${p}p'), label: '${p}p', on: p == short, onTap: () => _to(ws, now == null ? ((p * w0 / short).round(), (p * h0 / short).round()) : sizeOf(now, p))),
                 ]),
                 SizedBox(height: Shape.s(12)),
+                Text('Frame rate', style: T.label(Grey.g56)),   // (Alight Motion's ten: the document seen only at its frames, written at them too)
+                SizedBox(height: Shape.s(6)),
+                Wrap(spacing: Shape.s(6), runSpacing: Shape.s(6), children: [
+                  for (final r in const [8, 10, 12, 15, 24, 25, 30, 48, 50, 60])
+                    DeskChip(key: ValueKey('size-${r}fps'), label: '$r', on: r == Ws.fps, onTap: ws.inside == null ? null : () => ws.after(ws.inside!.later('set', thing: 0, name: 'frame_rate', number: r == ws.inside!.rate ? 0 : r.toDouble()), (_, _) => ws.reread())),
+                ]),
+                SizedBox(height: Shape.s(12)),
                 Text('$shownW × $shownH  ·  ${Ws.fps} frames a second', style: T.value(Grey.g76)),
               ],
             ),

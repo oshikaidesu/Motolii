@@ -223,7 +223,7 @@
 - [x] **Time Quantization（コマ落とし。ポスタリゼーション時間）**（無い→一部）：物の Frame rate（Play の札、0 は段と同じ滑らかさ）。キーで動く値は、その物の始まりから数えたコマの時刻で読む（doc_stepped：doc_number と doc_literal の両方の読みに）。After Effects の Posterize Time と同じ考え。まだ：映像そのものの再生と、キーでない動き（揺れ・ふるまい）は段のまま — 済（10/28）：窓で 4 コマ/秒にして値が 0.25・0.25・0.5・0.75 と段になるのを確かめた（`skin/book/test/workspace_joined_test_3.dart`）
 - [x] **レイヤーを切る**（無い→有る）：⌘E（Ableton Live の Split）とメニューの Split。選んだ物を再生位置で 2 つに：前は再生位置で終わり、後ろはそこから元の終わりまで、映像は前を切った分だけ先から（左端を詰める時と同じ計算）。キーは画面の時刻のまま。1 回で取り消せる。手本：AbsentMotion の Scene.splitAt（Apache-2.0） — 済（10/28）：窓で映像を選んで ⌘E、文書から両方を読んで確かめた（`skin/book/test/workspace_joined_test_3.dart`）
 - [x] 動画から音を取り出す（無い→有る）：Edit > Extract Sound。映像の写しを隠して音だけ聞こえる物にし（隠した映像も音は鳴る）、元の映像は Volume 0。名前は「… (sound)」。1 回で取り消せる。映像に Volume（0〜200%、Sound の札）を足した：書き出しは ffmpeg の volume、再生は GStreamer の playbin の volume — 済（10/28）：窓で文書から読んで確かめた（`skin/book/test/workspace_joined_test_3.dart`）、書き出しの音量を ffmpeg の volumedetect で測った（1・0.5・0 で -10.6・-16.7・-91 dB）
-- [ ] 作った後でプロジェクトの設定（大きさ・コマの速さ）を変える（一部）：大きさは上の帯の札で（1 回押すと縦横比と解像度の箱、2 回で数字、10/28）。まだ：コマの速さ（内側が 60 の決まり）
+- [x] 作った後でプロジェクトの設定（大きさ・コマの速さ）を変える（一部）：大きさは上の帯の札で（1 回押すと縦横比と解像度の箱、2 回で数字、10/28）。まだ：コマの速さ（内側が 60 の決まり） — 済（10/29）：段の frame_rate：上の帯の大きさの箱に Frame rate（Alight Motion の 10 段：8・10・12・15・24・25・30・48・50・60）。言うと段の時刻がそのコマに揃う（`filament/kit_things.h` の time_is：キー・ふるまい・動画のどれも同じ刻み、物ごとの Time Quantization を段全体に）、タイムラインはそのコマで数え（Ws.fps）、書き出しもその速さ（render_rate を言っていなければ）。edit.sh で 10 fps：0.05 秒と 0.09 秒が同じ絵、0.10 秒で次のコマへ。30 fps で書き出すと 30/1。窓の試験で 24 を押して書類とタイムラインが 24
 - [x] プレビューの拡大・手のひら（有る）：いま トラックパッド 2 本指・ピンチ — 済：窓の試験（`workspace_trackpad_test.dart`）
 - [x] 書き出し MP4（H.264）（一部）：書き出しの箱の Resolution・Rate・Quality を ffmpeg にそのまま（10/28） — 済：`check/film_way.sh`
 - [x] **書き出し HEVC・GIF・PNG 連番・静止画・透明**（無い→一部）：HEVC（.mov）・GIF・PNG と JPEG の連番・今のコマの PNG（⇧E）は有る（10/28、`check/film_way.sh`）。まだ：透明（段の絵が不透明） — 済（10/29）：書き出しの欄に Background（Solid・Clear）。Clear（`render_alpha` 1）なら、書き出す間だけ段の View を Filament の TRANSLUCENT にし（後処理まで透明さを保つ、View.h）、乗算済みの色を戻して ffmpeg に渡す（`filament/kit_draw.h` の film）。PNG 連番は RGBA（円 1 つで透明 2,048,020 画素・不透明 24,786・縁 794）、GIF は bgra、.mov は HEVC の透明つき（VideoToolbox の -alpha_quality 0.75、AVFoundation で読むと透明 2,048,086・不透明 24,834）。背景の色を言った書類は不透明のまま。窓の書き出しの欄の試験（`skin/book/test/workspace_render_dialog_test.dart`）
@@ -233,7 +233,7 @@
 ## H. 実機で見つけた根幹の操作（alight_ui.md）（66）
 
 - [ ] 新しい文書の箱：縦横比 6 種＋自由、解像度 7 段、fps 10 段、背景、PROJECT か ELEMENT（一部）：New（⌘N）で新しい書類を開くと、まず大きさの箱（縦横比 5 種と解像度 7 段、自由は 2 回押して打つ）が出る（10/28、`workspace_joined_test_3.dart`）。背景は Room カード。まだ：fps（内側の 60 の決まり）、ELEMENT
-- [ ] 文書の設定を後から変える（同じ箱）と、編集した時間（一部）：大きさは同じ箱でいつでも変えられる（10/28）。まだ：fps、編集した時間
+- [ ] 文書の設定を後から変える（同じ箱）と、編集した時間（一部）：大きさは同じ箱でいつでも変えられる（10/28）。まだ：fps、編集した時間 — fps も同じ箱で（10/29）。まだ：編集した時間
 - [x] 書き出し：形式ごとの行、空き容量と大きさの見積もり：書き出しの箱の Format の札（MP4・HEVC・GIF・PNG・JPEG）、Folder の横に空き容量（Mac の df）、Quality を選ぶと大きさの見積もり（Mbps × 秒） — 済（10/28）：窓の試験（`workspace_render_dialog_test.dart`）。Auto のときは見積もりを出さない
 - [x] 書き出し Video：解像度、H.264 / H.265、fps 3 段、画質 Mbps：書き出しの箱の Format（MP4 H.264・HEVC・GIF・PNG）、Resolution（Full と 2160p〜）、Rate（60・30・24・15）、Quality（Auto と 4〜32 Mbps）。値は書類に残る — 済（10/28）：`check/film_way.sh`、窓の試験（`workspace_render_dialog_test.dart`）
 - [x] 書き出し：今のコマを PNG：File メニューの Export Frame・⇧E（Premiere Pro と同じ）。再生位置の絵を文書の隣に「文書名_コマ.png」で — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）

@@ -345,7 +345,7 @@ static const DocCard doc_cards[] = {
     {"Scatter", "scatter_x scatter_y scatter_z scatter_rotate scatter_size seed drift_x drift_y"},
     {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
     {"Motion", "orient", "kind", "!camera"},   // (how it goes along its way: turned the way it is going, After Effects' Auto-Orient)
-    {"Play", "marker animation speed speed_hold frame_rate"},
+    {"Play", "marker animation speed speed_hold frame_rate", "kind", "!stage"},   // (a thing's; the stage's own frame rate is said in the size box)
     {"Sound", "volume beats", "kind", "film"},   // (its beats: shown on the timeline's ruler where it strikes)
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Parent", "parent_rotate parent_size roll roll_radius", "parent", "!0"},

@@ -29,7 +29,7 @@ class Ws extends ChangeNotifier {
       if (document) reread();
       if (moment) seen.value++;
     };
-    fps = inside.rate; // (a frame is the inside's: the timeline counts what a written film has)
+    fps = _fpsOf(inside); // (a frame is the document's: the timeline counts what a written film has)
     WsArt.comp = Size(inside.size.$1.toDouble(), inside.size.$2.toDouble());
     moment.value = (inside.now * fps).round(); // (the playhead is the inside's moment from the first)
     reread();
@@ -116,12 +116,19 @@ class Ws extends ChangeNotifier {
   }
 
   /// The document read again, after any change to it: what the seats list is what the document holds.
+  /// The document's frame rate (its `frame_rate`, the stage's own), or the inside's when it says none.
+  static int _fpsOf(Motolii m) => switch ((m.value(0, 'frame_rate', 0) ?? 0).round()) { > 0 && final r => r, _ => m.rate };
   void reread() => Timeline.timeSync('ws reread', _reread); // (named in Flutter's timeline: frames_test TRACE)
   void _reread() {
     final m = _inside;
     if (m == null) return;
     if (!m.fits && refit != null) return refit!(); // (the document says another size, by a hand or by undo: the host opens it again, and that reads it)
     lastChange = m.changes();
+    if (_fpsOf(m) != fps) {   // (the document's frame rate said again: the playhead kept where it is in time)
+      final at = moment.value / fps;
+      fps = _fpsOf(m);
+      moment.value = (at * fps).round();
+    }
     rev++;
     reads++;
     duration = Timeline.timeSync('MARK seconds', () => (m.seconds * fps).round().clamp(1, 1 << 20));

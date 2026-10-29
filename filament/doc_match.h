@@ -21,6 +21,7 @@ static std::string doc_mosh(Doc& d, int thing) {
 }
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
+    s.frames = doc_number(d, 0, "frame_rate", 0, 0);   // (the document's frame rate: its time seen at its frames from the next picture on)
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
     doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and (name in (%s) or name glob '*_by') order by thing, name) group by thing", doc_making),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });

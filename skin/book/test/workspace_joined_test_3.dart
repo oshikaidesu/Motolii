@@ -487,6 +487,16 @@ void _tests3() {
     await pick('size-720p');
     expect(ws.inside!.size, (720, 1280), reason: 'the same shape, smaller');
     expect(find.text('720 × 1280'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('ws-top-size')));   // (and its frame rate: the document's, the timeline counting in it)
+    await t.pump(kDoubleTapTimeout);
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('size-24fps')));
+    for (var i = 0; i < 100 && (ws.inside!.value(0, 'frame_rate', 0) ?? 0) != 24; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await t.pump();
+    }
+    await settled(t, ws);
+    expect([ws.inside!.value(0, 'frame_rate', 0), Ws.fps], [24, 24], reason: 'the document at 24 frames a second, and the timeline: ${ws.inside!.trouble}');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
