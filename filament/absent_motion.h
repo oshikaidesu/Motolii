@@ -25,11 +25,12 @@ std::string absent_text(const std::vector<AbsentEffect>& effects, int64_t thing,
 // large as r, in a line as wide as width (cap 0 butt, 1 round, 2 square; join 0 miter, 1 round, 2 bevel; else its own):
 // its outline to be filled, as SVG's path data, in the same points; none for a style it does not know.
 std::string absent_line_end(float x, float y, float dx, float dy, float r, float width, int cap, int join, const char* style);
-// A freehand stroke as AbsentMotion makes and shows it (absent_drawing.cpp): its points x y and pressure, in turn, as
-// wide as width (a brush's radius its pressure times half of it), the tool (0 pen, 1 brush, 2 fill), its effects (Stroke
-// Taper, Drawing Progress) at a moment: its outline to be filled, as SVG's path data, in the same units; in one piece
-// (together: Skia's union, as long again as the rest, for a path to keep), else its pieces to be filled as one.
-std::string absent_drawing(const std::vector<float>& xyp, float width, int tool, const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs, bool together);
+// Freehand strokes as AbsentMotion makes and shows them, one drawing layer's (absent_drawing.cpp): each stroke its tool
+// (0 pen, 1 brush, 2 fill, 3 eraser), how wide (a brush's radius its pressure times half of it), then its points x y and
+// pressure in turn, strokes with ';' between; its effects (Stroke Taper, Drawing Progress) at a moment: its outline to be
+// filled, as SVG's path data, in the same units; in one piece (together: Skia's union, as long again as the rest, for a
+// path to keep; always, once an eraser has taken from it), else its pieces to be filled as one.
+std::string absent_drawing(const std::string& strokes, const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs, bool together);
 // A motion blur or shutter blur on it (motion.cpp ShutterBlurOf): how long its shutter is open, in seconds at so many
 // frames a second, and whether its way is smeared (AbsentMotion's quick smear takes the way of its middle alone:
 // styles.cpp DrawShuttered); false: none is on it.

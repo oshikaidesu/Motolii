@@ -279,13 +279,7 @@ static void doc_moment(Doc& d, double now) {
                 for (const AbsentEffect& e : on) for (const auto& [name, v] : e.params) for (const float one : v) key += " " + std::to_string(one);
                 auto& kept = d.drawingKept[thing];
                 if (!on.empty() && kept.first != key) {
-                    std::istringstream in(drawn);
-                    int tool = 1;
-                    float wide = 0.f;
-                    in >> tool >> wide;
-                    std::vector<float> xyp;
-                    for (float v; in >> v;) xyp.push_back(v);
-                    kept = {key, absent_drawing(xyp, wide, tool, on, thing, 0.0, 1000.0, 0.0, false)};
+                    kept = {key, absent_drawing(drawn, on, thing, 0.0, 1000.0, 0.0, false)};
                 }
                 std::vector<tvg::PathCommand> c;
                 std::vector<tvg::Point> p;

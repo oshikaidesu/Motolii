@@ -312,9 +312,20 @@ class _StageViewState extends State<StageView> implements StageHandles {
     final points = getStrokePoints([for (final p in way) PointVector.fromOffset(offset: _doc(v, p))], options: options);
     if (points.length < 2) return;
     getStrokeOutlinePoints(points, options: options, rememberSimulatedPressure: true);
+    final said = [for (final p in points) '${p.point.x} ${p.point.y} ${2 * getStrokeRadius(options.size, options.thinning, p.pressure, options.easing) / options.size}'];
+    if (widget.brushTool == 3) {   // (an eraser: taken from the picked drawing, as Alight Motion's eraser takes from the drawing layer it is in)
+      final into = int.tryParse(ws.selected ?? '');
+      if (into == null) {
+        ws.notice = 'Pick a drawing to erase from';
+        return;
+      }
+      ws.after(m.later('brush', thing: into, word: '3 ${options.size} ${said.join(' ')}'), (done, why) {
+        if (!done) ws.notice = why;
+      });
+      return;
+    }
     m.later('together', number: 1);
     var made = 0;
-    final said = [for (final p in points) '${p.point.x} ${p.point.y} ${2 * getStrokeRadius(options.size, options.thinning, p.pressure, options.easing) / options.size}'];
     ws.after(m.later('brush', word: '${widget.brushTool} ${options.size} ${said.join(' ')}'), null, (t) => made = t);
     m.later('say', thing: -1, name: 'fill', word: ws.ink.isEmpty ? 'ffffff' : ws.ink);   // (an outline with no fill shows nothing: white, as a drawing app's brush begins, when no ink is chosen)
     ws.after(m.later('together'), (done, _) => done && made > 0 ? ws.select('$made') : null);

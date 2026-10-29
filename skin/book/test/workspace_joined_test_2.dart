@@ -477,6 +477,21 @@ void _tests2() {
     final drawing = m.word(made, 'drawing').split(' ');
     expect(drawing.first == '1' && drawing.length > 8 && (drawing.length - 2) % 3 == 0, isTrue, reason: 'the stroke kept as drawn, a brush: how wide, then each point and its pressure');
     expect(m.word(made, 'fill'), ws.ink.isEmpty ? 'ffffff' : ws.ink, reason: 'drawn in the ink, white with none');
+    await t.tap(find.text('Eraser').last);   // (Alight Motion's eraser: a stroke that takes from the picked drawing)
+    await t.pumpAndSettle();
+    final cut = await t.startGesture(stage.center - Offset(stage.width * .1, stage.height * .2));
+    for (var i = 0; i < 20; i++) {   // (down across the wave)
+      await cut.moveBy(Offset(0, stage.height * .02));
+      await t.pump();
+    }
+    await cut.up();
+    await settled(t, ws);
+    for (var i = 0; i < 200 && !m.word(made, 'drawing').contains(';'); i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    expect([m.things.length, m.word(made, 'drawing').contains('; 3 '), m.word(made, 'path') != path, m.word(made, 'path').startsWith('M')], [before + 1, true, true, true],
+        reason: 'erased from it, no new thing: ${m.trouble}');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

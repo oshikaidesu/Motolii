@@ -320,7 +320,7 @@ static const DocValue doc_values[] = {
     {"trail_length", "shape", 0.001, 60, true, nullptr},
     {"morph_to", "shape", 0, 1e9, false, nullptr},
     {"morph_steps", "shape", 0, 64, false, nullptr},   // (and so many steps from itself to it all at once, a blend; 0 or 1: none)
-    {"drawing", "shape", 0, 0, false, ""},   // (a freehand stroke as it was drawn: its tool (0 pen, 1 brush), how wide, then each point x y and its pressure, in the path's own units: doc_brush, made by AbsentMotion)
+    {"drawing", "shape", 0, 0, false, ""},   // (freehand strokes as they were drawn, ";" between: each its tool (0 pen, 1 brush, 2 fill, 3 eraser), how wide, then each point x y and its pressure, in the path's own units: doc_brush, made by AbsentMotion)
     {"path", "shape", 0, 0, false, ""},   // (a path shape's own path, drawn by a pen: SVG's path data, in its height from its middle, down as SVG goes)   // (only those nearer than this, in units of the stage, finer the further apart: a plexus; 0: each to the next in their order)
     // (a wave through it and its copies, Cavalry's oscillator: so far across and up (units), so far turned (degrees),
     //  so much larger (a share), so many times a second, each copy so far behind the one before (turns spread over all)
