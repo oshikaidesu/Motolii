@@ -116,8 +116,17 @@ abstract final class EffectTiles {
       ..say(aa, 'fill', 'ffffff')
       ..set(aa, 'size', 1)
       ..set(aa, 'y', -0.55);
-    List<String> shoot(String home) {   // (its eight pictures, made small)
-      final made = [for (final (k, at) in moments.indexed) if (m.at(at) && m.still(_drawn(home, k))) _drawn(home, k)];
+    List<String> shoot(String home, {bool plays = false}) {   // (its eight pictures, made small; plays: one that keeps its frame before (ISF's PERSISTENT) drawn every frame from the start, the eight kept as it passes them, as fx_tiles.sh warms one)
+      final made = <String>[];
+      if (plays) {
+        for (var n = 1, k = 0; k < moments.length && n <= (moments.last * 60).round(); n++) {
+          final keep = n == (moments[k] * 60).round();
+          if (m.at(n / 60) && m.still(keep ? _drawn(home, k) : '${folder.path}/warm.png') && keep) made.add(_drawn(home, k));
+          if (keep) k++;
+        }
+      } else {
+        made.addAll([for (final (k, at) in moments.indexed) if (m.at(at) && m.still(_drawn(home, k))) _drawn(home, k)]);
+      }
       if (made.isNotEmpty) Process.runSync('sips', ['-Z', '192', ...made]);
       return made;
     }
@@ -136,7 +145,8 @@ abstract final class EffectTiles {
           ..key(0, progress, moments.first, 0)
           ..key(0, progress, moments.last, 1);
       }
-      var made = shoot(home);
+      final plays = f.endsWith('.fs') && RegExp(r'"PERSISTENT"\s*:\s*(true|1)').hasMatch(File(f).readAsStringSync());
+      var made = shoot(home, plays: plays);
       if (whole) m.say(0, 'script', 'none');
       if (onIt) m.say(photo, 'fx', 'none');
       if (made.length < moments.length) made = shoot(home);   // (put on but not drawn, a script that stops: the sample as it is)
