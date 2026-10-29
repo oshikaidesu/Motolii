@@ -48,4 +48,4 @@ theme.xml に `<Parts Value="フォルダ"/>` を書くと、そのフォルダ�
 `desk.tools` `desk.blend` `desk.align`
 
 ## そのほか
-`undo`（やり直しは同じ絵を裏返して使う）、`shade`（明暗の切り替え）、`stage.safe`、`stage.grid`
+`undo`（やり直しは同じ絵を裏返して使う）、`shade`（明暗の切り替え）、`stage.safe`、`stage.grid`、`stage.snap`（今の絵を取っておく）、`stage.show`（取っておいた絵を見る）

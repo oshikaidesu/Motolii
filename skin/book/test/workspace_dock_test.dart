@@ -177,6 +177,20 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('a mouse\'s wheel moves the chips sideways, as VS Code\'s tab strip: the last chip is reached by a mouse alone', (t) async {
+    final ws = _joined();
+    await _shelf(t, ws, const Size(240, 918), 'Effects');
+    final along = find.ancestor(of: find.text('All'), matching: find.byType(Scrollable)).first, at = t.getCenter(find.text('All'));
+    expect(t.state<ScrollableState>(along).position.pixels, 0);
+    final mouse = TestPointer(1, PointerDeviceKind.mouse);
+    await t.sendEventToBinding(mouse.hover(at));
+    await t.sendEventToBinding(mouse.scroll(const Offset(0, 100000)));
+    await t.pump();
+    final p = t.state<ScrollableState>(along).position;
+    expect([p.pixels, p.maxScrollExtent > 0], [p.maxScrollExtent, true], reason: 'a turn down: to the far end');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
   testWidgets('the Effects shelf lists the files\' effects by their names, one run of A to Z (After Effects\' Effects & Presets), not by file', (t) async {
     final ws = _joined(), m = ws.inside!, nameOf = {for (final (n, f) in m.effects) f: n};
     await _shelf(t, ws, const Size(240, 918), 'Effects');
