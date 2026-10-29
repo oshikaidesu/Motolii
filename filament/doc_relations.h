@@ -253,6 +253,13 @@ static std::string doc_text_shown(Doc& d, int thing, double now, bool* moves = n
     const double begins = doc_literal(d, thing, "start", 0, 0), lasts = doc_literal(d, thing, "duration", 0, -1);
     return absent_text(on, thing, 1000.0 * begins, 1000.0 * (begins + (lasts > 0 ? lasts : doc_seconds(d))), 1000.0 * now, 60, typed);
 }
+// How long a thing's shutter is open (AbsentMotion's Motion Blur or Shutter Blur on it: absent_shutter), seconds at the
+// stage's 60 a second, and whether its way is smeared; false: none is on it.
+static bool doc_shutter(Doc& d, int thing, double now, double* open, bool* moves) {
+    if (doc_word(d, thing, "fx").find(".am") == std::string::npos) return false;
+    const double begins = doc_literal(d, thing, "start", 0, 0), lasts = doc_literal(d, thing, "duration", 0, -1);
+    return absent_shutter(doc_absent_on(d, thing, now), thing, 1000.0 * begins, 1000.0 * (begins + (lasts > 0 ? lasts : doc_seconds(d))), 1000.0 * now, 60, open, moves);
+}
 // A thing's opacity as AbsentMotion's opacity effects on it leave it (a share, 1 with none: absent_motion.h).
 static double doc_absent_opacity(Doc& d, int thing, double now) {
     if (doc_word(d, thing, "fx").find(".am") == std::string::npos) return 1.0;

@@ -27,7 +27,7 @@ static void doc_things_fx(Doc& d) {
     Stage& s = *d.stage;
     s.before.clear(), s.aim.clear();
     for (auto& [thing, e] : d.thingFx) {   // (each drawn alone into a picture, its effects run on it, before the stage's own view: thing_fx.h)
-        thing_effects(s, e.st, doc_fx_join(doc_fx_list(d, thing)));
+        thing_effects(s, e.st, doc_fx_join(doc_fx_steps(d, thing)));
         e.solidFile.clear();
         for (const std::string& w : doc_fx_list(d, thing)) if (solid_is(w)) e.solidFile = w;   // (a solid's shape among them: its picture laid on that, thing_fx.h; the last named)
         if (const DocScript* sc = e.solidFile.empty() ? nullptr : doc_script_of(d, e.solidFile)) {   // (its knobs as the document says them now, by their own names; the solid made with them, before the frame)
@@ -67,6 +67,15 @@ static void doc_things_fx(Doc& d) {
                 double frame[8];
                 if (!doc_frame(d, thing, d.stage->now, frame)) return usual;
                 return name == "origin_x" ? frame[0] - e.box[0] : name == "origin_y" ? frame[1] - e.box[1] : name == "turn" ? frame[4] : std::max(frame[2], frame[3]);   // (on its own picture: the box it is seen in)
+            }
+            if ((name == "blurLength" || name == "angle") && file.ends_with("am_directionalblur.wgsl") && doc_word(d, thing, "fx").find("am_directionalblur.wgsl") == std::string::npos) {
+                // (the step its Motion Blur is: as far and that way as its middle goes while its shutter is open, in its picture's pixels, as AbsentMotion's quick smear)
+                double open = 0.0, was[8], is[8];
+                bool moves = false;
+                const double now = d.stage->now;
+                if (!doc_shutter(d, thing, now, &open, &moves) || !moves || !doc_frame(d, thing, now - 0.5 * open, was) || !doc_frame(d, thing, now + 0.5 * open, is)) return 0.0;
+                const double ppp = (double)d.stage->view->getViewport().width / std::max(1, d.stage->w), dx = is[0] - was[0], dy = is[1] - was[1];
+                return name == "blurLength" ? ppp * std::hypot(dx, dy) : std::atan2(-dy, -dx) * 180.0 / M_PI;   // (its blur reads behind it along the way it is told: told back, it trails behind the way it goes)
             }
             return doc_number(d, thing, doc_screen_knob(file, name).c_str(), d.stage->now, usual);
         };

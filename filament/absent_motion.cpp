@@ -95,3 +95,9 @@ std::string absent_text(const std::vector<AbsentEffect>& effects, int64_t thing,
     }
     return text;
 }
+bool absent_shutter(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs, int fps, double* open, bool* moves) {
+    am::ShutterBlur blur;
+    if (!am::ShutterBlurOf(absent_layer(effects, thing, startMs, endMs), nowMs, &blur)) return false;
+    *open = blur.angle / 360.0 / std::max(1, fps), *moves = blur.position;   // (as DrawShuttered opens it: a frame's time times its angle)
+    return true;
+}

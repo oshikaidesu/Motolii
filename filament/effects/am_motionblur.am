@@ -1,0 +1,8 @@
+// Motion Blur: AbsentMotion's motionblur (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), moved by its own motion.cpp (filament/absent_motion.cpp)
+// --label:Blur
+// --absent:motionblur
+// --about:Blurs the layer along the way it moves, turns and grows, from its keyframes and from motion effects such as Auto-Shake and Oscillate. Tune scales the blur. The preview shows a quicker blur unless Full Blur is on.
+// --track@tune:Tune,0,4,1.0,0.01
+// --track@position:Position,0,1,1.0,0.01
+// --track@scale:Scale,0,1,1.0,0.01
+// --track@rotation:Angle,0,1,1.0,0.01

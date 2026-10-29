@@ -75,7 +75,7 @@ static void doc_moment(Doc& d, double now) {
         if (runOf[i] < 0) continue;
         const int run = runOf[i];
         Doc::Shown& t = *lies[i].shown;
-        const bool own = doc_fx_files(doc_fx_list(d, lies[i].thing));   // (with effects of its own: drawn alone, its picture laid here: thing_fx.h)
+        const bool own = doc_fx_files(doc_fx_steps(d, lies[i].thing));   // (with effects of its own: drawn alone, its picture laid here: thing_fx.h)
         const std::string laid = own ? doc_word(d, lies[i].thing, "blend") : std::string();   // (its sheet lies on what is behind as it says: Filament's own blending; one that reads what is under, as normal yet)
         Scene* into = own ? thing_fx_made(s, d.thingFx[lies[i].thing], laid == "add" || laid == "multiply" || laid == "screen" ? laid : "").view->getScene() : s.scene;   // (one view: every other run in the stage's own scene, kept in order by Filament's channels)
         Scene* const was = t.scene ? t.scene : s.scene;
@@ -104,7 +104,7 @@ static void doc_moment(Doc& d, double now) {
     }
     for (auto e = d.thingFx.begin(); e != d.thingFx.end();) {   // (no longer with effects of its own, or gone: let go)
         const auto at = std::find_if(lies.begin(), lies.end(), [&](const auto& l) { return l.thing == e->first; });
-        if (at == lies.end() || runOf[(size_t)(at - lies.begin())] < 0 || !doc_fx_files(doc_fx_list(d, e->first))) thing_fx_off(s, e->second), e = d.thingFx.erase(e);
+        if (at == lies.end() || runOf[(size_t)(at - lies.begin())] < 0 || !doc_fx_files(doc_fx_steps(d, e->first))) thing_fx_off(s, e->second), e = d.thingFx.erase(e);
         else ++e;
     }
     doc_things_fx(d);   // (each with effects of its own drawn alone first: doc_moment_fx.h)

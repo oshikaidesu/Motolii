@@ -30,5 +30,9 @@ std::string absent_line_end(float x, float y, float dx, float dy, float r, float
 // Taper, Drawing Progress) at a moment: its outline to be filled, as SVG's path data, in the same units; in one piece
 // (together: Skia's union, as long again as the rest, for a path to keep), else its pieces to be filled as one.
 std::string absent_drawing(const std::vector<float>& xyp, float width, int tool, const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs, bool together);
+// A motion blur or shutter blur on it (motion.cpp ShutterBlurOf): how long its shutter is open, in seconds at so many
+// frames a second, and whether its way is smeared (AbsentMotion's quick smear takes the way of its middle alone:
+// styles.cpp DrawShuttered); false: none is on it.
+bool absent_shutter(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs, int fps, double* open, bool* moves);
 struct AbsentCopy { double x = 0, y = 0, rotate = 0, scale = 1, alpha = 1; };
 std::vector<AbsentCopy> absent_copies(const std::vector<AbsentEffect>& effects, int64_t thing, double startMs, double endMs, double nowMs, float wide, float high, float atX, float atY, float reach);

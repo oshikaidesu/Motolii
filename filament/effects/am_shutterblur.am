@@ -1,0 +1,6 @@
+// True Motion Blur: AbsentMotion's shutterblur (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), moved by its own motion.cpp (filament/absent_motion.cpp)
+// --label:Move
+// --absent:shutterblur
+// --about:Blurs the layer along the way it really moves, turns and grows, like a camera shutter. A wider shutter angle gives longer trails and more samples give smoother ones. The preview shows a quicker blur unless Full Blur is on.
+// --track@shutter:Shutter Angle,0,360,180.0,1
+// --track@samples:Samples,2,32,8.0,1

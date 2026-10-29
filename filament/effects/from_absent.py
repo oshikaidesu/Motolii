@@ -16,6 +16,7 @@ src, out, skslc = sys.argv[1], sys.argv[2], sys.argv[3]
 d = json.load(open(src))
 moves = ('autoshake', 'randomdisplace', 'randomjitter', 'oscillate', 'swing', 'spin', 'pulsesize', 'pulseopacity')   # (AbsentMotion's motion.cpp ApplyMotion: what it moves the layer by; MotionOpacity: its opacity)
 moves += ('textrandomizer', 'timecode', 'countupdown')   # (its text.cpp Shown: a text's words changed, by textanim.cpp: absent_text)
+moves += ('motionblur', 'shutterblur')   # (its ShutterBlurOf: how long the shutter is open; the smear a step of its Directional Blur, doc_fx_steps)
 moves += ('stroketaper', 'drawingprogress')   # (its drawing.cpp EachPiece: a freehand stroke's outline as they make it: absent_drawing)
 moves += ('repeat', 'linearrepeat', 'gridrepeat', 'radialrepeat', 'scatterfield')   # (its RepeatCopies: copies of the layer, a scatter field's over the whole composition; along a path needs the layer beneath: not yet)
 

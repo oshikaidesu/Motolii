@@ -73,7 +73,7 @@ static bool doc_match(Doc& d) {
         if (d.shown.count(thing)) continue;
         Doc::Shown made{of};
         const std::string kind = doc_word(d, thing, "kind"), file = doc_word(d, thing, "file"), laid = doc_word(d, thing, "blend"), shape = doc_word(d, thing, "shape");
-        const bool effected = doc_fx_files(doc_fx_list(d, thing));   // (with effects of its own: drawn alone as normal, its way of lying on what is under taken once they are on: screen.h)
+        const bool effected = doc_fx_files(doc_fx_steps(d, thing));   // (with effects of its own: drawn alone as normal, its way of lying on what is under taken once they are on: screen.h)
         const char* lay = effected || laid.empty() || laid == "normal" || doc_blend_way(laid) ? nullptr : laid.c_str();   // (one that reads what is under: drawn as normal, flat.mat mixes it)
         std::string why = "it could not be read";
         const std::string fill = doc_word(d, thing, "fill");
@@ -129,7 +129,7 @@ static bool doc_match(Doc& d) {
         fx.heads = std::max(0, which("heads", "none end start both")), fx.headSize = (float)doc_number(d, thing, "head_size", 0, 4), fx.headShape = std::max(0, which("head_shape", "arrow circle box chevron bar t_line square square_filled diamond diamond_filled arrow_hollow arrow_filled circle_hollow circle_filled teardrop_hollow teardrop_filled")), fx.headStart = which("head_start", "arrow circle box chevron bar t_line square square_filled diamond diamond_filled arrow_hollow arrow_filled circle_hollow circle_filled teardrop_hollow teardrop_filled");
         fx.dash = (float)(doc_number(d, thing, "dash", 0, 0) / units), fx.dashFrom = (float)(doc_number(d, thing, "dash_offset", 0, 0) / units);
         bool fxOk = doc_fx(d, thing, 0.0, true, units, fx, why);   // (made as large as its effects reach at their most; each moment tells them as they are then)
-        if (!fxOk && doc_fx_files(doc_fx_list(d, thing))) { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }   // (an effect file of any kind of thing, as a picture's own file is refused)
+        if (!fxOk && doc_fx_files(doc_fx_steps(d, thing))) { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }   // (an effect file of any kind of thing, as a picture's own file is refused)
         made.units = units;
         if (doc_among("film picture text shape", kind)) made.space = doc_word(d, thing, "space") == "2.5d" ? 25 : 2;
         if (kind == "behaviour") made.behaviour = true;   // (nothing of it is seen: it says how values of others go)

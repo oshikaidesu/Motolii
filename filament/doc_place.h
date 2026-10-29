@@ -466,6 +466,16 @@ static std::vector<std::string> doc_fx_list(Doc& d, int thing, bool off) {
 static bool doc_fx_files(const std::vector<std::string>& list) {
     return std::any_of(list.begin(), list.end(), [](const std::string& w) { const std::string ext = std::filesystem::path(w).extension().string(); return !doc_thor_letter(w) && ext != ".mjs" && ext != ".am" && ext != ".json"; });   // (a splat effect is in the cloud's own look; AbsentMotion's motion moves the thing, absent_motion.h; Filament's own settings are the stage's)
 }
+// Its effects as its stack runs them: as listed, AbsentMotion's Motion Blur and Shutter Blur each a step of AbsentMotion's
+// own Directional Blur beside it on the shelf, told how far and which way the thing goes while its shutter is open
+// (doc_moment_fx.h: AbsentMotion's quick smear, styles.cpp DrawShuttered's SmearFilter).
+static std::vector<std::string> doc_fx_steps(Doc& d, int thing) {
+    std::vector<std::string> steps = doc_fx_list(d, thing);
+    for (std::string& w : steps)
+        if (std::filesystem::path(w).extension() == ".am")
+            if (const DocScript* sc = doc_script_of(d, w); sc && (sc->absent == "motionblur" || sc->absent == "shutterblur")) w = (std::filesystem::path(w).parent_path() / "am_directionalblur.wgsl").string();
+    return steps;
+}
 static std::string doc_fx_join(const std::vector<std::string>& list) {
     std::string all;
     for (const std::string& w : list) all += (all.empty() ? "" : " ") + w;

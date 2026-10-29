@@ -296,6 +296,7 @@ final _rowsBR = <(String, String, Map<String, Object>)>[
   ('stamper', 'look:Luma Stamper', const <String, Object>{}),
   ('strips', 'look:Streak Strips', const <String, Object>{}),
   ('outline', 'outline:star', const <String, Object>{}),
+  ('motion', 'motion:effects/am_motionblur.am', const {'~tune': 2}),
 ];
 // (section BQ: AbsentMotion's text effects from the shelf on the words MOTOLII: a running clock, a count, letters at random.)
 final _rowsBQ = <(String, String, Map<String, Object>)>[
@@ -711,6 +712,12 @@ void main() {
         expect(m.say(left, 'fx', '$blur $dir'), isTrue, reason: m.trouble);
         expect(m.set(left, 'js_Diagonal_Blur_width', .02) && m.set(left, 'js_Diagonal_Blur_angle', 0) && m.set(left, 'js_Diagonal_Blur_quality', 2), isTrue, reason: m.trouble);
         expect(m.set(left, 'js_am_directionalblur_blurLength', 20) && m.set(left, 'js_am_directionalblur_angle', 90), isTrue, reason: m.trouble);
+      } else if (effect.startsWith('motion:')) {   // (a yellow square going fast to the right, AbsentMotion's Motion Blur on it from the shelf, seen half way)
+        expect(m.remove(left), isTrue, reason: m.trouble);
+        left = m.add('shape', 'rect');
+        expect(m.set(left, 'size', .12) && m.say(left, 'fill', 'ffcc33') && m.key(left, 'x', 0, -.9) && m.key(left, 'x', .4, -.1), isTrue, reason: m.trouble);
+        expect(m.say(left, 'fx', '$motoliiDir/${effect.substring('motion:'.length)}') && m.set(left, 'js_am_motionblur_tune', (knobs['~tune'] as num).toDouble()), isTrue, reason: m.trouble);
+        expect(m.at(.2), isTrue, reason: m.trouble);
       } else if (effect.startsWith('outline:')) {   // (a shape made a path of its outline, as the thing menu's Convert to Outline asks it: workspace.dart)
         expect(m.remove(left), isTrue, reason: m.trouble);
         left = m.add('shape', effect.substring('outline:'.length));
