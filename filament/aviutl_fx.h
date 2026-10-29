@@ -35,6 +35,9 @@ struct AviutlRun {
     double box[4] = {0, 0, 0, 0};                   // (where the thing is seen, points of the stage: its frame is that of the stage's)
     int ground = -1;                                // (the stage's colour behind everything, 0xRRGGBB; -1 none)
     bool wide = false;                              // (it draws the object (obj.draw, drawpoly): its frame the stage's, the object the thing's own picture where it is seen)
+    const ScreenNumbers* numbers = nullptr;         // (this frame's: what it asks of the other things, the document's answers (doc_moment_fx.h doc_aviutl_asked))
+    std::vector<std::string> chain;                 // (the effects on the thing in their order, by name, and which is this one: obj.getoption "script_name")
+    int at = 0;
     double seen[4] = {0, 0, 0, 0};                  // (then where the thing is seen, points of the stage)
     std::map<std::string, ScreenFx*> isf;           // (Sashimono's remakes of AviUtl's built-in effects it ran, by their files: aviutl_sashimono)
     ScreenStack isfStack;
@@ -245,7 +248,18 @@ static int aviutl_getoption(lua_State* L) {
     else if (n == "draw_state") lua_pushboolean(L, r.drew);
     else if (n == "drawtarget") lua_pushstring(L, r.target.c_str());
     else if (n == "blend") lua_pushstring(L, r.blend.c_str());
-    else if (n == "script_name" && lua_gettop(L) == 1) lua_pushstring(L, std::filesystem::path(r.file).stem().string().c_str());
+    else if (n == "script_name") {   // (that many effects along from this one on the thing (lua.txt), by its name; past them, nil)
+        const long i = r.at + (lua_isnumber(L, 2) ? std::lround(lua_tonumber(L, 2)) : 0);
+        if (i >= 0 && i < (long)r.chain.size()) lua_pushstring(L, r.chain[(size_t)i].c_str());
+        else lua_pushnil(L);
+    } else if (n == "group_info") {   // (the layer of the group it is in, 0 the nearest; none, 0: PixelSnap_S's `group_layer > 0`; doc_aviutl_asked)
+        const double v = r.numbers ? (*r.numbers)(r.file, "aviutl.group" + std::to_string(lua_isnumber(L, 2) ? (int)lua_tonumber(L, 2) : 0), NAN) : NAN;
+        lua_pushinteger(L, std::isnan(v) ? 0 : (lua_Integer)v);
+    } else if (n == "camera_param") {   // (AviUtl's own camera, none of its own here: 1024 before the screen looking at its middle, as sashimono-edit's CAMERA_DISTANCE is AviUtl's)
+        lua_newtable(L);
+        static const std::pair<const char*, double> camera[] = {{"x", 0}, {"y", 0}, {"z", -1024}, {"tx", 0}, {"ty", 0}, {"tz", 0}, {"rz", 0}, {"d", 1024}};
+        for (const auto& [k, v] : camera) lua_pushnumber(L, v), lua_setfield(L, -2, k);
+    }
     else return aviutl_no(L, "obj.getoption " + n);
     return 1;
 }
@@ -256,6 +270,7 @@ static int aviutl_getinfo(lua_State* L) {
     else if (n == "filter" || n == "saving" || n == "reference_frame") lua_pushboolean(L, 0);
     else if (n == "image_max") return lua_pushinteger(L, r.bufs["framebuffer"].w), lua_pushinteger(L, r.bufs["framebuffer"].h), 2;   // (a thing's picture grows no larger than its box)
     else if (n == "script_path") lua_pushstring(L, (std::filesystem::path(r.file).parent_path().string() + "/").c_str());
+    else if (n == "layer_max") lua_pushinteger(L, r.numbers ? (lua_Integer)(*r.numbers)(r.file, "aviutl.layer_max", 1) : 1);   // (as many layers as there are things: doc_aviutl_asked)
     else if (n == "clock") lua_pushnumber(L, std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count());
     else return aviutl_no(L, "obj.getinfo " + n);
     return 1;
@@ -267,6 +282,10 @@ static int aviutl_getvalue(lua_State* L) {   // (target): its own tracks, and th
     for (const AviutlVar& v : r.vars)
         if (v.kind == "track" && (n == std::to_string(tracks++) || n == "track." + v.var)) return aviutl_old(v) ? (lua_getglobal(L, "obj"), lua_getfield(L, -1, v.var.c_str())) : lua_getglobal(L, v.var.c_str()), 1;
     if (n == "time") return lua_pushnumber(L, r.s->now), 1;
+    if (n.rfind("layer", 0) == 0 && r.numbers) {   // (another layer's, at a time from its start: the document's things as layers, doc_aviutl_asked; none there, nil)
+        const double v = (*r.numbers)(r.file, "aviutl." + n + (lua_isnumber(L, 2) ? "@" + std::to_string(lua_tonumber(L, 2)) : std::string()), NAN);
+        return std::isnan(v) ? lua_pushnil(L) : lua_pushnumber(L, v), 1;
+    }
     if (n == "x" || n == "y" || n == "z" || n == "rx" || n == "ry" || n == "rz" || n == "cx" || n == "cy" || n == "cz" || n == "aspect") return lua_pushnumber(L, 0), 1;
     if (n == "sx" || n == "sy" || n == "sz" || n == "alpha") return lua_pushnumber(L, 1), 1;
     if (n == "zoom") return lua_pushnumber(L, 100), 1;
@@ -373,7 +392,8 @@ static int aviutl_draw(lua_State* L) {   // (ox, oy, oz, zoom, alpha, rx, ry, rz
 // the frame (oz too), as they are into the temporary buffer, in depth (aviutl_mesh), the frame's alpha the object's too
 // (sashimono-edit's lua_drawpoly); u, v pixels (none: the picture's four corners), the alpha the 13th or 21st; a table
 // of faces of 20 ({x0 .. z3, u0 .. v3}[, alpha]), or of corners {x, y, z, u, v} with u, v 0 to 1, or {x, y, z, r, g,
-// b, a} coloured, 4 or 3 a face ([, count, alpha]) (sashimono-edit's _drawpoly_table).
+// b, a} coloured, 4 or 3 a face ([, count, alpha]) (sashimono-edit's _drawpoly_table); or faces of 28, coloured
+// ({x0 .. z3, r0, g0, b0, a0 .. a3}: 連結ライン.obj2's).
 static int aviutl_drawpoly(lua_State* L) {
     AviutlRun& r = aviutl_of(L);
     const AviutlBuf& from = r.bufs["object"];
@@ -394,6 +414,16 @@ static int aviutl_drawpoly(lua_State* L) {
         if (width == 20) {   // (faces)
             alpha = aviutl_num(L, 2, 1);
             for (const auto& v : items) faces.push_back(face(v.data()));
+        } else if (width == 28) {   // (faces coloured: four corners' places, then their colours, premultiplied 0 to 1, as the 20's places then uv)
+            alpha = aviutl_num(L, 2, 1);
+            for (const auto& v : items) {
+                std::vector<AviutlCorner> c(4);
+                for (int i = 0; i < 4; ++i) {
+                    c[i] = {v[i * 3], v[i * 3 + 1], v[i * 3 + 2], -2.0 * from.w, -2.0 * from.h};   // (no picture: its uv off it)
+                    for (int k = 0; k < 4; ++k) c[i].colour[k] = (float)std::clamp(v[12 + i * 4 + k], 0.0, 1.0);
+                }
+                faces.push_back(c);
+            }
         } else if (width == 5 || width == 7) {   // (corners: pictured, or coloured)
             const int count = lua_isnumber(L, 2) ? (int)lua_tonumber(L, 2) : 4;
             alpha = aviutl_num(L, 3, 1);
@@ -408,7 +438,7 @@ static int aviutl_drawpoly(lua_State* L) {
                 }
                 faces.push_back(c);
             }
-        } else return aviutl_no(L, "obj.drawpoly of " + std::to_string(width) + " numbers a " + (width == 28 ? "face with its corners' colours" : "face with its normals"));
+        } else return aviutl_no(L, "obj.drawpoly of " + std::to_string(width) + " numbers a face");
     } else {
         const int n = lua_gettop(L);
         if (n < 12) return aviutl_no(L, "obj.drawpoly with fewer than four corners");
@@ -581,7 +611,19 @@ function OR(a, b) return bit.bor(a, b) end
 function AND(a, b) return bit.band(a, b) end
 function XOR(a, b) return bit.bxor(a, b) end
 function SHIFT(a, s) if s >= 0 then return bit.lshift(a, s) end return bit.arshift(a, -s) end
-function HSV() error("not yet: HSV") end
+-- HSV(h, s, v): sashimono-edit's hsv_to_number (MIT, compat/aviutl/objapi.py), as AviUtl has it: h 0 to 360, s and v 0 to 255.
+function HSV(h, s, v)
+  h = ((tonumber(h) or 0) % 360) / 60
+  s = math.min(math.max(tonumber(s) or 0, 0), 255) / 255
+  v = math.min(math.max(tonumber(v) or 0, 0), 255)
+  local function rgb(r, g, b) return RGB(math.floor(r), math.floor(g), math.floor(b)) end
+  if s <= 0 then return rgb(v, v, v) end
+  local sector = math.floor(h)
+  local f = h - sector
+  local p, q, t = v * (1 - s), v * (1 - s * f), v * (1 - s * (1 - f))
+  local c = ({{v, t, p}, {q, v, p}, {p, v, t}, {p, q, v}, {t, p, v}, {v, p, q}})[sector % 6 + 1]
+  return rgb(c[1], c[2], c[3])
+end
 -- obj.interpolation(t, x0,y0,z0, x1,y1,z1, x2,y2,z2, x3,y3,z3): four points' Catmull-Rom, t 0 to 1 from the second to the
 -- third, y and z left out as wanted (the AviUtl2 script skill's references/api.md, gasdyueer, MIT); each axis by
 -- sashimono-edit's _catmull_rom (MIT, compat/aviutl/objapi.py), of the four points around it.
@@ -692,7 +734,7 @@ static std::shared_ptr<AviutlRun> aviutl_made(Stage& s, const std::string& file)
 // One frame of it: the thing's picture `from` (w x h) its object, its knobs and obj's values told, the script run, and
 // what it leaves (the frame it drew, else the object as obj now places it) drawn into `to`.
 static void aviutl_draw_step(Stage& s, AviutlRun& r, Texture* from, RenderTarget* to, const ScreenNumbers& numbers, uint32_t w, uint32_t h) {
-    r.s = &s, r.target = "framebuffer", r.blend = "none", r.sampler.clear(), r.drew = false, r.draws.clear(), r.font = {};
+    r.s = &s, r.target = "framebuffer", r.blend = "none", r.sampler.clear(), r.drew = false, r.draws.clear(), r.font = {}, r.numbers = &numbers;
     for (auto at = r.loaded.begin(); at != r.loaded.end();)
         if (at->first.rfind("text|", 0) == 0 && !r.worded.count(at->first)) s.engine->destroy(at->second.t), at = r.loaded.erase(at);
         else ++at;
@@ -739,7 +781,7 @@ static void aviutl_draw_step(Stage& s, AviutlRun& r, Texture* from, RenderTarget
         const double frame = std::round(s.now * 60);
         const std::pair<const char*, double> values[] = {{"ox", 0}, {"oy", 0}, {"oz", 0}, {"rx", 0}, {"ry", 0}, {"rz", 0}, {"cx", 0}, {"cy", 0}, {"cz", 0}, {"sx", 1}, {"sy", 1}, {"sz", 1}, {"zoom", 1}, {"aspect", 0}, {"alpha", 1},
             {"x", atX}, {"y", atY}, {"z", 0}, {"w", (double)ow}, {"h", (double)oh}, {"screen_w", (double)s.w}, {"screen_h", (double)s.h}, {"framerate", 60}, {"frame", frame}, {"time", s.now}, {"totalframe", frame + 1}, {"totaltime", s.now},
-            {"layer", 1}, {"index", 0}, {"num", 1}, {"id", 1}, {"effect_id", 1}, {"frame_s", 0}, {"frame_e", frame}, {"effect_layer", 1}, {"originframe", 0}, {"scene_id", 0}};
+            {"layer", numbers(r.file, "aviutl.layer", 1)}, {"index", 0}, {"num", 1}, {"id", 1}, {"effect_id", 1}, {"frame_s", 0}, {"frame_e", frame}, {"effect_layer", 1}, {"originframe", 0}, {"scene_id", 0}};
         for (const auto& [n, v] : values) lua_pushnumber(L, v), lua_setfield(L, -2, n);
         lua_pop(L, 1);
         lua_rawgeti(L, LUA_REGISTRYINDEX, r.chunk);

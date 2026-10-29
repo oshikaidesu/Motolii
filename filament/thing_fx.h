@@ -41,6 +41,10 @@ static void thing_effects(Stage& s, ScreenStack& st, const std::string& files) {
         if (made->door) st.fx.push_back(made), st.steps.push_back(0);
         if (made->door && std::find(made->others.begin(), made->others.end(), "backdrop") != made->others.end()) st.readsBehind = true;   // (AbsentMotion's backdrop: the stage's behind, screen.h)
     }
+    const auto nameOf = [](const std::string& file) { const size_t hash = file.rfind('#'); return hash != std::string::npos ? file.substr(hash + 1) : std::filesystem::path(file).stem().string(); };   // (one of an @ file: its name after #)
+    std::vector<std::string> names;   // (the effects in their order, by name: what a script asks of its fellows, obj.getoption "script_name")
+    for (const std::string& file : script_files(files)) if (file != "none") names.push_back(nameOf(file));
+    for (const auto& r : scripts) r->chain = names, r->at = (int)(std::find(names.begin(), names.end(), nameOf(r->file)) - names.begin());
     st.aviutl = scripts;
 }
 // One of ThorVG's own effects as a step (k: its letter), on the picture `from` (the device's) drawn into picture

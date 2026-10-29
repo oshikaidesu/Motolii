@@ -23,6 +23,43 @@ static void doc_thing_solid(Doc& d, int thing, ThingFx& e, const ScreenNumbers& 
     thing_effects_draw(s, e.st, e.view, numbers, thorFx);
     if (solid_reads(e.solidFile)) thing_fx_cover(s, e, (int)(e.knobs.count("precision") ? e.knobs["precision"] : 160)), thing_fx_solid(s, e, true);
 }
+// What an AviUtl2 script asks of the other things (aviutl_fx.h): its layers are the document's things in the order
+// they lie, the furthest back layer 1 (doc_laid; AviUtl2 draws layer 1 first, the higher over it). "aviutl.layer":
+// its own; "aviutl.layerN[.name][@seconds]": that one's value then, seconds from its start (lua.txt's obj.getvalue
+// "layer1.x", time), x and y pixels of the script's frame from its middle (as its obj.x), rz its turn, alpha, time
+// from its start; none there or not shown: NaN (nil). "aviutl.groupN": the layer of the Nth group it is in, 0 the
+// nearest (obj.getoption "group_info").
+static double doc_aviutl_asked(Doc& d, int thing, const double* box, const std::string& name, double usual) {
+    const std::vector<int>& laid = doc_laid(d);
+    const auto layerOf = [&](int t) { const auto at = std::find(laid.begin(), laid.end(), t); return at == laid.end() ? NAN : (double)(at - laid.begin() + 1); };
+    if (name == "aviutl.layer") return std::isnan(layerOf(thing)) ? usual : layerOf(thing);
+    if (name == "aviutl.layer_max") return (double)std::max<size_t>(1, laid.size());
+    std::smatch m;
+    if (std::regex_match(name, m, std::regex(R"(aviutl\.group(\d+))"))) {
+        int in = thing;
+        for (int n = std::stoi(m[1]); in && n >= 0; --n) in = (int)doc_number(d, in, "parent", d.stage->now, 0);
+        return in ? layerOf(in) : NAN;
+    }
+    if (!std::regex_match(name, m, std::regex(R"(aviutl\.layer(\d+)(?:\.(\w+))?(?:@(.+))?)"))) return NAN;
+    const size_t n = std::stoul(m[1]);
+    if (n < 1 || n > laid.size()) return NAN;
+    const int other = laid[n - 1];
+    if (!m[2].matched) return 1;
+    const double start = doc_number(d, other, "start", 0, 0), now = m[3].matched ? start + std::atof(m[3].str().c_str()) : d.stage->now;
+    const std::string what = m[2];
+    if (what == "time") return now - start;
+    double frame[8];
+    if (!doc_frame(d, other, now, frame)) return NAN;
+    const double ppp = (double)d.stage->view->getViewport().width / std::max(1, d.stage->w);
+    if (what == "x") return (frame[0] - (box[0] + box[2]) / 2) * ppp;
+    if (what == "y") return (frame[1] - (box[1] + box[3]) / 2) * ppp;
+    if (what == "z" || what == "rx" || what == "ry" || what == "cx" || what == "cy" || what == "cz") return 0;
+    if (what == "rz") return frame[4];
+    if (what == "alpha") return doc_number(d, other, "opacity", now, 1);
+    if (what == "zoom") return 100;
+    return NAN;
+}
+
 static void doc_things_fx(Doc& d) {
     Stage& s = *d.stage;
     s.before.clear(), s.aim.clear();
@@ -67,6 +104,7 @@ static void doc_things_fx(Doc& d) {
                 const size_t i = std::string("xyzw").find(name.back());
                 return ppp * (i == 0 ? frame[0] - frame[2] / 2 - e.box[0] : i == 1 ? frame[1] - frame[3] / 2 - e.box[1] : i == 2 ? frame[2] : frame[3]);
             }
+            if (name.rfind("aviutl.", 0) == 0) return doc_aviutl_asked(d, thing, e.box, name, usual);   // (an AviUtl2 script asking of the other things: its layers)
             if (name == "origin_x" || name == "origin_y" || name == "turn" || name == "extent") {   // (where the thing is on the picture now, how turned, how large: an effect's pattern stuck to it)
                 double frame[8];
                 if (!doc_frame(d, thing, d.stage->now, frame)) return usual;
