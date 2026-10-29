@@ -133,6 +133,7 @@ final _field = [
 final _tray = <Color>[];
 bool _trayOklab = true;
 HSVColor _wheel = const HSVColor.fromAHSV(1, 0, .8, .9);
+String _wheelFrom = '';   // (the ink or edge the wheel last followed)
 List<Color> _found = const [];
 
 /// Joined: a fill that is not a colour. Glass is a material a solid is filled with, not a thing of its own.
@@ -148,6 +149,14 @@ void _fill(DockCtx c, String word) {
     if (word == 'glass') return;
     if (name == 'fill') c.ws.ink = word;
     if (name == 'stroke') c.ws.edge = word;
+  }
+  if (t == null && (c.ws.aim == 'fill' || c.ws.aim == 'stroke')) { // (the tool strip's ink or edge aimed it, nothing picked: what a thing drawn next comes in, stage.dart _Swatches)
+    c.set(() {
+      word == 'glass' ? c.mem.trouble['fill'] = 'Glass fills a solid thing: pick one' : c.mem.trouble.remove('fill');
+      keep(c.ws.aim!);
+    });
+    c.ws.reread();
+    return;
   }
   if (c.ws.aim case final aim?) { // (a card's colour link aimed it: said to that value, of the picked thing or of the stage)
     c.ws.after(m.later('say', thing: t ?? 0, name: aim, word: word), (done, why) => c.set(() {
@@ -248,6 +257,14 @@ class ColorsShelf extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    WsScope.of(context, {WsAspect.picked});   // (its foot says where the colour goes: built again when a card's link or the tool strip aims it)
+    // (the wheel shows the colour drawn with now, the one aimed, as CLIP STUDIO PAINT's colour wheel shows the main or sub
+    //  colour picked: given by a swatch or by the strip, it follows; it showed red with gold chosen)
+    final drawn = c.ws.aim == 'stroke' ? c.ws.edge : c.ws.ink;
+    if (drawn != _wheelFrom) {
+      _wheelFrom = drawn;
+      if (_colourOf(drawn.split(' ').first) case final col?) _wheel = HSVColor.fromColor(col);
+    }
     _readMine();
     final used = usedColours(c.ws);
     final chip = c.chip, shelf = 'Colors';

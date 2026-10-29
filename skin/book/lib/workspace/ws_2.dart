@@ -196,7 +196,7 @@ class Ws extends ChangeNotifier {
     if (id == _sel && many.isEmpty) return;
     _sel = id;
     many.clear();
-    aim = null;
+    _aim = null;
     _keys.clear();
     deskManual = null;
     _tell(WsAspect.picked);
@@ -303,8 +303,15 @@ class Ws extends ChangeNotifier {
   String get deskAuto => 'Tools';   // (Ease and Camera are panes of their own now)
 
   /// Joined: the value of the picked thing (or of the stage, with nothing picked) a colour picked on the Colors shelf is
-  /// said to, when a card's colour link aimed it there; null: the fill.
-  String? aim;
+  /// said to, when a card's colour link or the tool strip's ink or edge aimed it there; null: the fill. Told as a pick
+  /// (the strip rings the one aimed, the shelf's foot says where its colour goes).
+  String? _aim;
+  String? get aim => _aim;
+  set aim(String? to) {
+    if (to == _aim) return;
+    _aim = to;
+    _tell(WsAspect.picked);
+  }
 
   /// A panel link elsewhere asked for a panel (fonts, colours, ease): the dock or desk shows it.
   void route(String to) {

@@ -536,6 +536,18 @@ void _tests2() {
     await settled(t, ws);
     final ink = ws.ink.split(' ');
     expect([ink.first, ink.last], ['b3c66b', '4781e5'], reason: 'nothing picked: the ink');
+    await t.tap(find.byKey(const ValueKey('ws-ink-stroke')));   // (the tool strip's edge pressed: the shelf's colour goes to it, as CLIP STUDIO PAINT's sub colour icon)
+    await t.pumpAndSettle();
+    expect(find.text('Set'), findsOneWidget, reason: 'the shelf\'s foot says the colour is set to the edge');
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Night Market');
+    await t.pumpAndSettle();
+    final red = find.descendant(of: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Strip'), matching: find.byType(DockHover)).at(2);
+    await seen(t, red);
+    await doubleTap(t, red);
+    await settled(t, ws);
+    expect([ws.edge, ws.ink.split(' ').first], ['e84545', 'b3c66b'], reason: 'nothing picked, aimed at the edge: the edge a thing drawn next gets, the ink kept');
+    await t.tap(find.byKey(const ValueKey('ws-ink-fill')));
+    await t.pumpAndSettle();
     final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp')));
     await t.tap(find.byKey(const ValueKey('ws-tool-2')));
     await t.pumpAndSettle();
@@ -547,6 +559,7 @@ void _tests2() {
     }
     final rect = int.parse(ws.selected!);
     expect(m.word(rect, 'fill'), ws.ink, reason: 'drawn in the ink');
+    expect(m.word(rect, 'stroke'), 'e84545', reason: 'and edged in the edge');
     await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Pop Poster');
     await t.pumpAndSettle();
     final chip = find.descendant(of: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Strip'), matching: find.byType(DockHover)).first;

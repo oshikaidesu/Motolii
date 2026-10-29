@@ -263,41 +263,41 @@ class _ToolButton extends StatelessWidget {
   );
 }
 
-/// Fill and stroke inks of the drawing tools, Photoshop style: fill in front, stroke behind.
+/// Fill and stroke inks of the drawing tools, fill above, stroke below. Pressed, one is the one the Colors shelf
+/// gives its colour to, brought to the front and ringed, and the shelf comes (CLIP STUDIO PAINT's main and sub colour
+/// icons at the foot of its tools: the one picked has a blue outline and the wheel changes it; Illustrator's Fill and
+/// Stroke boxes: the one chosen is edited). With nothing picked, it is the ink or the edge a thing drawn next comes in.
 class _Swatches extends StatelessWidget {
   const _Swatches();
   @override
   Widget build(BuildContext context) {
     final ws = WsScope.of(context, {WsAspect.document, WsAspect.picked}), p = _paintOf(ws);
-    final fill = p.fill ?? WsT.body, stroke = p.stroke ?? WsT.line;
+    final fill = p.fill ?? WsT.body, stroke = p.stroke ?? WsT.line, edgeOn = ws.aim == 'stroke';
+    Widget box(String aim, BoxDecoration look) => GestureDetector(
+      key: ValueKey('ws-ink-$aim'),
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        ws.aim = aim;
+        ws.route('Browser › Colors');
+      },
+      child: Container(
+        width: Shape.z(16),
+        height: Shape.z(16),
+        foregroundDecoration: ws.aim == aim ? BoxDecoration(borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius)), border: Border.all(color: WsT.accent)) : null,
+        decoration: look,
+      ),
+    );
+    final edge = Positioned(
+      right: 0,
+      bottom: 0,
+      child: box('stroke', BoxDecoration(color: WsT.body, borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius)), border: Border.all(color: stroke, width: 3))),
+    );
+    final ink = Positioned(left: 0, top: 0, child: box('fill', BoxDecoration(color: fill, borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius)), border: Border.all(color: WsT.body))));
     return SizedBox(
     width: Shape.z(26),
     height: Shape.z(26),
     child: Stack(
-      children: [
-        Positioned(
-          right: 0,
-          bottom: 0,
-          child: Container(
-            width: Shape.z(16),
-            height: Shape.z(16),
-            decoration: BoxDecoration(
-              color: WsT.body,
-              borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius)),
-              border: Border.all(color: stroke, width: 3),
-            ),
-          ),
-        ),
-        Container(
-          width: Shape.z(16),
-          height: Shape.z(16),
-          decoration: BoxDecoration(
-            color: fill,
-            borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius)),
-            border: Border.all(color: WsT.body),
-          ),
-        ),
-      ],
+      children: edgeOn ? [ink, edge] : [edge, ink],   // (the one aimed in front)
     ),
   );
   }
