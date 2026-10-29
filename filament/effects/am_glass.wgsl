@@ -49,6 +49,16 @@ fn layerAt__f2() -> vec2<f32> {
     return select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0));
   }
 }
+fn backdropAt_h4f2(p: vec2<f32>) -> vec4<f32> {
+  {
+    let c: vec4<f32> = textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + ((p + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution) * _uniform0.backdropBox.zw);
+    if c.w <= 0.0 {
+      return vec4<f32>(0.0);
+    }
+    let u: vec3<f32> = clamp(c.xyz / c.w, vec3<f32>(0.0), vec3<f32>(1.0));
+    return vec4<f32>(mix(1.055 * pow(u, vec3<f32>(0.416666657)) - 0.055, u * 12.92, step(u, vec3<f32>(0.0031308))) * c.w, c.w);
+  }
+}
 fn gauss__h4f2f2i(p: vec2<f32>, by: vec2<f32>, R_from: i32) -> vec4<f32> {
   {
     let sigma: f32 = max(_uniform0.blur, 0.0) * 0.333333343;
@@ -96,7 +106,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
     let e: f32 = max(_uniform0.blur * 0.15, 1.0);
     let g: vec2<f32> = vec2<f32>(f32(textureSample(blurPicture_Texture, blurPicture_Sampler, ((coord + vec2<f32>(e, 0.0)) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution).w) - f32(textureSample(blurPicture_Texture, blurPicture_Sampler, ((coord - vec2<f32>(e, 0.0)) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution).w), f32(textureSample(blurPicture_Texture, blurPicture_Sampler, ((coord + vec2<f32>(0.0, e)) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution).w) - f32(textureSample(blurPicture_Texture, blurPicture_Sampler, ((coord - vec2<f32>(0.0, e)) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution).w)) / (2.0 * e);
     let n: vec3<f32> = normalize(vec3<f32>(-g * max(_uniform0.blur, 1.0), 1.0));
-    let bg: vec4<f32> = textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + (((coord - n.xy * _uniform0.refraction) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution) * _uniform0.backdropBox.zw);
+    let bg: vec4<f32> = backdropAt_h4f2(coord - n.xy * _uniform0.refraction);
     var _skTemp3: vec3<f32>;
     if bg.w > 0.0 {
       _skTemp3 = vec3<f32>(bg.xyz) / f32(bg.w);

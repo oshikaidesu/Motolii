@@ -284,6 +284,24 @@ static void screen_place(Stage& s, Texture* from, RenderTarget* to, uint32_t w, 
     }
     if (copy) door::draw(s.engine, copy, from, to, w, h, at);
 }
+// A picture's colours said again from linear light to sRGB, or back (IEC 61966-2-1's transfer, on colours not
+// premultiplied, premultiplied again): a thing's own picture is drawn in linear light (its view's post-processing off,
+// thing_fx.h), and the effects laid on it are written for sRGB, as their makers' hosts give them (Skia's for AbsentMotion,
+// ISF's, ThorVG's, AviUtl2's); the stage's own whole-screen ones are drawn after its post-processing, sRGB already.
+static void screen_tone(Stage& s, Texture* from, RenderTarget* to, uint32_t w, uint32_t h, bool toSrgb) {
+    static std::map<Engine*, door::Screen*> doors[2];
+    door::Screen*& one = doors[toSrgb ? 1 : 0][s.engine];
+    if (!one) {
+        const std::string code = std::string("@group(0) @binding(0) var picture: texture_2d<f32>;\n@group(0) @binding(1) var near: sampler;\n") +
+            (toSrgb ? "fn tone(c: vec3f) -> vec3f { return select(1.055 * pow(c, vec3f(1.0 / 2.4)) - 0.055, c * 12.92, c <= vec3f(0.0031308)); }\n"
+                    : "fn tone(c: vec3f) -> vec3f { return select(pow((c + 0.055) / 1.055, vec3f(2.4)), c / 12.92, c <= vec3f(0.04045)); }\n") +
+            "@fragment fn main(@builtin(position) frag: vec4f, @location(0) uv: vec2f) -> @location(0) vec4f {\n"
+            "  let p = textureSampleLevel(picture, near, uv, 0.0);\n  if (p.a <= 0.0) { return vec4f(0.0); }\n"
+            "  return vec4f(tone(clamp(p.rgb / p.a, vec3f(0.0), vec3f(1.0))) * p.a, p.a);\n}\n";
+        one = door::screen(s.engine, toSrgb ? "to sRGB" : "to linear", code.c_str(), 0);
+    }
+    if (one) door::draw(s.engine, one, from, to, w, h, nullptr);
+}
 // One effect drawn: reading `from` (the stage's picture or the effect before's), drawing to `to`, through its passes;
 // its own pictures in order: `from`, then each target (ISF's) or the stage's past frames (the array).
 // w, h: as large as what it draws into (the stage, unless a thing's own picture says otherwise); over: its last laid over

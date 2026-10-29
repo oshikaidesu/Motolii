@@ -77,7 +77,11 @@ head += f"layout(set=0, binding={(6 if blur else 2) + (2 if back else 0)}) unifo
 head += 'float2 layerAt_() { return layerRect.z > 0 ? layerRect.xy : float2(0); }\nfloat2 layerSize_() { return layerRect.z > 0 ? layerRect.zw : resolution; }\n'   # (where AbsentMotion's layer space begins on the picture, and how large it is)
 head += 'half4 imageAt(float2 p) { return sample(image, (p + layerAt_()) / resolution); }\n'   # (a child shader read at a pixel: the picture at that place)
 if back:
-    head += 'half4 backdropAt(float2 p) { return sample(backdropPic, backdropBox.xy + (p + layerAt_()) / resolution * backdropBox.zw); }\n'   # (what is behind that place)
+    # (what is behind that place: the stage's behind is in linear light, the layer's picture sRGB, so said in sRGB too,
+    #  IEC 61966-2-1, as screen.h screen_tone)
+    head += ('half4 backdropAt(float2 p) {\n  half4 c = sample(backdropPic, backdropBox.xy + (p + layerAt_()) / resolution * backdropBox.zw);\n'
+             '  if (c.a <= 0) return half4(0);\n  half3 u = clamp(c.rgb / c.a, 0, 1);\n'
+             '  return half4(mix(1.055 * pow(u, half3(1.0 / 2.4)) - 0.055, u * 12.92, step(u, half3(0.0031308))) * c.a, c.a);\n}\n')
 if blur:   # (a Gaussian across then down, sigma blur/3 in pixels, three sigmas each side, as Skia's blur reaches)
     head += 'half4 ' + blur + 'At(float2 p) { return sample(blurPicture, (p + layerAt_()) / resolution); }\n'
     head += ('half4 gauss_(float2 p, float2 by, int from) {\n  float sigma = max(blur, 0) / 3; if (sigma < 0.5) return from == 0 ? sample(image, p / resolution) : sample(' + across + ', p / resolution);\n'

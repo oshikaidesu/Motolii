@@ -99,7 +99,7 @@ static void thing_fx_pictures(Stage& s, ScreenStack& st, View* v) {
     }
 }
 // The picture its effects leave (the last one drawn into; its own, with none): what its sheet or solid shows.
-static Texture* thing_fx_seen(const ScreenStack& st) { return st.steps.empty() ? st.shot : st.between[(st.steps.size() - 1) % 2]; }
+static Texture* thing_fx_seen(const ScreenStack& st) { return st.steps.empty() ? st.shot : st.between[st.steps.size() % 2]; }   // (the last made back in linear light: thing_effects_draw)
 static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenNumbers& numbers, const std::function<DrawnFx()>& thorFx = nullptr, const ScreenPictures& pictures = nullptr) {
     thing_fx_pictures(s, st, v);   // (made already when it was aimed: a thing's; the stage's own others made here)
     const Viewport vp = v->getViewport();
@@ -117,16 +117,18 @@ static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenN
     if (st.steps.empty()) return;   // (quiet with no effects: only its picture, for another's)
     const float ppp = (float)s.view->getViewport().width / (float)std::max(1, s.w);   // (pixels of its picture a point of the stage, as the stage's view draws: the desk's are fewer)
     const DrawnFx thor = thorFx && std::any_of(st.steps.begin(), st.steps.end(), [](char k) { return k != 0 && k != 'a'; }) ? thorFx() : DrawnFx{};
+    screen_tone(s, st.shot, st.betweenTarget[1], w, h, true);   // (its picture as its colours are said, sRGB, for the effects: screen.h screen_tone)
     for (size_t i = 0, f = 0, a = 0; i < st.steps.size(); ++i) {   // (each into a picture between: the effects take the whole picture as theirs, and fill what is clear)
-        Texture* from = i == 0 ? st.shot : st.between[(i - 1) % 2];
+        Texture* from = i == 0 ? st.between[1] : st.between[(i - 1) % 2];
         if (st.steps[i] == 'a') { aviutl_draw_step(s, *st.aviutl[a++], from, st.betweenTarget[i % 2], numbers, w, h); continue; }   // (an AviUtl2 script)
-        if (st.steps[i]) { thing_thor(s, st, st.steps[i], st.device[i == 0 ? 0 : 1 + (i - 1) % 2], (int)(i % 2), w, h, thor, ppp); continue; }   // (one of ThorVG's own)
+        if (st.steps[i]) { thing_thor(s, st, st.steps[i], st.device[i == 0 ? 2 : 1 + (i - 1) % 2], (int)(i % 2), w, h, thor, ppp); continue; }   // (one of ThorVG's own)
         screen_fresh(s, *st.fx[f]);
         ScreenFx& one = *st.fx[f++];
         one.othersNow.clear();
         for (const std::string& n : one.others) one.othersNow.push_back(pictures ? pictures(one.file, n) : nullptr);
         screen_draw(s, st, one, from, st.betweenTarget[i % 2], numbers, w, h);
     }
+    screen_tone(s, st.between[(st.steps.size() - 1) % 2], st.betweenTarget[st.steps.size() % 2], w, h, false);   // (back in linear light, as the stage takes it)
     st.seen = thing_fx_seen(st);
 }
 
