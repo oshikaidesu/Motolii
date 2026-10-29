@@ -85,9 +85,8 @@ fn layerSize__f2() -> vec2<f32> {
     return select(_uniform0.resolution, _uniform0.layerRect.zw, vec2<bool>(_uniform0.layerRect.z > 0.0));
   }
 }
-fn backdropAt_h4f2(p: vec2<f32>) -> vec4<f32> {
+fn srgbOf__h4h4(c: vec4<f32>) -> vec4<f32> {
   {
-    let c: vec4<f32> = textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + ((p + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution) * _uniform0.backdropBox.zw);
     if c.w <= 0.0 {
       return vec4<f32>(0.0);
     }
@@ -228,7 +227,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
       var i: i32 = 0;
       for (; i < 7; i = i + i32(1)) {
         {
-          let s: vec4<f32> = backdropAt_h4f2(coord - n.xy * (_uniform0.refraction + _uniform0.aberration * (f32(i) * 0.166666672 - 0.5)));
+          let s: vec4<f32> = srgbOf__h4h4(textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + (((coord - n.xy * (_uniform0.refraction + _uniform0.aberration * (f32(i) * 0.166666672 - 0.5))) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution) * _uniform0.backdropBox.zw));
           acc = acc + vec3<f32>(s.xyz) * band_f3i(i);
           alpha = alpha + f32(s.w) * 0.142857149;
         }

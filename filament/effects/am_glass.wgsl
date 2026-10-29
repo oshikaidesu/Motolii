@@ -49,9 +49,8 @@ fn layerAt__f2() -> vec2<f32> {
     return select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0));
   }
 }
-fn backdropAt_h4f2(p: vec2<f32>) -> vec4<f32> {
+fn srgbOf__h4h4(c: vec4<f32>) -> vec4<f32> {
   {
-    let c: vec4<f32> = textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + ((p + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution) * _uniform0.backdropBox.zw);
     if c.w <= 0.0 {
       return vec4<f32>(0.0);
     }
@@ -106,7 +105,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
     let e: f32 = max(_uniform0.blur * 0.15, 1.0);
     let g: vec2<f32> = vec2<f32>(f32(textureSample(blurPicture_Texture, blurPicture_Sampler, ((coord + vec2<f32>(e, 0.0)) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution).w) - f32(textureSample(blurPicture_Texture, blurPicture_Sampler, ((coord - vec2<f32>(e, 0.0)) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution).w), f32(textureSample(blurPicture_Texture, blurPicture_Sampler, ((coord + vec2<f32>(0.0, e)) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution).w) - f32(textureSample(blurPicture_Texture, blurPicture_Sampler, ((coord - vec2<f32>(0.0, e)) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution).w)) / (2.0 * e);
     let n: vec3<f32> = normalize(vec3<f32>(-g * max(_uniform0.blur, 1.0), 1.0));
-    let bg: vec4<f32> = backdropAt_h4f2(coord - n.xy * _uniform0.refraction);
+    let bg: vec4<f32> = srgbOf__h4h4(textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + (((coord - n.xy * _uniform0.refraction) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution) * _uniform0.backdropBox.zw));
     var _skTemp3: vec3<f32>;
     if bg.w > 0.0 {
       _skTemp3 = vec3<f32>(bg.xyz) / f32(bg.w);

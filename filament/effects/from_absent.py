@@ -51,15 +51,16 @@ s = d['sksl']
 pictures = re.findall(r'^\s*uniform\s+shader\s+(\w+)\s*;', s, re.M)
 blur = next((p for p in pictures if p in ('blurred', 'bright')), None)
 across = 'h_' if re.search(r'\bh\b', s) else 'h'   # (the blur's pass across: a name the effect's own lines do not use)
+below = 'below' in pictures   # (the layer beneath it, as AbsentMotion's: here a thing chosen on its card, screen.h's others)
 back = 'backdrop' in pictures   # (what lies behind the layer: the stage's picture without it, screen.h's behind, read where the layer's box lies on it)
-if sorted(pictures) != sorted(['image'] + ([blur] if blur else []) + (['backdrop'] if back else [])):
+if sorted(pictures) != sorted(['image'] + ([blur] if blur else []) + (['backdrop'] if back else []) + (['below'] if below else [])):
     sys.exit(f"{src}: reads {pictures}: an effect reads the picture, it blurred, and what is behind it at most")
 s = re.sub(r'(uniform\s+float2\s+)size\b', r'\1resolution', s)   # (the picture's size, as screen.h tells it)
 s = re.sub(r'\bsize\b', 'layerSize_()', s)   # (AbsentMotion's size where it is read: the layer's own, not the picture's with room round it)
 typed = r'^\s*(?:layout\(color\)\s+)?uniform\s+(float[234]?|half[234]?|int)\s+(\w+)\s*;'
 loose = re.findall(typed, s, re.M)
 s = re.sub(typed + r'\s*$', '', s, flags=re.M)
-s = re.sub(r'^\s*uniform\s+shader\s+(image|blurred|bright|backdrop)\s*;', '', s, flags=re.M)
+s = re.sub(r'^\s*uniform\s+shader\s+(image|blurred|bright|backdrop|below)\s*;', '', s, flags=re.M)
 loose.append(('float4', 'layerRect'))   # (the layer's own rectangle on the picture, in its pixels: corner and size, doc_moment_fx.h; none said, the whole picture)
 if back:
     loose.append(('float4', 'backdropBox'))   # (the layer's box on the stage: left, top, width, height, each a share of it: doc_moment_fx.h)
@@ -73,15 +74,20 @@ if blur:
     head += f'layout(webgpu, set=0, texture=2, sampler=3) sampler2D {across};\nlayout(webgpu, set=0, texture=4, sampler=5) sampler2D blurPicture;\n'
 if back:
     head += f"layout(webgpu, set=0, texture={6 if blur else 2}, sampler={7 if blur else 3}) sampler2D backdropPic;\n"   # (read after its own and its passes' pictures: screen.h's others)
-head += f"layout(set=0, binding={(6 if blur else 2) + (2 if back else 0)}) uniform Knobs {{\n" + ''.join(f'  {t} {n};\n' for t, n in loose) + '};\n'
+if below:
+    head += f"layout(webgpu, set=0, texture={(6 if blur else 2) + (2 if back else 0)}, sampler={(7 if blur else 3) + (2 if back else 0)}) sampler2D belowPic;\n"
+head += f"layout(set=0, binding={(6 if blur else 2) + (2 if back else 0) + (2 if below else 0)}) uniform Knobs {{\n" + ''.join(f'  {t} {n};\n' for t, n in loose) + '};\n'
 head += 'float2 layerAt_() { return layerRect.z > 0 ? layerRect.xy : float2(0); }\nfloat2 layerSize_() { return layerRect.z > 0 ? layerRect.zw : resolution; }\n'   # (where AbsentMotion's layer space begins on the picture, and how large it is)
 head += 'half4 imageAt(float2 p) { return sample(image, (p + layerAt_()) / resolution); }\n'   # (a child shader read at a pixel: the picture at that place)
-if back:
-    # (what is behind that place: the stage's behind is in linear light, the layer's picture sRGB, so said in sRGB too,
+if back or below:
+    # (the stage's behind and another thing's picture are in linear light, the layer's own picture sRGB: said in sRGB too,
     #  IEC 61966-2-1, as screen.h screen_tone)
-    head += ('half4 backdropAt(float2 p) {\n  half4 c = sample(backdropPic, backdropBox.xy + (p + layerAt_()) / resolution * backdropBox.zw);\n'
-             '  if (c.a <= 0) return half4(0);\n  half3 u = clamp(c.rgb / c.a, 0, 1);\n'
+    head += ('half4 srgbOf_(half4 c) {\n  if (c.a <= 0) return half4(0);\n  half3 u = clamp(c.rgb / c.a, 0, 1);\n'
              '  return half4(mix(1.055 * pow(u, half3(1.0 / 2.4)) - 0.055, u * 12.92, step(u, half3(0.0031308))) * c.a, c.a);\n}\n')
+if back:   # (what is behind that place)
+    head += 'half4 backdropAt(float2 p) { return srgbOf_(sample(backdropPic, backdropBox.xy + (p + layerAt_()) / resolution * backdropBox.zw)); }\n'
+if below:   # (the thing chosen, laid over the layer's own picture as a map is)
+    head += 'half4 belowAt(float2 p) { return srgbOf_(sample(belowPic, (p + layerAt_()) / resolution)); }\n'
 if blur:   # (a Gaussian across then down, sigma blur/3 in pixels, three sigmas each side, as Skia's blur reaches)
     head += 'half4 ' + blur + 'At(float2 p) { return sample(blurPicture, (p + layerAt_()) / resolution); }\n'
     head += ('half4 gauss_(float2 p, float2 by, int from) {\n  float sigma = max(blur, 0) / 3; if (sigma < 0.5) return from == 0 ? sample(image, p / resolution) : sample(' + across + ', p / resolution);\n'
@@ -90,6 +96,7 @@ if blur:   # (a Gaussian across then down, sigma blur/3 in pixels, three sigmas 
              + ('    if (from == 0) c = half4(clamp(dot(c.rgb, half3(0.2126, 0.7152, 0.0722)) - threshold, 0, 1).xxx, c.a);\n' if blur == 'bright' else '') +
              '    all += c * w; weight += w; }\n  return all / weight;\n}\n')
 s = re.sub(r'\bbackdrop\.eval\(', 'backdropAt(', s)
+s = re.sub(r'\bbelow\.eval\(', 'belowAt(', s)
 s = head + re.sub(r'\b(blurred|bright)\.eval\(', blur + 'At(' if blur else r'\1.eval(', re.sub(r'\bimage\.eval\(', 'imageAt(', s))
 s = re.sub(r'\bhalf4 main\(float2 (\w+)\)', r'half4 effect_(float2 \1)', s)   # (the file's own pixel function, whatever it names the pixel: the wrapper's main calls it)
 s += ('\nvoid main() { sk_FragColor = passindex < 0.5 ? gauss_(sk_FragCoord.xy, float2(1, 0), 0) : passindex < 1.5 ? gauss_(sk_FragCoord.xy, float2(0, 1), 1) : effect_(sk_FragCoord.xy - layerAt_()); }\n' if blur
@@ -107,6 +114,8 @@ if blur:
     lines += [f'// --pass@{across}:0,1,s1,s1', '// --pass@blurPicture:0,1,s1,s1', '// --pass@:0,0,s1,s1']   # (across, down, then the effect itself)
 if back:
     lines.append('// --picture@backdrop:Behind')   # (screen.h gives it the stage's picture of what is behind, not a thing chosen)
+if below:
+    lines.append('// --picture@below:Map layer')   # (a thing chosen on its card: AbsentMotion's layer beneath)
 if d.get('description'):
     lines.append(f"// --about:{' '.join(d['description'].split())}")   # (what it does, in AbsentMotion's words: the shelf finds it by them)
 lines += knob_lines(named, ('float', 'int', 'bool', 'choice', 'angle'))

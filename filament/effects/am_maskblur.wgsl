@@ -24,9 +24,8 @@ struct Knobs {
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
 @group(0) @binding(3) var backdropPic_Sampler: sampler;
 @group(0) @binding(2) var backdropPic_Texture: texture_2d<f32>;
-fn backdropAt_h4f2(p: vec2<f32>) -> vec4<f32> {
+fn srgbOf__h4h4(c: vec4<f32>) -> vec4<f32> {
   {
-    let c: vec4<f32> = textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + ((p + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution) * _uniform0.backdropBox.zw);
     if c.w <= 0.0 {
       return vec4<f32>(0.0);
     }
@@ -46,7 +45,9 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
     }
     let r: f32 = max(_uniform0.strength, 0.0) * clamp(lum, 0.0, 1.0);
     if r < 0.5 {
-      return backdropAt_h4f2(coord) * src.w;
+      {
+        return srgbOf__h4h4(textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + ((coord + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution) * _uniform0.backdropBox.zw)) * src.w;
+      }
     }
     let spin: f32 = fract(sin(dot(floor(coord), vec2<f32>(12.9898, 78.233))) * 43758.5469) * 6.28318548;
     var sum: vec4<f32> = vec4<f32>(0.0);
@@ -56,7 +57,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
         {
           let k: f32 = (f32(i) + 0.5) * 0.015625;
           let a: f32 = f32(i) * 2.39996314 + spin;
-          sum = sum + backdropAt_h4f2(coord + (sqrt(k) * r) * vec2<f32>(cos(a), sin(a)));
+          sum = sum + srgbOf__h4h4(textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + (((coord + (sqrt(k) * r) * vec2<f32>(cos(a), sin(a))) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution) * _uniform0.backdropBox.zw));
         }
       }
     }

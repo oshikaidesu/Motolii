@@ -37,9 +37,8 @@ struct Knobs {
 @group(0) @binding(0) var image_Texture: texture_2d<f32>;
 @group(0) @binding(3) var backdropPic_Sampler: sampler;
 @group(0) @binding(2) var backdropPic_Texture: texture_2d<f32>;
-fn backdropAt_h4f2(p: vec2<f32>) -> vec4<f32> {
+fn srgbOf__h4h4(c: vec4<f32>) -> vec4<f32> {
   {
-    let c: vec4<f32> = textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + ((p + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution) * _uniform0.backdropBox.zw);
     if c.w <= 0.0 {
       return vec4<f32>(0.0);
     }
@@ -113,7 +112,7 @@ fn effect__h4f2(coord: vec2<f32>) -> vec4<f32> {
         }
       }
     }
-    return backdropAt_h4f2(_uniform0.screen.xy + _0_q * _uniform0.screen.zw) * src.w;
+    return srgbOf__h4h4(textureSample(backdropPic_Texture, backdropPic_Sampler, _uniform0.backdropBox.xy + (((_uniform0.screen.xy + _0_q * _uniform0.screen.zw) + (select(vec2<f32>(0.0), _uniform0.layerRect.xy, vec2<bool>(_uniform0.layerRect.z > 0.0)))) / _uniform0.resolution) * _uniform0.backdropBox.zw)) * src.w;
   }
 }
 fn _skslMain(_stageIn: FSIn, _stageOut: ptr<function, FSOut>) {
