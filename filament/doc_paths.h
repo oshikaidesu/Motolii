@@ -486,6 +486,10 @@ static bool doc_let_go(Doc& d, bool keep) {
     for (const auto& [name, is] : h.tried) {
         bool moves = false;
         for (const DocValue& one : doc_values) moves = moves || (one.moves && name == one.name);
+        if (!moves && name.rfind("js_", 0) == 0)   // (a knob of one of its scripts, an effect's, as doc_knows finds it: one that takes keys as its file says, a track;
+            //  else it was set, unkeyed, every key it had taken away: golf_noise.md 44)
+            for (const DocScript* sc : doc_scripts_on(d, h.thing))
+                for (const DocValue& one : sc->values) moves = moves || (one.moves && name == one.name);
         if (!(moves ? doc_put(d, h.thing, name.c_str(), d.stage->now, is) : doc_set(d, h.thing, name.c_str(), is))) break;
     }
     for (const auto& [name, is] : h.said) if (name[0] != ' ' && !doc_say(d, h.thing, name.c_str(), is.c_str())) break;   // (' path': what it was, kept with the hold)

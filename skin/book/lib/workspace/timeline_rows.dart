@@ -47,7 +47,7 @@ extension _WsTimelineRows on _WsTimelineState {
                           right: Shape.s(8),
                           top: i * WtM.row - top,
                           height: WtM.row,
-                          child: Align(alignment: Alignment.centerLeft, child: Text(n, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g76))),
+                          child: Align(alignment: Alignment.centerLeft, child: Text(ws.inside?.shown(n)?.label ?? n, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g76))),   // (by its name in the inspector: an effect's knob Threshold, not js_am_rays_threshold)
                         )
                       else if (ws.layers[_order[i].layer] case final l)
                       Positioned(

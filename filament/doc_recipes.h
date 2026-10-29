@@ -236,6 +236,9 @@ static std::string doc_moving(Doc& d, int thing) {
     std::string names;
     for (const DocValue& one : doc_values)
         if (one.moves && doc_among(one.kinds, kind)) names += std::string(names.empty() ? "" : " ") + one.name;
+    if (doc_among("film picture text shape solid stage", kind))   // (and its scripts' knobs that take keys, an effect's tracks, as doc_has lists them: golf_noise.md 44)
+        for (const DocScript* sc : doc_scripts_on(d, thing))
+            for (const DocValue& one : sc->values) if (one.moves) names += std::string(names.empty() ? "" : " ") + one.name;
     return names;
 }
 // The names of all the values a thing has (from the values table: those of its kind), and a number's range.

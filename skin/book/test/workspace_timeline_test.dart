@@ -48,6 +48,20 @@ Offset _at(Ws ws, int thing, num frame, {Size size = _ref}) {
 }
 
 void main() {
+  test('an effect\'s value takes keys as any value does: every change keyed, a key there (its first leaving what it was where the keying began); with keys, a key where it is changed, the others kept (After Effects\' rule, doc_put)', () {
+    final dir = Directory.systemTemp.createTempSync('fxkeys').path, m = Motolii.open('$dir/k.motolii')!;
+    addTearDown(m.close);
+    final t = m.add('shape', 'rect'), knob = 'js_am_rays_reach';
+    bool at(double s) => m.at(s) && m.still('$dir/at.png');   // (the moment the hand lets go at: the stage's, drawn there; a window draws each moment)
+    expect(m.say(t, 'fx', '$motoliiDir/effects/am_rays.wgsl') && at(0), isTrue, reason: m.trouble);
+    m.keying(true);
+    expect(at(.5) && m.hold(t) && m.carry(knob, .3) && m.letGo(true), isTrue, reason: m.trouble);
+    expect(m.keyMoments(t, knob), [0, .5], reason: 'keyed: what it was at 0, 0.3 at 0.5 (golf_noise.md 44: none, before)');
+    m.keying(false);
+    expect(at(1) && m.hold(t) && m.carry(knob, .6) && m.letGo(true), isTrue, reason: m.trouble);
+    expect([m.keyMoments(t, knob), m.value(t, knob, .5)], [[0, .5, 1], .3], reason: 'with keys: one more where it was changed, the one at 0.5 kept (before, all of them were taken away)');
+  }, skip: !insideBuilt);
+
   testWidgets('the timeline lays out at the reference size and smaller', (t) async {
     final j = _joined();
     await _pump(t, j.ws);
@@ -89,6 +103,7 @@ void main() {
     expect(lane, findsNothing, reason: 'not animating: the keys are marks in the bar alone');
     j.ws.animating = true;
     await t.pumpAndSettle();
+    expect(find.descendant(of: lane, matching: find.text(j.ws.inside!.shown('x')?.label ?? 'x')), findsOneWidget, reason: 'named as the inspector names it');
     expect(lane, findsOneWidget, reason: 'animating: its keyed value in a lane of its own (Live 12 manual 25.5)');
     expect(find.byKey(ValueKey('ws-tl-lane-${j.rect}-y')), findsNothing, reason: 'a value without keys has none');
     final y = t.getCenter(lane).dy;
