@@ -77,6 +77,7 @@
 
 - **平らな物の 3D（P05、10/30 夜）**：中身の space の言葉が平らな物では「2d 2.5d」だけ（doc_kinds.h）。置き方（doc_place.h）は space 3 を持っている。窓の側は、平らな物に 3D の札を出さないようにした。作らずに止める
 - **効果の数にキーが付かない（P15、10/30 夜、golf_noise.md ㊹）**：手を離した時（doc_let_go、doc_paths.h 487 行）にキーを取れる値かを固定の一覧 doc_values だけで見るので、効果の数（台本のつまみ js_…）は doc_set に回り、キーが付かないうえ、あったキーも消える（doc_edit.h 151 行）。窓の側では直せない（窓は値を運んで離すだけ）。直すなら doc_let_go の見分けを doc_knows(…, key=true) と同じにする 1 行。P15 は物を切って（Split）通した。作らずに止める
+- **【いちばん先に】効果を載せた物が途中で終わると、窓が落ちる（P15、10/30 夜、golf_noise.md ㊽）**：2 度落ちた（~/Library/Logs/DiagnosticReports/lab_book-2026-10-30-031435.ips と -031752.ips、どちらも doc_moment → doc_entities → Filament の PagedArenaBitset::fetchRemove）。物が時間の外へ出ると doc_moment.h 108 行が thing_fx_off（thing_fx.h 199 行）でその物の効果用の Scene を消すが、Doc::Shown::scene が消えた Scene を指したまま残り、131〜132 行が sc->remove(e) で触る（use-after-free）。新しい表現の話ではなく壊れ。窓の側で避ける手は無い（効果を短い物に載せない、しか無い）。直すなら 106〜110 行で、消す Scene を指す物の部品を外して scene を空に戻す。夜の決まりどおり作らずに止め、teaser の書類は効果を外して 1 本のタイトルに戻した
 
 ## 夜の順番
 

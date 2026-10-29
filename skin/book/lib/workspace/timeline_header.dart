@@ -54,7 +54,7 @@ class _Header extends StatelessWidget {
                 builder: (_, _, _) => _Btn(ws.marks.any((k) => (k.$1 * Ws.fps).round() == ws.frame) ? TpGlyph.minus : TpGlyph.plus, key: const ValueKey('ws-tl-mark'), width: Shape.z(66), label: 'Marker', onTap: onMark),
               ),
               SizedBox(width: Shape.s(12)),
-              ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, _, _) => Text(ws.timecode(), style: big)),   // (one number, one weight: not three colours)
+              _TimeTyped(ws: ws, style: big, onStep: onStep),   // (one number, one weight: not three colours)
               SizedBox(width: Shape.s(8)),
               if (roomy) ...[Text('/ ${ws.timecode(Ws.duration)}', style: T.value(Grey.g56)), SizedBox(width: Shape.s(10))],
               _Chip('${Ws.fps} fps'),
@@ -90,6 +90,97 @@ class _Header extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// What a typed time says, as Premiere Pro's timecode reads it: the digits from the right are frames, seconds, minutes
+/// (852, 8:52 and 8.52 are 8 seconds 52 frames); begun with + or -, so far from where the playhead is (+30: 30 frames
+/// on). Null: not a time.
+int? wtTimeOf(String said, int now, int fps) {
+  final m = RegExp(r'^\s*([+-]?)([\d:.;]+)\s*$').firstMatch(said);
+  if (m == null) return null;
+  final parts = m[2]!.split(RegExp(r'[:.;]'));
+  final fields = parts.length > 1
+      ? [for (final p in parts.reversed) int.tryParse(p) ?? 0]
+      : [for (var s = parts.single; s.isNotEmpty; s = s.length > 2 ? s.substring(0, s.length - 2) : '') int.parse(s.length > 2 ? s.substring(s.length - 2) : s)];
+  final f = fields[0] + (fields.length > 1 ? fields[1] * fps : 0) + (fields.length > 2 ? fields[2] * 60 * fps : 0);
+  return switch (m[1]) { '+' => now + f, '-' => now - f, _ => f };
+}
+
+/// The playhead's time: pressed, it is typed (Premiere Pro's and After Effects' current time display: click it and
+/// type); Return goes there, Esc or a press elsewhere leaves the playhead where it was (golf_noise.md ㊺).
+class _TimeTyped extends StatefulWidget {
+  const _TimeTyped({required this.ws, required this.style, required this.onStep});
+  final Ws ws;
+  final TextStyle style;
+  final ValueChanged<int> onStep;
+  @override
+  State<_TimeTyped> createState() => _TimeTypedState();
+}
+
+class _TimeTypedState extends State<_TimeTyped> {
+  final _words = TextEditingController();
+  final _focus = FocusNode();
+  bool _typing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      if (!_focus.hasFocus && _typing) setState(() => _typing = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _words.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _begin() {
+    final now = widget.ws.timecode();
+    _words.value = TextEditingValue(text: now, selection: TextSelection(baseOffset: 0, extentOffset: now.length));   // (all of it picked: what is typed takes its place)
+    setState(() => _typing = true);
+    _focus.requestFocus();
+  }
+
+  void _go(String said) {
+    final ws = widget.ws;
+    if (wtTimeOf(said, ws.frame, Ws.fps) case final to?) widget.onStep(to.clamp(0, Ws.duration) - ws.frame);
+    _focus.unfocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ws = widget.ws;
+    if (!_typing) {
+      return MouseRegion(
+        cursor: SystemMouseCursors.text,
+        child: GestureDetector(
+          key: const ValueKey('ws-tl-time'),
+          behavior: HitTestBehavior.opaque,
+          onTap: _begin,
+          child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, _, _) => Text(ws.timecode(), style: widget.style)),
+        ),
+      );
+    }
+    return SizedBox(
+      width: Shape.z(72),
+      child: CallbackShortcuts(
+        bindings: {const SingleActivator(LogicalKeyboardKey.escape): _focus.unfocus},
+        child: TextHand(key: const ValueKey('ws-tl-time-words'), field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
+          controller: _words,
+          focusNode: _focus,
+          style: widget.style.copyWith(color: Grey.g100),
+          cursorColor: Grey.g100,
+          backgroundCursorColor: Grey.g38,
+          selectionColor: WsT.accent.withValues(alpha: .35),
+          maxLines: 1,
+          onSubmitted: _go,
+        )),
       ),
     );
   }

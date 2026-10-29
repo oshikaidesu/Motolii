@@ -187,4 +187,26 @@ void main() {
     expect(t.takeException(), isNull);
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
+
+  testWidgets('the time is typed as Premiere Pro\'s: digits from the right are frames, seconds, minutes; + and - go so far on or back', (t) async {
+    expect([wtTimeOf('852', 0, 60), wtTimeOf('8:52', 0, 60), wtTimeOf('1:00:00', 0, 60), wtTimeOf('+30', 502, 60), wtTimeOf('-2', 502, 60), wtTimeOf('go', 0, 60)], [532, 532, 3600, 532, 500, null]);
+    final j = _joined();
+    await _pump(t, j.ws);
+    j.ws.frame = 10;
+    await t.pump();
+    final words = find.descendant(of: find.byKey(const ValueKey('ws-tl-time-words')), matching: find.byType(EditableText));
+    await t.tap(find.byKey(const ValueKey('ws-tl-time')));
+    await t.pump();
+    await t.enterText(words, '+5');
+    await t.testTextInput.receiveAction(TextInputAction.done);
+    await t.pump();
+    expect(j.ws.frame, 15, reason: '+5 is 5 frames on');
+    await t.tap(find.byKey(const ValueKey('ws-tl-time')));
+    await t.pump();
+    await t.enterText(words, '0');
+    await t.sendKeyEvent(LogicalKeyboardKey.escape);
+    await t.pump();
+    expect([j.ws.frame, find.byKey(const ValueKey('ws-tl-time')).evaluate().length], [15, 1], reason: 'Esc leaves the playhead where it was, and the time is shown again');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
 }
