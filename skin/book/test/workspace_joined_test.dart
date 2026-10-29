@@ -10,6 +10,7 @@ import 'package:ffi/ffi.dart';
 
 import 'package:flutter/gestures.dart' show PointerDeviceKind, kDoubleTapTimeout, kSecondaryButton;
 import 'package:flutter/rendering.dart' show OffsetLayer;
+import 'package:flutter/foundation.dart' show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';

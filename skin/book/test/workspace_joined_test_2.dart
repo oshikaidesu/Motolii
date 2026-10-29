@@ -312,6 +312,7 @@ void _tests2() {
     await t.pumpAndSettle();
     final plate = find.byWidgetPredicate((w) => w is GlyphPlate && w.label == '2.5D'); // (the Transform card's three plates)
     await seen(t, plate);
+    expect(find.byWidgetPredicate((w) => w is GlyphPlate && w.label == '3D'), findsNothing, reason: 'a flat thing is offered only the spaces it takes: 3D was refused, its plate left lit (golf P05)');
     await t.tap(plate);
     await settled(t, ws);
     expect(m.word(rect, 'space'), '2.5d', reason: m.trouble);
@@ -319,6 +320,18 @@ void _tests2() {
     await t.pumpAndSettle();
     final z = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_z');   // (in the world: its depth, scrubbed as any number: Alight Motion's Z strip)
     await seen(t, z);
+    // (a number begun by typing it on the field: the caret after the first figure, so the next goes after it; Flutter's
+    //  select-all on a desktop's focus took it, and "230" came out 0: golf P05)
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;   // (the maker's: a desktop, where Flutter selects all on focus)
+    await t.tap(z.first);
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.digit2);
+    await t.pumpAndSettle();
+    final typing = t.widget<EditableText>(find.descendant(of: z.first, matching: find.byType(EditableText))).controller;
+    expect([typing.text, typing.selection.isCollapsed, typing.selection.baseOffset], ['2', true, 1]);
+    await t.sendKeyEvent(LogicalKeyboardKey.escape);
+    await t.pumpAndSettle();
+    debugDefaultTargetPlatformOverride = null;
     await t.timedDragFrom(t.getCenter(z.first), const Offset(60, 0), const Duration(milliseconds: 300));
     await settled(t, ws);
     expect(m.value(rect, 'z', 0), isNot(0), reason: 'moved in depth: ${m.trouble}');

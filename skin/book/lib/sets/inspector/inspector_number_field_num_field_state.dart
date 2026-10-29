@@ -406,6 +406,7 @@ class NumFieldState extends State<NumField> {
                 selectionColor: Role.selected.withValues(alpha: .4),
                 textAlign: block ? TextAlign.left : (pop ? TextAlign.center : TextAlign.right),
                 maxLines: 1,
+                selectAllOnFocus: false,   // (_startEdit says the selection: all of the number when begun by a click or Return; the caret after a number begun by typing it, which Flutter's own select-all on a desktop's focus took, so the next key replaced the first: golf P05, "230" came out 0)
                 keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
                 inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-+eE]'))],
                 onChanged: (_) {

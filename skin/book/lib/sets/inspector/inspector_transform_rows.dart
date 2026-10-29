@@ -15,6 +15,10 @@ class SpaceRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final x = Ctx.of(context), doc = x.doc;
     // contract: 2D / 2.5D / 3D is one switch; every space shows the same parameters; the space only changes how the layer meets the camera (2D held to it), never a value (B2).
+    // (only the spaces the document takes for it, by its words: a flat thing's 2d and 2.5d; offered 3D, it was refused
+    //  and the plate stayed lit as if taken: golf P05)
+    final words = doc.choices['v_space'] ?? const <String>[];
+    final offered = [for (final s in Space.values) if (words.isEmpty || words.contains(const {Space.d2: '2d', Space.d25: '2.5d', Space.d3: '3d'}[s])) s];
     return PropRow(
       id: 'v_space',
       label: 'Space',
@@ -24,12 +28,12 @@ class SpaceRow extends StatelessWidget {
         Forms.worn.choice( // (as the skin's forms draw one of a few)
           context,
           ChoiceSpec(
-            labels: [for (final s in Space.values) spaceNames[s]!],
-            glyphs: [for (final s in Space.values) (c, st) => _SpacePaint(s, st.color).paint(c, const Size(16, 14))],
-            selected: Space.values.indexOf(doc.space),
+            labels: [for (final s in offered) spaceNames[s]!],
+            glyphs: [for (final s in offered) (c, st) => _SpacePaint(s, st.color).paint(c, const Size(16, 14))],
+            selected: offered.indexOf(doc.space),
             enabled: !x.cfg.locked,
             onSelect: (i) {
-              doc.space = Space.values[i];
+              doc.space = offered[i];
               doc.poke();
             },
           ),
