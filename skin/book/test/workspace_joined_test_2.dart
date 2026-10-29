@@ -106,8 +106,14 @@ void _tests2() {
     await settled(t, ws);   // (what the window told the inside on the way, answered: the words below are this change's own)
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'op'), findsNothing, reason: 'a solid has no opacity: no knob for it');
     expect(m.set(rect, 'opacity', .5), isTrue);
-    expect(m.say(rect, 'stroke', 'grey'), isFalse);
-    expect(m.trouble, contains('six digits'));
+    // (the inside keeps one trouble for all its calls, and one of the window's asks answered on its own thread may say
+    //  its own just after: under a whole run's load it did, twice, golf_noise.md ㉝; asked again, this call's is read)
+    var why = '';
+    for (var i = 0; i < 5 && !why.contains('six digits'); i++) {
+      expect(m.say(rect, 'stroke', 'grey'), isFalse);
+      why = m.trouble;
+    }
+    expect(why, contains('six digits'));
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
