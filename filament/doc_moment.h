@@ -485,13 +485,17 @@ static void doc_moment(Doc& d, double now) {
         const Doc::Shown* const a = clipped ? &d.shown[by] : nullptr;
         const bool shaped = a && a->drawn && (t.drawn || t.film || t.look);   // (a solid too, by its own look: the kit's glass, or its plain look made to be cut)
         Doc::Cut& cut = d.cuts[thing];
-        MaterialInstance* const own = t.film ? t.film->look : t.drawn ? t.drawn->look : t.look;
+        MaterialInstance* const base = t.film ? t.film->look : t.drawn ? t.drawn->look : t.look;
+        const auto fx = d.thingFx.find(thing);   // (with effects of its own: the sheet they made is cut, after them, as After Effects cuts a layer by its matte once its effects are on)
+        MaterialInstance* const own = fx != d.thingFx.end() && fx->second.look && !fx->second.solid ? fx->second.look : base;
+        const auto unmatte = [&](MaterialInstance* look, bool there) {   // (a look no longer cut: there, still made, told so too; a look made again is gone)
+            if (!look) return;
+            std::erase_if(s.cuts, [&](const Stage::Cut& c) { return c.look == look; });
+            if (there) look->setParameter("matteUse", float4{0.f});
+        };
         const std::string how = shaped ? doc_word(d, thing, "clip_matte") + " " + std::to_string(invert) + " " + std::to_string(doc_number(d, thing, "clip_feather", 0, 0)) : std::string();   // (said only for one that is cut)
         if (shaped && (cut.from != by || cut.by != a->drawn || cut.how != how)) {   // (its matte takes that picture's shape, at that thing's place, cut as it is said)
-            if (cut.look) {   // (what cut its look before is let go of first)
-                std::erase_if(s.cuts, [&](const Stage::Cut& c) { return c.look == cut.look; });
-                cut.look->setParameter("matteUse", float4{0.f});
-            }
+            unmatte(cut.look, cut.look == base || cut.look == own);   // (what cut its look before is let go of first)
             if (cut.matte >= 0) {
                 Scene* sc = s.mattes[(size_t)cut.matte].scene;
                 doc_unshape(s, [sc](const Stage::Made& made) { return sc->hasEntity(made.thing); });
@@ -500,8 +504,10 @@ static void doc_moment(Doc& d, double now) {
             cut.from = by, cut.by = a->drawn, cut.look = nullptr, cut.how = how;
         }
         if (shaped && cut.look != own && own && cut.matte >= 0) {
+            unmatte(cut.look, false);   // (its look made again, or its effects come or gone: what was cut before let go)
+            unmatte(base, base && base != own), unmatte(t.drawn ? t.drawn->edgeLook : nullptr, own != base);
             matted(s, own, cut.matte, invert < 0.5, (float)doc_number(d, thing, "clip_feather", 0, 0)), cut.look = own;
-            if (t.drawn && t.drawn->edgeLook) matted(s, t.drawn->edgeLook, cut.matte, invert < 0.5, (float)doc_number(d, thing, "clip_feather", 0, 0));   // (its edge too)
+            if (own == base && t.drawn && t.drawn->edgeLook) matted(s, t.drawn->edgeLook, cut.matte, invert < 0.5, (float)doc_number(d, thing, "clip_feather", 0, 0));   // (its edge too)
         }   // (its look, or its look made again, is cut by it)
         if (!shaped && cut.look) {   // (no longer cut so: the matte is let go of)
             std::erase_if(s.cuts, [&](const Stage::Cut& c) { return c.look == cut.look; });

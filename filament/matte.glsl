@@ -11,9 +11,8 @@ highp vec3 matteSeen(highp mat4 eye, highp vec3 at) {   // where on its picture,
     highp vec2 uv = c.xy / max(c.w, 1e-6) * 0.5 + 0.5;
     return vec3(uvToRenderTargetUV(uv), step(1e-6, c.w) * step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0));
 }
-float matteLeft() {
+float matteLeftAt(highp vec3 at) {   // (at a point of the world said: a sheet laid on the screen, effected.mat, says where it shows)
     if (materialParams.matteUse == vec4(0.0)) return 1.0;   // (nothing cuts it: none of the pictures is looked at)
-    highp vec3 at = getUserWorldPosition();
     highp vec3 a = matteSeen(materialParams.matteEye0, at), b = matteSeen(materialParams.matteEye1, at);
     highp vec3 c = matteSeen(materialParams.matteEye2, at), d = matteSeen(materialParams.matteEye3, at);
     vec4 m = vec4(a.z * textureLod(materialParams_matte0, a.xy, materialParams.matteSoft.x).r, b.z * textureLod(materialParams_matte1, b.xy, materialParams.matteSoft.y).r,
@@ -22,3 +21,4 @@ float matteLeft() {
     vec4 left = mix(vec4(1.0), mix(1.0 - m, m, step(0.0, use)), abs(use));
     return left.x * left.y * left.z * left.w;
 }
+float matteLeft() { return matteLeftAt(getUserWorldPosition()); }

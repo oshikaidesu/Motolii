@@ -17,10 +17,14 @@ material {
         {
             type : float,
             name : glowing
-        }
+        },
+        { type : sampler2d, name : matte0 }, { type : sampler2d, name : matte1 }, { type : sampler2d, name : matte2 }, { type : sampler2d, name : matte3 },
+        { type : mat4, name : matteEye0 }, { type : mat4, name : matteEye1 }, { type : mat4, name : matteEye2 }, { type : mat4, name : matteEye3 },
+        { type : float4, name : matteUse }, { type : float4, name : matteSoft }   // (matte.glsl, as flat.mat's: the thing cut after its effects)
     ],
     variables : [
-        imageUV
+        imageUV,
+        worldAt
     ],
     vertexDomain : device,
     depthWrite : false,
@@ -35,10 +39,14 @@ vertex {
     void materialVertex(inout MaterialVertexInputs material) {
         material.imageUV.st = getPosition().st * 0.5 + 0.5;
         material.clipSpaceTransform = materialParams.place;   // (where on the stage its picture lies: the box the thing is seen in, Filament's own way of moving a device-domain sheet)
+        highp vec4 clip = materialParams.place * getPosition();   // (the point of the world it shows, as Filament's own computeWorldPosition finds one for a device-domain sheet, surface_getters.vs: there before the place, here after it;
+        clip.z = clip.z * -0.5 + 0.5;                             //  in the world as the user has it, as getUserWorldPosition says it, surface_getters.fs)
+        material.worldAt = getUserWorldFromWorldMatrix() * (getWorldFromClipMatrix() * clip);
     }
 }
 
 fragment {
+#include "matte.glsl"
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         highp vec2 uv = saturate(variable_imageUV.st);
@@ -46,6 +54,7 @@ fragment {
         material.baseColor = max(texture(materialParams_image, uv.st), 0.0);
         material.baseColor.rgb *= material.baseColor.a;   // (effects give straight colour, as OBS keeps its filters; Filament's transparent wants it times alpha: BlendingMode.TRANSPARENT)
         material.baseColor.rgb *= 1.0 + materialParams.glowing;   // (its glow after its effects: brighter than white, the stage's bloom takes it up, as flat.mat's)
+        material.baseColor *= matteLeftAt(variable_worldAt.xyz / variable_worldAt.w);   // (cut where what clips it is not, its effects' picture and all)
 #if defined(LAY_multiply)
         material.baseColor.rgb += 1.0 - material.baseColor.a;   // (where it is clear, what is behind is left as it is: times one, as flat.mat)
 #endif
