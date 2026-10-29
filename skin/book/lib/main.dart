@@ -55,7 +55,7 @@ void main() {
     return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => RelationBench()));
   }
   if (const bool.fromEnvironment('MOTOLII_BARE')) {   // (the window alone, the whole screen of it, without the book round it: --dart-define=MOTOLII_BARE=true)
-    return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: motoliiDoc, extra: const bool.fromEnvironment('MOTOLII_TRIES') ? groupRuleTryPanes() : const [])));   // (MOTOLII_TRIES: the group rule tries as tabs beside the inspector)
+    return runApp(WidgetsApp(color: const Color(0xFF000000), debugShowCheckedModeBanner: false, builder: (c, _) => Workspace(document: motoliiDoc, extra: const bool.fromEnvironment('MOTOLII_TRIES') ? groupRuleTryPanes() : const [])));   // (MOTOLII_TRIES: the group rule tries as tabs beside the inspector)
   }
   runApp(const LabBook());
 }
