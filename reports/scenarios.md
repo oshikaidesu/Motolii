@@ -82,6 +82,8 @@
 - 最初に押した所：左上の効果の棚　打数：**途中で保留**（10/30 夜）
   - 分かったこと：中身はカメラに効果を載せない（「a camera has no fx」。edit.sh で am_autoshake.am を載せて確かめた）。カメラを選ぶと効果の棚に Move（動き）の札が出ない。After Effects の決まった手は、カメラを Null の子にして Null を揺らす。Motolii のカメラにも parent がある → Null に Auto Shake（AbsentMotion の動き、effects/am_autoshake.am）を載せ、カメラをその子に、Null を印の所で 0.2 秒にする。白飛びは Flash (Sashimono).fs
   - 止めた理由：私の道具が Flutter の検索の欄に文字を打てない（人は打てる）。棚を送って探すと長くなるので、手を確かめてから次の晩にゴルフし直す（golf_noise.md ㊴）
+- やり直し（10/30 朝、私の道具が探す欄に打てるようになった）：**13 打で止まった**。手：時刻 213 Return（3）・Create・Layers・Null・Create（2 秒 13 から Null）・効果の棚・探す欄・shake・Auto-Shake・Add（Null に揺れ）・Camera の段。止めた理由：カメラの Inspector に Parent の欄が無い（Target・Orbit・Framing・Roll・Fog・Projection・Note だけ）ので、カメラを Null の子にできない ＝ (68)。Relations の画面は物どうしを点でつなぐ所で、親子の入口ではなかった
+  - 起きたこと：書類の印が記録と違っていた（M1 が 2.217 から 2.483 へ、M2 8.367 と 導入 0.05 が無い）。いつ動いた・消えたかは分からない（M1 の札を押した直後に 2.483 と見えた）。窓を閉じて、記録どおりに書類へ戻した（直す前の書類：scratchpad の teaser_before_marks.motolii）＝ (69)
 
 ### P09 解放の瞬間にぐっと寄って、少し行き過ぎて戻る
 - したいこと：解放の区切りで一気に寄り、止まり方だけ少し行き過ぎて戻る

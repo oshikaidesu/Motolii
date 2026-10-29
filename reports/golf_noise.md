@@ -91,3 +91,5 @@
 - [ ] (65) [P16]【入口】場面のつなぎ（白く飛ぶ・形のワイプ）に、値ごとにキーを 2 本ずつ打った（白い長方形の不透明度、ワイプの progress）：47 打（目安 6 打）。動画の 4 つはどれも「切れ目につなぎ（トランジション）を置き、端を引いて長さを決める」：白く飛ぶのは Premiere Pro の Dip to White、DaVinci Resolve の Dip to Color、Final Cut Pro の Fade To Color、CapCut の Flash 系。GL Transitions の札（Wipe 52 枚）は進み（progress）が効果の数なので、切れ目に置いた時に進みを 0→1 のキー 2 本にすれば、窓の手だけで出来る
 - [ ] (66) [P16]【見た目】Ease のパネルの上の帯で、何も区間が無い時の「No stretch · put the playhead between two keys, or pick a key」が Jump On の札に隠れて「or pick a」で切れる
 - [ ] (67) [P15] 効果をカードのごみ箱で外しても、その数のキーが書類に残る（js_Glitch_Shifter_glitch_horizontal の 3 点、Text の帯は「3 keys」のまま）。同じ効果を足し直すと前のキーが戻ってくる。After Effects は効果を消すとそのキーも消える（fx_off で消したのでなく、外したのだから）。Alight Motion の目（fx_off）で切った時は値を残すのが出典どおり
+- [ ] (68) [P08]【入口】カメラの Inspector に Parent の欄が無い（Target・Orbit・Framing・Roll・Fog・Projection・Note）。中身はカメラにも parent を持たせる（P08 の前の記録）。After Effects はカメラのレイヤーにも Parent、Blender・Cinema 4D もカメラを何かの子にするのが普通。揺れ（Auto-Shake）を載せた Null の子にできず、P08 が止まった
+- [ ] (69) [P08] 書類の印が記録と違っていた：M1 が 2.217 → 2.483 秒、M2（8.367）と 導入（0.05）が無い。いつ、どの手で変わったかは分からない（M1 の札を押した直後に 2.483 と見えた。⑰ はつかんだずれを保つよう直してある）。次に印の札を押す時は、押す前と後で書類の印を比べて切り分ける
