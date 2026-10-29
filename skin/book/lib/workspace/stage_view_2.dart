@@ -95,6 +95,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
   // Joined: a thing held on the stage, carried, and let go. The stage only says how far the hand has gone, in points of
   // the picture; where that puts the thing (at its own depth), and what it is to the document, is the inside's.
   ({Offset from, bool moved, String? by})? _held;   // (by: a handle's way of carrying it, scale, turn or pivot; null: placed)
+  String? _grip;   // (the handle in hand, by its name: it alone shown, lit, while it is carried: Alight Motion's)
 
   // Joined, Snap (the past repository's, After Effects' snapping): the held thing's left, middle and right (top, middle,
   // bottom) stick to the nearest of the same three lines of every other thing it does not go with and of the picture,
@@ -316,19 +317,21 @@ class _StageViewState extends State<StageView> implements StageHandles {
     // (joined: a hand on one of the picked thing's handles carries it the handle's way: the inside reckons it from where it took hold)
     final picked = int.tryParse(widget.selected ?? '');
     if (m != null && picked != null) {
-      String? by;
+      String? by, grip;
       var near = 8.0;
       for (final MapEntry(:key, :value) in handles.entries) {
         final d = (value - local).distance;
         if (d > near) continue;
         near = d;
         by = switch (key.split(' ').first) { 'corner' => 'scale', 'turn' => 'turn', 'anchor' => 'pivot', _ => null };
+        grip = key;
       }
       for (final p in [...m.points(picked), for (final (h, _) in m.handles(picked)) h]) { // (a path's own point, moved with its handles; or a handle alone: the inside takes the nearest)
         final d = (v.toScreen(WsArt.toView(widget.scene, p)) - local).distance;
         if (d > near) continue;
         near = d;
         by = 'point';
+        grip = null;
       }
       if (by != null) {
         m.take(picked);
@@ -336,6 +339,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
         m.carry('grip', at.dx, at.dy);
         if (ws.playing) ws.playing = false;
         _held = (from: local, moved: false, by: by);
+        if (grip != _grip) setState(() => _grip = grip);
         return;
       }
     }
@@ -376,6 +380,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
     final h = _held, ws = WsScope.read(context), m = ws.inside;
     _held = null;
     _snapTo = null;
+    if (_grip != null) setState(() => _grip = null);
     if (_met != (null, null)) setState(() => _met = (null, null));
     if (h == null || m == null) return;
     ws.after(m.later('let_go', number: keep && h.moved ? 1 : 0));   // (let go without waiting: the document read again once the inside has it)
@@ -495,7 +500,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
               children: [
                 RepaintBoundary(
                   child: CustomPaint(
-                    painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: widget.texture == null ? _Part.all : _Part.under, pivots: widget.pivots, met: _met, trail: trail, parent: _parentOf()),
+                    painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: widget.texture == null ? _Part.all : _Part.under, pivots: widget.pivots, met: _met, trail: trail, parent: _parentOf(), grip: _grip),
                   ),
                 ),
                 if (_desk case final desk? when widget.texture != null) ...[ // (the whole pane as the inside draws it: off the stage covered half way, the picked thing marked)
@@ -537,7 +542,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
                 if (widget.texture != null)
                   IgnorePointer(
                     child: CustomPaint(
-                      painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: _Part.over, pivots: widget.pivots, met: _met, marked: _desk != null, trail: trail, parent: _parentOf()),
+                      painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: _Part.over, pivots: widget.pivots, met: _met, marked: _desk != null, trail: trail, parent: _parentOf(), grip: _grip),
                     ),
                   ),
                 IgnorePointer(child: CustomPaint(painter: _RulerPainter(v, widget.cursor, scene))),

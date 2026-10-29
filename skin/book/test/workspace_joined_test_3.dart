@@ -770,6 +770,44 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a handle in hand alone is shown, larger; the others come back when it is let go (Alight Motion\'s handles)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    expect(m.set(rect, 'size', .5), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$rect');
+    await t.pumpAndSettle();
+    final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp'))), k = 1920 / stage.width;
+    final f = m.frame(rect)!, br = stage.topLeft + Offset(f[0] + f[2] / 2, f[1] + f[3] / 2) / k, tl = stage.topLeft + Offset(f[0] - f[2] / 2, f[1] - f[3] / 2) / k;
+    Future<int> lit(Offset at) async {   // (the accent's pixels within a few points of it, as the window is drawn now)
+      final root = t.binding.renderViews.first.layer! as OffsetLayer, ratio = t.view.devicePixelRatio, size = t.view.physicalSize;
+      final bytes = (await t.runAsync(() async => (await root.toImage(Offset.zero & (size / ratio), pixelRatio: ratio)).toByteData(format: ui.ImageByteFormat.rawRgba)))!;
+      final w = size.width.round(), a = WsT.accent;
+      var n = 0;
+      for (var y = ((at.dy - 7) * ratio).round(); y <= ((at.dy + 7) * ratio).round(); y++) {
+        for (var x = ((at.dx - 7) * ratio).round(); x <= ((at.dx + 7) * ratio).round(); x++) {
+          final i = 4 * (y * w + x);
+          if ((bytes.getUint8(i) - (a.r * 255).round()).abs() < 12 && (bytes.getUint8(i + 1) - (a.g * 255).round()).abs() < 12 && (bytes.getUint8(i + 2) - (a.b * 255).round()).abs() < 12) n++;
+        }
+      }
+      return n;
+    }
+    final before = await lit(tl);
+    final g = await t.startGesture(br, kind: PointerDeviceKind.mouse);
+    for (var i = 0; i < 3; i++) {   // (past the slop: carried, as a pull is)
+      await g.moveBy(const Offset(8, 0));
+      await t.pump();
+    }
+    final held = await lit(tl);
+    await g.up();
+    await settled(t, ws);
+    final after = await lit(tl);
+    expect([held < before - 15, after > before - 5], [true, true], reason: 'the far corner\'s handle gone while another is held (its frame\'s lines stay), back after: $before, $held, $after');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a corner handle pulled sizes the thing with the side across staying; with ⌥ held, from its middle (Figma\'s and Keynote\'s handles; Alight Motion sizes from the middle only)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

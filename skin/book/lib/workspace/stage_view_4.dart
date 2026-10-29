@@ -2,7 +2,8 @@
 part of 'stage_view.dart';
 
 class _ViewPainter extends CustomPainter {
-  _ViewPainter(this.scene, this.v, this.sel, this.hover, {required this.grid, required this.safe, this.part = _Part.all, this.pivots = false, this.met = (null, null), this.marked = false, this.trail, this.parent});
+  _ViewPainter(this.scene, this.v, this.sel, this.hover, {required this.grid, required this.safe, this.part = _Part.all, this.pivots = false, this.met = (null, null), this.marked = false, this.trail, this.parent, this.grip});
+  final String? grip;   // (the handle in hand: it alone shown, lit; the others gone till it is let go)
 
   /// The inside marks the picked thing and the one under the hand on its desk: not drawn here.
   final bool marked;
@@ -125,7 +126,8 @@ class _ViewPainter extends CustomPainter {
     final h = _handles(_scr, b, knob: l.kind != WsKind.camera && l.id != 'bg'), pts = [for (var i = 0; i < 4; i++) h['corner $i']!];
     _legible(c, Path()..addPolygon(pts, true), WsT.accent);
     final top = _scr(b.top);
-    if (h['turn'] case final knob?) {
+    final lit = WsT.accent.withValues(alpha: 1), seen = (String k) => grip == null || grip == k;
+    if (h['turn'] case final knob? when seen('turn')) {
       _legible(
         c,
         Path()
@@ -134,20 +136,25 @@ class _ViewPainter extends CustomPainter {
         WsT.accent,
         1,
       );
-      c.drawCircle(knob, 4.5, Paint()..color = Grey.g00);
-      c.drawCircle(knob, 3.5, Paint()..color = WsT.accent);
+      final big = grip == 'turn' ? 2.0 : 1.0;
+      c.drawCircle(knob, 4.5 * big, Paint()..color = Grey.g00);
+      c.drawCircle(knob, 3.5 * big, Paint()..color = lit);
     }
-    for (final p in pts) {
-      final r = Rect.fromCenter(center: p, width: _V.handle, height: _V.handle);
+    for (final (i, p) in pts.indexed) {
+      if (!seen('corner $i')) continue;
+      final r = Rect.fromCenter(center: p, width: _V.handle, height: _V.handle).inflate(grip == 'corner $i' ? _V.handle / 2 : 0);
       c.drawRect(r.inflate(1), Paint()..color = Grey.g00);
-      c.drawRect(r, Paint()..color = WsT.accent);
+      c.drawRect(r, Paint()..color = lit);
     }
     final a = h['anchor']!;
-    c.drawCircle(a, 6, _line(Grey.g00, 3.5));
-    c.drawCircle(a, 6, _line(WsT.accent, 1.5));
-    for (final d in const [Offset(1, 0), Offset(-1, 0), Offset(0, 1), Offset(0, -1)]) {
-      c.drawLine(a + d * 3, a + d * 10, _line(Grey.g00, 3));
-      c.drawLine(a + d * 3, a + d * 10, _line(WsT.accent, 1.2));
+    if (seen('anchor')) {
+      final big = grip == 'anchor' ? 1.6 : 1.0;
+      c.drawCircle(a, 6 * big, _line(Grey.g00, 3.5));
+      c.drawCircle(a, 6 * big, _line(lit, 1.5));
+      for (final d in const [Offset(1, 0), Offset(-1, 0), Offset(0, 1), Offset(0, -1)]) {
+        c.drawLine(a + d * 3, a + d * 10 * big, _line(Grey.g00, 3));
+        c.drawLine(a + d * 3, a + d * 10 * big, _line(lit, 1.2));
+      }
     }
     final bounds = pts.skip(1).fold(Rect.fromPoints(pts[0], pts[0]), (r, p) => r.expandToInclude(Rect.fromPoints(p, p)));
     _tag(c, bounds.topLeft, l.name, WsT.accent, WsT.onAccent, wsTone(l.kind));
@@ -175,7 +182,7 @@ class _ViewPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ViewPainter o) => o.scene != scene || o.v != v || o.sel != sel || o.hover != hover || o.grid != grid || o.safe != safe || o.part != part || o.pivots != pivots || o.met != met || o.marked != marked || !identical(o.trail, trail) || o.parent != parent;
+  bool shouldRepaint(_ViewPainter o) => o.scene != scene || o.v != v || o.sel != sel || o.hover != hover || o.grid != grid || o.safe != safe || o.part != part || o.pivots != pivots || o.met != met || o.marked != marked || !identical(o.trail, trail) || o.parent != parent || o.grip != grip;
 }
 
 // ---- rulers -----------------------------------------------------------------------------------------------------------
