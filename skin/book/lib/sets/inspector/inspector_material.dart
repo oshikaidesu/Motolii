@@ -146,6 +146,11 @@ class _TextGroupState extends State<TextGroup> {
       }
       setState(() {});
     });
+    _c.addListener(() {   // (its letters picked by the hand, kept for the Colors shelf to colour those alone: wordsPicked)
+      if (!_f.hasFocus) return;
+      final s = _c.selection;
+      wordsPicked.value = s.isValid && !s.isCollapsed ? (text: _c.text, start: s.start, end: s.end) : null;
+    });
   }
 
   @override
@@ -190,7 +195,7 @@ class _TextGroupState extends State<TextGroup> {
                   borderRadius: BorderRadius.all(Shape.r(4)),
                   border: Border.all(color: _f.hasFocus ? Grey.g63 : Grey.g26), // (a box you type in, seen as one even with nothing written)
                 ),
-                child: TextHand(field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
+                child: TextHand(key: const ValueKey('ws-text-words'), field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
                   controller: _c,
                   focusNode: _f,
                   style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w400, height: 1.4),

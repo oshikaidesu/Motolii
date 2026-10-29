@@ -27,3 +27,7 @@ class _TextHandState extends State<TextHand> implements TextSelectionGestureDete
   @override
   Widget build(BuildContext context) => _hand.buildGestureDetector(behavior: HitTestBehavior.translucent, child: widget.field(editableTextKey));
 }
+
+/// The letters picked in a thing's words, kept after the field lets go of the hand (Figma's and Canva's text keep their
+/// selection while a colour is chosen for it): which words, and from where to where in them; null, none picked.
+final wordsPicked = ValueNotifier<({String text, int start, int end})?>(null);

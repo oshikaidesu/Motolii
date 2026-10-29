@@ -11,6 +11,7 @@ import 'package:flutter/widgets.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
 
 import '../sets/inspector/inspector_parts.dart' show Pop;
+import '../sets/foundations/text_hand.dart' show wordsPicked;
 import '../sets/panels/media_parts.dart' show MiniSlider;
 import '../tokens.dart';
 import 'desk_kit.dart' show DeskChip;
@@ -173,8 +174,35 @@ HSVColor _wheel = const HSVColor.fromAHSV(1, 0, .8, .9);
 String _wheelFrom = '';
 
 /// Joined: the picked thing's fill told to the document (a colour as six digits, or a material's name). Not done: the foot says why.
+/// The letters picked in the picked text's words, when they are still its words and on one line (a text is split into
+/// its letters one line only: golf_noise.md ⑭); in letters, as the inside counts them (one however many bytes).
+(int, int)? _lettersPicked(DockCtx c, int? t) {
+  final m = c.ws.inside, p = wordsPicked.value;
+  if (m == null || t == null || p == null || m.word(t, 'kind') != 'text' || m.word(t, 'text') != p.text || p.text.contains('\n')) return null;
+  return (p.text.substring(0, p.start).runes.length, p.text.substring(0, p.end).runes.length);
+}
+
+/// Some letters of a text coloured and the rest left as they are: Figma's and Canva's colour on the letters picked in a
+/// text, PowerPoint's and Keynote's on selected text, After Effects' Character panel on the selected characters (P13:
+/// one word of a title). The inside colours a text split into its letters one by one: split letters, copy_fill one
+/// colour each in turn (its copy's wash is the colour itself: flat.mat).
+void _fillLetters(DockCtx c, int t, (int, int) at, String word) {
+  final m = c.ws.inside!, n = m.word(t, 'text').runes.length;
+  final had = m.word(t, 'copy_fill').split(' ').where((w) => w.isNotEmpty).toList();
+  final base = m.word(t, 'fill').split(' ').first.split('@').first;
+  final each = [for (var i = 0; i < n; i++) i >= at.$1 && i < at.$2 ? word : had.length == n ? had[i] : (base.isEmpty || base == 'none' ? 'ffffff' : base)];
+  m.later('together', number: 1);   // (one step)
+  if (m.word(t, 'split') != 'letters') m.later('say', thing: t, name: 'split', word: 'letters');
+  m.later('say', thing: t, name: 'copy_fill', word: each.join(' '));
+  m.later('say', thing: t, name: 'copy_fill_way', word: 'cycle');
+  c.ws.after(m.later('together'), (done, why) => c.set(() => done ? c.mem.trouble.remove('fill') : c.mem.trouble['fill'] = why));
+}
+
 void _fill(DockCtx c, String word) {
   final m = c.ws.inside!, t = int.tryParse(c.ws.selected ?? '');
+  if ((c.ws.aim == null || c.ws.aim == 'fill') && RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(word)) {
+    if (_lettersPicked(c, t) case final at?) return _fillLetters(c, t!, at, word.toLowerCase());
+  }
   // (a colour given to a thing is also what the next thing drawn comes in: its fill the ink, its outline the edge, as
   //  CLIP STUDIO PAINT has one drawing colour that every tool draws in, its text too, the last one chosen; glass fills
   //  a solid alone, so it is not kept)
@@ -338,7 +366,16 @@ class ColorsShelf extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(child: Text('${name == 'fill' ? 'Fill' : name == 'stroke' ? 'Stroke' : name[0].toUpperCase() + name.substring(1)} of $whom', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(Grey.g91).copyWith(fontWeight: FontWeight.w600))),
+            Expanded(
+              child: ValueListenableBuilder(   // (the letters picked in the text's words, when they are: those alone are coloured)
+                valueListenable: wordsPicked,
+                builder: (context, _, _) {
+                  final at = name == 'fill' ? _lettersPicked(c, t) : null;
+                  final who = at == null ? whom : '“${String.fromCharCodes(m.word(t!, 'text').runes.toList().sublist(at.$1, at.$2))}” in $whom';
+                  return Text('${name == 'fill' ? 'Fill' : name == 'stroke' ? 'Stroke' : name[0].toUpperCase() + name.substring(1)} of $who', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(Grey.g91).copyWith(fontWeight: FontWeight.w600));
+                },
+              ),
+            ),
             SizedBox(width: Shape.s(6)),
             DeskChip(key: const ValueKey('colour-sample'), label: 'Sample', onTap: () => _sample(c)),   // (a colour from anywhere on the screen: the Mac's own eyedropper)
           ],

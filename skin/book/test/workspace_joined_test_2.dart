@@ -134,6 +134,42 @@ void _tests2() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('P13: one word of a title coloured: its letters picked in the words, a colour pressed (Figma\'s, Canva\'s, PowerPoint\'s selected text)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final title = m.add('text', _font);
+    expect(m.say(title, 'text', 'MOTOLII GO') && m.say(title, 'fill', 'ffffff'), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$title')
+      ..shelf = 'Colors';
+    await t.pumpAndSettle();
+    final field = find.byKey(const ValueKey('ws-text-words'));
+    await seen(t, field);
+    final words = find.descendant(of: field, matching: find.byType(EditableText));
+    await t.tap(words);   // (into the field first: a double click picks a word in a field that has the hand, as Flutter's TextField)
+    await t.pumpAndSettle();
+    final box = t.state<EditableTextState>(words).renderEditable, go = box.localToGlobal(box.getLocalRectForCaret(const TextPosition(offset: 9)).center);
+    final twice = await t.createGesture(kind: PointerDeviceKind.mouse);
+    for (var i = 0; i < 2; i++) {   // (a double click: the word under it picked, TextHand)
+      await twice.down(go);
+      await twice.up();
+      await t.pump(const Duration(milliseconds: 50));
+    }
+    await twice.removePointer();
+    await t.pumpAndSettle();
+    expect(wordsPicked.value?.start, 8, reason: 'GO picked in the words');
+    expect(find.textContaining('“GO” in'), findsOneWidget, reason: 'the shelf says it colours those letters alone');
+    final red = find.byKey(const ValueKey('colour-box-market-2'));   // (Night Market's red)
+    await seen(t, red);
+    await t.tap(red);
+    await settled(t, ws);
+    expect([m.word(title, 'split'), m.word(title, 'copy_fill_way')], ['letters', 'cycle'], reason: m.trouble);
+    expect(m.word(title, 'copy_fill').split(' '), [for (var i = 0; i < 10; i++) i >= 8 ? 'e84545' : 'ffffff'], reason: 'GO red, the rest as it was');
+    wordsPicked.value = null;
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Stroke in the inspector is the edge of a flat shape or a text: a colour, None, and a width', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect'), cube = m.add('solid', 'cube');
