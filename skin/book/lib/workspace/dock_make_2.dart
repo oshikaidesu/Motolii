@@ -381,10 +381,16 @@ class _Grad extends StatelessWidget {
 // ---------------------------------------------------------------- create
 
 class _Make {
-  const _Make(this.name, this.g, this.hue, this.key, this.what);
+  const _Make(this.name, this.g, this.hue, this.key, this.what, {this.recipe = false});
   final String name, key, what;
   final DockG g;
   final Color hue;
+
+  /// One of the recipes (a picture made in one call), which may share a name with a tile of the shelf's own: AbsentMotion's
+  /// Rectangle, Star, Cube, Sun beside Motolii's shape, solid and light of those names (the shelf's own were made as
+  /// the recipe while it was asked first).
+  final bool recipe;
+  String get id => recipe ? 'recipe:$name' : name;
 }
 
 final _makes = <(String, List<_Make>)>[
@@ -471,9 +477,9 @@ const _laid = <String, Map<String, double>>{
 
 /// A tile made on the stage as a new thing, picked; a tile of copies lays the picked thing out. Not done: the foot of
 /// the shelf says why.
-void _make(DockCtx c, String name) {
-  final m = c.ws.inside!;
-  if (m.recipes.any((r) => r.$1 == name)) { // (a picture in one call: one step, and it is picked)
+void _make(DockCtx c, _Make tile) {
+  final m = c.ws.inside!, name = tile.name;
+  if (tile.recipe) { // (a picture in one call: one step, and it is picked)
     c.ws.after(m.later('make', word: name), (done, why) => c.set(() => done ? c.mem.trouble.remove(name) : c.mem.trouble[name] = why), (made) => c.ws.select('$made'));   // (without waiting: picked once made)
     return;
   }
@@ -500,7 +506,10 @@ void _make(DockCtx c, String name) {
     return;
   }
   final asked = _asked[name]!;
-  c.ws.after(m.later('add', name: asked.$1, word: asked.$2), (done, why) => c.set(() => done ? c.mem.trouble.remove(name) : c.mem.trouble[name] = why), (made) => c.ws.select('$made'));   // (without waiting: picked once made)
+  m.later('together', number: 1);   // (one step: the thing and its inks)
+  c.ws.after(m.later('add', name: asked.$1, word: asked.$2), null, (made) => c.ws.select('$made'));   // (without waiting: picked once made)
+  wsInked(c.ws, asked.$1, asked.$2);
+  c.ws.after(m.later('together'), (done, why) => c.set(() => done ? c.mem.trouble.remove(name) : c.mem.trouble[name] = why));
 }
 
 class CreateShelf extends StatelessWidget {
@@ -521,7 +530,7 @@ class CreateShelf extends StatelessWidget {
       for (final (g, items) in makes)
         if (c.chip == 'All' || c.chip == g) (g, items.where((m) => c.hit(m.name)).toList()),
     ].where((e) => e.$2.isNotEmpty).toList();
-    final sel = makes.expand((e) => e.$2).where((m) => m.name == c.sel).firstOrNull;
+    final sel = makes.expand((e) => e.$2).where((m) => m.id == c.sel).firstOrNull;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -571,7 +580,7 @@ class CreateShelf extends StatelessWidget {
             meta: c.mem.trouble[sel.name] ?? 'At ${c.ws.timecode()} · ${sel.what}',
             action: _laid.containsKey(sel.name) ? 'Lay out' : _worn.containsKey(sel.name) ? 'Put on' : 'Create',
             fresh: !_laid.containsKey(sel.name) && !_worn.containsKey(sel.name), // (a tile makes a new thing; a tile of copies lays out the picked one, a material is put on it)
-            onAction: () => _make(c, sel.name),
+            onAction: () => _make(c, sel),
           ),
       ],
     );
@@ -584,12 +593,12 @@ class _MakeTile extends StatelessWidget {
   final DockCtx c;
   @override
   Widget build(BuildContext context) {
-    final sel = c.sel == m.name;
+    final sel = c.sel == m.id;
     final inside = c.ws.inside;
-    final makes = inside != null && (_asked.containsKey(m.name) || _laid.containsKey(m.name) || _worn.containsKey(m.name) || inside.recipes.any((r) => r.$1 == m.name) || inside.elements.any((e) => e.$1 == m.name));
+    final makes = inside != null && (m.recipe ? inside.recipes.any((r) => r.$1 == m.name) : _asked.containsKey(m.name) || _laid.containsKey(m.name) || _worn.containsKey(m.name) || inside.elements.any((e) => e.$1 == m.name));
     return DockHover(
-      onTap: () => c.pick(m.name),
-      onDoubleTap: makes ? () => _make(c, m.name) : null, // (two presses make it, one step)
+      onTap: () => c.pick(m.id),
+      onDoubleTap: makes ? () => _make(c, m) : null, // (two presses make it, one step)
       builder: (context, h) => AnimatedContainer(
         duration: Mo.dur,
         curve: Mo.ease,

@@ -79,7 +79,10 @@ void _setFont(DockCtx c, _Font f) {
   final m = c.ws.inside!, t = int.tryParse(c.ws.selected ?? '');
   void told(bool done, String why) => c.set(() => done ? c.mem.trouble.remove(f.family) : c.mem.trouble[f.family] = why);
   if (t != null && m.word(t, 'kind') == 'text') return c.ws.after(m.later('say', thing: t, name: 'file', word: f.path!), told);   // (without waiting)
-  c.ws.after(m.later('add', name: 'text', word: f.path!), told, (made) => c.ws.select('$made'));
+  m.later('together', number: 1);   // (one step: the text and its inks)
+  c.ws.after(m.later('add', name: 'text', word: f.path!), null, (made) => c.ws.select('$made'));
+  wsInked(c.ws, 'text', '');
+  c.ws.after(m.later('together'), told);
 }
 
 const _sample = 'Motion for more relations';

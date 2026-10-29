@@ -703,6 +703,29 @@ void _tests2() {
       await t.pump();
     }
     expect(m.word(int.parse(ws.selected!), 'fill'), m.word(rect, 'fill'), reason: 'the next drawn comes in the colour last used');
+    // (put from a shelf, not drawn, it comes in the inks too: P03, golf_noise.md ㉛)
+    Future<int> putFrom(String shelf, String name, Finder tile) async {
+      final was = ws.selected;
+      ws.shelf = shelf;
+      await t.pumpAndSettle();
+      await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), name);   // (found by its name)
+      await t.pumpAndSettle();
+      await seen(t, tile);
+      await doubleTap(t, tile);   // (two presses put it on)
+      await settled(t, ws);
+      for (var i = 0; i < 200 && ws.selected == was; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+        await t.pump();
+      }
+      return int.parse(ws.selected!);
+    }
+    final put = [
+      await putFrom('Create', 'Rectangle', find.descendant(of: find.byType(CreateShelf), matching: find.text('Rectangle')).last),   // (the shape's tile: the recipe of that name says its own colours, as AbsentMotion's)
+      await putFrom('Fonts', 'Andale', find.textContaining('Andale Mono').first),
+    ];
+    expect([for (final p in put) m.word(p, 'fill')], [ws.ink, ws.ink], reason: 'a rectangle from Create, a text from Fonts: in the ink');
+    expect(m.word(put.first, 'shape'), 'rect', reason: 'the Shapes tile makes its own rectangle, not the recipe of that name (AbsentMotion\'s path)');
+    expect([for (final p in put) m.word(p, 'stroke')], ['e84545', 'e84545'], reason: 'and edged in the edge');
     await t.tap(find.byKey(const ValueKey('ws-tool-1')));
     await t.pumpAndSettle();
     await t.tap(find.text('X').first); // (the strip's, before the inspector's)

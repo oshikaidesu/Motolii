@@ -420,6 +420,22 @@ class Ws extends ChangeNotifier {
 /// The font a new text is set in, a font every machine of its kind has (one place: the Create shelf and the stage's tool).
 final wsTextFont = Platform.isWindows ? 'C:/Windows/Fonts/arial.ttf' : '/System/Library/Fonts/Supplemental/Arial Unicode.ttf';
 
+/// The chosen inks said to the thing just added (thing -1), wherever it was added from (P03: put after the key colours
+/// are chosen, it comes in them; the stage's drawing gave them, the Fonts and Create shelves did not: golf_noise.md ㉛).
+/// A text or a flat shape takes them, as the stage draws only those; a line its colour alone.
+void wsInked(Ws ws, String kind, String shape) {
+  final m = ws.inside;
+  if (m == null || !(kind == 'text' || kind == 'shape' && shape != 'null')) return;
+  final line = shape == 'line';
+  if (ws.ink.isNotEmpty) m.later('say', thing: -1, name: 'fill', word: ws.ink);
+  if (ws.ink.contains(' ') && ws.inkBlend.isNotEmpty && !line) m.later('say', thing: -1, name: 'gradient_blend', word: ws.inkBlend);   // (a gradient ink, mixed as it was chosen)
+  if (ws.edge.isNotEmpty && !line) {
+    m
+      ..later('say', thing: -1, name: 'stroke', word: ws.edge)
+      ..later('set', thing: -1, name: 'stroke_width', number: 6);
+  }
+}
+
 /// The window's state to the parts below (Flutter's InheritedModel): a part says which aspects it reads
 /// ([WsScope.of]) and is built again only when one of those changed.
 class WsScope extends StatefulWidget {

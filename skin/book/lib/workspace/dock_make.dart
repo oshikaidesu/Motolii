@@ -227,7 +227,7 @@ String createFact(Ws ws) {
 }
 
 /// Joined: the inside's recipes, pictures in one call (as Cavalry's tutorials build them), each a tile.
-(String, List<_Make>) _recipesOf(Ws ws) => ('Recipes', [for (final (name, what) in ws.inside!.recipes) _Make(name, DockG.copies, Pop.tonePlace, '', what)]);
+(String, List<_Make>) _recipesOf(Ws ws) => ('Recipes', [for (final (name, what) in ws.inside!.recipes) _Make(name, DockG.copies, Pop.tonePlace, '', what, recipe: true)]);
 
 /// The elements kept (Edit › Save to My Elements), put in at the playhead linked to their file: Alight Motion's + ›
 /// Object / Element › Element, AbsentMotion's ElementPicker (ElementUi.kt).

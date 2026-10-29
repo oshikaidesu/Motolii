@@ -243,13 +243,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
     m
       ..later('set', thing: -1, name: 'x', number: x)
       ..later('set', thing: -1, name: 'y', number: y);
-    if (ws.ink.isNotEmpty) m.later('say', thing: -1, name: 'fill', word: ws.ink); // (the drawing inks)
-    if (ws.ink.contains(' ') && ws.inkBlend.isNotEmpty && kind != 'line') m.later('say', thing: -1, name: 'gradient_blend', word: ws.inkBlend);   // (a gradient ink, mixed as it was chosen)
-    if (ws.edge.isNotEmpty && kind != 'line') {
-      m
-        ..later('say', thing: -1, name: 'stroke', word: ws.edge)
-        ..later('set', thing: -1, name: 'stroke_width', number: 6);
-    }
+    wsInked(ws, kind == 'text' ? 'text' : 'shape', kind); // (the drawing inks)
     if (cut != null) { // (Mask: it lies just behind the picked thing, and that one is clipped by it; not seen itself: it only cuts, as After Effects' matte)
       final all = m.things;
       if (all.contains(cut)) {
