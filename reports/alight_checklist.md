@@ -214,7 +214,7 @@
 - [x] **レイヤー・見た目・効果のコピー・貼り付け**（無い→有る）：⌘C・⌘X・⌘V（文字を打っていない時）は選んだ物をまるごと（親だけ除く）写して、再生位置に貼る。キーも一緒に動く（Ableton Live が挿入位置に貼るのと同じ）。⌥⌘C・⌥⌘V（Mac の Copy Style・Paste Style）は見た目（効果・色・線・ふるまい）を選んだ物すべてに。何の物か・形・位置は運ばない。手本：Motolii のルック（doc_looks.h、SQLite の ATTACH）、Alight Motion の Paste Style — 済（10/28）：窓でキーを押し、文書から読んで確かめた（`skin/book/test/workspace_joined_test_3.dart`）
 - [x] 重ね方（ブレンドモード）（有る）：いま blend 25 種 — 済：窓の試験（`workspace_desk_test.dart` の Blend）
 - [x] マスク（有る）：いま clip（alpha・luma、反転、ぼかし） — 済：窓の試験（`workspace_joined_test.dart`・`_3.dart`）、`check/clip_matte.sh`
-- [ ] 塗り：単色・グラデーション・**メディア**（一部）：いま fill・gradient。絵で塗るのは無い
+- [x] 塗り：単色・グラデーション・**メディア** — 単色・グラデーションは前から。メディアは 10/29：図形を選んで Media の棚で写真を選ぶと「Fill shape」、その図形が写真で塗られる（fill_media、ThorVG の Picture を図形でアルファマスク）。上の「メディアで塗る」の行と同じ
 - [x] 線・影・**Multi-Border**（一部→有る）：効果の棚の Multi-Border（ISF、Stylize）。3 つまでの縁を前の縁のまわりに。どの物（写真・文字・形）にも。手本：pixi-filters の OutlineFilter（MIT）の行そのまま、3 pass — 済（10/28）：文字に 2 重・3 重を描いて絵で確かめた
 - [x] 自分のフォント（有る）：いま ドックのフォント — 済：窓の試験（`workspace_joined_test_2.dart` の Fonts の棚）
 - [x] ブックマーク（有る）：いま ロケーター（Ableton どおり） — 済：窓の試験（`workspace_ableton_keys_test.dart` の locators）
