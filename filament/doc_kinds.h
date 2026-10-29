@@ -78,6 +78,7 @@ struct Doc {
     bool phys_keyed = false;            // reading where a thing's keys put it (not where the world has it)
     bool writing = false;               // it is being written as a film: it is read, not changed, until that is done
     double written_from = 0.0;          // the moment of the document that a film being written begins at (its work area's start)
+    int looking = 0;                    // the camera the stage is seen through now (0: the stage's own: doc_moment)
     double round = 8.0;                 // how long the document is, as last shown: waves, noise and drifts go round in it a whole number of times (a film loops)
     sqlite3_session* acting = nullptr;  // SQLite's own record of what the open act changes
     // A thing held by a hand (doc_hold): what of it is carried shows at once and is not yet the document's.
@@ -380,7 +381,7 @@ static const DocValue doc_values[] = {
     {"tone_mapper", "stage", 0, 0, false, "linear aces filmic agx pbr_neutral"}, {"exposure", "stage", -10, 10, false, nullptr},
     {"contrast", "stage", 0, 2, false, nullptr}, {"saturation", "stage", 0, 2, false, nullptr}, {"vibrance", "stage", 0, 2, false, nullptr}, {"temperature", "stage", -1, 1, false, nullptr},
     {"bloom", "stage", 0, 1, false, nullptr}, {"lens_flare", "stage", 0, 1, false, nullptr}, {"vignette", "stage", 0, 1, false, nullptr}, {"vignette_color", "stage", 0, 0, false, ""},
-    {"fog", "stage", 0, 1, false, nullptr}, {"fog_color", "stage", 0, 0, false, ""}, {"fog_near", "stage", 0, 1e4, false, nullptr}, {"fog_far", "stage", 0, 1e4, false, nullptr}, {"render_height", "stage", 0, 8640, false, nullptr}, {"render_rate", "stage", 0, 60, false, nullptr}, {"render_mbps", "stage", 0, 500, false, nullptr}, {"render_blur", "stage", 0, 64, false, nullptr}, {"render_alpha", "stage", 0, 1, false, nullptr},   // (how a film is written: its height, pictures a second, megabits a second, moments laid on one another for a motion blur; 0 as it was)   // (how far from the camera it begins, in the world's units: Filament's FogOptions distance)
+    {"fog", "stage camera", 0, 1, false, nullptr}, {"fog_color", "stage camera", 0, 0, false, ""}, {"fog_near", "stage camera", 0, 1e4, false, nullptr}, {"fog_far", "stage camera", 0, 1e4, false, nullptr},   // (the stage's, or the camera's seen through: Alight Motion's camera has its Fog) {"render_height", "stage", 0, 8640, false, nullptr}, {"render_rate", "stage", 0, 60, false, nullptr}, {"render_mbps", "stage", 0, 500, false, nullptr}, {"render_blur", "stage", 0, 64, false, nullptr}, {"render_alpha", "stage", 0, 1, false, nullptr},   // (how a film is written: its height, pictures a second, megabits a second, moments laid on one another for a motion blur; 0 as it was)   // (how far from the camera it begins, in the world's units: Filament's FogOptions distance)
     // (Filament's screen effects on solid things: shade where they meet and in their folds (SSAO), and what is near mirrored in them (SSR))
     {"ambient_occlusion", "stage", 0, 1, false, nullptr},
     {"reflections", "stage", 0, 1, false, nullptr},

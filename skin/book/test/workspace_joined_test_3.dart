@@ -124,7 +124,7 @@ void _tests3() {
     final ids = {for (final e in find.byType(NumField).evaluate()) (e.widget as NumField).id};
     expect(ids, containsAll(['v_x', 'v_distance', 'v_zoom']), reason: 'the inside\'s Camera card, as After Effects\' camera');
     expect(ids.intersection({'v_scale_x', 'v_opacity', 'depth'}), isEmpty, reason: 'a camera has none of these');
-    expect(inspectorCards(t), ['Camera', 'Projection', 'Note'], reason: 'where it is and looks, then its lens: orthographic, shifted');
+    expect(inspectorCards(t), ['Camera', 'Fog', 'Projection', 'Note'], reason: 'where it is and looks, its fog (Alight Motion\'s camera has it), then its lens: orthographic, shifted');
     expect(m.say(cam, 'projection', 'orthographic') && m.key(cam, 'shift_y', 0, 0.2), isTrue, reason: m.trouble);
     final dist = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_distance');
     await seen(t, dist);
