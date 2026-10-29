@@ -46,6 +46,10 @@ static void doc_things_fx(Doc& d) {
         e.st.sounds = [&d, thing = thing](const std::string& file, const std::string& name, bool fft, int wide) { return doc_sound_now(d, thing, file, name, fft, wide); };
         const ScreenNumbers numbers = [&d, thing = thing, &e = e](const std::string& file, const std::string& name, double usual) {
             std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn)
+            if (name == "clip_time" || name == "clip_length") {   // (how far into it and how long it lasts, seconds: an ISF effect's clip_time and clip_length, isf.cpp, as Sashimono's u_time and u_duration are a clip's)
+                const double start = doc_number(d, thing, "start", 0, 0), lasts = doc_number(d, thing, "duration", 0, -1);
+                return name == "clip_time" ? d.stage->now - start : lasts > 0 ? lasts : std::max(0.0, doc_seconds(d) - start);
+            }
             if (name == "duration") {   // (AbsentMotion's effects.cpp: the layer's length in seconds. None said: the document's, as a still that does not end)
                 const double lasts = doc_number(d, thing, "duration", 0, -1);
                 return lasts > 0 ? lasts : doc_seconds(d);

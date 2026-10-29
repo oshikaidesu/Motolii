@@ -412,6 +412,8 @@ static void doc_look(Doc& d) {
                     const double at = across ? frame[0] / d.stage->w : frame[1] / d.stage->h;
                     return !strcmp(mouse, "pointer") ? (across ? 2.0 * at - 1.0 : 1.0 - 2.0 * at) : at;
                 }
+        if (name == "clip_time") return d.stage->now;   // (the stage's own clock and length: the document's)
+        if (name == "clip_length") return doc_seconds(d);
         return doc_number(d, 0, doc_screen_knob(file, name).c_str(), d.stage->now, usual);
     });
     const std::string behind = doc_word(d, 0, "background");

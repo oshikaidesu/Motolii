@@ -98,7 +98,7 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
         glsl += "layout(set = 0, binding = " + std::to_string(2 * k) + ") uniform texture2D isf_tex_" + read[k] + ";\nlayout(set = 0, binding = " + std::to_string(2 * k + 1) + ") uniform sampler isf_smp_" + read[k] + ";\n";
     for (size_t k = 0; k < others.size(); ++k)
         glsl += "layout(set = 0, binding = " + std::to_string(2 * (read.size() + k)) + ") uniform texture2D isf_tex_" + others[k] + ";\nlayout(set = 0, binding = " + std::to_string(2 * (read.size() + k) + 1) + ") uniform sampler isf_smp_" + others[k] + ";\n";
-    glsl += "layout(set = 0, binding = " + std::to_string(2 * (read.size() + others.size())) + ") uniform Knobs {\n  float time;\n  vec2 resolution;\n  float frame;\n  float passindex;\n";
+    glsl += "layout(set = 0, binding = " + std::to_string(2 * (read.size() + others.size())) + ") uniform Knobs {\n  float time;\n  vec2 resolution;\n  float frame;\n  float passindex;\n  float clip_time;\n  float clip_length;\n";   // (and a thing's own: how far into it, how long it lasts, seconds, doc_moment_fx.h; the stage's: none)
     std::vector<std::string> switches;   // (an on/off knob: an int, as WGSL keeps no bool in a uniform, read as a bool where the shader names it, not where a colour's .r is)
     std::string lines;
     for (const auto& k : inputs.GetArray()) {

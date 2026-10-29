@@ -411,6 +411,8 @@ static int aviutl_sashimono(lua_State* L, AviutlRun& r, const std::string& n, co
             if (!p->second[2].empty()) v[p->second[2]] = y;
         }
     const ScreenNumbers numbers = [&](const std::string&, const std::string& knob, double usual) {
+        if (knob == "clip_time") return r.s->now;   // (its clock the script's obj.time; its length, none that ends)
+        if (knob == "clip_length") return 1.0e9;
         if (const auto it = v.find(knob); it != v.end()) return it->second;
         const std::string base = knob.size() > 2 ? knob.substr(0, knob.size() - 2) : std::string();
         if (knob.size() > 3 && knob.compare(knob.size() - 3, 3, "_on") == 0 && v.count(knob.substr(0, knob.size() - 3))) return v[knob.substr(0, knob.size() - 3)] != 0 ? 1.0 : 0.0;

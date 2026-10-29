@@ -4,7 +4,8 @@
 # an ISF effect file (.fs) for Motolii's ISF door (isf.cpp): the shader's own lines and the PRELUDE's own functions kept
 # as they are; PRELUDE's declarations said again in ISF's words (its picture `u_texture` and `u_source` the picture in,
 # `v_uv` ISF's place, `u_size` the picture's size, `u_pass` the pass), the clip's own (`u_object`, `u_origin`,
-# `u_content`) the whole picture, a pixel read by texelFetch turned over as ISF's places are (isf.cpp: up from the
+# `u_content`) the whole picture, its clock the thing's own (`u_time`, `u_duration`: the door's clip_time, clip_length),
+# a pixel read by texelFetch turned over as ISF's places are (isf.cpp: up from the
 # bottom left). Its params ISF's inputs by their own names: a track a float, a check a bool (a check read as a number a
 # float of 0 or 1), a colour a colour, a choice a long of its choices' numbers, a whole number (a seed, a count) a long.
 # Sashimono draws in linear light; Motolii gives an effect sRGB (screen.h screen_tone): its colours are read as given.
@@ -27,10 +28,10 @@ words = '''#define u_texture inputImage
 #define frag_color gl_FragColor
 #define u_size RENDERSIZE
 #define u_pass PASSINDEX
-#define u_time TIME
-#define u_frame (TIME * 60.0)
+#define u_time clip_time
+#define u_frame (clip_time * 60.0)
 #define u_fps 60.0
-#define u_duration 1.0e9
+#define u_duration clip_length
 #define u_object vec4(0.0, 0.0, RENDERSIZE)
 #define u_origin (RENDERSIZE * 0.5)
 #define u_content vec4(0.0, 0.0, RENDERSIZE)

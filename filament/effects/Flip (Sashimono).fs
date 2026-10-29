@@ -30,10 +30,10 @@
 #define frag_color gl_FragColor
 #define u_size RENDERSIZE
 #define u_pass PASSINDEX
-#define u_time TIME
-#define u_frame (TIME * 60.0)
+#define u_time clip_time
+#define u_frame (clip_time * 60.0)
 #define u_fps 60.0
-#define u_duration 1.0e9
+#define u_duration clip_length
 #define u_object vec4(0.0, 0.0, RENDERSIZE)
 #define u_origin (RENDERSIZE * 0.5)
 #define u_content vec4(0.0, 0.0, RENDERSIZE)
