@@ -110,6 +110,21 @@ class _HoverState extends State<_Hover> {
   );
 }
 
+/// What a step undone or done again changed, in plain words, as After Effects' and Premiere Pro's Edit menu names the
+/// step (Undo Change Warmth): the things and their values the document read again says it changed (P22: where it came back).
+String wsStepSaid(Ws ws, String done) {
+  final c = ws.lastChange, m = ws.inside;
+  if (c == null || m == null) return done;
+  if (c.things) return '$done: things added or taken away';
+  final byThing = <int, Set<String>>{};
+  for (final (t, n) in c.values) {
+    (byThing[t] ??= {}).add(m.shown(n)?.label ?? n);
+  }
+  String nameOf(int t) => t == 0 ? 'Stage' : ws.layers.where((l) => l.id == '$t').firstOrNull?.name ?? 'a thing';
+  final said = [for (final e in byThing.entries.take(3)) '${nameOf(e.key)} ${e.value.take(3).join(', ')}${e.value.length > 3 ? '…' : ''}'];
+  return said.isEmpty ? done : '$done: ${said.join(' · ')}${byThing.length > 3 ? ' …' : ''}';
+}
+
 class _UndoRedo extends StatelessWidget {
   const _UndoRedo();
   @override
@@ -123,7 +138,7 @@ class _UndoRedo extends StatelessWidget {
           onTap: () {
             final ws = WsScope.read(context), m = ws.inside;
             if (m == null) return;
-            ws.after(m.later(flip ? 'redo' : 'undo')); // (the window does not wait for the step)
+            ws.after(m.later(flip ? 'redo' : 'undo'), (done, why) => ws.notice = done ? wsStepSaid(ws, flip ? 'Redone' : 'Undone') : why); // (the window does not wait for the step)
           },
           builder: (h) => Container(
             width: Shape.z(24),

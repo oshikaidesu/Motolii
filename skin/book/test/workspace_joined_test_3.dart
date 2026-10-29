@@ -306,9 +306,16 @@ void _tests3() {
     await t.tap(find.byKey(const ValueKey('ws-undo')));
     await settled(t, ws);
     expect(m.things.length, before, reason: 'taken back by the arrow on the top bar');
+    expect(ws.notice, 'Undone: things added or taken away', reason: 'the top bar says what came back (P22)');
     await t.tap(find.byKey(const ValueKey('ws-redo')));
     await settled(t, ws);
     expect(m.things.length, before + 1, reason: 'and brought again');
+    ws.after(m.later('set', thing: a, name: 'x', number: 300));
+    await settled(t, ws);
+    await t.tap(find.byKey(const ValueKey('ws-undo')));
+    await settled(t, ws);
+    final rectName = ws.layers.firstWhere((l) => l.id == '$a').name;
+    expect(ws.notice, startsWith('Undone: $rectName '), reason: 'a value taken back: its thing and the value by name, as the Edit menu names the step');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
