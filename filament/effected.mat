@@ -25,7 +25,7 @@ material {
     vertexDomain : device,
     depthWrite : false,
     depthCulling : false,
-    blending : transparent,
+    blending : ${BLENDING},   // (kit_wgpu.sh builds it once for each way a sheet lies on what is behind, as flat.mat: transparent, add, multiply, screen)
     shadingModel : unlit,
     variantFilter : [ skinning, shadowReceiver, vsm ],
     culling: none
@@ -46,5 +46,8 @@ fragment {
         material.baseColor = max(texture(materialParams_image, uv.st), 0.0);
         material.baseColor.rgb *= material.baseColor.a;   // (effects give straight colour, as OBS keeps its filters; Filament's transparent wants it times alpha: BlendingMode.TRANSPARENT)
         material.baseColor.rgb *= 1.0 + materialParams.glowing;   // (its glow after its effects: brighter than white, the stage's bloom takes it up, as flat.mat's)
+#if defined(LAY_multiply)
+        material.baseColor.rgb += 1.0 - material.baseColor.a;   // (where it is clear, what is behind is left as it is: times one, as flat.mat)
+#endif
     }
 }

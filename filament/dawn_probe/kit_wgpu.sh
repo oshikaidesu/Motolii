@@ -25,6 +25,9 @@ for f in paper paper_copy floor_shade effected thick_glass far_side far_look gla
         echo "no WebGPU material: floor_lit_matte"; }   # (the same, cut by a matte: what the matte leaves out is not drawn, matte.glsl)
     [ $f = solid_image ] && { $MATC -a webgpu -a metal -p desktop -TSHADE=unlit -DFLAT -o out/wgpu_kit/solid_image_flat.filamat solid_image.mat > out/wgpu_kit/solid_image_flat.log 2>&1 ||
         echo "no WebGPU material: solid_image_flat"; }   # (the same, unlit)
+    [ $f = effected ] && for way in add multiply screen; do   # (a thing with effects of its own lies on what is behind as it says too, as flat's ways)
+        $MATC -a webgpu -a metal -p desktop -TBLENDING=$way -DLAY_$way -o out/wgpu_kit/effected_$way.filamat effected.mat > out/wgpu_kit/effected_$way.log 2>&1 || echo "no WebGPU material: effected_$way"
+    done
     [ $f = flat ] && for way in add multiply screen opaque; do   # (the ways a sheet lies on what is behind it: Filament's own blending; opaque: the colour behind everything, drawn before the solid things)
         $MATC -a webgpu -a metal -p desktop -TBLENDING=$way -DLAY_$way -o out/wgpu_kit/flat_$way.filamat flat.mat > out/wgpu_kit/flat_$way.log 2>&1 || echo "no WebGPU material: flat_$way"
     done

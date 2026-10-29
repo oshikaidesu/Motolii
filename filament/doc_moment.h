@@ -76,7 +76,8 @@ static void doc_moment(Doc& d, double now) {
         const int run = runOf[i];
         Doc::Shown& t = *lies[i].shown;
         const bool own = doc_fx_files(doc_fx_list(d, lies[i].thing));   // (with effects of its own: drawn alone, its picture laid here: thing_fx.h)
-        Scene* into = own ? thing_fx_made(s, d.thingFx[lies[i].thing]).view->getScene() : s.scene;   // (one view: every other run in the stage's own scene, kept in order by Filament's channels)
+        const std::string laid = own ? doc_word(d, lies[i].thing, "blend") : std::string();   // (its sheet lies on what is behind as it says: Filament's own blending; one that reads what is under, as normal yet)
+        Scene* into = own ? thing_fx_made(s, d.thingFx[lies[i].thing], laid == "add" || laid == "multiply" || laid == "screen" ? laid : "").view->getScene() : s.scene;   // (one view: every other run in the stage's own scene, kept in order by Filament's channels)
         Scene* const was = t.scene ? t.scene : s.scene;
         if (was != into) {   // (into the scene of its run; one not seen goes in when it is seen)
             if (t.in) doc_entities(s, t, [&](utils::Entity e) { was->remove(e), into->addEntity(e); });

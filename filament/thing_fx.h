@@ -139,6 +139,7 @@ struct ThingFx {
     View* view = nullptr;
     Mesh* sheet = nullptr;
     MaterialInstance* look = nullptr;
+    std::string lay;                       // (how its sheet lies on what is behind: Filament's own blending, effected.mat's ways; none: over it)
     utils::Entity eye;                     // (its own camera's: told the stage's each picture, as samples/rendertarget.cpp's offscreen camera is)
     Camera* camera = nullptr;
     double box[4] = {0, 0, 0, 0};          // (where it is seen, in points of the stage: left, top, right, bottom)
@@ -172,13 +173,15 @@ static View* thing_fx_view(Stage& s, ThingFx& e) {
 }
 
 // The sheet: the whole picture, samples/materials/image.mat's way (its points are the screen's own corners).
-static ThingFx& thing_fx_made(Stage& s, ThingFx& e) {
-    if (e.view) return e;
-    e.view = thing_fx_view(s, e);
+static ThingFx& thing_fx_made(Stage& s, ThingFx& e, const std::string& lay = "") {
+    if (e.view && e.lay == lay) return e;
+    if (!e.view) e.view = thing_fx_view(s, e);
+    if (e.sheet) take_off(s, e.sheet), delete e.sheet;   // (another way of lying: its sheet made again in it)
+    e.lay = lay;
     e.sheet = new Mesh;
     for (float2 c : {float2{-1, -1}, float2{1, -1}, float2{1, 1}, float2{-1, 1}}) e.sheet->pos.push_back({c.x, c.y, 0.f}), e.sheet->nrm.push_back({0, 0, 1}), e.sheet->uv.push_back(c * 0.5f + 0.5f);
     e.sheet->idx = {0, 1, 2, 0, 2, 3};
-    e.look = add(s, e.sheet, "effected.filamat");
+    e.look = add(s, e.sheet, lay.empty() ? "effected.filamat" : ("effected_" + lay + ".filamat").c_str());
     e.look->setParameter("image", white_point(s), TextureSampler());
     e.look->setParameter("place", math::mat4f{});   // (the whole stage till it is aimed)   // (a picture from the start, as image.mat's sample sets it at once: Filament readies every instance before any view, the thing's own drawn first; never seen, its picture set before the stage's view)
     return e;

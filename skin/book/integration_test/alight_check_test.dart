@@ -289,6 +289,12 @@ final _rowsAA = <(String, String, Map<String, Object>)>[
   ('rd3', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .55}),
   ('rd4', 'noise:x', const {'@minimum': -.8, '@maximum': -.35, '@when': .8}),
 ];
+// (section BR: looks from the Effects shelf, as a tile's Apply gives them: a beam of light over the left photo, its light
+//  laid on by screen; the left photo stamped in one colour by its brightness.)
+final _rowsBR = <(String, String, Map<String, Object>)>[
+  ('beam', 'look:Energy Beam', const {'~over': 1}),
+  ('stamper', 'look:Luma Stamper', const <String, Object>{}),
+];
 // (section BQ: AbsentMotion's text effects from the shelf on the words MOTOLII: a running clock, a count, letters at random.)
 final _rowsBQ = <(String, String, Map<String, Object>)>[
   ('clock', 'text+effects/am_timecode.am', const {'@size': .2, '@when': 1.5}),
@@ -545,7 +551,7 @@ final _rowsAB = <(String, String, Map<String, Object>)>[
   ('zoomHi', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .25}),
   ('zoomLo', 'cam:zoom', const {'@minimum': .7, '@maximum': 1.6, '@when': .75}),
 ];
-final _rows = switch (_section) { 'BQ' => _rowsBQ, 'BP' => _rowsBP, 'BO' => _rowsBO, 'BN' => _rowsBN, 'BM' => _rowsBM, 'BL' => _rowsBL, 'BK' => _rowsBK, 'BJ' => _rowsBJ, 'BI' => _rowsBI, 'BH' => _rowsBH, 'BG' => _rowsBG, 'BF' => _rowsBF, 'BE' => _rowsBE, 'BD' => _rowsBD, 'BC' => _rowsBC, 'BB' => _rowsBB, 'BA' => _rowsBA, 'AZ' => _rowsAZ, 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
+final _rows = switch (_section) { 'BR' => _rowsBR, 'BQ' => _rowsBQ, 'BP' => _rowsBP, 'BO' => _rowsBO, 'BN' => _rowsBN, 'BM' => _rowsBM, 'BL' => _rowsBL, 'BK' => _rowsBK, 'BJ' => _rowsBJ, 'BI' => _rowsBI, 'BH' => _rowsBH, 'BG' => _rowsBG, 'BF' => _rowsBF, 'BE' => _rowsBE, 'BD' => _rowsBD, 'BC' => _rowsBC, 'BB' => _rowsBB, 'BA' => _rowsBA, 'AZ' => _rowsAZ, 'AY' => _rowsAY, 'AX' => _rowsAX, 'AW' => _rowsAW, 'AV' => _rowsAV, 'AU' => _rowsAU, 'AT' => _rowsAT, 'AS' => _rowsAS, 'AR' => _rowsAR, 'AQ' => _rowsAQ, 'AP' => _rowsAP, 'AO' => _rowsAO, 'AN' => _rowsAN, 'AL' => _rowsAL, 'AK' => _rowsAK, 'AJ' => _rowsAJ, 'AI' => _rowsAI, 'AH' => _rowsAH, 'AG' => _rowsAG, 'AF' => _rowsAF, 'AE' => _rowsAE, 'AD' => _rowsAD, 'AC' => _rowsAC, 'AB' => _rowsAB, 'AA' => _rowsAA, 'V' => _rowsV, 'U' => _rowsU, 'T' => _rowsT, 'R' => _rowsR, 'Q' => _rowsQ, 'P' => _rowsP, 'Z' => _rowsZ, 'Y' => _rowsY, 'X' => _rowsX, 'W' => _rowsW, 'S5' => _rowsS5, 'S4' => _rowsS4, 'S3' => _rowsS3, 'S2' => _rowsS2, 'S' => _rowsS, 'AM' => _rowsAM, 'D' => _rowsD, 'D2' => _rowsD2, 'B' => _rowsB, 'E' => _rowsE, 'E2' => _rowsE2, 'C' => _rowsC, 'F' => _rowsF, _ => _rowsA };
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -703,6 +709,18 @@ void main() {
         expect(m.say(left, 'fx', '$blur $dir'), isTrue, reason: m.trouble);
         expect(m.set(left, 'js_Diagonal_Blur_width', .02) && m.set(left, 'js_Diagonal_Blur_angle', 0) && m.set(left, 'js_Diagonal_Blur_quality', 2), isTrue, reason: m.trouble);
         expect(m.set(left, 'js_am_directionalblur_blurLength', 20) && m.set(left, 'js_am_directionalblur_angle', 90), isTrue, reason: m.trouble);
+      } else if (effect.startsWith('look:')) {   // (a look from the Effects shelf, as its tile's Apply gives it: dock_effects.dart's paste_style)
+        var on = left;
+        if (knobs.containsKey('~over')) {   // (on a rect of its own over the left photo)
+          path = on = m.add('shape', 'rect');
+          expect(m.set(on, 'x', -.5) && m.set(on, 'size', .6), isTrue, reason: m.trouble);
+        }
+        m.later('paste_style', thing: on, word: '$motoliiDir/looks/${effect.substring('look:'.length)}.motolii');
+        for (var k = 0; k < 200 && m.word(on, 'fx').isEmpty; k++) {
+          await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+          await t.pump();
+        }
+        expect(m.word(on, 'fx'), isNotEmpty, reason: 'the look put on: ${m.trouble}');
       } else if (effect == 'ink' || effect.startsWith('ink+')) {   // (as the Brush gives it when let go: stage_view_2.dart _brushLetGo)
         final options = StrokeOptions(size: 32, simulatePressure: true, isComplete: true);
         final points = getStrokePoints([for (var i = 0; i <= 48; i++) PointVector.fromOffset(offset: Offset(1180 + i * 7, 760))], options: options);
