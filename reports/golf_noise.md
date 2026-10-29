@@ -25,3 +25,5 @@
 - [ ] ⑧ 窓が落ちる（SIGABRT、FEngine::loop の WebGPUDriver::beginRenderPass の中で std::terminate）。そのとき裏で効果の棚の見本を描くためにエンジンが 10 個以上（effect_tiles.dart _draw：12 本ごとに Motolii.open）。試験では見本を描かない（FLUTTER_TEST）。再現は 3 回試して 3 回とも落ちず、原因はまだ切り分けていない
 - [ ] ⑨ 再起動（live.sh に SIGUSR2、hot restart）で落ちる（SIGSEGV、エンジンのスレッドが消えた Dart の呼び先を呼ぶ）。開発中だけ
 - [ ] ⑩ 文字を置いても、すぐ打てない：置くと「Text」と出て、打ち直すには右の Inspector の欄を探す（ゴルフのホール 2 が 7 打）。AbsentMotion の addText は、足すとすぐ文字を打つ所を開く（panel = EditText）
+- [ ] ⑪ 効果の見本の絵が、どれも写真が左右に動くだけで、効果が何をするのか見えない（ユーザー、10/29）：effect_tiles.dart は写真の x を 0 秒から 2 秒へ動かして 8 コマ撮っている。出典：AbsentMotion の tools/effect_showcase.json（効果 181 本、効果ごとに 6 枚の写真のどれに掛けるか、代表のつまみの値 params、絵の 4 割で「掛ける前｜後」に分ける split、時間でつまみを動かす animate）。ISF の効果（420 本）には表が無いので、別に出典を探す
+- [ ] ⑫ Ease のパネルと時間軸が合っていない（ユーザー、10/29）：時間軸の段はキーの間をまっすぐの線で描き、Ease のパネルで決めた曲がり方（Bounce など）が出ない。段の点や線を押しても Ease のパネルにつながらない。出典：Alight Motion のイーズは、再生位置が 2 つのキーの間にある時、その区間を開く（alight_ui.md イーズ）。Ableton は曲げた区間を線の上でも曲げて描く（Live 12 manual 25.5.2 の ⌥ ドラッグ）
