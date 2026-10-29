@@ -377,7 +377,7 @@
 - [x] グループにしてマスク：グループの一番上が型、その下を切る — Edit メニューの Group and Mask（group_mask mask）。10/29 edit.sh で円の中だけ写真が見え、円は見えない
 - [x] グループにして抜く：一番上と重なる所を抜く — Edit メニューの Group and Exclude（group_mask exclude）。10/29 edit.sh で写真に円の穴、円は見えない
 - [x] グループを解く（Ungroup）：⌘⇧G（Figma と同じ）。物は今の場所のまま、まとめていた Null が消える — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
-- [ ] 図形の取っ手で角の数・角の丸みをキャンバスで変える
+- [x] 図形の取っ手で角の数・角の丸みをキャンバスで変える — 済（10/29）：図形を選ぶと段に図形の取っ手が出る。角丸の輪（最初の角から対角線に沿って、丸みの分だけ内へ：四角・多角形・星など）を内へ引くと角が丸くなり、角の数のひし形（多角形・星・歯車の右の辺の外）を外へ引くと角が増える。手で持ったまま値を変え、離すと 1 手（take・carry・let_go、`skin/book/lib/workspace/stage_view.dart` の _handles）。窓の試験で星を内へ 30・外へ 60 引いて round と points が増え、1 手で戻る。四角には角丸の輪だけ。取っ手を全部引く sweep_test も通る
 - [x] 取り消しの履歴を開き直しても残す（Alight Motion は消える）：取り消しは書類（SQLite）に残る — 済：窓の試験（`workspace_joined_test.dart`：大きさを変えて開き直した後に取り消すと戻る）
 
 

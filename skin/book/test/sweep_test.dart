@@ -25,6 +25,8 @@ const _handleFor = {
   'turn': {'rotate'},
   'anchor': {'anchor_x', 'anchor_y', 'x', 'y'}, // (the point it turns about, the thing staying put; where it lies on the body, the body is taken and moved, as After Effects' selection tool)
   'body': {'x', 'y', 'z'},
+  'round': {'round'}, // (a shape's own: its corners' roundness, Alight Motion's on the canvas)
+  'points': {'points'}, // (a polygon's or star's points)
 };
 
 Future<Ws> _pump(WidgetTester t) => openWorkspace(t, size: const Size(1600, 2400), document: '${Directory.systemTemp.createTempSync('sweep').path}/sweep.motolii');   // (the test door's own opening, tall: every card shows)

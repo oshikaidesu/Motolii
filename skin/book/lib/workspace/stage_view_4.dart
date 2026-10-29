@@ -2,8 +2,9 @@
 part of 'stage_view.dart';
 
 class _ViewPainter extends CustomPainter {
-  _ViewPainter(this.scene, this.v, this.sel, this.hover, {required this.grid, required this.safe, this.part = _Part.all, this.pivots = false, this.met = (null, null), this.marked = false, this.trail, this.parent, this.grip});
+  _ViewPainter(this.scene, this.v, this.sel, this.hover, {required this.grid, required this.safe, this.part = _Part.all, this.pivots = false, this.met = (null, null), this.marked = false, this.trail, this.parent, this.grip, this.form = ('', 0)});
   final String? grip;   // (the handle in hand: it alone shown, lit; the others gone till it is let go)
+  final (String, double) form;   // (the picked shape's form and roundness: its own handles)
 
   /// The inside marks the picked thing and the one under the hand on its desk: not drawn here.
   final bool marked;
@@ -123,7 +124,7 @@ class _ViewPainter extends CustomPainter {
   }
 
   void _selection(Canvas c, ArtBox b, ArtLayer l) {
-    final h = _handles(_scr, b, knob: l.kind != WsKind.camera && l.id != 'bg'), pts = [for (var i = 0; i < 4; i++) h['corner $i']!];
+    final h = _handles(_scr, b, knob: l.kind != WsKind.camera && l.id != 'bg', form: form.$1, round: form.$2), pts = [for (var i = 0; i < 4; i++) h['corner $i']!];
     _legible(c, Path()..addPolygon(pts, true), WsT.accent);
     final top = _scr(b.top);
     final lit = WsT.accent.withValues(alpha: 1), seen = (String k) => grip == null || grip == k;
@@ -145,6 +146,16 @@ class _ViewPainter extends CustomPainter {
       final r = Rect.fromCenter(center: p, width: _V.handle, height: _V.handle).inflate(grip == 'corner $i' ? _V.handle / 2 : 0);
       c.drawRect(r.inflate(1), Paint()..color = Grey.g00);
       c.drawRect(r, Paint()..color = lit);
+    }
+    if (h['round'] case final r? when seen('round')) {   // (its corners' roundness: a ring in from its first corner)
+      final big = grip == 'round' ? 1.6 : 1.0;
+      c.drawCircle(r, 4.5 * big, Paint()..color = Grey.g00);
+      c.drawCircle(r, 3.5 * big, _line(lit, 1.5));
+    }
+    if (h['points'] case final p? when seen('points')) {   // (its points: a diamond out from its side)
+      final big = grip == 'points' ? 1.6 : 1.0, d = Path()..addPolygon([p + Offset(0, -5 * big), p + Offset(5 * big, 0), p + Offset(0, 5 * big), p + Offset(-5 * big, 0)], true);
+      c.drawPath(d, _line(Grey.g00, 3));
+      c.drawPath(d, Paint()..color = lit);
     }
     final a = h['anchor']!;
     if (seen('anchor')) {
@@ -182,7 +193,7 @@ class _ViewPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ViewPainter o) => o.scene != scene || o.v != v || o.sel != sel || o.hover != hover || o.grid != grid || o.safe != safe || o.part != part || o.pivots != pivots || o.met != met || o.marked != marked || !identical(o.trail, trail) || o.parent != parent || o.grip != grip;
+  bool shouldRepaint(_ViewPainter o) => o.scene != scene || o.v != v || o.sel != sel || o.hover != hover || o.grid != grid || o.safe != safe || o.part != part || o.pivots != pivots || o.met != met || o.marked != marked || !identical(o.trail, trail) || o.parent != parent || o.grip != grip || o.form != form;
 }
 
 // ---- rulers -----------------------------------------------------------------------------------------------------------

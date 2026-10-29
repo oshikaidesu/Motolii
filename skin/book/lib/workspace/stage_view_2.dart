@@ -10,7 +10,15 @@ class _StageViewState extends State<StageView> implements StageHandles {
   Map<String, Offset> get handles {
     final v = _shown, scene = widget.scene, b = WsArt.boxOf(scene, widget.selected), l = scene.layer(widget.selected);
     if (v == null || b == null || l == null) return const {};
-    return _handles((d) => v.toScreen(WsArt.toView(scene, d)), b, knob: l.kind != WsKind.camera && l.id != 'bg');
+    final (form, round) = _formOf();
+    return _handles((d) => v.toScreen(WsArt.toView(scene, d)), b, knob: l.kind != WsKind.camera && l.id != 'bg', form: form, round: round);
+  }
+
+  /// The picked shape's form and how round its corners are (the inside's), for its own handles.
+  (String, double) _formOf() {
+    final m = WsScope.read(context).inside, t = int.tryParse(widget.selected ?? '');
+    if (m == null || t == null || m.word(t, 'kind') != 'shape') return ('', 0);
+    return (m.word(t, 'shape'), m.value(t, 'round', 0) ?? 0);
   }
 
   @override
@@ -323,7 +331,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
         final d = (value - local).distance;
         if (d > near) continue;
         near = d;
-        by = switch (key.split(' ').first) { 'corner' => 'scale', 'turn' => 'turn', 'anchor' => 'pivot', _ => null };
+        by = switch (key.split(' ').first) { 'corner' => 'scale', 'turn' => 'turn', 'anchor' => 'pivot', 'round' => 'round', 'points' => 'points', _ => null };
         grip = key;
       }
       for (final p in [...m.points(picked), for (final (h, _) in m.handles(picked)) h]) { // (a path's own point, moved with its handles; or a handle alone: the inside takes the nearest)
@@ -362,6 +370,14 @@ class _StageViewState extends State<StageView> implements StageHandles {
     final h = _held, ws = WsScope.read(context), m = ws.inside;
     if (h == null || m == null) return;
     final all = (local - h.from) / v.s; // (screen px -> points of the picture)
+    if (h.by case final way? when way == 'round' || way == 'points') {   // (a shape's own: its corners' roundness, or its points, as far as the hand goes)
+      final c = [for (var i = 0; i < 4; i++) handles['corner $i'] ?? Offset.zero], g = _gripOf(c), t = int.tryParse(widget.selected ?? '');
+      if (way == 'round') m.carry('round', g.roundOf(local));
+      if (way == 'points' && t != null) m.carry('points', ((m.value(t, 'points', 0) ?? 5) + (((local - h.from).dx * g.u.dx + (local - h.from).dy * g.u.dy) / 24).round()).clamp(3, 64).toDouble());
+      _held = (from: h.from, moved: true, by: way);
+      setState(() {});
+      return;
+    }
     if (h.by case final way?) {
       final gone = _doc(v, local) - _doc(v, h.from);
       // (a corner: the side across stays, as Figma's and Keynote's; with ⌥ held, about its pivot, from the middle)
@@ -500,7 +516,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
               children: [
                 RepaintBoundary(
                   child: CustomPaint(
-                    painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: widget.texture == null ? _Part.all : _Part.under, pivots: widget.pivots, met: _met, trail: trail, parent: _parentOf(), grip: _grip),
+                    painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: widget.texture == null ? _Part.all : _Part.under, pivots: widget.pivots, met: _met, trail: trail, parent: _parentOf(), grip: _grip, form: _formOf()),
                   ),
                 ),
                 if (_desk case final desk? when widget.texture != null) ...[ // (the whole pane as the inside draws it: off the stage covered half way, the picked thing marked)
@@ -542,7 +558,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
                 if (widget.texture != null)
                   IgnorePointer(
                     child: CustomPaint(
-                      painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: _Part.over, pivots: widget.pivots, met: _met, marked: _desk != null, trail: trail, parent: _parentOf(), grip: _grip),
+                      painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: _Part.over, pivots: widget.pivots, met: _met, marked: _desk != null, trail: trail, parent: _parentOf(), grip: _grip, form: _formOf()),
                     ),
                   ),
                 IgnorePointer(child: CustomPaint(painter: _RulerPainter(v, widget.cursor, scene))),

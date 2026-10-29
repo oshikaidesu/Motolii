@@ -770,6 +770,35 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a star\'s own handles on the canvas: its corners rounded by one pulled in, its points more by one pulled out (Alight Motion\'s)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final star = m.add('shape', 'star');
+    expect(m.set(star, 'size', .5), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$star');
+    await t.pumpAndSettle();
+    final stage = find.byType(StageView), origin = t.getTopLeft(stage);
+    Map<String, Offset> h() => (t.state(stage) as StageHandles).handles;
+    expect(h().keys, containsAll(['round', 'points']), reason: 'a star has both');
+    await t.timedDragFrom(origin + h()['round']!, const Offset(30, 30), const Duration(milliseconds: 300));
+    await settled(t, ws);
+    expect(m.value(star, 'round', 0) ?? 0, greaterThan(.02), reason: 'rounder, pulled in: ${m.trouble}');
+    final was = (m.value(star, 'points', 0) ?? 5).round();
+    await t.timedDragFrom(origin + h()['points']!, const Offset(60, 0), const Duration(milliseconds: 300));
+    await settled(t, ws);
+    expect((m.value(star, 'points', 0) ?? 5).round(), greaterThan(was), reason: 'more points, pulled out: ${m.trouble}');
+    expect(m.undo() && (m.value(star, 'points', 0) ?? 5).round() == was, isTrue, reason: 'one step back');
+    final rect = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$rect');
+    await t.pumpAndSettle();
+    expect([h().containsKey('round'), h().containsKey('points')], [true, false], reason: 'a rect has its roundness, no points');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a handle in hand alone is shown, larger; the others come back when it is let go (Alight Motion\'s handles)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

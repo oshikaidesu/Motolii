@@ -122,12 +122,33 @@ abstract interface class StageHandles {
 
 /// The selection's handles where they are drawn, by name: its four corners, the knob it turns by, the point it turns
 /// about and its middle (the body). The painter draws them from here; [StageHandles] hands them out from here.
-Map<String, Offset> _handles(Offset Function(Offset doc) scr, ArtBox b, {required bool knob}) {
+/// A shape's own too (Alight Motion's, on the canvas): its corners' roundness, in from its first corner along its
+/// diagonal as far as they are round (round: a share of its shorter side); a polygon's or star's points, out from the
+/// middle of its right side.
+Map<String, Offset> _handles(Offset Function(Offset doc) scr, ArtBox b, {required bool knob, String form = '', double round = 0}) {
   final top = scr(b.top), dir = top - scr(b.c), n = dir.distance < 1 ? const Offset(0, -1) : dir / dir.distance;
+  final c = [for (final p in b.corners) scr(p)];
   return {
-    for (final (i, p) in b.corners.indexed) 'corner $i': scr(p),
+    for (final (i, p) in c.indexed) 'corner $i': p,
     if (knob) 'turn': top + n * _V.stem,
     'anchor': scr(b.anchor),
     'body': scr(b.c),
+    if (const ['rect', 'polygon', 'star', 'squircle', 'chamfer', 'cog'].contains(form)) 'round': _shapeGrip(c).roundAt(round),
+    if (const ['polygon', 'star', 'cog'].contains(form)) 'points': (c[1] + c[2]) / 2 + _shapeGrip(c).u * 18,
   };
 }
+
+/// Where a shape's own handles are reckoned from: its first corner, the way along its top and down its left side, and
+/// its shorter side, in points of the window.
+({Offset c0, Offset u, Offset w, double short}) _gripOf(List<Offset> c) {
+  final top = c[1] - c[0], side = c[3] - c[0];
+  return (c0: c[0], u: top.distance < 1e-6 ? const Offset(1, 0) : top / top.distance, w: side.distance < 1e-6 ? const Offset(0, 1) : side / side.distance, short: math.max(1.0, math.min(top.distance, side.distance)));
+}
+
+extension on ({Offset c0, Offset u, Offset w, double short}) {
+  /// The roundness handle: in along the diagonal as far as the corners are round, never on the corner itself.
+  Offset roundAt(double round) => c0 + (u + w) * math.max(round.clamp(0.0, .5) * short, 12.0);
+  /// How round a hand at `at` makes the corners: how far in along the diagonal, a share of the shorter side.
+  double roundOf(Offset at) => (((at - c0).dx * (u + w).dx + (at - c0).dy * (u + w).dy) / 2 / short).clamp(0.0, .5);
+}
+({Offset c0, Offset u, Offset w, double short}) _shapeGrip(List<Offset> c) => _gripOf(c);
