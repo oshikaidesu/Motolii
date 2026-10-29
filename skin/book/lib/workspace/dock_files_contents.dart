@@ -303,18 +303,27 @@ class _Footer extends StatelessWidget {
     final layer = _layerOf(n, c), can = _kindOfFile(n.id).isNotEmpty, m = c.ws.inside;
     // (a shape picked and a still chosen: it fills that shape, Alight Motion's Fill > Media; the button says so)
     final shape = int.tryParse(c.ws.selected ?? ''), fills = m != null && shape != null && _kindOfFile(n.id) == 'picture' && m.word(shape, 'kind') == 'shape' && m.word(shape, 'shape') != 'null';
+    // (a picture or a film picked and another of its kind chosen: it shows that one instead, its place, size, keys and
+    //  effects as they are: After Effects' Replace Layer Source, Premiere Pro's Replace With Clip; P17)
+    final swaps = m != null && shape != null && !fills && layer != '$shape' && const {'picture', 'film'}.contains(m.word(shape, 'kind')) && _kindOfFile(n.id) == m.word(shape, 'kind');
     return FutureBuilder<String>(   // (what the media is, as GStreamer's discoverer tells it: Alight Motion's Media Info; its file's kind and size until then)
       future: can && m != null ? mediaInfoOf(m.libPath, n.id) : null,
       builder: (context, info) => DockFooter(
       preview: n.disk && (n.g == DockG.audio || n.g == DockG.video && (info.data ?? '×').isNotEmpty && !(info.data ?? '×').contains('×')) ? _Listen(n) : _Art(n),   // (sound alone, no picture in it: heard before it is placed)
       title: n.name,
       meta: c.mem.trouble[n.id] ?? [if (layer != null) 'In use', if (info.data case final i? when i.isNotEmpty) i, _metaOf(n)].join(' · '),
-      action: fills ? 'Fill shape' : can ? 'Place' : 'Select',
+      action: fills ? 'Fill shape' : swaps ? 'Replace' : can ? 'Place' : 'Select',
       done: !can && layer == null,
       doneLabel: 'Folder', // (the shelf lists only folders and files the inside can place: what cannot be placed is a folder)
-      fresh: can, // (placed, it is a new thing)
-      lasts: switch (_kindOfFile(n.id)) { 'picture' => _StillSeconds(c), 'film' || 'sound' when m != null => _FilmRange(c, n.id, mediaSecondsOf(m.libPath, n.id)), _ => null },
-      onAction: () => fills ? c.ws.after(m.later('say', thing: shape, name: 'fill_media', word: n.id)) : can ? _place(c, n) : c.ws.select(layer),
+      fresh: can && !fills && !swaps, // (placed, it is a new thing; filling or replacing, the picked one)
+      lasts: fills || swaps ? null : switch (_kindOfFile(n.id)) { 'picture' => _StillSeconds(c), 'film' || 'sound' when m != null => _FilmRange(c, n.id, mediaSecondsOf(m.libPath, n.id)), _ => null },
+      onAction: () => fills
+          ? c.ws.after(m.later('say', thing: shape, name: 'fill_media', word: n.id))
+          : swaps
+              ? c.ws.after(m.later('say', thing: shape, name: 'file', word: n.id), (done, why) => done ? c.ws.reread() : c.ws.notice = 'Not replaced: $why')
+              : can
+                  ? _place(c, n)
+                  : c.ws.select(layer),
       ),
     );
   }

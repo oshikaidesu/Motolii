@@ -3,7 +3,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:flutter/gestures.dart' show PointerDeviceKind, kDoubleTapTimeout;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -84,6 +84,37 @@ void main() {
     expect(find.textContaining('857 × 857 · JPEG'), findsOneWidget, reason: 'its size and kind, as GStreamer\'s discoverer tells them (Alight Motion\'s Media Info)');
     expect(await mediaInfoOf(ws.inside!.libPath, '$motoliiDir/check/beats.mp4'), '320 × 180 · 30 fps · 4.0 s · Quicktime', reason: 'a film: its rate and length too');
     expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
+  testWidgets('a picture picked and another picture pressed on Media: Replace shows the new one, its keys as they were (After Effects\' Replace Layer Source; P17)', (t) async {
+    final ws = _joined(), m = ws.inside!;
+    File('${ws.documentFolder}/still.jpg').copySync('${ws.documentFolder}/final.jpg');
+    final pic = m.add('picture', '${ws.documentFolder}/still.jpg');
+    expect(pic > 0 && m.key(pic, 'x', .5, 0) && m.key(pic, 'x', 1.5, 1), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$pic');
+    await _shelf(t, ws, const Size(520, 900), 'Media');
+    final folder = find.byKey(ValueKey('browser:file:${ws.documentFolder}'));
+    await t.ensureVisible(folder.first);
+    await t.tap(folder.first);
+    await t.pumpAndSettle();
+    final tile = find.byKey(ValueKey('browser:file:${ws.documentFolder}/final.jpg'));
+    for (var i = 0; i < 20 && tile.evaluate().isEmpty; i++) {   // (a folder of the disk is read without waiting)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pumpAndSettle();
+    }
+    await t.tap(tile.first);
+    await t.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));   // (a tile pressed twice places it: one press is known once the second has not come)
+    await t.pumpAndSettle();
+    expect(ws.selected, '$pic', reason: 'the picture still picked');
+    await t.tap(find.text('Replace'));
+    for (var i = 0; i < 200 && ws.waiting; i++) {   // (asked without waiting)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await t.pump();
+    }
+    expect([m.word(pic, 'file'), m.keyMoments(pic, 'x').length], ['${ws.documentFolder}/final.jpg', 2], reason: 'the same thing, its file the new one, its keys kept');
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 

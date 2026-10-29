@@ -152,7 +152,8 @@
 - したいこと：仮の背景を本番の絵に替える
 - 変えたい：絵　守りたい：奥行き・光・動き・効果
 - 成功：絵だけ替わり、ほかは作り直さなくていい。目安 3 打
-- 最初に押した所：　打数：
+- 最初に押した所：時間軸の背景の段　打数：**4 打**（10/30 夜、直したあと）：背景の段・Media の棚・新しい絵（final_background.jpg、本番の絵の代わりに docs/media/effects.jpg を teaser のフォルダーへ写した）・下の Replace。成功：絵だけ替わり、位置・Scale 230%・2.5D・Z −183.2・タイトルとその効果はそのまま（絵：reports/screen/p17_replace_1030.jpg）
+  - 直す前は、置いた絵を替える入口が無かった（Media の棚は新しい物を置くだけ。中身は絵の file を言い直せる：doc_kinds.h の file は film picture solid text の言葉）。After Effects の Replace Layer Source・Premiere Pro の Replace With Clip を、Fonts の棚（文字を選んで字体を押すとその字体に）と同じ形で入れた
 
 ### P18 20 秒を 15 秒に縮める
 - したいこと：全体を 15 秒にする。ヒットに付いた演出は印についていく
