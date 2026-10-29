@@ -83,6 +83,8 @@
   - 分かったこと：中身はカメラに効果を載せない（「a camera has no fx」。edit.sh で am_autoshake.am を載せて確かめた）。カメラを選ぶと効果の棚に Move（動き）の札が出ない。After Effects の決まった手は、カメラを Null の子にして Null を揺らす。Motolii のカメラにも parent がある → Null に Auto Shake（AbsentMotion の動き、effects/am_autoshake.am）を載せ、カメラをその子に、Null を印の所で 0.2 秒にする。白飛びは Flash (Sashimono).fs
   - 止めた理由：私の道具が Flutter の検索の欄に文字を打てない（人は打てる）。棚を送って探すと長くなるので、手を確かめてから次の晩にゴルフし直す（golf_noise.md ㊴）
 - やり直し（10/30 朝、私の道具が探す欄に打てるようになった）：**13 打で止まった**。手：時刻 213 Return（3）・Create・Layers・Null・Create（2 秒 13 から Null）・効果の棚・探す欄・shake・Auto-Shake・Add（Null に揺れ）・Camera の段。止めた理由：カメラの Inspector に Parent の欄が無い（Target・Orbit・Framing・Roll・Fog・Projection・Note だけ）ので、カメラを Null の子にできない ＝ (68)。Relations の画面は物どうしを点でつなぐ所で、親子の入口ではなかった。あとで分かった：カメラの親は Target › Layer。選ぶと中身が「a camera has no size」と断る（(68) の訂正）
+- 揺れまで通った（10/30 朝、カメラの親を中身で直したあと）：**38 打・スクロール 1 回**（外れ 2 打、強さの打ち直し 7 打を含む）。手：前の 13 打（Null に Auto-Shake、Camera の段）・Target › Layer・1. Null（カメラが Null の子に）・（Null の帯を 0.2 秒に縮めた・↶ で戻した：外れ）・Null の段・（送って一番下の Auto-Shake）・Magnitude 0 Return（3）・時刻 213 Return（3）・ひし形・時刻 225 Return（3）・ひし形・1 コマ戻る・Ease の左の点を上へ（M1 で 591 に跳ぶ：強すぎ）・時刻 213 Return（3）・Magnitude 80 Return（3）。当たり：コマごとに変わる点が、前 4,346・一撃の中 133,773・後 572（揺れは M1 からの 0.2 秒だけ。前後はカメラのゆっくりした寄りだけ）。白く飛ぶ方はまだ（P16 の白い面と同じ手で、Ease の一撃）
+  - 外れ：Null の帯を縮めても揺れは止まらない（After Effects も、親の帯が終わっても子は親の動きについていく）。止めるのは揺れの強さのキー ＝ (71)／平らな区間で左の点を引くと、つまみの幅で量るので Magnitude が 591 まで跳んだ。引いている間に、いくつになるかが見えない ＝ (70)
   - 起きたこと：書類の印が記録と違っていた（M1 が 2.217 から 2.483 へ、M2 8.367 と 導入 0.05 が無い）。いつ動いた・消えたかは分からない（M1 の札を押した直後に 2.483 と見えた）。窓を閉じて、記録どおりに書類へ戻した（直す前の書類：scratchpad の teaser_before_marks.motolii）＝ (69)
 
 ### P09 解放の瞬間にぐっと寄って、少し行き過ぎて戻る
