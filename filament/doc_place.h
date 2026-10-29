@@ -451,11 +451,14 @@ static bool doc_on(Doc& d, int thing, const char* name);
 // A thing's effects in the order they are laid, After Effects' stack: its "fx" names them in turn, files (.wgsl) and
 // ThorVG's own alike (doc_thor_names), any order; one of ThorVG's that is on and not named (a document from before)
 // lies first, in the old order (colours, shadow, glow, blur).
-static std::vector<std::string> doc_fx_list(Doc& d, int thing) {
+// off: those turned off too (fx_off: Alight Motion's eye on an effect), as its cards list them; else only those on.
+static std::vector<std::string> doc_fx_list(Doc& d, int thing, bool off) {
     std::vector<std::string> said, all;
+    const std::string hidden = off ? std::string() : ";" + doc_word(d, thing, "fx_off") + ";";
+    const auto seen = [&](const std::string& w) { return hidden.size() <= 2 || hidden.find(";" + doc_fx_title(w) + ";") == std::string::npos; };
     for (const std::string& w : script_files(doc_word(d, thing, "fx"))) if (w != "none" && w != "glow") said.push_back(w);   // (a glow is no step of the stack: Filament's bloom, doc_moment)
-    for (const char* n : doc_thor_names) if (std::find(said.begin(), said.end(), n) == said.end() && doc_on(d, thing, n)) all.push_back(n);
-    for (const std::string& w : said) if (!doc_thor_letter(w) || doc_on(d, thing, w.c_str())) all.push_back(w);
+    for (const char* n : doc_thor_names) if (std::find(said.begin(), said.end(), n) == said.end() && doc_on(d, thing, n) && seen(n)) all.push_back(n);
+    for (const std::string& w : said) if ((!doc_thor_letter(w) || doc_on(d, thing, w.c_str())) && seen(w)) all.push_back(w);
     return all;
 }
 // Whether a thing's effects are laid on it as the camera sees it (one of them a file: then all of them, in turn, there:

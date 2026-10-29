@@ -306,11 +306,13 @@ static std::vector<DocScript*> doc_scripts_on(Doc& d, int thing) {
     for (const std::string& file : script_files(said)) if (DocScript* sc = doc_script_of(d, file)) all.push_back(sc);
     return all;
 }
+static std::string doc_fx_title(const std::string& name);
+static std::vector<std::string> doc_fx_list(Doc& d, int thing, bool off = false);
 // AbsentMotion's own motion effects on a thing (.am files in its fx), in order, each its knobs' values now by the names
 // AbsentMotion reads them by: a point's x and y and a colour's x to w one param of numbers in turn (effects/from_absent.py).
 static std::vector<AbsentEffect> doc_absent_on(Doc& d, int thing, double now) {
     std::vector<AbsentEffect> all;
-    for (const std::string& file : script_files(doc_word(d, thing, "fx")))
+    for (const std::string& file : doc_fx_list(d, thing))   // (those turned off left out)
         if (std::filesystem::path(file).extension() == ".am")
             if (DocScript* sc = doc_script_of(d, file); sc && !sc->absent.empty()) {
                 AbsentEffect e{sc->absent, {}};

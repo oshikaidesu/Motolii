@@ -141,6 +141,7 @@ static const DocValue doc_values[] = {
     {"script", "picture text shape stage", 0, 0, false, ""},   // (the stage's: a whole-screen effect, a .wgsl file: screen.h)
     // (a thing's own effects, After Effects' effects on a layer: the whole-screen ones' .wgsl files, one over another, on the thing as the camera sees it)
     {"fx", "film picture text shape solid", 0, 0, false, ""},
+    {"fx_off", "film picture text shape solid", 0, 0, false, ""},   // (its effects turned off, the titles of their cards with ; between: Alight Motion's eye on an effect; their values kept)
     {"bounce", doc_drawn, 0, 1, false, nullptr},
     {"friction", doc_drawn, 0, 2, false, nullptr},
     {"gravity", "stage", -100, 100, false, nullptr},

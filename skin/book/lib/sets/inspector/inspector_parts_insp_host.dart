@@ -25,6 +25,8 @@ class InspHost extends StatefulWidget {
     this.onCardMove,
     this.onCardReset,
     this.onCardRemove,
+    this.onCardEye,
+    this.cardsOff = const [],
     this.onCardCopy,
     this.onCardPaste,
     this.onPath,
@@ -77,6 +79,8 @@ class InspHost extends StatefulWidget {
   final void Function(String title, int by)? onCardMove;
   final void Function(List<String> names)? onCardReset;   // (a card's values as they come: Reset on its head)
   final void Function(String title)? onCardRemove;   // (one of its effects taken off: Remove on its card's head, Alight Motion's Delete)
+  final void Function(String title)? onCardEye;   // (one of its effects turned off or on again, its values kept: Alight Motion's eye on an effect)
+  final List<String> cardsOff;   // (the titles of those turned off)
   final void Function(List<String> names)? onCardCopy;   // (a card's values copied, to be given to another thing: Copy on its head)
   final VoidCallback? onCardPaste;   // (and given: Paste)
 
@@ -151,6 +155,8 @@ class _InspHostState extends State<InspHost> {
       ..onCardMove = widget.onCardMove
       ..onCardReset = widget.onCardReset
       ..onCardRemove = widget.onCardRemove
+      ..onCardEye = widget.onCardEye
+      ..cardsOff = widget.cardsOff
       ..onCardCopy = widget.onCardCopy
       ..onCardPaste = widget.onCardPaste
       ..onPath = widget.onPath
@@ -299,6 +305,8 @@ class _InspHostState extends State<InspHost> {
       ..onCardMove = widget.onCardMove
       ..onCardReset = widget.onCardReset
       ..onCardRemove = widget.onCardRemove
+      ..onCardEye = widget.onCardEye
+      ..cardsOff = widget.cardsOff
       ..onCardCopy = widget.onCardCopy
       ..onCardPaste = widget.onCardPaste
       ..onPath = widget.onPath;

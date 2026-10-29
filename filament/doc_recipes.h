@@ -264,7 +264,7 @@ static std::string doc_fx_title(const std::string& name) {
 // The titles of a thing's effect cards in the order its effects are laid ("Halftone;Gaussian Blur").
 static std::string doc_fx_titles(Doc& d, int thing) {
     std::string all;
-    for (const std::string& w : doc_fx_list(d, thing)) all += (all.empty() ? "" : ";") + doc_fx_title(w);
+    for (const std::string& w : doc_fx_list(d, thing, true)) all += (all.empty() ? "" : ";") + doc_fx_title(w);   // (those turned off too: their cards are there)
     return all;
 }
 static std::string doc_cards_of(Doc& d, int thing) {
@@ -298,7 +298,7 @@ static std::string doc_cards_of(Doc& d, int thing) {
         else all += (all.empty() ? "" : "; ") + std::string(card.title) + ": " + names;
     }
     if (thing != 0)   // (its effects, a card each, in the order they are laid: ThorVG's own and the files' alike)
-        for (const std::string& w : doc_fx_list(d, thing)) {
+        for (const std::string& w : doc_fx_list(d, thing, true)) {   // (those turned off too: their values are kept)
             std::string card;
             if (doc_thor_letter(w)) { if (const auto at = effects.find(w); at != effects.end()) card = at->second; }
             else if (const DocScript* sc = doc_script_of(d, w)) {
@@ -365,7 +365,7 @@ static bool doc_fx_say(Doc& d, int thing, const std::vector<std::string>& list) 
 }
 // An effect file put at the end of a thing's effects, or taken out if it is among them (one step).
 static bool doc_fx_file(Doc& d, int thing, const char* file) {
-    std::vector<std::string> list = doc_fx_list(d, thing);
+    std::vector<std::string> list = doc_fx_list(d, thing, true);
     if (const auto at = std::find(list.begin(), list.end(), file); at != list.end()) list.erase(at);
     else list.push_back(file);
     doc_act(d);
@@ -375,7 +375,7 @@ static bool doc_fx_file(Doc& d, int thing, const char* file) {
 // One of a thing's effects (a file, or ThorVG's own by its value's name) moved `by` places in its list, After Effects'
 // dragging an effect up or down its stack (one step).
 static bool doc_fx_move(Doc& d, int thing, const char* name, int by) {
-    std::vector<std::string> list = doc_fx_list(d, thing);
+    std::vector<std::string> list = doc_fx_list(d, thing, true);
     auto at = std::find(list.begin(), list.end(), name);
     if (at == list.end()) at = std::find_if(list.begin(), list.end(), [&](const std::string& w) { return doc_fx_title(w) == name; });   // (or by its card's title)
     if (at == list.end()) return d.trouble = std::string(name) + " is not among its effects", false;
@@ -392,7 +392,7 @@ static bool doc_effect(Doc& d, int thing, const char* name, double at) {
     for (const DocEffect& e : doc_effects) {
         if (strcmp(e.name, name)) continue;
         const bool on = !strcmp(e.value, "fill") ? doc_word(d, thing, "fill") == e.on : doc_on(d, thing, e.value);   // (a fill: on when it is this one)
-        std::vector<std::string> list = doc_fx_list(d, thing);   // (ThorVG's own in the thing's list: put on at its end, as After Effects does, or out)
+        std::vector<std::string> list = doc_fx_list(d, thing, true);   // (ThorVG's own in the thing's list: put on at its end, as After Effects does, or out)
         doc_act(d);
         bool ok;
         if (on) ok = doc_knows(d, thing, e.value) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q", thing, e.value));   // (unsaid: as it was before it was put on)
@@ -422,8 +422,21 @@ static bool doc_effect(Doc& d, int thing, const char* name, double at) {
 // One of a thing's effects (by its card's title, or its own name) taken off, as the shelf takes it off when pressed
 // again: an effect file out of its list (doc_fx_file), one of ThorVG's own unsaid (doc_effect). Alight Motion's
 // Delete on an effect's card (one step).
+// One of its effects turned off, or on again (Alight Motion's eye on an effect): by its card's title, its values kept.
+static bool doc_fx_eye(Doc& d, int thing, const char* title) {
+    const std::vector<std::string> list = doc_fx_list(d, thing, true);
+    if (std::none_of(list.begin(), list.end(), [&](const std::string& w) { return doc_fx_title(w) == title; })) return d.trouble = std::string(title) + " is not among its effects", false;
+    const bool was = (";" + doc_word(d, thing, "fx_off") + ";").find(";" + std::string(title) + ";") != std::string::npos;
+    std::vector<std::string> off;
+    std::istringstream said(doc_word(d, thing, "fx_off"));
+    for (std::string one; std::getline(said, one, ';');) if (!one.empty() && one != title) off.push_back(one);
+    if (!was) off.push_back(title);
+    std::string all;
+    for (const std::string& one : off) all += (all.empty() ? "" : ";") + one;
+    return doc_say(d, thing, "fx_off", all.c_str());
+}
 static bool doc_fx_out(Doc& d, int thing, const char* name) {
-    const std::vector<std::string> list = doc_fx_list(d, thing);
+    const std::vector<std::string> list = doc_fx_list(d, thing, true);
     auto at = std::find(list.begin(), list.end(), name);
     if (at == list.end()) at = std::find_if(list.begin(), list.end(), [&](const std::string& w) { return doc_fx_title(w) == name; });
     if (at == list.end()) return d.trouble = std::string(name) + " is not among its effects", false;

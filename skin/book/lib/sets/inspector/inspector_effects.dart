@@ -126,6 +126,7 @@ class ValuesCard extends StatelessWidget {
                 if (doc.onCardCopy case final copy?) ('Copy', () => copy([for (final p in card.params) p.id])),
                 if (doc.onCardPaste case final paste?) ('Paste', paste),
                 if (doc.onCardReset case final reset?) ('Reset', () => reset([for (final p in card.params) p.id])),
+                if (at >= 0 && doc.onCardEye != null) (doc.cardsOff.contains(card.name) ? 'Show' : 'Hide', () => doc.onCardEye!(card.name)),   // (turned off and on again, its values kept: Alight Motion's eye)
                 if (at >= 0 && doc.onCardRemove != null) ('Remove', () => doc.onCardRemove!(card.name)),   // (only an effect's card: the thing's own values are not taken off)
               ])
                 Hov(

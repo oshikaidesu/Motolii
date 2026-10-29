@@ -69,4 +69,29 @@ void main() {
     expect(m.value(rect, 'blur', 0), 12, reason: 'one step back: the blur on again');
     await closeWorkspace(t);
   }, skip: !insideBuilt);
+
+  testWidgets('Hide on an effect\'s card turns it off, its card and values kept, and Show turns it on again (Alight Motion\'s eye on an effect)', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final halftone = '$motoliiDir/effects/halftone.wgsl';
+    final rect = m.add('shape', 'rect');
+    ws..reread()..select('$rect');
+    expect(ws.screenToggle(halftone), isTrue);
+    await t.pumpAndSettle();
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await t.pumpAndSettle();
+    for (final (word, off) in [('hide', 'Halftone'), ('show', '')]) {
+      final eye = find.byKey(ValueKey('card-$word:Halftone'));
+      await seen(t, eye);
+      await t.tap(eye);
+      for (var i = 0; i < 100 && m.word(rect, 'fx_off') != off; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await t.pump();
+      }
+      expect(m.word(rect, 'fx_off'), off, reason: '$word: ${m.trouble}');
+      expect(m.word(rect, 'fx'), halftone, reason: 'the effect itself kept on the thing');
+      await t.pumpAndSettle();
+      expect(_cards(t), contains('Halftone'), reason: 'and its card, its values there to be changed');
+    }
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
 }

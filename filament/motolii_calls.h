@@ -510,6 +510,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "relate") ok = changes(m, (int)doc_relate(doc(m), thing, w.c_str(), m->now));
             else if (c == "fx_file") ok = changes(m, (int)doc_fx_file(doc(m), thing, w.c_str()));   // (an effect file put at the end of the thing's effects, or taken out)
             else if (c == "fx_out") ok = changes(m, (int)doc_fx_out(doc(m), thing, w.c_str()));   // (one of its effects taken off, by its card's title)
+            else if (c == "fx_eye") ok = changes(m, (int)doc_fx_eye(doc(m), thing, w.c_str()));   // (one of its effects off, or on again: word its card's title)
             else if (c == "fx_move") ok = changes(m, (int)doc_fx_move(doc(m), thing, w.c_str(), (int)std::lround(number)));   // (one of its effects moved up or down its list)   // (the things in word put in the relation `thing` as they show now)
             else if (c == "lead") ok = changes(m, (int)doc_lead(doc(m), thing, (int)number, m->now));   // (the relation `thing` led by the thing `number`, nothing moving)
             else if (c == "free") ok = changes(m, (int)doc_free(doc(m), thing, (int)number, m->now, false));   // (a thing out of the relation `number`: back to what is under it, as the relation deleted does; only bake keeps where it shows)
@@ -552,7 +553,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
                 ok = desk_is(m, dw, dh, x, y, sc, pt);
             }
             else if (c == "hold") ok = (int)doc_hold(doc(m), thing);   // (a hand takes hold: what it carries next is this thing's)
-            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, duplicate, split, align, time_align, reset, fit, flip, extract_sound, freehand, brush, outline, copy, paste, copy_style, paste_style, keep_look, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_move, size, watch, pick, desk, live, relate, lead, free, release";
+            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, duplicate, split, align, time_align, reset, fit, flip, extract_sound, freehand, brush, outline, copy, paste, copy_style, paste_style, keep_look, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_eye, fx_move, size, watch, pick, desk, live, relate, lead, free, release";
             } catch (const std::exception& e) {
                 ok = 0;
                 std::fprintf(stderr, "motolii: %s threw: %s\n", c.c_str(), e.what());

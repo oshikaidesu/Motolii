@@ -341,7 +341,7 @@
 
 ## K. 効果の札とタイムラインの絵（実機）（6）
 
-- [ ] 効果が 2 つ以上なら札の一覧（入り切りの目・並べ替え）
+- [x] 効果が 2 つ以上なら札の一覧（入り切りの目・並べ替え） — 済（10/29）：効果の札は重ねた順に並び、頭の上下の矢印で並べ替え（fx_move、前から）、頭の Hide で切り Show で戻す（Alight Motion の目。`fx_off` に札の名前を残し、効果と値はそのまま：`filament/doc_place.h` の doc_fx_list が描く時だけ除く、`filament/doc_recipes.h` の doc_fx_eye）。edit.sh で写真に反転を付けて切ると元の写真と同じ（違う画素 90272 → 0）、戻すとまた 90272。窓で Hide・Show を押して札が残るのを見た（`skin/book/test/workspace_fx_order_test.dart`）
 - [x] 効果の小見出しを畳む — 効果の札は名前を押して畳む（`skin/book/lib/sets/inspector/inspector_rows_sect.dart`、畳んだかは fold.<名前> で覚える）、あまり変えない値は札の足の Advanced の下に畳む（`inspector_effects.dart`、`inspector_advanced.dart`）。10/29 コードで確かめ（窓の試験はまだ無い）
 - [ ] 効果ごとに複数のプリセット（動きつきも）
 - [x] 効果の最初の値を「掛かって見える値」に — 既にある仕組み（`filament/fx_first.sh` が測り `effects/first.tsv` に書き、script.cpp の script_first が重ねる）。10/29 に棚の全部（画面の効果 285）を測り直し：そのままで何も見えない 68 のうち 35 に見える値、12 は場面転換で動きのまま、21 は既定の 1 枚の絵では見えない物（別の絵・過去のコマ・時間を読む物）
