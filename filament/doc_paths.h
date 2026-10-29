@@ -119,11 +119,14 @@ static int doc_freehand(Doc& d, const char* points) {
 // A brush's stroke as the window drew it (perfect-freehand's points, each with the pressure its radius comes from): a
 // path shape whose stroke is kept as drawn (`drawing`: brush, how wide, each point and its pressure, in the plane's own
 // units) and whose outline AbsentMotion makes of it (absent_drawing: Alight Motion's brush, a band of round pieces, its
-// drawing effects on it as time goes: doc_moment). size: how wide, in points of the picture; then x y pressure each.
+// drawing effects on it as time goes: doc_moment). tool: AbsentMotion's (0 a pen, as wide all along; 1 a brush, as its
+// pressure says; 2 a fill, the way gone round filled); size: how wide, in points of the picture; then x y pressure each.
 static int doc_brush(Doc& d, const char* said) {
     std::istringstream in(said);
+    int tool = 1;
     double size = 0.0;
-    in >> size;
+    in >> tool >> size;
+    tool = std::clamp(tool, 0, 2);
     std::vector<double> xyp;
     for (double v; in >> v;) xyp.push_back(v);
     if (!(size > 0.0) || xyp.size() < 6) return d.trouble = "a stroke of fewer than two points", 0;
@@ -136,13 +139,13 @@ static int doc_brush(Doc& d, const char* said) {
         std::vector<float> own;
         std::string kept;
         char one[96];
-        std::snprintf(one, sizeof one, "1 %.5f", wide), kept = one;
+        std::snprintf(one, sizeof one, "%d %.5f", tool, wide), kept = one;
         for (size_t i = 0; i + 2 < xyp.size(); i += 3) {
             const math::double2 p = plane.own(xyp[i], xyp[i + 1]);
             own.insert(own.end(), {(float)p.x, (float)p.y, (float)xyp[i + 2]});
             std::snprintf(one, sizeof one, " %.5f %.5f %.3f", p.x, p.y, xyp[i + 2]), kept += one;
         }
-        const std::string outline = absent_drawing(own, (float)wide, 1, {}, thing, 0.0, 1000.0, 0.0, true);
+        const std::string outline = absent_drawing(own, (float)wide, tool, {}, thing, 0.0, 1000.0, 0.0, true);
         if (outline.empty() || !doc_say(d, thing, "drawing", kept.c_str()) || !doc_say(d, thing, "path", outline.c_str())) thing = 0;
     }
     if (!thing) d.act_ok = false;

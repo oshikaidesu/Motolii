@@ -298,7 +298,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
     m.later('together', number: 1);
     var made = 0;
     final said = [for (final p in points) '${p.point.x} ${p.point.y} ${2 * getStrokeRadius(options.size, options.thinning, p.pressure, options.easing) / options.size}'];
-    ws.after(m.later('brush', word: '${options.size} ${said.join(' ')}'), null, (t) => made = t);
+    ws.after(m.later('brush', word: '${widget.brushTool} ${options.size} ${said.join(' ')}'), null, (t) => made = t);
     m.later('say', thing: -1, name: 'fill', word: ws.ink.isEmpty ? 'ffffff' : ws.ink);   // (an outline with no fill shows nothing: white, as a drawing app's brush begins, when no ink is chosen)
     ws.after(m.later('together'), (done, _) => done && made > 0 ? ws.select('$made') : null);
   }

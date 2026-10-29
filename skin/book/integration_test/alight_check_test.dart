@@ -740,7 +740,7 @@ void main() {
         getStrokeOutlinePoints(points, options: options, rememberSimulatedPressure: true);
         var made = 0;
         m.later('together', number: 1);
-        ws.after(m.later('brush', word: '${options.size} ${[for (final p in points) '${p.point.x} ${p.point.y} ${2 * getStrokeRadius(options.size, options.thinning, p.pressure, options.easing) / options.size}'].join(' ')}'), null, (n) => made = n);
+        ws.after(m.later('brush', word: '1 ${options.size} ${[for (final p in points) '${p.point.x} ${p.point.y} ${2 * getStrokeRadius(options.size, options.thinning, p.pressure, options.easing) / options.size}'].join(' ')}'), null, (n) => made = n);
         m.later('say', thing: -1, name: 'fill', word: 'ffcc33');
         m.later('together');
         for (var k = 0; k < 200 && made == 0; k++) {   // (made by the inside: its effect said on it once it is there, as a hand picks it from the shelf)

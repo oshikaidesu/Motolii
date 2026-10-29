@@ -80,10 +80,12 @@ class StageView extends StatefulWidget {
     this.group = false,
     this.mask = false,
     this.brushSize = 16,
+    this.brushTool = 1,
   });
 
   /// Joined: how wide the Brush draws, in points of the picture (perfect-freehand's size).
   final double brushSize;
+  final int brushTool;   // (AbsentMotion's: 0 a pen, 1 a brush, 2 a fill: doc_brush)
 
   /// Joined: the Move tool's way (0 free, 1 along x only, 2 along y only), and whether an ellipse is drawn out from its middle.
   final int axis;

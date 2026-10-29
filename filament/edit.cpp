@@ -39,7 +39,7 @@ int main(int argc, char** argv) {
         int ok = 1;
         bool known = true;
         if (call == "add" && w.size() >= 3) { if ((ok = motolii_add(m, w[1].c_str(), rest(2).c_str()))) std::printf("thing %d\n", ok); }   // (a file's name may have spaces)
-        else if (call == "brush" && w.size() >= 8) {   // (a brush's stroke as the window gives it: how wide, then x y pressure each, points of the picture)
+        else if (call == "brush" && w.size() >= 9) {   // (a brush's stroke as the window gives it: its tool (0 pen, 1 brush, 2 fill), how wide, then x y pressure each, points of the picture)
             const int ticket = motolii_later(m, "brush", 0, "", rest(1).c_str(), 0);
             while ((ok = motolii_answer(m, ticket)) < 0) std::this_thread::sleep_for(std::chrono::milliseconds(2));
             if (ok) std::printf("thing %d\n", ok);

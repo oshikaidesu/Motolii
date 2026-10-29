@@ -253,7 +253,7 @@
 - [x] 見え方：Pixel、Grid、Solo、カメラ越し、拡大縮小と %：舞台の上の帯の Fit・50%・100%（等倍）と今の %、Grid、Safe、Camera（カメラ越しと自由）。Solo は S の鍵と時間軸 — 済：窓の試験（`workspace_stage_test.dart`、Solo は `workspace_joined_test_3.dart`）
 - [ ] ＋の 1 枚に全部：図形・メディア・音・物・テンプレート・手描き・ベクター・文字
 - [x] 図形 54 種を絵で選ぶ：Create の棚の Recipes に 54 種（AbsentMotion の shapes.xml と shapes.cpp から）、札はそれぞれの形の絵（flutter_svg） — 済（10/28）：`check/absent_shapes.sh`、窓の試験（`workspace_dock_test.dart`）。まだ：計算する図形の値（半径・尾など）がキーで動かない
-- [ ] 手描き：ペン・ブラシ・塗りつぶし・消しゴム・太さ・色 — 一部（10/29）：ブラシの輪郭は AbsentMotion の drawing.cpp（ペン・ブラシ・塗りつぶしの作り方を持つ、`filament/absent_drawing.cpp`）。窓の道具はまだブラシだけで、ペン（同じ太さ）・塗りつぶし・消しゴムは選べない。太さは道具の大きさ、色はインク
+- [ ] 手描き：ペン・ブラシ・塗りつぶし・消しゴム・太さ・色 — 一部（10/29）：段の道具の Brush の欄に Brush・Pen・Fill（Alight Motion の描く道具、AbsentMotion の drawing.cpp の道具 1・0・2：筆圧で太さが変わる帯、同じ太さの線、なぞった形を塗る）と太さ（Thin・Medium・Thick）と色（Fill）。edit.sh で同じ輪の道を 3 つの道具で描き、帯・線・塗った楕円になる（黄色の画素 24621・29427・145793）。まだ：消しゴム（AbsentMotion では同じ手描きの層の中を消す。Motolii は 1 本ずつ別の物なので、消す相手の決め方が要る）
 - [x] 空のグループを足す：Create の棚の Null（見えない物、親にして使う） — 済：窓の試験（`workspace_joined_test_2.dart` の Create：Null）
 - [ ] Element：使い回す部品、元とつながる、文字だけ差し替え、グループに戻す
 - [x] レイヤーを左右・上下に反転：Arrange > Flip Horizontal・Flip Vertical（scale_x か scale_y を −1 倍、キーも一緒に） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
