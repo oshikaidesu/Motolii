@@ -391,6 +391,8 @@ static Doc* doc_open(Stage& s, const char* path) {
                               "insert into thing(id) select max(thing) from fact where (select count(*) from thing) = 0 having max(thing) is not null", nullptr, nullptr, nullptr) != SQLITE_OK) return nullptr;
     if (sqlite3_exec(d->file, "select way from fact limit 0", nullptr, nullptr, nullptr) != SQLITE_OK)   // (a document from before stretches had ways)
         sqlite3_exec(d->file, "alter table fact add column way text", nullptr, nullptr, nullptr);
+    if (sqlite3_exec(d->file, "select made from step limit 0", nullptr, nullptr, nullptr) != SQLITE_OK)   // (a document from before its steps kept when they were made)
+        sqlite3_exec(d->file, "alter table step add column made real", nullptr, nullptr, nullptr);
     // (a document from before its moments were numeric: SQLite's session keeps a row whose moment is a whole number
     //  made and then changed in one act as two, if the moment is real, and that step cannot be undone. Made again once)
     bool real = false;
@@ -452,7 +454,7 @@ static bool doc_acted(Doc& d) {
     if (d.act_ok && size) {   // (what was undone and not done again is forgotten: a new step follows the last one that stands)
         sqlite3_exec(d.file, "delete from step where undone", nullptr, nullptr, nullptr);
         sqlite3_stmt* keep = nullptr;
-        sqlite3_prepare_v2(d.file, "insert into step(change) values(?)", -1, &keep, nullptr);
+        sqlite3_prepare_v2(d.file, "insert into step(change, made) values(?, (julianday('now') - 2440587.5) * 86400.0)", -1, &keep, nullptr);   // (and when, in seconds: doc_edited)
         sqlite3_bind_blob(keep, 1, changed, size, SQLITE_TRANSIENT);
         sqlite3_step(keep);
         sqlite3_finalize(keep);
@@ -480,6 +482,18 @@ static bool doc_change(Doc& d, char* change, bool later) {
 }
 
 // The last step undone (back = true), or the last undone step done again. false: there is none.
+// How long the document has been worked on (Alight Motion's Total Edit Time), from when its steps were made: the time
+// from one to the next counted while it is under a quarter of an hour, a longer one a break (WakaTime's way of
+// counting time at work from its heartbeats, its keystroke timeout 15 minutes by default). Seconds.
+static double doc_edited(Doc& d) {
+    double all = 0.0, was = -1.0;
+    doc_rows(d, sqlite3_mprintf("select made from step where made is not null order by n"), [&](sqlite3_stmt* row) {
+        const double at = sqlite3_column_double(row, 0);
+        if (was >= 0.0 && at > was && at - was < 900.0) all += at - was;
+        was = at;
+    });
+    return all;
+}
 static bool doc_step(Doc& d, bool back) {
     int n = 0;
     std::vector<uint8_t> change;

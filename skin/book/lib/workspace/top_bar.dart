@@ -548,6 +548,10 @@ class _SizeChipState extends State<_SizeChip> {
                 ]),
                 SizedBox(height: Shape.s(12)),
                 Text('$shownW × $shownH  ·  ${Ws.fps} frames a second', style: T.value(Grey.g76)),
+                if (ws.inside case final m?) ...[   // (Alight Motion's Total Edit Time, in its settings: how long the document has been worked on)
+                  SizedBox(height: Shape.s(6)),
+                  Text('Total Edit Time  ${m.edited ~/ 3600}h ${(m.edited % 3600) ~/ 60}m', key: const ValueKey('size-edited'), style: T.value(Grey.g63)),
+                ],
               ],
             ),
           ),

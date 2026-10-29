@@ -682,6 +682,8 @@ void _tests3() {
       await t.pump();
     }
     expect(ws.inside!.word(0, 'background'), 'd8d8d8', reason: 'light gray behind it: ${ws.inside!.trouble}');
+    await t.pumpAndSettle();
+    expect(t.widget<Text>(find.byKey(const ValueKey('size-edited'))).data, startsWith('Total Edit Time  0h 0m'), reason: 'Alight Motion\'s Total Edit Time: the steps just made, under a minute');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

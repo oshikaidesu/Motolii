@@ -233,7 +233,7 @@
 ## H. 実機で見つけた根幹の操作（alight_ui.md）（66）
 
 - [ ] 新しい文書の箱：縦横比 6 種＋自由、解像度 7 段、fps 10 段、背景、PROJECT か ELEMENT（一部）：New（⌘N）で新しい書類を開くと、まず大きさの箱（縦横比 5 種と解像度 7 段、自由は 2 回押して打つ）が出る（10/28、`workspace_joined_test_3.dart`）。背景は Room カード。まだ：fps（内側の 60 の決まり）、ELEMENT — 10/29：同じ箱に Frame rate（AbsentMotion の NewProjectSheet と同じ 12・15・18・20・24・25・30・48・50・60）と Background（同じく Black・White・Light Gray・Green・Blue・Transparent、Transparent は背景なしで書き出しも透明）。窓の試験で 24 fps と Light Gray を押して書類に入る。まだ：ELEMENT
-- [ ] 文書の設定を後から変える（同じ箱）と、編集した時間（一部）：大きさは同じ箱でいつでも変えられる（10/28）。まだ：fps、編集した時間 — fps も同じ箱で（10/29）。まだ：編集した時間
+- [x] 文書の設定を後から変える（同じ箱）と、編集した時間（一部）：大きさは同じ箱でいつでも変えられる（10/28）。まだ：fps、編集した時間 — fps も同じ箱で（10/29）。まだ：編集した時間 — 編集した時間も済（10/29）：大きさの箱の下に Total Edit Time。書類の取り消しの段に作った時刻を残し、次の段まで 15 分未満なら足す（WakaTime の数え方、キー入力の間が既定 15 分を超えたら休み）。窓の試験（`workspace_joined_test_3.dart` の size chip）
 - [x] 書き出し：形式ごとの行、空き容量と大きさの見積もり：書き出しの箱の Format の札（MP4・HEVC・GIF・PNG・JPEG）、Folder の横に空き容量（Mac の df）、Quality を選ぶと大きさの見積もり（Mbps × 秒） — 済（10/28）：窓の試験（`workspace_render_dialog_test.dart`）。Auto のときは見積もりを出さない
 - [x] 書き出し Video：解像度、H.264 / H.265、fps 3 段、画質 Mbps：書き出しの箱の Format（MP4 H.264・HEVC・GIF・PNG）、Resolution（Full と 2160p〜）、Rate（60・30・24・15）、Quality（Auto と 4〜32 Mbps）。値は書類に残る — 済（10/28）：`check/film_way.sh`、窓の試験（`workspace_render_dialog_test.dart`）
 - [x] 書き出し：今のコマを PNG：File メニューの Export Frame・⇧E（Premiere Pro と同じ）。再生位置の絵を文書の隣に「文書名_コマ.png」で — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）

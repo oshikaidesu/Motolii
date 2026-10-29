@@ -127,6 +127,9 @@ extension MotoliiDocument on Motolii {
   /// Points of the picture to one unit of the stage, at z 0.
   double get point => (_document['point'] as num?)?.toDouble() ?? 1;
 
+  /// How long the document has been worked on, in whole seconds (Alight Motion's Total Edit Time: doc_edited).
+  int get edited => ((_document['edited'] as num?) ?? 0).round();
+
   /// How a hand reads a thing's value, as the inside says it: shown = value x times + from (places in points of the
   /// picture from its top left, shares in hundredths...). Asked once a thing and a name.
   (double, double) reading(int thing, String name) {
