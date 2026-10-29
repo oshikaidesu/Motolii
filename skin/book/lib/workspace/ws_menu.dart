@@ -55,9 +55,8 @@ class WsMenuState extends State<WsMenu> {
             decoration: BoxDecoration(color: h && it.go != null ? Grey.g20 : null, borderRadius: BorderRadius.all(Shape.r(4))),
             child: Row(
               children: [
-                Text(it.label, style: T.name(it.go != null ? Grey.g91 : Grey.g56)),
-                const Spacer(),
-                if (it.go == null && it.why.isNotEmpty) Text(it.why, style: T.label(Grey.g56)) else if (it.keys.isNotEmpty) Text(it.keys, style: T.label(Grey.g56)),
+                Expanded(child: Text(it.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(it.go != null ? Grey.g91 : Grey.g56))),
+                if (it.go == null && it.why.isNotEmpty) Text(it.why, maxLines: 1, style: T.label(Grey.g56)) else if (it.keys.isNotEmpty) Text(it.keys, maxLines: 1, style: T.label(Grey.g56)),
               ],
             ),
           ),
@@ -69,7 +68,7 @@ class WsMenuState extends State<WsMenu> {
     consumeOutsideTaps: true,
     overlayBuilder: (context, info) {
       final w = Shape.z(220), pad = Shape.s(4);
-      final h = pad * 2 + [for (final it in _items) it.label.isEmpty ? Shape.s(8) + 1 : _row].fold(0.0, (a, b) => a + b);
+      final h = math.min(info.overlaySize.height * .5, [for (final it in _items) it.label.isEmpty ? Shape.s(8) + 1 : _row].fold(0.0, (a, b) => a + b)) + pad * 2;
       final at = info.anchorRect.topLeft + (info.position ?? Offset.zero);
       return Positioned(
         left: math.max(0.0, math.min(at.dx, info.overlaySize.width - w)),
@@ -86,7 +85,10 @@ class WsMenuState extends State<WsMenu> {
               border: Border.all(color: Grey.g26),
               boxShadow: [BoxShadow(color: const Color(0x80000000), blurRadius: 24, offset: const Offset(0, 8))],
             ),
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final it in _items) _one(it)]),
+            child: ConstrainedBox(   // (a long one, as many palettes as are kept, scrolls within half the window)
+              constraints: BoxConstraints(maxHeight: info.overlaySize.height * .5),
+              child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final it in _items) _one(it)])),
+            ),
           ),
         ),
       );

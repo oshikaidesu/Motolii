@@ -1,186 +1,175 @@
 // Part of dock_make.dart (cut there by size, as it was).
 part of 'dock_make.dart';
 
-/// The gradient being made: its stops (a colour put in with Add stop; a stop pressed is taken out), the ramp they
-/// make in the space chosen, and Save (kept with the maker's own).
-class _GradMaker extends StatelessWidget {
-  const _GradMaker(this.c);
-  final DockCtx c;
-  @override
-  Widget build(BuildContext context) {
-    final picked = _pickedColour(c), ramp = _stopsOf(_tray, _trayOklab);
-    return Container(
-      margin: EdgeInsets.only(top: WsT.gutter),
-      color: WsT.card,
-      padding: EdgeInsets.all(WsT.inset),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(child: Text('Make a gradient', style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w700))),
-              _Pill(_trayOklab ? 'Mix: CAM16' : 'Mix: sRGB', () => c.set(() => _trayOklab = !_trayOklab), on: _trayOklab),
-            ],
-          ),
-          SizedBox(height: Shape.s(6)),
-          DockHover(
-            onTap: _tray.length > 1 ? () => c.pick('maker-0') : null,
-            builder: (context, h) => Container(
-              height: Shape.z(24),
-              decoration: BoxDecoration(
-                color: _tray.length > 1 ? null : WsT.well,
-                gradient: _tray.length > 1 ? LinearGradient(colors: ramp) : null,
-                borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius)),
-                border: c.sel == 'maker-0' ? Border.all(color: Grey.g95, width: 2) : null,
-              ),
-              alignment: Alignment.center,
-              child: _tray.length > 1 ? null : Text('Add two colours or more', style: T.label(Grey.g56)),
-            ),
-          ),
-          SizedBox(height: Shape.s(6)),
-          Row(
-            children: [
-              for (final (i, col) in _tray.indexed) ...[
-                DockHover(
-                  onTap: () => c.set(() => _tray.removeAt(i)),   // (pressed: taken out)
-                  builder: (context, h) => Container(width: Shape.z(18), height: Shape.z(18), decoration: BoxDecoration(color: col, border: h ? Border.all(color: Grey.g95, width: 2) : null, borderRadius: BorderRadius.all(Shape.r(3)))),
-                ),
-                SizedBox(width: Shape.s(4)),
-              ],
-              _Pill('Add stop', () => c.set(() => _tray.add(picked!)), enabled: picked != null && _tray.length < 8),
-              SizedBox(width: Shape.s(4)),
-              _Pill('Save', () => c.set(() {
-                _mineGrads.insert(0, _Gradient('Gradient ${_mineGrads.length + 1}', List.of(_tray), oklab: _trayOklab, saved: true));
-                _tray.clear();
-                _keepMine();
-              }), enabled: _tray.length > 1),
-              SizedBox(width: Shape.s(4)),
-              _Pill('Clear', () => c.set(_tray.clear), enabled: _tray.isNotEmpty),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The colour picked on this shelf now, if one is picked.
-Color? _pickedColour(DockCtx c) {
-  final id = c.sel;
-  if (id == null) return null;
-  final parts = id.split('-'), i = int.tryParse(parts.last);
-  if (i == null) return null;
-  final key = parts.sublist(0, parts.length - 1).join('-');
-  if (key == 'wheel') return _wheel.toColor();
-  if (key == 'found' && i < _found.length) return _found[i];
-  if (key == 'used') return usedColours(c.ws).values.elementAtOrNull(i);
-  if (key.startsWith('field') && i < 12) return _field[int.parse(key.split('-').last)][i];
-  if (key == 'tray') return i < _tray.length ? _tray[i] : null;
-  final p = _pals.where((p) => p.id == key).firstOrNull;
-  return p != null && i < p.colors.length ? p.colors[i] : null;
-}
-
-class _PalCard extends StatelessWidget {
-  const _PalCard(this.p, this.c);
-  final _Pal p;
-  final DockCtx c;
-  @override
-  Widget build(BuildContext context) {
-    final ref = p.reference, open = _refOpen.contains(p.id);
-    return Container(
-      margin: EdgeInsets.only(top: WsT.gutter),
-      color: WsT.card,
-      padding: EdgeInsets.fromLTRB(WsT.inset, Shape.s(6), WsT.inset, WsT.inset),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w700)),
-              ),
-              if (p.saved) ...[const DockTag('SAVED'), SizedBox(width: Shape.s(6))],
-              Text('${p.colors.length}', style: T.value(Grey.g56).copyWith(fontSize: T.px(10))),
-            ],
-          ),
-          SizedBox(height: Shape.s(6)),
-          Row(
-            children: [
-              if (ref != null && File(ref).existsSync()) ...[   // (the photo it was taken from: pressed, it opens large and stays)
-                DockHover(
-                  onTap: () => c.set(() => open ? _refOpen.remove(p.id) : _refOpen.add(p.id)),
-                  builder: (context, h) => ClipRRect(
-                    borderRadius: BorderRadius.all(Shape.r(3)),
-                    child: SizedBox(width: Shape.z(40), height: Shape.z(26), child: Image.file(File(ref), fit: BoxFit.cover, cacheWidth: 120)),
-                  ),
-                ),
-                SizedBox(width: Shape.s(6)),
-              ],
-              Expanded(child: _Strip(p.id, p.colors, c, height: Shape.z(26), pad: false, shares: p.shares)),
-            ],
-          ),
-          if (open && ref != null && File(ref).existsSync()) ...[
-            SizedBox(height: Shape.s(6)),
-            ClipRRect(
-              borderRadius: BorderRadius.all(Shape.r(3)),
-              child: ConstrainedBox(constraints: BoxConstraints(maxHeight: Shape.z(160)), child: Image.file(File(ref), fit: BoxFit.contain, cacheWidth: 480)),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// Flat swatches edge to edge (each as wide as its share of a photo, if it has one); the picked one gets a light frame with a dark keyline inside, readable on any hue.
+/// A palette, one small card of its colours in stripes, side by side (Coolors', Adobe Color's and Canva's palette
+/// cards): however many are kept they stay a block of rows, and a press on a stripe colours at once. Only colours on it:
+/// its name, where it came from and its photo are in the shelf's foot, for the card the hand is on or last pressed
+/// (the shelf's details, as the Media shelf's foot tells a file's). The colour in use is framed.
 class _Strip extends StatelessWidget {
-  const _Strip(this.id, this.colors, this.c, {this.names, this.height = 24, this.gap = WsT.gutter, this.pad = true, this.shares});
-  final String id;
+  const _Strip(this.id, this.colors, this.c, {required this.name});
+  final String id, name;
   final List<Color> colors;
   final DockCtx c;
-  final List<String>? names;
-  final double height, gap;
-  final bool pad;
-  final List<double>? shares;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.fromLTRB(pad ? WsT.inset : Shape.s(0), pad ? gap : Shape.s(0), pad ? WsT.inset : Shape.s(0), Shape.s(0)),
-    child: SizedBox(
-      height: height,
-      child: Row(
-        children: [
-          for (final (i, col) in colors.indexed) ...[
-            if (i > 0) SizedBox(width: gap),
-            Expanded(
-              flex: shares == null ? 1000 : math.max(60, (shares![i] * 1000).round()),
-              child: DockHover(
-                onTap: () => c.pick('$id-$i'),
-                onDoubleTap: () => _fill(c, _hex(col).substring(1).toLowerCase()),   // (two presses fill; carried to the stage it does the same)
-                builder: (context, h) {
-                  final sel = c.sel == '$id-$i';
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: col,
-                      borderRadius: BorderRadius.circular(sel || h ? 3 : 0),
-                      border: sel ? Border.all(color: Grey.g95, width: 2) : (h ? Border.all(color: Grey.g76) : null),
-                    ),
-                    foregroundDecoration: sel
-                        ? BoxDecoration(
-                            border: Border.all(color: Grey.g07),
-                            borderRadius: BorderRadius.all(Shape.r(1)),
-                          )
-                        : null,
-                  );
-                },
-              ),
-            ),
-          ],
-        ],
+  Widget build(BuildContext context) => MouseRegion(
+    onEnter: (_) => _named.value = id,
+    onExit: (_) => _named.value = _pressed,
+    child: Semantics(
+      label: name,
+      child: ClipRRect(
+        borderRadius: BorderRadius.all(Shape.r(4)),
+        child: SizedBox(
+          width: Shape.z(112),
+          height: Shape.z(22),
+          child: Row(
+            children: [
+              for (final (i, col) in colors.indexed)
+                Expanded(
+                  child: DockHover(
+                    key: ValueKey('$id-$i'),
+                    onTap: () {
+                      _named.value = _pressed = id;
+                      _take(c, col);
+                    },
+                    builder: (context, h) {
+                      final sel = _wheelFrom == _hex(col).substring(1).toLowerCase();
+                      return Container(
+                        color: col,
+                        foregroundDecoration: sel || h ? BoxDecoration(border: Border.all(color: sel ? Grey.g95 : Grey.g76, width: sel ? 2 : 1)) : null,
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     ),
   );
 }
 
+/// A gradient's colours and where each stands, as the document says its fill ("ff3366@0.35 ..."; one with no @ stands
+/// evenly), and back.
+List<(Color, double)> _stopsIn(String word) {
+  final parts = word.split(' ').where((w) => w.isNotEmpty).toList();
+  if (parts.length < 2) return const [];
+  final out = <(Color, double)>[];
+  for (final (i, w) in parts.indexed) {
+    final hex = w.split('@').first, v = int.tryParse(hex, radix: 16);
+    if (v == null || (hex.length != 6 && hex.length != 8)) return const [];
+    out.add((hex.length == 8 ? Color(((v & 0xFF) << 24) | (v >> 8)) : Color(0xFF000000 | v), w.contains('@') ? (double.tryParse(w.split('@').last) ?? 0).clamp(0.0, 1.0) : i / (parts.length - 1)));
+  }
+  return out;
+}
+
+String _wordOfStops(List<(Color, double)> stops) {
+  String hex8(Color c) => _hex(c).substring(1).toLowerCase() + (c.a < 1 ? (c.a * 255).round().toRadixString(16).padLeft(2, '0') : '');
+  return [for (final (col, at) in [...stops]..sort((a, b) => a.$2.compareTo(b.$2))) '${hex8(col)}@${at.toStringAsFixed(3)}'].join(' ');
+}
+
+int _stop = 0;   // (the stop the picker colours)
+
+/// The gradient being coloured, its bar and its stops beneath (Figma's and Canva's gradient editors): a press on the
+/// bar puts a stop there in the colour the bar has there; a stop pressed is the one the square above colours; a stop
+/// carried along the bar moves; Remove takes the picked one out (two stay at least).
+class _Stops extends StatefulWidget {
+  const _Stops(this.stops, this.onChanged, this.onPick, {this.onHand});
+  final List<(Color, double)> stops;
+  final ValueChanged<List<(Color, double)>> onChanged;
+  final ValueChanged<int> onPick;
+  final ValueChanged<bool>? onHand;   // (a hand down on it, and up: one step)
+  @override
+  State<_Stops> createState() => _StopsState();
+}
+
+class _StopsState extends State<_Stops> {
+  List<(Color, double)>? _held;   // (while a stop is carried: where the hand has it)
+
+  Color _at(List<(Color, double)> s, double x) {
+    final sorted = [...s]..sort((a, b) => a.$2.compareTo(b.$2));
+    if (x <= sorted.first.$2) return sorted.first.$1;
+    for (var i = 1; i < sorted.length; i++) {
+      if (x <= sorted[i].$2) return Color.lerp(sorted[i - 1].$1, sorted[i].$1, (x - sorted[i - 1].$2) / math.max(1e-6, sorted[i].$2 - sorted[i - 1].$2))!;
+    }
+    return sorted.last.$1;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = _held ?? widget.stops, sorted = [...s]..sort((a, b) => a.$2.compareTo(b.$2)), knob = Shape.z(12);
+    return LayoutBuilder(
+      builder: (context, box) {
+        final w = box.maxWidth - knob;
+        return SizedBox(
+          height: Shape.z(18) + knob + Shape.s(4),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                left: knob / 2,
+                width: w,
+                top: 0,
+                height: Shape.z(18),
+                child: GestureDetector(
+                  key: const ValueKey('colour-stops-bar'),
+                  onTapUp: (d) {
+                    final x = (d.localPosition.dx / w).clamp(0.0, 1.0);
+                    widget.onChanged([...s, (_at(s, x), x)]);
+                    widget.onPick(s.where((e) => e.$2 <= x).length);   // (where it stands among them: the document keeps them in order)
+                  },
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.all(Shape.r(3)),
+                      gradient: LinearGradient(colors: [for (final e in sorted) e.$1], stops: [for (final e in sorted) e.$2]),
+                    ),
+                  ),
+                ),
+              ),
+              for (final (i, (col, at)) in s.indexed)
+                Positioned(
+                  left: at * w,
+                  top: Shape.z(18) + Shape.s(3),
+                  width: knob,
+                  height: knob,
+                  child: GestureDetector(
+                    key: ValueKey('colour-stop-$i'),
+                    onTap: () => widget.onPick(i),
+                    onHorizontalDragStart: (_) {
+                      widget.onPick(i);
+                      widget.onHand?.call(true);
+                      setState(() => _held = [...s]);
+                    },
+                    onHorizontalDragUpdate: (d) {
+                      final held = _held!;
+                      held[i] = (held[i].$1, (held[i].$2 + d.delta.dx / w).clamp(0.0, 1.0));
+                      setState(() {});
+                      widget.onChanged([...held]);
+                    },
+                    onHorizontalDragEnd: (_) {
+                      final held = _held!, at = held[i].$2;
+                      widget.onPick(held.where((e) => e.$2 < at).length);   // (carried past another, it is picked where it now stands)
+                      setState(() => _held = null);
+                      widget.onHand?.call(false);
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: col,
+                        borderRadius: BorderRadius.all(Shape.r(2)),
+                        border: Border.all(color: i == _stop ? Grey.g95 : Grey.g44, width: i == _stop ? 2 : 1),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// A gradient, a small tile of it: its name is said when the hand is on it, as a swatch's (the colours are what is
+/// looked for, and the tiles keep to a block however many are kept).
 class _Grad extends StatelessWidget {
   const _Grad(this.id, this.g, this.c);
   final String id;
@@ -188,33 +177,20 @@ class _Grad extends StatelessWidget {
   final DockCtx c;
   @override
   Widget build(BuildContext context) {
-    final sel = c.sel == id;
-    return DockHover(
-      onTap: () => c.pick(id),
-      onDoubleTap: () => _fill(c, [for (final k in _stopsOf(g.colors, g.oklab)) _hex(k).substring(1).toLowerCase()].join(' ')),
-      builder: (context, h) => AnimatedContainer(
-        duration: Mo.dur,
-        curve: Mo.ease,
-        height: Shape.z(28),
-        margin: EdgeInsets.only(top: WsT.gutter),
-        padding: EdgeInsets.symmetric(horizontal: WsT.inset),
-        color: dockFill(sel, h, WsT.card),
-        child: Row(
-          children: [
-            Container(
-              width: Shape.z(64),
-              height: Shape.z(16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(colors: _stopsOf(g.colors, g.oklab)),
-                borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius)),
-              ),
-            ),
-            SizedBox(width: Shape.s(8)),
-            Expanded(
-              child: Text(g.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(dockInk(sel))),
-            ),
-            Text('${g.colors.length} stops · ${g.oklab ? 'CAM16' : 'sRGB'}', style: T.label(dockInk(sel, Grey.g56))),
-          ],
+    final word = [for (final k in _stopsOf(g.colors, g.oklab)) _hex(k).substring(1).toLowerCase()].join(' ');
+    final sel = _wheelFrom == word;
+    return Semantics(
+      label: g.name,
+      child: DockHover(
+        onTap: () => _fill(c, word),   // (a press puts it on, as a swatch)
+        builder: (context, h) => Container(
+          width: Shape.z(46),
+          height: Shape.z(22),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: _stopsOf(g.colors, g.oklab)),
+            borderRadius: BorderRadius.all(Shape.r(4)),
+            border: sel ? Border.all(color: Grey.g95, width: 2) : (h ? Border.all(color: Grey.g76) : null),
+          ),
         ),
       ),
     );
@@ -258,7 +234,6 @@ final _makes = <(String, List<_Make>)>[
 ];
 
 /// The inside's own 3D shapes, and how a tile is asked of it (kind, then its file or shape).
-/// What a solid is made of (a colour, glass) is not a tile here: it is its fill, given on the Colors shelf.
 final _solids = (
   '3D',
   [
@@ -278,6 +253,16 @@ final _lights = (
     _Make('Spot', DockG.light, WsT.toneCamera, '', 'A cone of light'),
   ],
 );
+/// What a solid is made of, a material: put on the picked solid, as Repeater lays the picked thing out (a material is
+/// made in Create, not chosen among colours: the user, 10/29, "マテリアルなら普通クリエイトに入れるべき").
+final _materials = (
+  'Materials',
+  [
+    _Make('Glass', DockG.radial, WsT.toneShape, '', 'Thick glass: bends and tints what lies behind it. Put on the picked solid'),
+  ],
+);
+const _worn = {'Glass': 'glass'};   // (the tile, and the solid's fill it gives)
+
 final _asked = {
   'Text': ('text', wsTextFont),
   'Solid': ('shape', 'solid'), // (a flat colour as large as the stage: the inside makes it so)
@@ -311,6 +296,12 @@ void _make(DockCtx c, String name) {
     c.ws.after(m.later('make', word: name), (done, why) => c.set(() => done ? c.mem.trouble.remove(name) : c.mem.trouble[name] = why), (made) => c.ws.select('$made'));   // (without waiting: picked once made)
     return;
   }
+  if (_worn[name] case final fill?) {
+    final t = int.tryParse(c.ws.selected ?? '');
+    if (t == null || m.word(t, 'kind') != 'solid') return c.set(() => c.mem.trouble[name] = 'Pick a solid to make it ${name.toLowerCase()}');
+    c.ws.after(m.later('say', thing: t, name: 'fill', word: fill), (done, why) => c.set(() => done ? c.mem.trouble.remove(name) : c.mem.trouble[name] = why));
+    return;
+  }
   if (_laid[name] case final told?) {
     final t = int.tryParse(c.ws.selected ?? '');
     if (t == null) return c.set(() => c.mem.trouble[name] = 'Pick a thing to lay out');
@@ -342,6 +333,7 @@ class CreateShelf extends StatelessWidget {
       _elementsOf(c.ws),
       ..._makes.skip(1),
       _solids,
+      _materials,
       _lights,
     ].where((e) => e.$2.isNotEmpty).toList();
     final groups = [
@@ -396,8 +388,8 @@ class CreateShelf extends StatelessWidget {
             preview: DockBadge(sel.g, sel.hue, size: Shape.z(34)),
             title: '${sel.name} layer',
             meta: c.mem.trouble[sel.name] ?? 'At ${c.ws.timecode()} · ${sel.what}',
-            action: _laid.containsKey(sel.name) ? 'Lay out' : 'Create',
-            fresh: !_laid.containsKey(sel.name), // (a tile makes a new thing; a tile of copies lays out the picked one)
+            action: _laid.containsKey(sel.name) ? 'Lay out' : _worn.containsKey(sel.name) ? 'Put on' : 'Create',
+            fresh: !_laid.containsKey(sel.name) && !_worn.containsKey(sel.name), // (a tile makes a new thing; a tile of copies lays out the picked one, a material is put on it)
             onAction: () => _make(c, sel.name),
           ),
       ],
@@ -413,7 +405,7 @@ class _MakeTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final sel = c.sel == m.name;
     final inside = c.ws.inside;
-    final makes = inside != null && (_asked.containsKey(m.name) || _laid.containsKey(m.name) || inside.recipes.any((r) => r.$1 == m.name) || inside.elements.any((e) => e.$1 == m.name));
+    final makes = inside != null && (_asked.containsKey(m.name) || _laid.containsKey(m.name) || _worn.containsKey(m.name) || inside.recipes.any((r) => r.$1 == m.name) || inside.elements.any((e) => e.$1 == m.name));
     return DockHover(
       onTap: () => c.pick(m.name),
       onDoubleTap: makes ? () => _make(c, m.name) : null, // (two presses make it, one step)

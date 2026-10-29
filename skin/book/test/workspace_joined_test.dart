@@ -8,7 +8,7 @@ import 'dart:ui' as ui show ImageByteFormat;
 
 import 'package:ffi/ffi.dart';
 
-import 'package:flutter/gestures.dart' show PointerDeviceKind, kDoubleTapTimeout;
+import 'package:flutter/gestures.dart' show PointerDeviceKind, kDoubleTapTimeout, kSecondaryButton;
 import 'package:flutter/rendering.dart' show OffsetLayer;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';

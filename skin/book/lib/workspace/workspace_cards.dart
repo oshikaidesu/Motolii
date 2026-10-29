@@ -33,7 +33,7 @@ Map<String, String> _cardColours(Motolii m, int t) => {
             ? m.word(t, n).split('/').last // (a file by its name)
             : m.shown(n)?.look == 'numbers'
             ? m.word(t, n) // (numbers, one for each copy, as they are)
-            : m.word(t, n).split(' ').where((c) => c.isNotEmpty).map((c) => int.tryParse(c, radix: 16) != null && c.length == 6 ? '#${c.toUpperCase()}' : c.replaceRange(0, 1, c[0].toUpperCase())).join(' '), // (a colour, or colours in their order; a word that is not one, a material, as it is: Glass)
+            : m.word(t, n).split(' ').where((c) => c.isNotEmpty).map((w) => w.split('@').first).map((c) => int.tryParse(c, radix: 16) != null && (c.length == 6 || c.length == 8) ? '#${c.toUpperCase()}' : c.replaceRange(0, 1, c[0].toUpperCase())).join(' '),   // (a gradient's stop said by its colour, where it stands left out) // (a colour, or colours in their order; a word that is not one, a material, as it is: Glass)
 };
 
 /// Joined: the cards the inside shows a thing's values on beyond the sample's (motolii_cards), each as Params in the

@@ -355,9 +355,43 @@ void _tests2() {
     await t.pumpAndSettle();
     final tile = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Grad').first; // (a starter gradient: Hot pink)
     await seen(t, tile);
-    await doubleTap(t, tile);   // (two presses put it on: f052e7e)
+    await t.tap(tile);   // (a press puts it on, as the best-selling editors' swatches)
     await settled(t, ws);
     expect(m.word(rect, 'fill').split(' '), allOf(hasLength(11), containsAllInOrder(['e974ab', 'f08a5d', 'efcb4e'])), reason: 'its three colours in order, mixed between as CAM16 mixes them (f052e7e): ${m.trouble}');
+    // (made by hand, as Figma's and Canva's gradient editors: Gradient fades the colour to clear; a press on the bar puts a
+    //  stop there; a swatch colours the stop picked; Solid keeps the stop picked)
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), '');
+    await t.tap(find.byKey(const ValueKey('colour-kind-Solid')));
+    await settled(t, ws);
+    expect(m.word(rect, 'fill'), 'e974ab', reason: 'Solid: the stop picked, the first');
+    await t.tap(find.byKey(const ValueKey('colour-kind-Gradient')));
+    await settled(t, ws);
+    expect(m.word(rect, 'fill'), 'e974ab@0.000 e974ab00@1.000', reason: 'the colour to clear');
+    final bar = t.getRect(find.byKey(const ValueKey('colour-stops-bar')));
+    await t.tapAt(bar.centerLeft + Offset(bar.width * .25, 0));
+    await settled(t, ws);
+    expect(m.word(rect, 'fill').split(' '), hasLength(3), reason: 'a stop put a quarter along: ${m.word(rect, 'fill')}');
+    expect(m.word(rect, 'fill').split(' ')[1], endsWith('@0.250'));
+    final night = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Strip' && (w as dynamic).name == 'Night Market');
+    await seen(t, night);
+    await t.tap(find.descendant(of: night, matching: find.byType(DockHover)).at(2));
+    await settled(t, ws);
+    expect(m.word(rect, 'fill').split(' ')[1], 'e84545@0.250', reason: 'the swatch colours the stop picked, the one just put');
+    expect(find.descendant(of: find.byKey(const ValueKey('colour-details')), matching: find.text('Night Market')), findsOneWidget, reason: 'the shelf\'s foot tells the palette pressed');
+    await t.tap(find.byKey(const ValueKey('colour-stop-0')));   // (the stop picked is the window's, not the document's: the first, as a document opens)
+    await t.pumpAndSettle();
+    // (one's own colours, CLIP STUDIO PAINT's colour set: + keeps the colour now; its menu deletes it again, so the
+    //  maker's own file is left as it was)
+    final mine = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('colour-mine-'));
+    final before = mine.evaluate().length;
+    await t.tap(find.byKey(const ValueKey('colour-add')));
+    await t.pumpAndSettle();
+    expect(mine.evaluate().length, before + 1, reason: 'kept');
+    await t.tapAt(t.getCenter(find.byKey(ValueKey('colour-mine-$before'))), buttons: kSecondaryButton);
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('ws-menu-Delete')));
+    await t.pumpAndSettle();
+    expect(mine.evaluate().length, before, reason: 'deleted by its menu');
     expect(m.say(m.add('solid', 'cube'), 'fill', 'e974ab f08a5d'), isFalse, reason: 'a solid is filled with one colour');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
@@ -532,18 +566,18 @@ void _tests2() {
     await t.pumpAndSettle();
     final tile = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Grad').first;
     await seen(t, tile);
-    await doubleTap(t, tile);   // (two presses put it on: f052e7e)
+    await t.tap(tile);   // (a press puts it on)
     await settled(t, ws);
     final ink = ws.ink.split(' ');
     expect([ink.first, ink.last], ['b3c66b', '4781e5'], reason: 'nothing picked: the ink');
     await t.tap(find.byKey(const ValueKey('ws-ink-stroke')));   // (the tool strip's edge pressed: the shelf's colour goes to it, as CLIP STUDIO PAINT's sub colour icon)
     await t.pumpAndSettle();
-    expect(find.text('Set'), findsOneWidget, reason: 'the shelf\'s foot says the colour is set to the edge');
+    expect(find.text('Stroke of the next thing drawn'), findsOneWidget, reason: 'the shelf says it colours the edge');
     await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Night Market');
     await t.pumpAndSettle();
     final red = find.descendant(of: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Strip'), matching: find.byType(DockHover)).at(2);
     await seen(t, red);
-    await doubleTap(t, red);
+    await t.tap(red);
     await settled(t, ws);
     expect([ws.edge, ws.ink.split(' ').first], ['e84545', 'b3c66b'], reason: 'nothing picked, aimed at the edge: the edge a thing drawn next gets, the ink kept');
     await t.tap(find.byKey(const ValueKey('ws-ink-fill')));
@@ -564,7 +598,7 @@ void _tests2() {
     await t.pumpAndSettle();
     final chip = find.descendant(of: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Strip'), matching: find.byType(DockHover)).first;
     await seen(t, chip);
-    await doubleTap(t, chip);   // (the rect picked: it is filled)
+    await t.tap(chip);   // (the rect picked: it is filled)
     await settled(t, ws);
     expect([m.word(rect, 'fill') != ink.join(' '), ws.ink], [true, m.word(rect, 'fill')], reason: 'a colour given to a thing is the next one\'s too (CLIP STUDIO PAINT\'s one drawing colour, every tool\'s)');
     await t.dragFrom(stage.center - Offset(stage.width * .3, stage.height * .3), Offset(stage.width * .1, stage.height * .1));

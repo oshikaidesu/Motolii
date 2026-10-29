@@ -85,7 +85,7 @@ void _tests3() {
     ws.shelf = 'Create';
     await t.pumpAndSettle();
     final r = ws.inside!.recipes.length; // (a recipe is a file: the shelf grows by what is in recipes/)
-    expect(find.text('${17 + r} ready'), findsOneWidget, reason: 'seventeen tiles of its own since K5 (one Repeater for Radial and Grid), and the recipes');
+    expect(find.text('${18 + r} ready'), findsOneWidget, reason: 'seventeen tiles of its own since K5 (one Repeater for Radial and Grid), Glass since 10/29 (a material is made in Create), and the recipes');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
@@ -1466,12 +1466,22 @@ void _tests3() {
       ..select('$cube');
     await t.pumpAndSettle();
     expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Surface')), findsOneWidget, reason: 'Filament\'s own surface of a solid');
-    expect(m.say(cube, 'fill', 'glass'), isTrue, reason: m.trouble);
+    ws.shelf = 'Create';
+    await t.pumpAndSettle();
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Glass');
+    await t.pumpAndSettle();
+    final glass = find.descendant(of: find.byType(CreateShelf), matching: find.text('Glass')).first;
+    await seen(t, glass);
+    await doubleTap(t, glass);   // (a material is made in Create and put on the picked solid, as Repeater lays the picked thing out)
+    await settled(t, ws);
+    expect(m.word(cube, 'fill'), 'glass', reason: m.trouble);
     expect(m.cards(cube).map((c) => c.$1), ['Fill', 'Transform', 'Blending', 'Motion', 'Play', 'Glass', 'Lit', 'Physics', 'Note'], reason: 'filled with glass: the glass\'s own card, not the surface\'s');
     expect(m.cards(rect).map((c) => c.$1).contains('Matte'), isFalse, reason: 'not clipped: no matte to say how');
     expect(m.set(rect, 'clip', 1) && m.cards(rect).map((c) => c.$1).contains('Matte'), isTrue);
     expect(m.set(cube, 'ior', 2.2) && m.value(cube, 'ior', 0) == 2.2, isTrue, reason: m.trouble);
     expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join(' ') == 'Fill Transform Blending Motion Play Surface Lit Physics Note', isTrue);
+    ws.reread();   // (written to the inside directly: the window reads it again)
+    await t.pumpAndSettle();
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_metallic'), findsOneWidget);
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
@@ -1498,9 +1508,8 @@ void _tests3() {
     await t.tap(find.byKey(const ValueKey('link:colors:v_background')));
     await t.pumpAndSettle();
     expect(ws.aim, 'background');
-    await t.tap(find.descendant(of: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Strip'), matching: find.byType(DockHover)).first);
-    await t.pumpAndSettle();
-    await t.tap(find.descendant(of: find.byType(DockFooter), matching: find.text('Set')));
+    expect(find.text('Background of the stage'), findsOneWidget, reason: 'the shelf says what it colours');
+    await t.tap(find.descendant(of: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Strip'), matching: find.byType(DockHover)).first);   // (a press colours at once: Figma's, Canva's, Alight Motion's swatches)
     await settled(t, ws);   // (set by the inside, not waited for by the window)
     expect(m.word(0, 'background'), hasLength(6), reason: 'the stage\'s colour behind everything: ${m.trouble}');
     expect(m.say(0, 'tone_mapper', 'agx') && m.word(0, 'tone_mapper') == 'agx', isTrue, reason: m.trouble);

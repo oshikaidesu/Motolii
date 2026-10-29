@@ -8,7 +8,6 @@ import 'dart:ui' as ui;
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
 
 import '../sets/inspector/inspector_parts.dart' show Pop;
@@ -16,7 +15,9 @@ import '../tokens.dart';
 import 'desk_kit.dart' show DeskChip;
 import 'dock_glyphs.dart';
 import 'dock_parts.dart';
-import 'dock_tags.dart';
+import '../theme.dart' show ColorTheme;
+import 'package:flutter_colorpicker/flutter_colorpicker.dart' show ColorPickerArea, ColorPickerSlider, PaletteType, TrackType;
+import 'ws_menu.dart';
 import 'create_preview.dart';
 import 'ws.dart';
 import 'two_fingers.dart';
@@ -63,6 +64,9 @@ const _starterGrads = <_Gradient>[
 
 // What the maker has kept: ~/.motolii/colors.json {"palettes": [{"name": "", "colors": ["#rrggbb"]}], "gradients": [{"name": "", "colors": [], "oklab": true}]}.
 final _minePals = <_Pal>[];
+/// One's own colours, kept one by one (CLIP STUDIO PAINT's colour set: Add Color puts the drawing colour in, a tile
+/// pressed draws with it, a tile's menu replaces or deletes it).
+final _mineColours = <Color>[];
 final _mineGrads = <_Gradient>[];
 bool _mineRead = false;
 final _mineFile = File('${Platform.environment['HOME']}/.motolii/colors.json');
@@ -82,6 +86,7 @@ void _readMine() {
       final sh = (p['shares'] as List?)?.map((v) => (v as num).toDouble()).toList();
       if (cs.isNotEmpty) _minePals.add(_Pal('mine$i', '${p['name']}', cs, saved: true, reference: p['reference'] as String?, shares: sh != null && sh.length == cs.length ? sh : null));
     }
+    _mineColours.addAll([for (final h in (told['colours'] as List?) ?? const []) ?_colourOf(h)]);
     for (final g in (told['gradients'] as List?) ?? const []) {
       final cs = [for (final h in (g['colors'] as List)) ?_colourOf(h)];
       if (cs.length > 1) _mineGrads.add(_Gradient('${g['name']}', cs, oklab: g['oklab'] != false, saved: true));
@@ -95,6 +100,7 @@ void _keepMine() {
     _mineFile.writeAsStringSync(jsonEncode({
       'palettes': [for (final p in _minePals) {'name': p.name, 'colors': [for (final c in p.colors) _hex(c)], 'reference': p.reference, 'shares': p.shares}],
       'gradients': [for (final g in _mineGrads) {'name': g.name, 'colors': [for (final c in g.colors) _hex(c)], 'oklab': g.oklab}],
+      'colours': [for (final c in _mineColours) _hex(c)],
     }));
   } catch (_) {}
 }
@@ -123,21 +129,9 @@ List<Color> _stopsOf(List<Color> cs, bool smooth, {int per = 5}) {
   return out..add(cs.last);
 }
 
-/// The swatch field: twelve hues down four tones, plus a grey ramp.
-final _field = [
-  for (final l in const [.78, .64, .5, .34]) [for (var i = 0; i < 12; i++) HSLColor.fromAHSL(1, i * 30.0, .62, l).toColor()],
-  [for (var i = 0; i < 12; i++) HSLColor.fromAHSL(1, 0, 0, i / 11).toColor()],
-];
-
-// What is being made on this shelf and not kept yet: the stops of a gradient, the colour on the wheel, the swatches a search found.
-final _tray = <Color>[];
-bool _trayOklab = true;
+// The colour on the picker, and the ink, edge or value it last followed.
 HSVColor _wheel = const HSVColor.fromAHSV(1, 0, .8, .9);
-String _wheelFrom = '';   // (the ink or edge the wheel last followed)
-List<Color> _found = const [];
-
-/// Joined: a fill that is not a colour. Glass is a material a solid is filled with, not a thing of its own.
-final _glass = _Make('Glass', DockG.radial, WsT.toneShape, '', 'Thick glass material: bends and tints what lies behind it. Fills a solid; flat shapes keep a colour.');
+String _wheelFrom = '';
 
 /// Joined: the picked thing's fill told to the document (a colour as six digits, or a material's name). Not done: the foot says why.
 void _fill(DockCtx c, String word) {
@@ -182,7 +176,7 @@ Map<String, Color> usedColours(Ws ws) {
   if (m == null) return const {};
   return {
     for (final l in ws.layers)
-      if (m.word(int.parse(l.id), 'fill').split(' ').first case final f when f.length == 6)
+      if (m.word(int.parse(l.id), 'fill').split(' ').first.split('@').first case final f when f.length == 6)
         if (int.tryParse(f, radix: 16) case final v?) l.name: Color(0xFF000000 | v),
   };
 }
@@ -190,7 +184,7 @@ Map<String, Color> usedColours(Ws ws) {
 /// How many of the Create shelf's tiles make or lay out something of the document, of all it shows.
 String createFact(Ws ws) {
   final recipes = ws.inside!.recipes.length;
-  return '${_asked.length + _laid.length + recipes} ready'; // (the shelf shows only these)
+  return '${_asked.length + _laid.length + _worn.length + recipes} ready'; // (the shelf shows only these)
 }
 
 /// Joined: the inside's recipes, pictures in one call (as Cavalry's tutorials build them), each a tile.
@@ -231,294 +225,262 @@ String? _pickedPhoto(DockCtx c) {
   return id != null && id.startsWith('/') && RegExp(r'\.(png|jpe?g|webp)$', caseSensitive: false).hasMatch(id) ? id : null;
 }
 
-final _refOpen = <String>{};   // (palettes whose photo is opened large in the card)
 
-class _Pill extends StatelessWidget {
-  const _Pill(this.label, this.onTap, {this.on = false, this.enabled = true});
-  final String label;
-  final VoidCallback onTap;
-  final bool on, enabled;
-  @override
-  Widget build(BuildContext context) => DockHover(
-    onTap: enabled ? onTap : null,
-    builder: (context, h) => Container(
-      height: Shape.z(18),
-      padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(color: on ? WsT.accent : (h && enabled ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
-      child: Text(label, maxLines: 1, style: T.micro(on ? WsT.onAccent : (enabled ? Grey.g91 : Grey.g38)).copyWith(fontWeight: FontWeight.w600)),
-    ),
-  );
-}
+/// The palette whose details the shelf's foot tells: the one the hand is on, else the one last pressed.
+final _named = ValueNotifier<String?>(null);
+String? _pressed;
+final _mineMenu = GlobalKey<WsMenuState>();
 
+/// The Colors shelf, laid out to stay small however much is kept in it, and to colour in one press: what is coloured,
+/// in one line; the colour now, its square and hue full width (flutter_colorpicker's own, as Figma's picker) and its
+/// code; then every palette as one small card of its colours in stripes, side by side in rows (Coolors', Adobe
+/// Color's and Canva's palette cards: a press on a stripe takes that colour), and the gradients as small tiles. A
+/// press colours at once, as in the best-selling editors.
 class ColorsShelf extends StatelessWidget {
   const ColorsShelf(this.c, {super.key});
   final DockCtx c;
 
+  /// The thing a colour goes to now and its value's name (null: the next thing drawn).
+  (int?, String) _target() {
+    final t = int.tryParse(c.ws.selected ?? ''), aim = c.ws.aim ?? 'fill';
+    return (t ?? (aim == 'fill' || aim == 'stroke' ? null : 0), aim);
+  }
+
   @override
   Widget build(BuildContext context) {
-    WsScope.of(context, {WsAspect.picked});   // (its foot says where the colour goes: built again when a card's link or the tool strip aims it)
-    // (the wheel shows the colour drawn with now, the one aimed, as CLIP STUDIO PAINT's colour wheel shows the main or sub
-    //  colour picked: given by a swatch or by the strip, it follows; it showed red with gold chosen)
-    final drawn = c.ws.aim == 'stroke' ? c.ws.edge : c.ws.ink;
-    if (drawn != _wheelFrom) {
-      _wheelFrom = drawn;
-      if (_colourOf(drawn.split(' ').first) case final col?) _wheel = HSVColor.fromColor(col);
-    }
+    WsScope.of(context, {WsAspect.picked, WsAspect.document});   // (what it colours is said at its top: built again when a link or the tool strip aims it, or a thing is picked)
     _readMine();
-    final used = usedColours(c.ws);
-    final chip = c.chip, shelf = 'Colors';
-    // (a palette's tags: the ones most of its colours have; a swatch's own)
-    Set<String> palTags(_Pal p) {
-      final n = <String, int>{};
-      for (final col in p.colors) {
-        for (final t in DockTags.ofColour(col)) {
-          n[t] = (n[t] ?? 0) + 1;
-        }
-      }
-      return DockTags.of(shelf, p.id, {for (final e in n.entries) if (e.value * 2 >= p.colors.length) e.key});
-    }
-
-    final pals = [
-      for (final p in _pals)
-        if (DockTags.hit(c.query, p.name, palTags(p), code: p.colors.map(_hex).join(' ')) &&
-            (chip == 'All' || (chip == 'Saved' ? p.saved : chip == 'Starter' ? !p.saved : palTags(p).contains(chip)))) p,
-    ];
-    final grads = [
-      for (final g in _grads)
-        if (DockTags.hit(c.query, g.name, DockTags.of(shelf, 'g_${g.name}', {for (final col in g.colors) ...DockTags.ofColour(col)}), code: g.colors.map(_hex).join(' ')) &&
-            (chip == 'All' || (chip == 'Saved' ? g.saved : chip == 'Starter' ? !g.saved : true)))
-          g,
-    ];
-    // (the swatches that answer a search or a tag, laid in one strip, since the field's grid cannot lose cells)
-    final tagged = c.query.isNotEmpty || !const ['All', 'Used', 'Saved', 'Starter'].contains(chip);
-    _found = tagged
-        ? [
-            for (final row in _field)
-              for (final col in row)
-                if (DockTags.hit(c.query, '', DockTags.of(shelf, _hex(col), DockTags.ofColour(col)), code: _hex(col)) && (const ['All', 'Used', 'Saved', 'Starter'].contains(chip) || DockTags.ofColour(col).contains(chip))) col,
-          ]
-        : const [];
-    final vocab = <String, int>{};
-    for (final p in _pals) {
-      for (final t in palTags(p)) {
-        vocab[t] = (vocab[t] ?? 0) + 1;
+    final m = c.ws.inside!, used = usedColours(c.ws).values.toSet().toList();
+    final (t, name) = _target();
+    final word = t == null ? (name == 'stroke' ? c.ws.edge : c.ws.ink) : m.word(t, name);
+    final stops = _stopsIn(word), gradient = stops.length > 1, none = name == 'stroke' ? word.isEmpty : word == 'none';
+    if (_stop >= stops.length) _stop = 0;
+    // (the picker shows the colour of what is coloured now, or of the stop picked, as CLIP STUDIO PAINT's wheel shows
+    //  the main or sub colour)
+    if (word != _wheelFrom) {
+      _wheelFrom = word;
+      if (gradient) {
+        _wheel = HSVColor.fromColor(stops[_stop].$1.withValues(alpha: 1));
+      } else if (_colourOf(word.split(' ').first.split('@').first) case final col?) {
+        _wheel = HSVColor.fromColor(col);
       }
     }
-    final top = vocab.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-    Widget block(List<Widget> kids) => Padding(
-      padding: EdgeInsets.only(bottom: WsT.gutter),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: kids),
-    );
-    Widget grid(double cell, List<Widget> items) => LayoutBuilder(
-      builder: (context, box) {
-        final cols = wsCols(box.maxWidth, cell), w = wsCell(box.maxWidth, cols);
-        return Wrap(
-          spacing: WsT.gutter,
-          children: [for (final i in items) SizedBox(width: w, child: i)],
-        );
-      },
-    );
-    final all = chip == 'All' && c.query.isEmpty;
+    String hexOf(Color col) => _hex(col).substring(1).toLowerCase();
+    final whom = t == null ? 'the next thing drawn' : t == 0 ? 'the stage' : (c.ws.layer?.name ?? 'the picked thing');
+    final q = c.query.toLowerCase();
+    final pals = [for (final p in _pals) if (q.isEmpty || p.name.toLowerCase().contains(q)) p];
+    final grads = [for (final (i, g) in _grads.indexed) if (q.isEmpty || g.name.toLowerCase().contains(q)) (i, g)];
     final photo = _pickedPhoto(c);
-    final blocks = <(Widget, double)>[
-      if (all || (chip == 'All' && c.hit('glass material')))
-        (
-          block([
-            DockSection('Materials', count: 1, hue: _glass.hue),
-            const SizedBox(height: WsT.gutter),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: SizedBox(width: Shape.z(74), height: Shape.z(70), child: _MakeTile(_glass, c)),
-            ),
-          ]),
-          1.6,
-        ),
-      if (all)
-        (
-          block([
-            DockSection('Wheel', hue: Pop.tonePlace),
-            _WheelBlock(c),
-          ]),
-          2.2,
-        ),
-      if ((chip == 'All' || chip == 'Used') && c.query.isEmpty)
-        (
-          block([
-            DockSection('Used here', count: used.length, hue: WsT.accent, trailing: _Pill('Save as palette', () => c.set(() {
-              if (used.isEmpty) return;
-              _minePals.insert(0, _Pal('mine${_minePals.length}', 'Used ${_minePals.length + 1}', used.values.toList(), saved: true));
-              _keepMine();
-            }), enabled: used.isNotEmpty)),
-            _Strip('used', used.values.toList(), c, names: used.keys.toList()),
-          ]),
-          2.0,
-        ),
-      if (chip != 'Used' && (pals.isNotEmpty || (all && true)))
-        (
-          block([
-            DockSection('Palettes', count: pals.length, hue: Fam.scatter.c, trailing: _Pill(photo == null ? 'From photo: pick one in Media' : 'From photo', () async {
-              final p = await _paletteFrom(photo!);
-              if (p != null) c.set(() {
-                _minePals.insert(0, p);
-                _keepMine();
-              });
-            }, enabled: photo != null)),
-            grid(220, [for (final p in pals) _PalCard(p, c)]),
-          ]),
-          1 + pals.length * 2.6,
-        ),
-      if ((chip == 'All' || chip == 'Saved' || chip == 'Starter' || !const ['Used'].contains(chip)) && chip != 'Used' && (grads.isNotEmpty || all))
-        (
-          block([
-            DockSection('Gradients', count: grads.length, hue: Fam.stagger.c),
-            if (all) _GradMaker(c),
-            grid(200, [for (final (i, g) in _grads.indexed) if (grads.contains(g)) _Grad('grad-$i', g, c)]),
-          ]),
-          3.0 + grads.length,
-        ),
-      if (_found.isNotEmpty)
-        (
-          block([
-            DockSection('Swatches found', count: _found.length, hue: Fam.face.c),
-            const SizedBox(height: WsT.gutter),
-            _Strip('found', _found.take(24).toList(), c, height: Shape.z(22), gap: 1),
-          ]),
-          1.6,
-        ),
-      if (all || (chip == 'All' && c.hit('swatches')))
-        (
-          block([
-            DockSection('Swatches', count: 60, hue: Fam.face.c),
-            const SizedBox(height: WsT.gutter),
-            for (final (j, row) in _field.indexed) _Strip('field-$j', row, c, height: Shape.z(18), gap: 1),
-          ]),
-          4.0,
-        ),
-    ];
-    final sel = _resolve(c.sel, used);
-    final selTags = sel == null ? null : DockTags.ofColour(sel.$2).take(4).join(' · ');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    void to(HSVColor v) {   // (the square or the hue moved: the colour, or the picked stop's)
+      _wheel = v;
+      if (!gradient) return _fill(c, hexOf(v.toColor()));
+      final next = [...stops];
+      next[_stop] = (v.toColor().withValues(alpha: stops[_stop].$1.a), stops[_stop].$2);
+      _fill(c, _wordOfStops(next));
+    }
+    // (what it is painted with: Alight Motion's four tabs, Figma's paint type; a press each. A colour to a gradient
+    //  fades to clear, as Figma's first gradient does; a gradient to a colour keeps the stop picked)
+    Widget kind(String label, bool on, VoidCallback go) => DeskChip(key: ValueKey('colour-kind-$label'), label: label, on: on, onTap: on ? null : go);
+    final list = ListView(
+      padding: EdgeInsets.fromLTRB(WsT.inset, Shape.s(6), WsT.inset, WsT.inset),
       children: [
-        DockChips(
-          [
-            ('All', null),
-            ('Used', used.length),
-            ('Saved', _pals.where((p) => p.saved).length + _grads.where((g) => g.saved).length),
-            ('Starter', _starterPals.length + _starterGrads.length),
-            for (final t in top.take(8)) (t.key, t.value),
+        Row(
+          children: [
+            Expanded(child: Text('${name == 'fill' ? 'Fill' : name == 'stroke' ? 'Stroke' : name[0].toUpperCase() + name.substring(1)} of $whom', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(Grey.g91).copyWith(fontWeight: FontWeight.w600))),
+            SizedBox(width: Shape.s(6)),
+            DeskChip(key: const ValueKey('colour-sample'), label: 'Sample', onTap: () => _sample(c)),   // (a colour from anywhere on the screen: the Mac's own eyedropper)
           ],
-          active: chip,
-          onPick: c.pickChip,
         ),
-        Expanded(
-          child: blocks.isEmpty
-              ? DockEmpty(c.query)
-              : DockMasonry(minColumn: 300, weights: [for (final b in blocks) b.$2], children: [for (final b in blocks) b.$1]),
+        if (c.mem.trouble['fill'] case final why?) Padding(padding: EdgeInsets.only(top: Shape.s(4)), child: Text(why, style: T.label(ColorTheme.of('Alert', const Color(0xFFE5484D))))),
+        SizedBox(height: Shape.s(6)),
+        Row(
+          children: [
+            kind('Solid', !gradient && !none, () => _fill(c, hexOf(gradient ? stops[_stop].$1 : _wheel.toColor()))),
+            if (name == 'fill') ...[SizedBox(width: Shape.s(4)), kind('Gradient', gradient, () => _fill(c, _wordOfStops([(_wheel.toColor(), 0), (_wheel.toColor().withValues(alpha: 0), 1)])))],
+            SizedBox(width: Shape.s(4)),
+            kind('None', none, () => _fill(c, name == 'stroke' ? '' : 'none')),
+            const Spacer(),
+            if (gradient && stops.length > 2) DeskChip(key: const ValueKey('colour-stop-remove'), label: 'Remove stop', onTap: () => _fill(c, _wordOfStops([...stops]..removeAt(_stop)))),
+          ],
         ),
-        if (c.sel == _glass.name)
-          DockFooter(
-            preview: DockBadge(_glass.g, _glass.hue, size: Shape.z(34)),
-            title: _glass.name,
-            meta: c.mem.trouble['fill'] ?? _glass.what,
-            action: 'Fill',
-            onAction: () => _fill(c, 'glass'),
-          )
-        else if (sel != null)
-          DockFooter(
-            preview: ColoredBox(color: sel.$2),
-            title: _hex(sel.$2),
-            meta: c.mem.trouble['fill'] ?? '${c.ws.aim == null ? sel.$1 : 'to ${c.ws.aim}'} · $selTags',
-            action: c.ws.aim == null ? 'Fill' : 'Set',
-            onAction: () => _fill(c, _wordOf(c.sel) ?? _hex(sel.$2).substring(1).toLowerCase()),
+        SizedBox(height: Shape.s(8)),
+        if (gradient) ...[
+          _Stops(
+            stops,
+            (next) => _fill(c, _wordOfStops(next)),
+            (i) => c.set(() {
+              _stop = i;
+              _wheelFrom = '';   // (the picker shows the stop picked)
+            }),
+            onHand: (down) => down ? m.later('together', number: 1) : c.ws.after(m.later('together')),
           ),
+          SizedBox(height: Shape.s(8)),
+        ],
+        Listener(   // (a hand on the square or the hue: what it does till it lets go is one step)
+          onPointerDown: (_) => m.later('together', number: 1),
+          onPointerUp: (_) => c.ws.after(m.later('together')),
+          onPointerCancel: (_) => c.ws.after(m.later('together')),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ClipRRect(borderRadius: BorderRadius.all(Shape.r(4)), child: SizedBox(key: const ValueKey('colour-square'), height: Shape.z(112), child: ColorPickerArea(_wheel, to, PaletteType.hsvWithHue))),
+              SizedBox(height: Shape.s(6)),
+              SizedBox(height: Shape.z(18), child: ColorPickerSlider(TrackType.hue, _wheel, to, displayThumbColor: true)),
+            ],
+          ),
+        ),
+        SizedBox(height: Shape.s(6)),
+        Row(
+          children: [
+            Container(width: Shape.z(22), height: Shape.z(22), decoration: BoxDecoration(color: _wheel.toColor(), borderRadius: BorderRadius.all(Shape.r(4)), border: Border.all(color: Grey.g26))),
+            SizedBox(width: Shape.s(8)),
+            Text(_hex(_wheel.toColor()), style: T.value(Grey.g91).copyWith(fontWeight: FontWeight.w600)),
+          ],
+        ),
+        SizedBox(height: Shape.s(12)),
+        Text('Mine', style: T.label(Grey.g76).copyWith(fontWeight: FontWeight.w600)),
+        SizedBox(height: Shape.s(6)),
+        WsMenu(
+          key: _mineMenu,
+          child: Wrap(
+            spacing: Shape.s(3),
+            runSpacing: Shape.s(3),
+            children: [
+              for (final (i, col) in _mineColours.indexed)
+                GestureDetector(
+                  onSecondaryTapDown: (d) {   // (a tile's own menu, as CLIP STUDIO PAINT's colour set's long-press)
+                    final box = _mineMenu.currentContext?.findRenderObject() as RenderBox?;
+                    _mineMenu.currentState?.show(box?.globalToLocal(d.globalPosition) ?? Offset.zero, [
+                      WsMenuItem('Replace with ${_hex(_wheel.toColor())}', () => c.set(() {
+                        _mineColours[i] = _wheel.toColor();
+                        _keepMine();
+                      })),
+                      WsMenuItem('Delete', () => c.set(() {
+                        _mineColours.removeAt(i);
+                        _keepMine();
+                      })),
+                    ]);
+                  },
+                  child: DockHover(
+                    key: ValueKey('colour-mine-$i'),
+                    onTap: () => _take(c, col),
+                    builder: (context, h) => Container(
+                      width: Shape.z(22),
+                      height: Shape.z(22),
+                      decoration: BoxDecoration(
+                        color: col,
+                        borderRadius: BorderRadius.all(Shape.r(4)),
+                        border: _wheelFrom == hexOf(col) ? Border.all(color: Grey.g95, width: 2) : (h ? Border.all(color: Grey.g76) : null),
+                      ),
+                    ),
+                  ),
+                ),
+              DockHover(   // (the colour now put in at the end: CLIP STUDIO PAINT's Add Color)
+                key: const ValueKey('colour-add'),
+                onTap: () => c.set(() {
+                  _mineColours.add(_wheel.toColor());
+                  _keepMine();
+                }),
+                builder: (context, h) => Container(
+                  width: Shape.z(22),
+                  height: Shape.z(22),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(borderRadius: BorderRadius.all(Shape.r(4)), border: Border.all(color: h ? Grey.g76 : Grey.g38)),
+                  child: Text('+', style: T.name(h ? Grey.g95 : Grey.g63)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: Shape.s(12)),
+        Row(
+            children: [
+              Expanded(child: Text('Palettes', style: T.label(Grey.g76).copyWith(fontWeight: FontWeight.w600))),
+              DeskChip(key: const ValueKey('colour-keep'), label: 'Keep', onTap: used.isEmpty ? null : () => c.set(() {   // (the document's colours kept as a palette of one's own)
+                _minePals.insert(0, _Pal('mine${_minePals.length}', 'Used ${_minePals.length + 1}', used, saved: true));
+                _keepMine();
+              })),
+              SizedBox(width: Shape.s(4)),
+              DeskChip(key: const ValueKey('colour-photo'), label: 'Photo', onTap: photo == null ? null : () async {   // (taken from the photo picked in Media)
+                final p = await _paletteFrom(photo);
+                if (p != null) c.set(() {
+                  _minePals.insert(0, p);
+                  _keepMine();
+                });
+              }),
+            ],
+        ),
+        SizedBox(height: Shape.s(6)),
+        Wrap(
+          spacing: Shape.s(4),
+          runSpacing: Shape.s(4),
+          children: [
+            if (used.isNotEmpty && q.isEmpty) _Strip('used', used, c, name: 'In this document'),
+            for (final p in pals) _Strip(p.id, p.colors, c, name: p.name),
+          ],
+        ),
+        SizedBox(height: Shape.s(12)),
+        Text('Gradients', style: T.label(Grey.g76).copyWith(fontWeight: FontWeight.w600)),
+        SizedBox(height: Shape.s(6)),
+        Wrap(spacing: Shape.s(4), runSpacing: Shape.s(4), children: [for (final (i, g) in grads) _Grad('grad-$i', g, c)]),
+      ],
+    );
+    return Column(
+      children: [
+        Expanded(child: list),
+        ValueListenableBuilder<String?>(   // (the details of the palette under the hand or last pressed: its photo, its name, whose it is)
+          valueListenable: _named,
+          builder: (context, id, _) {
+            final p = _pals.where((p) => p.id == id).firstOrNull;
+            if (p == null) return const SizedBox.shrink();
+            final photo = p.reference != null && File(p.reference!).existsSync() ? p.reference : null;
+            final whose = photo != null ? 'From ${photo.split('/').last.replaceFirst(RegExp(r'^[0-9]+_'), '')}' : p.saved ? 'Yours' : 'Starter';
+            return DockFooter(
+              key: const ValueKey('colour-details'),
+              preview: photo != null ? Image.file(File(photo), fit: BoxFit.cover, cacheWidth: 96) : Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final col in p.colors) Expanded(child: ColoredBox(color: col))]),
+              title: p.name,
+              meta: '$whose · ${p.colors.length} colours',
+              action: 'Remove',
+              done: !p.saved,
+              doneLabel: 'Starter',
+              onAction: () => c.set(() {   // (one's own taken off the shelf, its file kept in step)
+                _minePals.remove(p);
+                _named.value = _pressed = null;
+                _keepMine();
+              }),
+            );
+          },
+        ),
       ],
     );
   }
-
-  /// Joined: a gradient is all its colours (smooth: with the stops between them), a ramp down the thing (the document's fill of two colours or more).
-  String? _wordOf(String? id) {
-    final parts = id?.split('-') ?? const [];
-    final i = parts.length > 1 ? int.tryParse(parts.last) : null;
-    if (i == null) return null;
-    final key = parts.sublist(0, parts.length - 1).join('-');
-    if (key == 'grad' && i < _grads.length) {
-      final g = _grads[i];
-      return [for (final k in _stopsOf(g.colors, g.oklab)) _hex(k).substring(1).toLowerCase()].join(' ');
-    }
-    if (key == 'maker' && _tray.length > 1) return [for (final k in _stopsOf(_tray, _trayOklab)) _hex(k).substring(1).toLowerCase()].join(' ');
-    return null;
-  }
-
-  (String, Color)? _resolve(String? id, Map<String, Color> used) {
-    if (id == null) return null;
-    final parts = id.split('-');
-    final i = int.tryParse(parts.last);
-    if (i == null) return null;
-    final key = parts.sublist(0, parts.length - 1).join('-');
-    if (key == 'wheel') return ('Wheel · H ${_wheel.hue.round()}° S ${(_wheel.saturation * 100).round()}% V ${(_wheel.value * 100).round()}%', _wheel.toColor());
-    if (key == 'found' && i < _found.length) return ('Swatch found', _found[i]);
-    if (key == 'tray' && i < _tray.length) return ('Stop ${i + 1} of the gradient being made', _tray[i]);
-    if (key == 'maker' && _tray.length > 1) return ('Gradient being made · ${_tray.length} stops', _tray.first);
-    if (key == 'used' && i < used.length) return ('Used by ${used.keys.elementAt(i)}', used.values.elementAt(i));
-    if (key.startsWith('field') && i < 12) {
-      final hsl = HSLColor.fromColor(_field[int.parse(key.split('-').last)][i]);
-      return ('Swatch · H ${hsl.hue.round()}° L ${(hsl.lightness * 100).round()}%', _field[int.parse(key.split('-').last)][i]);
-    }
-    if (key == 'grad' && i < _grads.length) return ('Gradient · ${_grads[i].name} · ${_grads[i].colors.length} stops · ${_grads[i].oklab ? 'CAM16' : 'sRGB'}', _grads[i].colors.first);
-    final p = _pals.where((p) => p.id == key).firstOrNull;
-    if (p != null && i < p.colors.length) return ('${p.name} · ${i + 1} of ${p.colors.length}', p.colors[i]);
-    return null;
-  }
 }
 
-/// The colour wheel and its value strip (flutter_colorpicker's own): hue round the ring, saturation from the middle
-/// out, light to dark on the strip. A hand on it picks the colour at once.
-class _WheelBlock extends StatelessWidget {
-  const _WheelBlock(this.c);
-  final DockCtx c;
-  void _to(HSVColor v) => c.set(() {
-    _wheel = v;
-    c.mem.sel[c.shelf] = 'wheel-0';
-  });
+/// What is coloured now, as the document or the inks say it: the picked thing's value aimed at (its fill, unless a
+/// link or the tool strip aimed another), else the stage's, else the ink or edge of the next thing drawn.
+String _paintNow(DockCtx c) {
+  final t = int.tryParse(c.ws.selected ?? ''), aim = c.ws.aim ?? 'fill', m = c.ws.inside!;
+  if (t != null) return m.word(t, aim);
+  if (aim == 'fill' || aim == 'stroke') return aim == 'stroke' ? c.ws.edge : c.ws.ink;
+  return m.word(0, aim);
+}
 
-  /// The Mac's eyedropper (NSColorSampler, MainFlutterWindow.swift): the colour taken is the wheel's, and given to the
-  /// picked thing at once (or the ink, none picked), as Keynote's eyedropper gives it.
-  Future<void> _sample() async {
-    final hex = await const MethodChannel('motolii/sampler').invokeMethod<String>('sample');
-    if (hex == null || int.tryParse(hex, radix: 16) == null) return;
-    _to(HSVColor.fromColor(Color(0xFF000000 | int.parse(hex, radix: 16))));
-    _fill(c, hex);
-  }
+/// A colour taken from a swatch or the eyedropper: given to what is coloured; while that is a gradient, to the stop
+/// picked (Figma's and Canva's swatches colour the stop being edited).
+void _take(DockCtx c, Color col) {
+  final stops = _stopsIn(_paintNow(c));
+  if (stops.length < 2) return _fill(c, _hex(col).substring(1).toLowerCase());
+  final next = [...stops];
+  next[_stop.clamp(0, stops.length - 1)] = (col, stops[_stop.clamp(0, stops.length - 1)].$2);
+  _wheelFrom = '';
+  _fill(c, _wordOfStops(next));
+}
 
-  @override
-  Widget build(BuildContext context) {
-    final size = Shape.z(128), v = _wheel;
-    return Padding(
-      padding: EdgeInsets.all(WsT.inset),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(width: size, height: size, child: ColorPickerArea(v, _to, PaletteType.hueWheel)),
-          SizedBox(width: Shape.s(8)),
-          SizedBox(width: Shape.z(28), height: size, child: RotatedBox(quarterTurns: 3, child: ColorPickerSlider(TrackType.value, v, _to, displayThumbColor: true))),
-          SizedBox(width: Shape.s(10)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(height: Shape.z(28), decoration: BoxDecoration(color: v.toColor(), borderRadius: BorderRadius.all(Shape.r(3)))),
-                SizedBox(height: Shape.s(6)),
-                Text(_hex(v.toColor()), style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w700)),
-                Text('H ${v.hue.round()}°  S ${(v.saturation * 100).round()}%  V ${(v.value * 100).round()}%', style: T.label(Grey.g56)),
-                SizedBox(height: Shape.s(6)),
-                DeskChip(key: const ValueKey('colour-sample'), label: 'Sample', onTap: _sample),   // (a colour from anywhere on the screen: the Mac's own eyedropper)
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+/// The Mac's eyedropper (NSColorSampler, MainFlutterWindow.swift): the colour taken is given at once to what is
+/// coloured, as Keynote's eyedropper gives it.
+Future<void> _sample(DockCtx c) async {
+  final hex = await const MethodChannel('motolii/sampler').invokeMethod<String>('sample');
+  if (hex == null || int.tryParse(hex, radix: 16) == null) return;
+  c.set(() => _wheel = HSVColor.fromColor(Color(0xFF000000 | int.parse(hex, radix: 16))));
+  _take(c, Color(0xFF000000 | int.parse(hex, radix: 16)));
 }

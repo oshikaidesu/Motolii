@@ -304,7 +304,11 @@ class _Swatches extends StatelessWidget {
 }
 
 /// Joined: a colour of the document as Flutter's (six digits; a ramp by its first); null: none.
-Color? _colourOf(String word) => word.split(' ').first.length == 6 ? (int.tryParse(word.split(' ').first, radix: 16) == null ? null : Color(0xFF000000 | int.parse(word.split(' ').first, radix: 16))) : null;
+Color? _colourOf(String word) {   // (a gradient by its first stop, where it stands left out)
+  final first = word.split(' ').first.split('@').first;
+  final v = first.length == 6 || first.length == 8 ? int.tryParse(first.substring(0, 6), radix: 16) : null;
+  return v == null ? null : Color(0xFF000000 | v);
+}
 
 /// Joined: what the picked thing is painted with and how it is set (or, nothing picked, the inks a drawn thing gets).
 // (read once a reading of the document and a pick: the strip is built at every picture while it plays, these do not
