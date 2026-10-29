@@ -1677,4 +1677,60 @@ void _tests3() {
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
+  testWidgets('from the list: ••• › Export… opens it and asks its export settings (AbsentMotion\'s exportFromList); two picked, by ⌘ and by Select, are written one after the other beside themselves at their own settings (DaVinci Resolve\'s Render Queue), and the open one is opened again', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    expect(m.add('shape', 'rect'), isNot(0), reason: m.trouble);
+    m.set(0, 'render_height', 360);
+    m.set(0, 'render_rate', 30);
+    final folder = ws.documentFolder!, doc = '$folder/${ws.document}', other = '$folder/other.motolii';
+    File(doc).copySync(other);   // (beside it, with its settings)
+    Future<void> home() async {
+      await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await t.sendKeyEvent(LogicalKeyboardKey.keyO);
+      await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await t.pump();
+    }
+
+    await home();
+    await t.tap(find.byKey(ValueKey('home-more:$other')));
+    await t.pump();
+    await t.tap(find.byKey(ValueKey('home-export:$other')));
+    for (var i = 0; i < 100 && ws.document != 'other.motolii'; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await t.pump();
+    }
+    await settled(t, ws);
+    expect(find.byKey(const ValueKey('render-MP4')), findsOneWidget, reason: 'its export settings asked, as Alight Motion\'s export screen');
+    await t.tap(find.text('Cancel').last);
+    await t.pump();
+
+    await home();
+    await t.tap(find.byKey(ValueKey('home-more:$other')));
+    await t.pump();
+    await t.tap(find.byKey(ValueKey('home-select:$other')));
+    await t.pump();
+    await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await t.tap(find.byKey(ValueKey('home-doc:$doc')));
+    await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await t.pump();
+    expect([find.byKey(ValueKey('home-picked:$doc')), find.byKey(ValueKey('home-picked:$other'))].map((f) => f.evaluate().length), [1, 1]);
+    expect(ws.document, 'other.motolii', reason: 'a press picks while any is picked, it does not open');
+    await t.tap(find.byKey(const ValueKey('home-export')));
+    final films = [for (final d in [doc, other]) File('${d.substring(0, d.lastIndexOf('.'))}.mp4')];
+    for (var i = 0; i < 9000 && !(ws.notice ?? '').startsWith('Written: 2 of 2'); i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await t.pump();
+    }
+    await settled(t, ws);
+    expect(ws.notice, startsWith('Written: 2 of 2'), reason: ws.inside?.trouble);
+    expect(films.map((f) => f.existsSync() && f.lengthSync() > 1000), [true, true], reason: 'each beside its document');
+    expect(ws.document, 'other.motolii', reason: 'the one open before is open again');
+    for (final f in films) {
+      final p = Process.runSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=height,r_frame_rate', '-of', 'csv=p=0', f.path]);
+      expect((p.stdout as String).trim(), '360,30/1', reason: 'at its own settings');
+      f.deleteSync();
+    }
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
 }

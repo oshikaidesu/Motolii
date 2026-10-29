@@ -9,6 +9,7 @@
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'package:flutter/widgets.dart';
 
 import '../motolii.dart' show docFactsOf;
@@ -27,9 +28,10 @@ class HomeDoc {
 }
 
 class WsHome extends StatefulWidget {
-  const WsHome({super.key, required this.folder, required this.lib, required this.open, required this.onOpen, required this.onNew, required this.onClose});
+  const WsHome({super.key, required this.folder, required this.lib, required this.open, required this.onOpen, required this.onExport, required this.onNew, required this.onClose});
   final String folder, lib, open;   // (the folder listed, the inside's library (read on another isolate), the document open now)
   final void Function(String doc) onOpen;
+  final void Function(List<String> docs) onExport;
   final VoidCallback onNew, onClose;
   @override
   State<WsHome> createState() => _WsHomeState();
@@ -40,6 +42,7 @@ class _WsHomeState extends State<WsHome> {
   List<HomeDoc> _docs = const [];
   String? _menu, _asking;   // (the card whose actions are open; the one asked whether it goes to the Trash)
   String _find = '';   // (CapCut's search over its projects: by name)
+  final _picked = <String>{};   // (Alight Motion's ⋯ › Select, or ⌘ as the Finder's and DaVinci Resolve's project list: while any is, a press picks)
   late final Directory _pictures = Directory.systemTemp.createTempSync('motolii_home');
 
   @override
@@ -167,6 +170,11 @@ class _WsHomeState extends State<WsHome> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                if (_picked.isNotEmpty) ...[
+                  _button('home-export', 'Export ${_picked.length}', true, () => widget.onExport([..._picked])),
+                  _button('home-unpick', 'Cancel', false, () => setState(_picked.clear)),
+                  const SizedBox(width: 8),
+                ],
                 _button('home-by-date', 'Date', !byName, () => setState(() => byName = false)),
                 _button('home-by-name', 'Name', byName, () => setState(() => byName = true)),
               ],
@@ -203,7 +211,11 @@ class _WsHomeState extends State<WsHome> {
       width: _tile,
       child: GestureDetector(
         key: ValueKey('home-doc:${d.path}'),
-        onTap: () => widget.onOpen(d.path),
+        onTap: () => _picked.isNotEmpty || HardwareKeyboard.instance.isMetaPressed
+            ? setState(() {
+                if (!_picked.remove(d.path)) _picked.add(d.path);
+              })
+            : widget.onOpen(d.path),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -215,6 +227,18 @@ class _WsHomeState extends State<WsHome> {
                 fit: StackFit.expand,
                 children: [
                   if (d.picture != null) Image.file(File(d.picture!), fit: BoxFit.cover),
+                  if (_picked.contains(d.path))
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      child: Container(
+                        key: ValueKey('home-picked:${d.path}'),
+                        margin: const EdgeInsets.all(6),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: WsT.accent, borderRadius: BorderRadius.circular(4)),
+                        child: Text('✓', style: T.label(WsT.onAccent)),
+                      ),
+                    ),
                   Positioned(
                     right: 0,
                     top: 0,
@@ -252,6 +276,11 @@ class _WsHomeState extends State<WsHome> {
                         ]
                       : [
                           _button('home-open:${d.path}', 'Open', false, () => widget.onOpen(d.path)),
+                          _button('home-select:${d.path}', 'Select', false, () => setState(() {
+                            _picked.add(d.path);
+                            _menu = null;
+                          })),
+                          _button('home-export:${d.path}', 'Export…', false, () => widget.onExport([d.path])),
                           _button('home-duplicate:${d.path}', 'Duplicate', false, () => _duplicate(d)),
                           if (!open) _button('home-trash:${d.path}', 'Move to Trash', false, () => setState(() => _asking = d.path)),
                         ],

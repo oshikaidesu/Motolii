@@ -78,11 +78,11 @@ class _WorkspaceState extends State<Workspace> {
   }
 
   /// Another document in place of the open one (made, if there is none at that place).
-  void _open(String doc) {
+  Future<void> _open(String doc) {
     _ws.stageTexture = null;
     _inside?.close();
     _inside = null;
-    _join(doc);
+    return _join(doc);
   }
 
   /// The open document's own picture kept in it as it is left for the list of them, and as the window closes (AbsentMotion
@@ -144,14 +144,35 @@ class _WorkspaceState extends State<Workspace> {
   }
 
   /// The document written as a film beside itself; the top bar says how it went.
-  Future<void> _render() async {
+  Future<bool> _render() async {
     final m = _inside, doc = _doc;
-    if (m == null || doc == null) return;
+    if (m == null || doc == null) return false;
     final mp4 = _ws.renderTo ?? '${doc.substring(0, doc.lastIndexOf('.'))}.mp4';
     _ws.renderTo = null;
     _ws.notice = 'Writing ${mp4.split('/').last} …';
     final done = await m.write(mp4);
     if (mounted) _ws.notice = done ? 'Written: ${mp4.split('/').last}' : 'Not written: ${m.trouble}';
+    return done;
+  }
+
+  /// Documents of the list written out: one as AbsentMotion's list does it (opened, and its export settings asked:
+  /// MainActivity.kt exportFromList); more, each beside itself at its own settings, one after another as DaVinci Resolve's
+  /// Render Queue goes through other projects' jobs (opening each in turn), and the one that was open opened again.
+  Future<void> _exportFrom(List<String> docs) async {
+    setState(() => _home = false);
+    if (docs.length == 1) {
+      if (docs.first != _doc) await _open(docs.first);
+      wsAskRender.value++;
+      return;
+    }
+    final back = _doc;
+    var written = 0;
+    for (final d in docs) {
+      if (d != _doc) await _open(d);
+      if (mounted && _doc == d && await _render()) written++;
+    }
+    if (back != null && back != _doc) await _open(back);
+    if (mounted) _ws.notice = 'Written: $written of ${docs.length} films, each beside its document';
   }
 
   /// The document and its media gathered into "<name> package" beside it, to be taken elsewhere whole (Alight Motion's
@@ -549,6 +570,7 @@ class _WorkspaceState extends State<Workspace> {
                       setState(() => _home = false);
                       if (d != _doc) _open(d);
                     },
+                    onExport: _exportFrom,
                     onNew: () {
                       setState(() => _home = false);
                       _commands()['file.new']!();
