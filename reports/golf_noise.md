@@ -62,3 +62,4 @@
 - [ ] ㊱ [P05]【入口】背景の絵を置くと、元の大きさ（857×657）で一番上に置かれる。背景にするには Scale を打ち、層を一番下へ引く（3 打）
 - [ ] ㊲ [P05]【入口】カメラを動かす所がすぐ見つからない：右下の Camera はレンズとピントだけ。カメラは Create の Layers から足し、Inspector の Orbit（Pitch・Yaw）や Framing に数を打つ。舞台の上でカメラを回す手が無い
 - [ ] ㊳ [P06] 空間に漂う粒子を作るのに 33 打ほど：丸を置き、小さく、2.5D・手前に、Repeater で写し、Inspector を下へ送って Scatter の Spread X・Y・Z と Flow X・Y、Copies の数と間を打つ。一押しの「ほこり」が無い。出典の候補：Alight Motion の Elements（保存した部品を一押しで置く）。Motolii にも部品（Save to My Elements、doc の element）がある → 作った粒子を部品のファイルとして棚に置けば、次からは 1〜2 打（ファイルで済む。エンジン不要）
+- [ ] ㊴ [P08]【入口】カメラを揺らす入口が無い：中身はカメラに効果を載せず（a camera has no fx）、カメラを選ぶと効果の棚に動き（Auto Shake など）が出ない。After Effects の決まった手（カメラを Null の子にして Null を揺らす）は Motolii でも出来るはずだが、手数が多い。直すなら：カメラを選んで動きを押すと、Null を作ってカメラをその子にし、Null に動きを載せる（After Effects の手を一押しに）。窓の側で出来る（中身の add・parent・fx を順に頼む）。**保留（10/30 夜）**：ゴルフで確かめ切れていない
