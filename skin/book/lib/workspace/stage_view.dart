@@ -14,6 +14,7 @@ import 'stage_art.dart';
 import 'two_fingers.dart';
 import '../motolii.dart' show Motolii, MotoliiDocument, MotoliiMoment, MotoliiWrites, MotoliiQuestions, MotoliiShelves, MotoliiWatch;
 import '../sets/panels/timeline_parts_parts.dart' show TpGlyph, TpGlyphView;
+import '../sets/inspector/inspector_material.dart' show textToType;
 import 'relate.dart';
 import 'package:perfect_freehand/perfect_freehand.dart' show getStrokeOutlinePoints, getStrokePoints, PointVector, StrokeOptions;
 import 'package:perfect_freehand/src/get_stroke_radius.dart' show getStrokeRadius;   // (how wide its pressure makes a point: kept private by the package, read as it is)

@@ -507,6 +507,32 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a text placed with the Text tool is typed at once: its words picked in the Text card, what is typed is its (AbsentMotion\'s addText, Figma\'s text tool)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    ws.reread();
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('ws-tool-5')));
+    await t.pumpAndSettle();
+    final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp')));
+    await t.tapAt(stage.center + Offset(0, stage.height * .2));
+    for (var i = 0; i < 200 && ws.selected == null; i++) {   // (made by the inside, picked once it is there)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    await t.pumpAndSettle();
+    final text = int.parse(ws.selected!), field = find.byWidgetPredicate((w) => w is EditableText && w.focusNode.debugLabel == 'text-content');
+    expect(field, findsOneWidget);
+    final f = t.widget<EditableText>(field);
+    expect([f.focusNode.hasFocus, f.controller.selection.start, f.controller.selection.end], [true, 0, 'Text'.length], reason: 'its words held and picked: what is typed takes their place');
+    t.testTextInput.enterText('HELLO');
+    await t.pump();
+    f.focusNode.unfocus();   // (left: the words are the text's)
+    await settled(t, ws);
+    expect(m.word(text, 'text'), 'HELLO');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('the Text tool\'s row has its font, size, alignment and colour in one row, as Alight Motion\'s text bar', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final words = m.add('text', _font);

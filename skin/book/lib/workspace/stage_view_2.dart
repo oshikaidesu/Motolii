@@ -269,7 +269,11 @@ class _StageViewState extends State<StageView> implements StageHandles {
           ..later('set', thing: -1, name: 'wide', number: d.dx.abs() / math.max(d.dy.abs(), 1e-3));
       }
     }
-    ws.after(m.later('together'), (done, _) => done && made > 0 ? ws.select('$made') : null);
+    ws.after(m.later('together'), (done, _) {
+      if (!done || made <= 0) return;
+      if (kind == 'text') textToType = true;   // (typed at once: the Text card takes the keys, inspector_material.dart)
+      ws.select('$made');
+    });
   }
 
   // Joined: the pen: a point where the hand came down, its handle drawn out as far as the hand was dragged (a tap: a

@@ -105,6 +105,11 @@ class FillStroke extends StatelessWidget {
   }
 }
 
+/// Said by the stage as it places a text: the Text card next built for it holds the keys, its words all picked, so
+/// what is typed at once is the text's (AbsentMotion's addText opens its EditText panel; Figma's text tool types where
+/// it was placed).
+bool textToType = false;
+
 class TextGroup extends StatefulWidget {
   const TextGroup({super.key, this.first = true});
   final bool first;
@@ -154,6 +159,14 @@ class _TextGroupState extends State<TextGroup> {
     final x = Ctx.of(context), doc = x.doc;
     if (!_f.hasFocus && _c.text != (doc.s2['v_text'] ?? ''))
       _c.text = doc.s2['v_text'] ?? ''; // (out of the box it is the text the host has now: another thing picked, an undo)
+    if (textToType) {   // (once built with the placed text's words: the keys to it, its words picked)
+      textToType = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _f.requestFocus();
+        _c.selection = TextSelection(baseOffset: 0, extentOffset: _c.text.length);
+      });
+    }
     const aligns = ['Left', 'Centre', 'Right']; // (ThorVG lines up between 0 and 1: these are its three steps, in hundredths 0, 50, 100)
     return Sect(
       title: 'Text',
