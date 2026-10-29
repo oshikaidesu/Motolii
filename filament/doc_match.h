@@ -178,7 +178,13 @@ static bool doc_match(Doc& d) {
                 double w = 0, h = 0;   // (a point of it a point of the document, as ALMaMPlayer's 1920 x 1080 screen shows it)
                 if (!shown.empty() && midi_roll_box(shown, w, h)) rollHigh = (float)(h / doc_point(d, thing, 0));
             }
-            if (fxOk && !shown.empty() && (made.drawn = picture(s, shown.c_str(), mat4f{}, rollHigh, float3{-1.f}, true, lay, fx, doc_word(d, thing, "marker").c_str()))) s.playing.erase(made.drawn);
+            const std::string ext = std::filesystem::path(file).extension().string();
+            const float aspect = doc_among(".jpg .jpeg .png .webp .bmp .JPG .JPEG .PNG", ext) && (edge.w > 0.f || doc_number(d, thing, "round", 0, 0) > 0.0) ? picture_aspect(s, file.c_str()) : 0.f;
+            if (fxOk && aspect > 0.f) {   // (a photo with an edge or round corners: a rect as wide as it is, its own file its fill, as a shape filled with media is (Alight Motion's media layers take a border as its shapes do))
+                DrawnFx own = fx;
+                own.media = file;
+                made.drawn = flat(s, "rect", aspect, mat4f{}, 1.f, float3{1.f}, lay, edge, own.over(1.f), 4, 0.5f, (float)doc_number(d, thing, "round", 0, 0));
+            } else if (fxOk && !shown.empty() && (made.drawn = picture(s, shown.c_str(), mat4f{}, rollHigh, float3{-1.f}, true, lay, fx, doc_word(d, thing, "marker").c_str()))) s.playing.erase(made.drawn);
             if (made.drawn && made.drawn->lottie && !picture_deep(s, made.drawn).empty()) {   // (its 3D layers stood up where they are, as After Effects shows them)
                 made.motion = std::make_shared<Motion>();
                 if (motion_open(*made.motion, file.c_str()))

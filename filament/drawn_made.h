@@ -382,13 +382,25 @@ static void flat_path(Drawn* d, tvg::Shape* shape, const char* form, int w, int 
 // form: rect (round: its corners, a share of its shorter side), circle, polygon and star (points of it; a star's
 // inner points at `inner` of the way out), line (a long rect, round at its ends), null (nothing to see: a thing to
 // go with); all drawn by ThorVG's own Shape.
+// How wide a picture's file is to its height, as ThorVG reads it (0: it cannot): on the driver thread, as drawn() makes one.
+static float picture_aspect(Stage& s, const char* file) {
+    float pw = 0.f, ph = 0.f;
+    door::on_driver(s.engine, [&] {
+        tvg::Initializer::init(0);
+        tvg::Picture* pic = tvg::Picture::gen();
+        if (pic->load(file) == tvg::Result::Success) pic->size(&pw, &ph);
+        tvg::Paint::rel(pic);
+    });
+    s.engine->flushAndWait();
+    return ph > 0.f ? pw / ph : 0.f;
+}
 static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, float high, float3 colour, const char* lay = nullptr, float4 edge = float4{0.f}, const DrawnFx& fx = {},
                    int points = 6, float inner = 0.5f, float round = 0.f) {
     return drawn(s, [&](Drawn* d, int* w, int* h) -> tvg::Paint* {
         const float tall = std::min(0.5f * (float)std::max(s.w, s.h), 4096.f / std::max(wide, 1e-3f));   // (as fine as half the stage; a long thin bar less high, so that it is as long as it is said)
         *h = std::max(2, 2 * (int)std::ceil(0.5f * tall));
         *w = std::max(2, 2 * (int)std::ceil(0.5f * tall * wide));
-        const float in = 0.5f * std::min(edge.w * (float)*h, 0.5f * (float)std::min(*w, *h));   // (half the stroke: the path is set in by that, so all of it is seen)
+        const float in = std::round(0.5f * std::min(edge.w * (float)*h, 0.5f * (float)std::min(*w, *h)));   // (half the stroke: the path is set in by that, so all of it is seen; a whole point, so its corners lie on whole points: ThorVG's round corners take a side as straight only when it is so exactly, tvgLottieModifier.cpp _colinear)
         const float thick = in > 0.f ? 2.f * in : 0.08f * (float)*h;   // (a wave's line: its stroke, or a share of its height)
         tvg::Shape* shape = d->shape = tvg::Shape::gen();
         flat_path(d, shape, form, *w, *h, in, points, inner, round, 0.f);

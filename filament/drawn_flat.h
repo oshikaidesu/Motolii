@@ -134,7 +134,7 @@ static Drawn* flat_mesh(Stage& s, const char* form, float wide, const mat4f& pla
     const int h = 1024, w = std::max(2, (int)std::lround(1024.f * wide));   // (points to make its path in: its own, as fine as it is)
     Drawn* d = new Drawn;
     d->fx = fx, d->cutW = (float)w, d->sheetHigh = high, d->hollow = fx.hollow;
-    const float in = 0.5f * std::min(edge.w * (float)h, 0.5f * (float)std::min(w, h));   // (half its edge: the path set in by that, as `flat` does)
+    const float in = std::round(0.5f * std::min(edge.w * (float)h, 0.5f * (float)std::min(w, h)));   // (half its edge: the path set in by that, as `flat` does, a whole point)
     d->edgeWide = 2.f * in;
     d->outline = tvg::Shape::gen();
     flat_path(d, d->outline, form, w, h, in, points, inner, round, (bends ? 1.f : -1.f) * (float)h / 64.f);   // (bent as it is drawn: cut fine all along; not: only its curves, its straight lines whole)

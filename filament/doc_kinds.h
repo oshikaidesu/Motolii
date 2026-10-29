@@ -159,7 +159,7 @@ static const DocValue doc_values[] = {
     {"clip_matte", "film picture text shape", 0, 0, false, "alpha luma"}, {"clip_invert", "film picture text shape", 0, 1, false, nullptr}, {"clip_feather", "film picture text shape", 0, 500, false, nullptr},   // (a solid is cut by a box, not a matte)
     {"solo", doc_kinds, 0, 1, false, nullptr}, {"lock", doc_kinds, 0, 1, false, nullptr},   // (After Effects' own: while any thing is solo only those are seen; a locked thing is not changed)
     {"visible", "film picture text solid shape camera light behaviour", 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid polygon star line wave null ring arc arrow squircle cog path spiral chamfer"},
-    {"points", "shape", 1, 360, false, nullptr}, {"inner", "shape", 0.01, 1, false, nullptr}, {"round", "shape", 0, 0.5, true, nullptr},   // (a polygon's or star's points, a star's inner points, its corners rounded)
+    {"points", "shape", 1, 360, false, nullptr}, {"inner", "shape", 0.01, 1, false, nullptr}, {"round", "shape picture", 0, 0.5, true, nullptr},   // (a polygon's or star's points, a star's inner points, its corners rounded)
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film solid picture text shape", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
     {"frame_rate", "film picture text solid shape", 0, 60, false, nullptr},
@@ -339,7 +339,7 @@ static const DocValue doc_values[] = {
     {"drift_x", "picture text shape", -1e3, 1e3, true, nullptr}, {"drift_y", "picture text shape", -1e3, 1e3, true, nullptr},   // (scattered copies flowing so far a second, units of the stage: past the scattering's edge, back in at the other)
     {"tint", "film picture text shape", 0, 1, true, nullptr}, {"tint_black", "film picture text shape", 0, 0, false, ""}, {"tint_white", "film picture text shape", 0, 0, false, ""},
     {"tritone", "film picture text shape", 0, 1, true, nullptr}, {"tritone_shadow", "film picture text shape", 0, 0, false, ""}, {"tritone_midtone", "film picture text shape", 0, 0, false, ""}, {"tritone_highlight", "film picture text shape", 0, 0, false, ""},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
-    {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr},   // (its edge: a colour, and how wide, in points of the picture at size 1)
+    {"stroke", "text shape picture", 0, 0, false, ""}, {"stroke_width", "text shape picture", 0, 1000, false, nullptr},   // (its edge: a colour, and how wide, in points of the picture at size 1)
     // (ThorVG's own: a text's letters and lines so many times as far apart as the font sets them, its slant; an edge's
     //  ends and corners, and dashes along it so long, with gaps as long, begun so far along)
     {"wrap", "text", 0, 0, false, "none character word smart ellipsis"}, {"wrap_at", "text", 0, 1000, false, nullptr},   // (its lines broken in a box so many times as wide as its letters are high: ThorVG's layout and wrap; a text's size is the height of all its lines, so this goes with the letters, not the picture)
