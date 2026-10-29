@@ -294,6 +294,7 @@ final _rowsAA = <(String, String, Map<String, Object>)>[
 final _rowsBR = <(String, String, Map<String, Object>)>[
   ('beam', 'look:Energy Beam', const {'~over': 1}),
   ('stamper', 'look:Luma Stamper', const <String, Object>{}),
+  ('strips', 'look:Streak Strips', const <String, Object>{}),
 ];
 // (section BQ: AbsentMotion's text effects from the shelf on the words MOTOLII: a running clock, a count, letters at random.)
 final _rowsBQ = <(String, String, Map<String, Object>)>[
