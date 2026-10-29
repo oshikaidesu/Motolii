@@ -10,6 +10,21 @@ index 706ca0ce3..c9dede7c8 100644
  target_include_directories(${TARGET} PUBLIC ${PUBLIC_HDR_DIR})
  set_target_properties(${TARGET} PROPERTIES FOLDER Libs)
  target_link_libraries(${TARGET} backend_headers shaders filabridge utils smol-v zstd)
+diff --git a/third_party/glslang/glslang/HLSL/hlslParseHelper.cpp b/third_party/glslang/glslang/HLSL/hlslParseHelper.cpp
+index 3dbdcb8b4..f23e74cf3 100644
+--- a/third_party/glslang/glslang/HLSL/hlslParseHelper.cpp
++++ b/third_party/glslang/glslang/HLSL/hlslParseHelper.cpp
+@@ -9403,6 +9403,10 @@ TIntermNode* HlslParseContext::addSwitch(const TSourceLoc& loc, TIntermTyped* ex
+ {
+     wrapupSwitchSubsequence(lastStatements, nullptr);
+ 
++    // motolii: D3DCompile takes a switch on a scalar float (or bool) and switches on it made an int; so do we
++    if (expression != nullptr && expression->getType().isScalar() && (expression->getBasicType() == EbtFloat || expression->getBasicType() == EbtBool))
++        expression = intermediate.addConversion(EOpConstructInt, TType(EbtInt, EvqTemporary), expression);
++
+     if (expression == nullptr ||
+         (expression->getBasicType() != EbtInt && expression->getBasicType() != EbtUint) ||
+         expression->getType().isArray() || expression->getType().isMatrix() || expression->getType().isVector())
 diff --git a/third_party/glslang/glslang/tnt/CMakeLists.txt b/third_party/glslang/glslang/tnt/CMakeLists.txt
 index 00442cfd7..59cf7fc1d 100644
 --- a/third_party/glslang/glslang/tnt/CMakeLists.txt
