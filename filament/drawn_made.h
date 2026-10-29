@@ -237,7 +237,9 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
         *w = 2 * (int)std::ceil(0.5f * (wide + outline));
         *h = 2 * (int)std::ceil(0.5f * (tall + outline));
         if (!fx.split && fx.wrapWidth <= 0.f && align <= 0.f) d->text = t, d->words = words, d->textWide = (float)*w, d->textAt = -y + 0.5f * outline;   // (its words told again in place: words_at)
-        if (fx.split && !strchr(words, '\n') && fx.wrapWidth <= 0.f) {   // (one line split into its letters: where each ends, by how wide the words up to it are set)
+        std::string line(words);   // (a last line left empty, a Return after the words, is no line: its letters are the ones before)
+        while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
+        if (fx.split && line.find('\n') == std::string::npos && fx.wrapWidth <= 0.f) {   // (one line split into its letters: where each ends, by how wide the words up to it are set)
             const auto across = [&](const std::string& some) {   // (how wide some letters are set, a share of the picture's width; and where their ink ends)
                 tvg::Text* up = tvg::Text::gen();
                 up->font(std::filesystem::path(fontFile).stem().string().c_str());
@@ -251,10 +253,10 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
                 return float2{ok ? (ux + uw - x + 0.5f * outline) / (float)*w : 0.f, ok ? (uw + outline) / (float)*w : 0.f};
             };
             std::vector<float2> inks;   // (each letter: where the words up to it end, and how wide it is alone)
-            for (const char* at = words; *at;) {
+            for (const char* at = line.c_str(); *at;) {
                 const char* next = at + 1;
                 while (*next && ((unsigned char)*next & 0xC0) == 0x80) ++next;   // (one letter, however many bytes)
-                inks.push_back(float2{across(std::string(words, next)).x, across(std::string(at, next)).y});
+                inks.push_back(float2{across(std::string(line.c_str(), next)).x, across(std::string(at, next)).y});
                 at = next;
             }
             float was = 0.f;   // (cut half way across the gap between a letter's ink and the next one's: no edge of a neighbour in either)
