@@ -109,6 +109,7 @@ static void doc_things_fx(Doc& d) {
                 s.backdropRead = true;
                 for (const Stage::Made& made : s.made) if (made.of == e.sheet) s.engine->getRenderableManager().setLayerMask(s.engine->getRenderableManager().getInstance(made.thing), 0xFF, 0x02);
             }
+            e.st.ground = d.backdropIs.size() == 6 ? (int)std::strtol(d.backdropIs.c_str(), nullptr, 16) : -1;   // (the colour behind everything: what an effect reading the frame finds where nothing is drawn)
             thing_fx_aim(s, e, box);
             thing_fx_pictures(s, e.st, e.view);
             if (e.look) e.look->setParameter("image", thing_fx_seen(e.st), TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));

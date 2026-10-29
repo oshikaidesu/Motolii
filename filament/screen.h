@@ -171,6 +171,8 @@ struct ScreenStack {
     std::string files;
     std::vector<ScreenFx*> fx;
     bool readsBehind = false;   // (one of its effects reads what is behind the thing: AbsentMotion's backdrop, the stage's behind)
+    double box[4] = {0, 0, 0, 0};   // (a thing's: where it is seen, points of the stage, thing_fx_aim)
+    int ground = -1;                // (the stage's colour behind everything, 0xRRGGBB; -1 none)
     std::map<std::string, ScreenFx*> made;   // every effect made so far, by its file, kept (a shader is made once: making one takes a picture's time or ten)
     Texture* shot = nullptr;
     Texture* depth = nullptr;

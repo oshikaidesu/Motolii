@@ -20,6 +20,7 @@ static void thing_effects(Stage& s, ScreenStack& st, const std::string& files) {
         if (aviutl_is(file)) {   // (an AviUtl2 script: run each frame on its picture, the one already made kept)
             const auto kept = std::find_if(st.aviutl.begin(), st.aviutl.end(), [&](const auto& r) { return r->file == file; });
             scripts.push_back(kept != st.aviutl.end() ? *kept : aviutl_made(s, file)), st.steps.push_back('a');
+            st.readsBehind |= scripts.back()->behind;   // (one that reads its frame reads what is behind: the stage's behind drawn, its own sheet left out of it)
             continue;
         }
         if (const char k = doc_thor_letter(file)) { st.steps.push_back(k); continue; }   // (one of ThorVG's own: drawn by ThorVG, in its place)
@@ -120,7 +121,7 @@ static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenN
     screen_tone(s, st.shot, st.betweenTarget[1], w, h, true);   // (its picture as its colours are said, sRGB, for the effects: screen.h screen_tone)
     for (size_t i = 0, f = 0, a = 0; i < st.steps.size(); ++i) {   // (each into a picture between: the effects take the whole picture as theirs, and fill what is clear)
         Texture* from = i == 0 ? st.between[1] : st.between[(i - 1) % 2];
-        if (st.steps[i] == 'a') { aviutl_draw_step(s, *st.aviutl[a++], from, st.betweenTarget[i % 2], numbers, w, h); continue; }   // (an AviUtl2 script)
+        if (st.steps[i] == 'a') { std::copy(st.box, st.box + 4, st.aviutl[a]->box), st.aviutl[a]->ground = st.ground; aviutl_draw_step(s, *st.aviutl[a++], from, st.betweenTarget[i % 2], numbers, w, h); continue; }   // (an AviUtl2 script, told where the thing is seen)
         if (st.steps[i]) { thing_thor(s, st, st.steps[i], st.device[i == 0 ? 2 : 1 + (i - 1) % 2], (int)(i % 2), w, h, thor, ppp); continue; }   // (one of ThorVG's own)
         screen_fresh(s, *st.fx[f]);
         ScreenFx& one = *st.fx[f++];
@@ -201,7 +202,7 @@ static void thing_fx_off(Stage& s, ThingFx& e) {
 // effects work on the layer's own picture, an ISF effect's centre its middle); its picture as many pixels as the box
 // covers on the stage's view; its sheet laid on the box (effected.mat place).
 static void thing_fx_aim(Stage& s, ThingFx& e, const double* box) {
-    std::copy(box, box + 4, e.box);
+    std::copy(box, box + 4, e.box), std::copy(box, box + 4, e.st.box);
     const double ppp = (double)s.view->getViewport().width / std::max(1, s.w);
     const double x0 = 2 * box[0] / s.w - 1, x1 = 2 * box[2] / s.w - 1, y0 = 1 - 2 * box[3] / s.h, y1 = 1 - 2 * box[1] / s.h;   // (the box in the stage's clip space, y up)
     math::mat4 crop;

@@ -30,6 +30,9 @@ struct AviutlRun {
     Stage* s = nullptr;                             // (this frame's)
     std::string target, blend, sampler;
     bool drew = false;
+    bool behind = false;                            // (it reads the frame: the stage behind the thing, as AviUtl2's framebuffer holds what is drawn before it)
+    double box[4] = {0, 0, 0, 0};                   // (where the thing is seen, points of the stage: its frame is that of the stage's)
+    int ground = -1;                                // (the stage's colour behind everything, 0xRRGGBB; -1 none)
 };
 
 // The placing shader: a picture (`size` pixels) put with its pixel `from` at `at` of the target, turned and sized by
@@ -167,7 +170,7 @@ static int aviutl_pixelshader(lua_State* L) {   // (name, target, {resource...},
     std::vector<Texture*> read((size_t)sh->pictures, r.none);
     for (size_t i = 0; i < res.size() && i < read.size(); ++i) {
         if (res[i] == "random") { read[i] = r.random; continue; }
-        if (res[i] == "framebuffer" || !r.bufs.count(res[i])) return aviutl_no(L, "obj.pixelshader reading " + res[i]);
+        if ((res[i] == "framebuffer" && !r.behind) || !r.bufs.count(res[i])) return aviutl_no(L, "obj.pixelshader reading " + res[i]);
         if (res[i] == target) aviutl_copy(r, "~" + std::to_string(i), target), read[i] = r.bufs["~" + std::to_string(i)].t;   // (the target read as a copy, as the spec says)
         else read[i] = r.bufs[res[i]].t;
     }
@@ -204,7 +207,7 @@ static int aviutl_copybuffer(lua_State* L) {   // (dst, src; src "image:" a pict
         aviutl_lay(r, *picture, t.rt, t.w, t.h, 0, 0, 1, 1, 0, 1, 0, 0, -1, 1);
         return lua_pushboolean(L, 1), 1;
     }
-    if (from == "framebuffer" || to == "framebuffer") return aviutl_no(L, "obj.copybuffer " + to + " from " + from);
+    if ((from == "framebuffer" || to == "framebuffer") && !r.behind) return aviutl_no(L, "obj.copybuffer " + to + " from " + from);
     if (!r.bufs.count(from)) return lua_pushboolean(L, 0), 1;
     aviutl_copy(r, to, from);
     return lua_pushboolean(L, 1), 1;
@@ -507,6 +510,7 @@ static std::shared_ptr<AviutlRun> aviutl_made(Stage& s, const std::string& file)
     r->file = file, r->s = &s;
     if (!aviutl_text(file, r->own, r->all, r->trouble)) return std::fprintf(stderr, "the AviUtl2 script %s is not taken: %s\n", file.c_str(), r->trouble.c_str()), r;
     r->vars = aviutl_vars(r->own);
+    r->behind = std::regex_search(r->all, std::regex(R"re(copybuffer\s*\([^)]*"(framebuffer|frm)"|getoption\s*\(\s*"drawtarget"\s*\))re"));   // (it reads the frame: its picture there is the stage's behind it)
     for (const ScriptKnob& k : aviutl_knobs(file)) r->usual[k.name] = k.usual;
     lua_State* L = r->L = luaL_newstate();
     luaL_openlibs(L);
@@ -556,7 +560,18 @@ static void aviutl_draw_step(Stage& s, AviutlRun& r, Texture* from, RenderTarget
     AviutlBuf in{from, nullptr, w, h};
     const AviutlBuf& object = aviutl_buf(r, "object", w, h);
     aviutl_lay(r, in, object.rt, w, h, 0, 0, 1, 1, 0, 1, 0, 0, -1, 1, 0, 1);   // (premultiplied, as AviUtl2's pictures are)
-    aviutl_clear(r, aviutl_buf(r, "framebuffer", w, h), 0, false);
+    const AviutlBuf& frame = aviutl_buf(r, "framebuffer", w, h);
+    const bool behind = r.behind && s.behind && r.box[2] > r.box[0] && r.box[3] > r.box[1];
+    aviutl_clear(r, frame, behind ? std::max(r.ground, 0) : 0, behind && r.ground >= 0);
+    if (behind) {   // (what is drawn before it, there: the stage's colour, then the stage's picture without the thing (kit_things.h, as AbsentMotion's backdrop reads it) in sRGB as the thing's own picture is given (screen_tone), over it)
+        const double bw = s.behind->getWidth(), bh = s.behind->getHeight(), kx = bw / std::max(1, s.w), ky = bh / std::max(1, s.h);
+        const AviutlBuf all{s.behind, nullptr, (uint32_t)bw, (uint32_t)bh};
+        const AviutlBuf& there = aviutl_buf(r, "~behind", w, h);
+        aviutl_lay(r, all, there.rt, w, h, 0, 0, w / ((r.box[2] - r.box[0]) * kx), h / ((r.box[3] - r.box[1]) * ky), 0, 1, (r.box[0] + r.box[2]) / 2 * kx - bw / 2, (r.box[1] + r.box[3]) / 2 * ky - bh / 2, -1, 1);
+        const AviutlBuf& toned = aviutl_buf(r, "~behind_srgb", w, h);
+        screen_tone(s, there.t, toned.rt, w, h, true);
+        aviutl_lay(r, toned, frame.rt, w, h, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1);
+    }
     std::string trouble = r.trouble;
     lua_State* L = r.L;
     if (trouble.empty()) {
