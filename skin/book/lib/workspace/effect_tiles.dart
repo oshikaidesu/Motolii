@@ -18,11 +18,18 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:flutter/painting.dart' show FileImage, ResizeImage;
+
 import '../motolii.dart';
 
 abstract final class EffectTiles {
   static final _asked = <String>{}, _queue = <(String, String)>[];
   static var _drawing = false;
+
+  /// How wide a tile's pictures are read (dock_effects.dart _Moving's Image.file): one drawn again under its own name is
+  /// let go of at that width, or Flutter's image cache goes on showing the one drawn before (seen: AbsentMotion's split
+  /// tiles came only once the window was opened again).
+  static const readWide = 256;
 
   /// The moments its pictures are drawn at, and the one its still is (fx_tiles.sh's 1.4 s).
   static const moments = [0.1, 0.357, 0.614, 0.871, 1.129, 1.386, 1.643, 1.9];
@@ -133,6 +140,9 @@ abstract final class EffectTiles {
         final some = _queue.take(12).toList();
         _queue.removeRange(0, some.length);
         for (final (home, same) in await Isolate.run(() => _draw(dir, some))) {
+          for (final p in [home, for (final (k, _) in moments.indexed) frame(home, k)]) {
+            ResizeImage(FileImage(File(p)), width: readWide).evict();
+          }
           m.tileDrawn(home, same: same);
         }
         changed();

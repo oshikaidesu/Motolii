@@ -167,7 +167,7 @@ class _MovingState extends State<_Moving> {
   }
 
   @override
-  Widget build(BuildContext context) => Image.file(File(_step == null ? widget.file : EffectTiles.frame(widget.file, _step!)), fit: BoxFit.cover, cacheWidth: 256, gaplessPlayback: true, errorBuilder: (_, _, _) => const SizedBox());
+  Widget build(BuildContext context) => Image.file(File(_step == null ? widget.file : EffectTiles.frame(widget.file, _step!)), fit: BoxFit.cover, cacheWidth: EffectTiles.readWide, gaplessPlayback: true, errorBuilder: (_, _, _) => const SizedBox());
 }
 
 /// Joined: the document's value an effect is, and what the picked thing has for it now.
