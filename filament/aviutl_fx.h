@@ -37,6 +37,10 @@ struct AviutlRun {
     bool wide = false;                              // (it draws the object (obj.draw, drawpoly): its frame the stage's, the object the thing's own picture where it is seen)
     const ScreenNumbers* numbers = nullptr;         // (this frame's: what it asks of the other things, the document's answers (doc_moment_fx.h doc_aviutl_asked))
     std::vector<std::string> chain;                 // (the effects on the thing in their order, by name, and which is this one: obj.getoption "script_name")
+    std::string pixelFrom = "object", pixelType = "col";   // (what obj.getpixel reads, and how it tells a pixel: obj.pixeloption)
+    std::vector<uint8_t> pixelSeen;                 // (that buffer read back, once, till pixeloption "get" again: aviutl_pixels.h)
+    uint32_t pixelW = 0, pixelH = 0;
+    bool pixelRead = false;
     int at = 0;
     double seen[4] = {0, 0, 0, 0};                  // (then where the thing is seen, points of the stage)
     std::map<std::string, ScreenFx*> isf;           // (Sashimono's remakes of AviUtl's built-in effects it ran, by their files: aviutl_sashimono)
@@ -294,11 +298,6 @@ static int aviutl_getvalue(lua_State* L) {   // (target): its own tracks, and th
     return aviutl_no(L, "obj.getvalue " + n);
 }
 static int aviutl_setanchor(lua_State* L) { return lua_pushinteger(L, std::max(1, (int)aviutl_num(L, 2))), 1; }   // (its points are not on the screen yet: the values stay the knobs')
-static int aviutl_getpixel(lua_State* L) {
-    AviutlRun& r = aviutl_of(L);
-    if (lua_gettop(L)) return aviutl_no(L, "obj.getpixel of a pixel");
-    return lua_pushinteger(L, r.bufs["object"].w), lua_pushinteger(L, r.bufs["object"].h), 2;
-}
 // (name, size, decoration, colour, edge colour, bold, italic): the nine of obj.getfont as sashimono-edit reads AviUtl2's
 // lua.txt (MIT, objapi.py lua_getfont), the spacings after them not read yet; defaults its own (48, white, black).
 static int aviutl_setfont(lua_State* L) {
@@ -688,7 +687,7 @@ static std::shared_ptr<AviutlRun> aviutl_made(Stage& s, const std::string& file)
     r->file = file, r->s = &s;
     if (!aviutl_text(file, r->own, r->all, r->trouble)) return std::fprintf(stderr, "the AviUtl2 script %s is not taken: %s\n", file.c_str(), r->trouble.c_str()), r;
     r->vars = aviutl_vars(r->own);
-    r->behind = std::regex_search(r->all, std::regex(R"re(copybuffer\s*\([^)]*"(framebuffer|frm)"|getoption\s*\(\s*"drawtarget"\s*\))re"));   // (it reads the frame: its picture there is the stage's behind it)
+    r->behind = std::regex_search(r->all, std::regex(R"re(copybuffer\s*\([^)]*"(framebuffer|frm)"|getoption\s*\(\s*"drawtarget"\s*\)|load\s*\(\s*"framebuffer"|pixeloption\s*\(\s*"get"\s*,\s*"(framebuffer|frm)")re"));   // (it reads the frame: its picture there is the stage's behind it)
     r->wide = std::regex_search(r->all, std::regex(R"(obj\.draw(poly)?\s*\()"));   // (it draws the object itself: where it will on the screen)
     for (const ScriptKnob& k : aviutl_knobs(file)) r->usual[k.name] = k.usual;
     lua_State* L = r->L = luaL_newstate();
@@ -700,7 +699,7 @@ static std::shared_ptr<AviutlRun> aviutl_made(Stage& s, const std::string& file)
     lua_newtable(L);
     const std::pair<const char*, lua_CFunction> calls[] = {{"pixelshader", aviutl_pixelshader}, {"clearbuffer", aviutl_clearbuffer}, {"copybuffer", aviutl_copybuffer}, {"load", aviutl_load}, {"setoption", aviutl_setoption}, {"getoption", aviutl_getoption},
         {"getinfo", aviutl_getinfo}, {"getvalue", aviutl_getvalue}, {"setanchor", aviutl_setanchor}, {"getpixel", aviutl_getpixel}, {"setfont", aviutl_setfont}, {"draw", aviutl_draw}, {"drawpoly", aviutl_drawpoly}, {"effect", aviutl_effect},
-        {"getpixeldata", aviutl_getpixeldata}, {"putpixeldata", aviutl_putpixeldata}};
+        {"getpixeldata", aviutl_getpixeldata}, {"putpixeldata", aviutl_putpixeldata}, {"pixeloption", aviutl_pixeloption}};
     for (const auto& [n, f] : calls) lua_pushlightuserdata(L, r.get()), lua_pushcclosure(L, f, 1), lua_setfield(L, -2, n);
     luaL_dostring(L, "return { __index = function(_, k) error('not yet: obj.' .. tostring(k), 2) end }");   // (any other name of obj)
     lua_setmetatable(L, -2);
@@ -734,7 +733,7 @@ static std::shared_ptr<AviutlRun> aviutl_made(Stage& s, const std::string& file)
 // One frame of it: the thing's picture `from` (w x h) its object, its knobs and obj's values told, the script run, and
 // what it leaves (the frame it drew, else the object as obj now places it) drawn into `to`.
 static void aviutl_draw_step(Stage& s, AviutlRun& r, Texture* from, RenderTarget* to, const ScreenNumbers& numbers, uint32_t w, uint32_t h) {
-    r.s = &s, r.target = "framebuffer", r.blend = "none", r.sampler.clear(), r.drew = false, r.draws.clear(), r.font = {}, r.numbers = &numbers;
+    r.s = &s, r.target = "framebuffer", r.blend = "none", r.sampler.clear(), r.drew = false, r.draws.clear(), r.font = {}, r.numbers = &numbers, r.pixelFrom = "object", r.pixelType = "col", r.pixelRead = false;
     for (auto at = r.loaded.begin(); at != r.loaded.end();)
         if (at->first.rfind("text|", 0) == 0 && !r.worded.count(at->first)) s.engine->destroy(at->second.t), at = r.loaded.erase(at);
         else ++at;

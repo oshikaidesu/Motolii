@@ -1,4 +1,4 @@
-// aviutl_load.h: part of aviutl_fx.h. obj.load as lua.txt says it, for a figure, a picture file (and obj.copybuffer's "image:") and words (the AviUtl2 script
+// aviutl_load.h: part of aviutl_fx.h. obj.load as lua.txt says it, for a figure, a picture file (and obj.copybuffer's "image:"), words and the frame (the AviUtl2 script
 // skill's references/api.md, gasdyueer, MIT: "figure", name[, color, size, line, round]; "image", file, true or false).
 // Drawn by ThorVG's own CPU canvas (SwCanvas, in Motolii's ThorVG), its premultiplied pixels laid in the object as
 // they are, kept by what was asked (the same asked again is not drawn again).
@@ -186,6 +186,16 @@ static int aviutl_load(lua_State* L) {
         }));
     }
     if (kind == "image") return lay(aviutl_image(r, aviutl_str(L, 2)));
+    if (kind == "framebuffer") {   // ([x, y, w, h, alpha]): that much of the frame, its top left at x, y (lua.txt); alpha not asked, laid over black as the screen shows it
+        const AviutlBuf fb = r.bufs["framebuffer"];
+        if (!fb.t) return lua_pushboolean(L, 0), 1;
+        const double x = aviutl_num(L, 2, 0), y = aviutl_num(L, 3, 0);
+        const uint32_t w = lua_isnumber(L, 4) ? (uint32_t)std::clamp(std::lround(lua_tonumber(L, 4)), 1L, 8192L) : fb.w, h = lua_isnumber(L, 5) ? (uint32_t)std::clamp(std::lround(lua_tonumber(L, 5)), 1L, 8192L) : fb.h;
+        const AviutlBuf& to = aviutl_buf(r, "object", w, h);
+        aviutl_clear(r, to, 0, !lua_toboolean(L, 6));
+        aviutl_lay(r, fb, to.rt, w, h, fb.w / 2.0 - x - w / 2.0, fb.h / 2.0 - y - h / 2.0, 1, 1, 0, 1, 0, 0, 0, 1);
+        return lua_pushboolean(L, 1), 1;
+    }
     if (kind == "text") {
         const std::string words = lua_isstring(L, 2) ? lua_tostring(L, 2) : "";
         if (words.empty()) return aviutl_clear(r, aviutl_buf(r, "object", 1, 1), 0, false), lua_pushboolean(L, 1), 1;
