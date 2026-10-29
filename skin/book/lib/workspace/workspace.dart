@@ -22,6 +22,7 @@ import 'desk_relations.dart';
 import 'desk_ease.dart';
 import 'dock.dart';
 import 'dock_glyphs.dart';
+import 'home.dart';
 import 'panes.dart';
 import 'desk_kit.dart';
 import 'key_drag.dart';
@@ -83,6 +84,14 @@ class _WorkspaceState extends State<Workspace> {
     _inside = null;
     _join(doc);
   }
+
+  /// The open document's own picture kept in it as it is left for the list of them, and as the window closes (AbsentMotion
+  /// keeps a project's as its editor is closed for its home: MainActivity.kt saveThumbnail), at its playhead or at the
+  /// moment it was told (file.poster). Not as another is opened in its place: its last asks would go unanswered.
+  void _keepPoster() => _inside?.poster('${Directory.systemTemp.path}/motolii_poster_$pid.png');
+
+  /// The documents beside the open one listed over the window (AbsentMotion's home: home.dart).
+  bool _home = false;
 
   /// The documents beside the open one (read as one is opened), and a place for a new one there.
   List<String> _beside = const [];
@@ -212,6 +221,13 @@ class _WorkspaceState extends State<Workspace> {
       },
       'file.render': () => wsAskRender.value++,   // (the settings window first)
       'file.exportFrame': _exportFrame,
+      'file.home': () => setState(() {   // (its own picture kept first: its card shows it as it is)
+        _keepPoster();
+        _home = true;
+      }),
+      'file.poster': () {   // (the moment its picture is drawn at from now on: Alight Motion's Set Project Thumbnail)
+        if (m.set(0, 'poster_at', ws.frame / 60)) _ws.notice = 'Project picture: ${ws.frame}';   // (the playhead as it is seen: sixty frames a second)
+      },
       'file.package': _package,
       'edit.undo': () => _typed(const UndoTextIntent(SelectionChangedCause.keyboard)) ? null : ws.after(m.later('undo')),
       'edit.redo': () => _typed(const RedoTextIntent(SelectionChangedCause.keyboard)) ? null : ws.after(m.later('redo')),
@@ -353,12 +369,14 @@ class _WorkspaceState extends State<Workspace> {
           PlatformMenuItemGroup(
             members: [
               item('New Document', 'file.new'),
+              item('Projects…', 'file.home'),
               PlatformMenu(label: 'Open', menus: [for (final f in _beside) PlatformMenuItem(label: f.split('/').last, onSelected: f == _doc ? null : () => _open(f))]),
             ],
           ),
           item('Export Video…', 'file.render'),   // (Live's File menu: Export Audio/Video)
           item('Export Frame', 'file.exportFrame'),
           item('Package Project', 'file.package'),
+          item('Use Frame as Project Picture', 'file.poster'),
         ],
       ),
       PlatformMenu(
@@ -486,6 +504,7 @@ class _WorkspaceState extends State<Workspace> {
 
   @override
   void dispose() {
+    _keepPoster();
     FocusManager.instance.removeListener(_keepKeys);
     _windowFocus.dispose();
     _own?.cancel();
@@ -517,7 +536,28 @@ class _WorkspaceState extends State<Workspace> {
         autofocus: true,
         child: ColoredBox(
           color: WsT.ground,
-          child: Overlay(initialEntries: [_entry]),
+          child: Stack(
+            children: [
+              Overlay(initialEntries: [_entry]),
+              if (_home && _doc != null && _ws.inside != null)
+                Positioned.fill(
+                  child: WsHome(
+                    folder: File(_doc!).parent.path,
+                    lib: _ws.inside!.libPath,
+                    open: _doc!,
+                    onOpen: (d) {
+                      setState(() => _home = false);
+                      if (d != _doc) _open(d);
+                    },
+                    onNew: () {
+                      setState(() => _home = false);
+                      _commands()['file.new']!();
+                    },
+                    onClose: () => setState(() => _home = false),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

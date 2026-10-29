@@ -240,8 +240,8 @@
 - [x] 書き出し：画像の連番（PNG / JPEG、解像度、fps、画質）：書き出しの箱の Format の PNG・JPEG（名前_0001 から 1 枚ずつ）、Resolution・Rate の行が効く。JPEG の画質は ffmpeg の -q:v 2（決まり） — 済（10/28）：`check/film_way.sh`、窓の試験（`workspace_render_dialog_test.dart`）
 - [ ] 書き出し：プロジェクトを素材ごと包んで共有（リンク）（一部）：File › Package Project で書類と素材を 1 つのフォルダに（10/28）。リンクは無い
 - [ ] 書き出し：テンプレートとしても書き出す
-- [ ] プロジェクト一覧：カードに長さ・縦横比・解像度・大きさ・fps、日付の見出し
-- [ ] プロジェクト一覧：並べ替え（名前・日付）、選ぶ・書き出す・複製・消す
+- [x] プロジェクト一覧：カードに長さ・縦横比・解像度・大きさ・fps、日付の見出し — 済（10/29）：⌘O・File › Projects… で、開いている書類と同じフォルダの書類を、PC の CapCut のホームの並べ方（横いっぱいの New Project、検索、正方形の絵の格子、下に名前と「容量 | 長さ」）に、AbsentMotion のホーム（HomeScreen.kt、Apache-2.0）の中身で：縦横比と短辺（16:9・1080p、名前の無い形は 1080x1350）、容量（formatBytes）、fps（書類の frame_rate）、最後に変えた日の見出し（d MMMM yyyy、新しい順）。絵と大きさ・長さは一覧を開くときや窓を閉じるときに自分の中にしまった物（motolii_poster、AbsentMotion の saveThumbnail：閉じるときの再生ヘッドのコマ、256）を開かずに読む（motolii_doc_facts）。窓の試験（`workspace_joined_test_3.dart` の ⌘O lists the documents）
+- [ ] プロジェクト一覧：並べ替え（名前・日付）、選ぶ・書き出す・複製・消す（一部）：並べ替え（Date・Name、AbsentMotion の ListHeader）、押して開く、•••で開く・複製（「名前 Copy」、AbsentMotion の edit_layer_copy_name）・ゴミ箱へ（聞いてから、~/.Trash へ移すので戻せる。開いている書類には出さない）— 済（10/29、窓の試験）。まだ：一覧からの書き出し（今は開いてから File › Package Project）
 - [ ] プロジェクト一覧：Templates・Elements のタブ、XML を読み込む
 - [ ] 環境設定：低画質のプレビュー、既定のレイヤーの長さ、音の変換の質（一部）：低画質のプレビューは設定でなく、再生中に描くのが間に合わない時に内側が自動で縮めて描く（Filament の dynamic resolution と同じ考え、止まると元の大きさ：motolii_hand.h の stage_scale）。まだ：既定のレイヤーの長さ（今は書類の終わりまで）、音の変換の質 — 既定のレイヤーの長さも（10/29）：大きさの箱（書類の設定）に New layer length（End と 1〜60 秒、AbsentMotion の設定の New Layer Length と同じ並び：AppSettings.LAYER_DURATIONS）。決めると後から置く図形・文字・写真・手描きがその長さになる（グループの Null と動画は除く、doc_add）。Motolii に環境設定の画面が無いので書類ごとの値。まだ：音の変換の質
 - [x] 取り消し・やり直しが常に画面にある：上の帯の左右の矢印（押すと 1 歩戻る・進む） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
@@ -356,7 +356,7 @@
 - [x] 値を動かすと次のキーが自動で入る：キーのある値を動かすと、その時点にキーが入る — 済：窓の試験（`workspace_joined_test.dart` の Trim：手を離した所にキー）
 - [x] 有料の機能を使うと書き出しに鍵（Motolii は真似しない） — 方針：鍵は付けない。真似しないことがこの行の答え（10/29）
 - [x] Element の伸ばし方の印（イントロの終わり・アウトロの始まり）（一部）：イントロの終わり・アウトロの始まりはグループの Element の札の秒で決める（10/29）。ルーラーの上の黄色い印も 10/29：グループを選ぶと、その Element の札の秒（イントロの終わり・アウトロの始まり）がルーラーの上に小さな黄色い三角で出る（Alight Motion の黄色い印と同じ所、`workspace_joined_test_3.dart` の Re-timing の試験）
-- [ ] プロジェクトの絵にするコマを決める
+- [x] プロジェクトの絵にするコマを決める — 済（10/29）：File › Use Frame as Project Picture で再生ヘッドのコマが書類の絵に（舞台の poster_at、Alight Motion の Set Project Thumbnail）。決めていなければ離れるときの再生ヘッド（AbsentMotion と同じ）。窓の試験（同上）
 - [x] 隠れた操作を作らない（長押しだけの操作は、メニューか右クリックにも出す） — 10/29：窓（skin/book/lib/workspace）に長押しの操作は 0。onLongPress は窓に使われていない検討用の sets/inspector/plans_set.dart だけ
 
 

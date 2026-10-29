@@ -91,6 +91,8 @@ int main(int argc, char** argv) {
         else if (call == "redo" && w.size() == 1) ok = motolii_redo(m);
         else if (call == "at" && w.size() == 2) { const double at = number(1); if (numbers) ok = motolii_at(m, at); }
         else if (call == "still" && w.size() >= 2) ok = motolii_still(m, rest(1).c_str());
+        else if (call == "poster" && w.size() >= 2) ok = motolii_poster(m, rest(1).c_str());   // (the document's own picture, kept in it: motolii_poster)
+        else if (call == "facts" && w.size() >= 2) std::printf("%s\n", motolii_doc_facts(w[1].c_str(), w.size() >= 3 ? w[2].c_str() : nullptr));   // (facts doc [png]: paths without spaces)
         else if (call == "write" && w.size() >= 2) ok = motolii_write(m, rest(1).c_str());
         else if (call == "pack" && w.size() >= 3) { const int n = motolii_pack(m, w[1].c_str(), rest(2).c_str()); ok = n >= 0; if (ok) std::printf("  %d files\n", n); }
         else if (call == "time" && w.size() <= 2) { const double n = w.size() == 2 ? number(1) : 120; if (numbers) motolii_timed(m, (int)n); }   // (so many pictures, 1/60 s apart: more for a steadier number)

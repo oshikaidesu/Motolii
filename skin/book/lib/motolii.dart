@@ -76,6 +76,17 @@ Future<List<String>> _mediaSaid(String lib, String file) => _mediaInfos[file] ??
 /// How long a media file plays, as the discoverer tells it (0: a still, or it cannot be read).
 Future<double> mediaSecondsOf(String lib, String file) async => switch (await _mediaSaid(lib, file)) { final s when s.length >= 5 => double.parse(s[3]), _ => 0 };
 
+/// A document read without opening it (the inside's own, on another isolate): its size and length as it last kept them
+/// (Motolii.poster) and its frames a second, its picture written to [png]; null: it kept none, or it is not one.
+Future<({int wide, int high, double seconds, double rate})?> docFactsOf(String lib, String doc, String png) => Isolate.run(() {
+  final from = doc.toNativeUtf8(), to = png.toNativeUtf8();
+  final said = c.MotoliiBindings(DynamicLibrary.open(lib)).motolii_doc_facts(from, to).toDartString().split(' ');
+  malloc
+    ..free(from)
+    ..free(to);
+  return said.length < 4 ? null : (wide: int.parse(said[0]), high: int.parse(said[1]), seconds: double.parse(said[2]), rate: double.parse(said[3]));
+});
+
 Future<String> mediaInfoOf(String lib, String file) async {
   final said = await _mediaSaid(lib, file);
   if (said.length < 5) return '';

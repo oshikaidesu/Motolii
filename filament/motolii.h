@@ -193,6 +193,8 @@ int motolii_redo(Motolii* m);
 double motolii_seconds(Motolii* m);                                /* how long the document runs */
 int motolii_at(Motolii* m, double seconds);                        /* the stage's moment: sent, not waited for (a later one replaces it); what was drawn, and when, motolii_drawn_at */
 int motolii_pack(Motolii* m, const char* folder, const char* name);   /* the document (as name.motolii) and the files its things are made of, copied into a folder of their own, the copy's words told their names there: how many files (-1: not) */
+int motolii_poster(Motolii* m, const char* png);                   /* the document's own picture (at its poster_at, else now), 256 on its longer side, written to png and kept in the document with its size and length */
+const char* motolii_doc_facts(const char* path, const char* png);  /* a document read without opening it: "wide high seconds rate" as it was last kept, its picture written to png (null: not); "": none kept (any thread) */
 int motolii_still(Motolii* m, const char* png);                    /* the stage as it is now, as a picture */
 int motolii_write(Motolii* m, const char* mp4);                    /* the whole document as a film (.mp4 H.264, .mov HEVC, .gif, .png a picture each: kit_draw.h), with its films' sound; other calls are answered meanwhile (from another thread), but the document is not changed and nothing is held until it is done */
 int motolii_rate(Motolii* m);                                      /* how many pictures a second that film has (a shell that counts in frames counts in these) */

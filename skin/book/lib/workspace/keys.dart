@@ -12,6 +12,7 @@ import 'package:flutter/widgets.dart';
 /// standard Mac ones (New, Undo, Cut, Copy, Paste, Select All), and the stage's tools.
 const defaultKeys = <(String, String)>[
   ('cmd+n', 'file.new'),
+  ('cmd+o', 'file.home'),   // (the documents listed: the Mac's own Open, as Alight Motion's home lists its projects)
   ('cmd+shift+r', 'file.render'),   // (Live 42.3: Export Audio/Video)
   ('shift+e', 'file.exportFrame'),   // (Premiere Pro's Export Frame)
   ('cmd+z', 'edit.undo'),

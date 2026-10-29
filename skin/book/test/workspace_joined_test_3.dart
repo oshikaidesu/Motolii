@@ -1635,4 +1635,46 @@ void _tests3() {
     await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
+  testWidgets('⌘O lists the documents beside it as CapCut\'s desktop home lays them, told as Alight Motion\'s are: its picture, length, shape, resolution, size and rate, by day or by name; a copy made, the copy opened; File › Use Frame as Project Picture', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    expect(m.add('picture', '$motoliiDir/fx_sample.jpg'), isNot(0), reason: m.trouble);
+    ws.reread();
+    await t.pumpAndSettle();
+    final file = t.widget<PlatformMenuBar>(find.byType(PlatformMenuBar)).menus.whereType<PlatformMenu>().firstWhere((e) => e.label == 'File');
+    ws.frame = 60;
+    file.menus.expand((e) => e is PlatformMenuItemGroup ? e.members : [e]).firstWhere((e) => e.label == 'Use Frame as Project Picture').onSelected!();
+    expect(m.value(0, 'poster_at', 0), closeTo(1, 1e-6), reason: 'the moment its picture is drawn at');
+    await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await t.sendKeyEvent(LogicalKeyboardKey.keyO);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await t.pump();
+    expect(find.byKey(const ValueKey('ws-home')), findsOneWidget);
+    final doc = '${ws.documentFolder}/${ws.document}', facts = find.byKey(ValueKey('home-facts:$doc'));
+    for (var i = 0; i < 100 && !(t.widget<Text>(facts).data ?? '').contains('fps'); i++) {   // (read on another isolate)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await t.pump();
+    }
+    expect(t.widget<Text>(facts).data, allOf(contains('16:9'), contains('1080p'), contains('60fps')), reason: 'as the document kept it as the list was opened');
+    expect(find.textContaining(RegExp(r'B \| 00:08$')), findsOneWidget, reason: 'its size and length under its name, as CapCut\'s "254.3M | 02:13"');
+    await t.tap(find.byKey(ValueKey('home-more:$doc')));
+    await t.pump();
+    await t.tap(find.byKey(ValueKey('home-duplicate:$doc')));
+    await t.pump();
+    final name = ws.document!.replaceFirst(RegExp(r'\.motolii$'), ''), copy = '${ws.documentFolder}/$name Copy.motolii';
+    expect(File(copy).existsSync(), isTrue, reason: 'AbsentMotion\'s "Name Copy"');
+    await t.tap(find.byKey(const ValueKey('home-by-name')));
+    await t.pump();
+    final at = t.getTopLeft(find.byKey(ValueKey('home-doc:$doc'))), copyAt = t.getTopLeft(find.byKey(ValueKey('home-doc:$copy')));
+    expect(at.dy < copyAt.dy || (at.dy == copyAt.dy && at.dx < copyAt.dx), isTrue, reason: 'by name: it before its copy, in the grid\'s reading order');
+    final first = ws.inside;
+    await t.tap(find.byKey(ValueKey('home-doc:$copy')));
+    for (var i = 0; i < 100 && identical(ws.inside, first); i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await t.pump();
+    }
+    await settled(t, ws);
+    expect([ws.document, find.byKey(const ValueKey('ws-home')).evaluate().length], ['$name Copy.motolii', 0], reason: 'the copy opened, the list gone');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
 }
