@@ -503,6 +503,22 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('the Text tool\'s row has its font, size, alignment and colour in one row, as Alight Motion\'s text bar', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final words = m.add('text', _font);
+    expect(m.say(words, 'fill', 'ff3366'), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$words');
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('ws-tool-5')));
+    await t.pumpAndSettle();
+    final strip = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_OptionsStrip');
+    expect([for (final l in ['Font', 'Size', 'L', 'Fill']) find.descendant(of: strip, matching: find.text(l)).evaluate().length], [1, 1, 1, 1]);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Scale Assist is put on from the Effects shelf, as Alight Motion\'s effect is; its card only then', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

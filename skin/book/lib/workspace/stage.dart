@@ -373,6 +373,7 @@ class _OptionsStrip extends StatelessWidget {
           if (t != null) ws.after(ws.inside!.later('set', thing: t, name: 'align', number: i / 2));   // (without waiting)
         },
       ),
+      _Field('Fill', swatch: p.fill ?? WsT.body),   // (and its colour, in the same row: Alight Motion's text bar, align, font, size, colour)
     ],
   };
 
