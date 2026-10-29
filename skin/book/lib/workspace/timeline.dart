@@ -360,6 +360,16 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     return _frames[l.id]?.$2;
   }
 
+  // A shape's form and its fill, as the document says them: its own small picture at the row's left.
+  // (no fill: its outline in its stroke's colour)
+  (String, Color?, bool)? _formOf(Ws ws, WsLayer l) {
+    final m = ws.inside, t = int.tryParse(l.id);
+    if (m == null || t == null || m.word(t, 'kind') != 'shape') return null;
+    Color? colour(String hex) => hex.length == 6 && int.tryParse(hex, radix: 16) != null ? Color(0xFF000000 | int.parse(hex, radix: 16)) : null;
+    final outline = m.word(t, 'fill') == 'none';
+    return (m.word(t, 'shape'), colour(m.word(t, outline ? 'stroke' : 'fill')), outline);
+  }
+
   // A photo on its bar: itself, read once small (as tall as a bar needs), laid along the bar again and again as
   // Alight Motion's photo bar is (reports/alight_ui.md: タイムラインの絵); one Flutter cannot read: none.
   List<ui.Image>? _stillOf(String file, String id) {
@@ -439,6 +449,9 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
           clipped: l.clipped,
           wave: _waveOf(ws, l),
           frames: _framesOf(ws, l),
+          form: _formOf(ws, l)?.$1,
+          fill: _formOf(ws, l)?.$2,
+          outline: _formOf(ws, l)?.$3 ?? false,
           tone: l.tone,
           mix: _mixOf(ws, l.id),
         ),

@@ -197,6 +197,20 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('each row shows its own small picture at its left, as Alight Motion\'s: a shape its form in its fill (no fill: its outline in its stroke)', (t) async {
+    final j = _joined(), m = j.ws.inside!;
+    final star = m.add('shape', 'star'), ring = m.add('shape', 'circle');
+    expect(m.say(star, 'fill', 'ff3366') && m.say(ring, 'fill', 'none') && m.say(ring, 'stroke', '00ff00'), isTrue, reason: m.trouble);
+    j.ws.reread();
+    await _pump(t, j.ws);
+    final rows = (t.widget<CustomPaint>(find.byWidgetPredicate((w) => w is CustomPaint && w.painter is WtTracksPainter)).painter! as WtTracksPainter).rows;
+    WtRow of(int thing) => rows[j.ws.layers.indexWhere((l) => l.id == '$thing')];
+    expect([of(star).form, of(star).fill, of(star).outline], ['star', const Color(0xFFFF3366), false]);
+    expect([of(ring).form, of(ring).fill, of(ring).outline], ['circle', const Color(0xFF00FF00), true]);
+    expect(find.byType(WtThumb), findsNWidgets(j.ws.layers.length), reason: 'every row: its picture, or its kind\'s mark');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
   testWidgets('the transport steps and the zoom buttons', (t) async {
     final j = _joined();
     await _pump(t, j.ws);

@@ -69,7 +69,7 @@ class _LabelRowState extends State<_LabelRow> {
           dim: r.dim,
           hot: _h,
           onSelect: widget.onSelect,
-          kind: WtKindChip(r.kind, dim: r.dim, tone: r.tone),
+          kind: WtThumb(r),   // (its own small picture, as Alight Motion's row)
           eye: _Toggle(widget.hidden ? TpGlyph.eyeOff : TpGlyph.eye, on: false, lit: !widget.hidden, onTap: widget.onEye),
           solo: _Toggle(TpGlyph.solo, on: widget.solo, lit: _h || sel, onTap: widget.onSolo),
           lock: _Toggle(r.locked ? TpGlyph.lock : TpGlyph.unlock, on: false, lit: r.locked || _h || sel, strong: r.locked, onTap: widget.onLock),

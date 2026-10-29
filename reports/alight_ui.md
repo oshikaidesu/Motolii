@@ -185,7 +185,7 @@ Alight Motion 6.2.60（Android）を、エミュレーターで 1 画面ずつ�
 - **効果ごとのプリセット**：Standard Settings のほかに、Brightness / Contrast は「Brighten」、Lens Flare は「Vertical Slide」（動きつき）。
 - **最初の値**：多くは足した瞬間に掛かって見える値（Gaussian Blur の Strength 0.150、Glass の Radius 50・光の角度 45°・屈折 0.25、Lens Flare の明るさ 3.0・光 6 本・Screen で重ねる）。ただし Brightness / Contrast は +0% で何も変わらず、その代わりにプリセット「Brighten」がある。
 - **Motolii**：効果の既定値は効果ごとのファイル（ISF・WGSL の頭のつまみ）任せ。「掛かって見える既定値」を決まりにはしていない。効果ごとのプリセットは無い。
-- **タイムラインの絵**：Alight Motion は写真・動画の帯にコマの絵、音の帯に波形（[44](alight_ui/44_image_layer.jpg)、[47](alight_ui/47_video_layer.jpg)、[58](alight_ui/58_audio_layer.jpg)）。Motolii のタイムラインには絵も波形も無い（絵はメディアの棚だけ）。→（10/30 朝）動画の帯はコマの絵 6 つ・音の帯は波形（前から）、写真の帯もその写真を帯に沿って並べる（ユーザー「タイムラインのサムネイルがないのが違和感」）。
+- **タイムラインの絵**：Alight Motion は写真・動画の帯にコマの絵、音の帯に波形（[44](alight_ui/44_image_layer.jpg)、[47](alight_ui/47_video_layer.jpg)、[58](alight_ui/58_audio_layer.jpg)）。Motolii のタイムラインには絵も波形も無い（絵はメディアの棚だけ）。→（10/30 朝）動画の帯はコマの絵 6 つ・音の帯は波形（前から）、写真の帯もその写真を帯に沿って並べる（ユーザー「タイムラインのサムネイルがないのが違和感」）。行の左の小さな絵も Alight Motion どおり（95・106）：写真・動画はその絵、図形は形をその塗りの色で（塗り無しは線の色で輪郭）、カメラ・文字・音・Null は種類の印のまま（文字の行の見本は無いので印のまま）。
 
 ### 隠れた操作（長押し）とタイムライン・キー（[90](alight_ui/90_hidden_multiselect.jpg)〜[95](alight_ui/95_hidden_drag_layer_time.jpg)）
 長押しで出る操作は、画面のどこにも案内が無い。**隠れている操作は「無い」ものとして扱う**（見つけられない操作は、使えないのと同じ）。Alight Motion の悪い所として一律に記録する。

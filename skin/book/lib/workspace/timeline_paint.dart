@@ -62,6 +62,9 @@ class WtRow {
     this.clipped = false,
     this.wave,
     this.frames,
+    this.form,
+    this.fill,
+    this.outline = false,
     this.tone,
     this.mix,
     this.stretches = const [],
@@ -85,6 +88,11 @@ class WtRow {
 
   /// What a film's bar plays, a picture for each of its stretches in turn (null: not a film, or not read yet).
   final List<ui.Image>? frames;
+
+  /// A shape's form (the inside's shape word: rect, circle, star...) and its fill: its own small picture at the row's left.
+  final String? form;
+  final Color? fill;
+  final bool outline;   // (no fill: drawn as its outline, [fill] its stroke's colour)
   final WsKind kind;
   final int inF, outF;
   final List<int> keys;
@@ -107,6 +115,9 @@ class WtRow {
       other.clipped == clipped &&
       identical(other.wave, wave) &&
       identical(other.frames, frames) &&   // (read once a change: the same list until the document changes)
+      other.form == form &&
+      other.fill == fill &&
+      other.outline == outline &&
       listEquals(other.lane, lane) &&
       other.stretches.length == stretches.length &&
       [for (var i = 0; i < stretches.length; i++) other.stretches[i].from == stretches[i].from && other.stretches[i].to == stretches[i].to && other.stretches[i].way == stretches[i].way].every((same) => same);
@@ -482,6 +493,69 @@ class WtOverviewPainter extends CustomPainter {
 // ---------------------------------------------------------------- kind chip
 
 /// A layer's kind: a small square of its hue with the kind drawn in the dark ink.
+/// A row's own small picture, as Alight Motion shows one at the left of each row (reports/alight_ui/95 and 106): a
+/// photo or a film its picture, a shape its form in its own fill; the rest, the mark of its kind (Alight Motion's
+/// camera and sound are marks too; a text's is not seen in its pictures: its mark kept).
+class WtThumb extends StatelessWidget {
+  const WtThumb(this.row, {super.key});
+  final WtRow row;
+  @override
+  Widget build(BuildContext context) {
+    final r = row;
+    if (r.frames case final f? when f.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.all(Shape.r(3)),
+        child: SizedBox.square(dimension: WtM.chip, child: RawImage(image: f.first, fit: BoxFit.cover, opacity: AlwaysStoppedAnimation(r.dim ? .35 : 1))),
+      );
+    }
+    if (r.form case final form? when r.kind == WsKind.shape && form != 'null') {
+      return Container(
+        width: WtM.chip,
+        height: WtM.chip,
+        decoration: BoxDecoration(color: Grey.g20, borderRadius: BorderRadius.all(Shape.r(3))),
+        child: CustomPaint(painter: _FormPainter(form, (r.fill ?? wsTone(r.kind)).withValues(alpha: r.dim ? .35 : 1), outline: r.outline)),
+      );
+    }
+    return WtKindChip(r.kind, dim: r.dim, tone: r.tone);
+  }
+}
+
+class _FormPainter extends CustomPainter {
+  const _FormPainter(this.form, this.ink, {this.outline = false});
+  final String form;
+  final Color ink;
+  final bool outline;
+  @override
+  void paint(Canvas c, Size s) {
+    final b = (Offset.zero & s).deflate(s.width * .16), st = Paint()..color = ink..style = PaintingStyle.stroke..strokeWidth = 1.4..strokeCap = StrokeCap.round;
+    final f = outline ? st : (Paint()..color = ink);
+    Path round(int n, double inner) => Path()
+      ..addPolygon([
+        for (var i = 0; i < n * (inner < 1 ? 2 : 1); i++)
+          b.center + Offset.fromDirection(-math.pi / 2 + i * math.pi * 2 / (n * (inner < 1 ? 2 : 1)), b.width / 2 * (inner < 1 && i.isOdd ? inner : 1)),
+      ], true);
+    switch (form) {
+      case 'rect' || 'solid':
+        c.drawRect(b, f);
+      case 'squircle' || 'chamfer':
+        c.drawRRect(RRect.fromRectAndRadius(b, Radius.circular(b.width * .3)), f);
+      case 'polygon':
+        c.drawPath(round(6, 1), f);
+      case 'star':
+        c.drawPath(round(5, .45), f);
+      case 'line':
+        c.drawLine(b.bottomLeft, b.topRight, st);
+      case 'ring':
+        c.drawOval(b.deflate(1), st);
+      default:   // (circle, and the forms with no small mark of their own: a round in its fill)
+        c.drawOval(b, f);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_FormPainter o) => o.form != form || o.ink != ink || o.outline != outline;
+}
+
 class WtKindChip extends StatelessWidget {
   const WtKindChip(this.kind, {super.key, this.dim = false, this.tone});
   final Color? tone;
