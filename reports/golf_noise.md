@@ -61,3 +61,4 @@
 - [x] ㉟ [P05] 数の欄に打つと 1 字目しか残らない（230 と打って 0、20 と打って 2）：欄を押して選び、打ち始めると、1 字目で打ち込みが始まるが、Flutter の EditableText がデスクトップではフォーカスを受けた時に全部を選ぶ（selectAllOnFocus、macOS・Windows・Linux は既定で true）ので、次の字が置き換えていた — 済（10/30 夜）：数の欄の EditableText に selectAllOnFocus: false（選び方は _startEdit が決める：押して・Return で始めたら全部、打って始めたら最後の字の後ろ）。出典：Flutter の editable_text.dart の selectAllOnFocus。試験：Space の試験で Mac として 2 を打つと、カーソルが 2 の後ろ（直す前は 2 が選ばれていた）
 - [ ] ㊱ [P05]【入口】背景の絵を置くと、元の大きさ（857×657）で一番上に置かれる。背景にするには Scale を打ち、層を一番下へ引く（3 打）
 - [ ] ㊲ [P05]【入口】カメラを動かす所がすぐ見つからない：右下の Camera はレンズとピントだけ。カメラは Create の Layers から足し、Inspector の Orbit（Pitch・Yaw）や Framing に数を打つ。舞台の上でカメラを回す手が無い
+- [ ] ㊳ [P06] 空間に漂う粒子を作るのに 33 打ほど：丸を置き、小さく、2.5D・手前に、Repeater で写し、Inspector を下へ送って Scatter の Spread X・Y・Z と Flow X・Y、Copies の数と間を打つ。一押しの「ほこり」が無い。出典の候補：Alight Motion の Elements（保存した部品を一押しで置く）。Motolii にも部品（Save to My Elements、doc の element）がある → 作った粒子を部品のファイルとして棚に置けば、次からは 1〜2 打（ファイルで済む。エンジン不要）
