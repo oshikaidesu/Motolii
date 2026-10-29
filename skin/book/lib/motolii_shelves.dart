@@ -12,7 +12,11 @@ extension MotoliiShelves on Motolii {
   List<(String, String)> get effects => _folders.putIfAbsent('effects', () => _labelled(_effects(_m).toDartString()));
 
   /// The looks on the shelf (a thing's values, effects and keys kept by a name: doc_looks.h): each one's name and file.
-  List<(String, String)> get looks => _folders.putIfAbsent('looks', () => _labelled(_looks(_m).toDartString()));
+  List<(String, String)> get looks => [for (final l in _kept) if (_labels[l.$1] != 'Element') l];
+
+  /// The elements (a thing kept whole with what it holds, put in linked: Alight Motion's My Elements): each one's name and file.
+  List<(String, String)> get elements => [for (final l in _kept) if (_labels[l.$1] == 'Element') l];
+  List<(String, String)> get _kept => _folders.putIfAbsent('looks', () => _labelled(_looks(_m).toDartString()));
 
   /// The motions a thing may be given (Cavalry's Animators): each one's name and file (a thing's script is the file of the one it has).
   List<(String, String)> get animators => _folders.putIfAbsent('animators', () => _labelled(_animators(_m).toDartString()));

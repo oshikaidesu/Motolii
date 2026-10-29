@@ -239,6 +239,15 @@ class _WorkspaceState extends State<Workspace> {
           ws.reread();
         });
       },
+      'thing.saveElement': () {   // (kept whole, with what it holds, among the elements on the Create shelf: Alight Motion's Save to My Elements)
+        final m = _inside, l = _ws.layer;
+        if (m == null || l == null) return;
+        ws.after(m.later('keep_element', thing: int.parse(l.id), word: l.name), (done, why) {
+          m.forgetFolders();
+          _ws.notice = done ? 'Saved to My Elements: ${l.name}' : 'Not saved: $why';
+          ws.reread();
+        });
+      },
       'edit.pasteStyle': () {   // (on every picked thing, one step)
         final all = {...ws.many, ?ws.selected};
         if (!File(_clipboard('style')).existsSync() || all.isEmpty) return;
@@ -298,6 +307,11 @@ class _WorkspaceState extends State<Workspace> {
         m.later('remove', thing: g);
         ws.after(m.later('together'), (_, _) => ws.reread());
         ws.pickMany([for (final t in kids) '$t']);
+      },
+      'thing.unlinkElement': () {   // (an element put in made a group of its own, no longer following its file: AbsentMotion's Unlink from Asset, ElementUi.kt)
+        final m = _inside, g = int.tryParse(ws.selected ?? '');
+        if (m == null || g == null || m.word(g, 'element').isEmpty) return;
+        ws.after(m.later('say', thing: g, name: 'element', word: ''), (_, _) => ws.reread());
       },
       'thing.split': () {
         final t = int.tryParse(ws.selected ?? '');
@@ -365,6 +379,7 @@ class _WorkspaceState extends State<Workspace> {
               item('Copy Style', 'edit.copyStyle'),
               item('Paste Style', 'edit.pasteStyle'),
               item('Save Look', 'thing.saveLook'),
+              item('Save to My Elements', 'thing.saveElement'),
               item('Select All', 'edit.selectAll'),
             ],
           ),
@@ -376,6 +391,7 @@ class _WorkspaceState extends State<Workspace> {
               item('Group and Mask', 'thing.groupMask'),
               item('Group and Exclude', 'thing.groupExclude'),
               item('Ungroup', 'thing.ungroup'),
+              item('Unlink from Element', 'thing.unlinkElement'),
               item('Split', 'thing.split'),
               item('Extract Sound', 'thing.extractSound'),
               item('Rename', 'thing.rename'),
@@ -441,9 +457,10 @@ class _WorkspaceState extends State<Workspace> {
     final inside = Motolii.open(doc);
     if (inside == null) return;
     _inside = inside;
-    _own = EffectTiles.watch(inside, () {   // (a file put in the maker's own folder: on the shelves at once)
-      if (mounted) _ws.reread();
+    _own = EffectTiles.watch(inside, () {   // (a file put in the maker's own folder: on the shelves at once; an element written over: followed where it is put in)
+      if (mounted) _ws.after(inside.later('follow_elements'), (_, _) => _ws.reread());
     });
+    _ws.after(inside.later('follow_elements'));   // (as the document is opened: AbsentMotion's elements followed as a project is loaded)
     _doc = doc;
     _beside = _documents();
     final id = await inside.texture();

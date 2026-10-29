@@ -200,7 +200,7 @@
 - [x] ベクター描画（ペン）（有る）：いま ペン（Skia でパスを読む） — 済：窓の試験（`workspace_joined_test_2.dart`：押した所に点、最初の点で閉じる、10/28）
 - [x] **手描き（フリーハンド）**（無い→有る）：段の道具の Brush（B、Photoshop・After Effects のブラシのキー）。なぞった道を perfect-freehand（MIT、Steve Ruiz、Dart 版 Adil Hanney）が輪郭にし、閉じたパスの形 1 つに（中点を通る 2 次曲線、perfect-freehand の見本どおり）。太さは Thin・Medium・Thick、色はインク（無ければ白）。1 回で取り消せる — 済（10/28）：窓で Brush でなぞり、文書から読んで確かめた（`skin/book/test/workspace_joined_test_2.dart`）
 - [x] グループ（一部→有る）：いま 関係の group（並びだけ） — 済（10/29）：物のメニューの Group（選んだ物をその真ん中の Null の子にする、1 手）・Group and Mask・Group and Exclude・Ungroup。グループを動かす・回すと中身がついて行く（親子づけ）。グループの不透明度と表示の入り切りも中身全体に効くようにした（Alight Motion のグループと同じ。Null は自分では何も描かないので、その不透明度は中身のもの：`filament/doc_relations.h` の doc_group_opacity）。edit.sh で四角と円をグループにし、グループの不透明度 0.4 で中身が 255 → 170（リニアの 0.4）、隠すと中身も消える
-- [ ] **Elements**（使い回す部品、元とつながる、文字だけ差し替え、Intro・Outro と Freeze・Stretch・Loop の伸ばし方）（無い）
+- [x] **Elements**（使い回す部品、元とつながる、文字だけ差し替え、Intro・Outro と Freeze・Stretch・Loop の伸ばし方）（無い）（一部）：使い回す部品・元とつながる・文字だけ差し替えは 10/29 に済（下の Element の行）。伸ばし方も 10/29 に済：グループの Element の札（Re-timing：freeze・stretch・loop・loop_stretch・blank、End of intro・Start of outro の秒）が部品といっしょに保存され、置いた部品の長さを変えると AbsentMotion の NestedClock（NestedScenes.kt）と同じ写し方で中の物の時刻が決まる（2 秒の部品を 4 秒にして、stretch で 2 秒目が元の 1 秒目、freeze で 1.5 秒目、loop で 1 秒目：窓の試験）。60 個の動く星の部品で 1 枚 6.5 ms
 - [x] ヌル（有る）：いま 形の null — 済：窓の試験（`workspace_joined_test_2.dart` の Create：Null）
 - [x] カメラ（Z、ズーム距離・画角、焦点ぼけ、フォグ）（有る）：いま camera の distance・zoom・focus・aperture、段の fog — 済：窓の試験（`workspace_joined_test_2.dart`、`workspace_desk_test.dart`）、`check/fog_near.sh`
 - [x] カメラを複数置いて切り替える：カメラごとに始まりと長さを決めると、その時に出ている一番手前のカメラで見る（今は 2D の図形もカメラのズームを受ける） — 済（10/28）：`check/camera_switch.sh`
@@ -255,7 +255,7 @@
 - [x] 図形 54 種を絵で選ぶ：Create の棚の Recipes に 54 種（AbsentMotion の shapes.xml と shapes.cpp から）、札はそれぞれの形の絵（flutter_svg） — 済（10/28）：`check/absent_shapes.sh`、窓の試験（`workspace_dock_test.dart`）。まだ：計算する図形の値（半径・尾など）がキーで動かない
 - [ ] 手描き：ペン・ブラシ・塗りつぶし・消しゴム・太さ・色 — 一部（10/29）：段の道具の Brush の欄に Brush・Pen・Fill（Alight Motion の描く道具、AbsentMotion の drawing.cpp の道具 1・0・2：筆圧で太さが変わる帯、同じ太さの線、なぞった形を塗る）と太さ（Thin・Medium・Thick）と色（Fill）。edit.sh で同じ輪の道を 3 つの道具で描き、帯・線・塗った楕円になる（黄色の画素 24621・29427・145793）。まだ：消しゴム（AbsentMotion では同じ手描きの層の中を消す。Motolii は 1 本ずつ別の物なので、消す相手の決め方が要る）
 - [x] 空のグループを足す：Create の棚の Null（見えない物、親にして使う） — 済：窓の試験（`workspace_joined_test_2.dart` の Create：Null）
-- [ ] Element：使い回す部品、元とつながる、文字だけ差し替え、グループに戻す
+- [x] Element：使い回す部品、元とつながる、文字だけ差し替え、グループに戻す — 済（10/29）：Edit › Save to My Elements（Alight Motion のレイヤーの ⋯ と同じ名前、AbsentMotion の saveToMyElements）でグループを中身ごと部品の棚に。Create の棚（Alight Motion の ＋ › Object / Element）の Elements の欄を 2 回押すと、再生位置・画面の真ん中に元とつながったまま入る（AbsentMotion の addElement）。元を保存し直すと置いた先が追いつき（AbsentMotion の withLinkedElements と同じく中身を元から作り直し、置いた先の場所と始まりはそのまま）、その場で変えた文字は残る（Figma のインスタンスの上書きと同じ考え）。Edit › Unlink from Element でただのグループに戻る（AbsentMotion の Unlink from Asset）。窓の試験（`workspace_joined_test_3.dart` の Save to My Elements）
 - [x] レイヤーを左右・上下に反転：Arrange > Flip Horizontal・Flip Vertical（scale_x か scale_y を −1 倍、キーも一緒に） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 画面に合わせる（Fit・Fill・Stretch）：Arrange > Fit to Picture・Fill Picture・Stretch to Picture（見えている箱を絵に合わせ、真ん中を絵の真ん中に） — 済（10/28）：窓の試験
 - [x] クリッピングマスクを作る：舞台の Mask の道具で四角を描く（その物の真後ろに見えない型ができて切り抜く）、または Blending カードの Clip to below で下の物に切り抜く — 済：窓の試験（`workspace_joined_test.dart`・`workspace_joined_test_3.dart`）
@@ -355,7 +355,7 @@
 - [x] Z を動かす帯：Transform カードの Position の Z（2.5D と 3D の物で出る、こすって動かす） — 済：窓の試験（`workspace_joined_test_2.dart` の Space）
 - [x] 値を動かすと次のキーが自動で入る：キーのある値を動かすと、その時点にキーが入る — 済：窓の試験（`workspace_joined_test.dart` の Trim：手を離した所にキー）
 - [x] 有料の機能を使うと書き出しに鍵（Motolii は真似しない） — 方針：鍵は付けない。真似しないことがこの行の答え（10/29）
-- [ ] Element の伸ばし方の印（イントロの終わり・アウトロの始まり）
+- [ ] Element の伸ばし方の印（イントロの終わり・アウトロの始まり）（一部）：イントロの終わり・アウトロの始まりはグループの Element の札の秒で決める（10/29）。まだ：ルーラーの上の黄色い印
 - [ ] プロジェクトの絵にするコマを決める
 - [x] 隠れた操作を作らない（長押しだけの操作は、メニューか右クリックにも出す） — 10/29：窓（skin/book/lib/workspace）に長押しの操作は 0。onLongPress は窓に使われていない検討用の sets/inspector/plans_set.dart だけ
 

@@ -321,6 +321,12 @@ void _make(DockCtx c, String name) {
     c.ws.after(m.later('together'), (done, why) => c.set(() => done ? c.mem.trouble.remove(name) : c.mem.trouble[name] = why));
     return;
   }
+  if (!_asked.containsKey(name)) {
+    if (m.elements.where((e) => e.$1 == name).firstOrNull case final e?) {   // (at the playhead, in the middle, picked: AbsentMotion's addElement)
+      c.ws.after(m.later('element', word: e.$2, number: c.ws.frame / Ws.fps), (done, why) => c.set(() => done ? c.mem.trouble.remove(name) : c.mem.trouble[name] = why), (made) => c.ws.select('$made'));
+    }
+    return;
+  }
   final asked = _asked[name]!;
   c.ws.after(m.later('add', name: asked.$1, word: asked.$2), (done, why) => c.set(() => done ? c.mem.trouble.remove(name) : c.mem.trouble[name] = why), (made) => c.ws.select('$made'));   // (without waiting: picked once made)
 }
@@ -332,7 +338,9 @@ class CreateShelf extends StatelessWidget {
   Widget build(BuildContext context) {
     final makes = [
       _recipesOf(c.ws),
-      ..._makes,
+      _makes.first,
+      _elementsOf(c.ws),
+      ..._makes.skip(1),
       _solids,
       _lights,
     ].where((e) => e.$2.isNotEmpty).toList();
@@ -405,7 +413,7 @@ class _MakeTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final sel = c.sel == m.name;
     final inside = c.ws.inside;
-    final makes = inside != null && (_asked.containsKey(m.name) || _laid.containsKey(m.name) || inside.recipes.any((r) => r.$1 == m.name));
+    final makes = inside != null && (_asked.containsKey(m.name) || _laid.containsKey(m.name) || inside.recipes.any((r) => r.$1 == m.name) || inside.elements.any((e) => e.$1 == m.name));
     return DockHover(
       onTap: () => c.pick(m.name),
       onDoubleTap: makes ? () => _make(c, m.name) : null, // (two presses make it, one step)

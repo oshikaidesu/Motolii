@@ -390,6 +390,119 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Save to My Elements keeps a group whole; its tile on the Create shelf puts it in at the playhead, linked (Alight Motion\'s Elements)', (t) async {
+    final own = Directory.systemTemp.createTempSync('own');
+    final setenv = DynamicLibrary.process().lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32), int Function(Pointer<Utf8>, Pointer<Utf8>, int)>('setenv');
+    final name = 'MOTOLII_OWN'.toNativeUtf8(), path = own.path.toNativeUtf8();
+    setenv(name, path, 1);
+    malloc
+      ..free(name)
+      ..free(path);
+    addTearDown(() {
+      final unsetenv = DynamicLibrary.process().lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>('unsetenv');
+      final n = 'MOTOLII_OWN'.toNativeUtf8();
+      unsetenv(n);
+      malloc.free(n);
+    });
+    final ws = await _pump(t), m = ws.inside!;
+    final g = m.add('shape', 'null'), a = m.add('shape', 'star'), b = m.add('shape', 'circle'), w = m.add('text', _font);
+    expect(m.say(g, 'name', 'Badge') && m.set(a, 'parent', g.toDouble()) && m.set(b, 'parent', g.toDouble()) && m.set(w, 'parent', g.toDouble()) && m.say(w, 'text', 'Sale') && m.set(g, 'x', .6), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$g');
+    await t.pumpAndSettle();
+    final edit = t.widget<PlatformMenuBar>(find.byType(PlatformMenuBar)).menus.whereType<PlatformMenu>().firstWhere((e) => e.label == 'Edit');
+    edit.menus.expand((e) => e is PlatformMenuItemGroup ? e.members : [e]).firstWhere((e) => e.label == 'Save to My Elements').onSelected!();
+    await settled(t, ws);
+    expect([File('${own.path}/elements/Badge.motolii').existsSync(), ws.notice], [true, 'Saved to My Elements: Badge'], reason: m.trouble);
+    ws
+      ..frame = 30
+      ..shelf = 'Create';
+    await t.pumpAndSettle();
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Badge');
+    await t.pumpAndSettle();
+    final tile = find.descendant(of: find.byType(CreateShelf), matching: find.text('Badge')).first;
+    await seen(t, tile);
+    await doubleTap(t, tile);
+    await settled(t, ws);
+    final made = int.parse(ws.selected!);
+    List<int> held() => [for (final x in m.things) if (m.value(x, 'parent', 0) == made) x];
+    expect([made != g, m.word(made, 'element'), m.value(made, 'x', 0), m.value(made, 'start', 0), [for (final x in held()) m.word(x, 'shape')]],
+        [true, '{own}/elements/Badge.motolii', 0, closeTo(30 / Ws.fps, 1e-6), ['star', 'circle', '']], reason: 'in the middle at the playhead, linked, with what it holds: ${m.trouble}');
+    // (the element written again, its star a polygon and its words others: the one put in follows, its own place kept)
+    expect(m.set(made, 'x', -.3) && m.say(a, 'shape', 'polygon') && m.say(w, 'text', 'Big Sale'), isTrue, reason: m.trouble);
+    ws.select('$g');
+    await t.pumpAndSettle();
+    edit.menus.expand((e) => e is PlatformMenuItemGroup ? e.members : [e]).firstWhere((e) => e.label == 'Save to My Elements').onSelected!();
+    await settled(t, ws);
+    ws.after(m.later('follow_elements'));
+    await settled(t, ws);
+    expect([m.value(made, 'x', 0), [for (final x in held()) m.word(x, 'kind') == 'text' ? m.word(x, 'text') : m.word(x, 'shape')]], [-.3, ['polygon', 'circle', 'Big Sale']], reason: 'followed: ${m.trouble}');
+    final words = held().firstWhere((x) => m.word(x, 'kind') == 'text');
+    expect(m.say(words, 'text', 'Ours'), isTrue);   // (its own words, kept when the element changes again: an override)
+    expect(m.say(b, 'shape', 'rect'), isTrue);
+    edit.menus.expand((e) => e is PlatformMenuItemGroup ? e.members : [e]).firstWhere((e) => e.label == 'Save to My Elements').onSelected!();
+    await settled(t, ws);
+    ws.after(m.later('follow_elements'));
+    await settled(t, ws);
+    expect([for (final x in held()) m.word(x, 'kind') == 'text' ? m.word(x, 'text') : m.word(x, 'shape')], ['polygon', 'rect', 'Ours'], reason: 'its own words kept: ${m.trouble}');
+    ws.select('$made');   // (unlinked: a group of its own, the element's changes no longer followed)
+    await t.pumpAndSettle();
+    edit.menus.expand((e) => e is PlatformMenuItemGroup ? e.members : [e]).firstWhere((e) => e.label == 'Unlink from Element').onSelected!();
+    await settled(t, ws);
+    expect(m.say(a, 'shape', 'star'), isTrue);
+    ws.select('$g');
+    await t.pumpAndSettle();
+    edit.menus.expand((e) => e is PlatformMenuItemGroup ? e.members : [e]).firstWhere((e) => e.label == 'Save to My Elements').onSelected!();
+    await settled(t, ws);
+    ws.after(m.later('follow_elements'));
+    await settled(t, ws);
+    expect([m.word(made, 'element'), m.word(held().first, 'shape')], ['', 'polygon'], reason: 'unlinked: ${m.trouble}');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('an element put in longer than it is plays as its Re-timing says: its intro and outro kept, the middle held, stretched or looped (Alight Motion\'s Element settings)', (t) async {
+    final own = Directory.systemTemp.createTempSync('own');
+    final setenv = DynamicLibrary.process().lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32), int Function(Pointer<Utf8>, Pointer<Utf8>, int)>('setenv');
+    final name = 'MOTOLII_OWN'.toNativeUtf8(), path = own.path.toNativeUtf8();
+    setenv(name, path, 1);
+    malloc
+      ..free(name)
+      ..free(path);
+    addTearDown(() {
+      final unsetenv = DynamicLibrary.process().lookupFunction<Int32 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>('unsetenv');
+      final n = 'MOTOLII_OWN'.toNativeUtf8();
+      unsetenv(n);
+      malloc.free(n);
+    });
+    final ws = await _pump(t), m = ws.inside!;
+    final g = m.add('shape', 'null'), a = m.add('shape', 'star');
+    expect(m.say(g, 'name', 'Slide') && m.set(g, 'duration', 2) && m.set(a, 'parent', g.toDouble()) && m.key(a, 'x', 0, 0) && m.key(a, 'x', 2, 1), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$g');
+    await t.pumpAndSettle();
+    expect(m.cards(g).map((c) => c.$1), contains('Element'), reason: 'a group\'s Element card');
+    expect(m.say(g, 'retime', 'stretch') && m.set(g, 'retime_in', .5) && m.set(g, 'retime_out', 1.5), isTrue, reason: m.trouble);
+    final edit = t.widget<PlatformMenuBar>(find.byType(PlatformMenuBar)).menus.whereType<PlatformMenu>().firstWhere((e) => e.label == 'Edit');
+    edit.menus.expand((e) => e is PlatformMenuItemGroup ? e.members : [e]).firstWhere((e) => e.label == 'Save to My Elements').onSelected!();
+    await settled(t, ws);
+    ws.frame = 0;
+    ws.after(m.later('element', word: '${own.path}/elements/Slide.motolii', number: 0), null, (made) => ws.select('$made'));
+    await settled(t, ws);
+    final made = int.parse(ws.selected!), b = m.things.firstWhere((x) => m.value(x, 'parent', 0) == made);
+    expect(m.set(made, 'duration', 4), isTrue, reason: m.trouble);   // (twice as long as it was)
+    Future<double> at(double s) async => (await m.shownAt([(b, 'x', s)])).single!;
+    expect([await at(.25), await at(2), await at(3.75)], [closeTo(.125, 1e-6), closeTo(.5, 1e-6), closeTo(.875, 1e-6)], reason: 'stretch: the intro and outro as they were, the middle drawn out');
+    expect(m.say(made, 'retime', 'freeze'), isTrue);
+    expect(await at(2), closeTo(.75, 1e-6), reason: 'freeze: the middle played, then held');
+    expect(m.say(made, 'retime', 'loop'), isTrue);
+    expect(await at(2), closeTo(.5, 1e-6), reason: 'loop: the middle again');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Scale Assist is put on from the Effects shelf, as Alight Motion\'s effect is; its card only then', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

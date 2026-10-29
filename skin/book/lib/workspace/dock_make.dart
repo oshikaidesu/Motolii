@@ -173,6 +173,10 @@ String createFact(Ws ws) {
 /// Joined: the inside's recipes, pictures in one call (as Cavalry's tutorials build them), each a tile.
 (String, List<_Make>) _recipesOf(Ws ws) => ('Recipes', [for (final (name, what) in ws.inside!.recipes) _Make(name, DockG.copies, Pop.tonePlace, '', what)]);
 
+/// The elements kept (Edit › Save to My Elements), put in at the playhead linked to their file: Alight Motion's + ›
+/// Object / Element › Element, AbsentMotion's ElementPicker (ElementUi.kt).
+(String, List<_Make>) _elementsOf(Ws ws) => ('Elements', [for (final (name, _) in ws.inside!.elements) _Make(name, DockG.nullObj, Grey.g76, '', 'Element, linked to its file')]);
+
 /// A palette taken from a photo: the picture shrunk, its pixels sorted into colours by Google's quantizer
 /// (material_color_utilities, as Material You takes a palette from a wallpaper), each with how many pixels it has
 /// (how much of the picture it is). The photo itself is copied beside the palette and stays there.

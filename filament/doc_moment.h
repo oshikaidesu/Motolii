@@ -18,7 +18,7 @@ static void doc_moment(Doc& d, double now) {
     for (int thing : lie) {
         const auto found = d.shown.find(thing);
         if (found == d.shown.end() || found->second.camera) continue;
-        const double since = now - doc_number(d, thing, "start", 0, 0), lasts = doc_number(d, thing, "duration", 0, -1);
+        const double since = doc_element_now(d, thing, now) - doc_number(d, thing, "start", 0, 0), lasts = doc_number(d, thing, "duration", 0, -1);   // (held in an element put in: at the moment it shows)
         Lies one{thing, &found->second, since >= 0.0 && (lasts < 0.0 || since < lasts) && doc_number(d, thing, "visible", 0, 1) > 0.5 && (!solo || doc_number(d, thing, "solo", 0, 0) > 0.5), found->second.space != 2, since};   // (a sheet in the world settles depth with the solid things)
         lies.push_back(one);
     }

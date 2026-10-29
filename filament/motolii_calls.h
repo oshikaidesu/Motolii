@@ -505,6 +505,9 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "paste") ok = m->made = changes(m, doc_look_paste(doc(m), w.c_str(), number));   // (word: that file; number: when it begins; the answer is the new thing)
             else if (c == "copy_style") ok = (int)doc_look_save(doc(m), thing, w.c_str(), false, n);   // (its look: doc_looks.h; name: only these values, a card's)
             else if (c == "keep_look") ok = (int)doc_look_keep(doc(m), thing, w, n);   // (word: its name on the shelf; name: only these values, a card's)
+            else if (c == "keep_element") ok = (int)doc_element_keep(doc(m), thing, w);   // (word: its name among the elements)
+            else if (c == "element") ok = m->made = changes(m, doc_element_add(doc(m), w.c_str(), number));   // (word: the element's file; number: when it begins; the answer is the new thing)
+            else if (c == "follow_elements") ok = changes(m, doc_elements_follow(doc(m))) >= 0;   // (each element put in whose file was written since made as it is now)
             else if (c == "paste_style") ok = changes(m, (int)doc_look_put(doc(m), thing, w.c_str()));
             else if (c == "remove") ok = changes(m, (int)doc_remove(doc(m), thing));
             else if (c == "relate") ok = changes(m, (int)doc_relate(doc(m), thing, w.c_str(), m->now));
@@ -553,7 +556,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
                 ok = desk_is(m, dw, dh, x, y, sc, pt);
             }
             else if (c == "hold") ok = (int)doc_hold(doc(m), thing);   // (a hand takes hold: what it carries next is this thing's)
-            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, duplicate, split, align, time_align, reset, fit, flip, extract_sound, freehand, brush, outline, copy, paste, copy_style, paste_style, keep_look, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_eye, fx_move, size, watch, pick, desk, live, relate, lead, free, release";
+            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, element, keep_element, follow_elements, duplicate, split, align, time_align, reset, fit, flip, extract_sound, freehand, brush, outline, copy, paste, copy_style, paste_style, keep_look, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_eye, fx_move, size, watch, pick, desk, live, relate, lead, free, release";
             } catch (const std::exception& e) {
                 ok = 0;
                 std::fprintf(stderr, "motolii: %s threw: %s\n", c.c_str(), e.what());

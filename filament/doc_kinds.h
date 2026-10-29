@@ -173,6 +173,9 @@ static const DocValue doc_values[] = {
     {"marker", "picture", 0, 0, false, ""},   // (an After Effects file: which of its named stretches it plays, over and over; all: the whole of it)
     {"name", "film picture text solid shape camera light behaviour", 0, 0, false, ""},   // (what it is called where things are listed, a behaviour too; not said: by what it is)
     {"label", doc_kinds, 0, 0, false, "auto rose orange yellow lime green mint aqua sky blue periwinkle orchid magenta red tangerine azure teal"},   // (its colour on the timeline, chosen: Ableton Live's clip colours in the window's order; auto, one by its number)
+    {"element", doc_kinds, 0, 0, false, ""},   // (the element it was put in from, linked: its file as a look says it, {own}/elements/...; doc_element_add, Alight Motion's Element)
+    {"retime", doc_kinds, 0, 0, false, "freeze stretch loop loop_stretch blank"}, {"retime_in", doc_kinds, 0, 1e6, false, nullptr}, {"retime_out", doc_kinds, 0, 1e6, false, nullptr}, {"element_length", doc_kinds, 0, 1e6, false, nullptr},   // (an element's Re-timing: doc_element_clock)
+    {"element_at", doc_kinds, -1, 1e12, false, nullptr}, {"element_part", doc_kinds, 0, 1e9, false, nullptr}, {"element_text", "text", 0, 0, false, ""},   // (what an element put in keeps of where it came from: doc_element_marks)
     {"note", doc_kinds, 0, 0, false, ""},   // (what a maker wrote of it for whoever opens the document next: After Effects' layer comment)
     {"animation", "solid", 0, 0, false, ""},   // (a 3D file: which of its own movements it plays, round and round, at its speed, from when it comes on)
     // (a light, Filament's own: made a sun, a point or a spot (its file); how strong, 1 as bright as the stage's own

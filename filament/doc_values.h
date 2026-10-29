@@ -106,6 +106,7 @@ static const DocShown doc_shown[] = {
     {"animation", "", "", "Movement", 0, 0, nullptr},
     {"speed", "", "×", "Speed", -4, 4, nullptr},
     {"speed_hold", "", "", "Hold at", 0, 0, nullptr},
+    {"retime", "", "", "Re-timing", 0, 0, nullptr}, {"retime_in", "", "s", "End of intro", 0, 10, nullptr}, {"retime_out", "", "s", "Start of outro", 0, 10, nullptr},   // (an element's, Alight Motion's)
     {"frame_rate", "", "fps", "Frame rate", 0, 60, nullptr},   // (0: as smooth as the stage)
     {"volume", "share", "%", "Volume", 0, 2, nullptr},   // (1 shown as 100%, as Alight Motion shows it)
     {"beats", "", "dB", "Beats", 0, 30, nullptr},
@@ -350,6 +351,7 @@ static const DocCard doc_cards[] = {
     {"Sound", "volume beats", "kind", "film"},   // (its beats: shown on the timeline's ruler where it strikes)
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Parent", "parent_rotate parent_size roll roll_radius", "parent", "!0"},   // (Alight Motion's Parenting Helper: how much of its parent's turn and size it takes, and rolling as a wheel; while it has a parent)
+    {"Element", "retime retime_in retime_out", "shape", "null"},   // (a group's, kept with it as an element: how it is played when put in longer or shorter, Alight Motion's Element settings' Re-timing and its marks)
     {"Scale Assist", "scale_assist scale_assist_amount scale_assist_damp", "scale_assist", "!"},   // (Alight Motion's Scale Assist: one way grown alone, or both, kept as bulky as it was; once put on from the Effects shelf, as its effect is: looks/Scale Assist.motolii)
     {"Connect", "connect connect_to connect_reach"},
     {"Line", "cap join dash dash_offset heads head_shape head_start head_size"},   // (and its open ends' shapes: Cavalry's heads, Alight Motion's line start and end)
@@ -449,10 +451,52 @@ static double doc_went_by(Doc& d, const std::string& own, double u, double t, do
 static double doc_keys_at(Doc& d, const Doc::Keys& k, double at, double otherwise);
 // Where a value's keys are kept (read from the facts once, as doc_number reads them): kept until the document changes.
 static const Doc::Keys& doc_keys_of(Doc& d, int thing, const char* name);
+static std::string doc_word(Doc& d, int thing, const char* name);
+// The element put in that a thing is held in (a group above it put in from an element, doc_element_add): 0 none.
+static int doc_element_above(Doc& d, int thing) {
+    for (int p = thing, n = 0; p && n < 64; ++n) {
+        const Doc::Keys& up = doc_keys_of(d, p, "parent");
+        p = up.value.empty() ? 0 : (int)up.value.front();
+        if (const Doc::Keys& was = doc_keys_of(d, p, "element_length"); p && !was.value.empty() && was.value.front() > 0.0) return p;
+    }
+    return 0;
+}
+// The moment of itself an element put in shows at `at`, as long as it is now against as long as it was: its intro and
+// outro as they were, the middle held, stretched, looped or looped and stretched between, or nothing after its end
+// (Alight Motion's Re-timing; AbsentMotion's NestedClock, NestedScenes.kt, its at(): Apache-2.0, Copyright 2026 The
+// AbsentMotion authors; in seconds, not rounded to the middles of frames). -1e9: not seen then (Blank).
+static double doc_element_clock(Doc& d, int el, double at) {
+    const double origin = doc_keys_at(d, doc_keys_of(d, el, "start"), 0, 0), scene_end = doc_keys_at(d, doc_keys_of(d, el, "element_length"), 0, 0);
+    const double lasts = doc_keys_at(d, doc_keys_of(d, el, "duration"), 0, -1), layer_end = lasts > 0.0 ? lasts : scene_end;
+    const std::string method = doc_word(d, el, "retime");
+    const double local = at - origin;
+    if (method == "blank") return local < scene_end ? at : -1e9;
+    const double intro = std::clamp(doc_keys_at(d, doc_keys_of(d, el, "retime_in"), 0, 0), 0.0, scene_end), out = doc_keys_at(d, doc_keys_of(d, el, "retime_out"), 0, 0);
+    const double outro = out > 0.0 ? std::clamp(out, intro, scene_end) : scene_end, outro_start = layer_end - (scene_end - outro), room = outro_start - intro, span = outro - intro;
+    double mapped = local;
+    if (local >= outro_start) mapped = outro + local - outro_start;
+    else if (local >= intro) {
+        const double into = local - intro;
+        if (method == "stretch" && room > 0.0) mapped = intro + into * span / room;
+        else if (method == "loop") mapped = intro + (span > 0.0 ? std::fmod(into, span) : 0.0);
+        else if (method == "loop_stretch" && span > 0.0 && room > 0.0) {
+            const double each = room / std::max(1.0, std::round(room / span));
+            mapped = intro + std::fmod(into, each) * span / each;
+        } else mapped = intro + std::min(into, span);   // (Freeze, as an element is made)
+    }
+    return origin + mapped;
+}
+// The moment a thing is at, as the element put in that holds it shows it (none: the stage's own).
+static double doc_element_now(Doc& d, int thing, double at) {
+    const int el = thing ? doc_element_above(d, thing) : 0;
+    return el ? doc_element_clock(d, el, at) : at;
+}
 // Time Quantization (Alight Motion's; After Effects' Posterize Time): a thing with a frame_rate is seen only at its own
 // frames, counted from its start: a value that moves is read at the frame the moment is in. 0: as smooth as the stage.
+// (Held in an element put in, first the moment the element shows: doc_element_now.)
 static double doc_stepped(Doc& d, int thing, const Doc::Keys& k, double at) {
     if (k.at.size() < 2 || !thing) return at;
+    at = doc_element_now(d, thing, at);
     const Doc::Keys& rate = doc_keys_of(d, thing, "frame_rate");
     if (rate.value.empty() || !(rate.value.front() > 0.0)) return at;
     const Doc::Keys& from = doc_keys_of(d, thing, "start");

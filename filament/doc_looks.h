@@ -6,7 +6,7 @@
 // session records, one step of undo as any other. A file it names in the library's folders or the maker's own is kept
 // as {motolii}/... or {own}/... (doc_folders), so a look made on one machine finds its effects on another (words only: a number stays a number).
 // After Effects' animation presets (.ffx: effects and their keys), Alight Motion's Save as Preset and Paste Style.
-static const char* const doc_look_kept_out = "'kind','file','text','shape','path','x','y','z','parent'";   // (what it is: a shape's own figure and drawn path too)
+static const char* const doc_look_kept_out = "'kind','file','text','shape','path','x','y','z','parent','element'";   // (what it is: a shape's own figure and drawn path too)
 static const char* const doc_look_placed = "'size','scale_x','scale_y','rotate','rotate_x','rotate_y','orient'";   // (kept only when keyed: a pulse is a look, a size is not)
 static const char* const doc_look_links = "'parent','mosh_with','copy_on','connect','connect_to','boolean_with','trail','morph_to'";   // (values that are another thing's number: doc_kinds.h)
 
@@ -108,8 +108,9 @@ static bool doc_look_put(Doc& d, int thing, const char* path) {
 // A copy (doc_look_save whole) made a thing again, the newest number (Edit > Paste): it begins at `now`, its keys moved
 // with it (as doc_keys_by moves a thing's), as Ableton Live pastes at the insert marker; the behaviours it carried and
 // what a group held made anew after it, in their order, moved in time with it, each link among them told the new
-// numbers. One step.
-static int doc_look_paste(Doc& d, const char* path, double now) {
+// numbers. One step (with `also`, more said of them in it: SQL, the copy's things as pasted_as says them; `before`,
+// said first). into: its first thing one already here, kept as it is, what the copy holds made anew in it.
+static int doc_look_paste(Doc& d, const char* path, double now, const char* also = "", int into = 0, const char* before = "") {
     if (d.act) return d.trouble = "a copy is pasted by itself, not within another act", 0;   // (SQLite attaches outside a transaction)
     const auto roots = doc_look_roots();
     char* attach = sqlite3_mprintf("attach database 'file:%q?mode=ro' as look", path);
@@ -128,7 +129,8 @@ static int doc_look_paste(Doc& d, const char* path, double now) {
     std::string made_all;   // (each thing of the copy a thing anew: its number there, its number here)
     sqlite3_prepare_v2(d.file, "select distinct thing from look.fact order by thing", -1, &q, nullptr);
     while (q && sqlite3_step(q) == SQLITE_ROW) {
-        char* one = sqlite3_mprintf("insert into thing default values; insert into pasted_as values(%d, last_insert_rowid());", sqlite3_column_int(q, 0));
+        const int k = sqlite3_column_int(q, 0);
+        char* one = into && k == 1 ? sqlite3_mprintf("insert into pasted_as values(1, %d);", into) : sqlite3_mprintf("insert into thing default values; insert into pasted_as values(%d, last_insert_rowid());", k);
         made_all += one;
         sqlite3_free(one);
     }
@@ -137,12 +139,14 @@ static int doc_look_paste(Doc& d, const char* path, double now) {
     const double by = now - was;
     if (!kind) d.trouble = "that is no copy of a thing";
     else if (doc_change(d, sqlite3_mprintf(
-                 "create temp table if not exists pasted_as(was integer, id integer); delete from pasted_as;%s"
+                 "create temp table if not exists pasted_as(was integer, id integer); delete from pasted_as;%s%s"
                  "insert into fact select p.id, name, case when exists (select 1 from look.fact as o where o.thing = f.thing and o.name = f.name and (o.at <> 0 or o.way is not null)) then at + %!.17g else at end,"
-                 " case when name = 'start' then max(0, value + %!.17g) when typeof(value) = 'text' then replace(replace(value, '{motolii}/', %Q), '{own}/', %Q) else value end, way from look.fact as f join pasted_as as p on p.was = f.thing;"
-                 "update fact set value = (select id from pasted_as where was = cast(fact.value as integer)) where thing in (select id from pasted_as)"
+                 " case when name = 'start' then max(0, value + %!.17g) when typeof(value) = 'text' then replace(replace(value, '{motolii}/', %Q), '{own}/', %Q) else value end, way from look.fact as f join pasted_as as p on p.was = f.thing where p.id != %d;"
+                 "insert into fact(thing, name, at, value) select p.id, 'start', 0, max(0, %!.17g) from pasted_as as p where %!.17g > 0 and p.id != %d"   // (one that began at the first moment, said by nothing: begins later as much as the rest)
+                 " and not exists (select 1 from look.fact where thing = p.was and name = 'start') and (select value from look.fact where thing = p.was and name = 'kind' and at = 0) <> 'behaviour';"
+                 "update fact set value = (select id from pasted_as where was = cast(fact.value as integer)) where thing in (select id from pasted_as) and thing != %d"
                  " and (name like '%%\\_by' escape '\\' or (thing != (select id from pasted_as where was = 1) and name in (%s))) and cast(value as integer) in (select was from pasted_as);"
-                 "insert or ignore into way select * from look.way;", made_all.c_str(), by, by, roots.first.c_str(), roots.second.c_str(), doc_look_links)))
+                 "insert or ignore into way select * from look.way;%s", before, made_all.c_str(), by, by, roots.first.c_str(), roots.second.c_str(), into, by, by, into, into, doc_look_links, also)))
         doc_rows(d, sqlite3_mprintf("select id from pasted_as where was = 1"), [&](sqlite3_stmt* row) { made = sqlite3_column_int(row, 0); });
     sqlite3_exec(d.file, "detach database look", nullptr, nullptr, nullptr);
     return made;
@@ -197,13 +201,95 @@ static int doc_pack(Doc& d, const std::string& folder, const std::string& name) 
 }
 
 // The looks on the shelf: looks/*.motolii in the library's folder and the maker's own (doc_folders), as the effects
-// are ("name\tpath\tlabel\tpicture", one to a line): its name the file's, its picture the .png beside it.
+// are ("name\tpath\tlabel\tpicture", one to a line): its name the file's, its picture the .png beside it. Then the
+// elements, elements/*.motolii, labelled Element (Alight Motion's My Elements: doc_element_keep).
 static std::string doc_look_names() {
     std::string all;
     std::error_code wrong;
-    for (const auto& f : doc_folder_files("looks", ".motolii")) {
-        const std::filesystem::path picture = std::filesystem::path(f).replace_extension(".png");
-        all += (all.empty() ? "" : "\n") + f.stem().string() + "\t" + f.string() + "\tLook\t" + (std::filesystem::exists(picture, wrong) ? picture.string() : "");
-    }
+    for (const char* kind : {"looks", "elements"})
+        for (const auto& f : doc_folder_files(kind, ".motolii")) {
+            const std::filesystem::path picture = std::filesystem::path(f).replace_extension(".png");
+            all += (all.empty() ? "" : "\n") + f.stem().string() + "\t" + f.string() + (kind[0] == 'l' ? "\tLook\t" : "\tElement\t") + (std::filesystem::exists(picture, wrong) ? picture.string() : "");
+        }
     return all;
+}
+// The thing kept as an element by its name, whole, with what it holds (Alight Motion's Save to My Elements; AbsentMotion's
+// saveToMyElements, ElementActions.kt): in the maker's own elements folder, one of that name written over.
+static bool doc_element_keep(Doc& d, int thing, const std::string& name) {
+    if (name.empty() || name.find_first_of("/\\:") != std::string::npos) return d.trouble = "an element's name is a file's name", false;
+    std::error_code wrong;
+    const std::filesystem::path dir = doc_folders("elements").back();
+    std::filesystem::create_directories(dir, wrong);
+    return doc_look_save(d, thing, (dir / (name + ".motolii")).string().c_str(), true);
+}
+// When an element's file was last written (seconds), as an instance keeps it to know it has changed since.
+static double doc_element_written(const std::string& path) {
+    std::error_code wrong;
+    const auto at = std::filesystem::last_write_time(path, wrong);
+    return wrong ? -1.0 : std::chrono::duration<double>(at.time_since_epoch()).count();
+}
+// What each thing an element put in holds keeps of where it came from (said with the paste, as pasted_as says them):
+// which of the element's things it is (element_part), a text's words as the element said them (element_text: words
+// of its own since are its own, kept when the element changes: an override, as a Figma instance keeps one), and on
+// the first, when the file was written (element_at), its Re-timing and how long it is (element_length).
+static std::string doc_element_marks(double written) {
+    char* marks = sqlite3_mprintf("insert or replace into fact(thing, name, at, value) select id, 'element_part', 0, was from pasted_as where was != 1;"
+                                  "insert or replace into fact(thing, name, at, value) select p.id, 'element_text', 0, f.value from pasted_as as p join look.fact as f on f.thing = p.was and f.name = 'text' and f.at = 0;"
+                                  "insert or replace into fact(thing, name, at, value) select id, 'element_at', 0, %!.17g from pasted_as where was = 1;"
+                                  "delete from fact where thing = (select id from pasted_as where was = 1) and name in ('retime', 'retime_in', 'retime_out', 'element_length');"   // (and its Re-timing as the element says it, and how long the element is)
+                                  "insert into fact(thing, name, at, value) select p.id, f.name, 0, f.value from pasted_as as p join look.fact as f on f.thing = 1 and f.at = 0 and f.name in ('retime', 'retime_in', 'retime_out') where p.was = 1;"
+                                  "insert into fact(thing, name, at, value) select p.id, 'element_length', 0, f.value from pasted_as as p join look.fact as f on f.thing = 1 and f.at = 0 and f.name = 'duration' where p.was = 1;", written);
+    std::string said = marks;
+    sqlite3_free(marks);
+    return said;
+}
+// An element put in at `now`, the newest thing, in the stage's middle, linked to its file (its `element`, the file as a
+// look says it: AbsentMotion's addElement, ElementActions.kt, an embedScene at the scene's centre with its link). One step.
+static int doc_element_add(Doc& d, const char* path, double now) {
+    const auto roots = doc_look_roots();
+    std::string word = path;
+    for (const auto& [root, said] : {std::pair{roots.first, "{motolii}/"}, std::pair{roots.second, "{own}/"}})
+        if (word.rfind(root, 0) == 0) word = said + word.substr(root.size());
+    char* also = sqlite3_mprintf("delete from fact where thing = (select id from pasted_as where was = 1) and name in ('x', 'y', 'element');"
+                                 "insert into fact(thing, name, at, value) select id, 'x', 0, 0 from pasted_as where was = 1 union all select id, 'y', 0, 0 from pasted_as where was = 1"
+                                 " union all select id, 'element', 0, %Q from pasted_as where was = 1;%s", word.c_str(), doc_element_marks(doc_element_written(path)).c_str());
+    const int made = doc_look_paste(d, path, now, also);
+    sqlite3_free(also);
+    return made;
+}
+// Each element put in whose file was written since follows it (AbsentMotion's ProjectStore.kt withLinkedElements: a
+// linked embedScene's scene replaced by the element's as it is now): what it held made anew from the file, it kept
+// as it is (where it lies, when it begins), each text whose words are its own since given them again. One step each.
+// How many followed.
+static int doc_elements_follow(Doc& d) {
+    const auto roots = doc_look_roots();
+    int n = 0;
+    for (const int one : doc_things(d)) {
+        std::string path = doc_word(d, one, "element");
+        if (path.empty()) continue;
+        if (path.rfind("{motolii}/", 0) == 0) path = roots.first + path.substr(10);
+        else if (path.rfind("{own}/", 0) == 0) path = roots.second + path.substr(6);
+        const double written = doc_element_written(path);
+        if (written < 0 || written == doc_number(d, one, "element_at", 0, -1)) continue;
+        std::vector<int> held{one};   // (it and all it holds, and theirs)
+        std::string gone, kept;
+        for (size_t i = 0; i < held.size(); ++i)
+            for (const int t : doc_things(d))
+                if (t != held[i] && (int)doc_number(d, t, "parent", 0, 0) == held[i] && std::find(held.begin(), held.end(), t) == held.end()) {
+                    held.push_back(t);
+                    char* g = sqlite3_mprintf("delete from fact where thing = %d;", t);
+                    gone += g;
+                    sqlite3_free(g);
+                    const std::string words = doc_word(d, t, "text");
+                    const int part = (int)doc_number(d, t, "element_part", 0, 0);
+                    if (part && doc_word(d, t, "kind") == "text" && words != doc_word(d, t, "element_text")) {
+                        char* k = sqlite3_mprintf("update fact set value = %Q where thing = (select id from pasted_as where was = %d) and name = 'text' and at = 0;", words.c_str(), part);
+                        kept += k;
+                        sqlite3_free(k);
+                    }
+                }
+        const std::string also = doc_element_marks(written) + kept;
+        n += doc_look_paste(d, path.c_str(), doc_number(d, one, "start", 0, 0), also.c_str(), one, gone.c_str()) == one;
+    }
+    return n;
 }
