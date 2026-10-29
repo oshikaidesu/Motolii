@@ -4,15 +4,43 @@ part of 'timeline.dart';
 extension _WsTimelineHand on _WsTimelineState {
   // ---------------------------------------------------------------- input
 
+  // The row under a height: its place, its layer, and the value whose lane it is (null: the layer's own row).
+  ({int i, WsLayer l, String? value})? _rowAt(double y) {
+    final i = ((y + _vscroll) / WtM.row).floor();
+    if (i < 0 || i >= _order.length) return null;
+    return (i: i, l: _ws!.layers[_order[i].layer], value: _order[i].value);
+  }
+
+  // A tap on a value's lane, as on Ableton's envelope (Live 12 manual 25.5.2): on a breakpoint, it is taken away; on
+  // the line, one is put there (the value the thing has there). Each one step.
+  void _laneTap(Offset p) {
+    final ws = _ws!, m = ws.inside, r = _rowAt(p.dy), v = _view;
+    if (m == null || r == null || r.value == null || _isLocked(ws, r.l.id)) return;
+    final t = int.parse(r.l.id), name = r.value!, row = _laneRow(ws, r.l, name), pts = row.lane ?? const [];
+    if (pts.isEmpty) return;
+    for (final k in m.keyMoments(t, name)) {
+      if ((v.x((k * Ws.fps).round()) - p.dx).abs() <= WtM.keyPicked + 2) return ws.after(m.later('unkey', thing: t, name: name, number: k));
+    }
+    final f = v.frameAt(p.dx), top = r.i * WtM.row - _vscroll + 4, h = WtM.row - 9;
+    var at = pts.first.$2;   // (the line: level before the first and after the last, straight between)
+    for (var i = 0; i < pts.length; i++) {
+      if (f >= pts[i].$1) at = pts[i].$2;
+      if (i + 1 < pts.length && f >= pts[i].$1 && f < pts[i + 1].$1) at = pts[i].$2 + (pts[i + 1].$2 - pts[i].$2) * (f - pts[i].$1) / (pts[i + 1].$1 - pts[i].$1);
+    }
+    if ((top + (1 - at) * h - p.dy).abs() > 5) return;   // (off the line: Ableton puts one there by a double click)
+    ws.after(m.later('key_here', thing: t, name: name, number: f.round().clamp(0, Ws.duration) / Ws.fps));
+  }
+
   void _trackDown(Offset p) {
     final ws = _ws!, v = _view;
-    final i = ((p.dy + _vscroll) / WtM.row).floor();
-    if (i < 0 || i >= ws.layers.length) { // (below the rows: nothing picked, After Effects' manner; joined, the inspector is then the whole picture's)
+    final r = _rowAt(p.dy);
+    if (r == null) { // (below the rows: nothing picked, After Effects' manner; joined, the inspector is then the whole picture's)
       ws.clearKeys();
       ws.select(null);
       return;
     }
-    final l = ws.layers[i];
+    if (r.value != null) return;   // (a lane: its tap is the lane's, on the hand's way up)
+    final i = r.i, l = r.l;
     final cy = i * WtM.row - _vscroll + WtM.row / 2;
     if (!_isLocked(ws, l.id) && (p.dy - cy).abs() <= WtM.bar / 2 + 2) {
       int? best;
@@ -35,9 +63,13 @@ extension _WsTimelineHand on _WsTimelineState {
   }
 
   MouseCursor _cursorAt(Offset p) {
-    final ws = _ws!, v = _view, i = ((p.dy + _vscroll) / WtM.row).floor();
-    if (i < 0 || i >= ws.layers.length) return MouseCursor.defer;
-    final l = ws.layers[i], a = v.x(l.inF), b = v.x(l.outF);
+    final ws = _ws!, v = _view, r = _rowAt(p.dy);
+    if (r == null) return MouseCursor.defer;
+    final l = r.l, a = v.x(l.inF), b = v.x(l.outF);
+    if (r.value case final n?) {   // (a lane: over a breakpoint, it is taken by a click)
+      final t = int.parse(l.id);
+      return ws.inside!.keyMoments(t, n).any((k) => (v.x((k * Ws.fps).round()) - p.dx).abs() <= WtM.keyPicked + 2) ? SystemMouseCursors.click : SystemMouseCursors.precise;
+    }
     if (_isLocked(ws, l.id) || p.dx < a - 6 || p.dx > b + 6) return SystemMouseCursors.precise;
     if (l.keys.any((k) => (v.x(k) - p.dx).abs() <= WtM.keyPicked + 2)) return SystemMouseCursors.click;
     return (p.dx - a).abs() <= 6 || (p.dx - b).abs() <= 6 ? SystemMouseCursors.resizeLeftRight : SystemMouseCursors.grab;
@@ -45,9 +77,10 @@ extension _WsTimelineHand on _WsTimelineState {
 
   bool _grab(Offset p) {
     final ws = _ws!, v = _view, m = ws.inside;
-    final i = ((p.dy + _vscroll) / WtM.row).floor();
-    if (m == null || i < 0 || i >= ws.layers.length) return false;
-    final l = ws.layers[i], a = v.x(l.inF), b = v.x(l.outF);
+    final r = _rowAt(p.dy);
+    if (m == null || r == null) return false;
+    if (r.value != null) return true;   // (a lane: nothing carried, and no box drawn from it)
+    final l = r.l, a = v.x(l.inF), b = v.x(l.outF);
     if (_isLocked(_ws!, l.id) || p.dx < a - 6 || p.dx > b + 6) return false;
     for (final k in l.keys) {
       if ((v.x(k) - p.dx).abs() > WtM.keyPicked + 2) continue;

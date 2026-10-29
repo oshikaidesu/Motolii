@@ -44,6 +44,38 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   int _workIn = 12, _workOut = 228;
   int _last = -1;
 
+  // The rows as laid: each layer's own, then, while animating, a lane for each of its values that moves (Ableton's
+  // automation lanes, Live 12 manual 25.5: with Cmd, every automated envelope in a lane of its own). value: the lane's.
+  List<({int layer, String? value})> _order = const [];
+
+  // A layer's values that have keys, in the thing's own order of them (Ableton lays out the automated ones: "Show
+  // Automated Parameters Only"; with Animate on every value is said to move, so its keys tell).
+  List<String> _moving(Ws ws, WsLayer l) {
+    final m = ws.inside, t = int.tryParse(l.id);
+    if (m == null || t == null) return const [];
+    final moving = m.moving(t).toSet();
+    return [for (final n in m.values(t)) if (moving.contains(n) && m.keyMoments(t, n).isNotEmpty) n];
+  }
+
+  // A value's lane: its keys where they are and what they hold, read from the document's picture (nothing asked of the inside).
+  WtRow _laneRow(Ws ws, WsLayer l, String name) {
+    final m = ws.inside!, t = int.parse(l.id), at = m.keyMoments(t, name), vs = m.keyValues(t, name);
+    final n = math.min(at.length, vs.length);
+    final lo = vs.take(n).fold(double.infinity, math.min), hi = vs.take(n).fold(-double.infinity, math.max);
+    return WtRow(
+      name: name,
+      kind: l.kind,
+      inF: l.inF,
+      outF: l.outF,
+      keys: [for (var i = 0; i < n; i++) (at[i] * Ws.fps).round()],
+      picked: const {},
+      tone: l.tone,
+      dim: _isHidden(ws, l.id) || (_anySolo(ws) && !_isSolo(ws, l.id)),
+      locked: _isLocked(ws, l.id),
+      lane: [for (var i = 0; i < n; i++) ((at[i] * Ws.fps).round(), hi > lo ? (vs[i] - lo) / (hi - lo) : .5)],
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -139,8 +171,9 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     final ws = _ws!, v = _view, r = Rect.fromPoints(b.$1, b.$2);
     if (r.width < 4 && r.height < 4) return;   // (a click, not a box: the tap has done it)
     final keys = <WsKey>[], things = <String>[];
-    for (var i = 0; i < ws.layers.length; i++) {
-      final l = ws.layers[i], top = i * WtM.row - _vscroll;
+    for (var i = 0; i < _order.length; i++) {
+      if (_order[i].value != null) continue;   // (a lane's points are not picked by a box)
+      final l = ws.layers[_order[i].layer], top = i * WtM.row - _vscroll;
       if (top + WtM.row < r.top || top > r.bottom || _isLocked(ws, l.id)) continue;
       for (final k in l.keys) {
         if (v.x(k) >= r.left && v.x(k) <= r.right) keys.add((layer: l.id, frame: k));
@@ -344,11 +377,21 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
       _workIn = (from * Ws.fps).round();
       _workOut = (to * Ws.fps).round();
     }
-    final ws = WsScope.of(context, {WsAspect.document, WsAspect.picked});
+    final ws = WsScope.of(context, {WsAspect.document, WsAspect.picked, WsAspect.animating});
     final sel = ws.selected, picks = ws.keys, lit = {...ws.many, ...wsMembersOf(ws)};   // (picked together, or moved by the relation picked: lit with it)
+    _order = [
+      for (final (i, l) in ws.layers.indexed) ...[
+        (layer: i, value: null),
+        if (ws.animating)
+          for (final n in _moving(ws, l)) (layer: i, value: n),
+      ],
+    ];
     final rows = <WtRow>[
-      for (final l in ws.layers)
-        WtRow(
+      for (final o in _order)
+        if (o.value case final n?)
+          _laneRow(ws, ws.layers[o.layer], n)
+        else if (ws.layers[o.layer] case final l)
+          WtRow(
           name: l.name,
           kind: l.kind,
           inF: l.inF,
@@ -449,6 +492,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                     supportedDevices: wsPressing,
                     dragStartBehavior: DragStartBehavior.down,
                     onTapDown: (d) => _trackDown(d.localPosition),
+                    onTapUp: (d) => _laneTap(d.localPosition),   // (a lane's tap, once it is known not to be a drag)
                     onPanStart: (d) => _barDown(d.localPosition),
                     onPanUpdate: (d) => _barMove(d.localPosition),
                     onPanEnd: (_) => _barUp(),

@@ -82,6 +82,36 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('animating, each keyed value has its own lane, as Ableton\'s automation lanes: a point clicked is taken away, the line clicked puts one', (t) async {
+    final j = _joined(), m = j.ws.inside!;
+    await _pump(t, j.ws);
+    final lane = find.byKey(ValueKey('ws-tl-lane-${j.rect}-x'));
+    expect(lane, findsNothing, reason: 'not animating: the keys are marks in the bar alone');
+    j.ws.animating = true;
+    await t.pumpAndSettle();
+    expect(lane, findsOneWidget, reason: 'animating: its keyed value in a lane of its own (Live 12 manual 25.5)');
+    expect(find.byKey(ValueKey('ws-tl-lane-${j.rect}-y')), findsNothing, reason: 'a value without keys has none');
+    final y = t.getCenter(lane).dy;
+    Future<void> until(bool Function() done) async {
+      for (var i = 0; i < 100 && !done(); i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await t.pump();
+      }
+    }
+
+    await t.tapAt(Offset(_at(j.ws, j.rect, 48).dx, y));   // (its key at 0.8 s)
+    await until(() => m.keyMoments(j.rect, 'x').length == 1);
+    expect(m.keyMoments(j.rect, 'x'), [closeTo(1.6, 1e-6)], reason: 'a breakpoint clicked: taken away (25.5.2)');
+    await t.tapAt(Offset(_at(j.ws, j.rect, 150).dx, y));   // (on the line: level after its one key)
+    await until(() => m.keyMoments(j.rect, 'x').length == 2);
+    expect(m.keyMoments(j.rect, 'x'), [closeTo(1.6, 1e-6), closeTo(2.5, 1e-6)], reason: 'the line clicked: a breakpoint put there (25.5.2)');
+    j.ws.animating = false;
+    await t.pumpAndSettle();
+    expect(lane, findsNothing);
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
   testWidgets('a timeline put away stops hearing the window: played after it is made again, nothing is thrown', (t) async {
     final j = _joined();
     await _pump(t, j.ws);

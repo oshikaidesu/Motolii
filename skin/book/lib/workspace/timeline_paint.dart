@@ -65,8 +65,13 @@ class WtRow {
     this.tone,
     this.mix,
     this.stretches = const [],
+    this.lane,
   });
   final List<WsStretch> stretches;   // (how it goes between its keys: each stretch's way drawn between them)
+
+  /// A value's own lane in place of a bar (Ableton's automation lane): each key's frame and where its value stands
+  /// between the lowest and the highest the value's keys hold (0 to 1); null: a layer's row.
+  final List<(int, double)>? lane;
   final Color? tone;   // (its label colour; none: its kind's)
   final List<Color>? mix;   // (a relation's: its things' label colours, its bar their gradient)
   final String name;
@@ -98,6 +103,7 @@ class WtRow {
       other.clipped == clipped &&
       identical(other.wave, wave) &&
       identical(other.frames, frames) &&   // (read once a change: the same list until the document changes)
+      listEquals(other.lane, lane) &&
       other.stretches.length == stretches.length &&
       [for (var i = 0; i < stretches.length; i++) other.stretches[i].from == stretches[i].from && other.stretches[i].to == stretches[i].to && other.stretches[i].way == stretches[i].way].every((same) => same);
   @override
@@ -254,6 +260,7 @@ class WtTracksPainter extends CustomPainter {
   }
 
   void _row(Canvas c, Size s, WtRow r, double cy) {
+    if (r.lane case final pts? when pts.isNotEmpty) return _lane(c, s, r, pts, cy);
     final p = Paint(), x0 = view.x(r.inF), x1 = math.max(view.x(r.outF), x0 + 4);
     if (x1 < 0 || x0 > s.width) return;
     final h = Forms.worn.trackBar(selected: r.selected);
@@ -358,6 +365,23 @@ class WtTracksPainter extends CustomPainter {
             ..color = r.dim ? Grey.g26 : Color.lerp(fill, Grey.g100, .55)!,
         );
       }
+    }
+  }
+
+  /// A value's lane, as Ableton draws an envelope in its own lane (Live 12 manual 25.5): its keys as breakpoints at
+  /// their values, lowest at the bottom, joined by straight segments (an envelope's as they come), level before the
+  /// first and after the last; the line in the bar's colour made lighter, as the bar's own automation line.
+  void _lane(Canvas c, Size s, WtRow r, List<(int, double)> pts, double cy) {
+    final top = cy - WtM.row / 2 + 4, h = WtM.row - 9, col = Color.lerp(wtBarFill(r), Grey.g100, r.dim ? .25 : .6)!;
+    Offset at((int, double) q) => Offset(view.x(q.$1), top + (1 - q.$2) * h);
+    final line = Path()..moveTo(0, at(pts.first).dy);
+    for (final q in pts) {
+      line.lineTo(at(q).dx, at(q).dy);
+    }
+    line.lineTo(s.width, at(pts.last).dy);
+    c.drawPath(line, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.2..strokeJoin = StrokeJoin.round..isAntiAlias = true..color = col);
+    for (final q in pts) {
+      c.drawCircle(at(q), WtM.key * .75, Paint()..color = col);
     }
   }
 

@@ -40,8 +40,18 @@ extension _WsTimelineRows on _WsTimelineState {
                 return Stack(
                   children: [
                     for (var i = 0; i < rows.length; i++)
+                      if (_order[i].value case final n?)   // (a value's lane: its name, under its layer's, as Ableton names a lane by its control)
+                        Positioned(
+                          key: ValueKey('ws-tl-lane-${ws.layers[_order[i].layer].id}-$n'),
+                          left: Shape.s(34),
+                          right: Shape.s(8),
+                          top: i * WtM.row - top,
+                          height: WtM.row,
+                          child: Align(alignment: Alignment.centerLeft, child: Text(n, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g76))),
+                        )
+                      else if (ws.layers[_order[i].layer] case final l)
                       Positioned(
-                        key: ValueKey('ws-tl-label-${ws.layers[i].id}'),
+                        key: ValueKey('ws-tl-label-${l.id}'),
                         left: 0,
                         right: 0,
                         top: i * WtM.row - top,
@@ -54,24 +64,25 @@ extension _WsTimelineRows on _WsTimelineState {
                           onVerticalDragUpdate: (d) => _lift += d.delta.dy,
                           onVerticalDragEnd: (_) {
                                   final by = (_lift / WtM.row).round();
-                                  if (by != 0) ws.after(ws.inside!.later('raise', thing: int.parse(ws.layers[i].id), number: -by.toDouble()));
+                                  if (by != 0) ws.after(ws.inside!.later('raise', thing: int.parse(l.id), number: -by.toDouble()));
                                 },
                           child: _LabelRow(
                             index: i,
                             row: rows[i],
-                            hidden: _isHidden(ws, ws.layers[i].id),
-                            solo: _isSolo(ws, ws.layers[i].id),
+                            hidden: _isHidden(ws, l.id),
+                            solo: _isSolo(ws, l.id),
                             onSelect: () => HardwareKeyboard.instance.isShiftPressed
-                                ? wsPickRange(ws, ws.layers[i].id)   // (Shift: every row from the last picked to this, After Effects' manner)
-                                : HardwareKeyboard.instance.isMetaPressed ? wsPickAlso(ws, ws.layers[i].id) : ws.select(ws.layers[i].id),   // (Cmd: one more, or one less)
-                            onEye: () => _eye(ws, ws.layers[i].id),
-                            onSolo: () => _flag(ws, 'solo', ws.layers[i].id),
-                            onLock: () => _flag(ws, 'lock', ws.layers[i].id),
+                                ? wsPickRange(ws, l.id)   // (Shift: every row from the last picked to this, After Effects' manner)
+                                : HardwareKeyboard.instance.isMetaPressed ? wsPickAlso(ws, l.id) : ws.select(l.id),   // (Cmd: one more, or one less)
+                            onEye: () => _eye(ws, l.id),
+                            onSolo: () => _flag(ws, 'solo', l.id),
+                            onLock: () => _flag(ws, 'lock', l.id),
                           ),
                         ),
                       ),
                     for (var i = 0; i < rows.length; i++)
-                      if (_renameField(i, ws.layers[i].id, i * WtM.row - top) case final f?) f,   // (its name written over it: Cmd+R)
+                      if (_order[i].value == null)
+                        if (_renameField(i, ws.layers[_order[i].layer].id, i * WtM.row - top) case final f?) f,   // (its name written over it: Cmd+R)
                   ],
                 );
               },

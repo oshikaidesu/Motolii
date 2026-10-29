@@ -33,6 +33,9 @@ extension MotoliiDocument on Motolii {
   /// The moments of a value's keys (none if the value stays): how many keys it has is their count.
   List<double> keyMoments(int thing, String name) => Motolii._numbers((_of(thing)['keyMoments'] as Map<String, dynamic>?)?[name]);
 
+  /// What each of a value's keys holds, in the order of [keyMoments].
+  List<double> keyValues(int thing, String name) => Motolii._numbers((_of(thing)['keyValues'] as Map<String, dynamic>?)?[name]);
+
   /// What the document's steps changed since last asked (asking forgets them): whether a thing came or went, and each
   /// value changed as (thing, name), from each step's own changeset.
   ({bool things, Set<(int, String)> values}) changes() {
