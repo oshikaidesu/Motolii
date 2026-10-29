@@ -50,12 +50,13 @@ bool aviutl_text(const std::string& file, std::string& own, std::string& all, st
 std::vector<AviutlVar> aviutl_vars(const std::string& text) {
     std::vector<AviutlVar> vars;
     std::istringstream lines(text);
-    const std::regex said(R"(^--(track|check|color|select|value|file|folder|font|figure|text|string)(?:@(\w+)|(\d)):([^\r]*))");
+    const std::regex said(R"(^--(track|checksection|check|color|select|value|file|folder|font|figure|text|string)(?:@(\w+)|(\d)):([^\r]*))");
     for (std::string line; std::getline(lines, line);) {
         std::smatch m;
         if (!std::regex_search(line, m, said)) continue;
         AviutlVar v;
         v.kind = m[1], v.var = m[2].matched ? m[2].str() : v.kind + m[3].str();   // (--track0: is obj.track0)
+        if (v.kind == "checksection") v.kind = "check";   // (a check that opens the knobs under it, its third its own folding: as a check)
         std::vector<std::string> parts;
         std::stringstream rest(m[4].str());
         for (std::string one; std::getline(rest, one, ',');) parts.push_back(std::regex_replace(one, std::regex(R"(^\s+|\s+$)"), ""));

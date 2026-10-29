@@ -1,4 +1,4 @@
-// aviutl_load.h: part of aviutl_fx.h. obj.load as lua.txt says it, for a figure and a picture file (and obj.copybuffer's "image:") (the AviUtl2 script
+// aviutl_load.h: part of aviutl_fx.h. obj.load as lua.txt says it, for a figure, a picture file (and obj.copybuffer's "image:") and words (the AviUtl2 script
 // skill's references/api.md, gasdyueer, MIT: "figure", name[, color, size, line, round]; "image", file, true or false).
 // Drawn by ThorVG's own CPU canvas (SwCanvas, in Motolii's ThorVG), its premultiplied pixels laid in the object as
 // they are, kept by what was asked (the same asked again is not drawn again).
@@ -8,7 +8,11 @@
 // y -200..+99); a line drawn inward, its outer edge the figure's own (_inside_outline: the stroke cut by the figure);
 // a line as thick as the figure or 4000, filled.
 
-static const std::map<std::string, int> aviutl_figures = {{"円", 0}, {"四角形", 4}, {"三角形", 3}, {"五角形", 5}, {"六角形", 6}, {"星形", -5}, {"背景", 1}};
+#ifdef __APPLE__
+#include <CoreText/CoreText.h>   // (a font found by its name: aviutl_font_file)
+#endif
+
+static const std::map<std::string, int> aviutl_figures ={{"円", 0}, {"四角形", 4}, {"三角形", 3}, {"五角形", 5}, {"六角形", 6}, {"星形", -5}, {"背景", 1}};
 
 // Its pixels, as a picture of the run's own, kept by `key`; made by `paint` into a canvas w x h (none: false).
 static const AviutlBuf* aviutl_drawn(AviutlRun& r, const std::string& key, uint32_t w, uint32_t h, const std::function<bool(tvg::SwCanvas*)>& paint) {
@@ -57,6 +61,98 @@ static const AviutlBuf* aviutl_image(AviutlRun& r, std::string file) {
     });
 }
 
+// The file of a font asked by its name, as the Mac finds it (CoreText: the family, a face's own name or its shown
+// name, its bold and italic face if it has them); not found, or a file ThorVG does not read (a collection, .ttc): the
+// window's own for new words (ws_2.dart's wsTextFont). `slant`: italic asked of a face that is not, to be slanted.
+static std::string aviutl_font_file(const std::string& name, bool bold, bool italic, bool* slant) {
+    std::string file;
+    bool sloped = false;
+#ifdef __APPLE__
+    CFStringRef said = name.empty() ? nullptr : CFStringCreateWithCString(nullptr, name.c_str(), kCFStringEncodingUTF8);
+    for (CFStringRef by : {kCTFontFamilyNameAttribute, kCTFontNameAttribute, kCTFontDisplayNameAttribute}) {
+        if (!said || !file.empty()) break;
+        const void* keys[] = {by};
+        const void* values[] = {said};
+        CFDictionaryRef asked = CFDictionaryCreate(nullptr, keys, values, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFSetRef must = CFSetCreate(nullptr, keys, 1, &kCFTypeSetCallBacks);
+        CTFontDescriptorRef wanted = CTFontDescriptorCreateWithAttributes(asked);
+        if (CTFontDescriptorRef found = CTFontDescriptorCreateMatchingFontDescriptor(wanted, must)) {
+            CTFontRef font = CTFontCreateWithFontDescriptor(found, 12, nullptr);
+            const CTFontSymbolicTraits traits = (bold ? kCTFontBoldTrait : 0) | (italic ? kCTFontItalicTrait : 0);
+            if (CTFontRef faced = traits ? CTFontCreateCopyWithSymbolicTraits(font, 12, nullptr, traits, traits) : nullptr) CFRelease(font), font = faced;
+            sloped = italic && !(CTFontGetSymbolicTraits(font) & kCTFontItalicTrait);
+            if (CFURLRef url = (CFURLRef)CTFontCopyAttribute(font, kCTFontURLAttribute)) {
+                char path[4096];
+                if (CFURLGetFileSystemRepresentation(url, true, (UInt8*)path, sizeof path)) file = path;
+                CFRelease(url);
+            }
+            CFRelease(font), CFRelease(found);
+        }
+        CFRelease(wanted), CFRelease(must), CFRelease(asked);
+    }
+    if (said) CFRelease(said);
+#endif
+    const std::string ext = std::filesystem::path(file).extension().string();
+    if (file.empty() || (ext != ".ttf" && ext != ".otf" && ext != ".TTF" && ext != ".OTF") || tvg::Text::load(file.c_str()) != tvg::Result::Success) {
+#ifdef _WIN32
+        file = "C:/Windows/Fonts/arial.ttf";
+#else
+        file = "/System/Library/Fonts/Supplemental/Arial Unicode.ttf";
+#endif
+        sloped = italic;
+    }
+    return *slant = sloped, file;
+}
+
+// obj.load "text": the words in obj.setfont's font, size, colour and decoration, a picture as large as they are set
+// (YMM4-LuaScript, routersys, MIT: TextRenderer.Render, the layout's own box; nothing said, one clear pixel). Set by
+// ThorVG's text as Motolii's words are (drawn_made.h type: its size in points, AviUtl's in pixels, so 72 / 96 of it).
+// The decorations as sashimono-edit measured AviUtl2 v2.1.6a (MIT, compat/decoration.py DECORATIONS, by obj.setfont's
+// number in its order: mapping.py _DECORATION_BY_INDEX): an edge of 8, 4, 12 and 4 hundredths of the size outside the
+// letters (縁取り, 細, 太, 角), a shadow 5 hundredths right and down (影付き; 薄, half as strong), in the edge colour.
+static const AviutlBuf* aviutl_text(AviutlRun& r, const std::string& words) {
+    const auto& f = r.font;
+    const double size = std::clamp(f.size, 1.0, 4096.0);
+    const int deco = (int)f.deco, colour = (int)f.colour, edge = (int)f.edge;
+    static const double edges[] = {0, 0, 0, 0.08, 0.04, 0.12, 0.04};
+    const float out = (float)(size * (deco >= 0 && deco <= 6 ? edges[deco] : 0)), down = deco == 1 || deco == 2 ? (float)(0.05 * size) : 0.f;
+    const std::string key = "text|" + f.name + "|" + std::to_string(size) + "|" + std::to_string(deco) + "|" + std::to_string(colour) + "|" + std::to_string(edge) + "|" + std::to_string(f.bold) + std::to_string(f.italic) + "|" + words;
+    r.worded.insert(key);
+    if (const auto kept = r.loaded.find(key); kept != r.loaded.end()) return &kept->second;
+    bool slant = false;
+    const std::string file = aviutl_font_file(f.name, f.bold, f.italic, &slant);
+    if (tvg::Text::load(file.c_str()) != tvg::Result::Success) return nullptr;
+    const auto set = [&](int c, uint8_t a) {
+        tvg::Text* t = tvg::Text::gen();
+        t->font(std::filesystem::path(file).stem().string().c_str());   // (ThorVG names a font by its file)
+        t->size((float)(size * 72.0 / 96.0));
+        t->text(words.c_str());
+        if (slant) t->italic();
+        t->fill((c >> 16) & 255, (c >> 8) & 255, c & 255);
+        t->opacity(a);
+        return t;
+    };
+    tvg::Scene* all = tvg::Scene::gen();
+    if (down > 0.f) {
+        tvg::Text* shadow = set(edge, deco == 2 ? 128 : 255);
+        shadow->translate(down, down);
+        all->add(shadow);
+    }
+    if (out > 0.f) {
+        tvg::Text* rim = set(edge, 255);
+        rim->outline(2.f * out, (edge >> 16) & 255, (edge >> 8) & 255, edge & 255);   // (twice as wide: its half within the letters under them)
+        all->add(rim);
+    }
+    all->add(set(colour, 255));
+    float x = 0, y = 0, w = 0, h = 0;
+    if (all->bounds(&x, &y, &w, &h) != tvg::Result::Success || w <= 0.f || h <= 0.f) return tvg::Paint::rel(all), nullptr;
+    all->translate(-x, -y);
+    bool given = false;
+    const AviutlBuf* made = aviutl_drawn(r, key, (uint32_t)std::ceil(w), (uint32_t)std::ceil(h), [&](tvg::SwCanvas* c) { return given = true, c->add(all) == tvg::Result::Success; });
+    if (!given) tvg::Paint::rel(all);
+    return made;
+}
+
 static int aviutl_load(lua_State* L) {
     AviutlRun& r = aviutl_of(L);
     const std::string kind = aviutl_str(L, 1);
@@ -90,5 +186,10 @@ static int aviutl_load(lua_State* L) {
         }));
     }
     if (kind == "image") return lay(aviutl_image(r, aviutl_str(L, 2)));
+    if (kind == "text") {
+        const std::string words = lua_isstring(L, 2) ? lua_tostring(L, 2) : "";
+        if (words.empty()) return aviutl_clear(r, aviutl_buf(r, "object", 1, 1), 0, false), lua_pushboolean(L, 1), 1;
+        return lay(aviutl_text(r, words));
+    }
     return aviutl_no(L, "obj.load " + kind + (kind == "figure" ? " " + aviutl_str(L, 2) : ""));
 }

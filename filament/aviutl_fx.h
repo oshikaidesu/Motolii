@@ -36,6 +36,8 @@ struct AviutlRun {
     int ground = -1;                                // (the stage's colour behind everything, 0xRRGGBB; -1 none)
     std::map<std::string, ScreenFx*> isf;           // (Sashimono's remakes of AviUtl's built-in effects it ran, by their files: aviutl_sashimono)
     ScreenStack isfStack;
+    struct { std::string name; double size = 48, deco = 0, colour = 0xffffff, edge = 0; bool bold = false, italic = false; } font;   // (obj.setfont's, for obj.load "text": aviutl_load.h)
+    std::set<std::string> worded;                   // (the words drawn this frame: those not drawn again let go the next, a clock's every second its own)
 };
 
 // The placing shader: a picture (`size` pixels) put with its pixel `from` at `at` of the target, turned and sized by
@@ -275,7 +277,15 @@ static int aviutl_getpixel(lua_State* L) {
     if (lua_gettop(L)) return aviutl_no(L, "obj.getpixel of a pixel");
     return lua_pushinteger(L, r.bufs["object"].w), lua_pushinteger(L, r.bufs["object"].h), 2;
 }
-static int aviutl_setfont(lua_State*) { return 0; }   // (kept for a text, which is not read yet)
+// (name, size, decoration, colour, edge colour, bold, italic): the nine of obj.getfont as sashimono-edit reads AviUtl2's
+// lua.txt (MIT, objapi.py lua_getfont), the spacings after them not read yet; defaults its own (48, white, black).
+static int aviutl_setfont(lua_State* L) {
+    auto& f = aviutl_of(L).font;
+    f.name = lua_isstring(L, 1) ? lua_tostring(L, 1) : "";
+    f.size = aviutl_num(L, 2, 48), f.deco = aviutl_num(L, 3, 0), f.colour = aviutl_num(L, 4, 0xffffff), f.edge = aviutl_num(L, 5, 0);
+    f.bold = aviutl_num(L, 6) != 0, f.italic = aviutl_num(L, 7) != 0;
+    return 0;
+}
 static int aviutl_draw(lua_State* L) {   // (ox, oy, oz, zoom, alpha, rx, ry, rz): flat only
     AviutlRun& r = aviutl_of(L);
     if (aviutl_num(L, 3) != 0 || aviutl_num(L, 6) != 0 || aviutl_num(L, 7) != 0) return aviutl_no(L, "obj.draw in depth");
@@ -624,7 +634,11 @@ static std::shared_ptr<AviutlRun> aviutl_made(Stage& s, const std::string& file)
 // One frame of it: the thing's picture `from` (w x h) its object, its knobs and obj's values told, the script run, and
 // what it leaves (the frame it drew, else the object as obj now places it) drawn into `to`.
 static void aviutl_draw_step(Stage& s, AviutlRun& r, Texture* from, RenderTarget* to, const ScreenNumbers& numbers, uint32_t w, uint32_t h) {
-    r.s = &s, r.target = "framebuffer", r.blend = "none", r.sampler.clear(), r.drew = false, r.draws.clear();
+    r.s = &s, r.target = "framebuffer", r.blend = "none", r.sampler.clear(), r.drew = false, r.draws.clear(), r.font = {};
+    for (auto at = r.loaded.begin(); at != r.loaded.end();)
+        if (at->first.rfind("text|", 0) == 0 && !r.worded.count(at->first)) s.engine->destroy(at->second.t), at = r.loaded.erase(at);
+        else ++at;
+    r.worded.clear();
     if (!r.place) return screen_place(s, from, to, w, h, nullptr);   // (none made: the picture as it came)
     AviutlBuf in{from, nullptr, w, h};
     const AviutlBuf& object = aviutl_buf(r, "object", w, h);
