@@ -430,10 +430,13 @@ static bool doc_fx_file(Doc& d, int thing, const char* file, double now = NAN) {
     if (const DocScript* sc = out ? doc_script_of(d, file) : nullptr)
         for (const std::string& n : sc->names)
             if (!doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q", thing, n.c_str()))) d.act_ok = false;
+    // (put on at the thing's own start, it comes in instead: 1 to 0, what is under it giving way to it, as Premiere Pro's
+    //  transition on a clip's head edge brings the clip in and one on its tail takes it out: P16, the next scene wiped in)
+    const bool in = !std::isnan(now) && std::fabs(now - doc_number(d, thing, "start", 0, 0)) < 0.5 / 60.0;   // (within half a frame of the stage's 60, motolii_hand.h RATE)
     if (const DocScript* sc = !out && !std::isnan(now) ? doc_script_of(d, file) : nullptr)
         if (std::any_of(sc->knobs.begin(), sc->knobs.end(), [](const ScriptKnob& k) { return k.name == "endImage"; }))
             for (size_t i = 0; i < sc->knobs.size(); ++i)
-                if (sc->knobs[i].name == "progress" && !(doc_key(d, thing, sc->names[i].c_str(), now, 0.0) && doc_key(d, thing, sc->names[i].c_str(), now + 1.0, 1.0))) d.act_ok = false;
+                if (sc->knobs[i].name == "progress" && !(doc_key(d, thing, sc->names[i].c_str(), now, in ? 1.0 : 0.0) && doc_key(d, thing, sc->names[i].c_str(), now + 1.0, in ? 0.0 : 1.0))) d.act_ok = false;
     return doc_acted(d);
 }
 // One of a thing's effects (a file, or ThorVG's own by its value's name) moved `by` places in its list, After Effects'
