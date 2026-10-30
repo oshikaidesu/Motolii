@@ -101,9 +101,10 @@ class _P extends CustomPainter {
       case DockG.media || DockG.video:
         cv.drawRRect(rr(.1, .2, .8, .6, .12), st);
         cv.drawPath(poly(const [Offset(.42, .36), Offset(.64, .5), Offset(.42, .64)]), fl);
-      case DockG.effects:
-        cv.drawPath(ngon(4, .42, inner: .13, rot: -math.pi / 2), fl);
-        cv.drawCircle(p(.84, .18), w * .07, fl);
+      case DockG.effects:   // ("fx", After Effects' and Premiere Pro's mark of a layer's effects: the sparkle was taken for a +, golf (57))
+        final t = TextPainter(text: TextSpan(text: 'fx', style: TextStyle(color: c, fontSize: w * .8, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700, height: 1)), textDirection: TextDirection.ltr)..layout();
+        t.paint(cv, Offset((w - t.width) / 2, (s.height - t.height) / 2));
+        t.dispose();
       case DockG.fonts || DockG.font:
         cv.drawPath(
           Path()
