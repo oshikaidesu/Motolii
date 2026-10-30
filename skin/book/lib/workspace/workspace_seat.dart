@@ -35,6 +35,8 @@ class _InspectorSeatState extends State<_InspectorSeat> {
     if (m == null || c == null || c.things || t == null || const bool.fromEnvironment('NOPOUR')) return false;
     for (final (thing, name) in c.values) {
       if (name == 'name' || (thing == t && (m.shaping.contains(name) || m.range(t, name) == null || m.shown(name)?.look == 'thing'))) return false; // (another thing: shown by its name, a word) // (a name changed anywhere: things are named on cards; a word: it is not watched)
+      // (nor is an effect's colour, three numbers shown as one swatch as a word is (workspace_cards.dart): golf_noise.md (84))
+      if (thing == t && RegExp(r'_[xyz]$').hasMatch(name) && RegExp(r' [rgb]$').hasMatch(m.shown(name)?.label ?? '')) return false;
     }
     return true;
   }

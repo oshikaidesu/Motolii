@@ -1278,6 +1278,30 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('an effect\'s colour swatch shows the colour a sample gave it at once, as a thing\'s own colour does (golf_noise.md (84))', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    expect(m.say(rect, 'fx', '$motoliiDir/effects/Fade Color.fs'), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$rect')
+      ..shelf = 'Colors';
+    await t.pumpAndSettle();
+    await seen(t, find.text('color a'));   // (its card in sight: only the cards in sight are built)
+    expect(find.text('#000000'), findsWidgets, reason: 'black, as it comes');
+    ws.aim = 'js_Fade_Color_color';   // (its card's colour link pressed)
+    await t.pumpAndSettle();
+    final white = find.byKey(const ValueKey('colour-sample-ffffff'));
+    await seen(t, white);
+    await t.tap(white);
+    await settled(t, ws);
+    await seen(t, find.text('color a'));
+    expect(m.value(rect, 'js_Fade_Color_color_x', 0), 1, reason: 'the document has it');
+    expect(find.text('#FFFFFF'), findsWidgets, reason: 'and its card shows it');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a card\'s Copy and Paste give its values alone to another thing (Alight Motion\'s copy of one effect)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final a = m.add('shape', 'rect'), b = m.add('shape', 'circle');

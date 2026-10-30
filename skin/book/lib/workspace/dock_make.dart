@@ -222,7 +222,6 @@ void _fill(DockCtx c, String word) {
   if (c.ws.aim case final aim?) { // (a card's colour link aimed it: said to that value, of the picked thing or of the stage)
     c.ws.after(m.later('say', thing: t ?? 0, name: aim, word: word), (done, why) => c.set(() {
       if (done && t != null) keep(aim);
-      if (done) c.ws.reread();   // (read again once said, as Media's Replace is: an effect's colour is three numbers the card shows as one, golf (83))
       done ? c.mem.trouble.remove('fill') : c.mem.trouble['fill'] = why;
     }));   // (without waiting)
     return;
