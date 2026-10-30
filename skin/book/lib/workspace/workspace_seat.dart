@@ -137,6 +137,11 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         movable: int.tryParse(l?.id ?? '') == null ? const [] : m.fxTitles(int.parse(l!.id)), // (its effects, up or down their stack)
         onCardMove: int.tryParse(l?.id ?? '') == null ? null : (title, by) => ws.after(m.later('fx_move', thing: int.parse(l!.id), word: title, number: by.toDouble())),
         onSum: m.workOut,
+        moreCards: int.tryParse(l?.id ?? '') == null ? const [] : m.moreCards(int.parse(l!.id)),
+        onMoreCard: int.tryParse(l?.id ?? '') == null ? null : (title) {
+          m.asked.putIfAbsent(int.parse(l!.id), () => {}).add(title);
+          ws.reread();
+        },
         onArrange: int.tryParse(l?.id ?? '') == null ? null : (how) {
           final t = int.parse(l!.id);
           ws.after(how.startsWith('flip') ? m.later('flip', thing: t, word: how.substring(4).toLowerCase()) : m.later('fit', thing: t, word: how), (_, _) => ws.reread());

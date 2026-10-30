@@ -85,7 +85,7 @@ void _tests3() {
     ws.shelf = 'Create';
     await t.pumpAndSettle();
     final r = ws.inside!.recipes.length; // (a recipe is a file: the shelf grows by what is in recipes/)
-    expect(find.text('${21 + r} ready'), findsOneWidget, reason: 'seventeen tiles of its own since K5 (one Repeater for Radial and Grid), Glass since 10/29 (a material is made in Create), Wave, Field and Scatter since 10/30 (put on as Repeater is), and the recipes');
+    expect(find.text('${18 + r} ready'), findsOneWidget, reason: 'seventeen tiles of its own since K5 (one Repeater for Radial and Grid), Glass since 10/29 (a material is made in Create), and the recipes');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);

@@ -66,6 +66,10 @@ class AddEffectRow extends StatelessWidget {
         // (Alight Motion's Copy Effects and Paste Effects: its whole stack, the knobs with it)
         if (doc.movable.isNotEmpty) if (doc.onCardCopy case final copy?) word('effects-copy', 'Copy all', () => copy(names)),
         if (doc.onCardPaste case final paste?) word('effects-paste', 'Paste', paste),
+        if (doc.moreCards.isNotEmpty && doc.onMoreCard != null) ...[   // (what Alight Motion shows for its kind is all that is there unasked: the rest by name)
+          SizedBox(width: Shape.s(10)),
+          CardMore(name: 'More', word: 'More', items: [for (final title in doc.moreCards) (title, title, () => doc.onMoreCard!(title))]),
+        ],
       ]),
     );
   }

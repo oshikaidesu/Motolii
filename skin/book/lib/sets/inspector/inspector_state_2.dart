@@ -369,6 +369,8 @@ class Doc extends ChangeNotifier {
   List<String> movable = const [];
   void Function(String title, int by)? onCardMove;
   void Function(String how)? onArrange;   // (flipX, flipY, fit, fill, stretch: Alight Motion's ⋯ on Move & Transform)
+  List<String> moreCards = const [];   // (the cards it may be given and is not shown)
+  void Function(String title)? onMoreCard;
   VoidCallback? onAddEffect;   // (Alight Motion's Add Effect: the shelf of them, its search taking the keys)
   double? Function(String sum)? onSum;   // (a sum typed in a number field worked out: null, it is not one)
   void Function(List<String> names)? onCardReset;

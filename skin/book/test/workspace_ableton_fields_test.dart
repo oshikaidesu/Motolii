@@ -178,13 +178,13 @@ void main() {
     await t.pumpAndSettle();
     final doc = Ctx.read(t.element(find.byType(InspectorPanel))).doc;
     bool folded(String card) => doc.b['fold.$card'] ?? false;
-    final blend = find.text('Shine');
+    final blend = find.text('Transform');
     await seen(t, blend);
     await t.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
     await t.tap(blend.first);
     await t.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await t.pumpAndSettle();
-    expect(doc.cards.map((c) => c.name).where(folded).length, greaterThan(3), reason: 'all of them');
+    expect(doc.cards.map((c) => c.name).where(folded).length, doc.cards.length, reason: 'all of them');
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, tags: 'main', skip: !insideBuilt);

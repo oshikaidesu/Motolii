@@ -125,7 +125,7 @@ class CardWords extends StatelessWidget {
           onTap: does,
           builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: Text(word, style: T.label(h ? Grey.g95 : Grey.g56))),
         ),
-      if (more.isNotEmpty) _CardMore(name: name, items: more),
+      if (more.isNotEmpty) CardMore(name: name, items: more),
     ]);
   }
 }
@@ -157,7 +157,7 @@ class ValuesCard extends StatelessWidget {
                     onTap: () => doc.onCardEye!(card.name),
                     builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: TpGlyphView(doc.cardsOff.contains(card.name) ? TpGlyph.eyeOff : TpGlyph.eye, h ? Grey.g95 : Grey.g56)),
                   ),
-                _CardMore(name: card.name, items: [   // (AbsentMotion's More: Effect Info, Reset to Defaults, Copy Effect, Paste Effect Values; Alight Motion's Duplicate; and a preset of it kept)
+                CardMore(name: card.name, items: [   // (AbsentMotion's More: Effect Info, Reset to Defaults, Copy Effect, Paste Effect Values; Alight Motion's Duplicate; and a preset of it kept)
                   if (doc.onCardInfo case final info?) ('info', 'Effect Info', () => info(card.name)),
                   if (doc.onCardReset case final reset?) ('reset', 'Reset to Defaults', () => reset([for (final p in card.params) p.id])),
                   if (doc.onCardDuplicate case final duplicate?) ('duplicate', 'Duplicate', () => duplicate(card.name)),
@@ -278,15 +278,15 @@ class _Grip extends CustomPainter {
 
 /// An effect card's ⋮ (AbsentMotion's EffectHeader More): what else is done with it, in a short list over the panel,
 /// as Chooser's lists look; one picked, it does that and closes.
-class _CardMore extends StatefulWidget {
-  const _CardMore({required this.name, required this.items});
-  final String name;
+class CardMore extends StatefulWidget {
+  const CardMore({super.key, required this.name, required this.items, this.word = '⋮'});
+  final String name, word;
   final List<(String key, String label, VoidCallback does)> items;
   @override
-  State<_CardMore> createState() => _CardMoreState();
+  State<CardMore> createState() => _CardMoreState();
 }
 
-class _CardMoreState extends State<_CardMore> {
+class _CardMoreState extends State<CardMore> {
   final _link = LayerLink();
   final _portal = OverlayPortalController();
   @override
@@ -308,7 +308,7 @@ class _CardMoreState extends State<_CardMore> {
             child: Hov(
               key: ValueKey('card-more:${widget.name}'),
               onTap: widget.items.isEmpty ? null : _portal.toggle,
-              builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: Text('⋮', style: T.label(h ? Grey.g95 : Grey.g56))),
+              builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: Text(widget.word, style: T.label(h ? Grey.g95 : Grey.g56))),
             ),
           ),
         ),

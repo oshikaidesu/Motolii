@@ -219,6 +219,7 @@ const char* motolii_shown(Motolii* m, const char* name) {
     });
 }
 const char* motolii_cards(Motolii* m, int thing) { return by_look(m, [=] { return (said_word() = doc_cards_of(*m->d, thing)).c_str(); }); }
+const char* motolii_cards_more(Motolii* m, int thing) { return by_look(m, [=] { std::string more; doc_cards_of(*m->d, thing, &more); return (said_word() = more).c_str(); }); }
 const char* motolii_fx_titles(Motolii* m, int thing) { return by_look(m, [=] { return (said_word() = doc_fx_titles(*m->d, thing)).c_str(); }); }
 const char* motolii_kind_of(const char* file) { return doc_kind_of(file); }
 int motolii_sets(const char* font, const char* words) { return type_sets(font, words) ? 1 : 0; }

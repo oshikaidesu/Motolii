@@ -338,7 +338,8 @@ static std::string doc_fx_titles(Doc& d, int thing) {
     for (const std::string& w : doc_fx_list(d, thing, true)) all += (all.empty() ? "" : ";") + doc_fx_title(w);   // (those turned off too: their cards are there)
     return all;
 }
-static std::string doc_cards_of(Doc& d, int thing) {
+// (more: those of the "added" rows not put on: what a maker may ask for, not shown unasked)
+static std::string doc_cards_of(Doc& d, int thing, std::string* more = nullptr) {
     const std::string has = " " + doc_has(d, thing) + " ";
     // (its effects' cards come under its own (Text, Fill, Transform, Blending...), before the cards of what it may do
     //  besides, Copies and on, as Premiere Pro's Effect Controls lays the effects put on under Motion and Opacity: they
@@ -362,7 +363,12 @@ static std::string doc_cards_of(Doc& d, int thing) {
             if (is == (card.is[0] == '!')) continue;
         }
         std::string names;
-        bool said = !card.added;   // (put on from the Create shelf, taken off by its Reset: none of its values said)
+        // (not there unasked: what a maker sees of a thing is Alight Motion's tiles for its kind (AbsentMotion's LayerTools.kt:
+        //  Color & Fill, Blending, Transform, its Edit, Effects; a video's Speed), the rest asked for by More. The stage's own
+        //  are asked for as a whole, by Stage settings)
+        const std::string kindNow = doc_word(d, thing, "kind");
+        if (!strcmp(card.title, "Surface") && kindNow != "solid") continue;   // (a flat thing's one value of it is its Shine)
+        bool said = !card.added || thing == 0 || (!strcmp(card.title, "Play") && kindNow == "film");
         for (const char* at = card.names; *at;) {
             const size_t len = strcspn(at, " ");
             const std::string n(at, len);
@@ -371,6 +377,7 @@ static std::string doc_cards_of(Doc& d, int thing) {
             if (has.find(" " + n + " ") != std::string::npos && !still) names += (names.empty() ? "" : " ") + n;
             at += len + (at[len] ? 1 : 0);
         }
+        if (!names.empty() && !said && more) *more += (more->empty() ? "" : "; ") + std::string(card.title) + ": " + names;
         if (names.empty() || !said) continue;
         if (card.when && card.is[0] == '+' && doc_thor_letter(card.when)) effects[card.when] = std::string(card.title) + ": " + names;
         else (past ? besides : all) += ((past ? besides : all).empty() ? "" : "; ") + std::string(card.title) + ": " + names;

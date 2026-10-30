@@ -340,40 +340,40 @@ static const DocCard doc_cards[] = {
     {"Camera", "parent x y z rotate_x rotate_y rotate distance zoom", "kind", "camera"},
     {"Fog", "fog fog_near fog_far fog_color", "kind", "camera"},   // (the camera's own, as Alight Motion's camera has: its colour, where it begins, where it is whole; the stage's when it says none)   // (After Effects' camera: what it looks at, where it is and how turned, how far its eye is, its zoom)
     {"Blending", "blend clip"},   // (After Effects' layer mode and its track matte, in its simplest: drawn over what lies below as it says, or only inside the one before it)
-    {"Type", "split letter_spacing line_spacing italic wrap wrap_at"},
-    {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ "},
+    {"Type", "split letter_spacing line_spacing italic wrap wrap_at", nullptr, nullptr, true},
+    {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ ", true},
     {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_rotate_x copy_rotate_y copy_turn copy_size copy_opacity_end copy_wide copy_z tall copy_tall stagger stagger_from copy_fill copy_fill_way", nullptr, nullptr, true},
     {"Wave", "wave_x wave_y wave_z wave_rotate wave_size wave_speed wave_phase wave_noise noise_scale", nullptr, nullptr, true},
     {"Field", "field_x field_y field_z field_radius field_band field_size field_rotate field_push", nullptr, nullptr, true},
     {"Scatter", "scatter_x scatter_y scatter_z scatter_rotate scatter_size seed drift_x drift_y", nullptr, nullptr, true},
-    {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
-    {"Motion", "orient", "kind", "!camera"},   // (how it goes along its way: turned the way it is going, After Effects' Auto-Orient)
-    {"Play", "marker animation speed speed_hold frame_rate", "kind", "!stage"},   // (a thing's; the stage's own frame rate is said in the size box)
+    {"Shine", "emissive", "kind", "!solid", true},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
+    {"Motion", "orient", "kind", "!camera", true},   // (how it goes along its way: turned the way it is going, After Effects' Auto-Orient)
+    {"Play", "marker animation speed speed_hold frame_rate", "kind", "!stage", true},   // (a thing's; the stage's own frame rate is said in the size box)
     {"Sound", "volume beats", "kind", "film"},   // (its beats: shown on the timeline's ruler where it strikes)
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Parent", "parent_rotate parent_size roll roll_radius", "parent", "!0"},   // (Alight Motion's Parenting Helper: how much of its parent's turn and size it takes, and rolling as a wheel; while it has a parent)
     {"Element", "retime retime_in retime_out", "shape", "null"},   // (a group's, kept with it as an element: how it is played when put in longer or shorter, Alight Motion's Element settings' Re-timing and its marks)
     {"Scale Assist", "scale_assist scale_assist_amount scale_assist_damp", "scale_assist", "!"},   // (Alight Motion's Scale Assist: one way grown alone, or both, kept as bulky as it was; once put on from the Effects shelf, as its effect is: looks/Scale Assist.motolii)
-    {"Connect", "connect connect_to connect_reach"},
-    {"Line", "cap join dash dash_offset heads head_shape head_start head_size"},   // (and its open ends' shapes: Cavalry's heads, Alight Motion's line start and end)
-    {"Path", "round bloat offset zigzag zigzag_ridges zigzag_smooth", "kind", "shape"},   // (its path made anew: After Effects' shape operators, ThorVG's own)
+    {"Connect", "connect connect_to connect_reach", nullptr, nullptr, true},
+    {"Line", "cap join dash dash_offset heads head_shape head_start head_size", nullptr, nullptr, true},   // (and its open ends' shapes: Cavalry's heads, Alight Motion's line start and end)
+    {"Path", "round bloat offset zigzag zigzag_ridges zigzag_smooth", "kind", "shape", true},   // (its path made anew: After Effects' shape operators, ThorVG's own)
     {"Edit Shape", "crop_left crop_top crop_right crop_bottom round", "kind", "picture"},   // (a photo's rect, Alight Motion's Edit Shape, AbsentMotion's Shape Options: cut in from its sides, what is left where it was, and its corners rounded; drawn as a rect its own file fills, doc_match)
-    {"Deform", "warp bend twist pinch skew squash wiggle stretch bend_direction pin_tl_x pin_tl_y pin_tr_x pin_tr_y pin_bl_x pin_bl_y pin_br_x pin_br_y warp_width warp_angle warp_speed skew_axis wiggle_detail wiggle_speed", "kind", "shape"},   // (its points moved as it is drawn: Cavalry's deformers)
-    {"Surface", "shading metallic roughness reflectance clear_coat clear_coat_roughness sheen anisotropy thickness emissive", "fill", "!glass"},
+    {"Deform", "warp bend twist pinch skew squash wiggle stretch bend_direction pin_tl_x pin_tl_y pin_tr_x pin_tr_y pin_bl_x pin_bl_y pin_br_x pin_br_y warp_width warp_angle warp_speed skew_axis wiggle_detail wiggle_speed", "kind", "shape", true},   // (its points moved as it is drawn: Cavalry's deformers)
+    {"Surface", "shading metallic roughness reflectance clear_coat clear_coat_roughness sheen anisotropy thickness emissive", "fill", "!glass", true},
     {"Glass", "ior dispersion swim dark vivid", "fill", "glass"},
-    {"Lit", "light_group", "kind", "solid"},   // (which lights reach it)
+    {"Lit", "light_group", "kind", "solid", true},   // (which lights reach it)
     {"Light", "intensity falloff cone shadows shadow_softness contact_shadows light_group sun_size sun_halo", "kind", "light"},
     {"Projection", "projection shift_x shift_y"},
-    {"Grade", "tone_mapper exposure contrast saturation vibrance temperature slope offset power shadows_color midtones_color highlights_color"},
+    {"Grade", "tone_mapper exposure contrast saturation vibrance temperature slope offset power shadows_color midtones_color highlights_color", nullptr, nullptr, true},
     {"Lens", "bloom ambient_occlusion reflections lens_flare vignette vignette_color fog fog_near fog_far fog_color anti_aliasing", "kind", "stage"},   // (the stage's; a camera's own fog is on its Fog card)
     {"Room", "room environment environment_rotate behind background"},
-    {"Physics", "physics bounce friction gravity"},
+    {"Physics", "physics bounce friction gravity", nullptr, nullptr, true},
     {"Around", "strength radius offset tilt leader centre_x centre_y rotate rotate_y lag", "file", "around"},   // (a relation's card: its things round a middle, or round a leader; turned in turn, lag apart)
     {"Row", "strength gap centre_x centre_y rotate rotate_y lag", "file", "row"},
     {"Follow", "strength leader lag leader_b hand", "file", "follow"},
     {"Push", "strength leader radius", "file", "push"},
     {"Group", "strength lag x y spread scatter rotate rotate_y size opacity", "file", "group"},   // (things in an order and nothing else: away by its own move, turn, size and opacity, each in turn)
-    {"Note", "label note"},   // (what a maker wrote of it: After Effects' layer comment)
+    {"Note", "label note", nullptr, nullptr, true},   // (what a maker wrote of it: After Effects' layer comment)
     {"Trim Paths", "trim trim_begin trim_offset", "trim", "+"},
     {"Datamosh", "mosh_with mosh_at", "mosh", "+"},
     {"Points", "dissolve grain", "file", "~.ply"},   // (a point cloud's own: points.h)   // (the film's own compressed pictures, mosh.h)   // (After Effects' shape operator: added from the shelf)

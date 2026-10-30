@@ -145,6 +145,7 @@ int motolii_range(Motolii* m, int thing, const char* name, double* low, double* 
 /* The cards a maker sees a thing's values on, besides where it is and its fill: "title: name name; title: name" (until
    the next call). A value added to the document's cards is shown by a shell that reads this, with nothing of its own. */
 const char* motolii_cards(Motolii* m, int thing);
+const char* motolii_cards_more(Motolii* m, int thing);   /* the cards it may be given and is not shown: asked for by the maker (title: names; ...) */
 /* How a value is shown to a hand: "look\tunit\tplain name\tlow\thigh\tfold" (empty: as its range says; until the next
    call). The look is count, onoff, angle, stage (a length of the stage, shown in points of the picture), down (one up the stage, shown down it), share (0 to 1,
    shown in hundredths), colour, colours, numbers, thing, seed or none; low and high the span its knob covers, in the

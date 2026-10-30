@@ -95,7 +95,15 @@ extension MotoliiDocument on Motolii {
 
   /// The cards a maker sees a thing's values on, besides where it is and its fill: each a title and the values on it.
   List<(String, List<String>)> cards(int thing) => [
-    for (final c in ((_of(thing)['cards'] as String?) ?? '').split('; '))
+    ..._cardsIn(_of(thing)['cards']),
+    for (final c in _cardsIn(_of(thing)['more'])) if (asked[thing]?.contains(c.$1) ?? false) c,
+  ];
+
+  /// The titles of the cards it may be given and is not shown, as the shelf of More: not there unasked.
+  List<String> moreCards(int thing) => [for (final (title, _) in _cardsIn(_of(thing)['more'])) if (!(asked[thing]?.contains(title) ?? false)) title];
+
+  static List<(String, List<String>)> _cardsIn(Object? said) => [
+    for (final c in ((said as String?) ?? '').split('; '))
       if (c.indexOf(': ') case final at when at > 0) (c.substring(0, at), c.substring(at + 2).split(' ')),
   ];
 

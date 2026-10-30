@@ -37,6 +37,7 @@ static void picture_thing(Motolii* m, int thing, PictureWriter& w) {
     w.Key("values"), w.String(motolii_values(m, thing));
     w.Key("moving"), w.String(motolii_moving(m, thing));
     w.Key("cards"), w.String(motolii_cards(m, thing));
+    w.Key("more"), w.String(motolii_cards_more(m, thing));
     w.Key("fx"), w.String(motolii_fx_titles(m, thing));
     w.Key("stretches"), w.String(motolii_thing_stretches(m, thing));
     {

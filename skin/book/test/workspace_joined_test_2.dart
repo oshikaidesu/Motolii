@@ -454,32 +454,35 @@ void _tests2() {
     await _close(t);
   }, tags: 'main', skip: !_built);
 
-  testWidgets('Copies, Wave, Field and Scatter are cards put on from the Create shelf and taken off by their Reset, not cards always there (After Effects\' Add ▸ Repeater, Alight Motion\'s Repeat and Wave Warp)', (t) async {
+  testWidgets('a thing shows what Alight Motion shows for its kind (AbsentMotion\'s LayerTools.kt); the rest is there when asked for by More, or once a value of it is said', (t) async {
     final ws = await _pump(t), m = ws.inside!;
-    final star = m.add('shape', 'star');
+    final text = m.add('text', ws.bodyFace), rect = m.add('shape', 'rect'), cube = m.add('solid', 'cube');
+    List<String> titles(int thing) => [for (final (title, _) in m.cards(thing)) title];
     ws
       ..reread()
-      ..select('$star')
-      ..shelf = 'Create';
+      ..select('$rect');
     await t.pumpAndSettle();
-    final added = ['Copies', 'Wave', 'Field', 'Scatter'];
-    expect([for (final (title, _) in m.cards(star)) title].where(added.contains), isEmpty, reason: 'none said: none shown');
-    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Wave');
+    expect(titles(text), ['Text', 'Fill', 'Transform', 'Blending']);
+    expect(titles(rect), ['Fill', 'Transform', 'Blending']);
+    expect(titles(cube), ['Fill', 'Transform', 'Blending']);
+    expect(m.moreCards(rect), containsAll(['Copies', 'Wave', 'Field', 'Scatter', 'Shine', 'Motion', 'Play', 'Physics', 'Note']), reason: 'none lost');
+    final more = find.byKey(const ValueKey('card-more:More'));
+    await seen(t, more);
+    await t.tap(more);
     await t.pumpAndSettle();
-    final tile = find.descendant(of: find.byType(CreateShelf), matching: find.text('Wave')).first;
-    await seen(t, tile);
-    await doubleTap(t, tile);
+    await t.tap(find.byKey(const ValueKey('card-Physics:More')));
     await settled(t, ws);
-    expect([m.value(star, 'wave_x', 0), m.value(star, 'wave_phase', 0), m.value(star, 'wave_speed', 0)], [.25, 1.5, .4], reason: m.trouble);
-    expect([for (final (title, _) in m.cards(star)) title], contains('Wave'));
-    final reset = find.byKey(const ValueKey('card-reset:Wave'));
-    await seen(t, reset);   // (the inspector builds the cards in sight: scrolled to)
-    expect(reset, findsOneWidget, reason: 'put on: its card comes');
+    expect(titles(rect), contains('Physics'), reason: 'asked for: there');
+    expect(m.moreCards(rect), isNot(contains('Physics')));
+    expect(m.set(rect, 'copies', 3), isTrue, reason: m.trouble);
+    ws.reread();
+    await t.pumpAndSettle();
+    expect(titles(rect), contains('Copies'), reason: 'a value of it said: there');
+    final reset = find.byKey(const ValueKey('card-reset:Copies'));
+    await seen(t, reset);
     await t.tap(reset);
     await settled(t, ws);
-    expect(m.value(star, 'wave_x', 0), 0);
-    expect([for (final (title, _) in m.cards(star)) title], isNot(contains('Wave')));
-    expect(find.byKey(const ValueKey('card-reset:Wave')), findsNothing, reason: 'its Reset takes it off');
+    expect(titles(rect), isNot(contains('Copies')), reason: 'its Reset takes it away');
     expect(t.takeException(), isNull);
     await _close(t);
   }, tags: 'main', skip: !_built);

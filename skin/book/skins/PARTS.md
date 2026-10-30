@@ -42,7 +42,7 @@ theme.xml に `<Parts Value="フォルダ"/>` を書くと、そのフォルダ�
 | `tp.keyFilled` | キーの印 |
 
 ## ドック（dock.）：パネルの見出しの印、作る棚・効果の棚の印（名前が中身のまま：`dock.media` はメディアのパネル、`dock.star` は星の形を作る）
-`dock.media` `dock.effects` `dock.fonts` `dock.colors` `dock.create` `dock.search` `dock.close` `dock.chevron` `dock.grid` `dock.list` `dock.plus` `dock.light` `dock.copies` `dock.distort` `dock.particles` `dock.text` `dock.time` `dock.shape` `dock.camera` `dock.nullObj` `dock.rect` `dock.ellipse` `dock.polygon` `dock.star` `dock.line` `dock.radial` `dock.folder` `dock.files` `dock.comp` `dock.image` `dock.audio` `dock.video` `dock.font` `dock.link` `dock.stage` `dock.inspector` `dock.timeline` `dock.desk`
+`dock.media` `dock.effects` `dock.fonts` `dock.colors` `dock.create` `dock.search` `dock.close` `dock.chevron` `dock.grid` `dock.list` `dock.plus` `dock.light` `dock.copies` `dock.text` `dock.time` `dock.shape` `dock.camera` `dock.nullObj` `dock.rect` `dock.ellipse` `dock.polygon` `dock.star` `dock.line` `dock.radial` `dock.folder` `dock.files` `dock.comp` `dock.image` `dock.audio` `dock.video` `dock.font` `dock.link` `dock.stage` `dock.inspector` `dock.timeline` `dock.desk`
 
 ## 机の道具（desk.）
 `desk.tools` `desk.blend` `desk.align`

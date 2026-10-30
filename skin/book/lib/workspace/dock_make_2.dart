@@ -416,9 +416,6 @@ final _makes = <(String, List<_Make>)>[
     'Copies',
     [
       _Make('Repeater', DockG.copies, Pop.tonePlace, '', 'Copies of the picked thing: how many, in how many rows, how far bent round a centre'),
-      _Make('Wave', DockG.distort, Pop.tonePlace, '', 'The picked thing\'s copies or letters waving one after another'),
-      _Make('Field', DockG.radial, Pop.tonePlace, '', 'A round field that swells and pushes the copies it passes over'),
-      _Make('Scatter', DockG.particles, Pop.tonePlace, '', 'The copies or letters thrown about, each turned its own way'),
     ],
   ),
 ];
@@ -476,9 +473,6 @@ final _asked = {
 /// what each tells it: in a row, side by side and a little smaller each time; round a centre below it.
 const _laid = <String, Map<String, double>>{
   'Repeater': {'copies': 5, 'copy_x': 1.3, 'copy_size': .92},
-  'Wave': {'wave_x': .25, 'wave_phase': 1.5, 'wave_speed': .4},   // (the recipe Wave lines' own: filament/recipes/wave_lines.js)
-  'Field': {'field_radius': 1.4, 'field_size': 1.2, 'field_push': .6},   // (Field dots': recipes/field_dots.js)
-  'Scatter': {'scatter_x': 2.9, 'scatter_y': 1.7, 'scatter_rotate': 180, 'scatter_size': .5},   // (Confetti's: recipes/confetti.js)
 };
 
 /// A tile made on the stage as a new thing, picked; a tile of copies lays the picked thing out. Not done: the foot of
