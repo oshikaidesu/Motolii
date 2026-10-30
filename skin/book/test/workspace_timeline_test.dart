@@ -115,6 +115,7 @@ void main() {
     expect(find.descendant(of: lane, matching: find.text(j.ws.inside!.shown('x')?.label ?? 'x')), findsOneWidget, reason: 'named as the inspector names it');
     expect(lane, findsOneWidget, reason: 'animating: its keyed value in a lane of its own (Live 12 manual 25.5)');
     expect(find.byKey(ValueKey('ws-tl-lane-${j.rect}-y')), findsNothing, reason: 'a value without keys has none');
+    expect(find.descendant(of: find.byKey(ValueKey('ws-tl-label-${j.ring}')), matching: find.text('2')), findsOneWidget, reason: 'the ring is the second layer, the lane above it not counted (After Effects\' # counts layers; golf (61))');
     final y = t.getCenter(lane).dy;
     // (the line between two keys goes as their way does, not straight: Ableton draws a curved segment curved, golf_noise.md ⑫)
     expect(m.way(j.rect, 'x', .8, 'Bezier 0 0 0.58 1'), isTrue, reason: m.trouble);

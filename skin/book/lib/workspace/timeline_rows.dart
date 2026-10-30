@@ -67,7 +67,7 @@ extension _WsTimelineRows on _WsTimelineState {
                                   if (by != 0) ws.after(ws.inside!.later('raise', thing: int.parse(l.id), number: -by.toDouble()));
                                 },
                           child: _LabelRow(
-                            index: i,
+                            index: _order[i].layer,   // (its layer's number, not its row's: After Effects' # counts layers, a value's lane none; golf (61))
                             row: rows[i],
                             hidden: _isHidden(ws, l.id),
                             solo: _isSolo(ws, l.id),
