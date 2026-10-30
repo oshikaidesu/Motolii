@@ -445,9 +445,9 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [x] Move & Transform：傾き X・Y（X SKEW・Y SKEW、AE は Transform 効果の Skew） — 済（10/30 夜）：描く物すべて（doc_skew、行列に 1 段）、Transform の札の Skew の行。窓の試験（同）
 - [x] Color & Fill：None・Color・Gradient（Media は fill_media）
 - [ ] Color & Fill：その場の色の目盛り（Color sliders）：AM は欄の中。Motolii は「インスペクターは一覧を持たず、そこへ送る」が決まりで、Colors の棚がこの欄を狙って開く（色相の輪・スポイトは棚にある）。ユーザーがモダンと言った考えなので、AM の真似で壊さない。ユーザーの判断待ち
-- [ ] **Border：内・中・外（Inside・Center・Outside）**：今は中だけ
-- [ ] **Border：何本も足す・並べ替え・消す（Add Border）**：今は 1 本
-- [ ] **Shadow：札の中で**（AM は Border & Shadow の欄、大きさ・透明度・位置・色）：今は Drop Shadow 効果として足す
+- [x] Border：内・中・外 — 有る（10/30 夜）：外は効果 Border (Sashimono)（文字で絵を見た）、内は効果 Inner Outline (Sashimono)（棚にあるまで、絵は未）、中は Fill の札の Stroke。+ Add Effect から足す。Fill の札の Stroke そのものの内・外は無い（ThorVG の Text に順番の指定が無い）
+- [x] Border：何本も足す・並べ替え・消す — 有る（10/30 夜）：効果を積むので、AM の Add Border と同じに足す・≡ で並べ替え・目・ゴミ箱。3 本を 1 枚でなら Multi-Border（棚にあるまで、絵は未）
+- [x] Shadow — 有る：Drop Shadow の札（距離・角度・ぼかし・濃さ・色、影を引いて動かす絵つき）。AM と違い「欄」ではなく効果として足す
 - [x] Blending：重ね方、Opacity
 - [x] Effects：目・並べ替え・⋮（Info・Reset・Duplicate・Copy・Paste）・消す
 - [x] Effects：全部まとめて Copy Effects・Paste Effects — 済（10/30 夜）：+ Add Effect の行の Copy all・Paste、並びとつまみごと。窓の試験（同）
