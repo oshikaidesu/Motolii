@@ -457,11 +457,13 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 
 
 ## T. いまの順番（ここを見れば続きが分かる。上から順に）
-- [ ] イーズの欄を AM に揃える：種類 3 つと形 10 個（`Keyframes.kt` の EasingCatalog）。Ease・Back・Hold と Bounce・Elastic の重複を外す
-- [ ] 同：Steps の式を AbsentMotion の step に替える
-- [ ] 同：グラフを四角く（iPad の AM、10/30 ユーザー。エミュレーターの絵は横に間延びしている）。数字の目盛りを外し、0 と 1 の破線、行き過ぎも見える、再生位置の破線
-- [ ] 同：取っ手を `Keyframes.kt` の handles() どおりに Dart へ移す（Kotlin は窓で動かせないので、これは移植する。10/30 ユーザー了承）
-- [ ] 同：形の印は小さな正方形の列、乗ると大きな曲線に出す
+- イーズの決まり（10/30 夜、ユーザー：「テストが通るから OK ってわけない」「これなら前の方が良かった。一気に作り変えるのはダメだ」）：一度に一つだけ変えて、変えるたびに前と今の絵を窓で見比べる。試験が通っても済にしない。全部作り替えた物は取り消して、部品を取れるように手元の枝 `held/ease-rework` に置いてある（push しない）
+- 前の窓にあって、作り替えで失くした物（見比べた私の見立て）：札の形の名前／OUT・IN の数字（After Effects の Keyframe Velocity の影響と速さ）／All と ★ の絞り込み／左の 0・50・100 と下の 135・136 の目盛り／狭い欄に全部が入る配置。消す時は一つずつ、理由と出典を添えて
+- [ ] イーズ 1：取っ手の動きだけを `Keyframes.kt` の handles() どおりに移す。見た目は変えない（Kotlin は窓で動かせないので移植する。10/30 ユーザー了承。`held/ease-rework` の desk_ease_handles.dart）
+- [ ] イーズ 2：グラフを四角く（iPad の AM、10/30 ユーザー。エミュレーターの絵は横に間延びしている）。作り替えでは逆に横長になった
+- [ ] イーズ 3：グラフの描き方を AM に寄せる（0 と 1 の破線、行き過ぎも見える、再生位置の破線）。一つずつ
+- [ ] イーズ 4：形の札の列の間延びを詰める。形が増えても溢れないように（10/30 ユーザー）。Ease・Back・Hold の扱いは `Keyframes.kt` の EasingCatalog を見て決める
+- [ ] 同：Steps の式は AbsentMotion の step に替えた。窓のグラフで形を見るのが残り
 - [ ] 区間の繰り返しの入口：エンジンは済（`<値>_loop`、cycle・pingpong・offset）。窓から選ぶ入口がまだ
 - [ ] レーンの箱（Ableton の Stretching and Skewing Envelopes、Live 12 手引き 26.7.2）。作る前に Logic と FL Studio も見る
 - [ ] レーンへの形の差し込み（Ableton の Insert Shape）
@@ -472,5 +474,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] 窓を手で触って確かめる：Tab、右クリック、選ぶ欄のキー、More、+ Add Effect
 - [ ] 遅い CI の Mac でだけ落ちる 5 本（golf_noise.md (108)、retry: 2 で隔離中）
 - [ ] 色の目盛りをインスペクターの中に置くか：ユーザーの判断待ち
+- [ ] パネルごとに UX を評価する（10/30 ユーザーの案。出典：KLM、Cognitive Walkthrough、Nielsen のヒューリスティック）
+- [ ] 「locators as Live's…」の試験が束で流すと時々落ちる（Drop のはずが M1。1 本だけなら通る）
 
 合計：393 箱。

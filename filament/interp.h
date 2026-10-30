@@ -26,7 +26,7 @@ static const struct { const char* name; int numbers; const char* names; double u
     {"Elastic", 4, "a b c d", {0.25, 1, 0.5, 1}, {0, 0, 0, 0}, {1, 2, 2, 2}},   // (as AbsentMotion's: its easing.cpp reads a, c, d)
     {"Cyclic", 5, "a b c d e", {2.0 / 7.0, 0, 0.5, 0, 0}, {0.01, 0, 0, 0, 0}, {1, 1, 1, 1, 1}},   // (as AbsentMotion's)
     {"Random", 6, "a b c d e f", {0.5, 0.5, 0.5, 0.5, 0.5, 0}, {0, 0, 0, 0, 0, 0}, {1, 1, 1, 1, 1, 1}},   // (as AbsentMotion's)
-    {"Steps", 2, "width smooth", {0.25, 0.0}, {0.06, 0}, {0.5, 0.45}},   // (four steps, the last to 1 at the end: Alight Motion's own, reports/alight_ui/135_ease_steps.jpg; the past repository's 0.178 made six)
+    {"Steps", 2, "length smoothing", {0.25, 0.0}, {0.02, 0}, {1, 1}},   // (as AbsentMotion's: four steps, the last to 1 at the end, reports/alight_ui/135_ease_steps.jpg; the past repository's 0.178 made six)
     {"ElasticSteps", 2, "length magnitude", {0.2, 0.5}, {0.05, 0}, {1, 1}},   // (as AbsentMotion's)
 };
 
@@ -72,16 +72,6 @@ static double interp_noise(double x, double seed) {
     const double index = std::floor(x), local = x - index;
     return interp_mix(interp_lattice(seed, index), interp_lattice(seed, index + 1.0), (1.0 - std::cos(3.141592653589793 * local)) / 2.0);
 }
-// (steps along the diagonal: `width` of a step, `smooth` how wide the smoothing that ARRIVES at each step's moment is)
-static double interp_steps(double width, double smooth, double u) {
-    if (!std::isfinite(u) || u <= 0.0) return 0.0;
-    if (u >= 1.0) return 1.0;
-    width = std::isfinite(width) && width > 0.0 ? width : 0.178;
-    smooth = std::fmax(smooth, 0.0);
-    const double index = std::floor(u / width), local = u - index * width, ramp_start = width - smooth;
-    const double progress = smooth <= 0.0001 ? 0.0 : interp_smoothstep(0.0, 1.0, interp_clamp((local - ramp_start) / smooth, 0.0, 1.0));
-    return interp_clamp(width * (index + progress), 0.0, 1.0);
-}
 
 static double interp_ease(const Interp& i, double u) {
     const double* p = i.p;
@@ -93,7 +83,7 @@ static double interp_ease(const Interp& i, double u) {
         case Interp::Elastic: return absent_ease("elastic", p, 4, u);
         case Interp::Cyclic: return absent_ease("cyclic", p, 5, u);
         case Interp::Random: return absent_ease("random", p, 6, u);
-        case Interp::Steps: return interp_steps(p[0], p[1], u);
+        case Interp::Steps: return absent_ease("step", p, 2, u);
         case Interp::ElasticSteps: return absent_ease("elasticStep", p, 2, u);
     }
     return u;
