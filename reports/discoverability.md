@@ -74,4 +74,10 @@ Motolii はもう、VS Code の形のキーの表（keys.dart）と keybindings.
 - 出典：openai.com/index/mercari、cloud.google.com のメルカリのベクトル検索の記事、huggingface.co/google/siglip2-base-patch16-224、github.com/asg017/sqlite-vec、github.com/JohannesBuchner/imagehash、shadertoy.com/howto
 
 **先の話（ユーザー 10/30）**：p5.js（Processing）や Blender の人気プリセットを「互換ではなく取り込み」。取り込んだ物も、置いた瞬間に同じ「読んで・描いて・測って札を付ける」に通せば、同じ棚に同じ探し方で並ぶ。順番は「普通に使える」の穴埋め（golf_noise.md）が先
-- Blender はジオメトリノード（ユーザー：「でもジオメトリーノードも absent motion みたいなのがいるかもしれない」）。道は 2 つ：(1) Blender を裏で走らせて（blender -b）glTF・Alembic に焼いて取り込む。Blender が計算するので確かだが、つまみをその場で動かすたびに焼き直すので 60fps で触れない。(2) AbsentMotion が Alight Motion を外から作り直したように、ジオメトリノードを Blender の外で動かす実装を借りる。Blender のコードは GPL なので、その移植も GPL になる。外で独立に書かれた物があるかは**未調査**（次に調べる）
+- Blender はジオメトリノード（ユーザー：「でもジオメトリーノードも absent motion みたいなのがいるかもしれない」）。道は 2 つ：(1) Blender を裏で走らせて（blender -b）glTF・Alembic に焼いて取り込む。Blender が計算するので確かだが、つまみをその場で動かすたびに焼き直すので 60fps で触れない。(2) AbsentMotion が Alight Motion を外から作り直したように、ジオメトリノードを Blender の外で動かす実装を借りる。Blender のコードは GPL なので、その移植も GPL になる。外で独立に書かれた物があるかは、調べた（10/30 午後、サブエージェント、読むだけ）：
+  - **そのまま使える独立の実装はまだ無い**。形が AbsentMotion と同じなのは geonodes-kit（MIT、JavaScript、.blend 5.x を直に読み、Blender 5.2.2 の出力と比べる。Blender のコードを読む人と書く人を分ける作り）だけで、2026-09-28 に始まったばかり、360 のノードのうち確かめ済みは 1。ThreeGN（three.js、EPL-2.0、2023 年で止まっている、「足りないノードは Blender のコードを読んで写せ」とあり線引きが曖昧）
+  - 別の仕組み（Houdini・Unreal PCG・three.js TSL・Godot）へ直す道具は見つからない
+  - Blender を裏で走らせる例はある：AlterMesh（Unreal、有料）、unigine-geometry-nodes（MIT、作者いわく「その場では動かない」）。bpy（Blender を Python の部品にした物、GPL-3.0、5.2.3）を別の process にして、つまみの値を毎コマ送り、形を受け取る形。小さな木の計算は数 ms と見込むが、形を渡す往復が 60fps に収まるかは**測った物が無い**
+  - .blend を Blender 無しで読む部品（Rust の blend・blend-rs、Kaitai の blender_blend：MIT・Apache-2.0・CC0）はあるが、5.x に対応するかは未確認。読めるのは木のつながりと値まで、各ノードが何をするかは Blender のコードの中にしか無い
+  - 作り直すなら土台になる部品（どれも Blender の外の独立の物）：Manifold（ブール、Blender 4.5 も使う）・OpenSubdiv・OpenVDB・libigl（面の上の点）・nanoflann・tinyspline・Embree（ライセンスは記憶から、確かめ直していない）
+  - 順番の見込み：(1) 今すぐ：bpy を別 process の計算係にして、往復の時間を先に測る。(2) 長い目：geonodes-kit を見守るか手伝う（AbsentMotion の道）。自分で Blender のノードを写すことはしない
