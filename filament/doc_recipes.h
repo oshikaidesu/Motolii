@@ -400,13 +400,20 @@ static bool doc_fx_say(Doc& d, int thing, const std::vector<std::string>& list) 
     if (!list.empty()) return doc_say(d, thing, "fx", doc_fx_join(list).c_str());
     return !doc_knows(d, thing, "fx") || doc_word(d, thing, "fx").empty() || doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = 'fx'", thing));
 }
-// An effect file put at the end of a thing's effects, or taken out if it is among them (one step).
+// An effect file put at the end of a thing's effects, or taken out if it is among them (one step). Taken out, its knobs'
+// values and keys go with it, as After Effects' and Alight Motion's effect deleted takes its keyframes (golf P15,
+// golf_noise.md (67): put on again, the old keys came back); its eye (fx_off) keeps them, as Alight Motion's does.
 static bool doc_fx_file(Doc& d, int thing, const char* file) {
     std::vector<std::string> list = doc_fx_list(d, thing, true);
-    if (const auto at = std::find(list.begin(), list.end(), file); at != list.end()) list.erase(at);
+    const auto at = std::find(list.begin(), list.end(), file);
+    const bool out = at != list.end();
+    if (out) list.erase(at);
     else list.push_back(file);
     doc_act(d);
     if (!doc_fx_say(d, thing, list)) d.act_ok = false;
+    if (const DocScript* sc = out ? doc_script_of(d, file) : nullptr)
+        for (const std::string& n : sc->names)
+            if (!doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q", thing, n.c_str()))) d.act_ok = false;
     return doc_acted(d);
 }
 // One of a thing's effects (a file, or ThorVG's own by its value's name) moved `by` places in its list, After Effects'

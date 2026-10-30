@@ -21,6 +21,7 @@ run volume_keys.sh
 run motion_blur.sh
 run camera_switch.sh
 run camera_parent.sh
+run fx_out_keys.sh
 run pack.sh
 run letters_move.sh
 run ramp_stops.sh
