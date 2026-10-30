@@ -33,6 +33,12 @@ class Ws extends ChangeNotifier {
     WsArt.comp = Size(inside.size.$1.toDouble(), inside.size.$2.toDouble());
     moment.value = (inside.now * fps).round(); // (the playhead is the inside's moment from the first)
     reread();
+    final kept = inside.settings;   // (the choices kept with the document: its inks and fonts, golf (90))
+    _ink = kept['ink'] ?? '';
+    _edge = kept['edge'] ?? '';
+    _inkBlend = kept['ink_blend'] ?? '';
+    _titleFont = kept['title_font'] ?? '';
+    _bodyFont = kept['body_font'] ?? '';
   }
 
   /// Joined: the document's name, and how the window is told to open it again at another size (the host does it).
@@ -48,13 +54,28 @@ class Ws extends ChangeNotifier {
   /// Where the next film is written (set by the settings window; the window's own default when null).
   String? renderTo;
   /// Joined: the inks the drawing tools give a new thing (a fill word, a stroke colour; '': the document's own), and how
-  /// the ink's colours are mixed when it is a gradient (gradient_blend; '': sRGB).
-  String ink = '', edge = '', inkBlend = '';
+  /// the ink's colours are mixed when it is a gradient (gradient_blend; '': sRGB). Kept with the document, not steps
+  /// of it, as a PowerPoint file keeps its theme's colours (the inside's setting: golf_noise.md (90), engine_needs.md E4).
+  String _ink = '', _edge = '', _inkBlend = '';
+  String get ink => _ink;
+  set ink(String v) => _ink = _kept('ink', _ink, v);
+  String get edge => _edge;
+  set edge(String v) => _edge = _kept('edge', _edge, v);
+  String get inkBlend => _inkBlend;
+  set inkBlend(String v) => _inkBlend = _kept('ink_blend', _inkBlend, v);
+  String _kept(String name, String was, String now) {
+    if (now != was) _inside?.later('setting', name: name, word: now);
+    return now;
+  }
 
   /// The fonts a title and a body text are set in as they are added, and which of the two the Fonts shelf sets now:
   /// PowerPoint's theme fonts (Headings and Body, a text box in Body), Canva's brand fonts (a heading's, a body's).
-  /// '': the usual one (golf_noise.md ㉚). Kept by the window while it is open (engine_needs.md E4: in the document).
-  String titleFont = '', bodyFont = '', fontRole = 'title';
+  /// '': the usual one (golf_noise.md ㉚). Kept with the document, as a PowerPoint file keeps its theme's fonts (golf (90)).
+  String _titleFont = '', _bodyFont = '', fontRole = 'title';
+  String get titleFont => _titleFont;
+  set titleFont(String v) => _titleFont = _kept('title_font', _titleFont, v);
+  String get bodyFont => _bodyFont;
+  set bodyFont(String v) => _bodyFont = _kept('body_font', _bodyFont, v);
   String get bodyFace => bodyFont.isEmpty ? wsTextFont : bodyFont;
   String get titleFace => titleFont.isEmpty ? bodyFace : titleFont;
 

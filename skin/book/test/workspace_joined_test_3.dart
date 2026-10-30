@@ -1334,6 +1334,28 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('the inks and the role fonts are kept with the document, not as steps: opened again, they are there (PowerPoint\'s theme colours and fonts; golf_noise.md (90))', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..ink = 'ff3366'
+      ..edge = '172a05'
+      ..titleFont = '/System/Library/Fonts/Supplemental/Arial Black.ttf'
+      ..bodyFont = '/System/Library/Fonts/Supplemental/Andale Mono.ttf';
+    await settled(t, ws);
+    expect(m.undo() && !m.things.contains(rect), isTrue, reason: 'the last step is the rectangle\'s, not a choice of ink');
+    final doc = openedDocument!;
+    await closeWorkspace(t);
+    final again = await openWorkspace(t, document: doc);
+    expect([again.ink, again.edge, again.titleFont, again.bodyFont], ['ff3366', '172a05', '/System/Library/Fonts/Supplemental/Arial Black.ttf', '/System/Library/Fonts/Supplemental/Andale Mono.ttf'], reason: 'opened again: ${again.inside?.settings}');
+    again.ink = '';
+    await settled(t, again);
+    expect(again.inside!.settings.containsKey('ink'), isFalse, reason: 'none again: taken away');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('an outline given a colour while it has no width comes 6 wide, one step (Alight Motion\'s border; golf_noise.md (89))', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

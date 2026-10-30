@@ -150,6 +150,7 @@ int motolii_guide(Motolii* m, const char* axis, double at, int on) { return by_h
 const char* motolii_guides(Motolii* m) { return by_look(m, [=] { return (said_word() = doc_guides(*m->d)).c_str(); }); }
 const char* motolii_marks(Motolii* m) { return by_look(m, [=] { return (said_word() = doc_marks(*m->d)).c_str(); }); }
 const char* motolii_mark_colours(Motolii* m) { return by_look(m, [=] { return (said_word() = doc_mark_colours(*m->d)).c_str(); }); }
+const char* motolii_settings(Motolii* m) { return by_look(m, [=] { return (said_word() = doc_settings(*m->d)).c_str(); }); }
 int motolii_fits(Motolii* m) {
     return by_look(m, [=] {   // (a read: the document's size against the stage's)
         int wide = m->s->w, high = m->s->h;
@@ -525,6 +526,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "mark_colour") ok = changes(m, (int)doc_mark_colour(doc(m), number, std::atoi(w.c_str())));   // (the mark at `number`: word its colour, 1 to 16; 0 none)
             else if (c == "guide") ok = changes(m, (int)doc_guide(doc(m), n.c_str(), number, w != "off"));
             else if (c == "work") ok = changes(m, (int)doc_work_is(doc(m), number, std::atof(w.c_str())));
+            else if (c == "setting") ok = (int)doc_setting(doc(m), n.c_str(), w.c_str());   // (name: the window's choice kept with the document, word: what it is, "" none; not a step: doc_setting)
             else if (c == "size") {   // (word: "wide high", the stage's size the document says: opened at it again by the window)
                 int wide = 0, high = 0;
                 std::sscanf(w.c_str(), "%d %d", &wide, &high);
@@ -560,7 +562,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
                 ok = desk_is(m, dw, dh, x, y, sc, pt);
             }
             else if (c == "hold") ok = (int)doc_hold(doc(m), thing);   // (a hand takes hold: what it carries next is this thing's)
-            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, element, keep_element, follow_elements, fx_duplicate, duplicate, split, align, time_align, reset, fit, flip, extract_sound, freehand, brush, outline, copy, paste, copy_style, paste_style, keep_look, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_eye, fx_move, size, watch, pick, desk, live, relate, lead, free, release";
+            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, element, keep_element, follow_elements, fx_duplicate, duplicate, split, align, time_align, reset, fit, flip, extract_sound, freehand, brush, outline, copy, paste, copy_style, paste_style, keep_look, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_eye, fx_move, size, watch, pick, desk, live, relate, lead, free, release, setting";
             } catch (const std::exception& e) {
                 ok = 0;
                 std::fprintf(stderr, "motolii: %s threw: %s\n", c.c_str(), e.what());

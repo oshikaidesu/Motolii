@@ -46,6 +46,7 @@
 - 最初に押した所：左上の字体の棚（Aa）　打数：3 で 1 つ置けた（10/30：棚・Arial Black・Place）。「あとで置く文字の字体」を決める所は無く、役目ごとにも決められない：未達（golf_noise.md ㉚）
   - 直したあと（10/30 夜）：**4 打、当たり 4/4**（棚・Arial Black・Body の札・Andale Mono。Title は始めから選ばれている）。Title の＋で Arial Black の文字が出た（絵：reports/screen/p04_roles_1030.jpg、p04_fonts_1030.jpg）。成功
   - 窓を開き直すと、役目の字体と P03 のキーカラーが消える（足した文字が灰色 #7F7F7F）：engine_needs.md の E4
+  - 直したあと（10/30 夕、(90)）：開き直しても役目の字体と色が残る。Title・Body・色を決めて窓を閉じ、開き直して Title の＋で、赤い Arial Black の文字（絵 reports/screen/kept_settings_1030.jpg）
   - 字体の棚の Place で置いた文字は塗り #7F7F7F で、P03 で決めたキーカラー（#172A05）で出なかった（㉛）
 
 ## 3. 空間を組む

@@ -360,6 +360,24 @@ static std::string doc_mark_colours(Doc& d) {   // (a line each, in time: the mo
     });
     return all;
 }
+// The window's own choices kept with the document, not steps of it (their table is not one the steps record): the
+// inks and the fonts a new thing comes in, as a PowerPoint file keeps its theme's colours and fonts (golf (90),
+// engine_needs.md E4). A word "" takes one away; doc_settings: a line each, the name, a space, the word.
+static bool doc_setting(Doc& d, const char* name, const char* word) {
+    if (!*name || strchr(name, ' ') || strchr(name, '\n') || strchr(word, '\n')) return d.trouble = "a setting is one word named, one line said", false;
+    char* say = *word ? sqlite3_mprintf("insert into setting(name, value) values(%Q, %Q) on conflict do update set value = excluded.value", name, word)
+                      : sqlite3_mprintf("delete from setting where name = %Q", name);
+    const bool ok = sqlite3_exec(d.file, say, nullptr, nullptr, nullptr) == SQLITE_OK;
+    sqlite3_free(say);
+    return ok || (d.trouble = sqlite3_errmsg(d.file), false);
+}
+static std::string doc_settings(Doc& d) {
+    std::string all;
+    doc_rows(d, sqlite3_mprintf("select name, value from setting order by name"), [&](sqlite3_stmt* row) {
+        all += std::string((const char*)sqlite3_column_text(row, 0)) + " " + (const char*)sqlite3_column_text(row, 1) + "\n";
+    });
+    return all;
+}
 static std::string doc_marks(Doc& d) {   // (a line each, in time: the moment, a space, the name)
     std::string all;
     doc_rows(d, sqlite3_mprintf("select at, value from fact where thing = 0 and name = 'mark' order by at"), [&](sqlite3_stmt* row) {
@@ -420,6 +438,7 @@ static Doc* doc_open(Stage& s, const char* path) {
                               "create table if not exists way(name text primary key, goes text) without rowid;"
                               "create table if not exists step(n integer primary key, change blob, undone integer default 0);"
                               "create table if not exists thing(id integer primary key autoincrement);"   // (a thing's number is never given again: SQLite's own)
+                              "create table if not exists setting(name text primary key, value text) without rowid;"   // (the window's choices kept with the document, not steps: doc_setting)
                               "insert into thing(id) select max(thing) from fact where (select count(*) from thing) = 0 having max(thing) is not null", nullptr, nullptr, nullptr) != SQLITE_OK) return nullptr;
     if (sqlite3_exec(d->file, "select way from fact limit 0", nullptr, nullptr, nullptr) != SQLITE_OK)   // (a document from before stretches had ways)
         sqlite3_exec(d->file, "alter table fact add column way text", nullptr, nullptr, nullptr);
