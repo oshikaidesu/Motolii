@@ -81,3 +81,6 @@ Motolii はもう、VS Code の形のキーの表（keys.dart）と keybindings.
   - .blend を Blender 無しで読む部品（Rust の blend・blend-rs、Kaitai の blender_blend：MIT・Apache-2.0・CC0）はあるが、5.x に対応するかは未確認。読めるのは木のつながりと値まで、各ノードが何をするかは Blender のコードの中にしか無い
   - 作り直すなら土台になる部品（どれも Blender の外の独立の物）：Manifold（ブール、Blender 4.5 も使う）・OpenSubdiv・OpenVDB・libigl（面の上の点）・nanoflann・tinyspline・Embree（ライセンスは記憶から、確かめ直していない）
   - 順番の見込み：(1) 今すぐ：bpy を別 process の計算係にして、往復の時間を先に測る。(2) 長い目：geonodes-kit を見守るか手伝う（AbsentMotion の道）。自分で Blender のノードを写すことはしない
+  - **測った（10/30 夕）**：この Mac の Blender 4.4.3 を `blender -b` で裏に立て、つまみ 1 つ（Strength）を毎回 TCP で送り、ジオメトリノードの木を計算させ、頂点と三角形を受け取るまでを 120 回（中央値）。60fps の 1 コマは 16.7 ms。波打つ格子 1 万頂点 2.3 ms、箱 1000 個をばらまく（8 千頂点）1.7 ms、箱 5000 個（4 万頂点）6.2 ms、波打つ格子 10 万頂点 22 ms（はみ出る）。Blender の計算は 0.7〜6.4 ms で、重いのは形の取り出し（to_mesh・三角形・numpy へ写す、10 万頂点で 14 ms）。Blender が立ち上がるまで 0.4〜0.5 秒。絵：reports/screen/geonodes_roundtrip_1030.png、測る道具：reports/geonodes_probe/（server.py・measure.py）
+  - 分かったこと：数万頂点までなら「Blender を裏の計算係にする」道で、つまみをその場で動かして 60fps に収まる。10 万頂点からは、毎コマ全部を取り出すのをやめる必要がある（形のつながりが変わらない時は位置だけ送る、など。まだ試していない）。Blender は GPL の別 process で、Motolii とは TCP の上の数のやりとりだけ（混ざらない）
+  - まだ：取り込んだ形を Motolii の舞台（Filament）に描く口が無い。.blend の木の「つまみ」（Group Input）を読んで札にする所も無い
