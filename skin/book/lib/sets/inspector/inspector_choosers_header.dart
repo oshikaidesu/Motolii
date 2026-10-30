@@ -29,7 +29,13 @@ class ChooserState extends State<Chooser> {
 
   bool _open = false, _up = false;
   final _q = TextEditingController();
-  final _qf = FocusNode(debugLabel: 'chooser-q');
+  late final _qf = FocusNode(debugLabel: 'chooser-q', onKeyEvent: _key);
+  final _node = FocusNode(debugLabel: 'chooser');
+  final _list = ScrollController();
+  int _at = -1;   // (the one the keys are on)
+  String _typed = '';   // (what has been typed to go to one, and when: a pause starts it again)
+  DateTime _typedAt = DateTime(0);
+  void Function(String)? _pick;
   final _link = LayerLink();
   final _portal = OverlayPortalController();
 
@@ -39,7 +45,54 @@ class ChooserState extends State<Chooser> {
   void dispose() {
     _q.dispose();
     _qf.dispose();
+    _node.dispose();
+    _list.dispose();
     super.dispose();
+  }
+
+  List<String> get _hits => [
+    for (final o in widget.options)
+      if (o.toLowerCase().contains(_q.text.toLowerCase())) o,
+  ];
+
+  void _go(int to) {
+    final n = _hits.length;
+    if (n == 0) return;
+    setState(() => _at = to.clamp(0, n - 1));
+    if (_list.hasClients) {
+      final top = _at * _itemH, seen = _maxItems * _itemH;
+      if (top < _list.offset) _list.jumpTo(top);
+      if (top + _itemH > _list.offset + seen) _list.jumpTo(top + _itemH - seen);
+    }
+  }
+
+  // (a select's keys, W3C's ARIA Authoring Practices, Select-Only Combobox: Down, Up, Return or Space open it; the arrows go
+  //  along it, Return takes the one the keys are on, Esc leaves it; a letter typed goes to the first that starts so)
+  KeyEventResult _key(FocusNode n, KeyEvent e) {
+    if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
+    final k = e.logicalKey, down = k == LogicalKeyboardKey.arrowDown, up = k == LogicalKeyboardKey.arrowUp;
+    final enter = k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter;
+    final letter = !widget.searchable && (e.character?.trim().length ?? 0) == 1 && !HardwareKeyboard.instance.isMetaPressed && !HardwareKeyboard.instance.isControlPressed ? e.character! : null;
+    if (!_open) {
+      if (!down && !up && !enter && k != LogicalKeyboardKey.space && letter == null) return KeyEventResult.ignored;
+      _set(true);
+      if (letter == null) return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.escape) _set(false);
+    else if (down) _go(_at + 1);
+    else if (up) _go(_at - 1);
+    else if (enter) {
+      if (_at >= 0 && _at < _hits.length) _pick?.call(_hits[_at]);
+    } else if (letter != null) {
+      final now = DateTime.now();
+      _typed = (now.difference(_typedAt) > const Duration(seconds: 1) ? '' : _typed) + letter.toLowerCase();
+      _typedAt = now;
+      final to = _hits.indexWhere((o) => o.toLowerCase().startsWith(_typed));
+      if (to >= 0) _go(to);
+    } else {
+      return KeyEventResult.ignored;
+    }
+    return KeyEventResult.handled;
   }
 
   void _set(bool open) {
@@ -56,14 +109,18 @@ class ChooserState extends State<Chooser> {
     setState(() => _open = open);
     _q.clear();
     open ? _portal.show() : _portal.hide();
-    if (open && widget.searchable) WidgetsBinding.instance.addPostFrameCallback((_) => _qf.requestFocus());
+    if (open) {
+      _at = widget.options.indexOf(Ctx.read(context).doc.s2[widget.id] ?? widget.options.first);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        (widget.searchable ? _qf : _node).requestFocus();
+        _go(_at);   // (what it is now in sight, the keys on it)
+      });
+    }
   }
 
   Widget _menu(BuildContext context, String cur, void Function(String) pick) {
-    final hits = [
-      for (final o in widget.options)
-        if (o.toLowerCase().contains(_q.text.toLowerCase())) o,
-    ];
+    final hits = _hits;
     return Container(
       padding: EdgeInsets.all(Shape.s(3)),
       decoration: BoxDecoration(
@@ -94,10 +151,7 @@ class ChooserState extends State<Chooser> {
                     cursorColor: Grey.g95,
                     backgroundCursorColor: Grey.g20,
                     maxLines: 1,
-                    onChanged: (_) => setState(() {}),
-                    onSubmitted: (_) {
-                      if (hits.isNotEmpty) pick(hits.first);
-                    },
+                    onChanged: (_) => setState(() => _at = 0),
                   )),
                 ],
               ),
@@ -110,6 +164,7 @@ class ChooserState extends State<Chooser> {
                     child: Text('No match', style: T.label(Grey.g56)),
                   )
                 : ListView.builder(
+                    controller: _list,
                     padding: EdgeInsets.zero,
                     itemExtent: _itemH,
                     itemCount: hits.length,
@@ -119,7 +174,7 @@ class ChooserState extends State<Chooser> {
                         onTap: () => pick(o),
                         builder: (_, h) => Container(
                           padding: EdgeInsets.symmetric(horizontal: Shape.s(8)),
-                          decoration: BoxDecoration(color: h ? Grey.g26 : (sel ? Grey.g20 : null), borderRadius: BorderRadius.all(Shape.r(5))),
+                          decoration: BoxDecoration(color: h || i == _at ? Grey.g26 : (sel ? Grey.g20 : null), borderRadius: BorderRadius.all(Shape.r(5))),
                           alignment: Alignment.centerLeft,
                           child: Row(
                             children: [
@@ -153,6 +208,7 @@ class ChooserState extends State<Chooser> {
       _set(false);
     }
 
+    _pick = pick;
     final field = Hov(
       onTap: () => _set(!_open),
       builder: (_, h) => Container(
@@ -185,13 +241,8 @@ class ChooserState extends State<Chooser> {
     );
 
     return Focus(
-      onKeyEvent: (n, e) {
-        if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape && _open) {
-          _set(false);
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
+      focusNode: _node,
+      onKeyEvent: _key,
       child: IgnorePointer(
         ignoring: !on,
         child: CompositedTransformTarget(

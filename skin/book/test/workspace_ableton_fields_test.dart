@@ -4,7 +4,7 @@ import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show Ctx, InspectorPanel, NumField;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show Chooser, Ctx, InspectorPanel, NumField;
 
 import 'door.dart';
 
@@ -126,6 +126,62 @@ void main() {
     await seen(t, blur);
     await menu(blur.first);
     expect(find.text('Reset'), findsWidgets, reason: 'an effect\'s knob has the same menu: it had none');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, tags: 'main', skip: !insideBuilt);
+
+  testWidgets('a list\'s keys: Down opens it, the arrows go along it, Return takes one, Esc leaves it, a letter goes to the first that starts so (W3C ARIA Authoring Practices, Select-Only Combobox)', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final a = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$a');
+    await t.pumpAndSettle();
+    final list = find.byWidgetPredicate((w) => w is Chooser && w.id == 'v_blend');
+    await seen(t, list);
+    await t.tap(list);
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await settled(t, ws);
+    final second = m.word(a, 'blend');
+    expect(second, isNotEmpty, reason: 'the next one down: ${m.trouble}');
+    await t.tap(list);
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await settled(t, ws);
+    expect(m.word(a, 'blend'), startsWith('s'), reason: 'the first that starts so');
+    final chosen = m.word(a, 'blend');
+    await t.tap(list);
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.escape);
+    await settled(t, ws);
+    expect(m.word(a, 'blend'), chosen, reason: 'Esc leaves it as it was');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, tags: 'main', skip: !insideBuilt);
+
+  testWidgets('Option on a card\'s head folds all the cards, and opens them again (the Mac\'s Option on a disclosure triangle, Finder\'s list)', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final a = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$a');
+    await t.pumpAndSettle();
+    final doc = Ctx.read(t.element(find.byType(InspectorPanel))).doc;
+    bool folded(String card) => doc.b['fold.$card'] ?? false;
+    final blend = find.text('Shine');
+    await seen(t, blend);
+    await t.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await t.tap(blend.first);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    await t.pumpAndSettle();
+    expect(doc.cards.map((c) => c.name).where(folded).length, greaterThan(3), reason: 'all of them');
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, tags: 'main', skip: !insideBuilt);

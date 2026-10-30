@@ -1,4 +1,5 @@
 // A group: a heading and its rows. How groups are told apart is the Editorial knob: A a rule above, B a grey step, C a rule under a large heading.
+import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/forms/forms.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
@@ -114,7 +115,11 @@ class _PopCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final doc = Ctx.of(context).doc, title = s.title, tone = s.tone;
     final open = s.onToggle != null ? s.open : (title == null || !(doc.b['fold.$title'] ?? false));
-    final toggle = s.onToggle ?? (title == null ? null : () => doc.flag('fold.$title', open));
+    final toggle = s.onToggle ?? (title == null ? null : () {
+      if (!HardwareKeyboard.instance.isAltPressed) return doc.flag('fold.$title', open);
+      for (final c in doc.cards) doc.flag('fold.${c.name}', open);   // (the Mac's Option on a disclosure triangle: all of them, Finder's list; this one as they go)
+      doc.flag('fold.$title', open);
+    });
     final keys = s.keyIds.map((i) => doc.keys[i] ?? KeyS.off).fold(KeyS.off, (a, b) => b.index > a.index ? b : a);
     final chips = s.brief.isNotEmpty ? s.brief : [if (s.hint != null && s.hint!.isNotEmpty) s.hint!];
     final brief = !open && chips.isNotEmpty;
