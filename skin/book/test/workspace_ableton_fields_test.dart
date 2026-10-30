@@ -210,6 +210,23 @@ void main() {
     await closeWorkspace(t);
   }, tags: 'main', skip: !insideBuilt);
 
+  testWidgets('Skew X and Y on the Transform card, on a text as on any thing drawn (Alight Motion\'s X Skew and Y Skew)', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final a = m.add('text', ws.bodyFace);
+    ws
+      ..reread()
+      ..select('$a');
+    await t.pumpAndSettle();
+    final skew = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_skew_x');
+    await seen(t, skew);
+    await t.timedDragFrom(t.getCenter(skew), const Offset(60, 0), const Duration(milliseconds: 300));
+    await settled(t, ws);
+    expect(m.value(a, 'skew_x', 0), greaterThan(0), reason: m.trouble);
+    expect(m.undo() && m.value(a, 'skew_x', 0) == 0, isTrue, reason: 'one step');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, tags: 'main', skip: !insideBuilt);
+
   testWidgets('typing a number: Tab keeps it and opens the next field, Shift-Tab the one before; the arrows move what is typed; nothing typed is as Esc (After Effects, Figma, Blender)', (t) async {
     final ws = await openWorkspace(t), m = ws.inside!;
     final a = m.add('shape', 'rect');

@@ -442,7 +442,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 
 - [x] **+ Add Effect**（AM の Effects 欄の下）：押すと効果の棚が開いて検索欄に字が打てる — 済（10/30 夜）：窓の試験（`workspace_ableton_fields_test.dart`）
 - [x] Move & Transform：位置・スケール（縦横の鎖）・回転 X Y Z・アンカー
-- [ ] **Move & Transform：傾き X・Y（X SKEW・Y SKEW）**：今は図形だけ。AE は Transform 効果の Skew
+- [x] Move & Transform：傾き X・Y（X SKEW・Y SKEW、AE は Transform 効果の Skew） — 済（10/30 夜）：描く物すべて（doc_skew、行列に 1 段）、Transform の札の Skew の行。窓の試験（同）
 - [x] Color & Fill：None・Color・Gradient（Media は fill_media）
 - [ ] **Color & Fill：その場の色の目盛り（Color sliders）とスポイト**：今は Colors の棚へ飛ぶ。スポイトは棚にある
 - [ ] **Border：内・中・外（Inside・Center・Outside）**：今は中だけ
