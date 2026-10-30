@@ -1,5 +1,6 @@
 // A thing's effects are one stack in any order, ThorVG's own and the files' alike (After Effects' Effect Controls):
-// their cards stand in the order they are laid, and a card's arrows move its effect up or down, one step.
+// their cards stand in the order they are laid, and a card's ≡ drags its effect onto another's place, one step (Alight
+// Motion's ≡ on an effect's row, After Effects' dragging an effect in Effect Controls).
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart' show motoliiDir;
@@ -10,7 +11,7 @@ import 'door.dart';
 List<String> _cards(WidgetTester t) => [for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name];
 
 void main() {
-  testWidgets('a blur and a halftone: cards in the order laid; the blur moved down lays after the halftone', (t) async {
+  testWidgets('a blur and a halftone: cards in the order laid; the blur dragged by its ≡ onto the halftone lays after it', (t) async {
     final ws = await openWorkspace(t), m = ws.inside!;
     final halftone = '$motoliiDir/effects/halftone.wgsl';
     final rect = m.add('shape', 'rect');
@@ -21,16 +22,23 @@ void main() {
     await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await t.pumpAndSettle();
     expect(m.word(rect, 'fx'), 'blur $halftone', reason: 'the file put at the end of its effects');
-    final down = find.byKey(const ValueKey('card-move:Gaussian Blur:1'));
-    await seen(t, down);   // (the effects' cards are last: scrolled to)
+    final grip = find.byKey(const ValueKey('card-drag:Gaussian Blur'));
+    await seen(t, grip);   // (the effects' cards are last: scrolled to)
     final cards = _cards(t);
     expect(cards.indexOf('Gaussian Blur'), allOf(greaterThan(-1), lessThan(cards.indexOf('Halftone'))), reason: 'cards in the order laid: $cards');
-    await t.tap(down);
+    expect(find.byKey(const ValueKey('card-drag:Transform')), findsNothing, reason: 'the thing\'s own cards stay where they are');
+    final onto = find.byWidgetPredicate((w) => w is ValuesCard && w.card.name == 'Halftone');
+    final hand = await t.startGesture(t.getCenter(grip));
+    await hand.moveBy(const Offset(0, 20));   // (past the drag's start)
+    await t.pump();
+    await hand.moveTo(t.getCenter(onto));
+    await t.pump();
+    await hand.up();
     await t.pumpAndSettle();
     await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await t.pumpAndSettle();
     expect(m.word(rect, 'fx'), '$halftone blur', reason: 'moved after the halftone');
-    await seen(t, find.byKey(const ValueKey('card-move:Gaussian Blur:-1')));
+    await seen(t, find.byKey(const ValueKey('card-drag:Gaussian Blur')));
     final after = _cards(t);
     expect(after.indexOf('Halftone'), lessThan(after.indexOf('Gaussian Blur')), reason: 'and its card with it: $after');
     expect(m.undo(), isTrue);

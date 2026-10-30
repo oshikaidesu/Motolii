@@ -157,15 +157,15 @@ class ValuesCard extends StatelessWidget {
                     builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: CustomPaint(size: Size.square(Shape.z(12)), painter: _Bin(h ? Grey.g95 : Grey.g56))),
                   ),
               ],
-              if (at >= 0 && doc.onCardMove != null)
-                for (final (by, up) in const [(-1, true), (1, false)])
-                Hov(
-                  key: ValueKey('card-move:${card.name}:$by'),
-                  onTap: (up ? at > 0 : at < doc.movable.length - 1) ? () => doc.onCardMove!(card.name, by) : null,
-                  builder: (_, h) => SizedBox(
-                    width: Shape.z(16),
-                    height: Shape.z(16),
-                    child: CustomPaint(painter: _Chevron(up, (up ? at > 0 : at < doc.movable.length - 1) ? (h ? Grey.g95 : Grey.g56) : Grey.g26)),
+              if (at >= 0 && doc.onCardMove != null && doc.movable.length > 1)   // (Alight Motion's ≡ on an effect's row, After Effects' dragging an effect in Effect Controls: held and dragged up or down its stack)
+                Draggable<String>(
+                  key: ValueKey('card-drag:${card.name}'),
+                  data: card.name,
+                  axis: Axis.vertical,
+                  feedback: FxDragGhost(card),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.grab,
+                    child: SizedBox(width: Shape.z(16), height: Shape.z(16), child: CustomPaint(painter: _Grip(Grey.g56))),
                   ),
                 ),
             ]),
@@ -222,34 +222,43 @@ class ValuesCard extends StatelessWidget {
         ],
       ],
     );
-    return side == null ? sect : CardOver(child: sect); // (a hand anywhere on the card plays its preview)
+    final shown = side == null ? sect : CardOver(child: sect); // (a hand anywhere on the card plays its preview)
+    if (at < 0 || doc.onCardMove == null) return shown;
+    return DragTarget<String>(   // (an effect let go on this one's card takes its place; the line says on which side it lands, as the stack's own EffectCard)
+      onWillAcceptWithDetails: (d) => d.data != card.name && doc.movable.contains(d.data),
+      onAcceptWithDetails: (d) => doc.onCardMove!(d.data, at - doc.movable.indexOf(d.data)),
+      builder: (context, held, _) {
+        final from = held.isEmpty ? -1 : doc.movable.indexOf(held.first!);
+        final below = from >= 0 && from < at;
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            shown,
+            if (from >= 0) Positioned(left: 0, right: 0, top: below ? null : 0, bottom: below ? 0 : null, height: Shape.z(2), child: ColoredBox(color: card.tone)),
+          ],
+        );
+      },
+    );
   }
 }
 
-/// A small chevron, up or down: a card moved up or down its stack.
-class _Chevron extends CustomPainter {
-  const _Chevron(this.up, this.ink);
-  final bool up;
+/// Three short lines, ≡: an effect's card held there is dragged up or down its stack.
+class _Grip extends CustomPainter {
+  const _Grip(this.ink);
   final Color ink;
   @override
   void paint(Canvas c, Size s) {
-    final y0 = s.height * (up ? .62 : .38), y1 = s.height * (up ? .38 : .62);
-    c.drawPath(
-      Path()
-        ..moveTo(s.width * .3, y0)
-        ..lineTo(s.width * .5, y1)
-        ..lineTo(s.width * .7, y0),
-      Paint()
-        ..color = ink
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
+    final paint = Paint()
+      ..color = ink
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round;
+    for (final y in const [.32, .5, .68]) {
+      c.drawLine(Offset(s.width * .25, s.height * y), Offset(s.width * .75, s.height * y), paint);
+    }
   }
 
   @override
-  bool shouldRepaint(_Chevron o) => o.up != up || o.ink != ink;
+  bool shouldRepaint(_Grip o) => o.ink != ink;
 }
 
 /// An effect card's ⋮ (AbsentMotion's EffectHeader More): what else is done with it, in a short list over the panel,

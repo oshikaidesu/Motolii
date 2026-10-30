@@ -74,7 +74,7 @@ class _EffectCardState extends State<EffectCard> {
               data: k,
               delay: const Duration(milliseconds: 180),
               axis: Axis.vertical,
-              feedback: _DragGhost(fx),
+              feedback: FxDragGhost(fx),
               childWhenDragging: Opacity(opacity: .35, child: head),
               child: head,
             ),
@@ -174,8 +174,8 @@ class _EffectCardState extends State<EffectCard> {
 }
 
 /// What follows the pointer while an effect is dragged: the folded head, lifted.
-class _DragGhost extends StatelessWidget {
-  const _DragGhost(this.fx);
+class FxDragGhost extends StatelessWidget {
+  const FxDragGhost(this.fx, {super.key});
   final Fx fx;
   @override
   Widget build(BuildContext context) => Container(

@@ -223,7 +223,7 @@ void main() {
         await t.pump();
       }
       await g.up();
-      await t.pumpAndSettle();
+      await settled(t, ws);   // (the carry answered by the inside before it is read: under the whole set's load a read came first, 0 carried)
       ws.reread();
       final moved = (ws.marks.single.$1 - at) * Ws.fps;
       ws.inside!.undo();
