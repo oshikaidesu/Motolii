@@ -368,6 +368,7 @@ class Doc extends ChangeNotifier {
   /// The host's cards that may be moved up or down (its effects, by their titles), and what moves one so many places.
   List<String> movable = const [];
   void Function(String title, int by)? onCardMove;
+  double? Function(String sum)? onSum;   // (a sum typed in a number field worked out: null, it is not one)
   void Function(List<String> names)? onCardReset;
   void Function(String title)? onCardRemove;
   void Function(String title)? onCardEye;

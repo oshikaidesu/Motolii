@@ -1,7 +1,7 @@
 # Tags the window tests are run by (package:test's Tagging tests). "main": the main few of each part of the window
 # (inspector, stage, timeline bars, keys, shelves, the Text tool, colours, undo, markers, a song), run after each fix in
 # under a minute:
-#   flutter test --tags main test/workspace_joined_test.dart test/workspace_ableton_keys_test.dart test/workspace_dock_test.dart
+#   flutter test --tags main test/workspace_joined_test.dart test/workspace_ableton_keys_test.dart test/workspace_dock_test.dart test/workspace_ableton_fields_test.dart
 # The whole set, every test, is run by the machine on each push to main (.github/workflows/build.yml): the main ones are
 # the maker's, the rest the machine's (Fowler and Humble's deployment pipeline; Flutter's Tree hygiene). A list of the
 # whole kept by hand left one file out, and its failure unseen: golf_noise.md (100).

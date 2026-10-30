@@ -136,6 +136,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         onAim: (at) => ws.aim = at.startsWith('v_') ? at.substring(2) : null, // (a colour link of a card is aimed at that value)
         movable: int.tryParse(l?.id ?? '') == null ? const [] : m.fxTitles(int.parse(l!.id)), // (its effects, up or down their stack)
         onCardMove: int.tryParse(l?.id ?? '') == null ? null : (title, by) => ws.after(m.later('fx_move', thing: int.parse(l!.id), word: title, number: by.toDouble())),
+        onSum: m.workOut,
         onCardRemove: int.tryParse(l?.id ?? '') == null ? null : (title) => ws.after(m.later('fx_out', thing: int.parse(l!.id), word: title), (_, _) => ws.reread()),
         onCardEye: int.tryParse(l?.id ?? '') == null ? null : (title) => ws.after(m.later('fx_eye', thing: int.parse(l!.id), word: title), (_, _) => ws.reread()),
         onCardDuplicate: int.tryParse(l?.id ?? '') == null ? null : (title) => ws.after(m.later('fx_duplicate', thing: int.parse(l!.id), word: title), (done, why) => done ? ws.reread() : ws.notice = why),   // (Alight Motion's ⋮ Duplicate: put on again after it, its values with it)

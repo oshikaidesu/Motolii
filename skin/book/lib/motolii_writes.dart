@@ -33,6 +33,16 @@ extension MotoliiWrites on Motolii {
 
   bool at(double seconds) => _at(_m, seconds) != 0;
 
+  /// A sum typed in a number field worked out (+ - * / and brackets, by SQLite as the ways are): null, it is not one.
+  double? workOut(String sum) => _with([sum], (s) {
+    final out = malloc<Double>();
+    try {
+      return _workOut(_m, s[0], out) != 0 ? out.value : null;
+    } finally {
+      malloc.free(out);
+    }
+  });
+
   /// A new thing (film, picture, text, solid) from a file (a solid: a file, or ring, gem or cube): its number, 0 if it was not made.
   /// What a solid is made of is its `fill`: a colour, or `glass`.
   int add(String kind, String file) => _took(_with([kind, file], (s) => _add(_m, s[0], s[1])));

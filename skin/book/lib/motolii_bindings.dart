@@ -2519,6 +2519,33 @@ class MotoliiBindings {
         )
       >();
 
+  int motolii_work_out(
+    ffi.Pointer<Motolii> m,
+    ffi.Pointer<pkg_ffi.Utf8> sum,
+    ffi.Pointer<ffi.Double> is$,
+  ) {
+    return _motolii_work_out(m, sum, is$);
+  }
+
+  late final _motolii_work_outPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int Function(
+            ffi.Pointer<Motolii>,
+            ffi.Pointer<pkg_ffi.Utf8>,
+            ffi.Pointer<ffi.Double>,
+          )
+        >
+      >('motolii_work_out');
+  late final _motolii_work_out = _motolii_work_outPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<Motolii>,
+          ffi.Pointer<pkg_ffi.Utf8>,
+          ffi.Pointer<ffi.Double>,
+        )
+      >();
+
   int motolii_write(ffi.Pointer<Motolii> m, ffi.Pointer<pkg_ffi.Utf8> mp4) {
     return _motolii_write(m, mp4);
   }

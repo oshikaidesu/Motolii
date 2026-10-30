@@ -411,4 +411,23 @@ alight_ui.md の「操作体系の全体」の良い所 7 つと、そこから�
 - [x] ⑦ グループの中はパンくず：済（289 行）
 - [ ] 効果の欄は 2 段：一覧は同じ高さの畳んだ行（名前・目・≡）と「+ Add Effect」、≡ を長押しして引きずって並べ替え。行を押すとその効果のつまみだけが開き、頭に「戻る・?・⋮・ゴミ箱」。Motolii は開いた大きな札のまま ↑↓。（一部、10/30 夜）：≡ を引きずって並べ替えは入った（AE の Effect Controls と同じく開いた札のまま）。まだ：畳んだ行の一覧と、押すとそのつまみだけ開く 2 段。見本：`panels/EffectsPanel.kt` の EffectListRow、`Reorder.kt`・`RowDrag.kt`（行の高さが揃っているので位置の計算が数行）（golf_noise.md (101)）
 
-合計：347 箱。
+
+## Q. インスペクターの当たり前（数字の欄）（14）
+10/30 夜、ユーザー：「コンセプトは新しいが、基盤の悪さが台無しにしている。当たり前の操作ができてない」。AE（Adjust layer properties）・Figma（Adjust alignment…）・Blender（Fields）の公式の手引きで 2 本以上が持つ物を当たり前とする。キーの割り当てが割れた所は Ableton（Motolii の決まり）。
+
+- [x] 横にこすって値を変える（AE・Figma・Blender）
+- [x] こする時の細かく・大きく（⇧ 10 分の 1、⌃ 10 倍：Ableton）
+- [x] 欄を押して、↑↓ で 1 刻み、修飾キーで大きく細かく（AE・Figma）
+- [x] 数字を打つと始まる、Return で打ち始める（Ableton・Blender）
+- [x] Return・欄の外を押すで確定、Esc で取り消し（AE・Blender）
+- [x] 複数選んだ時は Mixed（Figma）
+- [x] Delete で元の値に（Ableton）
+- [x] Tab・⇧Tab で次・前の欄へ、そのまま打てる（AE・Figma・Blender） — 済（10/30 夜）：窓の試験（`workspace_ableton_fields_test.dart`）
+- [x] 式を打てる（`100*2`、`(1+2)/3`、`*2` は今の値から）（AE・Figma・Blender） — 済（10/30 夜）：motolii_work_out、計算は SQLite（way と同じ）、窓の試験（同）
+- [x] 打っている途中の ↑↓ で値を増減（AE・Figma） — 済（10/30 夜）：窓の試験（同）
+- [x] 空のまま Return は取り消し — 済（10/30 夜）：窓の試験（同）
+- [x] どの数字の欄でも右クリックで Reset・Copy・Paste・キーを打つ／消す（AE の右クリック、Blender の欄のメニュー、10/29 ユーザー「マウスだけで全部できる」） — 済（10/30 夜）：効果のつまみにも。窓の試験（同）
+- [x] マウスだけで 1 つの値を元に戻せる（AE の Reset） — 済（10/30 夜）：右クリックの Reset。隠れていた不具合も直した：欄の Reset は札を作った時の値に戻るだけだった。今は札の Reset と同じく、値を忘れて「元の値」に戻す（Delete キーも）
+- [ ] **札の頭の Reset・Copy・Paste が Transform などの手描きの札にもある**（AE の Reset）
+
+合計：361 箱。

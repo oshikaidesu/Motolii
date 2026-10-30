@@ -285,28 +285,7 @@ class _CardMoreState extends State<_CardMore> {
               link: _link,
               targetAnchor: Alignment.bottomRight,
               followerAnchor: Alignment.topRight,
-              child: Container(
-                width: Shape.z(150),
-                padding: EdgeInsets.all(Shape.s(3)),
-                decoration: BoxDecoration(color: Grey.g15, borderRadius: BorderRadius.all(Shape.r(8)), border: Border.all(color: Grey.g26)),
-                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  for (final (key, label, does) in widget.items)
-                    Hov(
-                      key: ValueKey('card-$key:${widget.name}'),
-                      onTap: () {
-                        _portal.hide();
-                        does();
-                      },
-                      builder: (_, h) => Container(
-                        height: Shape.z(22),
-                        padding: EdgeInsets.symmetric(horizontal: Shape.s(8)),
-                        alignment: Alignment.centerLeft,
-                        decoration: BoxDecoration(color: h ? Grey.g26 : null, borderRadius: BorderRadius.all(Shape.r(5))),
-                        child: Text(label, maxLines: 1, style: T.name(h ? Grey.g95 : Grey.g76)),
-                      ),
-                    ),
-                ]),
-              ),
+              child: TinyMenu(name: 'card', of: widget.name, items: widget.items, hide: _portal.hide),
             ),
           ]),
           child: Hov(

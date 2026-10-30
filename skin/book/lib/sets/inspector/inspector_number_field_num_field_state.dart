@@ -14,6 +14,10 @@ import '../foundations/text_hand.dart';
 class NumFieldState extends State<NumField> {
   final _node = FocusNode(debugLabel: 'num');
   late final FocusNode _ef = FocusNode(debugLabel: 'num-edit', onKeyEvent: _editKey);
+  final _menu = OverlayPortalController();
+  Offset _menuAt = Offset.zero;
+  static int rightAt = -1;   // (the press a field took for its menu: the row round it leaves it)
+  static bool _tabbed = false;   // (the field that takes focus now was gone to by Tab: it opens to be typed in)
   final _ctl = TextEditingController();
   bool _editing = false, _err = false, _hover = false, _focus = false, _drag = false, _moved = false, _cancelled = false;
   Offset _down = Offset.zero;
@@ -86,12 +90,34 @@ class NumFieldState extends State<NumField> {
     }
   }
 
+  // (what a right click on it offers: its keys as its mark does, the rest of the row's menu on the row's own label)
+  List<(String, String, VoidCallback)> _menuItems() {
+    final doc = _x.doc, id = widget.id, ks = doc.keys[id] ?? _keys;
+    return [
+      ('reset', 'Reset', _reset),
+      ('copy', 'Copy', () {
+        if (doc.get(id) case final v?) Clipboard.setData(ClipboardData(text: fmt(v, widget.decimals)));
+      }),
+      ('paste', 'Paste', () async {
+        final t = double.tryParse((await Clipboard.getData(Clipboard.kTextPlain))?.text?.trim() ?? '');
+        if (t != null && mounted) _apply(t, same: true);
+      }),
+      if (ks != null) ...[
+        if (ks != KeyS.at) ('key', 'Key this frame', () => doc.setKey(id, KeyS.at)),
+        if (ks == KeyS.at) ('unkey', 'Remove key', () => doc.setKey(id, KeyS.anim)),
+        if (ks != KeyS.off) ('unanimate', 'Remove animation', () => doc.setKey(id, KeyS.off)),
+      ],
+    ];
+  }
+
   void _reset() {
-    final f = widget.onReset;
+    final f = widget.onReset, doc = _x.doc, id = widget.id;
     if (f != null) {
       f();
+    } else if (id.startsWith('v_') && doc.onCardReset != null) {
+      doc.onCardReset!([id.substring(2)]);   // (as it comes: what is said of it forgotten, its card's own Reset; the inspector's default is only what it was when the card was made)
     } else {
-      _x.doc.resetIds([widget.id]);
+      doc.resetIds([id]);
     }
   }
 
@@ -120,6 +146,11 @@ class NumFieldState extends State<NumField> {
 
   void _onDown(PointerDownEvent e) {
     if (!_on || _editing) return;
+    if (e.buttons == kSecondaryButton) {   // (After Effects' and Blender's right click on a value; every number, its row or an effect's knob alike: all by the mouse alone, 10/29)
+      rightAt = e.pointer;
+      _menuAt = e.position;
+      return _menu.show();
+    }
     if (_keyAt case final k? when e.buttons == kPrimaryButton && (e.localPosition - k).distance <= 9) {
       final now = _x.doc.keys[widget.id] ?? _keys;   // (as the document says it now: the field may not have been built since an undo)
       return _x.doc.setKey(widget.id, now == KeyS.at ? KeyS.anim : KeyS.at);   // (the row's KeyMark contract: inspector_rows_prop_row.dart)
@@ -306,18 +337,48 @@ class NumFieldState extends State<NumField> {
       _commit();
       return KeyEventResult.handled;
     }
+    if (e.logicalKey == LogicalKeyboardKey.tab) {   // (After Effects', Figma's and Blender's Tab: this number kept, the next field ready to type in; a number not taken stays here)
+      if (_commit()) {
+        final back = HardwareKeyboard.instance.isShiftPressed;
+        WidgetsBinding.instance.addPostFrameCallback((_) {   // (once its own editor is gone: that is what comes next till then)
+          _tabbed = true;
+          back ? _node.previousFocus() : _node.nextFocus();
+          scheduleMicrotask(() => _tabbed = false);   // (after the focus has gone there, a microtask of its own)
+        });
+      }
+      return KeyEventResult.handled;
+    }
+    if (e.logicalKey == LogicalKeyboardKey.arrowUp || e.logicalKey == LogicalKeyboardKey.arrowDown) {   // (After Effects' and Figma's: the number typed so far moved a step)
+      final t = double.tryParse(_ctl.text.trim()) ?? _x.doc.get(widget.id);
+      if (t == null) return KeyEventResult.handled;
+      final up = e.logicalKey == LogicalKeyboardKey.arrowUp ? 1 : -1;
+      _ctl.text = fmt(_clamp(t + up * widget.step * _x.cfg.mult()), widget.decimals);
+      _ctl.selection = TextSelection(baseOffset: 0, extentOffset: _ctl.text.length);
+      return KeyEventResult.handled;
+    }
     return KeyEventResult.ignored;
   }
 
-  void _commit() {
-    final t = double.tryParse(_ctl.text.trim());
+  // (the number typed, or a sum: After Effects', Figma's and Blender's; one begun with * or / goes on from the value as it is)
+  double? _typed() {
+    final said = _ctl.text.trim(), cur = _x.doc.get(widget.id);
+    return double.tryParse(said) ?? _x.doc.onSum?.call(said.startsWith(RegExp(r'[*/]')) && cur != null ? '$cur$said' : said);
+  }
+
+  bool _commit() {
+    if (_ctl.text.trim().isEmpty) {   // (nothing typed: as Esc)
+      _close();
+      return true;
+    }
+    final t = _typed();
     if (t == null) {
       // contract: invalid text keeps the field open and says "Number required" (C2).
       setState(() => _err = true);
-      return;
+      return false;
     }
     _apply(t, same: true);
     _close();
+    return true;
   }
 
   void _close({bool refocus = true}) {
@@ -329,7 +390,7 @@ class NumFieldState extends State<NumField> {
   void _editFocus() {
     if (_editing && !_ef.hasFocus) {
       // contract: leaving the field applies a valid number and drops an invalid one.
-      final t = double.tryParse(_ctl.text.trim());
+      final t = _typed();
       if (t != null) _apply(t, same: true);
       _close(refocus: false);
     }
@@ -428,7 +489,7 @@ class NumFieldState extends State<NumField> {
                 maxLines: 1,
                 selectAllOnFocus: false,   // (_startEdit says the selection: all of the number when begun by a click or Return; the caret after a number begun by typing it, which Flutter's own select-all on a desktop's focus took, so the next key replaced the first: golf P05, "230" came out 0)
                 keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-+eE]'))],
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-+eE*/() ]'))],
                 onChanged: (_) {
                   if (_err) setState(() => _err = false);
                 },
@@ -464,10 +525,22 @@ class NumFieldState extends State<NumField> {
             glyphBox: Pop.glyph,
           ),
         );
-        return Focus(
+        return OverlayPortal(
+          controller: _menu,
+          overlayChildBuilder: (_) => Stack(children: [
+            Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _menu.hide, onSecondaryTap: _menu.hide)),
+            Positioned(left: _menuAt.dx, top: _menuAt.dy, child: TinyMenu(name: 'num', of: widget.id, items: _menuItems(), hide: _menu.hide)),
+          ]),
+          child: Focus(
           focusNode: _node,
           onKeyEvent: _key,
-          onFocusChange: (f) => setState(() => _focus = f),
+          onFocusChange: (f) {
+            setState(() => _focus = f);
+            if (f && _tabbed) {
+              _tabbed = false;
+              _startEdit();
+            }
+          },
           child: RawGestureDetector(
             // (a press that scrubs is the field's at once: a scroll round the inspector would take a drag that goes up or
             //  down too and carry the field away under the hand; a press on a glyph that owns it, or while typing, is not)
@@ -491,6 +564,7 @@ class NumFieldState extends State<NumField> {
               },
               child: body,
             ),
+          ),
           ),
           ),
         );

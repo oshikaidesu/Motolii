@@ -2,6 +2,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_number_field_num_field_state.dart';
 
+import 'package:lab_book/sets/inspector/inspector_small.dart' show Hov;
+
 import '../../tokens.dart';
 
 TextStyle blockValue(Color c) => T.value(c).copyWith(fontSize: T.px(14), fontWeight: FontWeight.w600, height: 1.1);
@@ -55,6 +57,37 @@ class NumField extends StatefulWidget {
   State<NumField> createState() => NumFieldState();
 }
 
+
+/// A short list over the panel, one picked does that and closes: an effect card's ⋮, a number's right click.
+class TinyMenu extends StatelessWidget {
+  const TinyMenu({super.key, required this.name, required this.of, required this.items, required this.hide});
+  final String name, of; // (each row keyed name-word:of)
+  final List<(String, String, VoidCallback)> items;
+  final VoidCallback hide;
+  @override
+  Widget build(BuildContext context) => Container(
+    width: Shape.z(150),
+    padding: EdgeInsets.all(Shape.s(3)),
+    decoration: BoxDecoration(color: Grey.g15, borderRadius: BorderRadius.all(Shape.r(8)), border: Border.all(color: Grey.g26)),
+    child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      for (final (key, label, does) in items)
+        Hov(
+          key: ValueKey('$name-$key:$of'),
+          onTap: () {
+            hide();
+            does();
+          },
+          builder: (_, h) => Container(
+            height: Shape.z(22),
+            padding: EdgeInsets.symmetric(horizontal: Shape.s(8)),
+            alignment: Alignment.centerLeft,
+            decoration: BoxDecoration(color: h ? Grey.g26 : null, borderRadius: BorderRadius.all(Shape.r(5))),
+            child: Text(label, maxLines: 1, style: T.name(h ? Grey.g95 : Grey.g76)),
+          ),
+        ),
+    ]),
+  );
+}
 
 /// The field's claim on a press that scrubs it: taken at once, before a scroll round it can (Flutter's EagerGestureRecognizer, asked first).
 class ScrubClaim extends OneSequenceGestureRecognizer {

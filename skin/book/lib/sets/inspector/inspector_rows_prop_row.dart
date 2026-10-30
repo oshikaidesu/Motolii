@@ -1,4 +1,5 @@
 // One property: label, its value cells, the key mark, the reset mark. The columns are the same on every row (B1) so X/Y/Z line up.
+import 'package:lab_book/sets/inspector/inspector_number_field_num_field_state.dart' show NumFieldState;
 import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
@@ -200,7 +201,7 @@ class _PropRowState extends State<PropRow> {
         return Listener(
           behavior: HitTestBehavior.translucent,
           onPointerDown: (e) {
-            if (e.buttons == kSecondaryButton && widget.keyable) setState(() => _menu = !_menu);
+            if (e.buttons == kSecondaryButton && widget.keyable && e.pointer != NumFieldState.rightAt) setState(() => _menu = !_menu);   // (on the label: a number's own right click is its own)
           },
           child: Column(
             mainAxisSize: MainAxisSize.min,

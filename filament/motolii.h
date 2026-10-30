@@ -45,6 +45,7 @@ const char* motolii_find(Motolii* m, const char* query, const char* items, int l
 int motolii_guide(Motolii* m, const char* axis, double at, int on);
 const char* motolii_guides(Motolii* m);
 void motolii_close(Motolii* m);
+int motolii_work_out(Motolii* m, const char* sum, double* is);     /* a sum typed in a number field (+ - * / and brackets), as After Effects', Figma's and Blender's take one, worked out by SQLite as the ways are; 0: it is not one */
 const char* motolii_trouble(Motolii* m);                           /* why the last call that was not done was not */
 
 const char* motolii_kind_of(const char* file);                     /* what kind of thing a file makes ("": none) */

@@ -151,6 +151,7 @@ class Motolii {
 
   late final _play = _b.motolii_play;
   late final _at = _b.motolii_at;
+  late final _workOut = _b.motolii_work_out;
   late final _add = _b.motolii_add;
   late final _remove = _b.motolii_remove;
   late final _set = _b.motolii_set;

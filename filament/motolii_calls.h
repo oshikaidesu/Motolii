@@ -15,6 +15,22 @@ const char* motolii_effect_names(Motolii* m) { return by_look(m, [m] { return (m
 int motolii_effect(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)(doc_effect(doc(m), thing, name, at))); }); }
 int motolii_define(Motolii* m, const char* way, const char* expression) { return by_hand(m, [=] { return changes(m, (int)(doc_define(doc(m), way, expression))); }); }
 const char* motolii_ways(Motolii* m) { return by_look(m, [m] { return (m->listed = doc_ways(*m->d)).c_str(); }); }
+int motolii_work_out(Motolii* m, const char* sum, double* is) {
+    const std::string said(sum);
+    if (said.find_first_not_of("0123456789.+-*/()eE ") != std::string::npos) return 0;   // (a sum and nothing else: what is asked of SQLite is only ever that)
+    static const std::regex whole("(^|[^0-9.eE])([0-9]+)(?![0-9.eE])");
+    const std::string real = std::regex_replace(said, whole, "$1$2.0");   // (SQLite divides whole numbers as whole numbers: 1/3 would be 0)
+    return by_look(m, [&] {
+        sqlite3_stmt* asked = nullptr;
+        char* text = sqlite3_mprintf("select (%s)", real.c_str());
+        const bool made = sqlite3_prepare_v2(m->d->file, text, -1, &asked, nullptr) == SQLITE_OK;
+        sqlite3_free(text);
+        const bool ok = made && sqlite3_step(asked) == SQLITE_ROW && sqlite3_column_type(asked, 0) != SQLITE_NULL;
+        if (ok) *is = sqlite3_column_double(asked, 0);
+        sqlite3_finalize(asked);
+        return (int)ok;
+    });
+}
 int motolii_value(Motolii* m, int thing, const char* name, double at, double* is) {
     return by_look(m, [=] { return (int)(doc_value(doc(m), thing, name, at, is)); });
 }
