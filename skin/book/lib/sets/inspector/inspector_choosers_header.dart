@@ -254,9 +254,6 @@ class ChooserState extends State<Chooser> {
               final w = (context.findRenderObject() as RenderBox?)?.size.width ?? 160;
               return Stack(
                 children: [
-                  Positioned.fill(
-                    child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: () => _set(false)),
-                  ),
                   CompositedTransformFollower(
                     link: _link,
                     showWhenUnlinked: false,
@@ -265,13 +262,13 @@ class ChooserState extends State<Chooser> {
                     offset: Offset(0, _up ? -4 : 4),
                     child: Align(
                       alignment: _up ? Alignment.bottomLeft : Alignment.topLeft,
-                      child: SizedBox(width: math.max(w, 160), child: _menu(context, cur, pick)),
+                      child: TapRegion(groupId: _link, onTapOutside: (_) => _set(false), child: SizedBox(width: math.max(w, 160), child: _menu(context, cur, pick))),
                     ),
                   ),
                 ],
               );
             },
-            child: field,
+            child: TapRegion(groupId: _link, child: field),   // (a press on it shuts the list by its own tap, not shut and opened again)
           ),
         ),
       ),
@@ -403,7 +400,21 @@ class EmptyState extends StatelessWidget {
           padding: EdgeInsets.only(top: Shape.s(4), bottom: Shape.s(8)),
           child: Text('Nothing selected', style: T.label(Grey.g56).copyWith(height: 1.4)),
         ),
-        for (final c in x.doc.cards) ValuesCard(c), // (the host's own: the whole picture's values)
+        // (nothing picked, nothing shown: After Effects' Effect Controls is a layer's, Alight Motion shows none; the stage's own
+        //  as Apple Motion's Project: when it is asked for, not there unasked)
+        Hov(
+          key: const ValueKey('stage-settings'),
+          onTap: () => x.doc.flag('stage.open', !(x.doc.b['stage.open'] ?? false)),
+          builder: (_, h) => Container(
+            height: Pop.cell,
+            margin: EdgeInsets.only(bottom: Pop.gap),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: h ? Grey.g20 : Pop.well, borderRadius: BorderRadius.all(Shape.r(6))),
+            child: Text('Stage settings', style: T.label(h ? Grey.g95 : Grey.g76)),
+          ),
+        ),
+        if (x.doc.b['stage.open'] ?? false)
+          for (final c in x.doc.cards) ValuesCard(c), // (the host's own: the whole picture's values)
         if (x.cfg.maybe)
           Sect(
             title: 'Composition',

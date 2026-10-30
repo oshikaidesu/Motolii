@@ -144,6 +144,11 @@ class NumFieldState extends State<NumField> {
   Offset? _keyAt;
   KeyS? _keys;
 
+  bool _inMe(Offset at) {
+    final box = context.findRenderObject() as RenderBox?;
+    return box != null && (box.localToGlobal(Offset.zero) & box.size).contains(at);
+  }
+
   void _onDown(PointerDownEvent e) {
     if (!_on || _editing) return;
     if (e.buttons == kSecondaryButton) {   // (After Effects' and Blender's right click on a value; every number, its row or an effect's knob alike: all by the mouse alone, 10/29)
@@ -525,12 +530,9 @@ class NumFieldState extends State<NumField> {
             glyphBox: Pop.glyph,
           ),
         );
-        return OverlayPortal(
+        return OverlayPortal.targetsRootOverlay(
           controller: _menu,
-          overlayChildBuilder: (_) => Stack(children: [
-            Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _menu.hide, onSecondaryTap: _menu.hide)),
-            Positioned(left: _menuAt.dx, top: _menuAt.dy, child: TinyMenu(name: 'num', of: widget.id, items: _menuItems(), hide: _menu.hide)),
-          ]),
+          overlayChildBuilder: (_) => TinyMenuAt(at: _menuAt, name: 'num', of: widget.id, items: _menuItems(), hide: _menu.hide, keep: (e) => e.pointer == rightAt && e.buttons == kSecondaryButton && _inMe(e.position)),   // (right pressed here again: its place, as a Mac's)
           child: Focus(
           focusNode: _node,
           onKeyEvent: _key,

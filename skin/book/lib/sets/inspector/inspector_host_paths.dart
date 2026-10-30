@@ -404,9 +404,6 @@ class _FloatState extends State<Float> {
         controller: _portal,
         overlayChildBuilder: (_) => Stack(
           children: [
-            Positioned.fill(
-              child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: () => _set(false)),
-            ),
             CompositedTransformFollower(
               link: _link,
               showWhenUnlinked: false,
@@ -415,7 +412,7 @@ class _FloatState extends State<Float> {
               offset: Offset(0, _up ? -4 : 4),
               child: Align(
                 alignment: from,
-                child: SizedBox(
+                child: TapRegion(groupId: _link, onTapOutside: (_) => _set(false), child: SizedBox(
                   width: widget.width ?? (context.findRenderObject() as RenderBox?)?.size.width ?? 200,
                   child: Container(
                     padding: const EdgeInsets.all(3),
@@ -427,12 +424,12 @@ class _FloatState extends State<Float> {
                     ),
                     child: widget.menu(() => _set(false)),
                   ),
-                ),
+                )),
               ),
             ),
           ],
         ),
-        child: widget.anchor(_portal.isShowing, () => _set(!_portal.isShowing)),
+        child: TapRegion(groupId: _link, child: widget.anchor(_portal.isShowing, () => _set(!_portal.isShowing))),
       ),
     );
   }

@@ -1,8 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_number_field_num_field_state.dart';
 
-import 'package:lab_book/sets/inspector/inspector_small.dart' show Hov;
+import 'package:lab_book/sets/inspector/inspector_small.dart' show FloatShut, Hov;
 
 import '../../tokens.dart';
 
@@ -87,6 +89,27 @@ class TinyMenu extends StatelessWidget {
         ),
     ]),
   );
+}
+
+/// [TinyMenu] where the hand pressed, kept inside the window.
+class TinyMenuAt extends StatelessWidget {
+  const TinyMenuAt({super.key, required this.at, required this.name, required this.of, required this.items, required this.hide, this.keep});
+  final Offset at;
+  final String name, of;
+  final List<(String, String, VoidCallback)> items;
+  final VoidCallback hide;
+  final bool Function(PointerDownEvent)? keep;
+  @override
+  Widget build(BuildContext context) {
+    final room = MediaQuery.sizeOf(context), wide = Shape.z(150), high = items.length * Shape.z(22) + 2 * Shape.s(3) + 2;
+    return Stack(children: [
+      Positioned(
+        left: at.dx.clamp(0, math.max(0, room.width - wide)).toDouble(),
+        top: (at.dy + high <= room.height ? at.dy : math.max(0, at.dy - high)).toDouble(),
+        child: FloatShut(shut: hide, keep: keep, child: TinyMenu(name: name, of: of, items: items, hide: hide)),
+      ),
+    ]);
+  }
 }
 
 /// The field's claim on a press that scrubs it: taken at once, before a scroll round it can (Flutter's EagerGestureRecognizer, asked first).

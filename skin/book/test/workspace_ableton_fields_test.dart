@@ -6,7 +6,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart' show motoliiDir;
 import 'package:lab_book/workspace/dock_parts.dart' show DockSearch;
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show Chooser, Ctx, InspectorPanel, NumField;
+import 'package:lab_book/workspace/timeline.dart' show WsTimeline;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show Chooser, Ctx, InspectorPanel, NumField, ValuesCard;
 
 import 'door.dart';
 
@@ -264,6 +265,77 @@ void main() {
     await t.tap(find.byKey(const ValueKey('row-reset:v_rotate')));
     await settled(t, ws);
     expect([m.value(a, 'rotate', 0), m.value(a, 'x', 0)], [0, isNot(0)], reason: 'that row alone');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, tags: 'main', skip: !insideBuilt);
+
+  testWidgets('a menu shuts when anything else is touched, by either button, and on Esc; another right click opens the next in its place', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final a = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$a');
+    await t.pumpAndSettle();
+    final x = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_x'), y = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_z');
+    final number = find.byKey(const ValueKey('num-reset:v_x')), other = find.byKey(const ValueKey('num-reset:v_z')), stage = find.byKey(const ValueKey('ws-stage-comp'));
+    await seen(t, x);
+    Future<void> open() async {
+      await t.tap(x, buttons: kSecondaryButton);
+      await t.pumpAndSettle();
+      expect(number, findsOneWidget);
+    }
+    await open();
+    await t.tapAt(t.getCenter(stage));
+    await t.pumpAndSettle();
+    expect(number, findsNothing, reason: 'a press on the stage');
+    await open();
+    await t.tapAt(t.getCenter(stage), buttons: kSecondaryButton);
+    await t.pumpAndSettle();
+    expect(number, findsNothing, reason: 'a right press elsewhere');
+    await open();
+    await t.sendKeyEvent(LogicalKeyboardKey.escape);
+    await t.pumpAndSettle();
+    expect(number, findsNothing, reason: 'Esc');
+    await open();
+    await t.tap(y, buttons: kSecondaryButton);
+    await t.pumpAndSettle();
+    expect([number.evaluate().length, other.evaluate().length], [0, 1], reason: 'the next one, in its place');
+    await t.tapAt(t.getCenter(stage));
+    await t.pumpAndSettle();
+    final ruler = find.byType(WsTimeline), at = t.getTopLeft(ruler) + const Offset(400, 34);
+    await t.tapAt(at, buttons: kSecondaryButton);
+    await t.pumpAndSettle();
+    final menu = find.byKey(const ValueKey('ws-menu'));
+    expect(menu, findsOneWidget, reason: 'the ruler\'s own');
+    await t.tapAt(t.getCenter(stage));
+    await t.pumpAndSettle();
+    expect(menu, findsNothing, reason: 'the window\'s menu shuts on a press elsewhere');
+    await t.tapAt(at, buttons: kSecondaryButton);
+    await t.pumpAndSettle();
+    await t.tapAt(t.getCenter(stage), buttons: kSecondaryButton);
+    await t.pumpAndSettle();
+    expect(menu, findsNothing, reason: 'and on a right press elsewhere');
+    await t.tapAt(at, buttons: kSecondaryButton);
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.escape);
+    await t.pumpAndSettle();
+    expect(menu, findsNothing, reason: 'and on Esc');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, tags: 'main', skip: !insideBuilt);
+
+  testWidgets('nothing picked, the inspector shows nothing unasked: the stage\'s own cards when Stage settings is pressed (After Effects\' Effect Controls, Alight Motion, Apple Motion\'s Project)', (t) async {
+    final ws = await openWorkspace(t);
+    ws.select(null);
+    await t.pumpAndSettle();
+    expect(find.text('Nothing selected'), findsWidgets);
+    expect(find.byType(ValuesCard), findsNothing, reason: 'no card unasked');
+    await t.tap(find.byKey(const ValueKey('stage-settings')));
+    await t.pumpAndSettle();
+    expect(find.byType(ValuesCard), findsWidgets, reason: 'asked for');
+    await t.tap(find.byKey(const ValueKey('stage-settings')));
+    await t.pumpAndSettle();
+    expect(find.byType(ValuesCard), findsNothing, reason: 'and put away');
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, tags: 'main', skip: !insideBuilt);

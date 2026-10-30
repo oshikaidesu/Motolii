@@ -292,21 +292,24 @@ class _CardMoreState extends State<_CardMore> {
   @override
   Widget build(BuildContext context) => CompositedTransformTarget(
         link: _link,
-        child: OverlayPortal(
+        child: OverlayPortal.targetsRootOverlay(
           controller: _portal,
-          overlayChildBuilder: (_) => Stack(children: [
-            Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _portal.hide)),
-            CompositedTransformFollower(
+          overlayChildBuilder: (_) => Align(
+            alignment: Alignment.topLeft,
+            child: CompositedTransformFollower(
               link: _link,
               targetAnchor: Alignment.bottomRight,
               followerAnchor: Alignment.topRight,
-              child: TinyMenu(name: 'card', of: widget.name, items: widget.items, hide: _portal.hide),
+              child: FloatShut(shut: _portal.hide, group: _link, child: TinyMenu(name: 'card', of: widget.name, items: widget.items, hide: _portal.hide)),
             ),
-          ]),
-          child: Hov(
-            key: ValueKey('card-more:${widget.name}'),
-            onTap: widget.items.isEmpty ? null : _portal.show,
-            builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: Text('⋮', style: T.label(h ? Grey.g95 : Grey.g56))),
+          ),
+          child: TapRegion(
+            groupId: _link,   // (a press on the ⋮ itself shuts it, by the ⋮: not shut, then opened again)
+            child: Hov(
+              key: ValueKey('card-more:${widget.name}'),
+              onTap: widget.items.isEmpty ? null : _portal.toggle,
+              builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: Text('⋮', style: T.label(h ? Grey.g95 : Grey.g56))),
+            ),
           ),
         ),
       );

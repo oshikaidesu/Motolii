@@ -7,7 +7,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
-import '../sets/inspector/inspector_small.dart' show Hov;
+import '../sets/inspector/inspector_small.dart' show FloatShut, Hov;
 import '../tokens.dart';
 
 /// One row: [go] null, it cannot be done now and [why] says why; [keys] what it is pressed with too (never the only way).
@@ -98,7 +98,6 @@ class WsMenuState extends State<WsMenu> {
   @override
   Widget build(BuildContext context) => RawMenuAnchor(
     controller: _m,
-    consumeOutsideTaps: true,
     overlayBuilder: (context, info) {
       final w = Shape.z(220), pad = Shape.s(4);
       final h = math.min(info.overlaySize.height * .5, [for (final it in _items) _high(it)].fold(0.0, (a, b) => a + b)) + pad * 2;
@@ -106,8 +105,9 @@ class WsMenuState extends State<WsMenu> {
       return Positioned(
         left: math.max(0.0, math.min(at.dx, info.overlaySize.width - w)),
         top: at.dy + h <= info.overlaySize.height ? at.dy : math.max(0.0, at.dy - h),   // (down from the hand, or up where there is no room)
-        child: TapRegion(
-          groupId: info.tapRegionGroupId,
+        child: FloatShut(   // (the anchor shuts it on a left press outside and no more: every press, and Esc, as all that floats)
+          group: info.tapRegionGroupId,
+          shut: _m.close,
           child: Container(
             key: const ValueKey('ws-menu'),
             width: w,

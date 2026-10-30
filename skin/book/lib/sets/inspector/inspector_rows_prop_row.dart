@@ -179,22 +179,15 @@ class _PropRowState extends State<PropRow> {
             if (widget.under != null) Padding(padding: EdgeInsets.only(top: Shape.s(4), bottom: Shape.s(2)), child: widget.under),
           ],
         );
-        return OverlayPortal(
+        return OverlayPortal.targetsRootOverlay(
           controller: _menu,
-          overlayChildBuilder: (_) => Stack(children: [
-            Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _menu.hide, onSecondaryTap: _menu.hide)),
-            Positioned(
-              left: _menuAt.dx,
-              top: _menuAt.dy,
-              child: TinyMenu(name: 'row', of: widget.id, hide: _menu.hide, items: [
-                if (doc.onCardReset case final reset?) ('reset', 'Reset', () => reset([for (final i in ids) if (i.startsWith('v_')) i.substring(2)])),   // (Alight Motion's Reset Location, Scale, Rotation, Skew; After Effects' Reset)
-                if (ks != KeyS.at) ('key', 'Key this frame', () => doc.setKey(widget.id, KeyS.at)),
-                if (ks == KeyS.at) ('unkey', 'Remove key', () => doc.setKey(widget.id, KeyS.anim)),
-                if (ks != KeyS.off) ('unanimate', 'Remove animation', () => doc.setKey(widget.id, KeyS.off)),
-                if (doc.onMidi != null) ('midi', 'Keys from MIDI…', () => setState(() => _midi = true)),
-                if (cfg.maybe) ('relate', 'Relate…', () {}),
-              ]),
-            ),
+          overlayChildBuilder: (_) => TinyMenuAt(at: _menuAt, name: 'row', of: widget.id, hide: _menu.hide, items: [
+            if (doc.onCardReset case final reset?) ('reset', 'Reset', () => reset([for (final i in ids) if (i.startsWith('v_')) i.substring(2)])),   // (Alight Motion's Reset Location, Scale, Rotation; After Effects' Reset)
+            if (ks != KeyS.at) ('key', 'Key this frame', () => doc.setKey(widget.id, KeyS.at)),
+            if (ks == KeyS.at) ('unkey', 'Remove key', () => doc.setKey(widget.id, KeyS.anim)),
+            if (ks != KeyS.off) ('unanimate', 'Remove animation', () => doc.setKey(widget.id, KeyS.off)),
+            if (doc.onMidi != null) ('midi', 'Keys from MIDI…', () => setState(() => _midi = true)),
+            if (cfg.maybe) ('relate', 'Relate…', () {}),
           ]),
           child: Listener(
           behavior: HitTestBehavior.translucent,

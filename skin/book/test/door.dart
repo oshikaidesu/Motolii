@@ -84,6 +84,11 @@ List<String> inspectorEffects(WidgetTester t) {
 /// What [f] finds, brought into sight as a hand scrolls to it: the inspector builds only the cards in sight, so one
 /// further down is not there until the list is scrolled to it.
 Future<void> seen(WidgetTester t, Finder f) async {
+  final stage = find.byKey(const ValueKey('stage-settings'));
+  if (f.evaluate().isEmpty && stage.evaluate().isNotEmpty) {   // (nothing picked: the stage's own cards are asked for)
+    await t.tap(stage);
+    await t.pumpAndSettle();
+  }
   if (f.evaluate().isEmpty && inspectorList.evaluate().isNotEmpty) {
     final at = t.state<ScrollableState>(inspectorList).position; // (moved as a wheel moves it: a drag would land on a knob and scrub it)
     for (var y = 0.0; f.evaluate().isEmpty && y <= at.maxScrollExtent + 120; y += 120) {

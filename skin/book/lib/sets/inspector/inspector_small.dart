@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart' show KeyDownEvent, LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/forms/forms.dart';
 import '../../tokens.dart';
@@ -13,6 +14,53 @@ class Cap extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: EdgeInsets.only(top: Shape.s(6)),
     child: Text(text, style: T.label(color ?? Grey.g56).copyWith(height: 1.3)),
+  );
+}
+
+/// What floats over the window goes when anything else is touched, by either button, and on Esc (Flutter's TapRegion; a
+/// Mac's menu, Windows' too): [keep] a press it leaves alone, the one that opens it again; [group] what counts as inside.
+class FloatShut extends StatefulWidget {
+  const FloatShut({super.key, required this.shut, required this.child, this.group, this.keep});
+  final VoidCallback shut;
+  final Widget child;
+  final Object? group;
+  final bool Function(PointerDownEvent)? keep;
+  @override
+  State<FloatShut> createState() => _FloatShutState();
+}
+
+class _FloatShutState extends State<FloatShut> {
+  final _keys = FocusNode(debugLabel: 'float');
+  final _was = FocusManager.instance.primaryFocus;   // (who held the keys: given back)
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _keys.requestFocus() : null);   // (a field holding the keys would take Esc for itself)
+  }
+
+  @override
+  void dispose() {
+    if (_keys.hasFocus) _was?.requestFocus();
+    _keys.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => TapRegion(
+    groupId: widget.group,
+    onTapOutside: (e) {
+      if (!(widget.keep?.call(e) ?? false)) widget.shut();
+    },
+    child: Focus(
+      focusNode: _keys,
+      onKeyEvent: (_, e) {
+        if (e is! KeyDownEvent || e.logicalKey != LogicalKeyboardKey.escape) return KeyEventResult.ignored;
+        widget.shut();
+        return KeyEventResult.handled;
+      },
+      child: widget.child,
+    ),
   );
 }
 
