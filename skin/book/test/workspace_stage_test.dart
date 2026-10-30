@@ -87,6 +87,26 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('a camera takes a motion from the Effects shelf, as AbsentMotion\'s camera is moved by its own; an effect it has no picture for is not taken, and the top bar says why (golf ㊴)', (t) async {
+    final ws = _joined(), m = ws.inside!;
+    final cam = m.add('camera', 'camera');
+    ws
+      ..reread()
+      ..select('$cam');
+    Future<void> settle() async {
+      for (var i = 0; i < 200 && ws.waiting; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      }
+    }
+    expect(ws.screenToggle('$motoliiDir/effects/am_autoshake.am'), isTrue);
+    await settle();
+    expect(m.word(cam, 'fx'), endsWith('am_autoshake.am'), reason: 'Auto-Shake on the camera');
+    ws.screenToggle('$motoliiDir/effects/Shake.fs');
+    await settle();
+    expect(m.word(cam, 'fx'), endsWith('am_autoshake.am'), reason: 'a picture\'s effect not taken');
+    expect(ws.notice, 'Not taken: a camera takes motions only (it has no picture of its own)');
+  }, skip: !insideBuilt);
+
   testWidgets('a camera picked is on the frame while its bar is: it has no picture of its own to be seen (golf (76))', (t) async {
     final ws = _joined(), m = ws.inside!;
     m.add('shape', 'rect');

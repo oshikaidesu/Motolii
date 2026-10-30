@@ -397,6 +397,11 @@ static std::string doc_effect_names() {
 // An effect put on a thing at a moment, or taken off it if it is on (unsaid, its keys too), one step.
 // A thing's list of effects said as it now is (none: unsaid).
 static bool doc_fx_say(Doc& d, int thing, const std::vector<std::string>& list) {
+    // (a camera has no picture to lay an effect on: it takes AbsentMotion's motions, which move its place, as
+    //  AbsentMotion's camera is placed by its own motions (camera.cpp LayerView, styles.cpp OwnAt: ApplyMotion); golf ㊴)
+    if (doc_word(d, thing, "kind") == "camera")
+        for (const std::string& w : list)
+            if (std::filesystem::path(w).extension() != ".am") return d.trouble = "a camera takes motions only (it has no picture of its own): " + doc_fx_title(w) + " is an effect", false;
     if (!list.empty()) return doc_say(d, thing, "fx", doc_fx_join(list).c_str());
     return !doc_knows(d, thing, "fx") || doc_word(d, thing, "fx").empty() || doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = 'fx'", thing));
 }

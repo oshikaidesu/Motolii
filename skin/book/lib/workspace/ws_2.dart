@@ -392,7 +392,8 @@ class Ws extends ChangeNotifier {
   bool screenToggle(String file) {
     final m = _inside, t = int.tryParse(selected ?? '');
     if (m == null || t == null) return false;
-    after(m.later('fx_file', thing: t, word: file));   // (at the end of its effects or out, by the inside's rule for its list)
+    // (at the end of its effects or out, by the inside's rule for its list; not taken, said why: a camera takes motions only)
+    after(m.later('fx_file', thing: t, word: file), (done, why) => done || why.isEmpty ? null : notice = 'Not taken: ${why.split(':').first}');
     return true;
   }
 
