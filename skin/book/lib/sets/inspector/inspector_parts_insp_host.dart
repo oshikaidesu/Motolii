@@ -25,6 +25,7 @@ class InspHost extends StatefulWidget {
     this.onCardMove,
     this.onSum,
     this.onAddEffect,
+    this.onArrange,
     this.onCardReset,
     this.onCardRemove,
     this.onCardEye,
@@ -84,6 +85,7 @@ class InspHost extends StatefulWidget {
   final void Function(String title, int by)? onCardMove;
   final double? Function(String sum)? onSum;
   final VoidCallback? onAddEffect;
+  final void Function(String how)? onArrange;
   final void Function(List<String> names)? onCardReset;   // (a card's values as they come: Reset on its head)
   final void Function(String title)? onCardRemove;   // (one of its effects taken off: Remove on its card's head, Alight Motion's Delete)
   final void Function(String title)? onCardEye;   // (one of its effects turned off or on again, its values kept: Alight Motion's eye on an effect)
@@ -165,6 +167,7 @@ class _InspHostState extends State<InspHost> {
       ..onCardMove = widget.onCardMove
       ..onSum = widget.onSum
       ..onAddEffect = widget.onAddEffect
+      ..onArrange = widget.onArrange
       ..onCardReset = widget.onCardReset
       ..onCardRemove = widget.onCardRemove
       ..onCardEye = widget.onCardEye
@@ -322,6 +325,7 @@ class _InspHostState extends State<InspHost> {
       ..onCardMove = widget.onCardMove
       ..onSum = widget.onSum
       ..onAddEffect = widget.onAddEffect
+      ..onArrange = widget.onArrange
       ..onCardReset = widget.onCardReset
       ..onCardRemove = widget.onCardRemove
       ..onCardEye = widget.onCardEye

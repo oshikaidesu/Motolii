@@ -187,6 +187,7 @@ class _PropRowState extends State<PropRow> {
               left: _menuAt.dx,
               top: _menuAt.dy,
               child: TinyMenu(name: 'row', of: widget.id, hide: _menu.hide, items: [
+                if (doc.onCardReset case final reset?) ('reset', 'Reset', () => reset([for (final i in ids) if (i.startsWith('v_')) i.substring(2)])),   // (Alight Motion's Reset Location, Scale, Rotation, Skew; After Effects' Reset)
                 if (ks != KeyS.at) ('key', 'Key this frame', () => doc.setKey(widget.id, KeyS.at)),
                 if (ks == KeyS.at) ('unkey', 'Remove key', () => doc.setKey(widget.id, KeyS.anim)),
                 if (ks != KeyS.off) ('unanimate', 'Remove animation', () => doc.setKey(widget.id, KeyS.off)),

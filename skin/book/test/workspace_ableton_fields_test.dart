@@ -254,6 +254,37 @@ void main() {
     await closeWorkspace(t);
   }, tags: 'main', skip: !insideBuilt);
 
+  testWidgets('the Transform card\'s ⋮ flips and fits, a row\'s right click resets that row alone (Alight Motion\'s ⋯ on Move & Transform; they lay in the menu bar alone)', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final a = m.add('shape', 'rect');
+    expect(m.set(a, 'rotate', 30) && m.set(a, 'x', 1), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$a');
+    await t.pumpAndSettle();
+    final more = find.byKey(const ValueKey('card-more:Transform'));
+    await seen(t, more);
+    await t.tap(more);
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('card-flipX:Transform')));
+    await settled(t, ws);
+    expect(m.value(a, 'scale_x', 0), -1, reason: 'flipped: ${m.trouble}');
+    await t.tap(more);
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('card-stretch:Transform')));
+    await settled(t, ws);
+    expect(m.value(a, 'scale_x', 0)!.abs(), isNot(1), reason: 'stretched to the picture: ${m.trouble}');
+    final label = find.text('Rotation');
+    await seen(t, label);
+    await t.tap(label.first, buttons: kSecondaryButton);
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('row-reset:v_rotate')));
+    await settled(t, ws);
+    expect([m.value(a, 'rotate', 0), m.value(a, 'x', 0)], [0, isNot(0)], reason: 'that row alone');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, tags: 'main', skip: !insideBuilt);
+
   testWidgets('typing a number: Tab keeps it and opens the next field, Shift-Tab the one before; the arrows move what is typed; nothing typed is as Esc (After Effects, Figma, Blender)', (t) async {
     final ws = await openWorkspace(t), m = ws.inside!;
     final a = m.add('shape', 'rect');

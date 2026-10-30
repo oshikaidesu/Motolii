@@ -437,20 +437,22 @@ alight_ui.md の「操作体系の全体」の良い所 7 つと、そこから�
 - [ ] 色の欄の当たり前（16 進の貼り付け、右クリック）：まだ見ていない
 
 
-## S. インスペクターの要素（AM の欄と AE の属性を 1 つずつ）（12）
+## S. インスペクターの要素（AM の欄と AE の属性を 1 つずつ）（14）
 AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*Panel.kt の R.string）、AE のレイヤーの属性と並べた。10/30 夜、ユーザー：「waveはあるか？ないだろ？」：Wave Warp は効果の棚にあったが、インスペクターから足す入口が無く、無いのと同じだった。
 
 - [x] **+ Add Effect**（AM の Effects 欄の下）：押すと効果の棚が開いて検索欄に字が打てる — 済（10/30 夜）：窓の試験（`workspace_ableton_fields_test.dart`）
 - [x] Move & Transform：位置・スケール（縦横の鎖）・回転 X Y Z・アンカー
 - [x] Move & Transform：傾き X・Y（X SKEW・Y SKEW、AE は Transform 効果の Skew） — 済（10/30 夜）：描く物すべて（doc_skew、行列に 1 段）、Transform の札の Skew の行。窓の試験（同）
 - [x] Color & Fill：None・Color・Gradient（Media は fill_media）
-- [ ] **Color & Fill：その場の色の目盛り（Color sliders）とスポイト**：今は Colors の棚へ飛ぶ。スポイトは棚にある
+- [ ] Color & Fill：その場の色の目盛り（Color sliders）：AM は欄の中。Motolii は「インスペクターは一覧を持たず、そこへ送る」が決まりで、Colors の棚がこの欄を狙って開く（色相の輪・スポイトは棚にある）。ユーザーがモダンと言った考えなので、AM の真似で壊さない。ユーザーの判断待ち
 - [ ] **Border：内・中・外（Inside・Center・Outside）**：今は中だけ
 - [ ] **Border：何本も足す・並べ替え・消す（Add Border）**：今は 1 本
 - [ ] **Shadow：札の中で**（AM は Border & Shadow の欄、大きさ・透明度・位置・色）：今は Drop Shadow 効果として足す
 - [x] Blending：重ね方、Opacity
 - [x] Effects：目・並べ替え・⋮（Info・Reset・Duplicate・Copy・Paste）・消す
-- [ ] **Effects：全部まとめて Copy Effects・Paste Effects**
+- [x] Effects：全部まとめて Copy Effects・Paste Effects — 済（10/30 夜）：+ Add Effect の行の Copy all・Paste、並びとつまみごと。窓の試験（同）
 - [x] 効果の⋮の Reset to Defaults
+- [x] Move & Transform の ⋯：Flip Horizontal・Vertical、Fit・Fill・Stretch — 済（10/30 夜）：Transform の札の ⋮（メニューバーの奥だけだった）。窓の試験（同）
+- [x] Move & Transform の ⋯：Reset Location・Scale・Rotation・Skew — 済（10/30 夜）：行の右クリックの Reset。窓の試験（同）
 
-合計：376 箱。
+合計：378 箱。

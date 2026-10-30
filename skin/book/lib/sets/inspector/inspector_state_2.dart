@@ -368,6 +368,7 @@ class Doc extends ChangeNotifier {
   /// The host's cards that may be moved up or down (its effects, by their titles), and what moves one so many places.
   List<String> movable = const [];
   void Function(String title, int by)? onCardMove;
+  void Function(String how)? onArrange;   // (flipX, flipY, fit, fill, stretch: Alight Motion's ⋯ on Move & Transform)
   VoidCallback? onAddEffect;   // (Alight Motion's Add Effect: the shelf of them, its search taking the keys)
   double? Function(String sum)? onSum;   // (a sum typed in a number field worked out: null, it is not one)
   void Function(List<String> names)? onCardReset;

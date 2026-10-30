@@ -107,9 +107,10 @@ class _ParamSearchState extends State<ParamSearch> {
 
 /// A thing's own card's head: its values copied, given to another, as they come (After Effects' Reset).
 class CardWords extends StatelessWidget {
-  const CardWords(this.name, this.ids, {super.key});
+  const CardWords(this.name, this.ids, {super.key, this.more = const []});
   final String name;
   final List<String> ids;
+  final List<(String, String, VoidCallback)> more;   // (under its ⋮)
   @override
   Widget build(BuildContext context) {
     final doc = Ctx.of(context).doc;
@@ -124,6 +125,7 @@ class CardWords extends StatelessWidget {
           onTap: does,
           builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: Text(word, style: T.label(h ? Grey.g95 : Grey.g56))),
         ),
+      if (more.isNotEmpty) _CardMore(name: name, items: more),
     ]);
   }
 }
