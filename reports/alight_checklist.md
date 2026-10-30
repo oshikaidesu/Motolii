@@ -396,4 +396,19 @@
 - [x] 動きの道筋を細い線と向きの矢印で出す：選んだ物が動くと、舞台にその道筋（内側の位置の計算 motolii_path、揺れも含む）を細い線と矢印で（10/28） — 済：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 書き出し GIF：書き出しの箱の GIF（ffmpeg の palettegen・paletteuse、15 コマ毎秒） — 済：`check/film_way.sh`（10/28）、窓の試験（`workspace_render_dialog_test.dart`）
 
-合計：337 箱。
+
+## P. 操作体系（AM の形そのままで見る。「別の形で有る」は [ ]）（9）
+alight_ui.md の「操作体系の全体」の良い所 7 つと、そこから出る欄の組み方。10/30 夜、ユーザーが窓を触って「動線が悪い」「並び替えもできない」「AE・AM に習ってない」。チェックリストは物の有る無しを 1 行ずつ見ていて、操作の形は「別の形で有る」で済にしていた。判定は AM の形そのまま、見本は AbsentMotion（Apache-2.0、AM の写しを Kotlin で、手元の `filament/third_party/AbsentMotion/app/src/main/kotlin/app/absentmotion/ui/editor`）。
+
+- [ ] 物を選ぶと、欄のタイル（Transform・Fill・Border & Shadow・Blending・Effects・Edit Text／Edit Shape…）が並び、押すとその欄 1 枚だけが開く（戻るでタイルへ）。Motolii は全部の札を 1 本の長いスクロールに並べる（Premiere の Effect Controls）。見本：`LayerTools.kt` の LayerTools（タイル）と LayerPanel、`EditorScreen.kt` の LowerPanels（どれを出すか）
+- [ ] 広い画面では、その欄を右に電話 1 台分の幅（384dp）で出す。見本：`WideEditor.kt` の SidePanels（タブレットで幅 840dp 以上の時）
+- [ ] ① どの欄も同じ枠：左の縦の列に「戻る・キー（今触っている値に打つ・消す）・イーズ」。Motolii はキーの印が値ごとに右端、イーズは別の欄（「別の形で有る」で済にしていた 276 行）。見本：`LayerTools.kt` の LayerPanel（FrameButton の列と KeyTarget）
+- [x] ② 数字はこする目盛り：済（277 行）。見本：`panels/PanelParts.kt` の RulerSpinner
+- [ ] ③ 指で隠れない「こする帯」で物と点を動かす（274 行、一部）
+- [ ] ④ 押す前に結果が見える：重ね方は見本の写真に掛けた絵で選ぶ。見本：`panels/BlendingPanel.kt`
+- [ ] ⑤ 初めての所で吹き出しが押す場所を指す（294 行）。見本：`ui/tutorial`（tutorialTarget）
+- [x] ⑥ 複数選ぶと上の帯が変わる：済（285 行）
+- [x] ⑦ グループの中はパンくず：済（289 行）
+- [ ] 効果の欄は 2 段：一覧は同じ高さの畳んだ行（名前・目・≡）と「+ Add Effect」、≡ を長押しして引きずって並べ替え。行を押すとその効果のつまみだけが開き、頭に「戻る・?・⋮・ゴミ箱」。Motolii は開いた大きな札のまま ↑↓。見本：`panels/EffectsPanel.kt` の EffectListRow、`Reorder.kt`・`RowDrag.kt`（行の高さが揃っているので位置の計算が数行）（golf_noise.md (101)）
+
+合計：347 箱。
