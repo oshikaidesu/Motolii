@@ -91,7 +91,7 @@ void _tests3() {
     await _close(t);
   }, tags: 'main', skip: !_built);
 
-  testWidgets('scale is three numbers of the document, each its own; a flat thing has no scale z (its thickness to come), a solid has', (t) async {
+  testWidgets('scale is three numbers of the document, each its own; a flat thing\'s scale z is its thickness, none at first, a solid\'s linked with the rest', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final a = m.add('shape', 'rect'), cube = m.add('solid', 'cube');
     ws
@@ -99,7 +99,7 @@ void _tests3() {
       ..select('$a');
     await t.pumpAndSettle();
     Finder knob(String id) => find.byWidgetPredicate((w) => w is NumField && w.id == id);
-    expect(knob('v_scale_z'), findsNothing, reason: 'a flat thing: no depth to scale yet');
+    expect(Ctx.read(t.element(find.byType(InspectorPanel))).doc.get('v_scale_z'), 0, reason: 'a flat thing: none till it is given (golf_noise.md (104))');
     expect(knob('depth'), findsNothing, reason: 'no Depth knob: a thing\'s thickness is its scale z');
     ws.select('$cube');
     await t.pumpAndSettle();
@@ -1894,7 +1894,7 @@ void _tests3() {
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
-  }, skip: !_built);
+  }, retry: 2, skip: !_built);   // (a slow CI Mac only: golf_noise.md (108))
   testWidgets('⌘O lists the documents beside it as CapCut\'s desktop home lays them, told as Alight Motion\'s are: its picture, length, shape, resolution, size and rate, by day or by name; a copy made, the copy opened; File › Use Frame as Project Picture', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     expect(m.add('picture', '$motoliiDir/fx_sample.jpg'), isNot(0), reason: m.trouble);

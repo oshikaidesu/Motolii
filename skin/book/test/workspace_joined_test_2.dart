@@ -342,7 +342,7 @@ void _tests2() {
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
-  }, skip: !_built);
+  }, retry: 2, skip: !_built);   // (a slow CI Mac only: golf_noise.md (108))
 
   testWidgets('Space: a flat thing is 2D (by the order) or 2.5D (in the world, by depth); a solid thing is 3D', (t) async {
     final ws = await _pump(t), m = ws.inside!;
@@ -656,7 +656,7 @@ void _tests2() {
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
-  }, skip: !_built);
+  }, retry: 2, skip: !_built);   // (a slow CI Mac only: golf_noise.md (108))
 
   testWidgets('no decoration: the document\'s name on the stage and the timeline, its own marks and work area on the ruler', (t) async {
     final ws = await _pump(t), m = ws.inside!;

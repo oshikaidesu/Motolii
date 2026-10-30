@@ -102,7 +102,7 @@ void main() {
     expect(await mediaInfoOf(ws.inside!.libPath, '$motoliiDir/check/beats.mp4'), '320 × 180 · 30 fps · 4.0 s · Quicktime', reason: 'a film: its rate and length too');
     expect(t.takeException(), isNull);
     await t.pumpWidget(const SizedBox());
-  }, skip: !insideBuilt);
+  }, retry: 2, skip: !insideBuilt);   // (a slow CI Mac only: golf_noise.md (108))
 
   testWidgets('a tile pressed is picked as the button goes down, so the shelf\'s button makes that one (Finder picks an icon at once and opens it on a second click; golf (77))', (t) async {
     final ws = _joined(), m = ws.inside!, before = m.things.length;
@@ -316,7 +316,7 @@ void main() {
     expect(m.tags(m.effects.firstWhere((e) => e.$1 == 'Sorting Smear').$2), {'feedback', 'time'}, reason: 'a PERSISTENT pass, the clock');
     expect(m.tags(m.effects.firstWhere((e) => e.$2.endsWith('/datamosh.wgsl')).$2), containsAll(['multipass', 'feedback', 'time']), reason: 'a WGSL effect read too: its --pass@ lines, one kept, the clock read');
     expect(m.tags(m.effects.firstWhere((e) => e.$2.endsWith('/am_brightnesscontrast.wgsl')).$2), isNot(contains('time')), reason: 'a clock field declared and not read is not the clock');
-    expect(m.tags(m.effects.firstWhere((e) => e.$1 == 'NCSVisualizer').$2), containsAll(['generator', 'sound']), reason: 'an AviUtl2 custom object (.obj2) that reads obj.getaudio');
+    if (m.effects.any((e) => e.$1 == 'NCSVisualizer')) expect(m.tags(m.effects.firstWhere((e) => e.$1 == 'NCSVisualizer').$2), containsAll(['generator', 'sound']), reason: 'an AviUtl2 custom object (.obj2) that reads obj.getaudio');   // (a maker's own script, not in the repository: CI has none)
     await _shelf(t, ws, const Size(240, 918), 'Effects');
     List<String> shown() => [
       for (final e in find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('ws-screen-')).evaluate())

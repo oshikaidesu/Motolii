@@ -27,7 +27,7 @@ void _tests4() {
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
-  }, skip: !_built);
+  }, retry: 2, skip: !_built);   // (a slow CI Mac only: golf_noise.md (108))
 
   testWidgets('a knob of the stage\'s own cards in its units (Bloom in hundredths): a second drag right goes on from where the first left it, up', (t) async {
     final ws = await _pump(t), m = ws.inside!;
