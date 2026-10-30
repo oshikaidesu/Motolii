@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lab_book/motolii.dart' show motoliiDir;
 import 'package:lab_book/workspace/dock_parts.dart' show DockSearch;
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show Chooser, Ctx, InspectorPanel, NumField;
 
@@ -223,6 +224,32 @@ void main() {
     await settled(t, ws);
     expect(m.value(a, 'skew_x', 0), greaterThan(0), reason: m.trouble);
     expect(m.undo() && m.value(a, 'skew_x', 0) == 0, isTrue, reason: 'one step');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, tags: 'main', skip: !insideBuilt);
+
+  testWidgets('Copy all under a thing\'s effects, Paste on another: its whole stack goes over, in order, its knobs with it (Alight Motion\'s Copy Effects, Paste Effects)', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final a = m.add('shape', 'rect'), b = m.add('shape', 'circle');
+    final halftone = '$motoliiDir/effects/halftone.wgsl';
+    expect(m.effect(a, 'Gaussian Blur', 0) && m.set(a, 'blur', 33), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$a');
+    expect(ws.screenToggle(halftone), isTrue);
+    await settled(t, ws);
+    Future<void> press(String key) async {
+      final k = find.byKey(ValueKey(key));
+      await seen(t, k);
+      await t.tap(k);
+      await settled(t, ws);
+    }
+    await press('effects-copy');
+    ws.select('$b');
+    await t.pumpAndSettle();
+    await press('effects-paste');
+    expect(m.word(b, 'fx'), m.word(a, 'fx'), reason: 'the stack, in order: ${m.trouble}');
+    expect(m.value(b, 'blur', 0), 33, reason: 'its knobs with it');
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, tags: 'main', skip: !insideBuilt);

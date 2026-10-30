@@ -42,16 +42,31 @@ class AddEffectRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final doc = Ctx.of(context).doc;
-    return Hov(
-      key: const ValueKey('add-effect'),
-      onTap: doc.onAddEffect,
-      builder: (_, h) => Container(
-        height: Pop.cell,
-        margin: EdgeInsets.only(bottom: Pop.gap),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(color: h ? Grey.g20 : Pop.well, borderRadius: BorderRadius.all(Shape.r(6))),
-        child: Text('+ Add Effect', style: T.label(h ? Grey.g95 : Grey.g76)),
-      ),
+    final names = ['fx', 'fx_off', for (final c in doc.cards) if (doc.movable.contains(c.name)) for (final p in c.params) p.id];
+    Widget word(String key, String word, VoidCallback? does) => Hov(
+      key: ValueKey(key),
+      onTap: does,
+      builder: (_, h) => Padding(padding: EdgeInsets.only(left: Shape.s(10)), child: Text(word, style: T.label(h ? Grey.g95 : Grey.g56))),
+    );
+    return Padding(
+      padding: EdgeInsets.only(bottom: Pop.gap),
+      child: Row(children: [
+        Expanded(
+          child: Hov(
+            key: const ValueKey('add-effect'),
+            onTap: doc.onAddEffect,
+            builder: (_, h) => Container(
+              height: Pop.cell,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: h ? Grey.g20 : Pop.well, borderRadius: BorderRadius.all(Shape.r(6))),
+              child: Text('+ Add Effect', style: T.label(h ? Grey.g95 : Grey.g76)),
+            ),
+          ),
+        ),
+        // (Alight Motion's Copy Effects and Paste Effects: its whole stack, the knobs with it)
+        if (doc.movable.isNotEmpty) if (doc.onCardCopy case final copy?) word('effects-copy', 'Copy all', () => copy(names)),
+        if (doc.onCardPaste case final paste?) word('effects-paste', 'Paste', paste),
+      ]),
     );
   }
 }
