@@ -398,7 +398,7 @@ final _makes = <(String, List<_Make>)>[
     'Layers',
     [
       _Make('Text', DockG.text, WsT.toneText, 'T', 'Type layer'),
-      _Make('Camera', DockG.camera, WsT.toneCamera, '⇧C', '3D camera, 50 mm'),
+      _Make('Camera', DockG.camera, WsT.toneCamera, '⇧C', '3D camera, 45 mm'),   // (the lens it comes with: the stage's 30 degrees on Filament's 24 mm film, desk_depth.dart _filmMm, as the Camera desk says)
       _Make('Null', DockG.nullObj, Grey.g76, '⇧N', 'Invisible parent'),
     ],
   ),

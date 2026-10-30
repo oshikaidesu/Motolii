@@ -437,6 +437,12 @@ void wsInked(Ws ws, String kind, String shape) {
   if (m == null || !(kind == 'text' || kind == 'shape' && shape != 'null')) return;
   final line = shape == 'line';
   if (ws.ink.isNotEmpty) m.later('say', thing: -1, name: 'fill', word: ws.ink);
+  // (no ink chosen: a shape comes in a colour of its own, as Alight Motion's does: AbsentMotion's addShape, randomColor,
+  //  any hue, saturation 0.3 to 0.8, value 0.55 to 1; said, so the Inspector and the Colors shelf show it: golf (85))
+  if (ws.ink.isEmpty && kind == 'shape') {
+    final r = math.Random(), c = HSVColor.fromAHSV(1, r.nextDouble() * 360, .3 + r.nextDouble() * .5, .55 + r.nextDouble() * .45).toColor();
+    m.later('say', thing: -1, name: 'fill', word: [c.r, c.g, c.b].map((v) => (v * 255).round().toRadixString(16).padLeft(2, '0')).join());
+  }
   if (ws.ink.contains(' ') && ws.inkBlend.isNotEmpty && !line) m.later('say', thing: -1, name: 'gradient_blend', word: ws.inkBlend);   // (a gradient ink, mixed as it was chosen)
   if (ws.edge.isNotEmpty && !line) {
     m

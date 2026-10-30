@@ -1302,6 +1302,35 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a shape drawn with no ink chosen comes in a colour of its own, said, so the Inspector and the Colors shelf show it (Alight Motion\'s; golf_noise.md (85))', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    ws
+      ..ink = ''
+      ..select(null);
+    await t.pumpAndSettle();
+    final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp')));
+    await t.tap(find.byKey(const ValueKey('ws-tool-2')));
+    await t.pumpAndSettle();
+    await t.dragFrom(stage.center, Offset(stage.width * .1, stage.height * .1));
+    await settled(t, ws);
+    for (var i = 0; i < 200 && ws.selected == null; i++) {   // (made by the inside, picked once it is there)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    final rect = int.parse(ws.selected!), fill = m.word(rect, 'fill');
+    expect(RegExp(r'^[0-9a-f]{6}$').hasMatch(fill), isTrue, reason: 'said, not left to the inside\'s own: "$fill"');
+    final hsv = HSVColor.fromColor(Color(0xFF000000 | int.parse(fill, radix: 16)));
+    expect([hsv.saturation, hsv.value], [inInclusiveRange(.29, .81), inInclusiveRange(.54, 1)], reason: 'AbsentMotion\'s addShape randomColor');
+    ws.reread();
+    await t.pumpAndSettle();
+    expect(find.text('#${fill.toUpperCase()}'), findsWidgets, reason: 'the Inspector\'s Fill shows it, not —');
+    ws.shelf = 'Colors';
+    await t.pumpAndSettle();
+    expect(find.text('#${fill.toUpperCase()}'), findsNWidgets(2), reason: 'and the Colors shelf the same colour');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a card\'s Copy and Paste give its values alone to another thing (Alight Motion\'s copy of one effect)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final a = m.add('shape', 'rect'), b = m.add('shape', 'circle');
