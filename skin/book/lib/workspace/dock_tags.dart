@@ -34,6 +34,35 @@ abstract final class DockTags {
     return all;
   }
 
+  /// A thing chosen after a search is that search's first the next time, for the words exactly as typed: Alfred's
+  /// Keyword Latching (alfredapp.com/help/kb/understanding-result-ordering); the user's "選んだ物から覚える", golf
+  /// (94). Kept in ~/.motolii/latched.json ({"Effects|adjustment layer": the thing's id}); a test points it elsewhere.
+  static File _latchFile = File('${Platform.environment['HOME']}/.motolii/latched.json');
+  static Map<String, String>? _latches;
+  static void latchedAt(File f) => (_latchFile = f, _latches = null);
+  static Map<String, String> get _latched {
+    if (_latches case final l?) return l;
+    try {
+      return _latches = {for (final e in (jsonDecode(_latchFile.readAsStringSync()) as Map).entries) '${e.key}': '${e.value}'};
+    } catch (_) {
+      return _latches = {};   // (none yet, or not a map)
+    }
+  }
+
+  /// The thing latched to the words as typed on a shelf (null: none).
+  static String? latched(String shelf, String query) => query.trim().isEmpty ? null : _latched['$shelf|${query.trim().toLowerCase()}'];
+
+  /// A thing chosen with these words typed: latched to them.
+  static void latch(String shelf, String query, String id) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty || _latched['$shelf|$q'] == id) return;
+    _latched['$shelf|$q'] = id;
+    try {
+      _latchFile.parent.createSync(recursive: true);
+      _latchFile.writeAsStringSync(jsonEncode(_latched));
+    } catch (_) {}   // (not kept: the latch holds while the window is open)
+  }
+
   /// Whether a thing answers a search: every word of it is in its name, among its tags, or (a colour) its code.
   static bool hit(String query, String name, Set<String> tags, {String code = ''}) {
     if (query.trim().isEmpty) return true;

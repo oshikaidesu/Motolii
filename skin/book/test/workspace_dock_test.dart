@@ -12,6 +12,7 @@ import 'package:lab_book/motolii.dart';
 import 'package:lab_book/workspace/dock.dart';
 import 'package:lab_book/workspace/create_preview.dart';
 import 'package:lab_book/workspace/dock_parts.dart' show DockSearch, dockStarsAt;
+import 'package:lab_book/workspace/dock_tags.dart' show DockTags;
 import 'package:lab_book/workspace/effect_tiles.dart';
 
 import 'door.dart';
@@ -242,6 +243,34 @@ void main() {
     await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'checkerboard');
     await t.pumpAndSettle();
     expect(find.byKey(ValueKey('ws-screen-${checker.$2}')), findsOneWidget, reason: 'Checker found by a word of what it does, not of its name');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
+  testWidgets('an effect put on with words typed is the first for those words the next time: Alfred\'s Keyword Latching (golf_noise.md (94))', (t) async {
+    DockTags.latchedAt(File('${Directory.systemTemp.createTempSync('latch').path}/latched.json'));
+    final ws = _joined();
+    await _shelf(t, ws, const Size(240, 918), 'Effects');
+    final search = find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText));
+    List<String> shown() => [
+      for (final e in find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('ws-screen-')).evaluate())
+        (e.widget.key! as ValueKey<String>).value.substring('ws-screen-'.length),
+    ];
+    await t.enterText(search, 'blur');
+    await t.pumpAndSettle();
+    final before = shown(), last = before[1];   // (the second: one the list does not already put first)
+    expect(before.length, greaterThan(2), reason: 'several blurs, A to Z');
+    final tile = find.byKey(ValueKey('ws-screen-$last'));
+    await t.ensureVisible(tile);
+    await t.pumpAndSettle();
+    await doubleTap(t, tile);   // (two presses put it on)
+    await t.pumpAndSettle();
+    expect(DockTags.latched('Effects', 'blur'), last, reason: 'put on with "blur" typed: latched to it');
+    await t.enterText(search, '');
+    await t.pumpAndSettle();
+    await t.enterText(search, 'Blur ');
+    await t.pumpAndSettle();
+    expect(shown().first, last, reason: 'the one put on for these words, first now (the words as typed, big letters and spaces aside)');
+    expect(shown().toSet(), before.toSet(), reason: 'the rest as they were');
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 

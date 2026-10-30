@@ -276,7 +276,7 @@ class DockFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     final ws = WsScope.of(context, {WsAspect.document, WsAspect.picked}), l = fresh ? null : ws.layer;
     return Container(
-      height: Shape.z(52),
+      constraints: BoxConstraints(minHeight: Shape.z(52)),   // (as tall as what it says, 52 at least: two lines of words overflowed a fixed 52 by a point, Flutter's RenderFlex overflow; golf (95))
       padding: EdgeInsets.symmetric(horizontal: WsT.inset),
       decoration: BoxDecoration(
         color: WsT.card,
