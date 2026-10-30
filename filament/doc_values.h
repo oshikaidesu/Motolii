@@ -277,7 +277,8 @@ static DocScript* doc_script_of(Doc& d, const std::string& file) {
         for (const ScriptKnob& k : s.knobs) s.names.push_back(screen || lottie || absent ? doc_screen_knob(file, k.name) : "js_" + k.name);
         for (size_t i = 0; i < s.knobs.size(); ++i) {   // (the names are all made first: what points into them stays put)
             const ScriptKnob& k = s.knobs[i];
-            s.values.push_back(DocValue{s.names[i].c_str(), "film picture text shape solid stage", k.kind == "select" ? 0.0 : k.low, k.kind == "select" ? 0.0 : k.high, k.kind == "track", k.kind == "select" ? k.words.c_str() : nullptr});
+            // (a motion's knobs a camera's too: it takes AbsentMotion's motions, golf ㊴; its strength was refused on it)
+            s.values.push_back(DocValue{s.names[i].c_str(), absent ? "film picture text shape solid stage camera" : "film picture text shape solid stage", k.kind == "select" ? 0.0 : k.low, k.kind == "select" ? 0.0 : k.high, k.kind == "track", k.kind == "select" ? k.words.c_str() : nullptr});
             s.shown.push_back(DocShown{s.names[i].c_str(), k.kind == "check" ? "onoff" : k.kind == "picture" || k.kind == "sound" ? "thing" : "", "", k.label.c_str(), k.low, k.high, nullptr});
         }
         if (absent) {   // (read, not run: which of AbsentMotion's its head says)

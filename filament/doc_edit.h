@@ -13,7 +13,7 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
             if (base == one.name && doc_among(one.kinds, kind) && !one.words) v = &by;
         if (v && number && *number != 0.0 && (*number != std::floor(*number) || doc_word(d, (int)*number, "kind") != "behaviour")) return d.trouble = std::string(name) + " is a behaviour that is there", false;
     }
-    if (!v && !strncmp(name, "js_", 3) && doc_among("film picture text shape solid stage", kind))   // (a knob of the thing's script)
+    if (!v && !strncmp(name, "js_", 3) && doc_among("film picture text shape solid stage camera", kind))   // (a knob of the thing's script; a camera's motion's, golf ㊴)
         for (const DocScript* sc : doc_scripts_on(d, thing))
             for (const DocValue& one : sc->values)
                 if (!strcmp(one.name, name)) v = &one;
@@ -21,7 +21,7 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
         std::string all;
         for (const DocValue& one : doc_values)
             if (doc_among(one.kinds, kind) && (!moves || one.moves)) all += std::string(all.empty() ? "" : ", ") + one.name;
-        if (doc_among("film picture text shape solid stage", kind))
+        if (doc_among("film picture text shape solid stage camera", kind))
             for (const DocScript* sc : doc_scripts_on(d, thing))
                 for (const DocValue& one : sc->values)
                     if (!moves || one.moves) all += std::string(all.empty() ? "" : ", ") + one.name;

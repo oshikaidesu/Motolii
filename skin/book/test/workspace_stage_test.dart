@@ -120,6 +120,7 @@ void main() {
     expect(ws.screenToggle('$motoliiDir/effects/am_autoshake.am'), isTrue);
     await settle();
     expect(m.word(cam, 'fx'), endsWith('am_autoshake.am'), reason: 'Auto-Shake on the camera');
+    expect(m.set(cam, 'js_am_autoshake_magnitude', 80), isTrue, reason: 'its strength set on the camera: ${m.trouble}');
     ws.screenToggle('$motoliiDir/effects/Shake.fs');
     await settle();
     expect(m.word(cam, 'fx'), endsWith('am_autoshake.am'), reason: 'a picture\'s effect not taken');
