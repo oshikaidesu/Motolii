@@ -91,16 +91,24 @@ void main() {
   testWidgets('the arrows nudge the picked keys, else the picked bar, else the playhead; up and down go between rows', (t) async {
     final j = _joined(), ws = j.ws, does = wsAbletonCommands(ws);
     await _pump(t, ws);
+    Future<void> answered() async {   // (asked without waiting (later): done in the inside's turn, later under a loaded machine, as the locators' test waits;
+      //  it read the key before the inside moved it, three times at a whole run's heavy start: golf_noise.md, the test wobbles)
+      for (var i = 0; i < 200 && ws.waiting; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await t.pump();
+      }
+      await t.pumpAndSettle();
+    }
     final f = (.8 * Ws.fps).round();
     ws.pickKey((layer: '${j.rect}', frame: f));
     does['nudge.right']!();
-    await t.pumpAndSettle();
+    await answered();
     ws.reread();
     expect(ws.layers.firstWhere((l) => l.id == '${j.rect}').keys, contains(f + 1), reason: 'the key went a frame later');
     ws.select('${j.ring}');
     final inF = ws.layer!.inF;
     does['nudge.left10']!();
-    await t.pumpAndSettle();
+    await answered();
     ws.reread();
     expect(ws.layers.firstWhere((l) => l.id == '${j.ring}').inF, inF - 10, reason: 'the bar went 10 frames earlier');
     ws.select(null);
