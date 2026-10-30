@@ -59,6 +59,7 @@ class DirectTransform extends StatelessWidget {
             tone: Pop.toneTransform,
             keyIds: const ['v_position', 'v_scale', 'v_rotate'],
             mark: CardMark.transform,
+            trailing: CardWords('Transform', [for (final n in const ['anchor_x', 'anchor_y', 'anchor_z', 'x', 'y', 'z', 'scale_x', 'scale_y', 'scale_z', 'rotate_x', 'rotate_y', 'rotate', 'opacity']) if (doc.seat('v_$n')) n]),
             brief: ['${brief(doc.get('v_x'))}, ${brief(doc.get('v_y'))}', '${brief(doc.get('v_scale_x'))}%', '${brief(doc.get('v_rotate'))}°'],
             children: [
               SpaceRow(),

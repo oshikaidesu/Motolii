@@ -40,7 +40,9 @@ class PropRow extends StatefulWidget {
 }
 
 class _PropRowState extends State<PropRow> {
-  bool _menu = false, _midi = false;
+  bool _midi = false;
+  final _menu = OverlayPortalController();   // (a right click's list, over the panel, as a number's own: not laid in among the rows)
+  Offset _menuAt = Offset.zero;
 
   // (its key mark and whether it differs from as it comes, at a new moment: told alone, as its fields are)
   final _watching = <ValueListenable<int>>[];
@@ -177,31 +179,29 @@ class _PropRowState extends State<PropRow> {
             if (widget.under != null) Padding(padding: EdgeInsets.only(top: Shape.s(4), bottom: Shape.s(2)), child: widget.under),
           ],
         );
-        Widget item(String s, bool ok, String why, VoidCallback go) => Hov(
-          cursor: ok ? SystemMouseCursors.click : SystemMouseCursors.basic,
-          onTap: ok && !locked
-              ? () {
-                  go();
-                  setState(() => _menu = false);
-                }
-              : null,
-          builder: (_, h) => Container(
-            height: Shape.z(22),
-            padding: EdgeInsets.symmetric(horizontal: Shape.s(8)),
-            color: h && ok ? Grey.g15 : null,
-            child: Row(
-              children: [
-                Text(s, style: T.name(ok ? Grey.g91 : Grey.g56)),
-                const Spacer(),
-                if (!ok) Text(why, style: T.label(Grey.g56)),
-              ],
+        return OverlayPortal(
+          controller: _menu,
+          overlayChildBuilder: (_) => Stack(children: [
+            Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _menu.hide, onSecondaryTap: _menu.hide)),
+            Positioned(
+              left: _menuAt.dx,
+              top: _menuAt.dy,
+              child: TinyMenu(name: 'row', of: widget.id, hide: _menu.hide, items: [
+                if (ks != KeyS.at) ('key', 'Key this frame', () => doc.setKey(widget.id, KeyS.at)),
+                if (ks == KeyS.at) ('unkey', 'Remove key', () => doc.setKey(widget.id, KeyS.anim)),
+                if (ks != KeyS.off) ('unanimate', 'Remove animation', () => doc.setKey(widget.id, KeyS.off)),
+                if (doc.onMidi != null) ('midi', 'Keys from MIDI…', () => setState(() => _midi = true)),
+                if (cfg.maybe) ('relate', 'Relate…', () {}),
+              ]),
             ),
-          ),
-        );
-        return Listener(
+          ]),
+          child: Listener(
           behavior: HitTestBehavior.translucent,
           onPointerDown: (e) {
-            if (e.buttons == kSecondaryButton && widget.keyable && e.pointer != NumFieldState.rightAt) setState(() => _menu = !_menu);   // (on the label: a number's own right click is its own)
+            if (e.buttons == kSecondaryButton && widget.keyable && !locked && e.pointer != NumFieldState.rightAt) {   // (on the label: a number's own right click is its own)
+              _menuAt = e.position;
+              _menu.show();
+            }
           },
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -259,26 +259,6 @@ class _PropRowState extends State<PropRow> {
                     style: T.label(Role.linkedFor(widget.rel)),
                   ),
                 ),
-              if (_menu)
-                Container(
-                  margin: EdgeInsets.only(left: Shape.s(0), top: Shape.s(2), bottom: Shape.s(4)),
-                  decoration: BoxDecoration(
-                    color: Grey.g13,
-                    borderRadius: BorderRadius.all(Shape.r(4)),
-                    border: Border.all(color: ed.rule),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      item('Key this frame', ks != KeyS.at, 'Already keyed', () => doc.setKey(widget.id, KeyS.at)),
-                      item('Remove key', ks == KeyS.at, 'No key here', () => doc.setKey(widget.id, KeyS.anim)),
-                      item('Remove animation', ks != KeyS.off, 'Not animated', () => doc.setKey(widget.id, KeyS.off)),
-                      if (doc.onMidi != null) item('Keys from MIDI…', true, '', () => setState(() => _midi = true)),
-                      if (cfg.maybe) item('Relate…', true, '', () {}),
-                    ],
-                  ),
-                ),
               if (_midi)
                 Container(
                   margin: EdgeInsets.only(top: Shape.s(2), bottom: Shape.s(4)),
@@ -290,6 +270,7 @@ class _PropRowState extends State<PropRow> {
                   child: MidiKeys(prop: widget.id, onDone: () => setState(() => _midi = false)),
                 ),
             ],
+          ),
           ),
         );
       },

@@ -4,7 +4,7 @@ import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show Ctx, NumField;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show Ctx, InspectorPanel, NumField;
 
 import 'door.dart';
 
@@ -105,6 +105,23 @@ void main() {
     await t.tap(find.byKey(const ValueKey('num-reset:v_x')));
     await settled(t, ws);
     expect(m.value(a, 'x', 0), isNot(100), reason: 'one value back to what it was, by the mouse alone');
+    final label = find.text('Scale');
+    await seen(t, label);
+    final tall = t.getSize(find.byType(InspectorPanel)).height, below = t.getTopLeft(find.text('Rotation'));
+    await menu(label.first);
+    expect(find.byKey(const ValueKey('row-key:v_scale')), findsOneWidget, reason: 'a row\'s label has its menu');
+    expect([t.getSize(find.byType(InspectorPanel)).height, t.getTopLeft(find.text('Rotation'))], [tall, below], reason: 'over the panel, the rows where they were (10/30: it was laid in among them)');
+    await t.tapAt(const Offset(5, 5));
+    await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('row-key:v_scale')), findsNothing, reason: 'a press elsewhere closes it');
+    expect(m.set(a, 'x', 100) && m.set(a, 'rotate', 30), isTrue, reason: m.trouble);
+    ws.reread();
+    await t.pumpAndSettle();
+    final whole = find.byKey(const ValueKey('card-reset:Transform'));
+    await seen(t, whole);
+    await t.tap(whole);
+    await settled(t, ws);
+    expect([m.value(a, 'x', 0), m.value(a, 'rotate', 0)], [isNot(100), 0], reason: 'the Transform card\'s Reset, as the other cards\': ${m.trouble}');
     final blur = find.byWidgetPredicate((w) => w is NumField && w.id.endsWith('_blur'));
     await seen(t, blur);
     await menu(blur.first);

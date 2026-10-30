@@ -105,6 +105,29 @@ class _ParamSearchState extends State<ParamSearch> {
   }
 }
 
+/// A thing's own card's head: its values copied, given to another, as they come (After Effects' Reset).
+class CardWords extends StatelessWidget {
+  const CardWords(this.name, this.ids, {super.key});
+  final String name;
+  final List<String> ids;
+  @override
+  Widget build(BuildContext context) {
+    final doc = Ctx.of(context).doc;
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      for (final (word, does) in [
+        if (doc.onCardCopy case final copy?) ('Copy', () => copy(ids)),
+        if (doc.onCardPaste case final paste?) ('Paste', paste),
+        if (doc.onCardReset case final reset?) ('Reset', () => reset(ids)),
+      ])
+        Hov(
+          key: ValueKey('card-${word.toLowerCase()}:$name'),
+          onTap: does,
+          builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: Text(word, style: T.label(h ? Grey.g95 : Grey.g56))),
+        ),
+    ]);
+  }
+}
+
 /// A card of the host's own values, in the effects' manner: its Params, each field a value (keyed `v_` and its name).
 class ValuesCard extends StatelessWidget {
   ValuesCard(this.card, {super.key, this.top, this.side});
@@ -124,17 +147,7 @@ class ValuesCard extends StatelessWidget {
       trailing: (at < 0 || doc.onCardMove == null) && doc.onCardReset == null && doc.onCardCopy == null
           ? null
           : Row(mainAxisSize: MainAxisSize.min, children: [
-              if (at < 0)   // (the thing's own card: its values copied, given to another, as they come, After Effects' Reset)
-                for (final (word, does) in [
-                  if (doc.onCardCopy case final copy?) ('Copy', () => copy([for (final p in card.params) p.id])),
-                  if (doc.onCardPaste case final paste?) ('Paste', paste),
-                  if (doc.onCardReset case final reset?) ('Reset', () => reset([for (final p in card.params) p.id])),
-                ])
-                  Hov(
-                    key: ValueKey('card-${word.toLowerCase()}:${card.name}'),
-                    onTap: does,
-                    builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: Text(word, style: T.label(h ? Grey.g95 : Grey.g56))),
-                  ),
+              if (at < 0) CardWords(card.name, [for (final p in card.params) p.id]),
               if (at >= 0) ...[   // (an effect's card, as AbsentMotion's EffectHeader and Alight Motion's: its eye, ⋮ with the rest, the bin)
                 if (doc.onCardEye != null)
                   Hov(
