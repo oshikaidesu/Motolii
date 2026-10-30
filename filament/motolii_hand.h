@@ -457,12 +457,10 @@ const char* motolii_heard(Motolii* m) {
         return (said_word() = all).c_str();
     });
 }
-const char* motolii_shaping(Motolii* m) {
-    return by_look(m, [=] {
-        std::string all = "kind script shape file split name";   // (and its name: the inspector says it)
-        for (const DocCard& c : doc_cards) if (c.when && !doc_among(all, c.when)) all += std::string(" ") + c.when;
-        return (said_word() = all).c_str();
-    });
+const char* motolii_shaping(Motolii*) {   // (the cards are the maker's, not the document's: nothing waited for, as motolii_way_numbers; the window asked it at the opening and waited 22 ms, golf (87))
+    std::string all = "kind script shape file split name";   // (and its name: the inspector says it)
+    for (const DocCard& c : doc_cards) if (c.when && !doc_among(all, c.when)) all += std::string(" ") + c.when;
+    return (said_word() = all).c_str();
 }
 const char* motolii_spent(Motolii* m) {
     return by_look(m, [=] {
