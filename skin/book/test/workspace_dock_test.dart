@@ -119,6 +119,23 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('Alight Motion\'s fourteen samples under the colour on the Colors shelf: white in one press (golf (80))', (t) async {
+    final ws = _joined(), m = ws.inside!, rect = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$rect');
+    await _shelf(t, ws, const Size(520, 918), 'Colors');
+    expect(find.byKey(const ValueKey('colour-sample-000000')), findsOneWidget, reason: 'black among them');
+    await t.tap(find.byKey(const ValueKey('colour-sample-ffffff')));
+    for (var i = 0; i < 200 && ws.waiting; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await t.pump();
+    }
+    expect(m.word(rect, 'fill'), 'ffffff');
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
   testWidgets('a picture picked and another picture pressed on Media: Replace shows the new one, its keys as they were (After Effects\' Replace Layer Source; P17)', (t) async {
     final ws = _joined(), m = ws.inside!;
     File('${ws.documentFolder}/still.jpg').copySync('${ws.documentFolder}/final.jpg');

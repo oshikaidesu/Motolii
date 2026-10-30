@@ -445,6 +445,25 @@ class ColorsShelf extends StatelessWidget {
             Text(_hex(_wheel.toColor()), style: T.value(Grey.g91).copyWith(fontWeight: FontWeight.w600)),
           ],
         ),
+        SizedBox(height: Shape.s(6)),
+        // (Alight Motion's fourteen samples under its colour, white and black among them, one press each: AbsentMotion's
+        //  EffectSettings.kt 195 has them; golf_noise.md (80): white took the square's corner, and a miss on the ring)
+        for (final row in const [[0xFF4444, 0xF4B446, 0xFAE965, 0x1ED91E, 0x17E1E1, 0x3D4CF5, 0xDD44DD], [0xFFFFFF, 0xBEBEBE, 0x888888, 0x444444, 0x000000, 0x5EB7D9, 0x98C99C]])
+          Padding(
+            padding: EdgeInsets.only(bottom: Shape.s(3)),
+            child: Row(children: [
+              for (final (i, rgb) in row.indexed) ...[
+                if (i > 0) SizedBox(width: Shape.s(3)),
+                Expanded(
+                  child: DockHover(
+                    key: ValueKey('colour-sample-${rgb.toRadixString(16).padLeft(6, '0')}'),
+                    onTap: () => _take(c, Color(0xFF000000 | rgb)),
+                    builder: (context, h) => Container(height: Shape.z(18), decoration: BoxDecoration(color: Color(0xFF000000 | rgb), borderRadius: BorderRadius.all(Shape.r(3)), border: Border.all(color: h ? Grey.g95 : Grey.g26))),
+                  ),
+                ),
+              ],
+            ]),
+          ),
         SizedBox(height: Shape.s(10)),
         Row(
           children: [
