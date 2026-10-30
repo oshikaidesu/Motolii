@@ -2,7 +2,7 @@
 part of 'workspace_joined_test.dart';
 
 void _tests2() {
-  testWidgets('round 3 of the judges: a thing put aside is not held; Animate all travels from where it was; a value with keys changed not being keyed gets a key there', (t) async {
+  testWidgets('round 3 of the judges: a thing put aside is not held; Animate all keys where a change is made (After Effects\' Auto-keyframe; golf (62)); a value with keys changed not being keyed gets a key there', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final cube = m.add('solid', 'cube');
     expect(m.set(cube, 'visible', 0), isTrue, reason: m.trouble);
@@ -18,18 +18,23 @@ void _tests2() {
     expect(m.value(cube, 'x', 0), 0);
     expect(m.set(cube, 'visible', 1), isTrue);
 
-    // (Animate all turned on at 0, the thing carried at 2: it is where it was at 0 and travels to where it was let go)
+    // (Animate all turned on at 0, the thing carried at 2: one key there and only there, as After Effects' Auto-keyframe
+    //  keys at the current time (golf (62)); carried at 0 too, it travels from the one to the other)
     ws.frame = 0 * Ws.fps;   // (the playhead is the window's, told to the inside by it: BRIDGE.md rule 9)
     await settled(t, ws);
     m.keying(true);
     ws.frame = 2 * Ws.fps;   // (the playhead is the window's, told to the inside by it: BRIDGE.md rule 9)
     await settled(t, ws);
     expect(m.hold(cube) && m.carry('x', 3, 0) && m.letGo(true), isTrue, reason: m.trouble);
-    expect(await m.shownAt([(cube, 'x', 0), (cube, 'x', 1), (cube, 'x', 2)]), [0, 1.5, 3],   // (other moments: asked, BRIDGE.md rule 7)
-        reason: 'from where it was to where it was let go');
-    expect(m.undo(), isTrue, reason: 'both keys are one step');
+    expect([m.keyMoments(cube, 'x'), await m.shownAt([(cube, 'x', 0)])], [[2.0], [3]], reason: 'one key, where it was let go: no key where Animate all was turned on');
+    expect(m.undo(), isTrue);
     expect(m.keyed(cube, 'x', 2), 0);
     expect(m.redo(), isTrue);
+    ws.frame = 0;
+    await settled(t, ws);
+    expect(m.hold(cube) && m.carry('x', 0, 0) && m.letGo(true), isTrue, reason: m.trouble);
+    expect(await m.shownAt([(cube, 'x', 0), (cube, 'x', 1), (cube, 'x', 2)]), [0, 1.5, 3],   // (other moments: asked, BRIDGE.md rule 7)
+        reason: 'carried at 0 and at 2: it travels between');
     m.keying(false);
 
     // (not being keyed: a value with keys gets a key where it is changed, the others as they were (After Effects))

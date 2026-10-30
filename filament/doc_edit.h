@@ -377,9 +377,9 @@ static int doc_keys(Doc& d, int thing, const char* name, double at = -1.0) {   /
     return n;
 }
 // What a hand does to a value at a moment, as the document's own rules (a shell does not work them out):
-// put: the value changed there. Every change is being keyed (d.keying): a key there, and if it is the value's first, what
-//      it was stays as a key where the keying began. Not being keyed: a value with keys gets a key there (as After
-//      Effects keys a property that has keyframes, wherever it is changed), a value without is the value that stays.
+// put: the value changed there. Every change is being keyed (d.keying): a key there, its first as any (After Effects'
+//      Auto-keyframe). Not being keyed: a value with keys gets a key there (as After Effects keys a property that has
+//      keyframes, wherever it is changed), a value without is the value that stays.
 // key_here: a key at that moment holding what the value is there (nothing, if it has one there).
 // raise: brought nearer or further back among the things.
 // stay: its keys are taken away, and it stays what it is at that moment.
@@ -387,17 +387,14 @@ static int doc_keys(Doc& d, int thing, const char* name, double at = -1.0) {   /
 // moving: the names of the values of a thing that can take keys.
 static double doc_usual(Doc& d, const char* name);
 static bool doc_set(Doc& d, int thing, const char* name, double is);
-static bool doc_put(Doc& d, int thing, const char* name, double at, double is) {   // (After Effects' rule; the past repository moved a keyed value whole: motolii-edit, place_checked)
+static bool doc_put(Doc& d, int thing, const char* name, double at, double is) {   // (After Effects' rule)
     if (!doc_knows(d, thing, name, &is)) return false;
-    const bool keyed = doc_keys(d, thing, name) > 0;
-    if (keyed) return doc_key(d, thing, name, at, is);   // (a value with keys: a key there, whether every change is keyed or not)
-    if (!d.keying) return doc_set(d, thing, name, is);
-    // (its first key while every change is keyed: what it was stays, as a key where the keying began, so it travels from there)
-    const double was = doc_number(d, thing, name, d.keying_from, doc_usual(d, name));
-    doc_act(d);
-    if (d.keying_from != at) doc_key(d, thing, name, d.keying_from, was);
-    doc_key(d, thing, name, at, is);
-    return doc_acted(d);
+    // (a value with keys, or any while every change is keyed: a key there and only there, as After Effects' Auto-keyframe
+    //  keys a property at the current time and Alight Motion's diamond keys it at the playhead. What it was is not kept
+    //  as a key where the keying began, as the past repository's place_checked did: a change made before that moment
+    //  left a key after it that brought the value back, golf (62))
+    if (d.keying || doc_keys(d, thing, name) > 0) return doc_key(d, thing, name, at, is);
+    return doc_set(d, thing, name, is);
 }
 // A thing given another to go with (0: none) without moving on the stage, as the sample's Parent seat promises and
 // After Effects does: where it is, how far it is turned about the eye's line and how large are said again as the new

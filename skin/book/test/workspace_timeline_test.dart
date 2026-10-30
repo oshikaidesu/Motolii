@@ -48,7 +48,7 @@ Offset _at(Ws ws, int thing, num frame, {Size size = _ref}) {
 }
 
 void main() {
-  test('an effect\'s value takes keys as any value does: every change keyed, a key there (its first leaving what it was where the keying began); with keys, a key where it is changed, the others kept (After Effects\' rule, doc_put)', () {
+  test('an effect\'s value takes keys as any value does: every change keyed, a key there and only there (After Effects\' Auto-keyframe; golf (62)); with keys, a key where it is changed, the others kept (After Effects\' rule, doc_put)', () {
     final dir = Directory.systemTemp.createTempSync('fxkeys').path, m = Motolii.open('$dir/k.motolii')!;
     addTearDown(m.close);
     final t = m.add('shape', 'rect'), knob = 'js_am_rays_reach';
@@ -56,10 +56,10 @@ void main() {
     expect(m.say(t, 'fx', '$motoliiDir/effects/am_rays.wgsl') && at(0), isTrue, reason: m.trouble);
     m.keying(true);
     expect(at(.5) && m.hold(t) && m.carry(knob, .3) && m.letGo(true), isTrue, reason: m.trouble);
-    expect(m.keyMoments(t, knob), [0, .5], reason: 'keyed: what it was at 0, 0.3 at 0.5 (golf_noise.md 44: none, before)');
+    expect(m.keyMoments(t, knob), [.5], reason: 'keyed: 0.3 at 0.5, no key where the keying began (golf_noise.md 44: none, before; (62): one at 0 too)');
     m.keying(false);
     expect(at(1) && m.hold(t) && m.carry(knob, .6) && m.letGo(true), isTrue, reason: m.trouble);
-    expect([m.keyMoments(t, knob), m.value(t, knob, .5)], [[0, .5, 1], .3], reason: 'with keys: one more where it was changed, the one at 0.5 kept (before, all of them were taken away)');
+    expect([m.keyMoments(t, knob), m.value(t, knob, .5)], [[.5, 1], .3], reason: 'with keys: one more where it was changed, the one at 0.5 kept (before, all of them were taken away)');
   }, skip: !insideBuilt);
 
   testWidgets('a mark\'s flag is cut where the next mark is, as Logic Pro shows a marker\'s name only as far as the following one (golf ⑳)', (t) async {

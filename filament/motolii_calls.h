@@ -70,7 +70,7 @@ int motolii_path3(Motolii* m, int thing, int copy, double from, double to, int n
 int motolii_keying(Motolii* m, int on) {   // (on below 0: only says whether every change is keyed: a read, answered at once, not queued behind the hand's picture)
     if (on < 0) return (int)m->keying.load();
     m->keying = on != 0;   // (said at once; the document told in the hand's turn, without waiting)
-    return posted(m, "keying", [m, on] { m->d->keying = on != 0, m->d->keying_from = m->now; m->keying = m->d->keying; }), on != 0;
+    return posted(m, "keying", [m, on] { m->d->keying = on != 0; m->keying = m->d->keying; }), on != 0;
 }
 int motolii_hold(Motolii* m, int thing) { return by_hand(m, [=] { return (int)doc_hold(doc(m), thing); }); }
 int motolii_carry(Motolii* m, const char* by, double a, double b) { return posted(m, std::string("carry ") + by, [m, by = std::string(by), a, b] { doc_carry(doc(m), by.c_str(), a, b); }); }   // (refused: said when it is let go)

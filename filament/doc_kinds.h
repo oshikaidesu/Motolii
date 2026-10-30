@@ -56,7 +56,6 @@ struct Doc {
     Drawn* backdrop = nullptr;          // the colour behind everything: a flat colour as large as the stage, drawn before all else in the stage's own view
     std::string backdropIs;             // (the colour it was made in)
     bool keying = false;                // every value a hand changes gets a key at that moment (a shell's "animate all")
-    double keying_from = 0.0;           // the stage's moment at which that was turned on: a value's first key then has the value it had, there, before it
     int act = 0;                        // how many acts are open, one within another
     bool act_ok = true;                 // no change of the open act has been refused
     bool act_unmatched = false;         // a change within a larger act not yet shown: the stage is matched once, when the act ends
