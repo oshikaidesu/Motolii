@@ -40,7 +40,7 @@ void main() {
     await t.pumpAndSettle();
     final row = find.byWidgetPredicate((w) => w is PropRow && w.id == 'v_rotate');
     expect(row, findsOneWidget, reason: [for (final e in find.byType(PropRow).evaluate()) (e.widget as PropRow).id].join(' '));
-    final g = await t.startGesture(t.getCenter(row), buttons: kSecondaryMouseButton);
+    final g = await t.startGesture(t.getCenter(find.text('Rotation')), buttons: kSecondaryMouseButton);   // (on its label: a number's own right click is its own)
     await g.up();
     await t.pumpAndSettle();
     await t.tap(find.text('Keys from MIDI…'));

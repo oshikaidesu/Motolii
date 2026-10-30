@@ -1505,6 +1505,12 @@ void _tests3() {
       ..select('$rect');
     await t.pumpAndSettle();
     final own = ws.layers.firstWhere((l) => l.id == '$rect').tone;
+    final more = find.byKey(const ValueKey('card-more:More'));   // (Alight Motion shows no Note for its kinds: asked for by More)
+    await seen(t, more);
+    await t.tap(more);
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('card-Note:More')));
+    await t.pumpAndSettle();
     await seen(t, find.byWidgetPredicate((w) => w is Chooser && w.id == 'v_label'));   // (the Note card, the last)
     await pick(t, 'v_label', 'red');
     expect(m.word(rect, 'label'), 'red', reason: m.trouble);

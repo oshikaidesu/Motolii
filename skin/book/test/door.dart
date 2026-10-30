@@ -154,8 +154,11 @@ Future<void> pick(WidgetTester t, String id, String word) async {
     await t.tap(on);
     await t.pumpAndSettle();
     if (find.text(word).evaluate().isEmpty) {   // (its list builds only the rows in sight: scrolled to the word, as a hand finds it)
-      final row = find.text(t.widget<Chooser>(menu.first).options[1]);   // (a row of the list, never the word on the card)
-      await t.scrollUntilVisible(find.text(word), 40, scrollable: find.byWidget(t.widget(find.ancestor(of: row.last, matching: find.byType(Scrollable)).first)));   // (the list held, not found again by a row scrolled away)
+      final row = find.text(t.widget<Chooser>(menu.first).options.firstWhere((o) => find.text(o).evaluate().length == 1));   // (a row of the list in sight, never the word on the card: the list opens at its word)
+      final list = find.byWidget(t.widget(find.ancestor(of: row.last, matching: find.byType(Scrollable)).first));
+      t.state<ScrollableState>(list).position.jumpTo(0);
+      await t.pump();
+      await t.scrollUntilVisible(find.text(word), 40, scrollable: list);   // (the list held, not found again by a row scrolled away)
       await t.ensureVisible(find.text(word).last);   // (built is not yet in sight: a list builds a little past its edge)
       await t.pumpAndSettle();
     }
