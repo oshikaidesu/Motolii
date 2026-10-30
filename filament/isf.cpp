@@ -207,6 +207,12 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
         shelf.erase(0, shelf.find_first_not_of(" \t")), shelf.erase(shelf.find_last_not_of(" \t") + 1);
         for (const std::string tail : {" Effect", " Adjustment"})
             if (shelf.size() > tail.size() && shelf.compare(shelf.size() - tail.size(), tail.size(), tail) == 0) shelf.resize(shelf.size() - tail.size());
+        // (a transition, ISF's (ISF_Spec: its startImage, endImage and progress), on one shelf whatever its wipe or
+        //  dissolve, as After Effects keeps its transitions under Transition: they lay on Wipe, Dissolve and others;
+        //  put on, one runs from the playhead, doc_fx_file: golf (65))
+        if (std::find(pictures.begin(), pictures.end(), "startImage") != pictures.end() && std::find(pictures.begin(), pictures.end(), "endImage") != pictures.end() &&
+            std::any_of(inputs.GetArray().begin(), inputs.GetArray().end(), [&](const rapidjson::Value& i) { return str(i, "NAME") == "progress"; }))
+            shelf = "Transition";
         top += "// --label:" + shelf + "\n";
     }
     if (std::string about = str(head, "DESCRIPTION"); !about.empty()) {   // (what it does, in its own words: the shelf finds it by them)
@@ -222,7 +228,7 @@ std::string isf_file(const std::string& asked) {
     if (std::filesystem::path(file).extension() != ".fs" && !three_is(file)) return file;   // (a three.js effect: made ISF first, three_isf.cpp)
     struct stat st {};
     if (stat(file.c_str(), &st) != 0) return "";
-    const std::string key = "isf 11|" + file + "|" + std::to_string(st.st_mtimespec.tv_sec) + "." + std::to_string(st.st_mtimespec.tv_nsec) + "|" + std::to_string(st.st_size);
+    const std::string key = "isf 12|" + file + "|" + std::to_string(st.st_mtimespec.tv_sec) + "." + std::to_string(st.st_mtimespec.tv_nsec) + "|" + std::to_string(st.st_size);
     static std::mutex lock;
     static std::map<std::string, std::string> made;   // (what each file as it is became: "" could not be)
     std::lock_guard<std::mutex> hold(lock);

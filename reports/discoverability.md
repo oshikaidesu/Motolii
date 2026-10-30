@@ -59,8 +59,8 @@ Motolii はもう、VS Code の形のキーの表（keys.dart）と keybindings.
 | やること | 借りる物（ライセンス） | Motolii のどこ | 大きさ |
 |---|---|---|---|
 | 読んで付ける札：効果 / 生成 / つなぎ、音、前のコマ、TIME、パスの数、他の物の絵、外へ描くか | Tint の WGSL inspector（Apache-2.0、組み済み）、rapidjson（使用中） | doc_recipes.h の棚の一覧に列を足す、motolii_shelves.dart で読む | S |
-| カテゴリの綴りを 1 語に寄せる | ISF と AbsentMotion のカテゴリの一覧そのもの | isf.cpp 201〜206 行 | S |
-| 効果ごとに見本の写真を選ぶ（顔・グリーンバック・格子…） | AbsentMotion の effect_showcase.json の photo（Apache-2.0） | effect_tiles.dart | S |
+| カテゴリの綴りを 1 語に寄せる — **済（10/30 午後、ad4cb00b9）**：VIDVOX の「… Effect」「… Adjustment」を外す（Geometry 17＋15 → 32）。あわせて ISF のつなぎ（startImage・endImage・progress）を 1 つの札「Transition」に（After Effects の Transition の分類、67 本、Wipe・Dissolve などに散っていた） | ISF と AbsentMotion のカテゴリの一覧そのもの | isf.cpp 201〜206 行 | S |
+| 効果ごとに見本の写真を選ぶ（顔・グリーンバック・格子…） — **止めている（10/30 午後）**：写真 9 枚はリポジトリに無く、AbsentMotion の tools/effect_thumbs.py が Wikimedia Commons から落としている（「File:Fishmonger smiling.jpg」など）。落とすにはユーザーの許しが要る | AbsentMotion の effect_showcase.json の photo（Apache-2.0） | effect_tiles.dart | S |
 | 重い・軽い（60fps の札） | m.still の前後の時間、motolii_spent（motolii_hand.h 467 行）。Dawn の時刻の問い合わせは Filament で使えるか未確認 | effect_tiles.dart | S〜M |
 | 描いて測る「何をするか」：ぼかす・色・歪む・動く | OpenCV（Apache-2.0）か scikit-image（BSD-3）：SSIM、ラプラシアンの分散、色の分布、オプティカルフロー。しきい値は Motolii 側（今の 40 dB と同じく測って決める） | fx_first.sh の横（もう Pillow・numpy を使う）、札の絵の置き場に .tsv | M |
 | 物の外へどれだけ描くか（㊿ の部屋の広さにも使う） | 借りる物なし：小さな物に掛けて、箱の外の透明度を測る | effect_tiles.dart、screen.h の spill | M |
