@@ -353,6 +353,8 @@ class _WorkspaceState extends State<Workspace> {
         if (m == null || g == null || m.word(g, 'element').isEmpty) return;
         ws.after(m.later('say', thing: g, name: 'element', word: ''), (_, _) => ws.reread());
       },
+      // (the work area taken out and the gap closed: After Effects' Edit > Extract Work Area, under Split Layer; golf (72))
+      'edit.extractWork': () => ws.after(m.later('extract'), (done, why) => done || why.isEmpty ? null : ws.notice = 'Not taken: ${why.split(':').first}'),
       'thing.split': () {
         final t = int.tryParse(ws.selected ?? '');
         if (t == null) return;
@@ -436,6 +438,7 @@ class _WorkspaceState extends State<Workspace> {
               item('Ungroup', 'thing.ungroup'),
               item('Unlink from Element', 'thing.unlinkElement'),
               item('Split', 'thing.split'),
+              item('Extract Work Area', 'edit.extractWork'),
               item('Extract Sound', 'thing.extractSound'),
               item('Rename', 'thing.rename'),
               item('Remove', 'thing.remove'),

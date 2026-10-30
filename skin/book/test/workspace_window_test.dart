@@ -4,6 +4,7 @@ import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/tokens.dart';
+import 'package:lab_book/workspace/keys.dart' show WsKeys;
 import 'package:lab_book/workspace/ws.dart' show WsT;
 
 import 'door.dart';
@@ -121,6 +122,31 @@ void main() {
     await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
     await t.pumpAndSettle();
     expect(ws.selected, isNull, reason: 'golf_noise.md (63): no way back to nothing picked but a click below the rows');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
+  testWidgets('Edit > Extract Work Area takes the work area out of every thing and closes the gap, one step (After Effects\'; golf (72), P18)', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final a = m.add('shape', 'rect'), b = m.add('shape', 'rect');
+    expect(m.set(a, 'duration', 10) && m.set(b, 'start', 6) && m.set(b, 'duration', 6), isTrue, reason: m.trouble);
+    Future<void> settle() async {
+      for (var i = 0; i < 200 && ws.waiting; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await t.pump();
+      }
+      ws.reread();
+      await t.pumpAndSettle();
+    }
+    ws.after(m.later('work', number: 4, word: '6'));
+    await settle();
+    t.widget<WsKeys>(find.byType(WsKeys)).commands['edit.extractWork']!();   // (the menu's: Edit > Extract Work Area)
+    await settle();
+    final c = m.things.firstWhere((x) => x != a && x != b);
+    expect([for (final x in [a, b, c]) (m.value(x, 'start', 0), m.value(x, 'duration', 0))], [(0, 4), (4, 6), (4, 4)], reason: 'cut at 4, the part after brought back to 4; the other from 6 to 4');
+    expect(m.seconds, closeTo(10, 1e-6), reason: '12 seconds made 10');
+    expect(m.undo(), isTrue);
+    expect(m.things.length, 2, reason: 'one step');
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, skip: !insideBuilt);

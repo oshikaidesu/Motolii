@@ -466,7 +466,7 @@ static bool doc_keys_by(Doc& d, int thing, double by) {
 static double doc_lasts(Doc& d, int thing);
 // A thing cut in two at a moment (Ableton Live's Split, Cmd+E; AbsentMotion's Scene.splitAt): it ends there, and a copy
 // of it (every fact, its keys staying where they are on the stage) begins there, a film's copy as far on in the film as
-// the head's trim takes it (above). One step to undo; the answer is the copy, as duplicate's.
+// the head's trim takes it (above), lying just above it. One step to undo; the answer is the copy, as duplicate's.
 static int doc_split(Doc& d, int thing, double at) {
     if (doc_knows(d, thing) && doc_number(d, thing, "lock", 0, 0) > 0.5) return d.trouble = "it is locked", 0;
     const double start = doc_number(d, thing, "start", 0, 0), lasts = doc_number(d, thing, "duration", 0, -1), end = lasts > 0.0 ? start + lasts : doc_seconds(d);
@@ -475,7 +475,38 @@ static int doc_split(Doc& d, int thing, double at) {
     const int made = doc_duplicate(d, thing);
     bool ok = made && doc_set(d, thing, "duration", at - start) && doc_set(d, made, "start", at) && doc_set(d, made, "duration", end - at);
     if (ok && doc_word(d, thing, "kind") == "film") ok = doc_set(d, made, "begin", doc_number(d, thing, "begin", 0, 0) + (at - start) * std::fabs(doc_number(d, thing, "speed", 0, 1)));
+    if (ok) {   // (the part after lies just above the part before, as After Effects' Split Layer puts the new layer: a copy is made on top of all)
+        doc_forget(d);
+        const std::vector<int> lie = doc_laid(d);
+        const long from = std::find(lie.begin(), lie.end(), made) - lie.begin(), under = std::find(lie.begin(), lie.end(), thing) - lie.begin();
+        if (from != under + 1) ok = doc_raise(d, made, (int)(under + (from > under ? 1 : 0) - from));
+    }
     return doc_acted(d) && ok ? made : 0;
+}
+// The work area taken out and the gap closed (After Effects' Edit > Extract Work Area; Premiere Pro's Extract, DaVinci
+// Resolve's Ripple Delete): every thing across one of its edges cut there (doc_split, a film's part after as far on in
+// the film), the parts within it taken away, and all after it brought back by its length, their keys with them. One
+// step. The marks are left where they are (golf (72), P18: 20 seconds made 15 by taking 5 out of the middle).
+static bool doc_extract(Doc& d) {
+    double in = 0.0, out = 0.0;
+    doc_work(d, &in, &out);
+    const double gap = out - in, all = doc_seconds(d);
+    if (!(gap > 1e-3) || (in < 1e-3 && out > all - 1e-3)) return d.trouble = "the work area is all of it: set it to the part to take out", false;
+    std::vector<int> things;
+    doc_rows(d, sqlite3_mprintf("select thing from fact where thing <> 0 and name = 'kind' and value <> 'behaviour' order by thing"), [&](sqlite3_stmt* row) { things.push_back(sqlite3_column_int(row, 0)); });   // (a relation has no time of its own)
+    doc_act(d);
+    bool ok = true;
+    for (const int t : things) {
+        const double s = doc_number(d, t, "start", 0, 0), lasts = doc_number(d, t, "duration", 0, -1), e = lasts > 0.0 ? s + lasts : all;
+        int after = s >= out - 1e-3 ? t : 0;   // (the part after the work area, brought back)
+        if (!after && e > out + 1e-3) ok = ok && (after = doc_split(d, t, out)) != 0;
+        if (s < in - 1e-3 && e > in + 1e-3) { const int within = doc_split(d, t, in); ok = ok && within && doc_remove(d, within); }
+        else if (s >= in - 1e-3 && s < out - 1e-3) ok = ok && doc_remove(d, t);
+        if (after) ok = ok && doc_set(d, after, "start", doc_number(d, after, "start", 0, 0) - gap) && doc_keys_by(d, after, -gap);
+        if (!ok) break;
+    }
+    if (!ok) d.act_ok = false;
+    return doc_acted(d);
 }
 static bool doc_let_go(Doc& d, bool keep) {
     const Doc::Held h = d.held;
