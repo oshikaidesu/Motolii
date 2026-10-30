@@ -447,7 +447,7 @@ const sizeResolutions = [2160, 1440, 1080, 720, 540, 360, 270];
 final wsAskSize = ValueNotifier<bool>(false);
 
 class _SizeChipState extends State<_SizeChip> {
-  final _text = TextEditingController(), _focus = FocusNode(), _box = OverlayPortalController();
+  final _text = TextEditingController(), _focus = FocusNode(), _box = OverlayPortalController(), _boxKeys = FocusNode(debugLabel: 'document box');
   bool _editing = false;
   double? _scrub;   // (the width being scrubbed to)
   double _dx = 0;
@@ -470,6 +470,7 @@ class _SizeChipState extends State<_SizeChip> {
     wsAskSize.removeListener(_asked);
     _text.dispose();
     _focus.dispose();
+    _boxKeys.dispose();
     super.dispose();
   }
 
@@ -507,7 +508,13 @@ class _SizeChipState extends State<_SizeChip> {
     }
     // (pressed once: the shapes and resolutions; the one it is now lit, a shape of its own said as it is)
     final short = math.min(w0, h0).round(), now = sizeShapes.where((s) => sizeOf(s, short) == (w0.round(), h0.round())).firstOrNull;
-    Widget box(BuildContext _) => Stack(
+    // (Esc and ⌘. cancel, as the name box's above: a Mac dialog's Cancel; it has no field to hold the keys, so it holds
+    //  them itself: golf_noise.md (75))
+    Widget box(BuildContext _) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _box.isShowing && !_boxKeys.hasFocus ? _boxKeys.requestFocus() : null);   // (the keys taken from whatever had them as it opens)
+      return CallbackShortcuts(
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): _box.hide, const SingleActivator(LogicalKeyboardKey.period, meta: true): _box.hide},
+      child: Focus(focusNode: _boxKeys, child: Stack(
       children: [
         Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _box.hide, child: const ColoredBox(color: Color(0x88000000)))),
         Center(
@@ -585,7 +592,8 @@ class _SizeChipState extends State<_SizeChip> {
           ),
         ),
       ],
-    );
+    )));
+    }
     return OverlayPortal(
       controller: _box,
       overlayChildBuilder: box,

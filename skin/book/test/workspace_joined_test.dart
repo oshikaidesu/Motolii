@@ -31,6 +31,7 @@ import 'package:lab_book/sets/foundations/text_hand.dart' show wordsPicked;
 import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
 import 'package:lab_book/workspace/dock_parts.dart' show DockChips, DockFooter, DockHover, DockSearch;
 import 'package:lab_book/workspace/workspace.dart';
+import 'package:lab_book/workspace/top_bar.dart' show wsAskSize;
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/ws.dart';
 import 'package:lab_book/workspace/stage_view.dart' show StageView, StageHandles;

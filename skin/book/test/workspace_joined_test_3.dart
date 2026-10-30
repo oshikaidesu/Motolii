@@ -1234,6 +1234,22 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('the document box closes by Esc or ⌘., as a Mac dialog\'s Cancel (golf_noise.md (75): it had no field to hold the keys)', (t) async {
+    await _pump(t);
+    for (final cancel in [LogicalKeyboardKey.escape, LogicalKeyboardKey.period]) {
+      wsAskSize.value = true;
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('ws-size-box')), findsOneWidget);
+      if (cancel == LogicalKeyboardKey.period) await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await t.sendKeyEvent(cancel);
+      if (cancel == LogicalKeyboardKey.period) await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('ws-size-box')), findsNothing, reason: '$cancel');
+    }
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a card\'s Copy and Paste give its values alone to another thing (Alight Motion\'s copy of one effect)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final a = m.add('shape', 'rect'), b = m.add('shape', 'circle');
