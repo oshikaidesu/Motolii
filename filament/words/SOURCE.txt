@@ -1,0 +1,6 @@
+ja_en.tsv: Japanese WordNet v1.1 (NICT; Francis Bond, Takayuki Kuribayashi), https://github.com/bond-lab/wnja
+  release v1.1, wnjpn.db.gz  sha256 64a14dcfe3ba296566e91a70a2fc0616e85cf2ee7b7fd8cdcbc66c8b12a505a5 (60,390,049 bytes)
+  cut by wnja_export.py (python3 -I wnja_export.py wnjpn.db ja_en.tsv): each Japanese word (its katakana as hiragana),
+  a tab, the English words of the same synsets, most frequent first. Its license: LICENSE-wnja.txt (kept on all copies).
+Taken 2026-10-30, the user's choice: the search's word bridge, Japanese words said in English (motolii_calls.h find_english).
+A maker's own words/ja_en.tsv (their folder, doc_folders) adds words of their own in the same form.

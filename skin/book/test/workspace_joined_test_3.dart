@@ -1350,6 +1350,8 @@ void _tests3() {
     expect(await shown('adjusment layer'), contains('Background Copy'), reason: 'a word typed wrong finds After Effects\' adjustment layer by what it does');
     expect(await shown('particle'), contains('Particles (Sashimono)'), reason: 'and a part of a name');
     expect(m.find('glwo', [('a', 'Glow Light', ''), ('b', 'Gaussian Blur Light', '')]).first, 'a', reason: 'the inside\'s own: the nearest first');
+    expect(await shown('揺れる'), contains('Shake'), reason: 'Japanese said in English by Japanese WordNet, then looked for: shake, sway (golf_noise.md (96))');
+    expect(await shown('調整レイヤー'), contains('Background Copy'), reason: 'adjustment AND layer: After Effects\' adjustment layer by what it does');
     expect(t.takeException(), isNull);
     await _close(t);
   }, tags: 'main', skip: !_built);
