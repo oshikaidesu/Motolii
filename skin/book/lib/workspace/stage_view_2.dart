@@ -43,11 +43,15 @@ class _StageViewState extends State<StageView> implements StageHandles {
   Motolii? _deskOf;
   double? _toldDpr;
   void _deskTo(_View v) {
-    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final dpr = MediaQuery.devicePixelRatioOf(context), m = WsScope.read(context).inside;
+    if (m != _deskOf) {   // (another document opened in its place: its own desk told and its picture asked; the last one's was kept, and the stage stood still on it: golf_noise.md (73))
+      _desk = null;
+      _toldDesk = null;
+      _toldPick = null;
+    }
     if (widget.texture == null || (v == _toldDesk && dpr == _toldDpr)) return; // (told again when the window's zoom changes its pixels too)
     _toldDesk = v;
     _toldDpr = dpr;
-    final m = WsScope.read(context).inside;
     if ((_deskOf = m) == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _toldDesk != v || _toldDpr != dpr) return;
