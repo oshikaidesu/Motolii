@@ -3,7 +3,8 @@
 # Run on each push to main and each pull request that touch the code, and by hand (Actions › build › Run workflow): the
 # whole set of tests is the machine's, the few main ones the maker's after each fix (Fowler and Humble's deployment
 # pipeline, Continuous Delivery ch. 5: a fast commit stage, then the slower stages; Flutter's Tree hygiene: the tree kept
-# green, a change that turns it red mended or taken back first). A push made while one runs stops it (GitHub's concurrency).
+# green, a change that turns it red mended or taken back first). A push made while one runs waits for it, the latest only
+# (Continuous Delivery ch. 5: what came in meanwhile goes through the slow stage together; GitHub's concurrency).
 name: build
 on:
   workflow_dispatch:
@@ -14,7 +15,7 @@ on:
     paths: ['filament/**', 'skin/**', 'Brewfile', '.github/workflows/build.yml']
 concurrency:
   group: build-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   macos:
     runs-on: macos-15
