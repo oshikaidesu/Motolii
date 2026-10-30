@@ -18,7 +18,7 @@ import 'package:lab_book/motolii.dart';
 
 import 'door.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show Ctx, Chooser, GlyphPlate, AnchorCube, AnchorGeometry, LinkMark, ValuesCard, FillStroke, InspHeader, KeyS, NumField, OnOff, Pop, PropRow, Space, TextGroup;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show NumField, Ctx, Chooser, GlyphPlate, AnchorCube, AnchorGeometry, LinkMark, ValuesCard, FillStroke, InspHeader, KeyS, NumField, OnOff, Pop, PropRow, Space, TextGroup;
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart' show Sect;
 import 'package:lab_book/sets/inspector/inspector_direct_transform_canvas.dart' show TransformCanvas;
 import 'package:lab_book/sets/inspector/inspector_direct_transform_layout.dart' show TransformLayout;

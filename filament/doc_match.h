@@ -145,7 +145,7 @@ static bool doc_match(Doc& d) {
         bool fxOk = doc_fx(d, thing, 0.0, true, units, fx, why);   // (made as large as its effects reach at their most; each moment tells them as they are then)
         if (!fxOk && doc_fx_files(doc_fx_steps(d, thing))) { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }   // (an effect file of any kind of thing, as a picture's own file is refused)
         made.units = units;
-        if (doc_among("film picture text shape", kind)) made.space = doc_word(d, thing, "space") == "2.5d" ? 25 : 2;
+        if (doc_among("film picture text shape", kind)) made.space = doc_word(d, thing, "space") == "2.5d" ? 25 : doc_word(d, thing, "space") == "3d" ? 3 : 2;
         if (kind == "behaviour") made.behaviour = true;   // (nothing of it is seen: it says how values of others go)
         else if (kind == "camera") made.camera = true;   // (nothing of it is seen: it is how the rest is)
         else if (kind == "light") {   // (Filament's own light, made as the document says; placed and told how strong at each moment)

@@ -396,6 +396,7 @@ static int doc_keys(Doc& d, int thing, const char* name, double at = -1.0) {   /
 // keyed: 0 the value has no keys, 1 it has keys but none at that moment, 2 it has a key at that moment.
 // moving: the names of the values of a thing that can take keys.
 static double doc_usual(Doc& d, const char* name);
+static double doc_usual_on(Doc& d, int thing, const char* name);
 static bool doc_set(Doc& d, int thing, const char* name, double is);
 static bool doc_put(Doc& d, int thing, const char* name, double at, double is) {   // (After Effects' rule)
     if (!doc_knows(d, thing, name, &is)) return false;
@@ -451,7 +452,7 @@ static bool doc_parent(Doc& d, int thing, double to) {
 }
 static bool doc_key_here(Doc& d, int thing, const char* name, double at) {
     if (!doc_knows(d, thing, name, nullptr, nullptr, true)) return false;
-    return doc_keys(d, thing, name, at) && doc_keys(d, thing, name) ? true : doc_key(d, thing, name, at, doc_number(d, thing, name, at, doc_usual(d, name)));
+    return doc_keys(d, thing, name, at) && doc_keys(d, thing, name) ? true : doc_key(d, thing, name, at, doc_number(d, thing, name, at, doc_usual_on(d, thing, name)));
 }
 // raise: a thing brought `places` places nearer among the things (below 0: further back): each thing is told where it
 // lies now, as one change.

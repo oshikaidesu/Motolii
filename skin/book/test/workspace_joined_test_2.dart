@@ -353,7 +353,7 @@ void _tests2() {
     await t.pumpAndSettle();
     final plate = find.byWidgetPredicate((w) => w is GlyphPlate && w.label == '2.5D'); // (the Transform card's three plates)
     await seen(t, plate);
-    expect(find.byWidgetPredicate((w) => w is GlyphPlate && w.label == '3D'), findsNothing, reason: 'a flat thing is offered only the spaces it takes: 3D was refused, its plate left lit (golf P05)');
+    expect(find.byWidgetPredicate((w) => w is GlyphPlate && w.label == '3D'), findsOneWidget, reason: 'a flat thing is filmed as it is in 3D, the camera turning round it, as a solid is (golf_noise.md (104))');
     await t.tap(plate);
     await settled(t, ws);
     expect(m.word(rect, 'space'), '2.5d', reason: m.trouble);
@@ -433,6 +433,26 @@ void _tests2() {
     await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
+
+  testWidgets('a flat text\'s Scale Z is its thickness: none at first, scrubbed it is drawn solid, its width and height stay (After Effects\' Extrusion Depth, Apple Motion\'s Depth)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final text = m.add('text', ws.bodyFace);
+    ws
+      ..reread()
+      ..select('$text');
+    await t.pumpAndSettle();
+    expect(m.value(text, 'scale_z', 0), 0, reason: 'flat till it is given thickness');
+    final z = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_scale_z');
+    await seen(t, z);
+    await t.timedDragFrom(t.getCenter(z.first), const Offset(60, 0), const Duration(milliseconds: 300));
+    await settled(t, ws);
+    expect(m.value(text, 'scale_z', 0), greaterThan(0), reason: m.trouble);
+    expect([m.value(text, 'scale_x', 0), m.value(text, 'scale_y', 0)], [1, 1], reason: 'its width and height stay, the link on or off');
+    expect(m.word(text, 'fx'), isEmpty, reason: 'its thickness is no effect of its stack');
+    expect(m.undo() && m.value(text, 'scale_z', 0) == 0, isTrue, reason: 'one step');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, tags: 'main', skip: !_built);
 
   testWidgets('Copies, Wave, Field and Scatter are cards put on from the Create shelf and taken off by their Reset, not cards always there (After Effects\' Add ▸ Repeater, Alight Motion\'s Repeat and Wave Warp)', (t) async {
     final ws = await _pump(t), m = ws.inside!;

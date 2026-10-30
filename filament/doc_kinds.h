@@ -130,10 +130,11 @@ static const DocValue doc_values[] = {
     {"rotate", "film picture text solid shape camera light behaviour", -1e6, 1e6, true, nullptr}, {"rotate_x", "film picture text solid shape camera light behaviour", -1e6, 1e6, true, nullptr}, {"rotate_y", "film picture text solid shape camera light behaviour", -1e6, 1e6, true, nullptr},   // (a relation's own: added to each of its things in turn)
     {"orient", "film picture text solid shape", 0, 1, false, nullptr},   // (turned the way it is going along its path, its rotate added: After Effects' Auto-Orient)
     // (how many times as wide, as high and as deep as its size makes it, each on its own as After Effects' Scale: below 0
-    //  turned over; a flat thing has no depth to scale yet, its thickness to come as its scale_z)
+    //  turned over; a flat thing's scale_z is its thickness: none said, flat; said, it is drawn pushed out into depth by
+    //  Raster Extrude (doc_fx_list), as After Effects' Extrusion Depth and Apple Motion's Depth make a flat text solid)
     {"scale_x", doc_drawn, -1e4, 1e4, true, nullptr},
     {"scale_y", doc_drawn, -1e4, 1e4, true, nullptr},
-    {"scale_z", "solid", -1e4, 1e4, true, nullptr},
+    {"scale_z", "solid text shape picture", -1e4, 1e4, true, nullptr},
     // (falls and strikes others: moves, the world has it from its last key on; still, a wall where the document puts it;
     //  how much it bounces, how it rubs; and the stage's pull down, in units of the stage a second each second)
     {"physics", doc_drawn, 0, 0, false, "none moves still"},
@@ -198,7 +199,7 @@ static const DocValue doc_values[] = {
     {"roll", doc_kinds, 0, 0, false, "x y"}, {"roll_radius", doc_kinds, -1e3, 1e3, true, nullptr},   // (turned as a wheel rolling as it goes along x, or y; its radius half its smaller side and this more)
     {"dissolve", "solid", 0, 100, true, nullptr}, {"grain", "solid", 0.05, 20, true, nullptr},   // (a point cloud's: its grains thrown out each its own way, so far; and how large they are drawn: points.h)
     {"mosh", "film", 0, 1, false, nullptr}, {"mosh_with", "film", 0, 1e9, false, nullptr}, {"mosh_at", "film", 0, 1e6, false, nullptr},   // (a real datamosh: from that moment of its film, the other's motion poured into its last picture: mosh.h)   // (the thing it goes with: it is moved, turned and sized as that one is, then as it is itself; 0: none)
-    {"space", "film picture text shape", 0, 0, false, "2d 2.5d"},   // (the past repository's three tags: 2d is not in the world and lies by the order alone; 2.5d is a sheet in the world, before or behind by depth; a solid is 3d)
+    {"space", "film picture text shape", 0, 0, false, "2d 2.5d 3d"},   // (the past repository's three tags: 2d is not in the world and lies by the order alone; 2.5d is a sheet in the world, before or behind by depth, always facing the eye; 3d is filmed as it is, the camera turning round it, as a solid is)
     {"align", "text", 0, 1, false, nullptr},
     // (ThorVG's own scene effects on a thing it draws: a blur, and a shadow of a colour, how far it falls, which way, how
     //  soft, how much of it; lengths in points of the picture at size 1)

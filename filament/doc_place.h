@@ -1,4 +1,9 @@
 // doc_place.h: part of doc.h (where a thing lies, its look, its effects). Read only through doc.h.
+// How much deeper it is drawn: a flat thing's thickness keyed through 0 has none, not a place that cannot be turned back.
+static double doc_scale_z(Doc& d, int thing, double now) {
+    const double z = doc_literal(d, thing, "scale_z", now, 1);
+    return z == 0 && doc_word(d, thing, "kind") != "solid" ? 1e-3 : z;
+}
 static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy, bool member) {
     const double said = now;   // (the moment itself: a wave goes on at it, whatever the copy's delay)
     struct Placing { Doc& d; int copy, n; bool hasAt; math::double3 at; ~Placing() { d.ctxCopy = copy, d.ctxN = n, d.ctxHasAt = hasAt, d.ctxAt = at; } } was{d, d.ctxCopy, d.ctxN, d.ctxHasAt, d.ctxAt};   // (which copy, as it was before: told back after)
@@ -150,7 +155,7 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
             const math::quat q{pose.turn[3], pose.turn[0], pose.turn[1], pose.turn[2]};
             return math::mat4::translation(math::double3{pose.at[0], pose.at[1], pose.at[2]}) * math::mat4(math::mat3(math::quat(q))) *
                    math::mat4::scaling(doc_literal(d, thing, "size", now, 1)) *
-                   math::mat4::scaling(math::double3{doc_literal(d, thing, "scale_x", now, 1), doc_literal(d, thing, "scale_y", now, 1), doc_literal(d, thing, "scale_z", now, 1)}) *
+                   math::mat4::scaling(math::double3{doc_literal(d, thing, "scale_x", now, 1), doc_literal(d, thing, "scale_y", now, 1), doc_scale_z(d, thing, now)}) *
                    math::mat4::translation(math::double3{-doc_letter_middle(d, thing, member ? copy : -1), 0, 0});
         }
     }
@@ -204,7 +209,7 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
     }
     math::mat4 place = there * helped *
                        heading * turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::translation(shift) * math::mat4::scaling(doc_literal(d, thing, "size", now, 1)) *
-                       math::mat4::scaling(math::double3{assisted.x, assisted.y, doc_literal(d, thing, "scale_z", now, 1)}) *
+                       math::mat4::scaling(math::double3{assisted.x, assisted.y, doc_scale_z(d, thing, now)}) *
                        own * math::mat4::translation(-anchor);
     const double reach = member ? doc_literal(d, thing, "field_radius", said, 0) : 0.0;
     if (reach > 0.0) {   // (within the field: larger and turned about where it is seen, its picture's middle, as near the field's middle as it is)
@@ -481,6 +486,8 @@ static std::vector<std::string> doc_fx_list(Doc& d, int thing, bool off) {
     for (const std::string& w : script_files(doc_word(d, thing, "fx"))) if (w != "none" && w != "glow") said.push_back(w);   // (a glow is no step of the stack: Filament's bloom, doc_moment)
     for (const char* n : doc_thor_names) if (std::find(said.begin(), said.end(), n) == said.end() && doc_on(d, thing, n) && seen(n)) all.push_back(n);
     for (const std::string& w : said) if ((!doc_thor_letter(w) || doc_on(d, thing, w.c_str())) && seen(w)) all.push_back(w);
+    if (!off && doc_among("text shape picture", doc_word(d, thing, "kind")) && doc_on(d, thing, "scale_z") && std::none_of(all.begin(), all.end(), solid_is))   // (a flat thing given thickness: not one of its effects, no card of its own; its Scale Z deepens it, the place's own scaling)
+        all.push_back((doc_folders("solids").front() / "Raster_Extrude.js").string());
     return all;
 }
 // Whether a thing's effects are laid on it as the camera sees it (one of them a file: then all of them, in turn, there:
