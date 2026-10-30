@@ -464,6 +464,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] イーズ 3：グラフの描き方を AM に寄せる（0 と 1 の破線、行き過ぎも見える、再生位置の破線）。一つずつ
 - [ ] イーズ 4：形の札の列の間延びを詰める。形が増えても溢れないように（10/30 ユーザー）。Ease・Back・Hold の扱いは `Keyframes.kt` の EasingCatalog を見て決める
 - [ ] 同：Steps の式は AbsentMotion の step に替えた。窓のグラフで形を見るのが残り
+- [ ] イーズの掛け算（10/31 ユーザー：形はどんどん増える、掛け合わせたい）：形の一覧は棚へ逃がし、パネルには今の区間に載っている形のカードだけを並べる案。使い捨てのモックで試し中。カードを足さなければ今のパネルのまま。出典：Blender の F-Curve Modifiers（上から順に効く、Influence、Noise の Multiply）、GSAP の CustomWiggle（amplitudeEase が大きさ、timingEase が時間）。式の並びは Ableton の Device Chain に倣う案で、まだ確かめていない
 - [ ] 区間の繰り返しの入口：エンジンは済（`<値>_loop`、cycle・pingpong・offset）。窓から選ぶ入口がまだ
 - [ ] レーンの箱（Ableton の Stretching and Skewing Envelopes、Live 12 手引き 26.7.2）。作る前に Logic と FL Studio も見る
 - [ ] レーンへの形の差し込み（Ableton の Insert Shape）
@@ -473,6 +474,9 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] 本物の 3D のつづき：文字の輪郭を opentype.js で（4 本は取ったが、まだ入れていない）、Surface の札、ベベル
 - [ ] 窓を手で触って確かめる：Tab、右クリック、選ぶ欄のキー、More、+ Add Effect
 - [ ] 遅い CI の Mac でだけ落ちる 5 本（golf_noise.md (108)、retry: 2 で隔離中）
+- [ ] a motion is a file：CI でだけ 2 回続けて落ちる（手元は空の置き場でも通る）。二度押しが間に合っていない見立てだが、未確認
+- [ ] 2 色の塗りでも Gradient の札が出ず、More から出す形になっている（10/31、`a7949e91c` の結果）。角度を触るのに一手増える。Alight Motion の Color & Fill と見比べて決める
+- [ ] Colors の棚：まっさらな状態（箱 52）だと、上の塊が高くて箱の一覧が短い。1600×960 の窓でも箱の真ん中が押せなかった
 - [ ] 色の目盛りをインスペクターの中に置くか：ユーザーの判断待ち
 - [ ] パネルごとに UX を評価する（10/30 ユーザーの案。出典：KLM、Cognitive Walkthrough、Nielsen のヒューリスティック）
 - [ ] 「locators as Live's…」の試験が束で流すと時々落ちる（Drop のはずが M1。1 本だけなら通る）

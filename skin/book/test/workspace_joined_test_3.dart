@@ -124,7 +124,7 @@ void _tests3() {
     final ids = {for (final e in find.byType(NumField).evaluate()) (e.widget as NumField).id};
     expect(ids, containsAll(['v_x', 'v_distance', 'v_zoom']), reason: 'the inside\'s Camera card, as After Effects\' camera');
     expect(ids.intersection({'v_scale_x', 'v_opacity', 'depth'}), isEmpty, reason: 'a camera has none of these');
-    expect(inspectorCards(t), ['Camera', 'Fog', 'Projection', 'Note'], reason: 'where it is and looks, its fog (Alight Motion\'s camera has it), then its lens: orthographic, shifted');
+    expect(inspectorCards(t), ['Camera', 'Fog', 'Projection'], reason: 'where it is and looks, its fog (Alight Motion\'s camera has it), then its lens: orthographic, shifted');
     expect(m.say(cam, 'projection', 'orthographic') && m.key(cam, 'shift_y', 0, 0.2), isTrue, reason: m.trouble);
     final dist = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_distance');
     await seen(t, dist);
@@ -997,6 +997,7 @@ void _tests3() {
     expect(m.set(rect, 'duration', 2) && m.key(rect, 'x', 0, -1) && m.key(rect, 'x', 1, 1), isTrue, reason: m.trouble);
     ws..reread()..select('$rect');
     await t.pumpAndSettle();
+    await ask(t, 'Play');
     await pick(t, 'v_speed_hold', 'end');
     await settled(t, ws);
     expect(m.word(rect, 'speed_hold'), 'end');
@@ -1445,6 +1446,7 @@ void _tests3() {
     await t.pumpAndSettle();
     // (the circle has no Wave yet, nor its card (golf_noise.md (99)): pasted on a card it has, as After Effects' Paste puts
     //  an effect copied on the layer picked, its Wave card comes)
+    await ask(t, 'Path');
     await press('paste', card: 'Path');
     expect([m.value(b, 'wave_x', 0), m.value(b, 'wave_speed', 0), m.word(b, 'fill')], [closeTo(.3, 1e-9), 2, '3a86ff'], reason: 'its wave, and nothing else of the rect: ${m.trouble}');
     expect([for (final (title, _) in m.cards(b)) title], contains('Wave'));
@@ -1505,12 +1507,7 @@ void _tests3() {
       ..select('$rect');
     await t.pumpAndSettle();
     final own = ws.layers.firstWhere((l) => l.id == '$rect').tone;
-    final more = find.byKey(const ValueKey('card-more:More'));   // (Alight Motion shows no Note for its kinds: asked for by More)
-    await seen(t, more);
-    await t.tap(more);
-    await t.pumpAndSettle();
-    await t.tap(find.byKey(const ValueKey('card-Note:More')));
-    await t.pumpAndSettle();
+    await ask(t, 'Note');   // (Alight Motion shows none for its kinds)
     await seen(t, find.byWidgetPredicate((w) => w is Chooser && w.id == 'v_label'));   // (the Note card, the last)
     await pick(t, 'v_label', 'red');
     expect(m.word(rect, 'label'), 'red', reason: m.trouble);
@@ -1568,6 +1565,7 @@ void _tests3() {
       ..reread()
       ..select('$rect');
     await t.pumpAndSettle();
+    await ask(t, 'Play');
     expect([for (final c in m.cards(rect)) if (c.$1 == 'Play') ...c.$2], contains('frame_rate'), reason: 'its card: ${m.cards(rect)}');
     expect((await m.shownAt([(rect, 'x', .45)])).single, closeTo(.45, 1e-9), reason: 'as smooth as the stage');
     ws.after(m.later('set', thing: rect, name: 'frame_rate', number: 4));
@@ -1669,10 +1667,11 @@ void _tests3() {
       ..reread()
       ..select('$text');
     await t.pumpAndSettle();
+    await ask(t, 'Type');
     await seen(t, find.descendant(of: find.byType(ValuesCard), matching: find.text('Type')));
     expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Type')), findsOneWidget);
     expect(m.cards(text).map((c) => c.$1).contains('Gradient'), isFalse, reason: 'one colour: no ramp to turn');
-    expect(m.say(text, 'fill', 'ff3366 1b2fd8') && m.cards(text).map((c) => c.$1).contains('Gradient'), isTrue, reason: 'two: its ramp');
+    expect(m.say(text, 'fill', 'ff3366 1b2fd8') && m.moreCards(text).contains('Gradient'), isTrue, reason: 'two: its ramp, asked for by More');
     expect(m.say(text, 'fill', 'ffffff'), isTrue);
     final wide = m.frame(text)![2], letters = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_letter_spacing');
     expect(letters, findsOneWidget);
@@ -1683,6 +1682,7 @@ void _tests3() {
     expect(m.frame(text)![2], greaterThan(wide), reason: 'and the words wider on the stage');
     ws.select('$rect');
     await t.pumpAndSettle();
+    await ask(t, 'Line');
     await seen(t, find.descendant(of: find.byType(ValuesCard), matching: find.text('Line')));
     expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Line')), findsOneWidget);
     final round = find.descendant(of: find.byType(ValuesCard), matching: find.text('ROUND')).first; // (the ends: butt, round, square, as the sample's segments write them)
@@ -1696,6 +1696,7 @@ void _tests3() {
       ..reread()
       ..select('$cube');
     await t.pumpAndSettle();
+    await ask(t, 'Surface');
     expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Surface')), findsOneWidget, reason: 'Filament\'s own surface of a solid');
     ws.shelf = 'Create';
     await t.pumpAndSettle();
@@ -1706,11 +1707,11 @@ void _tests3() {
     await doubleTap(t, glass);   // (a material is made in Create and put on the picked solid, as Repeater lays the picked thing out)
     await settled(t, ws);
     expect(m.word(cube, 'fill'), 'glass', reason: m.trouble);
-    expect(m.cards(cube).map((c) => c.$1), ['Fill', 'Transform', 'Blending', 'Motion', 'Play', 'Glass', 'Lit', 'Physics', 'Note'], reason: 'filled with glass: the glass\'s own card, not the surface\'s');
+    expect(m.cards(cube).map((c) => c.$1), ['Fill', 'Transform', 'Blending', 'Glass'], reason: 'filled with glass: the glass\'s own card, not the surface\'s');
     expect(m.cards(rect).map((c) => c.$1).contains('Matte'), isFalse, reason: 'not clipped: no matte to say how');
     expect(m.set(rect, 'clip', 1) && m.cards(rect).map((c) => c.$1).contains('Matte'), isTrue);
     expect(m.set(cube, 'ior', 2.2) && m.value(cube, 'ior', 0) == 2.2, isTrue, reason: m.trouble);
-    expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join(' ') == 'Fill Transform Blending Motion Play Surface Lit Physics Note', isTrue);
+    expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join(' ') == 'Fill Transform Blending Surface', isTrue);
     ws.reread();   // (written to the inside directly: the window reads it again)
     await t.pumpAndSettle();
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_metallic'), findsOneWidget);
@@ -1769,7 +1770,7 @@ void _tests3() {
     final spot = int.parse(ws.selected!);
     expect([m.word(spot, 'kind'), m.word(spot, 'file')], ['light', 'spot'], reason: m.trouble);
     expect(find.descendant(of: find.byType(InspHeader), matching: find.text('Light')), findsOneWidget);
-    expect(inspectorCards(t), ['Fill', 'Transform', 'Light', 'Note'], reason: 'its colour, where it is and how it is turned, as After Effects\' lights have, then its own');
+    expect(inspectorCards(t), ['Fill', 'Transform', 'Light'], reason: 'its colour, where it is and how it is turned, as After Effects\' lights have, then its own');
     expect(m.set(spot, 'shadows', 1) && m.say(spot, 'fill', 'ffb36b') && m.set(spot, 'cone', 20), isTrue, reason: m.trouble);
     expect(m.set(spot, 'shadows', 2), isFalse, reason: 'shadows is 0 or 1');
     expect(m.key(spot, 'intensity', 0, 0) && m.key(spot, 'intensity', 1, 3), isTrue, reason: 'its strength moves: ${m.trouble}');
@@ -1801,6 +1802,7 @@ void _tests3() {
       ..select('$pic');
     await t.pumpAndSettle();
     expect(m.words(pic, 'marker'), ['all', 'Start', 'End'], reason: 'its file\'s own names');
+    await ask(t, 'Play');
     expect(inspectorCards(t), contains('Play'));
     expect(m.say(pic, 'marker', 'Start') && m.word(pic, 'marker') == 'Start', isTrue, reason: m.trouble);
     // (a 3D file plays one of its own movements, at its speed)

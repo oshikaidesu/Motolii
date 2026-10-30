@@ -511,7 +511,7 @@ void _tests2() {
   }, skip: !_built);
 
   testWidgets('Colors: a saved gradient fills a flat thing as a ramp of all its colours; Used here is the document\'s fills', (t) async {
-    final ws = await _pump(t), m = ws.inside!;
+    final ws = await openWorkspace(t, size: tallWindow), m = ws.inside!;
     final rect = m.add('shape', 'rect');
     expect(m.say(rect, 'fill', '2a4bd8'), isTrue);
     ws
@@ -819,7 +819,7 @@ void _tests2() {
   }, skip: !_built);
 
   testWidgets('the inks and the strip mean the document: a colour filled with nothing picked is what is drawn next; the Move tool along X keeps y', (t) async {
-    final ws = await _pump(t), m = ws.inside!;
+    final ws = await openWorkspace(t, size: tallWindow), m = ws.inside!;
     ws
       ..reread()
       ..select(null)

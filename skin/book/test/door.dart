@@ -21,6 +21,9 @@ export 'package:lab_book/workspace/door.dart';
 /// Whether the inside is built (filament/edit.sh): a test that needs it says `skip: !insideBuilt`.
 final insideBuilt = File('$motoliiDir/out/libmotolii.dylib').existsSync();
 
+/// Tall enough for a box of the Colors shelf at its first size to be pressed, under the wheel and the samples.
+const tallWindow = Size(1600, 1400);
+
 /// The window on a new, empty document (or [document]), with your panes and desk tools; its state.
 Future<Ws> openWorkspace(WidgetTester t, {List<WsPane> extra = const [], List<DeskTool> tools = const [], String? document, Map<String, Object?> view = const {}, Size size = const Size(1600, 960)}) async {
   t.view.physicalSize = size;
@@ -100,6 +103,16 @@ Future<void> seen(WidgetTester t, Finder f) async {
   await t.pumpAndSettle();
 }
 
+/// A card Alight Motion does not show for a thing's kind, asked for as a hand asks: More, under its effects, then its name.
+Future<void> ask(WidgetTester t, String card) async {
+  final more = find.byKey(const ValueKey('card-more:More'));
+  await seen(t, more);
+  await t.tap(more);
+  await t.pumpAndSettle();
+  await t.tap(find.byKey(ValueKey('card-$card:More')));
+  await t.pumpAndSettle();
+}
+
 /// The window is the document's alone: closed and opened again on the same document, at the same thing, moment, keys
 /// and desk tool, it shows the same words. What differs was held by the window, not the document.
 Future<void> expectSameAfterReopen(WidgetTester t, {List<WsPane> extra = const [], List<DeskTool> tools = const []}) async {
@@ -115,9 +128,9 @@ Future<void> expectSameAfterReopen(WidgetTester t, {List<WsPane> extra = const [
   }
   await t.pumpAndSettle();
   final selected = ws.selected, frame = ws.frame, keys = ws.keys.toList(), desk = ws.deskManual, shelf = ws.shelf, ink = ws.ink, edge = ws.edge, aim = ws.aim, animating = ws.animating, view = Map.of(ws.view), fronted = ws.fronted?.$1, doc = openedDocument!;
-  final before = windowWords(t);
+  final before = windowWords(t), size = t.view.physicalSize;
   await closeWorkspace(t);
-  final again = await openWorkspace(t, extra: extra, tools: tools, document: doc, view: view);
+  final again = await openWorkspace(t, extra: extra, tools: tools, document: doc, view: view, size: size);
   again.select(selected);
   for (final k in keys) {
     again.pickKey(k, add: true);

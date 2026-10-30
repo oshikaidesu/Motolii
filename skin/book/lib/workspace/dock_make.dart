@@ -106,7 +106,17 @@ final _minePals = <_Pal>[];
 final _mineColours = <Color>[];
 final _mineGrads = <_Gradient>[];
 bool _mineRead = false;
-final _mineFile = File('${Platform.environment['HOME']}/.motolii/colors.json');
+File _mineFile = File('${Platform.environment['HOME']}/.motolii/colors.json');
+
+/// Where they are kept (a test points it elsewhere, and forgets what was read: as easeStarsAt).
+void coloursAt(File f) {
+  _mineFile = f;
+  _mineRead = false;
+  _minePals.clear();
+  _mineColours.clear();
+  _mineGrads.clear();
+  _tile = 52;
+}
 
 Color? _colourOf(Object? hex) {
   final v = int.tryParse('$hex'.replaceFirst('#', ''), radix: 16);

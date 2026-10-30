@@ -121,6 +121,7 @@ void main() {
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
       ws.reread();
     }
+    m.asked.putIfAbsent(text, () => {}).add('Motion');   // (Alight Motion shows none for its kinds)
     final titles = [for (final (title, _) in m.cards(text)) title];
     expect(titles.indexOf('Glitch Shifter'), allOf(greaterThan(titles.indexOf('Transform')), lessThan(titles.indexOf('Motion'))), reason: '$titles');   // (Copies, the first of those besides, is shown once put on since 10/30: golf_noise.md (99))
   }, skip: !insideBuilt);

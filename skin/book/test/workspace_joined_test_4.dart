@@ -53,6 +53,7 @@ void _tests4() {
     final text = m.add('text', '/System/Library/Fonts/Supplemental/Arial Black.ttf');
     ws..reread()..select('$text');
     await t.pumpAndSettle();
+    await ask(t, 'Type');
     final bloom = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_letter_spacing');
     await seen(t, bloom);
     final list = find.ancestor(of: bloom, matching: find.byType(Scrollable)).first;
