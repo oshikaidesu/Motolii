@@ -82,7 +82,10 @@ static void stage_kept_fresh(StageKept& k, Doc& d, Stage& s, long revision, int 
         }).detach();
     }
     k.state.assign((size_t)std::max(1.0, std::ceil(doc_seconds(d) * rate)) + 1, 0);
-    if (k.target) s.engine->destroy(k.target), s.engine->destroy(k.into), s.engine->destroy(k.shown), k.target = nullptr;
+    // (each forgotten as it goes: `shown` is made when played, not with the target, and left said it was thrown away twice,
+    //  the throw left `target` said, and the next picture drawn into what was gone: golf_noise.md (102))
+    if (k.target) s.engine->destroy(k.target), k.target = nullptr, s.engine->destroy(k.into), k.into = nullptr;
+    if (k.shown) s.engine->destroy(k.shown), k.shown = nullptr;
     for (int i = 0; i < (int)k.state.size(); ++i) {   // (what is on disk for it already, from before: an undo back to it, or the document opened again)
         std::error_code e;
         if (std::filesystem::exists(stage_kept_file(k, i), e)) k.state[i] = 2;

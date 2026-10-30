@@ -40,7 +40,7 @@ struct Motolii {
     std::condition_variable asked_now;
     std::unique_ptr<thermion::FrameScheduler> beat;   // (the screen's beat, Thermion's: a picture is drawn on each; CVDisplayLink, DXGI on Windows)
     uint64_t beats = 0, drew_at = 0;                  // (beats come, and the one the last picture was drawn on: under asked_lock)
-    long beats_drawn = 0, beats_gpu_busy = 0, beats_still = 0, writes_on_beat = 0, beats_two = 0, beats_unseen = 0; uint64_t busy_at = 0, still_at = 0, seen_beat = 0; double films_ms = 0, films_most = 0, part_ms[7] = {}, part_most[7] = {};   // (the hand's round in parts: files looked at, changes, telling, GPU asked, ahead, the rest)   // (beats a picture was drawn on, and beats the GPU had not finished the last: for the spent line)
+    long rounds_threw = 0, beats_drawn = 0, beats_gpu_busy = 0, beats_still = 0, writes_on_beat = 0, beats_two = 0, beats_unseen = 0; uint64_t busy_at = 0, still_at = 0, seen_beat = 0; double films_ms = 0, films_most = 0, part_ms[7] = {}, part_most[7] = {};   // (the hand's round in parts: files looked at, changes, telling, GPU asked, ahead, the rest)   // (beats a picture was drawn on, and beats the GPU had not finished the last: for the spent line)
     std::atomic<void (*)(void*)> shown{nullptr};      // (motolii_finished: told when a picture is finished, to tell Flutter)
     std::atomic<void*> shown_with{nullptr};
     std::deque<std::function<void()>> asked;
@@ -360,6 +360,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         } catch (const std::exception& e) {
         std::fprintf(stderr, "motolii: the hand's round threw while %s: %s\n", m->step.load(), e.what());
         m->trouble = std::string("the hand's round threw: ") + e.what();
+        ++m->rounds_threw;   // (the trouble goes with the next call; this stays, told in motolii_spent)
         m->telling = false;
         m->changed = false;
         m->playing = false;
@@ -474,6 +475,7 @@ const char* motolii_spent(Motolii* m) {
         }
         std::sort(doors.rbegin(), doors.rend());
         said_word() = line;
+        if (m->rounds_threw) said_word() += "; the hand's round threw " + std::to_string(m->rounds_threw) + " times";
         { char parts[300]; std::snprintf(parts, sizeof parts, "; the hand's round: files %.0f ms (most %.1f), changes %.0f (%.1f) of which done %.0f (%.1f), telling %.0f (%.1f), GPU asked %.0f (%.1f), ahead %.0f (%.1f), moment and draw %.0f (%.1f)", m->part_ms[0], m->part_most[0], m->part_ms[1], m->part_most[1], m->part_ms[6], m->part_most[6], m->part_ms[2], m->part_most[2], m->part_ms[3], m->part_most[3], m->part_ms[4], m->part_most[4], m->part_ms[5], m->part_most[5]); said_word() += parts; for (double& x : m->part_most) x = 0; }
         char waits[260];
         std::snprintf(waits, sizeof waits, "; reads waited for the document %.0f ms, the longest %.1f ms, %ld over 2 ms; the GPU took %.1f ms a picture, at most %.1f, of %.0f it may", 1e3 * m->read_waited, 1e3 * m->read_waited_most, m->read_waits, m->gpu_ms, m->gpu_most, m->budget);
