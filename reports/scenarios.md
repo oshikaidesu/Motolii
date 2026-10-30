@@ -211,3 +211,10 @@
 - したいこと：作業を閉じて、次の日に開いた時に、続きから始めたい
 - 成功：開くと、最後に触っていた物と場所に戻る
 - 確かめた（10/30 夜、通せず）：窓が落ちたあと開き直すと、再生位置は 0 秒・何も選ばれていない・棚と Inspector の開き方も最初のまま。After Effects・Premiere Pro は再生位置をプロジェクトの中に持つ → 書類に値の名前を足す話なので engine_needs.md の E4 に「P24 で詰まった」と印
+
+## 5 秒のタイトル（ゴルフし直し、10/30 朝）
+
+最初のゴルフと同じ題（文字が弾んで出る・光る・着地でカメラが揺れる・ゆっくり寄る）を、窓だけで新しい書類に作り直した。**65 打・スクロール 3 回・往復 1 回**（外れ 4 打）。当たり：0:20 文字が落ちてくる、0:53・0:56 着地でカメラが揺れる、1:30 静か、4:30 寄っている（絵：reports/screen/title5s_1030.jpg）。書類：~/Movies/Motolii/teaser/untitled_1.motolii
+- 手：New Document（⌘N）・背景 Black・新しいレイヤーの長さ 5s・（Esc で閉じない：外れ）・外を押して閉じる・T の道具・舞台を押す（Text）・Text の段・文字の欄・⌘A・MOTOLII・外を押す（12）／Text の段・効果の棚・探す欄・bounce・Bounce In・Add（18）／Colors・白・⇧⌘A（21）・（Lens の Flare を引いた：外れ）・↶・Bloom 42%（光らない：外れ）・Text の段・（送って Surface）・Light up 3.7（光った）（26）／（送って上へ）・2.5D・Create・Layers・⏮・Camera・Create・Null・Create（34）／効果の棚・探す欄・shake・Auto-Shake・Add・Camera の段・Target › Layer・1. Null（42）／Null の段・（送って Auto-Shake）・Magnitude 0 Return（3）・時刻 52 Return（3）・ひし形・時刻 104 Return（3）・ひし形・1 コマ戻る・Ease の左の点を少し上へ（120 に）（56）／Camera の段・⏮・Distance のひし形・時刻 459 Return（3）・Distance 1400 Return（3）（65）
+- 前のゴルフで止まった所（カメラを揺らす入口、値のキー、文字に光）は全部通った。新しいノイズ：(73)〜(77)
+
