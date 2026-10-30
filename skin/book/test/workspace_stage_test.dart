@@ -87,6 +87,25 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('an effect put on shows its card under the thing\'s own, before the cards of what it may do besides, as Premiere Pro lays the effects under Motion and Opacity (golf (58))', (t) async {
+    final ws = _joined(), m = ws.inside!;
+    final text = m.add('text', ws.bodyFace);
+    ws
+      ..reread()
+      ..select('$text');
+    for (var i = 0; i < 200 && ws.waiting; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+    }
+    final file = '$motoliiDir/effects/Glitch Shifter.fs';
+    expect(ws.screenToggle(file), isTrue);
+    for (var i = 0; i < 200 && (ws.waiting || !m.fxTitles(text).contains('Glitch Shifter')); i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      ws.reread();
+    }
+    final titles = [for (final (title, _) in m.cards(text)) title];
+    expect(titles.indexOf('Glitch Shifter'), allOf(greaterThan(titles.indexOf('Transform')), lessThan(titles.indexOf('Copies'))), reason: '$titles');
+  }, skip: !insideBuilt);
+
   testWidgets('a camera takes a motion from the Effects shelf, as AbsentMotion\'s camera is moved by its own; an effect it has no picture for is not taken, and the top bar says why (golf ㊴)', (t) async {
     final ws = _joined(), m = ws.inside!;
     final cam = m.add('camera', 'camera');

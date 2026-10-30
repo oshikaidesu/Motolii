@@ -306,10 +306,15 @@ static std::string doc_fx_titles(Doc& d, int thing) {
 }
 static std::string doc_cards_of(Doc& d, int thing) {
     const std::string has = " " + doc_has(d, thing) + " ";
-    std::string all;
+    // (its effects' cards come under its own (Text, Fill, Transform, Blending...), before the cards of what it may do
+    //  besides, Copies and on, as Premiere Pro's Effect Controls lays the effects put on under Motion and Opacity: they
+    //  were under ten unused cards, four screens down; golf (58))
+    std::string all, besides;
     std::map<std::string, std::string> effects;   // (ThorVG's own effects' cards by the value that puts each on: laid out as its list lays them)
     const bool behaviour = doc_word(d, thing, "kind") == "behaviour";
+    bool past = false;
     for (const DocCard& card : doc_cards) {
+        past = past || !strcmp(card.title, "Copies");
         if (behaviour && !(card.when && !strcmp(card.when, "file"))) continue;   // (a behaviour: only its own card, not those of things that happen to share a name with its knobs)
         if (card.when && card.is[0] == '+') {   // (an effect's card while it is on: doc_on)
             if (!doc_on(d, thing, card.when)) continue;
@@ -332,7 +337,7 @@ static std::string doc_cards_of(Doc& d, int thing) {
         }
         if (names.empty()) continue;
         if (card.when && card.is[0] == '+' && doc_thor_letter(card.when)) effects[card.when] = std::string(card.title) + ": " + names;
-        else all += (all.empty() ? "" : "; ") + std::string(card.title) + ": " + names;
+        else (past ? besides : all) += ((past ? besides : all).empty() ? "" : "; ") + std::string(card.title) + ": " + names;
     }
     if (thing != 0)   // (its effects, a card each, in the order they are laid: ThorVG's own and the files' alike)
         for (const std::string& w : doc_fx_list(d, thing, true)) {   // (those turned off too: their values are kept)
@@ -344,6 +349,7 @@ static std::string doc_cards_of(Doc& d, int thing) {
             }
             if (!card.empty()) all += (all.empty() ? "" : "; ") + card;
         }
+    if (!besides.empty()) all += (all.empty() ? "" : "; ") + besides;
     if (doc_among("picture text shape stage", doc_word(d, thing, "kind")))   // (its script's own card: the knobs its head declares)
         if (const std::vector<DocScript*> scs = doc_scripts_on(d, thing); !scs.empty()) {
             std::string names = thing == 0 ? "script follow" : "script";

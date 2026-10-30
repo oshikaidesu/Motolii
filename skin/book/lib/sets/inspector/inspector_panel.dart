@@ -57,7 +57,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         const EmptyState()
       else ...[
         const InspHeader(),
-        // contract: one stack, After Effects style: the host's cards, Transform first and the effects on it last; every titled card folds on its own.
+        // contract: one stack: the host's cards, Transform first, then the effects on it, then what it may do besides (Premiere Pro's Effect Controls: the effects put on under Motion and Opacity); every titled card folds on its own.
         SizedBox(height: Pop.gap),
         for (final c in doc.cards) inspectorCards[c.name]?.call(c) ?? ValuesCard(c), // (a card the window knows, drawn by hand; one it does not (an effect, a script's knobs), drawn from what the inside says)
       ],
