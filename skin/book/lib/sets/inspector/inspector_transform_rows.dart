@@ -205,24 +205,6 @@ class ScaleRow extends StatelessWidget {
   }
 }
 
-/// Leaned sideways, up or down: Alight Motion's X Skew and Y Skew, After Effects' Transform effect's Skew.
-class SkewRow extends StatelessWidget {
-  const SkewRow({super.key});
-  @override
-  Widget build(BuildContext context) {
-    if (!Ctx.of(context).doc.seat('v_skew_x')) return const SizedBox.shrink();
-    return PropRow(
-      id: 'v_skew',
-      label: 'Skew',
-      ids: const ['v_skew_x', 'v_skew_y'],
-      cells: [
-        NumField(id: 'v_skew_x', label: 'X', axis: axX, unit: '°', decimals: 1, perPx: .5),
-        NumField(id: 'v_skew_y', label: 'Y', axis: axY, unit: '°', decimals: 1, perPx: .5),
-      ],
-    );
-  }
-}
-
 class RotRow extends StatelessWidget {
   const RotRow({super.key});
   @override

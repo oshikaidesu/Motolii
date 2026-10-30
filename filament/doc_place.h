@@ -1,11 +1,4 @@
 // doc_place.h: part of doc.h (where a thing lies, its look, its effects). Read only through doc.h.
-// Leaned as it says: Alight Motion's X Skew and Y Skew.
-static math::mat4 doc_skew(Doc& d, int thing, double now) {
-    math::mat4 lean;
-    lean[1][0] = std::tan(doc_literal(d, thing, "skew_x", now, 0) * (double)TAU / 360.0);
-    lean[0][1] = std::tan(doc_literal(d, thing, "skew_y", now, 0) * (double)TAU / 360.0);
-    return lean;
-}
 // How much deeper it is drawn: a flat thing's thickness keyed through 0 has none, not a place that cannot be turned back.
 static double doc_scale_z(Doc& d, int thing, double now) {
     const double z = doc_literal(d, thing, "scale_z", now, 1);
@@ -162,7 +155,7 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
             const math::quat q{pose.turn[3], pose.turn[0], pose.turn[1], pose.turn[2]};
             return math::mat4::translation(math::double3{pose.at[0], pose.at[1], pose.at[2]}) * math::mat4(math::mat3(math::quat(q))) *
                    math::mat4::scaling(doc_literal(d, thing, "size", now, 1)) *
-                   math::mat4::scaling(math::double3{doc_literal(d, thing, "scale_x", now, 1), doc_literal(d, thing, "scale_y", now, 1), doc_scale_z(d, thing, now)}) * doc_skew(d, thing, now) *
+                   math::mat4::scaling(math::double3{doc_literal(d, thing, "scale_x", now, 1), doc_literal(d, thing, "scale_y", now, 1), doc_scale_z(d, thing, now)}) *
                    math::mat4::translation(math::double3{-doc_letter_middle(d, thing, member ? copy : -1), 0, 0});
         }
     }
@@ -216,7 +209,7 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
     }
     math::mat4 place = there * helped *
                        heading * turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::translation(shift) * math::mat4::scaling(doc_literal(d, thing, "size", now, 1)) *
-                       math::mat4::scaling(math::double3{assisted.x, assisted.y, doc_scale_z(d, thing, now)}) * doc_skew(d, thing, now) *
+                       math::mat4::scaling(math::double3{assisted.x, assisted.y, doc_scale_z(d, thing, now)}) *
                        own * math::mat4::translation(-anchor);
     const double reach = member ? doc_literal(d, thing, "field_radius", said, 0) : 0.0;
     if (reach > 0.0) {   // (within the field: larger and turned about where it is seen, its picture's middle, as near the field's middle as it is)

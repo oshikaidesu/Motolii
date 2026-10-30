@@ -442,7 +442,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 
 - [x] **+ Add Effect**（AM の Effects 欄の下）：押すと効果の棚が開いて検索欄に字が打てる — 済（10/30 夜）：窓の試験（`workspace_ableton_fields_test.dart`）
 - [x] Move & Transform：位置・スケール（縦横の鎖）・回転 X Y Z・アンカー
-- [x] Move & Transform：傾き X・Y（X SKEW・Y SKEW、AE は Transform 効果の Skew） — 済（10/30 夜）：描く物すべて（doc_skew、行列に 1 段）、Transform の札の Skew の行。窓の試験（同）
+- [x] Move & Transform：傾き X・Y — 有る：効果 Skew (Sashimono)・[Transform]Skew（AE も Transform 効果）。Transform の札に行を足したが、棚の物を作り直しただけだったので取り消した（10/30 夜、ユーザー：「エフェクトとして持ってるものをインスペクターとしてもう一度実装しようとしてる」）
 - [x] Color & Fill：None・Color・Gradient（Media は fill_media）
 - [ ] Color & Fill：その場の色の目盛り（Color sliders）：AM は欄の中。Motolii は「インスペクターは一覧を持たず、そこへ送る」が決まりで、Colors の棚がこの欄を狙って開く（色相の輪・スポイトは棚にある）。ユーザーがモダンと言った考えなので、AM の真似で壊さない。ユーザーの判断待ち
 - [x] Border：内・中・外 — 有る（10/30 夜）：外は効果 Border (Sashimono)（文字で絵を見た）、内は効果 Inner Outline (Sashimono)（棚にあるまで、絵は未）、中は Fill の札の Stroke。+ Add Effect から足す。Fill の札の Stroke そのものの内・外は無い（ThorVG の Text に順番の指定が無い）
@@ -453,6 +453,6 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [x] Effects：全部まとめて Copy Effects・Paste Effects — 済（10/30 夜）：+ Add Effect の行の Copy all・Paste、並びとつまみごと。窓の試験（同）
 - [x] 効果の⋮の Reset to Defaults
 - [x] Move & Transform の ⋯：Flip Horizontal・Vertical、Fit・Fill・Stretch — 済（10/30 夜）：Transform の札の ⋮（メニューバーの奥だけだった）。窓の試験（同）
-- [x] Move & Transform の ⋯：Reset Location・Scale・Rotation・Skew — 済（10/30 夜）：行の右クリックの Reset。窓の試験（同）
+- [x] Move & Transform の ⋯：Reset Location・Scale・Rotation — 済（10/30 夜）：行の右クリックの Reset。窓の試験（同）
 
 合計：378 箱。

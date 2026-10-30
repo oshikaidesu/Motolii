@@ -59,7 +59,7 @@ class DirectTransform extends StatelessWidget {
             tone: Pop.toneTransform,
             keyIds: const ['v_position', 'v_scale', 'v_rotate'],
             mark: CardMark.transform,
-            trailing: CardWords('Transform', [for (final n in const ['anchor_x', 'anchor_y', 'anchor_z', 'x', 'y', 'z', 'scale_x', 'scale_y', 'scale_z', 'skew_x', 'skew_y', 'rotate_x', 'rotate_y', 'rotate', 'opacity']) if (doc.seat('v_$n')) n], more: [
+            trailing: CardWords('Transform', [for (final n in const ['anchor_x', 'anchor_y', 'anchor_z', 'x', 'y', 'z', 'scale_x', 'scale_y', 'scale_z', 'rotate_x', 'rotate_y', 'rotate', 'opacity']) if (doc.seat('v_$n')) n], more: [
               if (doc.onArrange case final to?)   // (Alight Motion's ⋯ on Move & Transform; they lay in the menu bar alone: golf_noise.md 【入口】)
                 for (final (how, word) in const [('flipX', 'Flip Horizontal'), ('flipY', 'Flip Vertical'), ('fit', 'Fit to Picture'), ('fill', 'Fill Picture'), ('stretch', 'Stretch to Picture')]) (how, word, () => to(how)),
             ]),
@@ -72,7 +72,7 @@ class DirectTransform extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
-                  children: [AxisHeader(), PosRow(), ScaleRow(), RotRow(), SkewRow()],
+                  children: [AxisHeader(), PosRow(), ScaleRow(), RotRow()],
                 ),
               ),
             ],

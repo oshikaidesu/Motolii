@@ -132,7 +132,6 @@ static const DocValue doc_values[] = {
     // (how many times as wide, as high and as deep as its size makes it, each on its own as After Effects' Scale: below 0
     //  turned over; a flat thing's scale_z is its thickness: none said, flat; said, it is drawn pushed out into depth by
     //  Raster Extrude (doc_fx_list), as After Effects' Extrusion Depth and Apple Motion's Depth make a flat text solid)
-    {"skew_x", doc_drawn, -89, 89, true, nullptr}, {"skew_y", doc_drawn, -89, 89, true, nullptr},   // (leaned sideways, up or down: Alight Motion's X Skew and Y Skew, After Effects' Transform effect's Skew; any thing drawn flat or solid)
     {"scale_x", doc_drawn, -1e4, 1e4, true, nullptr},
     {"scale_y", doc_drawn, -1e4, 1e4, true, nullptr},
     {"scale_z", "solid text shape picture", -1e4, 1e4, true, nullptr},

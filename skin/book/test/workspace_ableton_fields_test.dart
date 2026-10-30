@@ -211,23 +211,6 @@ void main() {
     await closeWorkspace(t);
   }, tags: 'main', skip: !insideBuilt);
 
-  testWidgets('Skew X and Y on the Transform card, on a text as on any thing drawn (Alight Motion\'s X Skew and Y Skew)', (t) async {
-    final ws = await openWorkspace(t), m = ws.inside!;
-    final a = m.add('text', ws.bodyFace);
-    ws
-      ..reread()
-      ..select('$a');
-    await t.pumpAndSettle();
-    final skew = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_skew_x');
-    await seen(t, skew);
-    await t.timedDragFrom(t.getCenter(skew), const Offset(60, 0), const Duration(milliseconds: 300));
-    await settled(t, ws);
-    expect(m.value(a, 'skew_x', 0), greaterThan(0), reason: m.trouble);
-    expect(m.undo() && m.value(a, 'skew_x', 0) == 0, isTrue, reason: 'one step');
-    expect(t.takeException(), isNull);
-    await closeWorkspace(t);
-  }, tags: 'main', skip: !insideBuilt);
-
   testWidgets('Copy all under a thing\'s effects, Paste on another: its whole stack goes over, in order, its knobs with it (Alight Motion\'s Copy Effects, Paste Effects)', (t) async {
     final ws = await openWorkspace(t), m = ws.inside!;
     final a = m.add('shape', 'rect'), b = m.add('shape', 'circle');

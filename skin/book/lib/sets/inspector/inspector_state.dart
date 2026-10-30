@@ -24,7 +24,6 @@ const pickGrid = [
   ['v_x', 'v_y', 'v_z'],
   ['v_scale_x', 'v_scale_y', 'v_scale_z'],
   ['v_rotate_x', 'v_rotate_y', 'v_rotate'],
-  ['v_skew_x', 'v_skew_y'],
   ['v_opacity'],
   ['depth'],
 ];
