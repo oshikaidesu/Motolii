@@ -13,6 +13,12 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
             if (base == one.name && doc_among(one.kinds, kind) && !one.words) v = &by;
         if (v && number && *number != 0.0 && (*number != std::floor(*number) || doc_word(d, (int)*number, "kind") != "behaviour")) return d.trouble = std::string(name) + " is a behaviour that is there", false;
     }
+    static const DocValue looped{"_loop", "film picture text solid shape camera light behaviour stage", 0, 0, false, "none cycle pingpong offset"};   // (its keys gone through again past the last: `<name>_loop`, doc_keys_at)
+    if (!v && strlen(name) > 5 && !strcmp(name + strlen(name) - 5, "_loop")) {
+        const std::string base(name, strlen(name) - 5);
+        if (doc_knows(d, thing, base.c_str())) v = &looped;
+        d.trouble.clear();
+    }
     if (!v && !strncmp(name, "js_", 3) && doc_among("film picture text shape solid stage camera", kind))   // (a knob of the thing's script; a camera's motion's, golf ㊴)
         for (const DocScript* sc : doc_scripts_on(d, thing))
             for (const DocValue& one : sc->values)

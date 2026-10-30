@@ -621,7 +621,7 @@ static bool doc_reset(Doc& d, int thing, const std::string& names) {
     doc_act(d);
     bool ok = true;
     std::istringstream said(names);
-    for (std::string n; ok && said >> n;) ok = doc_knows(d, thing, n.c_str()) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q", thing, n.c_str()));
+    for (std::string n; ok && said >> n;) ok = doc_knows(d, thing, n.c_str()) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name in (%Q, %Q)", thing, n.c_str(), (n + "_loop").c_str()));
     if (!ok) d.act_ok = false;
     return doc_acted(d) && ok;
 }

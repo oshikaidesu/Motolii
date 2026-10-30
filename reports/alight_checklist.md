@@ -455,4 +455,22 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [x] Move & Transform の ⋯：Flip Horizontal・Vertical、Fit・Fill・Stretch — 済（10/30 夜）：Transform の札の ⋮（メニューバーの奥だけだった）。窓の試験（同）
 - [x] Move & Transform の ⋯：Reset Location・Scale・Rotation — 済（10/30 夜）：行の右クリックの Reset。窓の試験（同）
 
-合計：378 箱。
+
+## T. いまの順番（ここを見れば続きが分かる。上から順に）
+- [ ] イーズの欄を AM に揃える：種類 3 つと形 10 個（`Keyframes.kt` の EasingCatalog）。Ease・Back・Hold と Bounce・Elastic の重複を外す
+- [ ] 同：Steps の式を AbsentMotion の step に替える
+- [ ] 同：グラフを四角く（iPad の AM、10/30 ユーザー。エミュレーターの絵は横に間延びしている）。数字の目盛りを外し、0 と 1 の破線、行き過ぎも見える、再生位置の破線
+- [ ] 同：取っ手を `Keyframes.kt` の handles() どおりに Dart へ移す（Kotlin は窓で動かせないので、これは移植する。10/30 ユーザー了承）
+- [ ] 同：形の印は小さな正方形の列、乗ると大きな曲線に出す
+- [ ] 区間の繰り返しの入口：エンジンは済（`<値>_loop`、cycle・pingpong・offset）。窓から選ぶ入口がまだ
+- [ ] レーンの箱（Ableton の Stretching and Skewing Envelopes、Live 12 手引き 26.7.2）。作る前に Logic と FL Studio も見る
+- [ ] レーンへの形の差し込み（Ableton の Insert Shape）
+- [ ] `cubic-bezier(...)`・`linear(...)` を貼ってイーズにする（ways/ のファイルの仕組みに載せる）
+- [ ] 区間の波の数を拍で決める
+- [ ] 区間に重ねる（Blender の F-Curve Modifiers）
+- [ ] 本物の 3D のつづき：文字の輪郭を opentype.js で（4 本は取ったが、まだ入れていない）、Surface の札、ベベル
+- [ ] 窓を手で触って確かめる：Tab、右クリック、選ぶ欄のキー、More、+ Add Effect
+- [ ] 遅い CI の Mac でだけ落ちる 5 本（golf_noise.md (108)、retry: 2 で隔離中）
+- [ ] 色の目盛りをインスペクターの中に置くか：ユーザーの判断待ち
+
+合計：393 箱。

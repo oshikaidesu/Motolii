@@ -82,7 +82,7 @@ struct Doc {
     sqlite3_session* acting = nullptr;  // SQLite's own record of what the open act changes
     // A thing held by a hand (doc_hold): what of it is carried shows at once and is not yet the document's.
     struct Held { int thing = -1; std::map<std::string, double> from, tried; std::map<std::string, std::string> said; } held;   // (said: a word carried, a path's points moved)   // (-1: nothing held; 0 is the stage, which a hand may hold by a value of its own)
-    struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
+    struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; std::string loop; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
     struct NameHash { using is_transparent = void; size_t operator()(std::string_view n) const { return std::hash<std::string_view>{}(n); } };   // (a name looked up as it is said, no string made for it)
     std::unordered_map<int, std::unordered_map<std::string, Keys, NameHash, std::equal_to<>>> moving;   // a value's keys, and the way of the stretch after each, by thing and name; read from the facts when first asked for, forgotten at every change
     struct HeardWordHash { size_t operator()(const std::pair<int, const char*>& k) const { return std::hash<int>{}(k.first) * 31u ^ std::hash<const void*>{}(k.second); } };

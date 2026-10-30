@@ -524,7 +524,8 @@ static const Doc::Keys& doc_keys_of(Doc& d, int thing, const char* name) {
             keys.interp.push_back(kind);
             keys.own.push_back(of_the_nine ? "" : way);
         });
-        found = of.emplace(std::string(name), std::move(keys)).first;
+        if (keys.at.size() > 1) keys.loop = doc_word(d, thing, (std::string(name) + "_loop").c_str());   // (the keys gone through again past the last: doc_keys_at)
+        found = d.moving[thing].emplace(std::string(name), std::move(keys)).first;
     }
     return found->second;
 }
@@ -532,11 +533,20 @@ static const Doc::Keys& doc_keys_of(Doc& d, int thing, const char* name) {
 static double doc_keys_at(Doc& d, const Doc::Keys& k, double at, double otherwise) {
     if (k.at.empty()) return otherwise;
     if (k.at.size() == 1 || at <= k.at.front()) return k.value.front();
-    if (at >= k.at.back()) return k.value.back();
+    // (past the last key, gone through again: After Effects' loopOut, its cycle, pingpong and offset, on all its keys;
+    //  whatever the value is, as the way of a stretch is. offset: each time on from where the last ended)
+    double on = 0.0;
+    if (at > k.at.back() && (k.loop == "cycle" || k.loop == "pingpong" || k.loop == "offset")) {
+        const double span = k.at.back() - k.at.front(), rounds = std::floor((at - k.at.front()) / span), left = at - k.at.front() - rounds * span;
+        at = k.loop == "pingpong" && std::fmod(rounds, 2.0) != 0.0 ? k.at.back() - left : k.at.front() + left;
+        if (k.loop == "offset") on = rounds * (k.value.back() - k.value.front());
+    }
+    if (at <= k.at.front()) return k.value.front() + on;
+    if (at >= k.at.back()) return k.value.back() + on;
     const size_t i = (size_t)(std::upper_bound(k.at.begin(), k.at.end(), at) - k.at.begin()) - 1;   // (the stretch it is in begins at key i)
     const double u = (at - k.at[i]) / (k.at[i + 1] - k.at[i]);
-    if (k.own[i].empty()) return k.value[i] + (k.value[i + 1] - k.value[i]) * interp_ease(k.interp[i], u);
-    return doc_went_by(d, k.own[i], u, at - k.at[i], k.at[i + 1] - k.at[i], k.value[i], k.value[i + 1]);
+    if (k.own[i].empty()) return k.value[i] + (k.value[i + 1] - k.value[i]) * interp_ease(k.interp[i], u) + on;
+    return doc_went_by(d, k.own[i], u, at - k.at[i], k.at[i + 1] - k.at[i], k.value[i], k.value[i + 1]) + on;
 }
 static std::string doc_word(Doc& d, int thing, const char* name) {
     if (thing == 0 && !strcmp(name, "kind")) return "stage";   // (thing 0 is the stage: its values are the whole picture's)
