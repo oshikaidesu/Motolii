@@ -13,10 +13,17 @@ import '../tokens.dart';
 /// One row: [go] null, it cannot be done now and [why] says why; [keys] what it is pressed with too (never the only way).
 /// A rule between groups: [WsMenuItem.rule].
 class WsMenuItem {
-  const WsMenuItem(this.label, this.go, {this.keys = '', this.why = ''});
-  const WsMenuItem.rule() : label = '', go = null, keys = '', why = '';
+  const WsMenuItem(this.label, this.go, {this.keys = '', this.why = ''}) : colours = const [], picked = -1, pick = null;
+  const WsMenuItem.rule() : label = '', go = null, keys = '', why = '', colours = const [], picked = -1, pick = null;
+
+  /// Colours to pick one of, as Ableton Live's context menus end in the clip's or the track's colours: [picked] the one
+  /// it has (-1: none), [pick] told the number of the one pressed.
+  const WsMenuItem.colours(this.colours, this.picked, this.pick) : label = '', go = null, keys = '', why = '';
   final String label, keys, why;
   final VoidCallback? go;
+  final List<Color> colours;
+  final int picked;
+  final void Function(int)? pick;
 }
 
 class WsMenu extends StatefulWidget {
@@ -37,8 +44,34 @@ class WsMenuState extends State<WsMenu> {
   }
 
   double get _row => Shape.z(22);
+  double get _swatch => Shape.z(20);
+  double _high(WsMenuItem it) => it.colours.isNotEmpty ? (it.colours.length / 8).ceil() * (_swatch + Shape.s(4)) + Shape.s(4) : it.label.isEmpty ? Shape.s(8) + 1 : _row;
 
-  Widget _one(WsMenuItem it) => it.label.isEmpty
+  Widget _one(WsMenuItem it) => it.colours.isNotEmpty
+      ? Padding(   // (eight to a row)
+          padding: EdgeInsets.all(Shape.s(4)),
+          child: Wrap(
+            spacing: Shape.s(4),
+            runSpacing: Shape.s(4),
+            children: [
+              for (var k = 0; k < it.colours.length; k++)
+                Hov(
+                  key: ValueKey('ws-menu-colour-$k'),
+                  cursor: SystemMouseCursors.click,
+                  onTap: () {
+                    _m.close();
+                    it.pick?.call(k);
+                  },
+                  builder: (_, h) => Container(
+                    width: _swatch,
+                    height: _swatch,
+                    decoration: BoxDecoration(color: it.colours[k], borderRadius: BorderRadius.all(Shape.r(3)), border: Border.all(color: k == it.picked || h ? Grey.g95 : const Color(0x00000000), width: 2)),
+                  ),
+                ),
+            ],
+          ),
+        )
+      : it.label.isEmpty
       ? Padding(padding: EdgeInsets.symmetric(vertical: Shape.s(4)), child: SizedBox(height: 1, child: ColoredBox(color: Grey.g20)))
       : Hov(
           key: ValueKey('ws-menu-${it.label}'),
@@ -68,7 +101,7 @@ class WsMenuState extends State<WsMenu> {
     consumeOutsideTaps: true,
     overlayBuilder: (context, info) {
       final w = Shape.z(220), pad = Shape.s(4);
-      final h = math.min(info.overlaySize.height * .5, [for (final it in _items) it.label.isEmpty ? Shape.s(8) + 1 : _row].fold(0.0, (a, b) => a + b)) + pad * 2;
+      final h = math.min(info.overlaySize.height * .5, [for (final it in _items) _high(it)].fold(0.0, (a, b) => a + b)) + pad * 2;
       final at = info.anchorRect.topLeft + (info.position ?? Offset.zero);
       return Positioned(
         left: math.max(0.0, math.min(at.dx, info.overlaySize.width - w)),

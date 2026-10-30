@@ -318,11 +318,21 @@ static bool doc_work_is(Doc& d, double from, double to) {
     if (!(from >= 0.0 && to > from + 1e-3 && to <= 1e6)) return d.trouble = "a work area is from one moment to a later one", false;
     return doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(0, 'work_in', 0.0, %!.17g), (0, 'work_out', 0.0, %!.17g) on conflict do update set value = excluded.value", from, to));
 }
-static bool doc_mark(Doc& d, double at, const char* word) {   // ("": the mark there is taken away)
+static bool doc_mark(Doc& d, double at, const char* word) {   // ("": the mark there is taken away, its colour with it)
     if (!(at >= 0.0 && at <= 1e6)) return d.trouble = "a mark is at a moment of the stage: from 0 to 1000000 seconds", false;
     if (strchr(word, '\n')) return d.trouble = "a mark's name is one line", false;
     return doc_change(d, *word ? sqlite3_mprintf("insert into fact(thing, name, at, value) values(0, 'mark', %!.17g, %Q) on conflict do update set value = excluded.value", at, word)
-                               : sqlite3_mprintf("delete from fact where thing = 0 and name = 'mark' and at = %!.17g", at));
+                               : sqlite3_mprintf("delete from fact where thing = 0 and name in ('mark', 'mark_colour') and at = %!.17g", at));
+}
+// A mark's colour, one of the sixteen label colours (1 to 16; 0: none), as Premiere Pro's, DaVinci Resolve's and
+// CapCut's markers have one (golf ㉕, P02: a cut and a hit told apart): a fact beside its name at its moment.
+static bool doc_mark_colour(Doc& d, double at, int colour) {
+    if (colour < 0 || colour > 16) return d.trouble = "a mark's colour is one of 16 (0: none)", false;
+    bool there = false;
+    doc_rows(d, sqlite3_mprintf("select 1 from fact where thing = 0 and name = 'mark' and at = %!.17g", at), [&](sqlite3_stmt*) { there = true; });
+    if (!there) return d.trouble = "there is no mark at that moment", false;
+    return doc_change(d, colour ? sqlite3_mprintf("insert into fact(thing, name, at, value) values(0, 'mark_colour', %!.17g, %d) on conflict do update set value = excluded.value", at, colour)
+                                : sqlite3_mprintf("delete from fact where thing = 0 and name = 'mark_colour' and at = %!.17g", at));
 }
 // The guides: lines across the picture at a place, in points of it (After Effects' composition guides): x, an upright
 // line that far from the left; y, a level one that far from the top. Facts of the stage, a change of them a step.
@@ -337,6 +347,15 @@ static std::string doc_guides(Doc& d) {   // (a line each: x or y, a space, wher
     doc_rows(d, sqlite3_mprintf("select substr(name, 7), at from fact where thing = 0 and name in ('guide_x', 'guide_y') order by name, at"), [&](sqlite3_stmt* row) {
         char line[60];
         std::snprintf(line, sizeof line, "%s %.17g\n", (const char*)sqlite3_column_text(row, 0), sqlite3_column_double(row, 1));   // (all of it: a guide is found again by where it is)
+        all += line;
+    });
+    return all;
+}
+static std::string doc_mark_colours(Doc& d) {   // (a line each, in time: the moment, a space, its colour)
+    std::string all;
+    doc_rows(d, sqlite3_mprintf("select at, value from fact where thing = 0 and name = 'mark_colour' order by at"), [&](sqlite3_stmt* row) {
+        char line[60];
+        std::snprintf(line, sizeof line, "%.17g %d\n", sqlite3_column_double(row, 0), sqlite3_column_int(row, 1));
         all += line;
     });
     return all;

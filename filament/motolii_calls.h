@@ -149,6 +149,7 @@ int motolii_mark(Motolii* m, double at, const char* word) { return by_hand(m, [=
 int motolii_guide(Motolii* m, const char* axis, double at, int on) { return by_hand(m, [=] { return changes(m, (int)doc_guide(doc(m), axis, at, on != 0)); }); }
 const char* motolii_guides(Motolii* m) { return by_look(m, [=] { return (said_word() = doc_guides(*m->d)).c_str(); }); }
 const char* motolii_marks(Motolii* m) { return by_look(m, [=] { return (said_word() = doc_marks(*m->d)).c_str(); }); }
+const char* motolii_mark_colours(Motolii* m) { return by_look(m, [=] { return (said_word() = doc_mark_colours(*m->d)).c_str(); }); }
 int motolii_fits(Motolii* m) {
     return by_look(m, [=] {   // (a read: the document's size against the stage's)
         int wide = m->s->w, high = m->s->h;
@@ -520,6 +521,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "free") ok = changes(m, (int)doc_free(doc(m), thing, (int)number, m->now, false));   // (a thing out of the relation `number`: back to what is under it, as the relation deleted does; only bake keeps where it shows)
             else if (c == "release") ok = changes(m, (int)doc_release(doc(m), thing, m->now));   // (the relation `thing` let go, each of its things where it shows now)
             else if (c == "mark") ok = changes(m, (int)doc_mark(doc(m), number, w.c_str()));
+            else if (c == "mark_colour") ok = changes(m, (int)doc_mark_colour(doc(m), number, std::atoi(w.c_str())));   // (the mark at `number`: word its colour, 1 to 16; 0 none)
             else if (c == "guide") ok = changes(m, (int)doc_guide(doc(m), n.c_str(), number, w != "off"));
             else if (c == "work") ok = changes(m, (int)doc_work_is(doc(m), number, std::atof(w.c_str())));
             else if (c == "size") {   // (word: "wide high", the stage's size the document says: opened at it again by the window)

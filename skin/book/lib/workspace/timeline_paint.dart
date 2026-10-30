@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show setEquals;
-import 'package:flutter/foundation.dart' show listEquals, ValueListenable;
+import 'package:flutter/foundation.dart' show listEquals, mapEquals, ValueListenable;
 import 'package:flutter/widgets.dart';
 
 import '../forms/forms.dart';
@@ -164,10 +164,11 @@ void _vLines(Canvas c, WtView v, int fps, double w, double top, double bottom, {
 // ---------------------------------------------------------------- ruler
 
 class WtRulerPainter extends CustomPainter {
-  const WtRulerPainter({required this.view, required this.fps, required this.workIn, required this.workOut, required this.markers, this.beats = const [], this.retimed = const []});
+  const WtRulerPainter({required this.view, required this.fps, required this.workIn, required this.workOut, required this.markers, this.markColours = const {}, this.beats = const [], this.retimed = const []});
   final WtView view;
   final int fps, workIn, workOut;
   final List<(int, String)> markers;
+  final Map<int, Color> markColours;   // (a mark's colour by its frame, if it has one)
 
   /// Where the films' sound strikes (their Beats), frames: a short tick each at the ruler's foot.
   final List<int> beats;
@@ -195,13 +196,13 @@ class WtRulerPainter extends CustomPainter {
       final x = view.x(f).roundToDouble();
       if (x >= -4 && x <= s.width + 4) c.drawPath(Path()..moveTo(x - 4, 0)..lineTo(x + 4, 0)..lineTo(x, 6)..close(), p..color = WsT.toneMark);
     }
-    final flags = <(Rect, TextPainter)>[];
+    final flags = <(Rect, TextPainter, Color)>[];
     final xs = [for (final (f, _) in markers) view.x(f).roundToDouble()];
     for (final (f, name) in markers) {
       final x = view.x(f).roundToDouble();
       if (x < -60 || x > s.width) continue;
       final t = _text(name, T.micro(Grey.g13).copyWith(fontWeight: FontWeight.w700));
-      flags.add((Rect.fromLTWH(x, WtM.band + 2, wtFlagRoom(name, x, xs), 12), t));
+      flags.add((Rect.fromLTWH(x, WtM.band + 2, wtFlagRoom(name, x, xs), 12), t, markColours[f] ?? WsT.toneText));
     }
     if (view.ppf >= 3) {
       final f0 = view.scroll.floor();
@@ -226,7 +227,7 @@ class WtRulerPainter extends CustomPainter {
       }
     }
 
-    for (final (r, t) in flags) {
+    for (final (r, t, ink) in flags) {
       final x = r.left;
       c.drawPath(
         Path()
@@ -236,9 +237,9 @@ class WtRulerPainter extends CustomPainter {
           ..lineTo(r.right, r.bottom)
           ..lineTo(r.left, r.bottom)
           ..close(),
-        p..color = WsT.toneText,
+        p..color = ink,
       );
-      c.drawRect(Rect.fromLTWH(x, r.bottom, 1, bottom - r.bottom), p..color = WsT.toneText);
+      c.drawRect(Rect.fromLTWH(x, r.bottom, 1, bottom - r.bottom), p..color = ink);
       c.save();
       c.clipRect(Rect.fromLTRB(r.left, r.top, r.right - 3, r.bottom));   // (a name cut at its flag's end)
       t.paint(c, Offset(r.left + 3, r.center.dy - t.height / 2));
@@ -249,7 +250,7 @@ class WtRulerPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(WtRulerPainter o) => o.view != view || o.fps != fps || o.workIn != workIn || o.workOut != workOut || o.markers != markers || !identical(o.beats, beats);
+  bool shouldRepaint(WtRulerPainter o) => o.view != view || o.fps != fps || o.workIn != workIn || o.workOut != workOut || o.markers != markers || !mapEquals(o.markColours, markColours) || !identical(o.beats, beats);
 }
 
 // ---------------------------------------------------------------- tracks

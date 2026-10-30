@@ -344,6 +344,7 @@ class Ws extends ChangeNotifier {
   /// Joined: the work area, the marks, the guides: the document's picture's.
   (double, double) get work => _inside!.work;
   List<(double, String)> get marks => _inside!.marks;
+  Map<double, int> get markColours => _inside!.markColours;
   List<(String, double)> get guides => _inside!.guides;
   set animating(bool on) {
     _inside?.keying(on);

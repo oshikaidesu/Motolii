@@ -46,6 +46,11 @@ extension _WsTimelineRuler on _WsTimelineState {
     ];
   }
 
+  /// The marks' colours on the ruler, by frame (the one carried: where the hand has it).
+  Map<int, Color> _markColoursOf(Ws ws) => {
+    for (final MapEntry(key: at, value: k) in ws.markColours.entries) (_markHeld?.$1 == at ? _markTo : (at * Ws.fps).round()): wsLabelColour(k - 1),
+  };
+
   void _flag(Ws ws, String name, String id) {
     final m = ws.inside!;
     ws.after(m.later('set', thing: int.parse(id), name: name, number: (name == 'solo' ? _isSolo(ws, id) : _isLocked(ws, id)) ? 0 : 1));

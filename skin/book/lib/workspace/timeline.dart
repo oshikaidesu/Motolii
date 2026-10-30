@@ -289,6 +289,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
         m!.later('together', number: 1);
         m.later('mark', number: at);
         m.later('mark', number: to, word: name);
+        if (_ws!.markColours[at] case final k?) m.later('mark_colour', number: to, word: '$k');   // (its colour with it)
         _ws!.after(m.later('together'));
       }
       setState(() {});
@@ -515,7 +516,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                 child: SizedBox(
                   height: WtM.ruler,
                   child: CustomPaint(
-                    painter: WtRulerPainter(view: v, fps: Ws.fps, workIn: _workIn, workOut: _workOut, markers: _marksOf(_ws!), beats: _beatsOf(ws), retimed: _retimedOf(ws)),
+                    painter: WtRulerPainter(view: v, fps: Ws.fps, workIn: _workIn, workOut: _workOut, markers: _marksOf(_ws!), markColours: _markColoursOf(_ws!), beats: _beatsOf(ws), retimed: _retimedOf(ws)),
                     foregroundPainter: WtKeptPainter(view: v, kept: ws.kept), // (the pictures kept on disk for playing)
                   ),
                 ),

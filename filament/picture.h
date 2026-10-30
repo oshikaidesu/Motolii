@@ -144,6 +144,7 @@ static void picture_update(Motolii* m) {
     w.Key("point"), w.Double(motolii_point(m));
     w.Key("edited"), w.Double(doc_edited(*m->d));   // (how long it has been worked on, seconds: Alight Motion's Total Edit Time)
     w.Key("marks"), w.String(motolii_marks(m));
+    w.Key("markColours"), w.String(motolii_mark_colours(m));
     w.Key("guides"), w.String(motolii_guides(m));
     w.Key("ways"), w.String(motolii_ways(m));
     w.Key("wayNames"), w.String(motolii_way_names(m));

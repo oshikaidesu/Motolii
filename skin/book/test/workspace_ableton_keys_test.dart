@@ -245,4 +245,48 @@ void main() {
     expect(ws.marks.map((k) => k.$2), contains('Build'));
     await t.pumpWidget(const SizedBox());
   }, tags: 'main', skip: !insideBuilt);
+
+  testWidgets('a mark takes a colour from its flag\'s menu, as Premiere Pro\'s, Resolve\'s and CapCut\'s markers; carried it keeps it, taken away it goes with it (golf ㉕)', (t) async {
+    final ws = _joined().ws, m = ws.inside!;
+    await _pump(t, ws);
+    Future<void> settle() async {
+      for (var i = 0; i < 200 && ws.waiting; i++) {   // (asked without waiting (later))
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await t.pump();
+      }
+      ws.reread();
+      await t.pumpAndSettle();
+    }
+    Future<void> menu(Offset at) async {
+      await t.tapAt(at, buttons: kSecondaryButton);
+      await t.pumpAndSettle();
+    }
+    await menu(Offset(600, WtM.header + WtM.ruler - 6));
+    await t.tap(find.byKey(const ValueKey('ws-menu-Add Marker')));
+    await settle();
+    final at = ws.marks.single.$1, flag = Offset(600.0 + 3, WtM.header + WtM.band + 6);
+    await menu(flag);
+    expect(find.byKey(const ValueKey('ws-menu-colour-15')), findsOneWidget, reason: 'its menu ends in the sixteen label colours');
+    await t.tap(find.byKey(const ValueKey('ws-menu-colour-2')));
+    await settle();
+    expect(ws.markColours, {at: 3}, reason: 'the third, kept in the document');
+    final g = await t.startGesture(flag, kind: PointerDeviceKind.mouse);   // (carried 20 points to the right)
+    await t.pump();
+    for (var i = 1; i <= 4; i++) {
+      await g.moveBy(const Offset(5, 0));
+      await t.pump();
+    }
+    await g.up();
+    await settle();
+    final to = ws.marks.single.$1;
+    expect([to, ws.markColours], [greaterThan(at), {to: 3}], reason: 'carried: its colour with it, one step');
+    await menu(flag + const Offset(20, 0));
+    await t.tap(find.byKey(const ValueKey('ws-menu-Delete')));
+    await settle();
+    expect([ws.marks, ws.markColours], [isEmpty, isEmpty], reason: 'taken away: its colour too');
+    m.undo();
+    await settle();
+    expect(ws.markColours, {to: 3}, reason: 'undone: both back');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
 }

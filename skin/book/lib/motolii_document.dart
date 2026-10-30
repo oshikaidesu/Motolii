@@ -66,6 +66,12 @@ extension MotoliiDocument on Motolii {
       if (line.indexOf(' ') case final i when i > 0) (double.parse(line.substring(0, i)), line.substring(i + 1)),
   ];
 
+  /// The marks that have a colour: the moment of each to its colour, 1 to 16 (the label colours).
+  Map<double, int> get markColours => {
+    for (final line in ((_document['markColours'] as String?) ?? '').split('\n'))
+      if (line.indexOf(' ') case final i when i > 0) double.parse(line.substring(0, i)): int.parse(line.substring(i + 1)),
+  };
+
   /// The guides: lines across the picture, 'x' upright and 'y' level, at so many points from its left or top.
   List<(String, double)> get guides => [
     for (final line in ((_document['guides'] as String?) ?? '').split('\n'))

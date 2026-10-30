@@ -35,6 +35,7 @@ int motolii_loudness(Motolii* m, int thing, float* db, int room);
 int motolii_strikes(Motolii* m, int thing, double rise, int own, double* at, int room);
 int motolii_loudness_over(Motolii* m, int thing, double from, double to, int n, float* db);   /* loudness at n moments of the document, where the film shows them (-100: silent or not shown); -1: not read yet, 0: no sound */   /* own: in the film's own seconds instead */
 const char* motolii_marks(Motolii* m);
+const char* motolii_mark_colours(Motolii* m);   /* a line each, in time, "moment colour" (1 to 16, the label colours): the marks that have one */
 /* The guides: lines across the picture, x upright and y level, at so many points from its left or top; a change is a
    step. motolii_guides: a line each, "x 150" (until the next call). */
 int motolii_guide(Motolii* m, const char* axis, double at, int on);
