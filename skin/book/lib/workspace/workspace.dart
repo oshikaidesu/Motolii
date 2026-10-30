@@ -374,6 +374,7 @@ class _WorkspaceState extends State<Workspace> {
       'layers.sequence': () => ws.after(m.later('sequence')),   // (After Effects' Keyframe Assistant: one after another, from the top)
       'play.toggle': () => ws.playing = !ws.playing,
       ...wsAbletonCommands(ws),   // (Ableton Live's keys: ableton.dart)
+      ...wsToolCommands(ws),   // (the stage's tools: stage.dart)
       'frame.first': () => step(-ws.frame),
       'frame.last': () => step(Ws.duration - ws.frame),
     };

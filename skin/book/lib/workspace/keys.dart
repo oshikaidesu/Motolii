@@ -56,6 +56,14 @@ const defaultKeys = <(String, String)>[
   ('shift+.', 'frame.forward10'),
   ('home', 'frame.first'),   // (Live 42.20: move insert marker to beginning)
   ('end', 'frame.last'),
+  ('v', 'tool.select'),   // (the stage's tools, their letters as stage.dart lists them: After Effects', Photoshop's)
+  ('m', 'tool.move'),
+  ('r', 'tool.rectangle'),
+  ('e', 'tool.ellipse'),
+  ('p', 'tool.pen'),
+  ('t', 'tool.text'),
+  ('b', 'tool.brush'),
+  ('c', 'tool.camera'),
 ];
 
 /// The keys in use: the window's own, the maker's file over them.

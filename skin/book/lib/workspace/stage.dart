@@ -32,6 +32,12 @@ const _tools = [
   (G.camera, 'Camera', 'C'),   // (After Effects' Unified Camera tool, C: a drag turns the camera round where it looks, the wheel brings it nearer)
 ];
 
+/// The tools as the window's commands (`tool.select`, `tool.text`…), their letters in its keymap (keys.dart): heard
+/// wherever the window has the keys and no words are being typed, as After Effects' and Photoshop's tool letters are,
+/// not only while the stage has them (golf_noise.md (78): a document box closed left them to the window, and T was
+/// not heard).
+Map<String, VoidCallback> wsToolCommands(Ws ws) => {for (final (i, t) in _tools.indexed) 'tool.${t.$2.toLowerCase()}': () => ws.setView('stage.tool', i)};
+
 class _Stage extends StatefulWidget {
   const _Stage();
   @override
@@ -85,17 +91,6 @@ class _StageState extends State<_Stage> {
     } catch (_) {}   // (gone already)
   }
 
-  KeyEventResult _key(FocusNode n, KeyEvent e) {
-    if (e is! KeyDownEvent || HardwareKeyboard.instance.isMetaPressed || HardwareKeyboard.instance.isControlPressed) return KeyEventResult.ignored;
-    final ch = e.character?.toUpperCase();
-    final i = _tools.indexWhere((t) => t.$3 == ch);
-    if (i >= 0) {
-      setState(() => _tool = i);
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
   @override
   Widget build(BuildContext context) {
     WsScope.frameOf(context);   // (the scene is at the playhead)
@@ -109,7 +104,6 @@ class _StageState extends State<_Stage> {
         decoration: BoxDecoration(border: hot.isEmpty ? null : Border.all(color: WsT.accent, width: 2)),
         child: Focus(
       focusNode: _focus,
-      onKeyEvent: _key,
       child: Column(
         children: [
           WsHeader(

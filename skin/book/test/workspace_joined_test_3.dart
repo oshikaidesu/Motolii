@@ -1250,6 +1250,34 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a tool\'s letter is the window\'s: after a new document\'s box is closed by Esc, T takes the text tool, as After Effects\' and Photoshop\'s tool letters are heard wherever no words are typed (golf_noise.md (78))', (t) async {
+    final ws = await _pump(t);
+    final comp = t.getRect(find.byKey(const ValueKey('ws-stage-comp')));
+    FocusManager.instance.primaryFocus?.unfocus();   // (the keys nowhere but the window's, as a field gone with the document it was of leaves them)
+    await t.pumpAndSettle();
+    t.widget<WsKeys>(find.byType(WsKeys)).commands['file.new']!();   // (File > New Document: a new one in its place, its box asked)
+    for (var i = 0; i < 100 && find.byKey(const ValueKey('ws-size-box')).evaluate().isEmpty; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await t.pump();
+    }
+    expect(find.byKey(const ValueKey('ws-size-box')), findsOneWidget);
+    final m = ws.inside!;
+    await t.sendKeyEvent(LogicalKeyboardKey.escape);
+    await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ws-size-box')), findsNothing);
+    final before = m.things.length;
+    await t.sendKeyEvent(LogicalKeyboardKey.keyT);
+    await t.pumpAndSettle();
+    await t.tapAt(comp.center);
+    for (var i = 0; i < 200 && (ws.waiting || m.things.length == before); i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await t.pump();
+    }
+    expect([m.things.length, m.word(m.things.last, 'kind')], [before + 1, 'text'], reason: 'T took the text tool after Esc, and a press put a text');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a card\'s Copy and Paste give its values alone to another thing (Alight Motion\'s copy of one effect)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final a = m.add('shape', 'rect'), b = m.add('shape', 'circle');
