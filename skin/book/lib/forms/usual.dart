@@ -1,40 +1,9 @@
 // The window's own drawing of the controls a form may replace. A form that does not override these keeps this picture.
-import 'package:flutter/gestures.dart' show PointerScrollEvent;
 import 'package:flutter/widgets.dart';
 
 import '../tokens.dart';
 import '../workspace/ws.dart' show WsT;
 import 'forms.dart';
-
-/// A sideways row a mouse's wheel moves as well as a trackpad's sideways swipe: a wheel turns only up and down, so its
-/// turn is taken sideways, as VS Code's and Chrome's tab strips take it (golf_noise.md ㊶: the chips past the shelf's
-/// edge, Motion among them, were out of a mouse's reach).
-class _Sideways extends StatefulWidget {
-  const _Sideways({required this.builder});
-  final Widget Function(ScrollController along) builder;
-  @override
-  State<_Sideways> createState() => _SidewaysState();
-}
-
-class _SidewaysState extends State<_Sideways> {
-  final _along = ScrollController();
-
-  @override
-  void dispose() {
-    _along.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Listener(
-    onPointerSignal: (e) {
-      if (e is! PointerScrollEvent || e.scrollDelta.dx != 0 || !_along.hasClients) return;   // (a sideways swipe: the scroll's own)
-      final p = _along.position;
-      _along.jumpTo((p.pixels + e.scrollDelta.dy).clamp(p.minScrollExtent, p.maxScrollExtent));
-    },
-    child: widget.builder(_along),
-  );
-}
 
 class _Hot extends StatefulWidget {
   const _Hot({required this.builder, this.onTap});
@@ -100,11 +69,12 @@ abstract final class Usual {
     },
   );
 
-  /// Round filter chips in a sideways scroll (the mouse's wheel moves it too). The active one is the accent.
+  /// Round filter chips in a sideways scroll, moved as any sideways list on a Mac is: a trackpad's sideways swipe, or a
+  /// mouse's wheel with Shift held (Flutter's own ScrollBehavior.pointerAxisModifiers); the wheel alone moves what is
+  /// up and down, not this (golf_noise.md (93)). The active one is the accent.
   static Widget chips(BuildContext context, ChipsSpec c) => SizedBox(
     height: Shape.z(28),
-    child: _Sideways(builder: (along) => SingleChildScrollView(
-      controller: along,
+    child: SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: EdgeInsets.fromLTRB(WsT.inset, Shape.s(2), WsT.inset, Shape.s(6)),
       child: Row(
@@ -134,7 +104,7 @@ abstract final class Usual {
           ],
         ],
       ),
-    )),
+    ),
   );
 
   /// One timeline name: a band, an accent edge when picked, the kind and the three toggles.

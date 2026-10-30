@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart' show PointerDeviceKind, kDoubleTapTimeout;
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -244,7 +245,7 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
-  testWidgets('a mouse\'s wheel moves the chips sideways, as VS Code\'s tab strip: the last chip is reached by a mouse alone', (t) async {
+  testWidgets('the chips move sideways as any sideways list on a Mac: the wheel with Shift held, not the wheel alone (golf_noise.md (93))', (t) async {
     final ws = _joined();
     await _shelf(t, ws, const Size(240, 918), 'Effects');
     final along = find.ancestor(of: find.text('All'), matching: find.byType(Scrollable)).first, at = t.getCenter(find.text('All'));
@@ -253,8 +254,32 @@ void main() {
     await t.sendEventToBinding(mouse.hover(at));
     await t.sendEventToBinding(mouse.scroll(const Offset(0, 100000)));
     await t.pump();
+    expect(t.state<ScrollableState>(along).position.pixels, 0, reason: 'the wheel alone: up and down, not this row');
+    await t.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await t.sendEventToBinding(mouse.scroll(const Offset(0, 100000)));
+    await t.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await t.pump();
     final p = t.state<ScrollableState>(along).position;
-    expect([p.pixels, p.maxScrollExtent > 0], [p.maxScrollExtent, true], reason: 'a turn down: to the far end');
+    expect([p.pixels, p.maxScrollExtent > 0], [p.maxScrollExtent, true], reason: 'with Shift held: to the far end (Flutter\'s pointerAxisModifiers)');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
+  testWidgets('the Effects shelf filters by what each effect is, read from its file, nobody asked to write it: a tag chip, or the tag typed (Shadertoy\'s filters; golf_noise.md (92))', (t) async {
+    final ws = _joined(), m = ws.inside!, nameOf = {for (final (n, f) in m.effects) f: n};
+    expect(m.tags(m.effects.firstWhere((e) => e.$1 == 'Waveform Displace').$2), {'sound'}, reason: 'an audio input read: ${m.tags('Waveform Displace')}');
+    expect(m.tags(m.effects.firstWhere((e) => e.$1 == 'Sorting Smear').$2), {'feedback', 'time'}, reason: 'a PERSISTENT pass, the clock');
+    await _shelf(t, ws, const Size(240, 918), 'Effects');
+    List<String> shown() => [
+      for (final e in find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('ws-screen-')).evaluate())
+        nameOf[(e.widget.key! as ValueKey<String>).value.substring('ws-screen-'.length)]!,
+    ];
+    final chip = find.textContaining(RegExp(r'^#sound\b'));
+    await seen(t, chip);
+    await t.tap(chip.first);
+    await t.pumpAndSettle();
+    expect(shown(), containsAll(['Waveform Displace', 'FFT Spectrogram']), reason: 'the sound chip: the effects that hear');
+    expect(shown().every((n) => m.tags(m.effects.firstWhere((e) => e.$1 == n).$2).contains('sound')), isTrue, reason: 'and none else: ${shown()}');
+    expect(find.textContaining(RegExp(r'^#transition\b')), findsNothing, reason: 'Transition is a kind already, read the same way: not twice');
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
@@ -268,8 +293,7 @@ void main() {
         nameOf[(e.widget.key! as ValueKey<String>).value.substring('ws-screen-'.length)]!,
     ];
     expect(names, containsAll(['Edge Glow', 'Glow']), reason: 'AbsentMotion\'s am_edgeglow.wgsl and VIDVOX\'s Glow.fs');
-    final hits = names.sublist(0, names.length - 5);   // (the nearest five of the rest come after, nearest first: RapidFuzz, golf_noise.md (91))
-    expect(hits, [...hits]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase())), reason: 'by name: before, the capitals of VIDVOX\'s files came before all of AbsentMotion\'s am_');
+    expect(names, [...names]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase())), reason: 'by name: before, the capitals of VIDVOX\'s files came before all of AbsentMotion\'s am_');
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 

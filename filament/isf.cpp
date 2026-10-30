@@ -223,6 +223,41 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
     return top + lines + "\n" + wgsl->wgsl;
 }
 
+std::string isf_tags(const std::string& file) {
+    std::ifstream in(file);
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    const size_t open = text.find("/*"), close = text.find("*/");
+    rapidjson::Document head;
+    if (open == std::string::npos || close == std::string::npos || head.Parse(text.c_str() + open + 2, close - open - 2).HasParseError() || !head.IsObject()) return "";
+    const auto str = [](const rapidjson::Value& o, const char* k) { return o.IsObject() && o.HasMember(k) && o[k].IsString() ? std::string(o[k].GetString()) : std::string(); };
+    const rapidjson::Value none(rapidjson::kArrayType);
+    const rapidjson::Value& inputs = head.HasMember("INPUTS") && head["INPUTS"].IsArray() ? head["INPUTS"] : none;
+    const rapidjson::Value& passes = head.HasMember("PASSES") && head["PASSES"].IsArray() ? head["PASSES"] : none;
+    std::vector<std::string> pictures;
+    bool sound = false, progress = false;
+    for (const auto& i : inputs.GetArray()) {
+        if (str(i, "TYPE") == "image") pictures.push_back(str(i, "NAME"));
+        sound = sound || str(i, "TYPE") == "audio" || str(i, "TYPE") == "audioFFT";   // (Shadertoy's Sound Input)
+        progress = progress || str(i, "NAME") == "progress";
+    }
+    const auto has = [&](const char* n) { return std::find(pictures.begin(), pictures.end(), n) != pictures.end(); };
+    const bool transition = has("startImage") && has("endImage") && progress;   // (ISF_Spec's transitions, as isf_wgsl's label reads them)
+    bool feedback = false;   // (a pass kept from frame to frame: ISF_Spec's PERSISTENT, VIDVOX's own Feedback)
+    for (const auto& p : passes.GetArray()) feedback = feedback || (p.IsObject() && p.HasMember("PERSISTENT") && (p["PERSISTENT"].IsBool() ? p["PERSISTENT"].GetBool() : p["PERSISTENT"].IsNumber() && p["PERSISTENT"].GetDouble() != 0));
+    const std::string body = text.substr(close + 2);
+    static const std::regex clock(R"(\b(TIME|TIMEDELTA|FRAMEINDEX|DATE)\b)");   // (it moves by itself: ISF_Spec's clock uniforms)
+    std::string tags;
+    const auto tag = [&](bool on, const char* word) { if (on) tags += (tags.empty() ? "" : " ") + std::string(word); };
+    tag(transition, "transition");
+    tag(pictures.empty(), "generator");   // (no picture in: ISF_Spec's sources)
+    tag(sound, "sound");
+    tag(passes.Size() > 1, "multipass");   // (Shadertoy's Multipass)
+    tag(feedback, "feedback");
+    tag(std::regex_search(body, clock), "time");
+    tag(!transition && pictures.size() > 1, "image");   // (another thing's picture in, beside its own: Shadertoy's Webcam, a picture from outside)
+    return tags;
+}
+
 std::string isf_file(const std::string& asked) {
     const std::string file = fx_source(asked);   // (one put on again, Glow~2.fs: Glow.fs's own, script.h)
     if (std::filesystem::path(file).extension() != ".fs" && !three_is(file)) return file;   // (a three.js effect: made ISF first, three_isf.cpp)

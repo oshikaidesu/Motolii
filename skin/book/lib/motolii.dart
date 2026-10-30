@@ -218,7 +218,7 @@ class Motolii {
 
   late final _guide = _b.motolii_guide;
 
-  final _labels = <String, String>{}, _pictures = <String, String>{}, _homes = <String, String>{}, _abouts = <String, String>{};
+  final _labels = <String, String>{}, _pictures = <String, String>{}, _homes = <String, String>{}, _abouts = <String, String>{}, _tags = <String, Set<String>>{};
   final _same = <String>{};
 
   final _shownOf = <String, Shown?>{};   // (read out of the things' parts once a picture of the document)

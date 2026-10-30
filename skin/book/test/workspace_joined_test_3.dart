@@ -1352,7 +1352,7 @@ void _tests3() {
     expect(m.find('glwo', [('a', 'Glow Light', ''), ('b', 'Gaussian Blur Light', '')]).first, 'a', reason: 'the inside\'s own: the nearest first');
     expect(t.takeException(), isNull);
     await _close(t);
-  }, skip: !_built);
+  }, tags: 'main', skip: !_built);
 
   testWidgets('the inks and the role fonts are kept with the document, not as steps: opened again, they are there (PowerPoint\'s theme colours and fonts; golf_noise.md (90))', (t) async {
     final ws = await _pump(t), m = ws.inside!;
@@ -1374,7 +1374,7 @@ void _tests3() {
     expect(again.inside!.settings.containsKey('ink'), isFalse, reason: 'none again: taken away');
     expect(t.takeException(), isNull);
     await _close(t);
-  }, skip: !_built);
+  }, tags: 'main', skip: !_built);
 
   testWidgets('an outline given a colour while it has no width comes 6 wide, one step (Alight Motion\'s border; golf_noise.md (89))', (t) async {
     final ws = await _pump(t), m = ws.inside!;

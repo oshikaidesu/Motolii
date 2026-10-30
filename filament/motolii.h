@@ -159,7 +159,7 @@ int motolii_look_save(Motolii* m, int thing, const char* path);
 int motolii_look_put(Motolii* m, int thing, const char* path);
 const char* motolii_looks(Motolii* m);
 int motolii_make(Motolii* m, const char* recipe);
-/* The whole-screen effects on the shelf ("name\tpath\tlabel\tpicture\thome\tsame", one to a line, label as the file's "// --label:" says;
+/* The whole-screen effects on the shelf ("name\tpath\tlabel\tpicture\thome\tsame\tabout\ttags", one to a line, tags what it is read from it (isf.h isf_tags), label as the file's "// --label:" says;
    picture its tile ("" none yet), home where one drawn for it goes, same "same" when it is seen to change nothing (doc_recipes.h doc_tile); until the next call): the stage's script is the
    paths of those on it, with spaces between, the first nearest the picture. AviUtl2's scripts after them (aviutl_scripts/,
    to any depth; an @ file's each "file#name"), each for a thing's fx. */

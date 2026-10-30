@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 
 import '../tokens.dart';
 import 'dock_parts.dart';
+import 'dock_tags.dart';
 import 'effect_tiles.dart';
 import 'ws.dart';
 
@@ -45,22 +46,33 @@ class EffectsShelf extends StatelessWidget {
           (id: f, name: n, label: 'Motion', on: ws.motion == f, apply: () => ws.motionToggle(f), said: 'A motion for the picked thing',
            tile: _Tile(n, key: ValueKey('ws-motion-$n'), on: ws.motion == f ? 'ON' : null, picked: c.sel == f, onTap: () => c.pick(f), onApply: () => ws.motionToggle(f))),
     ];
-    // (by its name, or by what it does in its maker's words, as Alight Motion's search reads the descriptions; then, for
-    //  a word typed wrong or in part, the nearest five of the rest by RapidFuzz (the inside's find): the user's choice)
-    final hits = [for (final e in every) if (c.hit(e.name) || (c.query.isNotEmpty && c.hit(m.about(e.id)))) e], hit = {for (final e in hits) e.id};
-    final near = c.query.trim().isEmpty ? const <String>[] : m.find(c.query, [for (final e in every) if (!hit.contains(e.id)) (e.id, '${e.name} ${e.label}', m.about(e.id))]);
+    // (by its name, or by what it does in its maker's words, as Alight Motion's search reads the descriptions; when that
+    //  finds nothing, a word typed wrong or in part, the nearest five by RapidFuzz (the inside's find, the user's choice),
+    //  as a search engine's "Did you mean" comes when the words as typed find nothing)
+    // (and by what it is, read from it, as the other shelves' tags are found: DockTags, each word on its own; golf (92))
+    Set<String> tagsOf(String id) => DockTags.of('Effects', id, m.tags(id));
+    final hits = [for (final e in every) if (c.hit(e.name) || (c.query.isNotEmpty && (c.hit(m.about(e.id)) || DockTags.hit(c.query, e.name, tagsOf(e.id))))) e], hit = {for (final e in hits) e.id};
+    final near = c.query.trim().isEmpty || hits.isNotEmpty ? const <String>[] : m.find(c.query, [for (final e in every) if (!hit.contains(e.id)) (e.id, '${e.name} ${e.label}', m.about(e.id))]);
     final all = [...hits, for (final id in near) ...every.where((e) => e.id == id).take(1)];
-    final kinds = <String, int>{};
+    final kinds = <String, int>{}, read = <String, int>{};
     for (final e in all) {
       if (e.label.isNotEmpty) kinds[e.label] = (kinds[e.label] ?? 0) + 1;
+      for (final t in tagsOf(e.id)) {
+        read[t] = (read[t] ?? 0) + 1;
+      }
     }
+    // (and the tags read from them, the most first, as the Fonts shelf's tag chips (dock_fonts.dart), each with the #
+    //  a tag is typed with (DockTags), a kind of the same word being another thing (VIDVOX's Feedback kind is not the
+    //  kept passes read); transition not twice, the kind Transition being read the same way (isf.cpp): Shadertoy's
+    //  filters, read from the shaders, golf (92))
+    final tagChips = [for (final t in (read.entries.where((t) => t.key != 'transition').toList()..sort((a, b) => b.value.compareTo(a.value))).take(8)) MapEntry('#${t.key}', t.value)];
     final starred = all.where((e) => c.starred(e.id)).length;   // (the starred a table of their own, as the Ease desk's ★)
-    final chip = kinds.containsKey(c.chip) || (c.chip == '★' && starred > 0) ? c.chip : 'All', shown = [for (final e in all) if (chip == 'All' || (chip == '★' ? c.starred(e.id) : e.label == chip)) e.tile];
+    final chip = kinds.containsKey(c.chip) || tagChips.any((t) => t.key == c.chip) || (c.chip == '★' && starred > 0) ? c.chip : 'All', shown = [for (final e in all) if (chip == 'All' || (chip == '★' ? c.starred(e.id) : (chip.startsWith('#') ? tagsOf(e.id).contains(chip.substring(1)) : e.label == chip))) e.tile];
     final sel = all.where((e) => e.id == c.sel).firstOrNull;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DockChips([('All', all.length), if (starred > 0) ('★', starred), for (final k in kinds.entries) (k.key, k.value)], active: chip, onPick: c.pickChip),
+        DockChips([('All', all.length), if (starred > 0) ('★', starred), for (final t in tagChips) (t.key, t.value), for (final k in kinds.entries) (k.key, k.value)], active: chip, onPick: c.pickChip),   // (the tags read first, as Shadertoy's filters head its results: the kinds are many, thirty and more)
         Expanded(
           child: shown.isEmpty
               ? DockEmpty(c.query)

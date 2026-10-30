@@ -76,7 +76,7 @@ static std::string doc_folder_names(const char* folder, const char* extension) {
         }
         if (f.extension() == ".mjs") label = "Points";   // (a PlayCanvas splat effect: for a point cloud)
         std::replace(about.begin(), about.end(), '\t', ' ');
-        all += (all.empty() ? "" : "\n") + name + "\t" + f.string() + "\t" + label + doc_tile(f.string(), std::filesystem::path(f).replace_extension(".png")) + "\t" + about;
+        all += (all.empty() ? "" : "\n") + name + "\t" + f.string() + "\t" + label + doc_tile(f.string(), std::filesystem::path(f).replace_extension(".png")) + "\t" + about + "\t" + (f.extension() == ".fs" ? isf_tags(f.string()) : "");   // (and what it is, read from it: isf_tags)
     }
     return all;
 }
