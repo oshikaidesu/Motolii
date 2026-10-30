@@ -221,6 +221,44 @@ const char* motolii_way_numbers(Motolii*, const char* kind) {   // (the kinds ar
     }
     return said.c_str();
 }
+// The words a hand types, against a shelf's items ("id<TAB>its name and label<TAB>what it does" a line), nearest first:
+// RapidFuzz (MIT, third_party/rapidfuzz, the user's choice), as its author's process.extract goes as it comes: the best
+// `limit` (its 5 when 0), no cut. A name by WRatio, extract's own scorer; what it does, a longer text, by partial_ratio,
+// RapidFuzz's way to find a short string in a long one (WRatio counts a text 8 times as long at 0.6 of its score); the
+// higher of the two. Each in letters (a byte 10xxxxxx goes with the one before it, as drawn_made.h splits a text) and in
+// small letters, as RapidFuzz's utils.default_process; nothing of the document read.
+const char* motolii_find(Motolii*, const char* query, const char* items, int limit) {
+    const auto letters = [](const std::string& s) {
+        std::u32string out;
+        for (size_t i = 0; i < s.size();) {
+            const unsigned char b = (unsigned char)s[i];
+            const int more = b >= 0xF0 ? 3 : b >= 0xE0 ? 2 : b >= 0xC0 ? 1 : 0;
+            char32_t c = more ? b & (0x3F >> more) : b;
+            for (int k = 1; k <= more && i + k < s.size(); ++k) c = (c << 6) | ((unsigned char)s[i + k] & 0x3F);
+            out += c < 128 ? (char32_t)std::tolower((int)c) : c;
+            i += 1 + more;
+        }
+        return out;
+    };
+    const std::u32string q = letters(query);
+    const rapidfuzz::fuzz::CachedWRatio<char32_t> name(q);
+    const rapidfuzz::fuzz::CachedPartialRatio<char32_t> does(q);
+    std::vector<std::pair<double, std::string>> found;
+    std::istringstream lines(items);
+    for (std::string line; std::getline(lines, line);) {
+        const size_t a = line.find('\t'), b = a == std::string::npos ? a : line.find('\t', a + 1);
+        if (a == std::string::npos) continue;
+        const std::u32string about = b == std::string::npos ? U"" : letters(line.substr(b + 1));
+        found.push_back({std::max(name.similarity(letters(line.substr(a + 1, b == std::string::npos ? std::string::npos : b - a - 1))), about.empty() ? 0.0 : does.similarity(about)), line.substr(0, a)});
+    }
+    std::stable_sort(found.begin(), found.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+    found.resize(std::min(found.size(), (size_t)(limit > 0 ? limit : 5)));
+    static thread_local std::string said;
+    said.clear();
+    char score[32];
+    for (const auto& [at, id] : found) std::snprintf(score, sizeof score, "\t%.1f\n", at), said += id + score;
+    return said.c_str();
+}
 const char* motolii_way_names(Motolii* m) {
     return by_look(m, [=] {
         said_word().clear();

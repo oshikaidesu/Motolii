@@ -103,4 +103,14 @@ extension MotoliiShelves on Motolii {
 
   /// What kind of thing a file makes ('': none).
   String kindOf(String file) => _with([file], (s) => _kindOf(s[0]).toDartString());
+
+  /// The items nearest the words a hand types, best first, the best [limit] (0: 5, as RapidFuzz's extract): each its id,
+  /// its name and label, and what it does (the inside's motolii_find: RapidFuzz, typos, parts, abbreviations).
+  List<String> find(String words, Iterable<(String, String, String)> items, {int limit = 0}) {
+    final lines = [for (final (id, name, about) in items) [id, name, about].map((w) => w.replaceAll(RegExp(r'[\t\n]'), ' ')).join('\t')].join('\n');
+    return [
+      for (final line in _with([words, lines], (s) => _find(_m, s[0], s[1], limit).toDartString()).split('\n'))
+        if (line.lastIndexOf('\t') case final i when i > 0) line.substring(0, i),
+    ];
+  }
 }

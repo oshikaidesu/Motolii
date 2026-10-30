@@ -1334,6 +1334,26 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('the effects shelf finds by words typed wrong or in part: the nearest five after the plain hits (RapidFuzz; golf_noise.md (91))', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$rect')
+      ..shelf = 'Effects';
+    await t.pumpAndSettle();
+    Future<List<String>> shown(String words) async {
+      await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), words);
+      await t.pumpAndSettle();
+      return [for (final e in find.byWidgetPredicate((w) => w is Text && (w.data ?? '').isNotEmpty).evaluate()) (e.widget as Text).data!];
+    }
+    expect(await shown('adjusment layer'), contains('Background Copy'), reason: 'a word typed wrong finds After Effects\' adjustment layer by what it does');
+    expect(await shown('particle'), contains('Particles (Sashimono)'), reason: 'and a part of a name');
+    expect(m.find('glwo', [('a', 'Glow Light', ''), ('b', 'Gaussian Blur Light', '')]).first, 'a', reason: 'the inside\'s own: the nearest first');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('the inks and the role fonts are kept with the document, not as steps: opened again, they are there (PowerPoint\'s theme colours and fonts; golf_noise.md (90))', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');

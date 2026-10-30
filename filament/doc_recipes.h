@@ -379,7 +379,7 @@ static bool doc_on(Doc& d, int thing, const char* name) {
 // it on (ThorVG's own), and what it is told then: a number, a word, or keys from that moment ("keys 0 1 1 0": 1 now,
 // 0 a second on: Trim Paths drawn on, as After Effects' is mostly used). [with]: the card's other values said with it, as
 // it is drawn when they are not said (doc_moment's own), so its card shows what the stage does ("name=number name:word").
-struct DocEffect { const char* name; const char* value; const char* on; bool word; const char* label; const char* with = ""; };   // (label: what it is for, as an effect file's --label: says)
+struct DocEffect { const char* name; const char* value; const char* on; bool word; const char* label; const char* with = ""; const char* about = ""; };   // (label: what it is for, as an effect file's --label: says; about: what it does, in words the shelf's search reads)
 static const DocEffect doc_effects[] = {
     {"Gaussian Blur", "blur", "12", false, "Light"},
     {"Drop Shadow", "shadow", "000000", true, "Light", "shadow_distance=10 shadow_angle=135 shadow_blur=10 shadow_opacity=0.5"},
@@ -388,15 +388,16 @@ static const DocEffect doc_effects[] = {
     {"Datamosh", "mosh", "1", false, "Glitch", "mosh_at=1"},
     {"Duotone", "tint", "1", false, "Color", "tint_black:1b1f5c tint_white:ff8a65"},
     {"Gradient Map", "tritone", "1", false, "Color", "tritone_shadow:1b1f5c tritone_midtone:c44569 tritone_highlight:ffd166"},
-    {"Background Copy", "fill", "behind", true, "Utility"},   // (its fill what is behind it: the effects on it then work on the background in its shape, and it still lies on what is under as its blend says; After Effects' adjustment layer as one more effect)
+    {"Background Copy", "fill", "behind", true, "Utility", "", "Its fill is what is behind it: the effects on it work on the background in its shape. After Effects' Adjustment Layer"},   // (its fill what is behind it: the effects on it then work on the background in its shape, and it still lies on what is under as its blend says; After Effects' adjustment layer as one more effect)
 };
-// The shelf's effects, "name\tvalue\tlabel\tpicture" one to a line (picture: thing_<value>.png in the library's effects/, "" none).
+// The shelf's effects, "name\tvalue\tlabel\tpicture\t\t\tabout" one to a line (picture: thing_<value>.png in the library's effects/, "" none;
+// about: what it does, as a file's description is the 7th of motolii_effects').
 static std::string doc_effect_names() {
     std::string all;
     std::error_code wrong;
     for (const DocEffect& e : doc_effects) {
         const std::filesystem::path picture = doc_folders("effects").front() / ("thing_" + std::string(e.value) + ".png");
-        all += (all.empty() ? "" : "\n") + std::string(e.name) + "\t" + e.value + "\t" + e.label + "\t" + (std::filesystem::exists(picture, wrong) ? picture.string() : "");
+        all += (all.empty() ? "" : "\n") + std::string(e.name) + "\t" + e.value + "\t" + e.label + "\t" + (std::filesystem::exists(picture, wrong) ? picture.string() : "") + "\t\t\t" + e.about;
     }
     return all;
 }

@@ -37,6 +37,9 @@ int motolii_loudness_over(Motolii* m, int thing, double from, double to, int n, 
 const char* motolii_marks(Motolii* m);
 const char* motolii_mark_colours(Motolii* m);   /* a line each, in time, "moment colour" (1 to 16, the label colours): the marks that have one */
 const char* motolii_settings(Motolii* m);   /* the window's choices kept with the document, not steps (asked later: setting): a line each, "name word" */
+/* The words a hand types against a shelf's items (`items`: "id<TAB>its name and label<TAB>what it does" a line), nearest
+   first, the best `limit` (5 when 0): "id<TAB>score" a line, the score 0 to 100. RapidFuzz (MIT): typos, parts, abbreviations. */
+const char* motolii_find(Motolii* m, const char* query, const char* items, int limit);
 /* The guides: lines across the picture, x upright and y level, at so many points from its left or top; a change is a
    step. motolii_guides: a line each, "x 150" (until the next call). */
 int motolii_guide(Motolii* m, const char* axis, double at, int on);

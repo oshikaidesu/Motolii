@@ -3,6 +3,7 @@
 !/third_party/godot_easing/
 !/third_party/js/
 !/third_party/midi_roll/
+!/third_party/rapidfuzz/
 !/third_party/thermion_frame/
 probe
 *.filamat

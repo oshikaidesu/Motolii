@@ -179,6 +179,7 @@ class Motolii {
   late final _effect = _b.motolii_effect;
   late final _wayAt = _b.motolii_way_at;
   late final _kindOf = _b.motolii_kind_of;
+  late final _find = _b.motolii_find;
   late final _together = _b.motolii_together;
   late final _frames = _b.motolii_frames;
   late final _keptRuns = _b.motolii_kept;

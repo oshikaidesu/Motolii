@@ -28,7 +28,7 @@ class EffectsShelf extends StatelessWidget {
     // (each: what it is told by (a thing's own by its name; a file's by its file: two files may share a name, Halftone's
     //  three.js .wgsl and an AviUtl2 script), its name, what it is for, its tile, whether it is on, what two presses do
     //  (also what a drop on the stage does), what it says of itself)
-    final all = <({String id, String name, String label, Widget tile, bool on, VoidCallback apply, String said})>[
+    final every = <({String id, String name, String label, Widget tile, bool on, VoidCallback apply, String said})>[
       if (picked)
         for (final (n, _) in m.thingEffects)
           (id: n, name: n, label: m.label(n), on: on.contains(n), apply: () => ws.fxToggle(n), said: _said(ws, n),
@@ -44,7 +44,12 @@ class EffectsShelf extends StatelessWidget {
         for (final (n, f) in m.animators)
           (id: f, name: n, label: 'Motion', on: ws.motion == f, apply: () => ws.motionToggle(f), said: 'A motion for the picked thing',
            tile: _Tile(n, key: ValueKey('ws-motion-$n'), on: ws.motion == f ? 'ON' : null, picked: c.sel == f, onTap: () => c.pick(f), onApply: () => ws.motionToggle(f))),
-    ].where((e) => c.hit(e.name) || (c.query.isNotEmpty && c.hit(m.about(e.id)))).toList();   // (by its name, or by what it does in its maker's words, as Alight Motion's search reads the descriptions)
+    ];
+    // (by its name, or by what it does in its maker's words, as Alight Motion's search reads the descriptions; then, for
+    //  a word typed wrong or in part, the nearest five of the rest by RapidFuzz (the inside's find): the user's choice)
+    final hits = [for (final e in every) if (c.hit(e.name) || (c.query.isNotEmpty && c.hit(m.about(e.id)))) e], hit = {for (final e in hits) e.id};
+    final near = c.query.trim().isEmpty ? const <String>[] : m.find(c.query, [for (final e in every) if (!hit.contains(e.id)) (e.id, '${e.name} ${e.label}', m.about(e.id))]);
+    final all = [...hits, for (final id in near) ...every.where((e) => e.id == id).take(1)];
     final kinds = <String, int>{};
     for (final e in all) {
       if (e.label.isNotEmpty) kinds[e.label] = (kinds[e.label] ?? 0) + 1;

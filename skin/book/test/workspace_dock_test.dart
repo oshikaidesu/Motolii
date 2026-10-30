@@ -268,7 +268,8 @@ void main() {
         nameOf[(e.widget.key! as ValueKey<String>).value.substring('ws-screen-'.length)]!,
     ];
     expect(names, containsAll(['Edge Glow', 'Glow']), reason: 'AbsentMotion\'s am_edgeglow.wgsl and VIDVOX\'s Glow.fs');
-    expect(names, [...names]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase())), reason: 'by name: before, the capitals of VIDVOX\'s files came before all of AbsentMotion\'s am_');
+    final hits = names.sublist(0, names.length - 5);   // (the nearest five of the rest come after, nearest first: RapidFuzz, golf_noise.md (91))
+    expect(hits, [...hits]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase())), reason: 'by name: before, the capitals of VIDVOX\'s files came before all of AbsentMotion\'s am_');
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 

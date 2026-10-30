@@ -1,0 +1,4 @@
+rapidfuzz-cpp, tag v3.3.4 (released 2026-08-30): https://github.com/rapidfuzz/rapidfuzz-cpp
+  extras/rapidfuzz_amalgamated.hpp  sha256 9ead854b937a5d694f09db6212b5afa0849066aac42244d342113386eb752a04
+  LICENSE (MIT)                     sha256 529ac8f069bd6aa633a2da2bea8de4299f43dec428aa407585f2b460dd98944f
+Taken 2026-10-30, unchanged. The fuzzy matching of Motolii's search (typos, parts, abbreviations): the user's choice.

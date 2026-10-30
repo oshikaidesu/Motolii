@@ -84,6 +84,20 @@ int main(int argc, char** argv) {
         else if (call == "look" && w.size() >= 4 && (w[1] == "save" || w[1] == "put")) { const int n = std::atoi(w[2].c_str()); ok = w[1] == "save" ? motolii_look_save(m, n, rest(3).c_str()) : motolii_look_put(m, n, rest(3).c_str()); }   // (a file's name may have spaces)
         else if (call == "looks" && w.size() == 1) { std::printf("%s\n", motolii_looks(m)); continue; }
         else if (call == "shelf" && w.size() == 1) { std::printf("%s\n", motolii_effects(m)); continue; }   // (the effect files on the shelf, AviUtl2's scripts too)
+        else if (call == "find" && w.size() >= 2) {   // (the shelf's effects nearest the words first, by name, label and what each does: motolii_find, RapidFuzz)
+            std::string items;
+            for (const char* lines : {motolii_effects(m), motolii_effect_names(m)}) {
+                std::istringstream in(lines);
+                for (std::string l; std::getline(in, l);) {
+                    std::vector<std::string> f;
+                    std::istringstream cut(l);
+                    for (std::string one; std::getline(cut, one, '\t');) f.push_back(one);
+                    if (!f.empty() && !f[0].empty()) items += f[0] + "\t" + f[0] + " " + (f.size() > 2 ? f[2] : "") + "\t" + (f.size() > 6 ? f[6] : "") + "\n";
+                }
+            }
+            std::printf("%s", motolii_find(m, rest(1).c_str(), items.c_str(), 10));
+            continue;
+        }
         else if (call == "changed" && w.size() == 1) { motolii_files_changed(); continue; }   // (files written, put in or taken out: read again at their next use)
         else if (call == "recipes" && w.size() == 1) { std::printf("  %s\n", motolii_recipes(m)); continue; }
         else if (call == "together" && w.size() == 2) ok = motolii_together(m, w[1] == "on" ? 1 : 0) || w[1] == "on";   // (the calls between are one step, the stage matched once at the end)

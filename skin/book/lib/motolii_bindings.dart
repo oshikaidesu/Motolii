@@ -364,6 +364,36 @@ class MotoliiBindings {
   late final _motolii_files_changed = _motolii_files_changedPtr
       .asFunction<void Function()>();
 
+  ffi.Pointer<pkg_ffi.Utf8> motolii_find(
+    ffi.Pointer<Motolii> m,
+    ffi.Pointer<pkg_ffi.Utf8> query,
+    ffi.Pointer<pkg_ffi.Utf8> items,
+    int limit,
+  ) {
+    return _motolii_find(m, query, items, limit);
+  }
+
+  late final _motolii_findPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<pkg_ffi.Utf8> Function(
+            ffi.Pointer<Motolii>,
+            ffi.Pointer<pkg_ffi.Utf8>,
+            ffi.Pointer<pkg_ffi.Utf8>,
+            ffi.Int,
+          )
+        >
+      >('motolii_find');
+  late final _motolii_find = _motolii_findPtr
+      .asFunction<
+        ffi.Pointer<pkg_ffi.Utf8> Function(
+          ffi.Pointer<Motolii>,
+          ffi.Pointer<pkg_ffi.Utf8>,
+          ffi.Pointer<pkg_ffi.Utf8>,
+          int,
+        )
+      >();
+
   void motolii_finished(
     ffi.Pointer<Motolii> m,
     ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>
@@ -1084,6 +1114,19 @@ class MotoliiBindings {
         int Function(ffi.Pointer<Motolii>, double, ffi.Pointer<pkg_ffi.Utf8>)
       >();
 
+  ffi.Pointer<pkg_ffi.Utf8> motolii_mark_colours(ffi.Pointer<Motolii> m) {
+    return _motolii_mark_colours(m);
+  }
+
+  late final _motolii_mark_coloursPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<pkg_ffi.Utf8> Function(ffi.Pointer<Motolii>)
+        >
+      >('motolii_mark_colours');
+  late final _motolii_mark_colours = _motolii_mark_coloursPtr
+      .asFunction<ffi.Pointer<pkg_ffi.Utf8> Function(ffi.Pointer<Motolii>)>();
+
   ffi.Pointer<pkg_ffi.Utf8> motolii_marks(ffi.Pointer<Motolii> m) {
     return _motolii_marks(m);
   }
@@ -1724,6 +1767,19 @@ class MotoliiBindings {
       .asFunction<
         int Function(ffi.Pointer<pkg_ffi.Utf8>, ffi.Pointer<pkg_ffi.Utf8>)
       >();
+
+  ffi.Pointer<pkg_ffi.Utf8> motolii_settings(ffi.Pointer<Motolii> m) {
+    return _motolii_settings(m);
+  }
+
+  late final _motolii_settingsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<pkg_ffi.Utf8> Function(ffi.Pointer<Motolii>)
+        >
+      >('motolii_settings');
+  late final _motolii_settings = _motolii_settingsPtr
+      .asFunction<ffi.Pointer<pkg_ffi.Utf8> Function(ffi.Pointer<Motolii>)>();
 
   ffi.Pointer<pkg_ffi.Utf8> motolii_shaping(ffi.Pointer<Motolii> m) {
     return _motolii_shaping(m);
