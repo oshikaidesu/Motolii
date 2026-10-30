@@ -271,6 +271,11 @@ static bool doc_align(Doc& d, const std::vector<int>& things, const std::string&
 static bool doc_fit(Doc& d, int thing, const std::string& how) {
     const double now = d.stage->now;
     double b[4];
+    if (d.act && d.act_unmatched) {   // (within a larger act, what it has made so far shown first, as its end does (doc_acted): a picture placed and fitted in one step, golf ㊱)
+        d.act_unmatched = false;
+        doc_forget(d);
+        if (d.act_ok && !doc_match(d)) d.act_ok = false;
+    }
     if (!doc_seen_box(d, thing, now, b) || b[2] - b[0] < 1e-6 || b[3] - b[1] < 1e-6) return d.trouble = "it is not seen now", false;
     const double wx = (double)d.stage->w / (b[2] - b[0]), wy = (double)d.stage->h / (b[3] - b[1]);
     if (how != "fit" && how != "fill" && how != "stretch") return d.trouble = "made to fit, fill or stretch", false;

@@ -874,6 +874,38 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a photo placed from the Media shelf comes fitted inside the picture, in its middle, one step (Alight Motion\'s: AbsentMotion imageLayer; golf ㊱)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    File('$motoliiDir/fx_sample.jpg').copySync('${ws.documentFolder}/photo.jpg');   // (857 x 857: a square on a wide picture)
+    ws.shelf = 'Media';
+    await t.pumpAndSettle();
+    final folder = find.byKey(ValueKey('browser:file:${ws.documentFolder}'));
+    await t.ensureVisible(folder.first);
+    await t.tap(folder.first);
+    await t.pumpAndSettle();
+    final tile = find.byKey(ValueKey('browser:file:${ws.documentFolder}/photo.jpg'));
+    for (var i = 0; i < 20 && tile.evaluate().isEmpty; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pumpAndSettle();
+    }
+    await t.tap(tile.first);
+    await t.pump(kDoubleTapTimeout);
+    await t.pumpAndSettle();
+    await t.tap(find.text('Place'));
+    for (var i = 0; i < 200 && m.things.isEmpty; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    await settled(t, ws);
+    final photo = m.things.last, f = m.frame(photo)!;
+    final (wide, high) = m.size;
+    expect([f[0], f[1]], [closeTo(wide / 2, 1), closeTo(high / 2, 1)], reason: 'in the middle: ${m.trouble}');
+    expect([f[2], f[3]], [closeTo(high, 2), closeTo(high, 2)], reason: 'a square on a wide picture: as high as it, its sides left bare');
+    expect(m.undo() && m.things.isEmpty, isTrue, reason: 'placed and fitted: one step');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a still picked on the Media shelf says how long it lasts before it is placed: 2 s as it comes, End to the document\'s end (Alight Motion\'s ruler under a photo)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     File('${ws.documentFolder}/dot.png').writeAsBytesSync(const [137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 218, 99, 252, 207, 192, 80, 15, 0, 4, 133, 1, 128, 132, 169, 140, 33, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130]);   // (one pixel, as a PNG says it)
