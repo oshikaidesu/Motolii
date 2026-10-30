@@ -355,6 +355,13 @@ class _WorkspaceState extends State<Workspace> {
       },
       // (the work area taken out and the gap closed: After Effects' Edit > Extract Work Area, under Split Layer; golf (72))
       'edit.extractWork': () => ws.after(m.later('extract'), (done, why) => done || why.isEmpty ? null : ws.notice = 'Not taken: ${why.split(':').first}'),
+      // (After Effects' Cmd+Opt+B: "set work area to duration of selected layers or, if no layers are selected, set
+      // work area to composition duration"; golf (82): back to the whole after Extract Work Area took two drags)
+      'edit.workToPicked': () {
+        final picked = {for (final t in _picked()) '$t'}, bars = [for (final l in ws.layers) if (picked.contains(l.id)) l];
+        final (from, to) = bars.isEmpty ? (0.0, m.seconds) : (bars.map((l) => l.inF).reduce(math.min) / Ws.fps, bars.map((l) => l.outF).reduce(math.max) / Ws.fps);
+        ws.after(m.later('work', number: from, word: '$to'));
+      },
       'thing.split': () {
         final t = int.tryParse(ws.selected ?? '');
         if (t == null) return;
@@ -440,6 +447,7 @@ class _WorkspaceState extends State<Workspace> {
               item('Unlink from Element', 'thing.unlinkElement'),
               item('Split', 'thing.split'),
               item('Extract Work Area', 'edit.extractWork'),
+              item('Set Work Area to Selected', 'edit.workToPicked'),
               item('Extract Sound', 'thing.extractSound'),
               item('Rename', 'thing.rename'),
               item('Remove', 'thing.remove'),

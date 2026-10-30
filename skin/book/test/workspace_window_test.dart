@@ -150,6 +150,45 @@ void main() {
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, skip: !insideBuilt);
+
+  testWidgets('Cmd+Opt+B sets the work area to the picked things, or to the whole with nothing picked (After Effects\'; golf (82))', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final a = m.add('shape', 'rect'), b = m.add('shape', 'rect');
+    expect(m.set(a, 'start', 2) && m.set(a, 'duration', 3) && m.set(b, 'start', 6) && m.set(b, 'duration', 6), isTrue, reason: m.trouble);
+    Future<void> settle() async {
+      for (var i = 0; i < 200 && ws.waiting; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await t.pump();
+      }
+      ws.reread();
+      await t.pumpAndSettle();
+    }
+    Future<void> cmdOptB() async {
+      await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await t.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await t.sendKeyEvent(LogicalKeyboardKey.keyB);
+      await t.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await settle();
+    }
+    ws.after(m.later('work', number: 4, word: '6'));
+    await settle();
+    ws.select('$a');
+    await t.pumpAndSettle();
+    await cmdOptB();
+    expect(m.work, (2.0, 5.0), reason: 'the picked thing\'s own time');
+    ws.pickMany(['$a', '$b']);
+    await t.pumpAndSettle();
+    await cmdOptB();
+    expect(m.work, (2.0, 12.0), reason: 'from the first start to the last end');
+    t.widget<WsKeys>(find.byType(WsKeys)).commands['edit.deselectAll']!();
+    await t.pumpAndSettle();
+    await cmdOptB();
+    expect(m.work, (0.0, m.seconds), reason: 'nothing picked: the whole');
+    expect(m.undo() && m.work == (2.0, 12.0), isTrue, reason: 'one step each');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
 }
 
 class _Snap extends StatelessWidget {
