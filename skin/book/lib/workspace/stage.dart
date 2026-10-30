@@ -527,12 +527,14 @@ class _Readout extends StatelessWidget {
         ),
         SizedBox(width: Shape.s(6)),
         Text(l.name, style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w600)),
-        if (box == null && ws.inside?.word(int.parse(l.id), 'kind') != 'behaviour')   // (a relation has no picture of its own: nothing to say)
+        // (a relation has no picture of its own: nothing to say; nor has a camera, which is on the frame while its bar is,
+        //  and has no size: its name alone, as After Effects' camera layer has no bounds and no Scale; golf (76))
+        if (box == null && ws.inside?.word(int.parse(l.id), 'kind') != 'behaviour' && !(l.kind == WsKind.camera && (scene.layer(l.id)?.live(scene.frame) ?? false)))
           Padding(
             padding: EdgeInsets.only(left: Shape.s(10)),
             child: Text(l.kind == WsKind.audio ? 'No picture' : 'Not on this frame', style: T.label(Grey.g56)),
           )
-        else ...[
+        else if (l.kind != WsKind.camera) ...[
           // (the same numbers as the inspector's, which are the document's)
           if (wsPlace(ws, l.id) case final at) ...[
             pair('P', '${at['x']?.round()}, ${at['y']?.round()}'),

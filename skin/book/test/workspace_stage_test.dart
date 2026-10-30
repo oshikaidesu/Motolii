@@ -87,6 +87,26 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('a camera picked is on the frame while its bar is: it has no picture of its own to be seen (golf (76))', (t) async {
+    final ws = _joined(), m = ws.inside!;
+    m.add('shape', 'rect');
+    final cam = m.add('camera', 'camera');
+    ws.reread();
+    await _stage(t, ws, const Size(924, 616));
+    ws
+      ..frame = 0
+      ..select('$cam');
+    await t.pump();
+    expect(find.text('Not on this frame'), findsNothing, reason: 'the playhead is in its bar');
+    expect(find.text('S'), findsNothing, reason: 'a camera has no size: its name alone');
+    expect(m.set(cam, 'start', 2), isTrue, reason: m.trouble);
+    ws.reread();
+    await t.pump();
+    expect(find.text('Not on this frame'), findsOneWidget, reason: 'it comes on at 2 s');
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
   testWidgets('Snapshot keeps the picture as it is; Show lays it over the picture only while held (After Effects\' Take and Show Snapshot; P19)', (t) async {
     final ws = _joined(), m = ws.inside!;
     m.add('shape', 'rect');
