@@ -47,6 +47,8 @@ ninja -C $THOR/build_dawn > /dev/null
 SKIA=third_party/skia_src
 [ -f $SKIA/out/path/libpathops.a ] || ./skia.sh
 [ out/skpath.o -nt skpath.cpp ] || clang++ -c -std=c++20 -O2 -DNDEBUG -fno-rtti -fno-exceptions -I $SKIA -I $THOR/inc skpath.cpp -o out/skpath.o
+AM_SRC=third_party/AbsentMotion   # (AbsentMotion, Apache-2.0: pinned as skia.sh pins Skia; a checkout that never had it, CI's, fetches it here)
+[ -d $AM_SRC ] || { mkdir -p $AM_SRC && git init -q $AM_SRC && git -C $AM_SRC -c core.hooksPath=/dev/null fetch -q --depth 1 https://github.com/Comett1225/AbsentMotion.git 0f5d891b7e6fd7260ca6191b4eafef23141230c8 && git -C $AM_SRC checkout -q FETCH_HEAD; } || exit 1
 # (absent_motion.cpp: AbsentMotion's own motion and text effects, its motion.cpp, scene.cpp, easing.cpp and textanim.cpp as they are, with
 #  Skia's headers; what of scene.cpp draws or reads a whole scene is not reached and is stripped: hidden, -dead_strip below)
 AM=third_party/AbsentMotion/app/src/main/cpp
