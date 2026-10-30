@@ -485,8 +485,10 @@ static int doc_split(Doc& d, int thing, double at) {
 }
 // The work area taken out and the gap closed (After Effects' Edit > Extract Work Area; Premiere Pro's Extract, DaVinci
 // Resolve's Ripple Delete): every thing across one of its edges cut there (doc_split, a film's part after as far on in
-// the film), the parts within it taken away, and all after it brought back by its length, their keys with them. One
-// step. The marks are left where they are (golf (72), P18: 20 seconds made 15 by taking 5 out of the middle).
+// the film), the parts within it taken away, and all after it brought back by its length, their keys with them; the
+// marks within it taken away and those after it brought back too, as Premiere Pro's Extract does with Ripple Sequence
+// Markers on (its markers after an edit move with the ripple; from 25.3 those in the part extracted are cleared). One
+// step (golf (72), P18: 20 seconds made 15 by taking 5 out of the middle, the hits' marks kept on their hits).
 static bool doc_extract(Doc& d) {
     double in = 0.0, out = 0.0;
     doc_work(d, &in, &out);
@@ -505,6 +507,9 @@ static bool doc_extract(Doc& d) {
         if (after) ok = ok && doc_set(d, after, "start", doc_number(d, after, "start", 0, 0) - gap) && doc_keys_by(d, after, -gap);
         if (!ok) break;
     }
+    ok = ok && doc_change(d, sqlite3_mprintf("delete from fact where thing = 0 and name in ('mark', 'mark_colour') and at >= %!.17g and at < %!.17g;"
+                                             "update fact set at = at + %!.17g where thing = 0 and name in ('mark', 'mark_colour') and at >= %!.17g;"
+                                             "update fact set at = at - 1e7 where thing = 0 and name in ('mark', 'mark_colour') and at >= 5e6", in - 1e-9, out - 1e-9, 1e7 - gap, out - 1e-9));   // (by way of far off, as doc_keys_by: none lands on one not yet moved)
     if (!ok) d.act_ok = false;
     return doc_acted(d);
 }
