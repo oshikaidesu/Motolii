@@ -122,7 +122,7 @@ void main() {
       ws.reread();
     }
     final titles = [for (final (title, _) in m.cards(text)) title];
-    expect(titles.indexOf('Glitch Shifter'), allOf(greaterThan(titles.indexOf('Transform')), lessThan(titles.indexOf('Copies'))), reason: '$titles');
+    expect(titles.indexOf('Glitch Shifter'), allOf(greaterThan(titles.indexOf('Transform')), lessThan(titles.indexOf('Motion'))), reason: '$titles');   // (Copies, the first of those besides, is shown once put on since 10/30: golf_noise.md (99))
   }, skip: !insideBuilt);
 
   testWidgets('a camera takes a motion from the Effects shelf, as AbsentMotion\'s camera is moved by its own; an effect it has no picture for is not taken, and the top bar says why (golf ㊴)', (t) async {

@@ -505,6 +505,12 @@ class _WorkspaceState extends State<Workspace> {
           PlatformMenuItemGroup(members: [for (final (label, how) in _times) item(label, 'time.$how')]),
         ],
       ),
+      // (a menu titled Help: the Mac puts its search of every menu item in it (Apple's HIG, the Help menu), so a feature
+      //  forgotten is found by its name; and Motolii's ledger of what it has, as a Help menu's own help: golf (98))
+      PlatformMenu(
+        label: 'Help',
+        menus: [PlatformMenuItem(label: 'Motolii Features (ASSETS.md)', onSelected: () => Process.run('open', ['${File(motoliiDir).parent.path}/ASSETS.md']))],
+      ),
     ];
   }
 

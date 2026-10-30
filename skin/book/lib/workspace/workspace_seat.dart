@@ -26,6 +26,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
   // (the moment alone moved: the values and key marks told to the inspector as it stands; anything else: built again)
   final _live = ValueNotifier<(Map<String, double>, Map<String, KeyS>)>((const {}, const {}));
   int? _frame;
+  String? _titles;   // (the picked thing's cards' titles as last read)
   Object _now(Ws ws) => (ws.rev, ws.selected, ws.animating);
 
   // (the reading of the document changed only numbers of what is picked, none that changes its cards: they are told
@@ -33,6 +34,11 @@ class _InspectorSeatState extends State<_InspectorSeat> {
   bool _onlyNumbers(Ws ws) {
     final m = ws.inside, c = ws.lastChange, t = int.tryParse(ws.selected ?? '') ?? (ws.selected == null ? 0 : null);
     if (m == null || c == null || c.things || t == null || const bool.fromEnvironment('NOPOUR')) return false;
+    final titles = [for (final (title, _) in m.cards(t)) title].join(';');
+    if (titles != _titles) {   // (a card put on or taken off by its values alone: Copies laid out from the Create shelf, taken off by its Reset)
+      _titles = titles;
+      return false;
+    }
     for (final (thing, name) in c.values) {
       if (name == 'name' || (thing == t && (m.shaping.contains(name) || m.range(t, name) == null || m.shown(name)?.look == 'thing'))) return false; // (another thing: shown by its name, a word) // (a name changed anywhere: things are named on cards; a word: it is not watched)
       // (nor is an effect's colour, three numbers shown as one swatch as a word is (workspace_cards.dart): golf_noise.md (84))

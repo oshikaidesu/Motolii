@@ -406,7 +406,7 @@ static const DocValue doc_values[] = {
     {"behind", "stage", 0, 0, false, "colour room"}};   // (what is behind everything: the background's colour, or the room itself)
 // The cards a maker sees a thing's values on, besides where it is and its fill: a title and the values on it, in the
 // order shown (a thing is shown those of them its kind has). A value the window has no other seat for goes here.
-struct DocCard { const char* title; const char* names; const char* when = nullptr; const char* is = nullptr; };   // (shown only while `when` is `is`; "!...": is not; "~...": has it in it)
+struct DocCard { const char* title; const char* names; const char* when = nullptr; const char* is = nullptr; bool added = false; };   // (shown only while `when` is `is`; "!...": is not; "~...": has it in it; added: only once one of its values is said or keyed, as After Effects' shape layer shows a Repeater only once Add ▸ Repeater put it on, and Alight Motion's Repeat and Wave Warp are effects put on, not cards always there)
 // How a value is shown to a hand (a shell draws its knob by this, nothing of its own): its look (count: a whole number;
 // onoff; angle; stage: a length of the stage, shown in points of the picture; down: one up the stage, shown down it as the picture counts; share: 0 to 1, shown in hundredths;
 // colour, colours, numbers: words of those; words: any, typed; file: a file, given from a shelf; thing: another thing; seed; none: as its range says), the unit it is read

@@ -274,6 +274,23 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('every shelf finds as the effects shelf does: a word typed wrong or in Japanese brings the nearest (golf_noise.md (97))', (t) async {
+    final ws = _joined();
+    Future<void> search(String shelf, String words) async {
+      await _shelf(t, ws, const Size(520, 918), shelf);
+      await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), words);
+      await t.pumpAndSettle();
+    }
+    await search('Create', 'hart');
+    expect(find.text('Heart'), findsWidgets, reason: 'Create: a word typed wrong');
+    await search('Create', '矢印');
+    expect(find.textContaining('Arrow'), findsWidgets, reason: 'Create: a Japanese word, arrow');
+    await search('Fonts', 'arail black');
+    expect(find.textContaining('Arial Black'), findsWidgets, reason: 'Fonts: a word typed wrong');
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
   testWidgets('the chips move sideways as any sideways list on a Mac: the wheel with Shift held, not the wheel alone (golf_noise.md (93))', (t) async {
     final ws = _joined();
     await _shelf(t, ws, const Size(240, 918), 'Effects');
@@ -297,6 +314,9 @@ void main() {
     final ws = _joined(), m = ws.inside!, nameOf = {for (final (n, f) in m.effects) f: n};
     expect(m.tags(m.effects.firstWhere((e) => e.$1 == 'Waveform Displace').$2), {'sound'}, reason: 'an audio input read: ${m.tags('Waveform Displace')}');
     expect(m.tags(m.effects.firstWhere((e) => e.$1 == 'Sorting Smear').$2), {'feedback', 'time'}, reason: 'a PERSISTENT pass, the clock');
+    expect(m.tags(m.effects.firstWhere((e) => e.$2.endsWith('/datamosh.wgsl')).$2), containsAll(['multipass', 'feedback', 'time']), reason: 'a WGSL effect read too: its --pass@ lines, one kept, the clock read');
+    expect(m.tags(m.effects.firstWhere((e) => e.$2.endsWith('/am_brightnesscontrast.wgsl')).$2), isNot(contains('time')), reason: 'a clock field declared and not read is not the clock');
+    expect(m.tags(m.effects.firstWhere((e) => e.$1 == 'NCSVisualizer').$2), containsAll(['generator', 'sound']), reason: 'an AviUtl2 custom object (.obj2) that reads obj.getaudio');
     await _shelf(t, ws, const Size(240, 918), 'Effects');
     List<String> shown() => [
       for (final e in find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('ws-screen-')).evaluate())

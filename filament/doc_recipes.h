@@ -57,6 +57,29 @@ static std::string doc_tile(const std::string& ref, const std::filesystem::path&
     const std::string picture = std::filesystem::exists(drawn, wrong) ? drawn : !beside.empty() && std::filesystem::exists(beside, wrong) ? beside.string() : "";
     return "\t" + picture + "\t" + drawn + "\t" + (std::filesystem::exists(drawn + ".same", wrong) ? "same" : "");
 }
+// What a WGSL effect is, read from it as isf_tags reads an ISF file (the user's Mercari: read, not asked; Shadertoy's
+// filters, golf (92)): from its head, Motolii's own lines (screen.h): its passes (--pass@; more than one: multipass;
+// one kept from frame to frame, its first flag 1, or --history@: feedback), another picture (--picture@: image); from
+// its body, the stage's clock read (.time, .frame: time).
+static std::string doc_wgsl_tags(const std::filesystem::path& file) {
+    std::ifstream in(file);
+    int passes = 0;
+    bool feedback = false, image = false, clock = false;
+    static const std::regex ticks(R"(\.\s*(time|frame)\b)");   // (read, knobs.time: a field declared and not read is not the clock)
+    for (std::string line; std::getline(in, line);) {
+        if (line.rfind("//", 0) == 0) {
+            if (const size_t at = line.find("--pass@"); at != std::string::npos) {
+                ++passes;
+                if (const size_t colon = line.find(':', at); colon != std::string::npos && line.compare(colon + 1, 1, "1") == 0) feedback = true;
+            }
+            feedback = feedback || line.find("--history@") != std::string::npos;
+            image = image || line.find("--picture@") != std::string::npos;
+        } else if (!clock && std::regex_search(line, ticks)) clock = true;
+    }
+    std::string tags;
+    for (const auto& [on, word] : {std::pair{passes > 1, "multipass"}, {feedback, "feedback"}, {clock, "time"}, {image, "image"}}) if (on) tags += (tags.empty() ? "" : " ") + std::string(word);
+    return tags;
+}
 static std::string doc_folder_names(const char* folder, const char* extension) {
     struct Seen { std::string all; int seen = -1; };
     static std::map<std::string, Seen> seen;
@@ -76,7 +99,7 @@ static std::string doc_folder_names(const char* folder, const char* extension) {
         }
         if (f.extension() == ".mjs") label = "Points";   // (a PlayCanvas splat effect: for a point cloud)
         std::replace(about.begin(), about.end(), '\t', ' ');
-        all += (all.empty() ? "" : "\n") + name + "\t" + f.string() + "\t" + label + doc_tile(f.string(), std::filesystem::path(f).replace_extension(".png")) + "\t" + about + "\t" + (f.extension() == ".fs" ? isf_tags(f.string()) : "");   // (and what it is, read from it: isf_tags)
+        all += (all.empty() ? "" : "\n") + name + "\t" + f.string() + "\t" + label + doc_tile(f.string(), std::filesystem::path(f).replace_extension(".png")) + "\t" + about + "\t" + (f.extension() == ".fs" ? isf_tags(f.string()) : f.extension() == ".wgsl" ? doc_wgsl_tags(f) : "");   // (and what it is, read from it: isf_tags, doc_wgsl_tags)
     }
     return all;
 }
@@ -105,12 +128,23 @@ static std::string doc_aviutl_names() {
                 std::ifstream in(f);
                 const bool many = f.filename().string()[0] == '@';
                 std::string name = many ? "" : f.stem().string(), label;
-                const auto put = [&] { if (!name.empty()) lines += name + "\t" + f.string() + (many ? "#" + name : "") + "\t" + label + doc_tile(f.string() + (many ? "#" + name : ""), many ? std::filesystem::path() : std::filesystem::path(f).replace_extension(".png")) + "\n"; };
+                // (and what each is, read from it as isf_tags reads an ISF file: AviUtl's own kinds by the extension, a custom
+                //  object .obj2 a generator and a scene change .scn2 a transition; obj.getaudio: sound; obj.time, obj.frame: time)
+                bool sound = false, clock = false;
+                const std::string ext = f.extension().string();
+                const auto put = [&] {
+                    std::string tags;
+                    for (const auto& [on, word] : {std::pair{ext == ".scn2", "transition"}, {ext == ".obj2", "generator"}, {sound, "sound"}, {clock, "time"}}) if (on) tags += (tags.empty() ? "" : " ") + std::string(word);
+                    if (!name.empty()) lines += name + "\t" + f.string() + (many ? "#" + name : "") + "\t" + label + doc_tile(f.string() + (many ? "#" + name : ""), many ? std::filesystem::path() : std::filesystem::path(f).replace_extension(".png")) + "\t\t" + tags + "\n";
+                    sound = clock = false;
+                };
                 for (std::string line; std::getline(in, line);) {
                     if (line.rfind("\xEF\xBB\xBF", 0) == 0) line.erase(0, 3);
                     line.erase(line.find_last_not_of(" \t\r") + 1);
                     if (many && line.rfind("@", 0) == 0) { put(), name = line.substr(1), label.clear(); continue; }
                     if (label.empty() && line.rfind("--label:", 0) == 0) label = line.substr(8);
+                    sound = sound || line.find("obj.getaudio") != std::string::npos;
+                    clock = clock || line.find("obj.time") != std::string::npos || line.find("obj.frame") != std::string::npos;
                 }
                 put();
             }
@@ -328,14 +362,16 @@ static std::string doc_cards_of(Doc& d, int thing) {
             if (is == (card.is[0] == '!')) continue;
         }
         std::string names;
+        bool said = !card.added;   // (put on from the Create shelf, taken off by its Reset: none of its values said)
         for (const char* at = card.names; *at;) {
             const size_t len = strcspn(at, " ");
             const std::string n(at, len);
+            said = said || !doc_word(d, thing, n.c_str()).empty() || doc_keys(d, thing, n.c_str());
             const bool still = (n == "animation" || n == "speed") && doc_word(d, thing, "kind") == "solid" && doc_words(d, thing, "animation").empty();   // (a solid with no movement of its own has none to play)
             if (has.find(" " + n + " ") != std::string::npos && !still) names += (names.empty() ? "" : " ") + n;
             at += len + (at[len] ? 1 : 0);
         }
-        if (names.empty()) continue;
+        if (names.empty() || !said) continue;
         if (card.when && card.is[0] == '+' && doc_thor_letter(card.when)) effects[card.when] = std::string(card.title) + ": " + names;
         else (past ? besides : all) += ((past ? besides : all).empty() ? "" : "; ") + std::string(card.title) + ": " + names;
     }

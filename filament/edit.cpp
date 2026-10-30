@@ -3,11 +3,13 @@
 //   ./edit.sh out/first.motolii       then a call a line (`help` lists them)
 // A call that is not done says why, and leaves the document as it was.
 #include "motolii.h"
+#include <algorithm>
 #include <chrono>
 #include <thread>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -16,7 +18,7 @@
 static const char* const calls =
     "  add film <file> | add sound <a .mp3, .wav, .m4a: heard, hidden> | add picture <an After Effects file, a .jpg, a .png> | add text <font.ttf> | add solid <file.glb>|ring|gem|cube   (say N fill glass: it is glass)\n"
     "  pen <thing, 0: new> <x> <y> [<handle x> <handle y>] (points of the picture) | points <thing> | handles <thing> | hold <thing> | carry <by> <a> <b> | let_go 1|0 | remove <thing> | set <thing> <name> <number> | say <thing> <name> <word> | key <thing> <name> <at> <number> | unkey <thing> <name> <at>\n"
-    "  way <thing> <name> <at> <a way, and its numbers> | ways | define <a way's name> <its expression> | value <thing> <name> <at>\n"
+    "  way <thing> <name> <at> <a way, and its numbers> | ways | cards <thing> | define <a way's name> <its expression> | value <thing> <name> <at>\n"
     "  make <recipe> | recipes | effect <thing> <name> | effects | shelf | look save|put <thing> <file.motolii> | looks | together on|off | undo | redo | list | at <seconds> | still <file.png> | write <file.mp4> | time [pictures]\n";
 
 int main(int argc, char** argv) {
@@ -77,6 +79,7 @@ int main(int argc, char** argv) {
         else if (call == "way" && w.size() >= 5) { const int n = thing(); const double at = number(3); if (numbers) ok = motolii_way(m, n, w[2].c_str(), at, rest(4).c_str()); }   // (the stretch from that key on)
         else if (call == "define" && w.size() >= 3) ok = motolii_define(m, w[1].c_str(), rest(2).c_str());
         else if (call == "ways" && w.size() == 1) { std::printf("  %s\n", motolii_ways(m)); continue; }
+        else if (call == "cards" && w.size() == 2) { const int n = thing(); if (numbers) std::printf("  %s\n", motolii_cards(m, n)); continue; }   // (a thing's cards as the inspector lays them: "title: names; ...")
         else if (call == "value" && w.size() == 4) { const int n = thing(); const double at = number(3); double is = 0; if (numbers && (ok = motolii_value(m, n, w[2].c_str(), at, &is))) { std::printf("  %.4f\n", is); continue; } }
         else if (call == "make" && w.size() >= 2) ok = motolii_make(m, rest(1).c_str()) != 0;
         else if (call == "effect" && w.size() >= 3) { const int n = thing(); if (numbers) ok = motolii_effect(m, n, rest(2).c_str(), motolii_now(m)); }   // (an effect's name may have spaces)
@@ -96,6 +99,35 @@ int main(int argc, char** argv) {
                 }
             }
             std::printf("%s", motolii_find(m, rest(1).c_str(), items.c_str(), 10));
+            // (and what Motolii has, as its ledger and the golf's record say it (ASSETS.md's rows, golf_noise.md's
+            //  entries): a feature there and forgotten is found before it is said not to be (the user, 10/30). The
+            //  lines with the words as typed first, as the shelves' plain hits; then the nearest by motolii_find)
+            std::string words = rest(1), lower = words, lines, said;
+            std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+            int plain = 0;
+            for (const char* book : {"../../../ASSETS.md", "../../../reports/golf_noise.md"}) {   // (from out/wgpu_kit, where edit.sh runs this)
+                std::ifstream in(book);
+                int n = 0;
+                for (std::string l; std::getline(in, l);) {
+                    ++n;
+                    if (l.rfind("| ", 0) != 0 && l.rfind("- [", 0) != 0) continue;
+                    const std::string id = std::string(book).substr(std::string(book).rfind('/') + 1) + ":" + std::to_string(n);
+                    std::string low = l;
+                    std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+                    const size_t colon = l.find("\xEF\xBC\x9A");   // (its head: up to the first full-width colon)
+                    if (low.find(lower) != std::string::npos) { if (plain++ < 10) said += id + "\t" + l.substr(0, 160) + "\n"; continue; }
+                    lines += id + "\t" + l.substr(0, colon == std::string::npos ? 120 : colon) + "\t" + l + "\n";
+                }
+            }
+            std::printf("-- in the ledger and the golf's record\n%s", said.c_str());
+            if (plain < 10) {
+                std::istringstream near(motolii_find(m, words.c_str(), lines.c_str(), 10 - plain));
+                for (std::string l; std::getline(near, l);) {
+                    const std::string id = l.substr(0, l.find('\t'));
+                    const size_t at = lines.find(id + "\t");
+                    if (at != std::string::npos) std::printf("%s ~\t%s\n", id.c_str(), lines.substr(lines.find('\t', lines.find('\t', at) + 1) + 1, 160).c_str());
+                }
+            }
             continue;
         }
         else if (call == "changed" && w.size() == 1) { motolii_files_changed(); continue; }   // (files written, put in or taken out: read again at their next use)

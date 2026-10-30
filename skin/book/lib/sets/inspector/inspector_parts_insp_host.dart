@@ -303,7 +303,7 @@ class _InspHostState extends State<InspHost> {
       doc.animateAll = _animating = on;
       _tick++;
     }
-    if (o.title != widget.title || o.kindWord != widget.kindWord || !setEquals(o.seats, widget.seats) || o.choices.toString() != widget.choices.toString()) _tick++;
+    if (o.title != widget.title || o.kindWord != widget.kindWord || !setEquals(o.seats, widget.seats) || o.choices.toString() != widget.choices.toString() || !listEquals(o.cardsOff, widget.cardsOff)) _tick++;   // (an effect's eye shut or opened: its card says so)
     doc
       ..title = widget.title
       ..kindWord = widget.kindWord

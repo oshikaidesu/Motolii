@@ -173,7 +173,11 @@ class FontsShelf extends StatelessWidget {
     };
     bool used(_Font f) => setIn.containsKey(f.path);
     Set<String> tagsOf(_Font f) => DockTags.of('Fonts', f.family, f.path == null ? const <String>{} : (c.ws.inside?.fontTags(f.path!) ?? const <String>{}));
-    final hits = fonts.where((f) => DockTags.hit(c.query, f.family, tagsOf(f))).toList();
+    var hits = fonts.where((f) => DockTags.hit(c.query, f.family, tagsOf(f))).toList();
+    if (hits.isEmpty && c.query.trim().isNotEmpty) {   // (nothing has the words as typed: the nearest five, golf (97))
+      final near = c.near([for (final f in fonts) (f.family, '${f.family} ${tagsOf(f).join(' ')}', '')]);
+      hits = [for (final id in near) ...fonts.where((f) => f.family == id).take(1)];
+    }
     final vocab = <String, int>{};
     for (final f in hits) {
       for (final t in tagsOf(f)) {

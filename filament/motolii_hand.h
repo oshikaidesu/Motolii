@@ -358,7 +358,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         m->spent[3] += std::chrono::duration<double>(drawn - told).count(), m->many[3]++;
         m->changed = again;
         } catch (const std::exception& e) {
-        std::fprintf(stderr, "motolii: the hand's round threw: %s\n", e.what());
+        std::fprintf(stderr, "motolii: the hand's round threw while %s: %s\n", m->step.load(), e.what());
         m->trouble = std::string("the hand's round threw: ") + e.what();
         m->telling = false;
         m->changed = false;

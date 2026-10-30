@@ -85,7 +85,7 @@ void _tests3() {
     ws.shelf = 'Create';
     await t.pumpAndSettle();
     final r = ws.inside!.recipes.length; // (a recipe is a file: the shelf grows by what is in recipes/)
-    expect(find.text('${18 + r} ready'), findsOneWidget, reason: 'seventeen tiles of its own since K5 (one Repeater for Radial and Grid), Glass since 10/29 (a material is made in Create), and the recipes');
+    expect(find.text('${21 + r} ready'), findsOneWidget, reason: 'seventeen tiles of its own since K5 (one Repeater for Radial and Grid), Glass since 10/29 (a material is made in Create), Wave, Field and Scatter since 10/30 (put on as Repeater is), and the recipes');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
@@ -1430,8 +1430,8 @@ void _tests3() {
     final ws = await _pump(t), m = ws.inside!;
     final a = m.add('shape', 'rect'), b = m.add('shape', 'circle');
     expect(m.set(a, 'wave_x', .3) && m.set(a, 'wave_speed', 2) && m.say(a, 'fill', 'ff3366') && m.say(b, 'fill', '3a86ff'), isTrue, reason: m.trouble);
-    Future<void> press(String what) async {
-      final k = find.byKey(ValueKey('card-$what:Wave'));
+    Future<void> press(String what, {String card = 'Wave'}) async {
+      final k = find.byKey(ValueKey('card-$what:$card'));
       await seen(t, k);
       await t.tap(k);
       await settled(t, ws);
@@ -1443,8 +1443,11 @@ void _tests3() {
     await press('copy');
     ws.select('$b');
     await t.pumpAndSettle();
-    await press('paste');
+    // (the circle has no Wave yet, nor its card (golf_noise.md (99)): pasted on a card it has, as After Effects' Paste puts
+    //  an effect copied on the layer picked, its Wave card comes)
+    await press('paste', card: 'Path');
     expect([m.value(b, 'wave_x', 0), m.value(b, 'wave_speed', 0), m.word(b, 'fill')], [closeTo(.3, 1e-9), 2, '3a86ff'], reason: 'its wave, and nothing else of the rect: ${m.trouble}');
+    expect([for (final (title, _) in m.cards(b)) title], contains('Wave'));
     expect(m.undo() && (m.value(b, 'wave_x', 0) ?? 0) == 0, isTrue, reason: 'one step');
     expect(t.takeException(), isNull);
     await _close(t);

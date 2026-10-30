@@ -56,6 +56,10 @@ class DockCtx {
   String get chip => mem.chip[shelf] ?? 'All';
   void pickChip(String c) => set(() => mem.chip[shelf] = c);
   bool hit(String name) => query.isEmpty || name.toLowerCase().contains(query.toLowerCase());
+  /// When the words as typed find nothing, the shelf's nearest five, best first (each item its id, name and what it
+  /// does): the inside's find, RapidFuzz for a word typed wrong or in part, Japanese WordNet for a Japanese word, as the
+  /// effects shelf finds them (golf_noise.md (91), (96)); every shelf alike (97). None while nothing is typed.
+  List<String> near(Iterable<(String, String, String)> items) => query.trim().isEmpty ? const [] : ws.inside?.find(query, items) ?? const [];
   Set<String> get _stars => mem.starred;
   bool starred(String id) => _stars.contains(id);
   void star(String id) => set(() {

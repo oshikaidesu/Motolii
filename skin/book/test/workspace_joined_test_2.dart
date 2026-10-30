@@ -434,6 +434,36 @@ void _tests2() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Copies, Wave, Field and Scatter are cards put on from the Create shelf and taken off by their Reset, not cards always there (After Effects\' Add ▸ Repeater, Alight Motion\'s Repeat and Wave Warp)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final star = m.add('shape', 'star');
+    ws
+      ..reread()
+      ..select('$star')
+      ..shelf = 'Create';
+    await t.pumpAndSettle();
+    final added = ['Copies', 'Wave', 'Field', 'Scatter'];
+    expect([for (final (title, _) in m.cards(star)) title].where(added.contains), isEmpty, reason: 'none said: none shown');
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Wave');
+    await t.pumpAndSettle();
+    final tile = find.descendant(of: find.byType(CreateShelf), matching: find.text('Wave')).first;
+    await seen(t, tile);
+    await doubleTap(t, tile);
+    await settled(t, ws);
+    expect([m.value(star, 'wave_x', 0), m.value(star, 'wave_phase', 0), m.value(star, 'wave_speed', 0)], [.25, 1.5, .4], reason: m.trouble);
+    expect([for (final (title, _) in m.cards(star)) title], contains('Wave'));
+    final reset = find.byKey(const ValueKey('card-reset:Wave'));
+    await seen(t, reset);   // (the inspector builds the cards in sight: scrolled to)
+    expect(reset, findsOneWidget, reason: 'put on: its card comes');
+    await t.tap(reset);
+    await settled(t, ws);
+    expect(m.value(star, 'wave_x', 0), 0);
+    expect([for (final (title, _) in m.cards(star)) title], isNot(contains('Wave')));
+    expect(find.byKey(const ValueKey('card-reset:Wave')), findsNothing, reason: 'its Reset takes it off');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, tags: 'main', skip: !_built);
+
   testWidgets('the Depth desk is the camera\'s lens: its focal length is the zoom, a scrub of the aperture is one step', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final cube = m.add('solid', 'cube');

@@ -416,6 +416,9 @@ final _makes = <(String, List<_Make>)>[
     'Copies',
     [
       _Make('Repeater', DockG.copies, Pop.tonePlace, '', 'Copies of the picked thing: how many, in how many rows, how far bent round a centre'),
+      _Make('Wave', DockG.distort, Pop.tonePlace, '', 'The picked thing\'s copies or letters waving one after another'),
+      _Make('Field', DockG.radial, Pop.tonePlace, '', 'A round field that swells and pushes the copies it passes over'),
+      _Make('Scatter', DockG.particles, Pop.tonePlace, '', 'The copies or letters thrown about, each turned its own way'),
     ],
   ),
 ];
@@ -473,6 +476,9 @@ final _asked = {
 /// what each tells it: in a row, side by side and a little smaller each time; round a centre below it.
 const _laid = <String, Map<String, double>>{
   'Repeater': {'copies': 5, 'copy_x': 1.3, 'copy_size': .92},
+  'Wave': {'wave_x': .25, 'wave_phase': 1.5, 'wave_speed': .4},   // (the recipe Wave lines' own: filament/recipes/wave_lines.js)
+  'Field': {'field_radius': 1.4, 'field_size': 1.2, 'field_push': .6},   // (Field dots': recipes/field_dots.js)
+  'Scatter': {'scatter_x': 2.9, 'scatter_y': 1.7, 'scatter_rotate': 180, 'scatter_size': .5},   // (Confetti's: recipes/confetti.js)
 };
 
 /// A tile made on the stage as a new thing, picked; a tile of copies lays the picked thing out. Not done: the foot of
@@ -526,10 +532,17 @@ class CreateShelf extends StatelessWidget {
       _materials,
       _lights,
     ].where((e) => e.$2.isNotEmpty).toList();
-    final groups = [
+    var groups = [
       for (final (g, items) in makes)
         if (c.chip == 'All' || c.chip == g) (g, items.where((m) => c.hit(m.name)).toList()),
     ].where((e) => e.$2.isNotEmpty).toList();
+    if (groups.isEmpty && c.query.trim().isNotEmpty) {   // (nothing has the words as typed: the nearest five, each in its own group, golf (97))
+      final near = c.near([for (final (g, items) in makes) for (final m in items) (m.id, '${m.name} $g', '')]);
+      groups = [
+        for (final (g, items) in makes)
+          if (c.chip == 'All' || c.chip == g) (g, [for (final id in near) ...items.where((m) => m.id == id)]),
+      ].where((e) => e.$2.isNotEmpty).toList();
+    }
     final sel = makes.expand((e) => e.$2).where((m) => m.id == c.sel).firstOrNull;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
