@@ -94,6 +94,7 @@ class _Tile extends StatelessWidget {
   Widget build(BuildContext context) => DockHover(
     onTap: onTap,
     onDoubleTap: onApply,
+    picks: true,
     builder: (context, h) => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

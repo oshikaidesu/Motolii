@@ -102,6 +102,23 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('a tile pressed is picked as the button goes down, so the shelf\'s button makes that one (Finder picks an icon at once and opens it on a second click; golf (77))', (t) async {
+    final ws = _joined(), m = ws.inside!, before = m.things.length;
+    await _shelf(t, ws, const Size(520, 918), 'Create');
+    await t.tap(find.text('Layers').first);   // (its chip: the recipes come first)
+    await t.pumpAndSettle();
+    await t.tap(find.text('Camera').first);
+    await t.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+    expect(find.text('Camera layer'), findsOneWidget);
+    await t.tap(find.text('Null').first);
+    await t.pump();   // (no wait for a second press)
+    expect(find.text('Null layer'), findsOneWidget, reason: 'the button below is about the tile pressed last');
+    await t.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+    expect(m.things.length, before, reason: 'one press makes nothing');
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
   testWidgets('a picture picked and another picture pressed on Media: Replace shows the new one, its keys as they were (After Effects\' Replace Layer Source; P17)', (t) async {
     final ws = _joined(), m = ws.inside!;
     File('${ws.documentFolder}/still.jpg').copySync('${ws.documentFolder}/final.jpg');

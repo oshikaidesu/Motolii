@@ -167,6 +167,7 @@ class _TileState extends State<_Tile> {
       key: ValueKey('browser:file:${n.id}'),
       onTap: () => _open(n, c),
       onDoubleTap: can && !n.folder ? () => _place(c, n) : null,   // (two presses place it; carried to the stage it does the same)
+      picks: true,
       builder: (context, h) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

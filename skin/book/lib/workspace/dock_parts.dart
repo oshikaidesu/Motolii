@@ -1,7 +1,9 @@
 // The dock's shared pieces: what a shelf remembers, hover, chips, section heads, the detail strip at the foot of a shelf.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart' show kDoubleTapTimeout, kPrimaryButton;
 import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'package:flutter/widgets.dart';
 
@@ -65,30 +67,52 @@ class DockCtx {
 
 /// Hover + tap, nothing else: repaints only when the pointer enters or leaves.
 class DockHover extends StatefulWidget {
-  const DockHover({super.key, required this.builder, this.onTap, this.onDoubleTap});
+  const DockHover({super.key, required this.builder, this.onTap, this.onDoubleTap, this.picks = false});
 
-  /// Whether ⌘ was held as the last tile was pressed: read there, as the press is told only once a second press could
-  /// no longer come (a hand lets ⌘ go before that).
+  /// Whether ⌘ was held as the last tile was pressed.
   static bool cmdAtPress = false;
   final Widget Function(BuildContext context, bool hover) builder;
   final VoidCallback? onTap;
 
   /// Two presses: the item's own action at once (joined: a tile made without its foot's button).
   final VoidCallback? onDoubleTap;
+
+  /// One press only picks it (not so a font's, which sets a role's font): told as the button goes down.
+  final bool picks;
   @override
   State<DockHover> createState() => _DockHoverState();
 }
 
 class _DockHoverState extends State<DockHover> {
   bool _h = false;
+  Timer? _second;   // (while a second press would make it two)
+
+  @override
+  void dispose() {
+    _second?.cancel();
+    super.dispose();
+  }
+
+  // A tile that one press picks and two act on is picked as the button goes down, as Finder picks an icon and opens it on the
+  // second click: a press told only once a second could no longer come (Flutter's tap waits kDoubleTapTimeout beside
+  // a double tap) left the shelf's button on the tile picked before; golf (77). The second press is the double's.
+  void _down(PointerDownEvent e) {
+    DockHover.cmdAtPress = HardwareKeyboard.instance.isMetaPressed;
+    if (!widget.picks || widget.onDoubleTap == null || widget.onTap == null || e.buttons != kPrimaryButton) return;
+    final second = _second?.isActive ?? false;
+    _second?.cancel();
+    _second = second ? null : Timer(kDoubleTapTimeout, () {});
+    if (!second) widget.onTap!();
+  }
+
   @override
   Widget build(BuildContext context) => MouseRegion(
     cursor: widget.onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
     onEnter: (_) => setState(() => _h = true),
     onExit: (_) => setState(() => _h = false),
     child: _carried(Listener(   // (the press as it comes, before the gestures settle which it is)
-      onPointerDown: (_) => DockHover.cmdAtPress = HardwareKeyboard.instance.isMetaPressed,
-      child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onTap, onDoubleTap: widget.onDoubleTap, child: widget.builder(context, _h)),
+      onPointerDown: _down,
+      child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.picks && widget.onDoubleTap != null ? null : widget.onTap, onDoubleTap: widget.onDoubleTap, child: widget.builder(context, _h)),
     )),
   );
 

@@ -599,6 +599,7 @@ class _MakeTile extends StatelessWidget {
     return DockHover(
       onTap: () => c.pick(m.id),
       onDoubleTap: makes ? () => _make(c, m) : null, // (two presses make it, one step)
+      picks: true,
       builder: (context, h) => AnimatedContainer(
         duration: Mo.dur,
         curve: Mo.ease,
