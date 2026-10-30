@@ -513,7 +513,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "paste_style") ok = changes(m, (int)doc_look_put(doc(m), thing, w.c_str()));
             else if (c == "remove") ok = changes(m, (int)doc_remove(doc(m), thing));
             else if (c == "relate") ok = changes(m, (int)doc_relate(doc(m), thing, w.c_str(), m->now));
-            else if (c == "fx_file") ok = changes(m, (int)doc_fx_file(doc(m), thing, w.c_str()));   // (an effect file put at the end of the thing's effects, or taken out)
+            else if (c == "fx_file") ok = changes(m, (int)doc_fx_file(doc(m), thing, w.c_str(), m->now));   // (an effect file put at the end of the thing's effects, or taken out; a transition runs from now)
             else if (c == "fx_out") ok = changes(m, (int)doc_fx_out(doc(m), thing, w.c_str()));   // (one of its effects taken off, by its card's title)
             else if (c == "fx_eye") ok = changes(m, (int)doc_fx_eye(doc(m), thing, w.c_str()));   // (one of its effects off, or on again: word its card's title)
             else if (c == "fx_move") ok = changes(m, (int)doc_fx_move(doc(m), thing, w.c_str(), (int)std::lround(number)));   // (one of its effects moved up or down its list)   // (the things in word put in the relation `thing` as they show now)

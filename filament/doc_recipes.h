@@ -414,7 +414,12 @@ static bool doc_fx_say(Doc& d, int thing, const std::vector<std::string>& list) 
 // An effect file put at the end of a thing's effects, or taken out if it is among them (one step). Taken out, its knobs'
 // values and keys go with it, as After Effects' and Alight Motion's effect deleted takes its keyframes (golf P15,
 // golf_noise.md (67): put on again, the old keys came back); its eye (fx_off) keeps them, as Alight Motion's does.
-static bool doc_fx_file(Doc& d, int thing, const char* file) {
+// A transition put on at a moment (`now`; NAN: none said) runs there: its progress keyed 0 then and 1 a second after, so
+// the thing goes and what is under it shows, as After Effects' transition effects take a layer away (Transition
+// Completion 0 to 100%) and its transition presets lay their keys from the current time; a second, the editors' own
+// length of a transition (Premiere Pro's default, Final Cut Pro's 30 frames), pulled longer or shorter by its keys.
+// A transition is ISF's (ISF_Spec): its progress, and the endImage it goes to (golf (65): two keys a value by hand).
+static bool doc_fx_file(Doc& d, int thing, const char* file, double now = NAN) {
     std::vector<std::string> list = doc_fx_list(d, thing, true);
     const auto at = std::find(list.begin(), list.end(), file);
     const bool out = at != list.end();
@@ -425,6 +430,10 @@ static bool doc_fx_file(Doc& d, int thing, const char* file) {
     if (const DocScript* sc = out ? doc_script_of(d, file) : nullptr)
         for (const std::string& n : sc->names)
             if (!doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q", thing, n.c_str()))) d.act_ok = false;
+    if (const DocScript* sc = !out && !std::isnan(now) ? doc_script_of(d, file) : nullptr)
+        if (std::any_of(sc->knobs.begin(), sc->knobs.end(), [](const ScriptKnob& k) { return k.name == "endImage"; }))
+            for (size_t i = 0; i < sc->knobs.size(); ++i)
+                if (sc->knobs[i].name == "progress" && !(doc_key(d, thing, sc->names[i].c_str(), now, 0.0) && doc_key(d, thing, sc->names[i].c_str(), now + 1.0, 1.0))) d.act_ok = false;
     return doc_acted(d);
 }
 // One of a thing's effects (a file, or ThorVG's own by its value's name) moved `by` places in its list, After Effects'

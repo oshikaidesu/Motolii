@@ -23,6 +23,7 @@ run camera_switch.sh
 run camera_parent.sh
 run camera_motion.sh
 run fx_out_keys.sh
+run fx_transition.sh
 run pack.sh
 run letters_move.sh
 run ramp_stops.sh

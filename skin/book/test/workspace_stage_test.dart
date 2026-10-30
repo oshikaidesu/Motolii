@@ -87,6 +87,25 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('a transition put on from the shelf runs from the playhead: its progress keyed 0 there and 1 a second after (After Effects\' transition presets; golf (65))', (t) async {
+    final ws = _joined(), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$rect')
+      ..frame = 2 * Ws.fps;   // (the playhead is the window's, told to the inside by it: BRIDGE.md rule 9)
+    Future<void> settle() async {
+      for (var i = 0; i < 200 && ws.waiting; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      }
+    }
+    await settle();
+    expect(ws.screenToggle('$motoliiDir/effects/Circle Open.fs'), isTrue);
+    await settle();
+    final progress = m.values(rect).firstWhere((n) => n.endsWith('_progress'));
+    expect([m.keyMoments(rect, progress), m.keyValues(rect, progress)], [[2.0, 3.0], [0.0, 1.0]]);
+  }, skip: !insideBuilt);
+
   testWidgets('an effect put on shows its card under the thing\'s own, before the cards of what it may do besides, as Premiere Pro lays the effects under Motion and Opacity (golf (58))', (t) async {
     final ws = _joined(), m = ws.inside!;
     final text = m.add('text', ws.bodyFace);
