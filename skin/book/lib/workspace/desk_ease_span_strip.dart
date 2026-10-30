@@ -50,7 +50,8 @@ class SpanStrip extends StatelessWidget {
         ],
       ],
       right: [
-        if (onJump != null) ...[DeskChip(key: const ValueKey('ease-jump'), label: jump ? 'Jump On' : 'Jump Off', on: jump, onTap: onJump), SizedBox(width: WsT.gap)],
+        // (an end is pulled only on a stretch: with none, as Copy and Paste, not shown; golf (66))
+        if (s != null && onJump != null) ...[DeskChip(key: const ValueKey('ease-jump'), label: jump ? 'Jump On' : 'Jump Off', on: jump, onTap: onJump), SizedBox(width: WsT.gap)],
         for (final (label, tap) in [('Copy', onCopy), ('Paste', onPaste), ('Paste All', onPasteAll)])
           if (s != null && tap != null) ...[DeskChip(key: ValueKey('ease-${label.toLowerCase().replaceAll(' ', '-')}'), label: label, onTap: tap), SizedBox(width: WsT.gap)],
         DeskIconButton(size: Shape.z(18), glyph: (ink) => _ReverseGlyph(ink), onTap: onReverse),

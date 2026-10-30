@@ -94,12 +94,14 @@ void main() {
       ..frame = 30;   // (0.5 s, between its keys at 0 and 1 s)
     await t.pumpAndSettle();
     expect(find.textContaining('No stretch'), findsNothing, reason: 'the stretch from 0 to 60 is shown');
+    expect(find.byKey(const ValueKey('ease-jump')), findsOneWidget, reason: 'its ends can be pulled');
     await t.tap(find.descendant(of: find.byType(DeskEase), matching: find.text('Out')).first);
     await settled(t, ws);
     expect(m.wayOf(cube, 'x', 0), startsWith('Bezier 0 0 0.58 1'), reason: 'put on the stretch the playhead is in');
     ws.frame = 90;   // (after the last key: no stretch)
     await t.pumpAndSettle();
     expect(find.textContaining('No stretch'), findsOneWidget);
+    expect(find.byKey(const ValueKey('ease-jump')), findsNothing, reason: 'no stretch, no end to pull: the hint is not hidden under it (golf (66))');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t); // (what the desk shows is read back from the document, not kept by the window)
     await closeWorkspace(t);
