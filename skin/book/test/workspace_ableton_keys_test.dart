@@ -234,6 +234,18 @@ void main() {
     final nearLine = await carry(flag), farRight = await carry(flag + const Offset(14, 0));
     expect(nearLine, greaterThan(3), reason: 'carried');
     expect(farRight, closeTo(nearLine, 1), reason: 'carried as far as the hand went wherever on its flag it was taken, not to where the hand is');
+    ws.frame = 0;
+    await t.pumpAndSettle();
+    final shaken = await t.startGesture(flag, kind: PointerDeviceKind.mouse);   // (a click whose hand shook: taken for a drag, let go where it was)
+    await t.pump();
+    await shaken.moveBy(const Offset(3, 0));
+    await t.pump();
+    await shaken.moveBy(const Offset(-3, 0));
+    await t.pump();
+    await shaken.up();
+    await t.pumpAndSettle();
+    ws.reread();
+    expect([ws.frame, ws.marks.single.$1], [(at * Ws.fps).round(), at], reason: 'a click all the same: it goes there, the marker stays (golf_noise.md (88))');
     ws.frame = (ws.marks.single.$1 * Ws.fps).round();
     await t.pumpAndSettle();
     await t.tap(find.byKey(const ValueKey('ws-tl-mark')));
