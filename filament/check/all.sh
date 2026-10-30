@@ -24,6 +24,7 @@ run camera_parent.sh
 run camera_motion.sh
 run fx_out_keys.sh
 run fx_transition.sh
+run fx_colour.sh
 run extract.sh
 run shelf_words.sh
 run pack.sh

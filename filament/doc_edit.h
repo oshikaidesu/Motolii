@@ -150,8 +150,18 @@ static bool doc_set(Doc& d, int thing, const char* name, double is) {
         return doc_lead(d, thing, (int)is, d.stage ? d.stage->now : 0.0);
     return doc_knows(d, thing, name, &is) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q and at <> 0; insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %!.17g) on conflict do update set value = excluded.value, way = null", thing, name, thing, name, is));
 }
+static bool doc_put(Doc& d, int thing, const char* name, double at, double is);
 static bool doc_say(Doc& d, int thing, const char* name, const char* word) {
-    return doc_knows(d, thing, name, nullptr, word) && doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %Q) on conflict do update set value = excluded.value", thing, name, word));
+    if (doc_knows(d, thing, name, nullptr, word)) return doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %Q) on conflict do update set value = excluded.value", thing, name, word));
+    // (an effect's colour, ISF's one input that Motolii holds as three numbers and an alpha (isf.cpp: _x, _y, _z, _w),
+    //  said as one colour, as the Colors shelf says a colour to a card's value: each put at the stage's moment by the rule
+    //  of a value changed, a key there if it has keys (doc_put); the alpha as it was. After Effects' and Alight Motion's
+    //  effect colour is one colour; golf (83): white took three number fields)
+    const std::string base(name), hex(word), why = d.trouble;
+    if (hex.size() != 6 || hex.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos || !doc_knows(d, thing, (base + "_x").c_str())) return d.trouble = why, false;
+    doc_act(d);
+    for (int i = 0; i < 3; ++i) doc_put(d, thing, (base + "_" + "xyz"[i]).c_str(), d.stage ? d.stage->now : 0.0, std::stoi(hex.substr(2 * (size_t)i, 2), nullptr, 16) / 255.0);
+    return doc_acted(d);
 }
 // A thing taken out of a relation where it shows at that moment: no longer in it (what its values were connected to
 // is what this one started from for it, or none; a relation that started from this one for it now starts from that),

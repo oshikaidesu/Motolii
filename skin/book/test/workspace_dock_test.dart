@@ -136,6 +136,24 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('an effect\'s colour, three numbers to the inside, takes a sample of the Colors shelf as one colour when its card aims the shelf at it (golf (83))', (t) async {
+    final ws = _joined(), m = ws.inside!, rect = m.add('shape', 'rect');
+    expect(m.say(rect, 'fx', '$motoliiDir/effects/Fade Color.fs'), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$rect')
+      ..aim = 'js_Fade_Color_color';   // (its card's colour link pressed: workspace_seat.dart onAim)
+    await _shelf(t, ws, const Size(520, 918), 'Colors');
+    await t.tap(find.byKey(const ValueKey('colour-sample-ffffff')));
+    for (var i = 0; i < 200 && ws.waiting; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await t.pump();
+    }
+    expect([for (final c in ['x', 'y', 'z']) m.value(rect, 'js_Fade_Color_color_$c', 0)], [1, 1, 1], reason: 'white: the three numbers');
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
   testWidgets('a picture picked and another picture pressed on Media: Replace shows the new one, its keys as they were (After Effects\' Replace Layer Source; P17)', (t) async {
     final ws = _joined(), m = ws.inside!;
     File('${ws.documentFolder}/still.jpg').copySync('${ws.documentFolder}/final.jpg');
