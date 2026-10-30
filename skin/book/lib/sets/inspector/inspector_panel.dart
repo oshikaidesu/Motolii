@@ -30,6 +30,32 @@ final inspectorCards = <String, Widget Function(Fx card)>{
   'Trim Paths': (c) => ValuesCard(c, top: const TrimDrawing()), // (the part of the path left, its ends taken)
 };
 
+// (under its effects, as Alight Motion's list ends: before the first card of what it may do besides, doc_cards_of's order)
+int _addAt(Doc doc) {
+  final at = doc.cards.indexWhere((c) => const {'Copies', 'Wave', 'Field', 'Scatter', 'Shine', 'Motion', 'Play'}.contains(c.name));
+  return at < 0 ? doc.cards.length : at;
+}
+
+/// Alight Motion's Add Effect, under a thing's effects: the shelf of them, ready to be searched.
+class AddEffectRow extends StatelessWidget {
+  const AddEffectRow({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final doc = Ctx.of(context).doc;
+    return Hov(
+      key: const ValueKey('add-effect'),
+      onTap: doc.onAddEffect,
+      builder: (_, h) => Container(
+        height: Pop.cell,
+        margin: EdgeInsets.only(bottom: Pop.gap),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: h ? Grey.g20 : Pop.well, borderRadius: BorderRadius.all(Shape.r(6))),
+        child: Text('+ Add Effect', style: T.label(h ? Grey.g95 : Grey.g76)),
+      ),
+    );
+  }
+}
+
 /// The Inspector: one scrolling stack of the host's cards. Needs an InspHost above it.
 class InspectorPanel extends StatefulWidget {
   const InspectorPanel({super.key, this.width = 372, this.height = 720});
@@ -59,7 +85,11 @@ class _InspectorPanelState extends State<InspectorPanel> {
         const InspHeader(),
         // contract: one stack: the host's cards, Transform first, then the effects on it, then what it may do besides (Premiere Pro's Effect Controls: the effects put on under Motion and Opacity); every titled card folds on its own.
         SizedBox(height: Pop.gap),
-        for (final c in doc.cards) inspectorCards[c.name]?.call(c) ?? ValuesCard(c), // (a card the window knows, drawn by hand; one it does not (an effect, a script's knobs), drawn from what the inside says)
+        for (final (i, c) in doc.cards.indexed) ...[
+          if (doc.onAddEffect != null && i == _addAt(doc)) const AddEffectRow(),
+          inspectorCards[c.name]?.call(c) ?? ValuesCard(c), // (a card the window knows, drawn by hand; one it does not (an effect, a script's knobs), drawn from what the inside says)
+        ],
+        if (doc.onAddEffect != null && _addAt(doc) >= doc.cards.length) const AddEffectRow(),
       ],
     ];
     final panel = Focus(

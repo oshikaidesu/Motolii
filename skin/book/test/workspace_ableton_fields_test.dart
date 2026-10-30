@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lab_book/workspace/dock_parts.dart' show DockSearch;
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show Chooser, Ctx, InspectorPanel, NumField;
 
 import 'door.dart';
@@ -182,6 +183,29 @@ void main() {
     await t.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await t.pumpAndSettle();
     expect(doc.cards.map((c) => c.name).where(folded).length, greaterThan(3), reason: 'all of them');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, tags: 'main', skip: !insideBuilt);
+
+  testWidgets('Add Effect in the inspector opens the Effects shelf with its search taking the keys: Wave Warp a word away (Alight Motion\'s Add Effect)', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final a = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$a')
+      ..shelf = 'Media';
+    await t.pumpAndSettle();
+    final add = find.byKey(const ValueKey('add-effect'));
+    await seen(t, add);
+    await t.tap(add);
+    await t.pumpAndSettle();
+    expect(ws.shelf, 'Effects');
+    await t.pump();
+    final search = find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText));
+    expect(t.widget<EditableText>(search).focusNode.hasFocus, isTrue, reason: 'ready to be typed in');
+    await t.enterText(search, 'wave warp');
+    await settled(t, ws);
+    expect(find.text('Wave Warp'), findsWidgets);
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, tags: 'main', skip: !insideBuilt);

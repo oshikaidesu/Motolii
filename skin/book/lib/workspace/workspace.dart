@@ -1,5 +1,6 @@
 // The whole window: top bar, then the panes (panes.dart) — browser shelves | Stage over Timeline, Inspector over Desk, rearrangeable.
 // Each seat is its own file and reads the shared Ws.
+import 'dock_parts.dart' show askDockSearch;
 import 'dart:developer' show Timeline;
 import 'dart:async';
 import 'dart:io';

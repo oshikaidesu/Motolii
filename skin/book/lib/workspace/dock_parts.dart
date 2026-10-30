@@ -350,6 +350,15 @@ class DockFooter extends StatelessWidget {
 }
 
 /// The search well under the header: magnifier, editable text, clear.
+/// The shelf's search asked for from elsewhere (the Inspector's Add Effect): the field in sight takes the keys, or the
+/// next one to come.
+final _searchAsked = ValueNotifier(0);
+bool _searchAwaited = false;
+void askDockSearch() {
+  _searchAwaited = true;
+  _searchAsked.value++;
+}
+
 class DockSearch extends StatefulWidget {
   const DockSearch({super.key, required this.controller, required this.hint, this.trailing});
   final TextEditingController controller;
@@ -367,12 +376,24 @@ class _DockSearchState extends State<DockSearch> {
   void initState() {
     super.initState();
     _focus.addListener(_r);
+    _searchAsked.addListener(_asked);
+    if (_searchAwaited) WidgetsBinding.instance.addPostFrameCallback((_) => _asked());
   }
 
   void _r() => setState(() {});
 
+  void _asked() {
+    if (!mounted) return;
+    _searchAwaited = false;
+    _focus.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _focus.requestFocus() : null);   // (the press that asked gives the panel it came from the keys, a frame on: inspector_panel.dart)
+    WidgetsBinding.instance.scheduleFrame();
+    widget.controller.selection = TextSelection(baseOffset: 0, extentOffset: widget.controller.text.length);
+  }
+
   @override
   void dispose() {
+    _searchAsked.removeListener(_asked);
     _focus.dispose();
     super.dispose();
   }

@@ -436,4 +436,21 @@ alight_ui.md の「操作体系の全体」の良い所 7 つと、そこから�
 - [x] Option＋札の頭で全部の札を畳む・開く（Mac の開閉の三角の決まり、Finder のリスト） — 済（10/30 夜）：窓の試験（同）
 - [ ] 色の欄の当たり前（16 進の貼り付け、右クリック）：まだ見ていない
 
-合計：364 箱。
+
+## S. インスペクターの要素（AM の欄と AE の属性を 1 つずつ）（12）
+AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*Panel.kt の R.string）、AE のレイヤーの属性と並べた。10/30 夜、ユーザー：「waveはあるか？ないだろ？」：Wave Warp は効果の棚にあったが、インスペクターから足す入口が無く、無いのと同じだった。
+
+- [x] **+ Add Effect**（AM の Effects 欄の下）：押すと効果の棚が開いて検索欄に字が打てる — 済（10/30 夜）：窓の試験（`workspace_ableton_fields_test.dart`）
+- [x] Move & Transform：位置・スケール（縦横の鎖）・回転 X Y Z・アンカー
+- [ ] **Move & Transform：傾き X・Y（X SKEW・Y SKEW）**：今は図形だけ。AE は Transform 効果の Skew
+- [x] Color & Fill：None・Color・Gradient（Media は fill_media）
+- [ ] **Color & Fill：その場の色の目盛り（Color sliders）とスポイト**：今は Colors の棚へ飛ぶ。スポイトは棚にある
+- [ ] **Border：内・中・外（Inside・Center・Outside）**：今は中だけ
+- [ ] **Border：何本も足す・並べ替え・消す（Add Border）**：今は 1 本
+- [ ] **Shadow：札の中で**（AM は Border & Shadow の欄、大きさ・透明度・位置・色）：今は Drop Shadow 効果として足す
+- [x] Blending：重ね方、Opacity
+- [x] Effects：目・並べ替え・⋮（Info・Reset・Duplicate・Copy・Paste）・消す
+- [ ] **Effects：全部まとめて Copy Effects・Paste Effects**
+- [x] 効果の⋮の Reset to Defaults
+
+合計：376 箱。
