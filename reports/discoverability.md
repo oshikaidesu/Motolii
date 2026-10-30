@@ -37,3 +37,41 @@ Motolii はもう、VS Code の形のキーの表（keys.dart）と keybindings.
 7. **キーの設定画面**：全部の命令の一覧、名前でもキーでも絞る、キーを押して決める、ぶつかると赤く（VS Code の設定画面、Final Cut のキーボードの絵、Cavalry の赤く光る）。
 
 この形にすれば、操作を 1 つ足すたびに、メニュー・右クリック・検索・キー・ヒントの入口が全部そろう。
+
+## 効果が 5 万件になった時：人に書かせずに札を付ける（10/30 昼）
+
+ユーザー（10/30）：「これからどんどん fx 表現は増える、50000 件まで行ったらどうする？ 売買サイトを参考にできないかな、メルカリとか」「かれらはその情報すら入力させないようにしているよね。こっちは静的解析できるから似たアプローチが取れるはず」。棚を眺めて選ぶのは 1,200 件（glow だけで 16 枚）でもう苦しい。メルカリは写真を撮るだけで題名・カテゴリ・説明を埋め（AI 出品サポート、2024/9）、写真で探す（絵の埋め込みと近いものの検索）。効果のファイルは中身を全部読めて何度でも描けるので、同じ形が取れる：**読んで分かる札**と**描いて測って分かる札**を、置いた瞬間に自動で付ける。調べ：サブエージェント（読むだけ）、主な行は確かめた。
+
+**今あるもの**
+- ISF の読み：filament/isf.cpp。絵の入力・入力の無い物（生成）83〜86・170〜171 行、音の入力 89・141〜145 行、PASSES・PERSISTENT 70〜78 行、CATEGORIES を棚の 7 語（Glitch・Distort・Color・Film・Light・Time・Stylize）に部分一致で寄せる 201〜206 行、DESCRIPTION を説明に 207〜210 行。glslang と Tint はもう入っている（Tint の WGSL inspector と SPIRV-Cross も組んであるが使っていない）
+- 棚：dock_effects.dart（名前か説明文の部分一致で探す 47 行、札は label から 48〜58 行）、★ は ~/.motolii/effect_stars.json。効果の「最近使った」は無い（字体だけ）
+- 札の絵：effect_tiles.dart（気球の写真と Aa、8 コマ、つなぎは progress を 0→1、PERSISTENT は頭から描く）。tileSame は「見本と見分けがつかない」（ffmpeg の PSNR が 8 コマとも 40 dB 超 → NO CHANGE）で、**効果どうしが似ているかは見ていない**
+- AbsentMotion の tools/effect_showcase.json：181 本の効果ごとに写真 9 枚のどれに掛けるか・動かし方。Motolii は params と split だけ読み、photo・animate は読んでいない
+
+**数えたもの**（filament/effects）
+- .fs 420・.wgsl 168・.am 20・.mjs 4・AviUtl2 276
+- 説明が無い .fs：198 / 420（キーが無い 105、空 93）
+- カテゴリの綴りがばらばら（Color と Color Effect、Distort・Distortion・Distortion Effect、タブ入り）
+- 読むだけでもう分かる札：つなぎ 67、音で動く 7、前のコマを覚える（PERSISTENT）46、生成（絵の入力が無い）45
+
+**やること**（S 小・M 中・L 大）
+
+| やること | 借りる物（ライセンス） | Motolii のどこ | 大きさ |
+|---|---|---|---|
+| 読んで付ける札：効果 / 生成 / つなぎ、音、前のコマ、TIME、パスの数、他の物の絵、外へ描くか | Tint の WGSL inspector（Apache-2.0、組み済み）、rapidjson（使用中） | doc_recipes.h の棚の一覧に列を足す、motolii_shelves.dart で読む | S |
+| カテゴリの綴りを 1 語に寄せる | ISF と AbsentMotion のカテゴリの一覧そのもの | isf.cpp 201〜206 行 | S |
+| 効果ごとに見本の写真を選ぶ（顔・グリーンバック・格子…） | AbsentMotion の effect_showcase.json の photo（Apache-2.0） | effect_tiles.dart | S |
+| 重い・軽い（60fps の札） | m.still の前後の時間、motolii_spent（motolii_hand.h 467 行）。Dawn の時刻の問い合わせは Filament で使えるか未確認 | effect_tiles.dart | S〜M |
+| 描いて測る「何をするか」：ぼかす・色・歪む・動く | OpenCV（Apache-2.0）か scikit-image（BSD-3）：SSIM、ラプラシアンの分散、色の分布、オプティカルフロー。しきい値は Motolii 側（今の 40 dB と同じく測って決める） | fx_first.sh の横（もう Pillow・numpy を使う）、札の絵の置き場に .tsv | M |
+| 物の外へどれだけ描くか（㊿ の部屋の広さにも使う） | 借りる物なし：小さな物に掛けて、箱の外の透明度を測る | effect_tiles.dart、screen.h の spill | M |
+| 似た効果を 1 枚にまとめる（glow 16 枚） | imagehash（BSD-2）か OpenCV の img_hash（Apache-2.0）。pHash.org は GPLv3 なので使わない | 札の絵の横にハッシュ、まとめるのは dock_effects.dart | M |
+| 貼った絵で探す・言葉で探す（「光る写真」で札を付けるのにも） | SigLIP 2（コードも重みも Apache-2.0、多言語）。OpenCLIP はコードは MIT だが LAION の重みは「配って使う」のが対象外。動かすのは ONNX Runtime（MIT、合うかは未確認） | 札の絵のコマを埋め込み、探す欄は dock_effects.dart | L |
+| 埋め込みの置き場 | sqlite-vec（MIT/Apache-2.0、v1 前）。5 万 × 768 で約 154 MB、総当たりで足りる（hnswlib・FAISS は 50 万を超えてから） | 札の絵の置き場の横に別の DB | S〜M |
+
+**先例**
+- Shadertoy はタグのほかに「何が出来るか」で絞る（音を出す・音を聞く・カメラ・マルチパス）：Motolii が読むだけで分かる札と同じ種類
+- メルカリは多言語の SigLIP を自分の品物で調整して、写真検索のクリックが 50%・購入が 14% 増えた（A/B、2025 の論文 arxiv.org/abs/2510.13359）。借りる候補を SigLIP にする裏付け
+- 出典：openai.com/index/mercari、cloud.google.com のメルカリのベクトル検索の記事、huggingface.co/google/siglip2-base-patch16-224、github.com/asg017/sqlite-vec、github.com/JohannesBuchner/imagehash、shadertoy.com/howto
+
+**先の話（ユーザー 10/30）**：p5.js（Processing）や Blender の人気プリセットを「互換ではなく取り込み」。取り込んだ物も、置いた瞬間に同じ「読んで・描いて・測って札を付ける」に通せば、同じ棚に同じ探し方で並ぶ。順番は「普通に使える」の穴埋め（golf_noise.md）が先
+- Blender はジオメトリノード（ユーザー：「でもジオメトリーノードも absent motion みたいなのがいるかもしれない」）。道は 2 つ：(1) Blender を裏で走らせて（blender -b）glTF・Alembic に焼いて取り込む。Blender が計算するので確かだが、つまみをその場で動かすたびに焼き直すので 60fps で触れない。(2) AbsentMotion が Alight Motion を外から作り直したように、ジオメトリノードを Blender の外で動かす実装を借りる。Blender のコードは GPL なので、その移植も GPL になる。外で独立に書かれた物があるかは**未調査**（次に調べる）
