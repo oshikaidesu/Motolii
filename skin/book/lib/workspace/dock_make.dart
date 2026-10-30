@@ -220,7 +220,13 @@ void _fill(DockCtx c, String word) {
     return;
   }
   if (c.ws.aim case final aim?) { // (a card's colour link aimed it: said to that value, of the picked thing or of the stage)
-    c.ws.after(m.later('say', thing: t ?? 0, name: aim, word: word), (done, why) => c.set(() {
+    // (an outline coloured while it has no width comes 6 wide, as Alight Motion's border is added (AbsentMotion
+    //  Styling.kt withBorderAdded, BorderSize 6) and as the drawing tools give their edge (wsInked): one step; golf (89))
+    final edged = aim == 'stroke' && t != null && word != 'none' && (m.value(t, 'stroke_width', 0) ?? 0) <= 0;
+    if (edged) m.later('together', number: 1);
+    final said = m.later('say', thing: t ?? 0, name: aim, word: word);
+    if (edged) m.later('set', thing: t, name: 'stroke_width', number: 6);
+    c.ws.after(edged ? m.later('together') : said, (done, why) => c.set(() {
       if (done && t != null) keep(aim);
       done ? c.mem.trouble.remove('fill') : c.mem.trouble['fill'] = why;
     }));   // (without waiting)

@@ -1334,6 +1334,25 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('an outline given a colour while it has no width comes 6 wide, one step (Alight Motion\'s border; golf_noise.md (89))', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$rect')
+      ..shelf = 'Colors'
+      ..aim = 'stroke';   // (the Stroke row's colour link pressed)
+    await t.pumpAndSettle();
+    final orange = find.byKey(const ValueKey('colour-sample-f4b446'));
+    await seen(t, orange);
+    await t.tap(orange);
+    await settled(t, ws);
+    expect([m.word(rect, 'stroke'), m.value(rect, 'stroke_width', 0)], ['f4b446', 6], reason: 'seen at once: ${m.trouble}');
+    expect(m.undo() && m.word(rect, 'stroke').isEmpty && (m.value(rect, 'stroke_width', 0) ?? 0) == 0, isTrue, reason: 'one step');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a shape drawn with no ink chosen comes in a colour of its own, said, so the Inspector and the Colors shelf show it (Alight Motion\'s; golf_noise.md (85))', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     ws
