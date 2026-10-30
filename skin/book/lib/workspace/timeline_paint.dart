@@ -136,6 +136,14 @@ bool _listEq<E>(List<E> a, List<E> b) {
 /// How wide a mark's flag on the ruler is, its name in it (the ruler draws it so; a hand finds it so).
 double wtFlagWidth(String name) => _text(name, T.micro(Grey.g13).copyWith(fontWeight: FontWeight.w700)).width + 8;
 
+/// How wide a mark's flag is where it stands: its name's width, cut where the next mark is, as Logic Pro shows a
+/// marker's name only as far as the following marker (golf ⑳: 解放 at 8.0 s under M2 at 8.37 s); [xs]: every mark's x.
+double wtFlagRoom(String name, double x, Iterable<double> xs) {
+  final next = xs.where((o) => o > x).fold<double?>(null, (a, o) => a == null || o < a ? o : a);
+  final w = wtFlagWidth(name);
+  return next == null ? w : math.max(6, math.min(w, next - x - 1));
+}
+
 TextPainter _text(String s, TextStyle st) => TextPainter(
   text: TextSpan(text: s, style: st),
   textDirection: TextDirection.ltr,
@@ -188,11 +196,12 @@ class WtRulerPainter extends CustomPainter {
       if (x >= -4 && x <= s.width + 4) c.drawPath(Path()..moveTo(x - 4, 0)..lineTo(x + 4, 0)..lineTo(x, 6)..close(), p..color = WsT.toneMark);
     }
     final flags = <(Rect, TextPainter)>[];
+    final xs = [for (final (f, _) in markers) view.x(f).roundToDouble()];
     for (final (f, name) in markers) {
       final x = view.x(f).roundToDouble();
       if (x < -60 || x > s.width) continue;
       final t = _text(name, T.micro(Grey.g13).copyWith(fontWeight: FontWeight.w700));
-      flags.add((Rect.fromLTWH(x, WtM.band + 2, t.width + 8, 12), t));
+      flags.add((Rect.fromLTWH(x, WtM.band + 2, wtFlagRoom(name, x, xs), 12), t));
     }
     if (view.ppf >= 3) {
       final f0 = view.scroll.floor();
@@ -230,7 +239,10 @@ class WtRulerPainter extends CustomPainter {
         p..color = WsT.toneText,
       );
       c.drawRect(Rect.fromLTWH(x, r.bottom, 1, bottom - r.bottom), p..color = WsT.toneText);
+      c.save();
+      c.clipRect(Rect.fromLTRB(r.left, r.top, r.right - 3, r.bottom));   // (a name cut at its flag's end)
       t.paint(c, Offset(r.left + 3, r.center.dy - t.height / 2));
+      c.restore();
       t.dispose();
     }
     c.drawRect(Rect.fromLTWH(0, bottom, s.width, 1), p..color = WsT.line);

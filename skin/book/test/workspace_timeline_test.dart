@@ -62,6 +62,15 @@ void main() {
     expect([m.keyMoments(t, knob), m.value(t, knob, .5)], [[0, .5, 1], .3], reason: 'with keys: one more where it was changed, the one at 0.5 kept (before, all of them were taken away)');
   }, skip: !insideBuilt);
 
+  testWidgets('a mark\'s flag is cut where the next mark is, as Logic Pro shows a marker\'s name only as far as the following one (golf ⑳)', (t) async {
+    final full = wtFlagWidth('解放');
+    expect(full, greaterThan(11));
+    expect(wtFlagRoom('解放', 100, const [100, 300]), full, reason: 'room enough: its whole name');
+    expect(wtFlagRoom('解放', 100, const [100, 112]), 11, reason: 'the next mark 12 px on: cut there, not under it');
+    expect(wtFlagRoom('解放', 100, const [100, 101]), 6, reason: 'never less than its point');
+    expect(wtFlagRoom('M2', 112, const [100, 112]), wtFlagWidth('M2'), reason: 'the last one: its whole name');
+  });
+
   testWidgets('the timeline lays out at the reference size and smaller', (t) async {
     final j = _joined();
     await _pump(t, j.ws);

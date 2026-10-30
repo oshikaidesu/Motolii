@@ -5,9 +5,10 @@ extension _WsTimelineRuler on _WsTimelineState {
   /// The mark whose flag is under the hand, if any.
   (double, String)? _flagAt(Offset p) {
     if (p.dy < WtM.band + 1 || p.dy > WtM.band + 15) return null;
+    final xs = [for (final m in _ws!.marks) _view.x((m.$1 * Ws.fps).round()).roundToDouble()];
     for (final m in _ws!.marks.reversed) {
-      final x = _view.x((m.$1 * Ws.fps).round());
-      if (p.dx >= x - 2 && p.dx <= x + wtFlagWidth(m.$2)) return m;
+      final x = _view.x((m.$1 * Ws.fps).round()).roundToDouble();
+      if (p.dx >= x - 2 && p.dx <= x + wtFlagRoom(m.$2, x, xs)) return m;
     }
     return null;
   }
