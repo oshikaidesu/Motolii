@@ -17,7 +17,7 @@ define: NOT done: a way begins at the one key's value and ends at the other's: f
 define: NOT done: near "*": syntax error
 way: NOT done: a way is one of: Hold, Linear, Bezier (x1 y1 x2 y2), Bounce (length bounce), Elastic (a b c d), Cyclic (a b c d e), Random (a b c d e f), Steps (length smoothing), ElasticSteps (length magnitude); by name: SlowIn SlowOut SlowInSlowOut VerySlowIn VerySlowOut SpringOut SmallSpringOut BounceOut Overshoot; defined here: overshoot
 way: NOT done: x has no key at that moment: a stretch begins at a key
-way: NOT done: start does not move: keys go on x, y, z, rotate, rotate_x, rotate_y, scale_x, scale_y, scale_z, size, anchor_x, anchor_y, anchor_z, parent_rotate, parent_size, scale_assist_amount, scale_assist_damp, roll_radius, dissolve, grain, emissive
+way: NOT done: start does not move: keys go on x, y, z, rotate, rotate_x, rotate_y, scale_x, scale_y, scale_z, size, anchor_x, anchor_y, anchor_z, parent_rotate, parent_size, scale_assist_amount, scale_assist_damp, roll_radius, dissolve, grain, copy_x, copy_y, copy_rotate, copy_size, copy_wide, copy_z, copy_rotate_x, copy_rotate_y, wave_z, scatter_z, copy_turn, copy_on_offset, wave_x, wave_y, wave_rotate, wave_size, wave_speed, wave_phase, wave_noise, scatter_x, scatter_y, scatter_rotate, scatter_size, emissive
 way: NOT done: Random is said alone or with its 6 numbers (a b c d e f)
 way: NOT done: Bezier is said alone or with its 4 numbers (x1 y1 x2 y2): x1 and x2 are from 0 to 1
 define: NOT done: Bounce is one of the nine kinds already

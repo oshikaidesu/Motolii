@@ -57,7 +57,7 @@ while not broke and alone and time.time()-t<limit/2:   # (half the time: what wa
 print('alone',seen,'cut at the frame',len(trimmed),*sorted(set(trimmed)-known))
 print('no effect is cut at the frame:','yes' if set(trimmed)<=known else 'NO')
 while not broke and time.time()-t<limit:
-    part=[chains.pop(0) for _ in range(min(40,len(chains)))] or [random.sample(fx,20) for _ in range(40)]
+    part=[chains.pop(0) for _ in range(min(8,len(chains)))] or [random.sample(fx,20) for _ in range(8)]   # (8 at a time: a slow CI Mac draws 40 of them in more than draw()'s minute, and that read as standing still)
     why,o=draw(part)
     if why:
         at=min(o.count('still: done'),len(part)-1)

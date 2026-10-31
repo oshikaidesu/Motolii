@@ -94,7 +94,7 @@ void main() {
     }
     expect(find.text('still.jpg'), findsWidgets, reason: 'the picture beside the document, found by its name');
     await t.tap(find.byKey(ValueKey('browser:file:${ws.documentFolder}/still.jpg')).first);   // (picked: its foot says what it is)
-    for (var i = 0; i < 100 && find.textContaining('857 × 857').evaluate().isEmpty; i++) {   // (GStreamer's discoverer, on another isolate)
+    for (var i = 0; i < 600 && find.textContaining('857 × 857').evaluate().isEmpty; i++) {   // (GStreamer's discoverer, on another isolate; 5 seconds were too few for a CI Mac: golf (108))
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await t.pump();
     }

@@ -351,7 +351,7 @@ void _tests2() {
     expect(ws.fxOf('$rect'), ['Duotone', 'Gradient Map']);
 
     await pick('Glow');
-    expect(ws.fxOf('$rect'), contains('Glow'), reason: m.trouble);   // (AbsentMotion's am_lightglow.wgsl, the shelf's Glow: golf (79))
+    expect([for (final (title, _) in m.cards(rect)) title], contains('Glow'), reason: m.trouble);   // (AbsentMotion's am_lightglow.wgsl, the shelf's Glow: golf (79); a file's, so its card, fxOf being the inside's own)
 
     await pick('Trim Paths');
     expect(m.keyMoments(rect, 'trim'), [0, 1], reason: 'drawn on in a second, from the playhead');
