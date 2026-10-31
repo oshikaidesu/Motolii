@@ -109,7 +109,7 @@ class _WorkspaceState extends State<Workspace> {
     return '${dir.path}/clipboard_$what.motolii';
   }
 
-  static const _times = [('Align Starts', 'start'), ('Align Ends', 'end'), ('Move to Playhead', 'playhead'), ('Stagger', 'stagger'), ('Extend Start to Playhead', 'extend'), ('Trim End to Playhead', 'trim_end')];
+  static const _times = [('Align Starts', 'start'), ('Align Ends', 'end'), ('Move to Playhead', 'playhead'), ('Move End to Playhead', 'playhead_end'), ('Stagger', 'stagger'), ('Extend Start to Playhead', 'extend'), ('Trim End to Playhead', 'trim_end')];
   static const _aligns = [('Align Left', 'left'), ('Align Centre', 'centre'), ('Align Right', 'right'), ('Align Top', 'top'), ('Align Middle', 'middle'), ('Align Bottom', 'bottom'), ('Spread Across', 'across'), ('Spread Down', 'down')];
 
   /// The things picked: together if more than one is, else the one.

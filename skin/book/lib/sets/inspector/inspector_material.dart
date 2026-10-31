@@ -169,6 +169,10 @@ class _TextGroupState extends State<TextGroup> {
       textToType = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
+        if (doc.b['fold.Text'] ?? false) {   // (a folded card has no field for the keys to go to: the next build takes them)
+          textToType = true;
+          return doc.flag('fold.Text', false);
+        }
         _f.requestFocus();
         _c.selection = TextSelection(baseOffset: 0, extentOffset: _c.text.length);
       });

@@ -276,6 +276,19 @@ void _tests3() {
     await t.pumpAndSettle();
     await press(LogicalKeyboardKey.bracketRight);
     expect(m.value(b, 'duration', 0), closeTo(.25, 1e-9), reason: '⌥] trims its end');
+    await t.sendKeyEvent(LogicalKeyboardKey.bracketLeft);
+    await settled(t, ws);
+    expect(s(b), 2.75, reason: '[ moves its start here (After Effects\': Move Layer In Point to current time)');
+    ws.frame = (2.9 * Ws.fps).round();
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.bracketRight);
+    await settled(t, ws);
+    expect(s(b) + m.value(b, 'duration', 0)!, closeTo(2.9, 1e-9), reason: '] moves its end here');
+    final drawn = m.add('shape', 'rect');   // (as the window places it: no length said)
+    expect(m.set(drawn, 'start', 0), isTrue, reason: m.trouble);
+    ws.after(m.later('time_align', word: 'trim_end $drawn', number: 1));
+    await settled(t, ws);
+    expect(m.value(drawn, 'duration', 0), closeTo(1, 1e-9), reason: 'one with no length ends here too: ${m.trouble}');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
@@ -598,6 +611,26 @@ void _tests3() {
     expect(t.takeException(), isNull);
     await _close(t);
   }, tags: 'main', skip: !_built);
+
+  testWidgets('a text placed with its card folded is typed at once all the same: the card opens for it, nothing typed is lost', (t) async {
+    final ws = await _pump(t);
+    ws.reread();
+    await t.pumpAndSettle();
+    Ctx.read(t.element(find.byType(InspectorPanel))).doc.flag('fold.Text', true);
+    await t.tap(find.byKey(const ValueKey('ws-tool-5')));
+    await t.pumpAndSettle();
+    await t.tapAt(t.getRect(find.byKey(const ValueKey('ws-stage-comp'))).center);
+    for (var i = 0; i < 200 && ws.selected == null; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    await t.pumpAndSettle();
+    final field = find.byWidgetPredicate((w) => w is EditableText && w.focusNode.debugLabel == 'text-content');
+    expect(field, findsOneWidget, reason: 'the card open');
+    expect(t.widget<EditableText>(field).focusNode.hasFocus, isTrue, reason: 'the keys in it');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
 
   testWidgets('a text placed with the Inspector short is typed at once all the same: the Text card, low in the stack, is made for it and comes into sight', (t) async {
     final ws = await _pump(t);

@@ -29,6 +29,8 @@ const defaultKeys = <(String, String)>[
   ('cmd+g', 'thing.group'),   // (Figma's, Keynote's: Group)
   ('cmd+shift+g', 'thing.ungroup'),
   ('cmd+e', 'thing.split'),   // (Live 42.5: Split)
+  ('[', 'time.playhead'),   // (After Effects': Move Layer In Point to current time, Out Point)
+  (']', 'time.playhead_end'),
   ('alt+[', 'time.extend'),   // (Final Cut Pro: Trim Start, Trim End)
   ('alt+]', 'time.trim_end'),
   ('cmd+r', 'thing.rename'),   // (Live 42.5, 42.19)

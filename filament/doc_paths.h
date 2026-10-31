@@ -585,18 +585,21 @@ static bool doc_sequence(Doc& d, double overlap, double rate) {
 // trim takes it). A thing moved takes its keys with it, as Sequence moves them. One step.
 static bool doc_time_align(Doc& d, const std::vector<int>& things, const std::string& how, double now) {
     if (things.empty()) return d.trouble = "nothing to line up", false;
+    const double whole = doc_seconds(d);
+    const auto lasting = [&](int t) { return doc_lasts(d, t) > 0.0 ? doc_lasts(d, t) : std::max(1e-3, whole - doc_number(d, t, "start", 0, 0)); };   // (no length said, as a thing drawn in the window has: to the document's end, as doc_time_stretch reads it)
     double first = 1e18, last = -1e18;
-    for (const int t : things) first = std::min(first, doc_number(d, t, "start", 0, 0)), last = std::max(last, doc_number(d, t, "start", 0, 0) + doc_lasts(d, t));
+    for (const int t : things) first = std::min(first, doc_number(d, t, "start", 0, 0)), last = std::max(last, doc_number(d, t, "start", 0, 0) + lasting(t));
     doc_act(d);
     bool ok = true;
     double after = doc_number(d, things[0], "start", 0, 0);
     for (const int t : things) {
         if (!ok) break;
-        const double was = doc_number(d, t, "start", 0, 0), lasts = doc_lasts(d, t);
+        const double was = doc_number(d, t, "start", 0, 0), lasts = lasting(t);
         double to = was;
         if (how == "start") to = first;
         else if (how == "end") to = last - lasts;
         else if (how == "playhead") to = now;
+        else if (how == "playhead_end") to = now - lasts;
         else if (how == "stagger") to = after, after += lasts;
         else if (how == "extend") {
             if (now >= was + lasts - 1e-3) continue;   // (the playhead past its end: nothing to draw out to)
@@ -606,7 +609,7 @@ static bool doc_time_align(Doc& d, const std::vector<int>& things, const std::st
         } else if (how == "trim_end") {   // (Final Cut Pro's Trim End: its end to the playhead, the playhead inside it)
             if (now > was + 1e-3 && now < was + lasts - 1e-3) ok = doc_set(d, t, "duration", now - was);
             continue;
-        } else { ok = false, d.trouble = "lined up by start, end, playhead, stagger, extend or trim_end"; break; }
+        } else { ok = false, d.trouble = "lined up by start, end, playhead, playhead_end, stagger, extend or trim_end"; break; }
         to = std::max(0.0, to);
         if (std::fabs(to - was) > 1e-9) ok = doc_set(d, t, "start", to) && doc_keys_by(d, t, to - was);
     }
