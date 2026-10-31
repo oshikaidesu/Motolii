@@ -79,11 +79,12 @@ void main() {
       ..pickKey((layer: '$cube', frame: 0))
       ..front('Ease');   // (a pane of its own since c1d8253)
     await t.pumpAndSettle();
-    for (final (tile, said) in const [('In', 'Bezier 0.42 0 1 1'), ('Out', 'Bezier 0 0 0.58 1')]) {
-      await t.tap(find.byKey(ValueKey('ease.$tile')));
-      await settled(t, ws);
-      expect(m.wayOf(cube, 'x', 0), startsWith(said), reason: tile);
-    }
+    await t.tap(find.byKey(const ValueKey('ease.Bounce')));
+    await settled(t, ws);
+    expect(m.wayOf(cube, 'x', 0), startsWith('Bounce'), reason: m.trouble);
+    expect(m.way(cube, 'x', 0, 'Bezier 0 0 0.58 1'), isTrue, reason: m.trouble);
+    ws.reread();
+    await t.pumpAndSettle();
     await t.tap(find.byKey(const ValueKey('ease-reverse')));
     await settled(t, ws);
     expect(m.wayOf(cube, 'x', 0), startsWith('Bezier 0.42 0 1 1'), reason: 'Out turned is In');
@@ -94,9 +95,9 @@ void main() {
       ..frame = 30;   // (0.5 s, between its keys at 0 and 1 s)
     await t.pumpAndSettle();
     expect(find.textContaining('between two keys'), findsNothing, reason: 'the stretch from 0 to 60 is shown');
-    await t.tap(find.byKey(const ValueKey('ease.Out')));
+    await t.tap(find.byKey(const ValueKey('ease.Linear')));
     await settled(t, ws);
-    expect(m.wayOf(cube, 'x', 0), startsWith('Bezier 0 0 0.58 1'), reason: 'put on the stretch the playhead is in');
+    expect(m.wayOf(cube, 'x', 0), 'Linear', reason: 'put on the stretch the playhead is in, a curve back straight');
     ws.frame = 90;   // (after the last key: no stretch)
     await t.pumpAndSettle();
     expect(find.textContaining('between two keys'), findsOneWidget, reason: 'no stretch: it says how to have one (golf (66))');
@@ -146,7 +147,7 @@ void main() {
     await closeWorkspace(t);
   }, skip: !insideBuilt);
 
-  testWidgets('Ease: AbsentMotion\'s panel: the family\'s shapes beside the graph, the other families a press away, each shape\'s own handles on its curve', (t) async {
+  testWidgets('Ease: the shapes in one row beside the graph, a press each, each shape\'s own handles on its curve', (t) async {
     final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
     final cube = m.add('solid', 'cube');
     expect(m.key(cube, 'x', 0, 0) && m.key(cube, 'x', 1, 1), isTrue, reason: m.trouble);
@@ -155,13 +156,9 @@ void main() {
       ..pickKey((layer: '$cube', frame: 0))
       ..front('Ease');
     await t.pumpAndSettle();
-    for (final name in ['Linear', 'In', 'Out', 'In-out']) {
-      expect(find.byKey(ValueKey('ease.$name')), findsOneWidget, reason: 'the family the stretch is of');
+    for (final name in ['Linear', 'Bounce', 'Elastic', 'Cyclic', 'Random', 'Steps', 'ElasticSteps']) {
+      expect(find.byKey(ValueKey('ease.$name')).hitTestable(), findsOneWidget, reason: 'in sight, nothing to open');
     }
-    expect(find.byKey(const ValueKey('ease.Cyclic')), findsNothing, reason: 'the others a press away');
-    await t.tap(find.byKey(const ValueKey('ease.family.1')));
-    await settled(t, ws);
-    expect(m.wayOf(cube, 'x', 0), startsWith('Bounce'), reason: 'a family pressed: its first shape on the stretch');
     await t.tap(find.byKey(const ValueKey('ease.Cyclic')));
     await settled(t, ws);
     final said = m.wayOf(cube, 'x', 0).split(' ');

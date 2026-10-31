@@ -22,26 +22,19 @@ String easeGoes(List<String> cards) => 'a + (b - a) * ${[for (final c in cards) 
 /// A card, as the way it says.
 Ease easeCard(String word, Motolii? m) {
   final e = heard(word);
-  return easeOther(e) && m != null ? Ease(e.kind, e.p1, e.p2, e.name, [for (var i = 0; i <= 48; i++) m.wayAt(word, i / 48)]) : e;
+  return easeOther(e) && m != null ? Ease(e.kind, e.p1, e.p2, e.name, [for (var i = 0; i <= 96; i++) m.wayAt(word, i / 96)]) : e;
 }
 
 /// The cards laid as one way; a card left alone: itself.
 Ease easeLaid(List<Ease> cards) => cards.length == 1
     ? cards.single
     : Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), [for (final c in cards) said(c).replaceAll(' ', _space)].join(_over), [
-        for (var i = 0; i <= 48; i++) cards.fold<double>(1, (v, c) => v * c.at(i / 48)),
+        for (var i = 0; i <= 96; i++) cards.fold<double>(1, (v, c) => v * c.at(i / 96)),
       ]);
 
-String _word(Ease e) => easeName(e)?.split(' ').first ?? 'Bezier';
-
-/// What a way is called on its tile: those it is laid from, each by its name.
-String easeTitle(Ease e) {
-  final s = said(e);
-  return easeIsLaid(s) ? [for (final c in easeCards(s)) _word(heard(c))].join(' $_over ') : e.name ?? '';
-}
-
-/// The cards of a way laid from more than one, the top edge of each seen behind the next and the graph the card in
-/// front, as Apple Wallet stacks its cards. One carried off the stack comes off.
+/// The flow: the ways laid, top to bottom, each multiplied by the next (the maker's arrows, 10/31; Blender's stack), what
+/// they make the graph beside them; an empty frame under them for the next (Monster Train's empty slots: it says it takes
+/// one, and nothing need be learnt). A card carried off the flow comes off.
 class EaseCards extends StatelessWidget {
   const EaseCards({super.key, required this.cards, required this.onOff});
   final List<Ease> cards;
@@ -49,37 +42,66 @@ class EaseCards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final high = (Shape.z(44) / cards.length).clamp(Shape.z(14), Shape.z(24));   // (more cards, less of each: the graph keeps its room)
-    Widget edge(int i, Ease c) => Container(
-      height: high,
-      margin: EdgeInsets.symmetric(horizontal: Shape.s(4.0 * (cards.length - i))),
-      padding: EdgeInsets.symmetric(horizontal: Shape.s(6)),
-      decoration: BoxDecoration(color: WsT.raised, borderRadius: BorderRadius.vertical(top: Shape.r(6)), border: Border(top: BorderSide(color: Grey.g38))),
-      child: Row(
-        children: [
-          if (high >= Shape.z(18)) ...[
-            SizedBox(width: Shape.z(30), height: Shape.z(16), child: CustomPaint(painter: EaseThumb(c, Grey.g91, Grey.g38))),
-            SizedBox(width: Shape.s(6)),
+    final side = Size.square(Shape.z(30));
+    Widget card(Ease c) => SizedBox.fromSize(size: side, child: PresetTile(c, on: true, onTap: () {}, carried: false));
+    Widget arrow() => CustomPaint(size: Size(side.width, Shape.z(12)), painter: _Arrow(Grey.g56));
+    return ColoredBox(
+      color: WsT.card,
+      child: SingleChildScrollView(
+        padding: EdgeInsets.symmetric(vertical: Shape.s(4)),
+        child: Column(
+          children: [
+            for (final (i, c) in cards.indexed) ...[
+              if (i > 0) arrow(),
+              cards.length < 2
+                  ? card(c)
+                  : Draggable<int>(
+                      key: ValueKey('ease.card.$i'),
+                      data: i,
+                      dragAnchorStrategy: pointerDragAnchorStrategy,
+                      feedback: easeHeld(card(c)),
+                      childWhenDragging: Opacity(opacity: .3, child: card(c)),
+                      onDraggableCanceled: (_, _) => onOff(i),   // (let go on the flow or the graph it is accepted there, and stays)
+                      child: card(c),
+                    ),
+            ],
+            arrow(),
+            CustomPaint(key: const ValueKey('ease.slot'), size: side, painter: _Slot(Grey.g38)),
           ],
-          Text(_word(c), maxLines: 1, style: T.micro(Grey.g91).copyWith(fontSize: T.px(10), fontWeight: FontWeight.w600)),
-        ],
+        ),
       ),
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final (i, c) in cards.indexed)
-          Draggable<int>(
-            key: ValueKey('ease.card.$i'),
-            data: i,
-            dragAnchorStrategy: pointerDragAnchorStrategy,
-            feedback: easeHeld(PresetTile(c, on: false, onTap: () {}, label: _word(c), carried: false)),
-            childWhenDragging: Opacity(opacity: .3, child: edge(i, c)),
-            onDraggableCanceled: (_, _) => onOff(i),   // (let go on the stack it is accepted there, and stays)
-            child: edge(i, c),
-          ),
-      ],
-    );
   }
+}
+
+class _Arrow extends CustomPainter {
+  const _Arrow(this.ink);
+  final Color ink;
+  @override
+  void paint(Canvas c, Size s) {
+    final x = s.width / 2, p = Paint()..color = ink..strokeWidth = 1.4..style = PaintingStyle.stroke..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;
+    c.drawLine(Offset(x, 1), Offset(x, s.height - 2), p);
+    c.drawPath(Path()..moveTo(x - 3, s.height - 5)..lineTo(x, s.height - 2)..lineTo(x + 3, s.height - 5), p);
+  }
+
+  @override
+  bool shouldRepaint(_Arrow o) => o.ink != ink;
+}
+
+class _Slot extends CustomPainter {
+  const _Slot(this.ink);
+  final Color ink;
+  @override
+  void paint(Canvas c, Size s) {
+    final k = s.width / 68, box = RRect.fromRectAndRadius(Rect.fromLTWH(3 * k, 4 * k, 61 * k, 60 * k), Radius.circular(8 * k));
+    final line = Paint()..color = ink..strokeWidth = 1.2..style = PaintingStyle.stroke;
+    for (final m in (Path()..addRRect(box)).computeMetrics()) {
+      for (var d = 0.0; d < m.length; d += 7) {
+        c.drawPath(m.extractPath(d, d + 4), line);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Slot o) => o.ink != ink;
 }

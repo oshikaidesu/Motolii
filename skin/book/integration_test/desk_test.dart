@@ -214,10 +214,6 @@ void main() {
     // the one at 0.5) given it from its tile; still at both keys, other than straight between.
     ws.pickKey((layer: '$a', frame: 0));
     await open('Ease');
-    await t.tap(find.byKey(const ValueKey('ease.family.1')));
-    await t.pump();
-    await wait(100);
-    await t.pump();
     await t.tap(find.byKey(const ValueKey('ease.Random')));
     await t.pump();
     await wait(100);
@@ -236,7 +232,7 @@ void main() {
     await t.pump();
     await wait(100);
     final kept = m.wayOf(a, 'opacity', 0);
-    await t.tap(find.byKey(const ValueKey('ease.family.0')));
+    await t.tap(find.byKey(const ValueKey('ease.Linear')));
     await t.pump();
     await wait(100);
     final straight = m.wayOf(a, 'opacity', 0);

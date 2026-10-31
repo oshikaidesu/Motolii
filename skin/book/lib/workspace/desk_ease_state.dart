@@ -191,7 +191,7 @@ class DeskEaseState extends State<DeskEase> {
       var ease = _pending ?? (at.isEmpty ? easePreset('Linear') : heard(m.wayOf(int.parse(span!.layer.id), at.keys.first, at.values.first)));
       if (easeOther(ease) && ease.drawn == null) {
         // (no seat for this kind: its curve is the inside's own working of it, as said now)
-        ease = Ease(ease.kind, ease.p1, ease.p2, ease.name, [for (var i = 0; i <= 48; i++) m.wayAt(ease.name!, i / 48)]);
+        ease = Ease(ease.kind, ease.p1, ease.p2, ease.name, [for (var i = 0; i <= 96; i++) m.wayAt(ease.name!, i / 96)]);
       }
       void set(Ease e) {
         setState(() => _pending = e);
@@ -215,12 +215,12 @@ class DeskEaseState extends State<DeskEase> {
     return _body(ws, span, ease, (e) => setState(() => store[id] = e));
   }
 
-  // The panel as AbsentMotion's EasingPanel.kt lays it: the left column, the graph, the shapes, the families, their widths its weights.
+  // The panel as AbsentMotion's EasingPanel.kt lays it, its widths its weights: the left column, the graph, the shapes.
   Widget _body(Ws ws, EaseSpan? span, Ease ease, ValueChanged<Ease> set) {
     final cards = easeIsLaid(said(ease)) ? [for (final c in easeCards(said(ease))) easeCard(c, ws.inside)] : [ease];
     Ease laidOn(Ease e) => easeLaid([...cards, for (final c in easeCards(said(e))) easeCard(c, ws.inside)]);
     final pile = _held == null ? cards : [for (final c in easeCards(said(_held!))) easeCard(c, ws.inside)];
-    final family = easeFamilyOf(ease), ways = unseated(ws), bezier = family == 0;
+    final bezier = easeIsBezier(ease);
     final overshoot = bezier && !_noOver && (easeOvershoot || _overLocked || [ease.p1.dy, ease.p2.dy].any((y) => y < 0 || y > 1));
     _overLocked = overshoot;
     final reverse = ease.reversed();
@@ -247,11 +247,11 @@ class DeskEaseState extends State<DeskEase> {
           ),
         ),
         Expanded(
-          flex: 575,
+          flex: 575 + 169,
           child: DragTarget<Object>(
             onWillAcceptWithDetails: (d) {
               if (d.data case final Ease e) setState(() => _held = laidOn(e));
-              return true;   // (a card of the stack too: let go on it, it stays)
+              return true;   // (a card of the flow too: let go on it, it stays)
             },
             onLeave: (_) => setState(() => _held = null),
             onAcceptWithDetails: (d) {
@@ -261,11 +261,11 @@ class DeskEaseState extends State<DeskEase> {
             builder: (_, hot, _) => DecoratedBox(
               position: DecorationPosition.foreground,
               decoration: BoxDecoration(border: hot.isEmpty ? null : Border.all(color: WsT.accent, width: 2)),   // (as the stage shows a tile held over it)
-              child: Column(
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (pile.length > 1) EaseCards(cards: pile, onOff: (i) => set(easeLaid([...cards]..removeAt(i)))),
                   Expanded(
+                    flex: 575,
                     child: ColoredBox(
                       color: WsT.well,
                       child: Stack(
@@ -281,13 +281,13 @@ class DeskEaseState extends State<DeskEase> {
                       ),
                     ),
                   ),
+                  Expanded(flex: 169, child: EaseCards(cards: pile, onOff: (i) => set(easeLaid([...cards]..removeAt(i))))),
                 ],
               ),
             ),
           ),
         ),
-        Expanded(flex: 169, child: EasePresets(ease: ease, shapes: easesOfFamily(family, ways), onPick: set)),
-        Expanded(flex: 168, child: EaseFamilies(family: family, ways: ways, onPick: set)),
+        Expanded(flex: 169, child: EaseShapes(ease: ease, shapes: easeRow(unseated(ws)), onPick: set)),
       ],
     );
   }

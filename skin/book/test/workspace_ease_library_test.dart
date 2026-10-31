@@ -3,7 +3,6 @@ import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
-import 'package:lab_book/workspace/desk_ease_cards.dart' show easeTitle;
 import 'package:lab_book/workspace/desk_ease_state.dart' show easeOvershoot;
 import 'package:lab_book/workspace/desk_ease_graph.dart';
 
@@ -98,8 +97,9 @@ void main() {
       ..pickKey((layer: '$cube', frame: 0))
       ..front('Ease');
     await t.pumpAndSettle();
-    await t.tap(_in(find.byKey(const ValueKey('ease.In'))));
-    await settled(t, ws);
+    expect(m.way(cube, 'x', 0, 'Bezier 0.42 0 1 1'), isTrue, reason: m.trouble);
+    ws.reread();
+    await t.pumpAndSettle();
     final alone = m.wayOf(cube, 'x', 0);
     expect(alone, startsWith('Bezier 0.42'), reason: m.trouble);
     final graph = _in(find.byType(EaseGraph));
@@ -114,7 +114,7 @@ void main() {
       await settled(t, ws);
     }
 
-    await carry(_in(find.byKey(const ValueKey('ease.family.1'))), t.getCenter(graph), held: () async {
+    await carry(_in(find.byKey(const ValueKey('ease.Bounce'))), t.getCenter(graph), held: () async {
       expect(t.widget<EaseGraph>(graph).ease.name, contains('×'), reason: 'what it would make, seen while held');
       expect(m.wayOf(cube, 'x', 0), alone, reason: 'nothing changed until it is let go');
     });
@@ -123,23 +123,24 @@ void main() {
     expect((await m.shownAt([(cube, 'x', .4)])).single, closeTo(m.wayAt(alone, .4) * m.wayAt('Bounce', .4), .02), reason: 'the two multiplied (wayAt: read off the picture\'s curve of it, a step at a time)');
     expect(await m.shownAt([(cube, 'x', 0), (cube, 'x', 1)]), [0, 1], reason: 'on its keys at both ends');
     expect(_in(find.byKey(const ValueKey('ease.card.1'))), findsOneWidget, reason: 'each a card');
-    expect(easeTitle(unseated(ws).firstWhere((e) => e.name == laid)), 'In × Bounce', reason: 'and a way of the document, a tile');
+    expect(unseated(ws).map((e) => e.name), contains(laid), reason: 'and a way of the document, a tile');
+    expect(_in(find.byKey(const ValueKey('ease.slot'))), findsOneWidget, reason: 'and room for the next');
     expect(m.undo() && m.wayOf(cube, 'x', 0) == alone, isTrue, reason: 'one step');
     expect(m.redo() && m.wayOf(cube, 'x', 0) == laid, isTrue);
     ws.reread();
     await t.pumpAndSettle();
-    final out = t.getCenter(find.byKey(const ValueKey('ease.family.0')));
+    final out = t.getCenter(find.byKey(const ValueKey('ease.Linear')));
     await carry(_in(find.byKey(const ValueKey('ease.card.1'))), t.getCenter(_in(find.byKey(const ValueKey('ease.card.0')))));
     expect(m.wayOf(cube, 'x', 0), laid, reason: 'let go among them: it stays');
     await carry(_in(find.byKey(const ValueKey('ease.card.1'))), out);
     expect(m.wayOf(cube, 'x', 0), alone, reason: 'carried out: it comes off, the one left alone');
     expect(_in(find.byKey(const ValueKey('ease.card.0'))), findsNothing, reason: 'one way: its numbers again');
-    await carry(_in(find.byKey(const ValueKey('ease.family.1'))), t.getCenter(graph));
+    await carry(_in(find.byKey(const ValueKey('ease.Bounce'))), t.getCenter(graph));
     expect(m.wayOf(cube, 'x', 0), contains('×'), reason: m.trouble);
-    await t.tap(_in(find.byKey(const ValueKey('ease.family.0'))));
+    await t.tap(_in(find.byKey(const ValueKey('ease.Linear'))));
     await settled(t, ws);
     expect(m.wayOf(cube, 'x', 0), 'Linear', reason: 'a press: in place of them all');
-    await carry(_in(find.byKey(const ValueKey('ease.family.1'))), t.getCenter(graph));
+    await carry(_in(find.byKey(const ValueKey('ease.Bounce'))), t.getCenter(graph));
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await closeWorkspace(t);
