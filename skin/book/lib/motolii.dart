@@ -322,10 +322,13 @@ class Motolii {
 
 /// How a value is shown to a hand (Motolii.shown): look, unit, plain name, knob span, folded away.
 class Shown {
-  const Shown(this.look, this.unit, this.label, this.low, this.high, this.fold);
+  const Shown(this.look, this.unit, this.label, this.low, this.high, this.fold, {this.open = false});
   final String look, unit, label;
   final double low, high;
 
   /// The fold it lies in on its card, named by what the fold holds (null: on the card's first row).
   final String? fold;
+
+  /// [low] and [high] are how far its knob goes; more is taken typed (the inside's doc_edit.h).
+  final bool open;
 }

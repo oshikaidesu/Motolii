@@ -80,6 +80,43 @@ void main() {
     await closeWorkspace(t);
   }, tags: 'main', skip: !insideBuilt);
 
+  testWidgets('an effect\'s number goes past its knob when typed, never past 0, and a scrub stays where it was typed (After Effects\' slider and valid ranges)', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final a = m.add('shape', 'rect');
+    expect(m.say(a, 'fx', '$motoliiDir/effects/am_circularripple.wgsl'), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$a');
+    await t.pumpAndSettle();
+    const radius = 'js_am_circularripple_radius';
+    final x = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_$radius');
+    final typing = find.descendant(of: x, matching: find.byType(EditableText));
+    Future<void> type(String said) async {
+      await seen(t, x);
+      await t.tap(x);
+      await t.pumpAndSettle();
+      await t.sendKeyEvent(LogicalKeyboardKey.enter);
+      await t.pumpAndSettle();
+      t.widget<EditableText>(typing).controller.text = said;
+      await t.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settled(t, ws);
+    }
+    await type('16');
+    expect(m.value(a, radius, 0), 16, reason: 'its author\'s 0.8 is where the knob ends, not all it takes');
+    await type('-3');
+    expect(m.value(a, radius, 0), 0, reason: 'a range from 0 holds at 0');
+    await type('4');
+    final at = t.getCenter(x), hand = await t.startGesture(at);
+    await hand.moveBy(const Offset(12, 0));
+    await hand.moveBy(const Offset(6, 0));
+    await t.pump();
+    await hand.up();
+    await settled(t, ws);
+    expect(m.value(a, radius, 0), greaterThanOrEqualTo(4), reason: 'a scrub does not throw it back to the knob\'s end');
+    expect(m.set(a, radius, -1), isFalse);
+    await closeWorkspace(t);
+  }, tags: 'main', skip: !insideBuilt);
+
   testWidgets('a right click on any number offers Reset, Copy, Paste and its keys, on a row or an effect\'s knob alike (After Effects, Blender; all by the mouse alone)', (t) async {
     final ws = await openWorkspace(t), m = ws.inside!;
     final a = m.add('shape', 'rect');

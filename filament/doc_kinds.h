@@ -127,7 +127,7 @@ static const char* const doc_relations = "around row follow push group";   // (t
 static const char* const doc_shapes = "ring gem cube ball";             // (the kit's own shapes a solid may be)
 // (whether a value is keyed, in SQLite's words: see doc_key)
 #define DOC_KEYED "(select count(*) > 1 or max(at) <> 0 or max(way) is not null from fact where thing = %d and name = %Q)"
-struct DocValue { const char* name; const char* kinds; double low, high; bool moves; const char* words; };
+struct DocValue { const char* name; const char* kinds; double low, high; bool moves; const char* words; bool open = false; };   // (open: low and high are how far its knob goes, more is taken typed, After Effects' slider and valid ranges, PF_FloatSliderDef)
 static const DocValue doc_values[] = {
     {"x", "film picture text solid shape camera light behaviour", -1e4, 1e4, true, nullptr}, {"y", "film picture text solid shape camera light behaviour", -1e4, 1e4, true, nullptr}, {"z", doc_kinds, -1e4, 1e4, true, nullptr},   // (a group's own: how far its things are away when out)
     {"rotate", "film picture text solid shape camera light behaviour", -1e6, 1e6, true, nullptr}, {"rotate_x", "film picture text solid shape camera light behaviour", -1e6, 1e6, true, nullptr}, {"rotate_y", "film picture text solid shape camera light behaviour", -1e6, 1e6, true, nullptr},   // (a relation's own: added to each of its things in turn)
@@ -419,4 +419,4 @@ struct DocCard { const char* title; const char* names; const char* when = nullpt
 // in, a name in plain words, the span its knob covers (the value itself may go further, as its range says) and
 // the name of the fold it lies in on its card, if it is folded away (named by what the fold holds; a card's first
 // row holds eight at most, as on Ableton's Push).
-struct DocShown { const char* name; const char* look; const char* unit; const char* label; double low, high; const char* fold; };
+struct DocShown { const char* name; const char* look; const char* unit; const char* label; double low, high; const char* fold; bool open = false; };

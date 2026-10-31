@@ -81,7 +81,7 @@ List<Fx> _makeCards(Ws ws, Motolii m, int t) {
         _ => lo < 0 && hi > 0 ? '@ui(bipolar)' : '@ui(bar)',
       };
       final whole = sh?.look == 'count' || sh?.look == 'onoff' || sh?.look == 'seed';
-      return '  /// $label $ui @range($lo, $hi) @unit(${sh?.unit ?? ''}) @default(${_shown(m, t, n, m.value(t, n, at) ?? lo0)})\n  $n: ${whole ? 'u32' : 'f32'},';
+      return '  /// $label $ui @range($lo, $hi)${sh?.open == true ? ' @open' : ''} @unit(${sh?.unit ?? ''}) @default(${_shown(m, t, n, m.value(t, n, at) ?? lo0)})\n  $n: ${whole ? 'u32' : 'f32'},';
     }
     return '  /// $label${const ['numbers', 'colours', 'words', 'file'].contains(sh?.look) ? ' @unit(${sh!.look})' : ''}\n  $n: vec3<f32>,'; // (any word: colours, six digits each, given from the Colors shelf; or numbers, one for each copy)
   }

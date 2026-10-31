@@ -228,7 +228,7 @@ const char* motolii_shown(Motolii* m, const char* name) {
     return by_look(m, [=] {
         const DocShown* s = doc_shown_of(*m->d, name);
         char line[512] = "";
-        if (s) std::snprintf(line, sizeof line, "%s\t%s\t%s\t%g\t%g\t%s", s->look, s->unit, s->label, s->low, s->high, s->fold ? s->fold : "");
+        if (s) std::snprintf(line, sizeof line, "%s\t%s\t%s\t%g\t%g\t%s\t%d", s->look, s->unit, s->label, s->low, s->high, s->fold ? s->fold : "", (int)s->open);
         return (said_word() = line).c_str();
     });
 }

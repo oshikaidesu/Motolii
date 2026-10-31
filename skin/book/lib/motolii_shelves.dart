@@ -93,7 +93,7 @@ extension MotoliiShelves on Motolii {
     for (final part in _thing.values) {
       if ((part['shown'] as Map<String, dynamic>?)?[name] case final String said) {
         final f = said.split('\t');
-        return f.length < 6 ? null : Shown(f[0], f[1], f[2], double.parse(f[3]), double.parse(f[4]), f[5].isEmpty ? null : f[5]);
+        return f.length < 6 ? null : Shown(f[0], f[1], f[2], double.parse(f[3]), double.parse(f[4]), f[5].isEmpty ? null : f[5], open: f.length > 6 && f[6] == '1');
       }
     }
     return null;

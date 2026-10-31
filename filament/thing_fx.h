@@ -149,6 +149,7 @@ struct ThingFx {
     utils::Entity eye;                     // (its own camera's: told the stage's each picture, as samples/rendertarget.cpp's offscreen camera is)
     Camera* camera = nullptr;
     double box[4] = {0, 0, 0, 0};          // (where it is seen, in points of the stage: left, top, right, bottom)
+    double reach = 128.0;                  // (points of room round it for what its effects draw outside it: doc_fx_reach)
     bool world = false;                    // (its sheet stands where it lies in the world, its picture filmed square to it: thing_fx_stand; else laid on the screen)
     double own[5] = {0, 0, 0, 0, 0};       // (stood: where it is on its picture, its middle, its width and height, in its points, and how many points a unit of the world)
     math::mat4 square;                     // (stood: where its picture is filmed from, the thing's own place, unscaled)
@@ -257,7 +258,7 @@ static void thing_fx_face(Stage& s, ThingFx& e, const math::mat4& place, float2 
 // is as sharp as it is without them. Its sheet lies where it lies.
 static void thing_fx_stand(Stage& s, ThingFx& e, const math::mat4& place, float2 half, double seen) {
     const double ppp = (double)s.view->getViewport().width / std::max(1, s.w), usual = s.h / (12.0 * std::tan(15.0 * M_PI / 180.0));   // (points a unit of the world, by the stage's own eye: doc_moment.h)
-    const double room = 128.0 / usual, sx = length(place[0].xyz), sy = length(place[1].xyz), wide = half.x * sx + room, high = half.y * sy + room;
+    const double room = e.reach / usual, sx = length(place[0].xyz), sy = length(place[1].xyz), wide = half.x * sx + room, high = half.y * sy + room;
     const double point = std::min(std::max(usual, seen), 2048.0 / (ppp * std::max(wide, high)));   // (4096 pixels at the most)
     thing_fx_face(s, e, place, half, room, point * ppp);
     e.box[0] = e.box[1] = 0, e.box[2] = 2 * wide * point, e.box[3] = 2 * high * point;

@@ -19,6 +19,7 @@ class NumField extends StatefulWidget {
     this.decimals = 0,
     this.min,
     this.max,
+    this.open = false,
     this.step = 1,
     this.perPx = 1,
     this.zeroWord,
@@ -39,6 +40,10 @@ class NumField extends StatefulWidget {
   final double? min, max;
   final double step, perPx;
   final bool enabled, turns;
+
+  /// [min] and [max] are how far a scrub goes; a number typed goes past them, only a [min] of 0 or more holding
+  /// (After Effects' slider and valid ranges, PF_FloatSliderDef).
+  final bool open;
   final Color? axis;
   final ValueChanged<double>? onSet;
   final VoidCallback? onReset;

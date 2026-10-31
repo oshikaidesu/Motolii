@@ -76,6 +76,7 @@ class Param {
     this.advanced = false,
     this.fold,
     this.upIncreases = true,
+    this.open = false,
     this.toShader = 1,
     this.why = '',
   });
@@ -93,6 +94,9 @@ class Param {
 
   /// For vertical looks: dragging up raises the value (false: dragging down does, e.g. a drop).
   final bool upIncreases;
+
+  /// [min] and [max] are how far its scrub goes; more is taken typed.
+  final bool open;
 
   bool get bounded => min != null && max != null;
   double get step => dec == 0 ? 1 : math.pow(10, -dec).toDouble();
@@ -242,6 +246,7 @@ Param infer(Decl d) {
       dec: scale == 1 ? dec(l, h) : (look == ParamLook.percent || look == ParamLook.angle ? 0 : 1),
       options: opts,
       advanced: d.advanced,
+      open: a.containsKey('open'),
       fold: d.fold,
       upIncreases: up,
       toShader: scale,

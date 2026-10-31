@@ -56,7 +56,7 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
     }
     if (word && *word && (doc_among("vignette_color fog_color background", name) || (!strcmp(name, "fill") && kind == "light")))   // (one colour: six digits)
         if (strlen(word) != 6 || strspn(word, "0123456789abcdefABCDEF") != 6) return d.trouble = std::string(name) + " is six digits, as ff3366", false;
-    if (number && (!std::isfinite(*number) || *number < v->low || *number > v->high || (doc_among("keyed clip visible solo lock shadows clip_invert", name) && *number != 0.0 && *number != 1.0)))
+    if (number && (!std::isfinite(*number) || (*number < v->low && !(v->open && v->low < 0)) || (*number > v->high && !v->open) || (doc_among("keyed clip visible solo lock shadows clip_invert", name) && *number != 0.0 && *number != 1.0)))
         return std::snprintf(range, sizeof range, doc_among("keyed clip visible solo lock shadows clip_invert", name) ? " is 0 or 1" : " is from %g to %g", v->low, v->high), d.trouble = name + std::string(range), false;
     if (key && !v->moves) { const std::string moving = said(true); return d.trouble = std::string(name) + " does not move: " + (moving.empty() ? std::string("nothing of it does") : "keys go on " + moving), false; }
     if ((number || word || key) && strcmp(name, "lock") && doc_number(d, thing, "lock", 0, 0) > 0.5) return d.trouble = "it is locked", false;

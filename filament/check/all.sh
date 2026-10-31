@@ -28,6 +28,7 @@ run fx_colour.sh
 run fx_sheet.sh
 run fx_world.sh
 run world_view.sh
+run fx_reach.sh
 run extract.sh
 run shelf_words.sh
 run pack.sh

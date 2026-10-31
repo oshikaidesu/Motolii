@@ -37,6 +37,7 @@ class ParamTile extends StatelessWidget {
         decimals: p.dec,
         min: p.min,
         max: p.max,
+        open: p.open,
         perPx: p.perPx,
         step: p.dec > 0 ? p.step * 10 : 1,
         bipolar: p.look == ParamLook.bipolar,

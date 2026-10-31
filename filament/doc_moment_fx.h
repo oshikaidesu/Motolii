@@ -53,6 +53,19 @@ static void doc_thing_shell(Doc& d, int thing, ThingFx& e, bool on) {
     });
     if (!on) e.looks.clear();
 }
+// The room round a thing for what its effects draw outside it: sashimono-edit's 128 points, and as a knob is typed past
+// where its author's range ends (doc_edit.h), that much further, by its range's lengths, as far as the stage is long. An
+// effect's reach cannot be read from it; this is Motolii's own measure, without a model.
+static double doc_fx_reach(Doc& d, int thing) {
+    double past = 0.0;
+    for (const DocScript* sc : doc_scripts_on(d, thing))
+        for (const DocValue& v : sc->values)
+            if (v.open) {
+                const double at = doc_number(d, thing, v.name, d.stage->now, v.low);
+                past = std::max({past, (at - v.high) / (v.high - v.low), (v.low - at) / (v.high - v.low)});
+            }
+    return 128.0 + std::min(past, 1.0) * std::max(d.stage->w, d.stage->h);
+}
 static void doc_thing_stand(Doc& d, int thing, ThingFx& e) {   // (before the frame)
     math::mat4 place;
     float2 half{0.5f};
@@ -62,6 +75,7 @@ static void doc_thing_stand(Doc& d, int thing, ThingFx& e) {   // (before the fr
         place = doc_shown_at(d, thing, d.stage->now), doc_half(d, thing, &half);
         const math::double2 a = doc_seen(d, place[3].xyz), b = doc_seen(d, place[3].xyz + normalize(d.facing[0].xyz));
         seen = length(b - a);   // (a unit across the eye's sight, where it is)
+        e.reach = doc_fx_reach(d, thing);
     }
     thing_fx_stand(*d.stage, e, place, half, seen);
 }
@@ -197,7 +211,8 @@ static void doc_things_fx(Doc& d) {
                 if (found) {   // (where it is seen, as much of it as is on the stage: its picture, After Effects' layer;
                     //  with room around it for what its effects draw outside it, sashimono-edit's BAKE_MARGIN: 128 pixels,
                     //  engine/render/script_bake.py; its effects' own reach read from their knobs is not, ISF's not in pixels)
-                    const double m = 128.0 * s.w / std::max(1u, s.view->getViewport().width);
+                    e.reach = doc_fx_reach(d, thing);
+                    const double m = e.reach * s.w / std::max(1u, s.view->getViewport().width);
                     box[0] = std::max(0.0, seen[0] - m), box[1] = std::max(0.0, seen[1] - m), box[2] = std::min((double)s.w, seen[2] + m), box[3] = std::min((double)s.h, seen[3] + m);
                 }
                 if (box[2] - box[0] < 1 || box[3] - box[1] < 1) box[0] = box[1] = 0, box[2] = s.w, box[3] = s.h;   // (none of it on the stage: the whole)
