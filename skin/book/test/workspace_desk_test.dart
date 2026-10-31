@@ -129,7 +129,8 @@ void main() {
       await settled(t, ws);
     }
     List<double> keys() => [for (final s in m.keyMoments(cube, 'x')) (s * 60).roundToDouble()];
-    await pull(Offset(g.left, y(0)), .25, says: 'Position X');   // (the start up a quarter: a quarter of x's knob span, 8, as the stretch is flat)
+    final bar = r.width * 42 / 575 * .55;
+    await pull(Offset(g.left - bar, y(0)), .25, says: 'Position X');   // (the start up a quarter: a quarter of x's knob span, 8, as the stretch is flat)
     expect(keys(), [29, 30, 60], reason: 'a key a frame before keeps the value as it was');
     expect(m.keyValues(cube, 'x')[0], closeTo(0, 1e-9));
     expect(m.keyValues(cube, 'x')[1], closeTo(2, .1), reason: 'the start key moved up: it jumps there');
@@ -140,9 +141,15 @@ void main() {
     await t.pumpAndSettle();
     addTearDown(() => easeJump = true);
     expect(easeJump, isFalse);
-    await pull(Offset(g.right, y(1)), .5);   // (the end down half the way to the start's value: 2 to 0, so 1)
+    expect(t.widget<EaseGraph>(find.byType(EaseGraph)).ends.$1, closeTo(.25, .02), reason: 'let go, it stands where it was left');
+    await pull(Offset(g.right + bar, y(1)), .5);   // (the end down half the bar: half of x's knob span, 8)
     expect(keys(), [29, 30, 60], reason: 'Jump off: no key after it');
-    expect(m.keyValues(cube, 'x')[2], closeTo(1, .1));
+    expect(m.keyValues(cube, 'x')[2], closeTo(-4, .1));
+    expect(t.widget<EaseGraph>(find.byType(EaseGraph)).ends.$2, closeTo(.5, .02));
+    expect(m.undo() && t.widget<EaseGraph>(find.byType(EaseGraph)).ends.$2 > 0, isTrue);
+    ws.reread();
+    await t.pumpAndSettle();
+    expect(t.widget<EaseGraph>(find.byType(EaseGraph)).ends.$2, closeTo(1, .02), reason: 'undone, it goes back up its bar');
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, skip: !insideBuilt);

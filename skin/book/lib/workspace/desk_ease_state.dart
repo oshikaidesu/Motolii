@@ -23,6 +23,10 @@ bool easeJump = true;
 /// Whether the graph looks past 0 and 1 (Alight Motion's Enable Overshoot). Kept while the window is open.
 bool easeOvershoot = false;
 
+/// Of each stretch whose ends a hand has moved, each value as its two keys first were and the measure of its bars: the
+/// ends stand where they were left, read from the keys, so an undo takes them back (the user, 10/31: "確定してもその位置のままで").
+final _endsFrom = Expando<Map<String, Map<String, (double, double, double)>>>();
+
 class DeskEaseState extends State<DeskEase> {
   // Joined: while a hand is down the ease is told to the document as it goes (the stage and the bars follow), the newest
   // one at a time (one still on its way: the next waits, those between are skipped); all of it one step of undo.
@@ -140,15 +144,28 @@ class DeskEaseState extends State<DeskEase> {
   // (each value keyed at both ends of the stretch: its keys' frames and values, the one at the end pulled, and where
   //  [by] takes it: so much of the way from the one key's value to the other's, or of its knob's span where the two are
   //  the same, as far as a hand takes it)
-  Iterable<(String, List<int>, List<double>, int, double)> _ends(Motolii m, int t, EaseSpan span, bool start, double by) sync* {
+  Iterable<(String, List<int>, List<double>, int, double)> _ends(Ws ws, EaseSpan span, bool start, double by) sync* {
+    final m = ws.inside!, t = int.parse(span.layer.id), from = _from(ws, span);
     for (final name in m.moving(t)) {
       final at = [for (final s in m.keyMoments(t, name)) (s * Ws.fps).round()], vs = m.keyValues(t, name);
       final i = at.indexOf(span.from), j = at.indexOf(span.to), k = start ? i : j;
       if (i < 0 || j < 0 || k >= vs.length || j >= vs.length) continue;
       final shown = m.shown(name), lo = shown?.low ?? -double.infinity, hi = shown?.high ?? double.infinity;
-      final scale = (vs[j] - vs[i]).abs() > 1e-9 ? vs[j] - vs[i] : (shown == null ? 1.0 : hi - lo);
+      final scale = from[name]?.$3 ?? ((vs[j] - vs[i]).abs() > 1e-9 ? vs[j] - vs[i] : (shown == null ? 1.0 : hi - lo));
       yield (name, at, vs, k, (vs[k] + by * scale).clamp(math.min(lo, vs[k]), math.max(hi, vs[k])));
     }
+  }
+
+  Map<String, (double, double, double)> _from(Ws ws, EaseSpan span) => (_endsFrom[ws] ??= {}).putIfAbsent('${spanId(span)}:${span.to}', () => {});
+
+  // (where the two ends stand on their bars)
+  (double, double) _endsOf(Ws ws, EaseSpan? span) {
+    if (ws.inside == null || span == null || _from(ws, span).isEmpty) return (0, 1);
+    final from = _from(ws, span);
+    for (final (name, at, vs, _, _) in _ends(ws, span, true, 0)) {
+      if (from[name] case (final a, final b, final scale)?) return ((vs[at.indexOf(span.from)] - a) / scale, 1 + (vs[at.indexOf(span.to)] - b) / scale);
+    }
+    return (0, 1);
   }
 
   // (an end of the stretch pulled [by]: with Jump on, a key a frame outside first keeps the key's value as it was. One step.)
@@ -158,7 +175,11 @@ class DeskEaseState extends State<DeskEase> {
     final t = int.parse(span.layer.id), key = start ? span.from : span.to, outside = start ? span.from - 1 : span.to + 1;
     m.later('together', number: 1);
     var told = 0;
-    for (final (name, at, vs, k, now) in _ends(m, t, span, start, by)) {
+    for (final (name, at, vs, _, _) in _ends(ws, span, start, 0)) {   // (the measure of the bars, as the keys are now, once)
+      final i = at.indexOf(span.from), j = at.indexOf(span.to), shown = m.shown(name);
+      _from(ws, span).putIfAbsent(name, () => (vs[i], vs[j], (vs[j] - vs[i]).abs() > 1e-9 ? vs[j] - vs[i] : (shown == null ? 1.0 : shown.high - shown.low)));
+    }
+    for (final (name, at, vs, k, now) in _ends(ws, span, start, by)) {
       if (easeJump && outside >= 0 && !at.contains(outside)) {
         m.later('key', thing: t, name: name, word: '${outside / Ws.fps}', number: vs[k]);   // (the key's value before it moved: a frame off, what the value was there)
       }
@@ -174,7 +195,7 @@ class DeskEaseState extends State<DeskEase> {
     final m = ws.inside;
     if (m == null || span == null) return null;
     final t = int.parse(span.layer.id);
-    for (final (name, _, _, _, now) in _ends(m, t, span, start, by)) {
+    for (final (name, _, _, _, now) in _ends(ws, span, start, by)) {
       final (k, f) = m.reading(t, name);
       final v = now * k + f, shown = m.shown(name);
       return '${shown?.label ?? name} ${v.toStringAsFixed(v.abs() >= 100 ? 0 : 2)}${shown?.unit ?? ''}';
@@ -288,7 +309,7 @@ class DeskEaseState extends State<DeskEase> {
                       child: Stack(
                         children: [
                           Positioned.fill(
-                            child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: card, onion: _held ?? (laid ? easeLaid(cards) : null), span: span, frame: frame, onChanged: put, jump: easeJump, overshoot: overshoot, onEnd: ws.inside == null ? null : (start, by) => _moveEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by))),   // (only the graph follows the playhead)
+                            child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: card, onion: _held ?? (laid ? easeLaid(cards) : null), ends: _endsOf(ws, span), span: span, frame: frame, onChanged: put, jump: easeJump, overshoot: overshoot, onEnd: ws.inside == null ? null : (start, by) => _moveEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by))),   // (only the graph follows the playhead)
                           ),
                           if (span == null) Positioned.fill(child: Center(child: Padding(padding: EdgeInsets.all(Shape.s(8)), child: Text('Put the playhead between two keys, or pick a key', textAlign: TextAlign.center, style: T.label(Grey.g63))))),
                           if (_trouble case final why?) Positioned(left: Shape.s(4), right: Shape.s(4), top: Shape.s(2), child: Text(why, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63))),
