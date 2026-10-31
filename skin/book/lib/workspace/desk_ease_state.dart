@@ -216,6 +216,7 @@ class DeskEaseState extends State<DeskEase> {
   Widget _body(Ws ws, EaseSpan? span, Ease ease, ValueChanged<Ease> set) {
     final cards = easeIsLaid(said(ease)) ? [for (final c in easeCards(said(ease))) easeCard(c, ws.inside)] : [ease];
     Ease laidOn(Ease e) => easeLaid([...cards, for (final c in easeCards(said(e))) easeCard(c, ws.inside)]);
+    final pile = _held == null ? cards : [for (final c in easeCards(said(_held!))) easeCard(c, ws.inside)];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -235,22 +236,30 @@ class DeskEaseState extends State<DeskEase> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: DragTarget<Ease>(
+                child: DragTarget<Object>(
                   onWillAcceptWithDetails: (d) {
-                    setState(() => _held = laidOn(d.data));
-                    return true;
+                    if (d.data case final Ease e) setState(() => _held = laidOn(e));
+                    return true;   // (a card of the stack too: let go on it, it stays)
                   },
                   onLeave: (_) => setState(() => _held = null),
                   onAcceptWithDetails: (d) {
                     _held = null;
-                    set(laidOn(d.data));
+                    if (d.data case final Ease e) set(laidOn(e));
                   },
                   builder: (_, hot, _) => DecoratedBox(
                     position: DecorationPosition.foreground,
                     decoration: BoxDecoration(border: hot.isEmpty ? null : Border.all(color: WsT.accent, width: 2)),   // (as the stage shows a tile held over it)
-                    child: ColoredBox(
-                      color: WsT.card,
-                      child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: _held ?? ease, span: span, frame: frame, onChanged: set, jump: easeJump, onEnd: ws.inside == null ? null : (start, by) => _moveEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by)))   // (only the graph follows the playhead),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (pile.length > 1) EaseCards(cards: pile, onOff: (i) => set(easeLaid([...cards]..removeAt(i)))),
+                        Expanded(
+                          child: ColoredBox(
+                            color: WsT.card,
+                            child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: _held ?? ease, span: span, frame: frame, onChanged: set, jump: easeJump, onEnd: ws.inside == null ? null : (start, by) => _moveEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by)))   // (only the graph follows the playhead),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -258,7 +267,7 @@ class DeskEaseState extends State<DeskEase> {
               const SizedBox(width: WsT.gutter),
               SizedBox(
                 width: Shape.z(128),
-                child: cards.length > 1 ? EaseCards(cards: cards, onOff: (i) => set(easeLaid([...cards]..removeAt(i)))) : EaseNumbers(ease: ease, span: span, onChanged: set),
+                child: EaseNumbers(ease: ease, span: span, onChanged: set),
               ),
             ],
           ),

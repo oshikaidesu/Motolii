@@ -40,7 +40,8 @@ String easeTitle(Ease e) {
   return easeIsLaid(s) ? [for (final c in easeCards(s)) _word(heard(c))].join(' $_over ') : e.name ?? '';
 }
 
-/// The cards of a way laid from more than one, where its one way's numbers are shown.
+/// The cards of a way laid from more than one, the top edge of each seen behind the next and the graph the card in
+/// front, as Apple Wallet stacks its cards. One carried off the stack comes off.
 class EaseCards extends StatelessWidget {
   const EaseCards({super.key, required this.cards, required this.onOff});
   final List<Ease> cards;
@@ -48,32 +49,37 @@ class EaseCards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = Size(Shape.z(56), Shape.z(50));
-    return ColoredBox(
-      color: WsT.card,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.all(Shape.s(5)),
-        child: Wrap(
-          spacing: Shape.s(3),
-          runSpacing: Shape.s(3),
-          children: [
-            for (final (i, c) in cards.indexed)
-              if (PresetTile(c, on: false, onTap: () {}, label: _word(c), carried: false) case final tile)
-                Draggable<int>(
-                  key: ValueKey('ease.card.$i'),
-                  data: i,
-                  dragAnchorStrategy: pointerDragAnchorStrategy,
-                  feedback: IgnorePointer(child: SizedBox.fromSize(size: size, child: tile)),
-                  childWhenDragging: Opacity(opacity: .3, child: SizedBox.fromSize(size: size, child: tile)),
-                  onDraggableCanceled: (_, at) {
-                    final box = context.findRenderObject()! as RenderBox;
-                    if (!(box.localToGlobal(Offset.zero) & box.size).contains(at)) onOff(i);   // (let go among them: it stays)
-                  },
-                  child: SizedBox.fromSize(size: size, child: tile),
-                ),
+    final high = (Shape.z(44) / cards.length).clamp(Shape.z(14), Shape.z(24));   // (more cards, less of each: the graph keeps its room)
+    Widget edge(int i, Ease c) => Container(
+      height: high,
+      margin: EdgeInsets.symmetric(horizontal: Shape.s(4.0 * (cards.length - i))),
+      padding: EdgeInsets.symmetric(horizontal: Shape.s(6)),
+      decoration: BoxDecoration(color: WsT.raised, borderRadius: BorderRadius.vertical(top: Shape.r(6)), border: Border(top: BorderSide(color: Grey.g38))),
+      child: Row(
+        children: [
+          if (high >= Shape.z(18)) ...[
+            SizedBox(width: Shape.z(30), height: Shape.z(16), child: CustomPaint(painter: EaseThumb(c, Grey.g91, Grey.g38))),
+            SizedBox(width: Shape.s(6)),
           ],
-        ),
+          Text(_word(c), maxLines: 1, style: T.micro(Grey.g91).copyWith(fontSize: T.px(10), fontWeight: FontWeight.w600)),
+        ],
       ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final (i, c) in cards.indexed)
+          Draggable<int>(
+            key: ValueKey('ease.card.$i'),
+            data: i,
+            dragAnchorStrategy: pointerDragAnchorStrategy,
+            feedback: easeHeld(PresetTile(c, on: false, onTap: () {}, label: _word(c), carried: false)),
+            childWhenDragging: Opacity(opacity: .3, child: edge(i, c)),
+            onDraggableCanceled: (_, _) => onOff(i),   // (let go on the stack it is accepted there, and stays)
+            child: edge(i, c),
+          ),
+      ],
     );
   }
 }

@@ -64,7 +64,8 @@ class PresetTile extends StatelessWidget {
         : Draggable<Ease>(
             data: ease,
             dragAnchorStrategy: pointerDragAnchorStrategy,
-            feedback: IgnorePointer(child: SizedBox(width: Shape.z(58), height: Shape.z(50), child: tile)),
+            feedback: easeHeld(tile),
+            childWhenDragging: Opacity(opacity: .3, child: tile),
             child: tile,
           );
   }
@@ -73,13 +74,15 @@ class PresetTile extends StatelessWidget {
     onTap: onTap,
     builder: (_, h) {
       final ink = on ? WsT.onAccent : (h ? Grey.g95 : Grey.g76);
-      return Container(
-        decoration: BoxDecoration(color: on ? WsT.accent : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
+      return Transform.translate(   // (a card: it lifts under the hand)
+        offset: Offset(0, h && carried ? -Shape.s(2) : 0),
+        child: Container(
+        decoration: BoxDecoration(color: on ? WsT.accent : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.radius)), boxShadow: h && carried ? easeShadow : null),
         padding: EdgeInsets.fromLTRB(Shape.s(2), Shape.s(5), Shape.s(2), Shape.s(4)),
         child: Column(
           children: [
             Expanded(
-              child: CustomPaint(size: Size.infinite, painter: _Thumb(ease, ink, on ? WsT.onAccent : Grey.g38)),
+              child: CustomPaint(size: Size.infinite, painter: EaseThumb(ease, ink, on ? WsT.onAccent : Grey.g38)),
             ),
             SizedBox(height: Shape.s(3)),
             FittedBox( // (a name wider than its tile is drawn smaller, never cut)
@@ -92,13 +95,30 @@ class PresetTile extends StatelessWidget {
             ),
           ],
         ),
+        ),
       );
     },
   );
 }
 
-class _Thumb extends CustomPainter {
-  const _Thumb(this.ease, this.ink, this.base);
+const easeShadow = [BoxShadow(color: Color(0x80000000), blurRadius: 10, offset: Offset(0, 4))];
+
+/// A card in the hand: held by its middle, tilted a little.
+Widget easeHeld(Widget card) {
+  final w = Shape.z(58), h = Shape.z(50);
+  return IgnorePointer(
+    child: Transform.translate(
+      offset: Offset(-w / 2, -h / 2),
+      child: Transform.rotate(
+        angle: -.06,
+        child: Container(width: w, height: h, decoration: BoxDecoration(borderRadius: BorderRadius.all(Shape.r(WsT.radius)), boxShadow: easeShadow), child: card),
+      ),
+    ),
+  );
+}
+
+class EaseThumb extends CustomPainter {
+  const EaseThumb(this.ease, this.ink, this.base);
   final Ease ease;
   final Color ink, base;
   @override
@@ -131,5 +151,5 @@ class _Thumb extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_Thumb o) => o.ease != ease || o.ink != ink || o.base != base;
+  bool shouldRepaint(EaseThumb o) => o.ease != ease || o.ink != ink || o.base != base;
 }

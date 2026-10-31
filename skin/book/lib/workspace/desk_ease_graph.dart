@@ -289,8 +289,8 @@ class _GraphPainter extends CustomPainter {
       }
     }
     // Name of the shape, top-left inside the box.
-    final name = easeIsLaid(said(ease)) ? easeTitle(ease) : (easeName(ease) ?? 'Custom').split(' ').first;   // (a kind with its numbers: its name; the numbers stand beside)
-    deskText(c, name.toUpperCase(), Offset(g.left + 6, g.top + 5), T.micro(Grey.g76).copyWith(fontWeight: FontWeight.w700, letterSpacing: 1));
+    final name = (easeName(ease) ?? 'Custom').split(' ').first;   // (a kind with its numbers: its name; the numbers stand beside)
+    if (!easeIsLaid(said(ease))) deskText(c, name.toUpperCase(), Offset(g.left + 6, g.top + 5), T.micro(Grey.g76).copyWith(fontWeight: FontWeight.w700, letterSpacing: 1));   // (cards laid: each says its own)
   }
 
   @override
