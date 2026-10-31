@@ -221,10 +221,13 @@ static void doc_things_fx(Doc& d) {
                 }
                 if (box[2] - box[0] < 1 || box[3] - box[1] < 1) box[0] = box[1] = 0, box[2] = s.w, box[3] = s.h;   // (none of it on the stage: the whole)
                 e.st.frame[0] = 0, e.st.frame[1] = 0, e.st.frame[2] = 1, e.st.frame[3] = 1;
+                const bool shown = found && !e.shell && !e.st.wide;
                 if (!e.shell && !e.st.wide) {   // (that its frame; its picture the whole stage, as AbsentMotion's effects are cut by the scene: effects.cpp EffectRuntime::draw)
                     e.st.frame[0] = box[0] / s.w, e.st.frame[1] = box[1] / s.h, e.st.frame[2] = (box[2] - box[0]) / s.w, e.st.frame[3] = (box[3] - box[1]) / s.h;
                     box[0] = box[1] = 0, box[2] = s.w, box[3] = s.h;
                 }
+                std::copy(e.st.frame, e.st.frame + 4, e.st.own);
+                if (shown) e.st.own[0] = seen[0] / s.w, e.st.own[1] = seen[1] / s.h, e.st.own[2] = (seen[2] - seen[0]) / s.w, e.st.own[3] = (seen[3] - seen[1]) / s.h;
                 if (e.st.wide) {   // (an AviUtl2 script that draws it: the whole stage its frame, as AviUtl2's object is drawn on the screen and sashimono-edit lays a script's draws in the screen's pixels (engine/render/renderer.py _draw_calls); where it is seen told it)
                     std::copy(found ? seen : box, (found ? seen : box) + 4, e.st.thingSeen);
                     box[0] = box[1] = 0, box[2] = s.w, box[3] = s.h;

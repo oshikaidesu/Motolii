@@ -45,6 +45,7 @@ struct ScreenFx {
     std::vector<std::string> others;
     std::vector<Texture*> othersNow;   // (what each is this time: given before it is drawn; none, its own picture)
     std::vector<bool> othersOwn;       // (whether each is its own picture, this time)
+    bool source = false;   // (ISF's source, a generator: isf_tags)
     double frame[4] = {0, 0, 1, 1}, pass[4] = {0, 0, 1, 1};   // (the frame on the picture (ScreenStack), and on the picture this pass draws: a pass of a set size has none of it, on that side)
     // Its audio inputs (// --sound@name: ISF's audio and audioFFT), among the others in their places: each another
     // thing's sound at this moment, a row of `wide` values (ISF_Spec: an image a row a channel), half floats as the spec
@@ -85,6 +86,7 @@ static void screen_framed(std::string& code) {
 // descriptor 0 a sampled texture, 1 a uniform buffer), its entry `main`; and the knobs' struct read for where each is.
 static bool screen_read(ScreenFx& fx, std::string& code) {
     const std::string file = isf_file(fx.file);   // (an ISF effect: the WGSL made of it)
+    fx.source = isf_tags(fx_source(fx.file)).find("generator") != std::string::npos;
     if (file.empty()) return fx.trouble = "the ISF effect could not be made WGSL: " + fx.file, false;
     std::ifstream in(file);
     if (!in) return fx.trouble = "there is no such file: " + fx.file, false;
@@ -197,6 +199,7 @@ struct ScreenStack {
     bool readsBehind = false;   // (one of its effects reads what is behind the thing: AbsentMotion's backdrop, the stage's behind)
     bool wide = false;          // (one of its effects draws the thing where it will on the screen: an AviUtl2 script's obj.draw; its box the whole stage)
     double thingSeen[4] = {0, 0, 0, 0};   // (then where the thing itself is seen, points of the stage: left, top, right, bottom)
+    double own[4] = {0, 0, 1, 1};         // (where the thing itself lies, as `frame` says: a generator paints only on it, so it is what that reckons by, After Effects' PF_InData width and height: golf_noise.md (116))
     double frame[4] = {0, 0, 1, 1};       // (a thing's: where the frame its effects reckon by lies on the picture they draw, left, top, width, height, each a share of it; the picture is larger: After Effects' width and height against its buffer (PF_InData))
     double box[4] = {0, 0, 0, 0};   // (a thing's: where it is seen, points of the stage, thing_fx_aim)
     int ground = -1;                // (the stage's colour behind everything, 0xRRGGBB; -1 none)
@@ -344,7 +347,7 @@ static void screen_tone(Stage& s, Texture* from, RenderTarget* to, uint32_t w, u
 // what `to` holds (a thing's effects, over what is under the thing), not drawn in its place.
 static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, RenderTarget* to, const ScreenNumbers& numbers, uint32_t w = 0, uint32_t h = 0, bool over = false) {
     if (!w) w = (uint32_t)s.w, h = (uint32_t)s.h;
-    std::copy(st.frame, st.frame + 4, fx.frame);
+    std::copy(fx.source ? st.own : st.frame, (fx.source ? st.own : st.frame) + 4, fx.frame);
     const auto passing = [&](int t) {
         for (int i = 0; i < 2; ++i) {
             const bool set = t >= 0 && fx.targets[(size_t)t].points[i];

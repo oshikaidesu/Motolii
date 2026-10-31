@@ -266,6 +266,7 @@ static void thing_fx_stand(Stage& s, ThingFx& e, const math::mat4& place, float2
     e.box[0] = e.box[1] = 0, e.box[2] = across * point, e.box[3] = tall * point;
     std::copy(e.box, e.box + 4, e.st.box);
     e.st.frame[0] = (c[0] - wide) / across, e.st.frame[1] = (c[3] - high) / tall, e.st.frame[2] = 2 * wide / across, e.st.frame[3] = 2 * high / tall;
+    e.st.own[0] = (c[0] - wide + room) / across, e.st.own[1] = (c[3] - high + room) / tall, e.st.own[2] = 2 * (wide - room) / across, e.st.own[3] = 2 * (high - room) / tall;
     e.own[0] = c[0] * point, e.own[1] = c[3] * point, e.own[2] = 2 * half.x * sx * point, e.own[3] = 2 * half.y * sy * point, e.own[4] = point;
     const mat4f sheet = mat4f(e.square * math::mat4::translation(math::double3{(c[1] - c[0]) / 2, (c[3] - c[2]) / 2, 0.0}) * math::mat4::scaling(math::double3{across / 2, tall / 2, 1.0}));
     move(s, e.sheet, [&](int, const mat4f&) { return sheet; });
