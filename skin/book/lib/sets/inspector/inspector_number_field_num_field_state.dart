@@ -283,6 +283,12 @@ class NumFieldState extends State<NumField> {
   }
 
   KeyEventResult _key(FocusNode n, KeyEvent e) {
+    if (_editing && !_ef.hasFocus) {   // (the editor has the keys a frame on: what comes before that is its all the same, golf_noise.md (113))
+      final c = e.character ?? '', at = _ctl.selection;
+      if (e is! KeyDownEvent || !RegExp(r'^[0-9.\-+*/]$').hasMatch(c)) return _editKey(n, e);
+      _ctl.value = TextEditingValue(text: _ctl.text.replaceRange(at.start, at.end, c), selection: TextSelection.collapsed(offset: at.start + 1));
+      return KeyEventResult.handled;
+    }
     if (_editing || !_on) return KeyEventResult.ignored;
     if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
     final k = e.logicalKey;
@@ -327,9 +333,7 @@ class NumFieldState extends State<NumField> {
       _err = false;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_editing) return;
-      _ef.requestFocus();
-      _ctl.selection = typed != null ? TextSelection.collapsed(offset: _ctl.text.length) : TextSelection(baseOffset: 0, extentOffset: _ctl.text.length);
+      if (mounted && _editing) _ef.requestFocus();
     });
   }
 
@@ -535,6 +539,8 @@ class NumFieldState extends State<NumField> {
         return OverlayPortal.targetsRootOverlay(
           controller: _menu,
           overlayChildBuilder: (_) => TinyMenuAt(at: _menuAt, name: 'num', of: widget.id, items: _menuItems(), hide: _menu.hide, keep: (e) => e.pointer == rightAt && e.buttons == kSecondaryButton && _inMe(e.position)),   // (right pressed here again: its place, as a Mac's)
+          child: Actions(   // (Cmd+A on a field held: all of its number, not every thing in the window; After Effects' and Figma's)
+          actions: {SelectAllTextIntent: CallbackAction<SelectAllTextIntent>(onInvoke: (_) => _startEdit())},
           child: Focus(
           focusNode: _node,
           onKeyEvent: _key,
@@ -568,6 +574,7 @@ class NumFieldState extends State<NumField> {
               },
               child: body,
             ),
+          ),
           ),
           ),
           ),

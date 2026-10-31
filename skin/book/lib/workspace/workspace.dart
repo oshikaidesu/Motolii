@@ -131,9 +131,9 @@ class _WorkspaceState extends State<Workspace> {
     if (_inside != null && t != null) _inside!.later(call, thing: t, word: _clipboard(what));
   }
 
-  bool _typed(Intent act) {
+  bool _typed<T extends Intent>(T act) {
     final box = primaryFocus?.context;
-    if (box == null || box.findAncestorStateOfType<EditableTextState>() == null) return false;
+    if (box == null || Actions.maybeFind<T>(box, intent: act) == null) return false;
     Actions.maybeInvoke(box, act);
     return true;
   }

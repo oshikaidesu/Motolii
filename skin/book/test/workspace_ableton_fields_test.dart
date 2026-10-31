@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart' show motoliiDir;
 import 'package:lab_book/workspace/dock_parts.dart' show DockSearch;
+import 'package:lab_book/workspace/keys.dart' show WsKeys;
 import 'package:lab_book/workspace/timeline.dart' show WsTimeline;
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show Chooser, Ctx, InspectorPanel, NumField, ValuesCard;
 
@@ -40,6 +41,37 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.delete);
     await t.pumpAndSettle();
     expect(m.value(a, 'x', ws.frame / 60), isNot(was), reason: 'Delete: back to its default');
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
+  testWidgets('what is typed before the editor has the keys goes on the number; Cmd+A on a field held is all of its number, not every thing (After Effects, Figma)', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final a = m.add('shape', 'rect');
+    m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$a');
+    await t.pumpAndSettle();
+    final x = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_x');
+    await seen(t, x);
+    await t.tap(x);
+    await t.pumpAndSettle();
+    for (final (k, c) in [(LogicalKeyboardKey.digit1, '1'), (LogicalKeyboardKey.digit0, '0'), (LogicalKeyboardKey.digit5, '5')]) {
+      await simulateKeyDownEvent(k, character: c);   // (no frame between them)
+      await simulateKeyUpEvent(k);
+    }
+    await t.pump();
+    final typing = find.descendant(of: x, matching: find.byType(EditableText));
+    expect(t.widget<EditableText>(typing).controller.text, '105', reason: 'the 2nd and 3rd keys came before the frame that gives the editor the keys');
+    await t.sendKeyEvent(LogicalKeyboardKey.escape);
+    await t.pumpAndSettle();
+    await t.tap(x);
+    await t.pumpAndSettle();
+    t.widget<WsKeys>(find.byType(WsKeys)).commands['edit.selectAll']!();
+    await t.pump();
+    await t.pump();
+    final words = t.widget<EditableText>(typing).controller;
+    expect([ws.many.length, words.selection.start, words.selection.end], [0, 0, words.text.length], reason: 'the things stay as they were, the number is all picked: a digit takes its place');
     await closeWorkspace(t);
   }, skip: !insideBuilt);
 
