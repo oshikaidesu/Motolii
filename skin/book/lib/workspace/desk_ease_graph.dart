@@ -171,18 +171,15 @@ class _GraphPainter extends CustomPainter {
     final y0 = pulled == end ? endAt! : 0.0, y1 = pulled == end + 1 ? endAt! : 1.0;
     double along(double x) => y0 + (y1 - y0) * ease.at(x);
     final a = px(Offset(0, y0)), b = px(Offset(1, y1)), home = (px(Offset.zero), px(const Offset(1, 1)));
-    final top = home.$2.dy, bottom = home.$1.dy, step = g.width / 32;
-    final grid = Paint()..strokeWidth = 1;
-    for (var i = 0; i <= 32; i++) {
-      final x = (g.left + i * step).floorToDouble() + .5;
-      c.drawLine(Offset(x, g.top), Offset(x, g.bottom), grid..color = Grey.g13);
-      c.drawLine(Offset(x, top), Offset(x, bottom), grid..color = i % 8 == 0 ? Grey.g26 : Grey.g20);
+    final top = home.$2.dy, bottom = home.$1.dy;
+    final grid = Paint()..strokeWidth = 1..color = Grey.g20;   // (few lines, only where the way goes: so small, AbsentMotion's 32 are a grain)
+    for (var i = 0; i <= 8; i++) {
+      final x = (g.left + i * g.width / 8).floorToDouble() + .5;
+      c.drawLine(Offset(x, top), Offset(x, bottom), grid);
     }
-    for (var y = bottom; y >= g.top; y -= step) {
-      c.drawLine(Offset(g.left, y), Offset(g.right, y), grid..color = y >= top ? Grey.g20 : Grey.g13);
-    }
-    for (var y = bottom + step; y <= g.bottom; y += step) {
-      c.drawLine(Offset(g.left, y), Offset(g.right, y), grid..color = Grey.g13);
+    for (var i = 1; i < 4; i++) {
+      final y = (top + i * (bottom - top) / 4).floorToDouble() + .5;
+      c.drawLine(Offset(g.left, y), Offset(g.right, y), grid);
     }
     void dashed(Offset p, Offset q, Color ink, double wide, double on, double off) {
       final line = Paint()..color = ink..strokeWidth = wide, far = (q - p).distance;
@@ -193,9 +190,9 @@ class _GraphPainter extends CustomPainter {
     dashed(Offset(g.left, top), Offset(g.right, top), Grey.g56, 1, 4, 3);
     dashed(Offset(g.left, bottom), Offset(g.right, bottom), Grey.g56, 1, 4, 3);
     // The playhead, when it is inside the span.
-    if (from != null && to != null && frame >= from! && frame <= to! && to! > from!) {
+    if (from != null && to != null && frame > from! && frame < to!) {   // (on a key it would read as the graph's edge)
       final x = g.left + g.width * (frame - from!) / (to! - from!);
-      dashed(Offset(x, top), Offset(x, bottom), Grey.g95, 1.2, 5, 3);
+      dashed(Offset(x, top), Offset(x, bottom), Grey.g76, 1, 5, 3);
     }
     // A relation's things' copies of the curve, each so much later (thin, faint, under the one a hand shapes).
     c.save();
@@ -203,7 +200,7 @@ class _GraphPainter extends CustomPainter {
     for (final (shift, hue) in ghosts) {
       final copy = Path()..moveTo(px(Offset(shift, 0)).dx, a.dy);
       for (var i = 1; i <= 96; i++) {
-        final x = i / 96, o = px(Offset(x + shift, ease.at(x)));
+        final x = i / 96, o = px(Offset(x + shift, (onion ?? ease).at(x)));
         copy.lineTo(o.dx, o.dy);
       }
       copy.lineTo(g.right + 4, b.dy);
@@ -238,14 +235,26 @@ class _GraphPainter extends CustomPainter {
       if (ease.kind == EaseKind.hold && i == n) path.lineTo(o.dx, a.dy);
       path.lineTo(o.dx, o.dy);
     }
-    c.drawPath(path, Paint()..style = PaintingStyle.stroke..strokeWidth = 2.4..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round..color = WsT.accentInk);
+    c.drawPath(path, Paint()..style = PaintingStyle.stroke..strokeWidth = 3..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round..color = WsT.accentInk);
     // The value jumping at the end pulled: from where it was (the key the jump leaves outside) to where it is now.
     if (pulled != null && jump) {
       final was = pulled == end ? home.$1 : home.$2, now = pulled == end ? a : b;
       dashed(was, now, Role.warning, 1.6, 3.5, 2.5);
       c.drawCircle(was, 3, Paint()..color = Grey.g63);
     }
-    // Keys at both ends (the one pulled, bigger: it is grabbed).
+    // The handles: large, a hand's: yellow the shape's, white where it runs; on a key, a ring round it, so the key is seen.
+    for (final (i, h) in handles.indexed) {
+      final o = handle(h.x, h.y), on = active == i, ink = h.param ? WsT.keyDot : Grey.g95;
+      if ((o - a).distance < 9 || (o - b).distance < 9) {
+        c.drawCircle(o, on ? 10 : 9, Paint()..color = ink..style = PaintingStyle.stroke..strokeWidth = 2);
+      } else {
+        c.drawCircle(o, on ? 7 : 6, Paint()..color = ink);
+      }
+      if (dragging && on && !h.param) {
+        deskText(c, '${h.x.toStringAsFixed(2)}, ${h.y.toStringAsFixed(2)}', o + Offset(h.x < .5 ? 9 : -9, -9), T.value(Grey.g95).copyWith(fontSize: T.px(10)), ax: h.x < .5 ? 0 : 1, ay: 1);
+      }
+    }
+    // Keys at both ends, over the handles (the one pulled, bigger: it is grabbed).
     for (final (i, k) in [a, b].indexed) {
       final r = active == end + i ? 4.5 : 3.0;
       c.save();
@@ -254,16 +263,8 @@ class _GraphPainter extends CustomPainter {
       c.drawRect(Rect.fromLTWH(-r, -r, 2 * r, 2 * r), Paint()..color = active == end + i ? WsT.accent : WsT.accentInk);
       c.restore();
     }
-    // The handles: large, a hand's: yellow the shape's, white where it runs.
-    for (final (i, h) in handles.indexed) {
-      final o = handle(h.x, h.y), on = active == i, ink = h.param ? WsT.keyDot : Grey.g95;
-      c.drawCircle(o, on ? 7 : 6, Paint()..color = ink);
-      if (dragging && on && !h.param) {
-        deskText(c, '${h.x.toStringAsFixed(2)}, ${h.y.toStringAsFixed(2)}', o + Offset(h.x < .5 ? 9 : -9, -9), T.value(Grey.g95).copyWith(fontSize: T.px(10)), ax: h.x < .5 ? 0 : 1, ay: 1);
-      }
-    }
     // What it is, under it, as Alight Motion's.
-    final name = (easeName(ease) ?? 'Cubic Bezier').split(' ').first;
+    final name = easeWord(ease);
     if (!easeIsLaid(said(ease))) deskText(c, name.toUpperCase(), Offset(g.center.dx, s.height - 5), T.micro(Grey.g63).copyWith(letterSpacing: .6), ax: .5, ay: 1);   // (cards laid: each says its own)
   }
 

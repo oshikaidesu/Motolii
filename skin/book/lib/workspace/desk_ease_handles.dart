@@ -5,6 +5,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
+import 'package:lab_book/workspace/desk_ease_cards.dart';
 
 class EaseHandle {
   const EaseHandle(this.x, this.y, this.moved, {this.param = false, this.fromX, this.fromY, this.dashed = false, this.overshoot = false, this.damping = 1});
@@ -20,16 +21,28 @@ double _legal(double v, double lo, double hi) => v.clamp(lo, hi);
 
 /// The handles of an ease: Bezier's two on its own; the others' as its words say them.
 List<EaseHandle> easeHandles(Ease e) {
+  if (easeIsTurned(said(e))) {   // (AbsentMotion's handles(): a reversed way's are its own, turned end for end)
+    return [
+      for (final h in easeHandles(heard(easeTurn(said(e)))))
+        EaseHandle(1 - h.x, 1 - h.y, (x, y) => heard(easeTurn(said(h.moved(1 - x, 1 - y)))), param: h.param, fromX: h.fromX == null ? null : 1 - h.fromX!, fromY: h.fromY == null ? null : 1 - h.fromY!, dashed: h.dashed, overshoot: h.overshoot, damping: h.damping),
+    ];
+  }
   if (e.kind == EaseKind.hold) return const [];
+  if (e == easePreset('Linear')) {
+    return [
+      EaseHandle(.25, .25, (x, y) => e.withHandles(Offset(x, y), const Offset(.75, .75)), fromX: 0, fromY: 0),
+      EaseHandle(.75, .75, (x, y) => e.withHandles(const Offset(.25, .25), Offset(x, y)), fromX: 1, fromY: 1),
+    ];
+  }
   if (!easeOther(e)) {
     return [
       EaseHandle(e.p1.dx, e.p1.dy, (x, y) => e.withHandles(Offset(x, y), e.p2), fromX: 0, fromY: 0),
       EaseHandle(e.p2.dx, e.p2.dy, (x, y) => e.withHandles(e.p1, Offset(x, y)), fromX: 1, fromY: 1),
     ];
   }
-  final w = e.name!.split(' '), kind = w.first, said = [for (final x in w.skip(1)) double.tryParse(x)];
-  double p(int i, double usual, double lo, double hi) => (i < said.length ? said[i] ?? usual : usual).clamp(lo, hi);
-  double raw(int i, double usual) => i < said.length ? said[i] ?? usual : usual;
+  final w = e.name!.split(' '), kind = w.first, numbers = [for (final x in w.skip(1)) double.tryParse(x)];
+  double p(int i, double usual, double lo, double hi) => (i < numbers.length ? numbers[i] ?? usual : usual).clamp(lo, hi);
+  double raw(int i, double usual) => i < numbers.length ? numbers[i] ?? usual : usual;
   Ease as(List<double> q) => Ease(e.kind, e.p1, e.p2, '$kind ${q.join(' ')}');
   switch (kind) {
     case 'Bounce':
@@ -94,6 +107,8 @@ List<EaseHandle> easeHandles(Ease e) {
 /// How far up and down the graph looks for an ease: AbsentMotion's EasingPanel.kt geoOf.
 (double, double) easeReach(Ease e, [bool overshoot = false]) => overshoot
     ? (-2, 3)
+    : easeIsTurned(said(e))
+    ? switch (easeReach(heard(easeTurn(said(e))))) { (final lo, final hi) => (1 - hi, 1 - lo) }
     : switch (e.kind == EaseKind.hold || !easeOther(e) ? 'Bezier' : e.name!.split(' ').first) {
         'Elastic' => (-.3, 2.05),
         'Cyclic' => (-.5, 1.5),

@@ -9,18 +9,30 @@ import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/desk_ease_presets.dart';
 import 'package:lab_book/workspace/ws.dart';
 
-const _over = '×', _space = '~';   // (a way defined in a document is one word)
+const _over = '×', _space = '~', _turned = 'Reverse:';   // (a way defined in a document is one word)
 
 /// The ways a way is laid from, each as it is said; one not laid: itself.
-List<String> easeCards(String said) => [for (final w in said.split(_over)) w.replaceAll(_space, ' ')];
+List<String> easeCards(String said) => [for (final w in said.split(_over)) w.startsWith(_turned) ? w : w.replaceAll(_space, ' ')];
 
 bool easeIsLaid(String said) => said.contains(_over);
+bool easeIsTurned(String said) => said.startsWith(_turned);
 
-/// How a way laid from [cards] goes, as a way defined in a document says it.
-String easeGoes(List<String> cards) => 'a + (b - a) * ${[for (final c in cards) "way('${c.replaceAll("'", "''")}', u)"].join(' * ')}';
+/// A way turned end for end, as it is said, or turned back (AbsentMotion's "reverse": this document has no such word, so
+/// it is a way defined so, as ways laid are).
+String easeTurn(String said) => easeIsTurned(said) ? said.substring(_turned.length).replaceAll(_space, ' ') : '$_turned${said.replaceAll(' ', _space)}';
+
+/// The ways a word needs defined before a stretch can go by it: name and how it goes.
+List<(String, String)> easeDefines(String word) => [
+  for (final c in easeCards(word)) if (easeIsTurned(c)) (c, "a + (b - a) * (1 - way('${easeTurn(c).replaceAll("'", "''")}', 1 - u))"),
+  if (easeIsLaid(word)) (word, 'a + (b - a) * ${[for (final c in easeCards(word)) "way('${c.replaceAll("'", "''")}', u)"].join(' * ')}'),
+];
 
 /// A card, as the way it says.
 Ease easeCard(String word, Motolii? m) {
+  if (easeIsTurned(word)) {
+    final base = easeCard(easeTurn(word), m);
+    return Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), word, [for (var i = 0; i <= 96; i++) 1 - base.at(1 - i / 96)]);
+  }
   final e = heard(word);
   return easeOther(e) && m != null ? Ease(e.kind, e.p1, e.p2, e.name, [for (var i = 0; i <= 96; i++) m.wayAt(word, i / 96)]) : e;
 }
@@ -32,21 +44,47 @@ Ease easeLaid(List<Ease> cards) => cards.length == 1
         for (var i = 0; i <= 96; i++) cards.fold<double>(1, (v, c) => v * c.at(i / 96)),
       ]);
 
+/// What a way is called under the graph.
+String easeWord(Ease e) {
+  final s = said(e);
+  return (easeIsTurned(s) ? easeTurn(s) : easeName(e) ?? 'Bezier').split(' ').first;
+}
+
 /// The flow: the ways laid, top to bottom, each multiplied by the next (the maker's arrows, 10/31; Blender's stack); an
 /// empty frame under them for the next (Monster Train's empty slots: it says it takes one, and nothing need be learnt);
 /// what they make small at its foot. The card pressed is the one the graph shows, its handles in hand (the maker: seen
-/// always, the whole has no handles). A card carried off the flow comes off.
+/// always, the whole has no handles). A card carried up or down it takes that place, a shape let go on a card goes in
+/// before it, and one carried off the flow comes off.
 class EaseCards extends StatelessWidget {
-  const EaseCards({super.key, required this.cards, required this.now, required this.whole, required this.onPress, required this.onOff});
+  const EaseCards({super.key, required this.cards, required this.now, required this.whole, required this.onPress, required this.onOff, required this.onMove, required this.onLay, required this.onHold});
   final List<Ease> cards;
   final int now;
   final Ease? whole;
   final ValueChanged<int> onPress, onOff;
+  final void Function(int from, int to) onMove;
+  final void Function(Ease shape, int at) onLay;
+  final void Function(Ease? shape, int at) onHold;   // (a shape held over a card: seen before it is let go)
 
   @override
   Widget build(BuildContext context) {
     final side = Size.square(Shape.z(30));
     Widget card(int i, Ease c) => SizedBox.fromSize(size: side, child: PresetTile(c, on: i == now, onTap: () => onPress(i), carried: false));
+    Widget place(int i, Widget child) => DragTarget<Object>(
+      onWillAcceptWithDetails: (d) {
+        if (d.data case final Ease e) onHold(e, i);
+        return d.data != i;
+      },
+      onLeave: (d) => d is Ease ? onHold(null, i) : null,
+      onAcceptWithDetails: (d) {
+        if (d.data case final Ease e) onLay(e, i);
+        if (d.data case final int from) onMove(from, i);
+      },
+      builder: (_, hot, _) => DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(borderRadius: BorderRadius.all(Shape.r(5)), border: hot.isEmpty ? null : Border.all(color: WsT.accent, width: 2)),
+        child: child,
+      ),
+    );
     Widget arrow() => CustomPaint(size: Size(side.width, Shape.z(12)), painter: _Arrow(Grey.g56));
     return ColoredBox(
       color: WsT.card,
@@ -61,7 +99,7 @@ class EaseCards extends StatelessWidget {
               if (i > 0) arrow(),
               cards.length < 2
                   ? card(i, c)
-                  : Draggable<int>(
+                  : place(i, Draggable<int>(
                       key: ValueKey('ease.card.$i'),
                       data: i,
                       dragAnchorStrategy: pointerDragAnchorStrategy,
@@ -69,7 +107,7 @@ class EaseCards extends StatelessWidget {
                       childWhenDragging: Opacity(opacity: .3, child: card(i, c)),
                       onDraggableCanceled: (_, _) => onOff(i),   // (let go on the flow or the graph it is accepted there, and stays)
                       child: card(i, c),
-                    ),
+                    )),
             ],
             arrow(),
             CustomPaint(key: const ValueKey('ease.slot'), size: side, painter: _Slot(Grey.g38)),

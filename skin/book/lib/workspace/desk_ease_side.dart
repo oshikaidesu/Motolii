@@ -19,11 +19,14 @@ bool easeIsBezier(Ease e) => const {'Linear', 'Bezier'}.contains(said(e).split('
 /// The row: the shapes, then, scrolled to, what has no seat among them: Hold, and the ways of the window and the document.
 List<Ease> easeRow(List<Ease> ways) {
   Ease? named(String n) => easePresets.where((p) => p.name == n).firstOrNull ?? ways.where((w) => w.name == n).firstOrNull;
-  return [for (final n in easeShapes) ?named(n), easePreset('Hold'), for (final w in ways) if (!easeShapes.contains(w.name) && !easeIsLaid(w.name!)) w];   // (cards laid stay on their stretches: no shape of their own)
+  return [for (final n in easeShapes) ?named(n), easePreset('Hold'), for (final w in ways) if (!easeShapes.contains(w.name) && !easeIsLaid(w.name!) && !easeIsTurned(w.name!)) w];   // (cards laid stay on their stretches: no shape of their own)
 }
 
 /// Whether the way now is this shape: a curve pulled from the straight line is still of it; its numbers its own.
-bool _isOf(Ease shape, Ease now) => easeIsBezier(shape) ? easeIsBezier(now) : said(shape).split(' ').first == said(now).split(' ').first;
+bool _isOf(Ease shape, Ease now) {
+  final word = said(now), base = easeIsTurned(word) ? easeTurn(word) : word;
+  return easeIsBezier(shape) ? easeIsBezier(now) : said(shape).split(' ').first == base.split(' ').first;
+}
 
 /// The row beside the graph: a press puts a shape on the stretch, or a curved line back straight.
 class EaseShapes extends StatelessWidget {
@@ -37,7 +40,7 @@ class EaseShapes extends StatelessWidget {
     color: WsT.card,
     child: LayoutBuilder(
       builder: (_, box) => ListView(
-        itemExtent: box.maxHeight / easeShapes.length,
+        itemExtent: box.maxHeight / (easeShapes.length + .45),   // (the next cut by the edge: it says there is more)
         children: [
           for (final e in shapes)
             PresetTile(e, key: ValueKey('ease.${e.name}'), on: _isOf(e, ease), onTap: () => _isOf(e, ease) && !(easeIsBezier(e) && e != ease) ? null : onPick(e)),   // (the one it is already: its own numbers kept)
@@ -69,7 +72,7 @@ class EaseLeft extends StatelessWidget {
             ),
           ),
         ),
-        Expanded(child: Center(child: CardMore(name: 'Ease', word: '⋯', above: true, items: menu))),
+        Expanded(child: Center(child: CardMore(name: 'Ease', word: '⋯', above: true, big: true, items: menu))),
       ],
     ),
   );

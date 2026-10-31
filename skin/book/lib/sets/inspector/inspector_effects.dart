@@ -279,9 +279,9 @@ class _Grip extends CustomPainter {
 /// An effect card's ⋮ (AbsentMotion's EffectHeader More): what else is done with it, in a short list over the panel,
 /// as Chooser's lists look; one picked, it does that and closes.
 class CardMore extends StatefulWidget {
-  const CardMore({super.key, required this.name, required this.items, this.word = '⋮', this.above = false});
+  const CardMore({super.key, required this.name, required this.items, this.word = '⋮', this.above = false, this.big = false});
   final String name, word;
-  final bool above;   // (opened upward, for one at the window's foot: AbsentMotion's AboveAnchor)
+  final bool above, big;   // (above: opened upward, for one at the window's foot: AbsentMotion's AboveAnchor)
   final List<(String key, String label, VoidCallback does)> items;
   @override
   State<CardMore> createState() => _CardMoreState();
@@ -309,7 +309,7 @@ class _CardMoreState extends State<CardMore> {
             child: Hov(
               key: ValueKey('card-more:${widget.name}'),
               onTap: widget.items.isEmpty ? null : _portal.toggle,
-              builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: Text(widget.word, style: T.label(h ? Grey.g95 : Grey.g56))),
+              builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: Text(widget.word, style: T.label(h ? Grey.g95 : widget.big ? Grey.g76 : Grey.g56).copyWith(fontSize: widget.big ? T.px(20) : null, fontWeight: widget.big ? FontWeight.w700 : null))),
             ),
           ),
         ),

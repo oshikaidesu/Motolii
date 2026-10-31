@@ -28,7 +28,8 @@ class DeskEaseState extends State<DeskEase> {
   // one at a time (one still on its way: the next waits, those between are skipped); all of it one step of undo.
   bool _down = false, _open = false, _going = false;
   Ease? _pending, _waiting;
-  int _card = 0;   // (of a way laid from cards, the one the graph shows)
+  int _card = 0;   // (of a way laid from cards, the one the graph shows; another stretch: its first)
+  String _cardOf = '';
   Ease? _held;   // (what a tile held over the graph would make: seen before it is let go, Final Cut Pro's skimming of an effect)
   bool _overLocked = false, _noOver = false;   // (AbsentMotion's lockOvershoot, disableOvershoot: once it looks past 0 and 1 it stays so, until the menu says)
   String? _trouble;
@@ -72,7 +73,6 @@ class DeskEaseState extends State<DeskEase> {
   // (while the hand is down: the newest ease told, one at a time; the step opened at the first)
   void _live(Ws ws, Ease e) {
     final m = ws.inside!;
-    if (easeIsLaid(said(e))) return;   // (a way laid is defined when the hand lets go, not at each step of it)
     if (_going) {
       _waiting = e;
       return;
@@ -85,6 +85,7 @@ class DeskEaseState extends State<DeskEase> {
     }
     _going = true;
     var last = 0;
+    _define(m, said(e));
     for (final (t, name, at) in all) {
       last = m.later('way', thing: t, name: name, number: at, word: said(e));
     }
@@ -94,6 +95,12 @@ class DeskEaseState extends State<DeskEase> {
       _waiting = null;
       if (next != null) _live(ws, next);
     });
+  }
+
+  void _define(Motolii m, String word) {
+    for (final (name, goes) in easeDefines(word)) {
+      m.later('define', name: name, word: goes);
+    }
   }
 
   void _settle(Ws ws, EaseSpan? span) {
@@ -108,18 +115,21 @@ class DeskEaseState extends State<DeskEase> {
     final told = [for (final (t, name, at) in all) if (_open || said(heard(m.wayOf(t, name, at))) != to) (t, name, at)];
     if (_open) {
       _open = false;
+      _define(m, to);
       for (final (t, name, at) in told) {
         m.later('way', thing: t, name: name, number: at, word: to);
       }
+      _define(m, to);   // (again, the stretch on it: what it went by till now, no longer asked for, goes)
       ws.after(m.later('together'), (done, why) => mounted ? setState(() => _trouble = done ? null : why) : null);
       return;
     }
     if (told.isEmpty) return setState(() => _trouble = all.isEmpty ? 'No key where the stretch begins' : null);
     m.later('together', number: 1);   // (one step, without waiting)
-    if (easeIsLaid(to)) m.later('define', name: to, word: easeGoes(easeCards(to)));
+    _define(m, to);
     for (final (t, name, at) in told) {
       m.later('way', thing: t, name: name, number: at, word: to);
     }
+    _define(m, to);
     ws.after(m.later('together'), (done, why) => mounted ? setState(() => _trouble = done ? null : why) : null);
   }
 
@@ -175,6 +185,7 @@ class DeskEaseState extends State<DeskEase> {
   void _onEveryKey(Ws ws, Ease e) {
     final m = ws.inside!, layers = {for (final k in ws.keys) k.layer};
     m.later('together', number: 1);
+    _define(m, said(e));
     for (final l in ws.layers.where((l) => layers.contains(l.id))) {
       for (final f in l.keys) {
         for (final at in keysAt(ws, (layer: l, from: f, to: f, picked: f)).entries) {
@@ -191,10 +202,7 @@ class DeskEaseState extends State<DeskEase> {
     if (ws.inside case final m?) {
       final at = span == null ? const <String, double>{} : keysAt(ws, span);
       var ease = _pending ?? (at.isEmpty ? easePreset('Linear') : heard(m.wayOf(int.parse(span!.layer.id), at.keys.first, at.values.first)));
-      if (easeOther(ease) && ease.drawn == null) {
-        // (no seat for this kind: its curve is the inside's own working of it, as said now)
-        ease = Ease(ease.kind, ease.p1, ease.p2, ease.name, [for (var i = 0; i <= 96; i++) m.wayAt(ease.name!, i / 96)]);
-      }
+      if (easeOther(ease) && ease.drawn == null) ease = easeCard(said(ease), m);   // (no seat for this kind: its curve is the inside's own working of it, as said now)
       void set(Ease e) {
         setState(() => _pending = e);
         _down ? _live(ws, e) : _settle(ws, span);
@@ -222,23 +230,24 @@ class DeskEaseState extends State<DeskEase> {
     final cards = easeIsLaid(said(ease)) ? [for (final c in easeCards(said(ease))) easeCard(c, ws.inside)] : [ease];
     Ease laidOn(Ease e) => easeLaid([...cards, for (final c in easeCards(said(e))) easeCard(c, ws.inside)]);
     final pile = _held == null ? cards : [for (final c in easeCards(said(_held!))) easeCard(c, ws.inside)];
+    if (spanId(span) != _cardOf) (_cardOf = spanId(span), _card = 0);
     final at = _card.clamp(0, cards.length - 1), card = cards[at], laid = cards.length > 1;
     void put(Ease e) => set(laid ? easeLaid([...cards]..[at] = easeCard(said(e), ws.inside)) : e);   // (a press, a handle, a turn: on the card pressed)
     final bezier = easeIsBezier(card);
     final overshoot = bezier && !_noOver && (easeOvershoot || _overLocked || [card.p1.dy, card.p2.dy].any((y) => y < 0 || y > 1));
     _overLocked = overshoot;
-    final reverse = card.reversed();
+    final turned = bezier ? card.reversed() : Ease(card.kind, card.p1, card.p2, easeTurn(said(card)));   // (AbsentMotion's reversed(): a bezier's handles turned, any other marked so)
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          flex: 168,
+          flex: 110,
           child: EaseLeft(
-            onReverse: bezier && card != easePreset('Linear') && reverse != card ? () => put(reverse) : null,
+            onReverse: card != easePreset('Linear') && turned != card ? () => put(turned) : null,
             menu: [
-              ('copy', 'Copy Curve', () => setState(() => easeCopied = card)),
+              ('copy', 'Copy Curve', () => setState(() => easeCopied = ease)),
               if (easeCopied case final copied?) ...[
-                ('paste', 'Paste Curve', () => put(copied)),
+                ('paste', 'Paste Curve', () => set(copied)),
                 if (ws.inside != null) ('all', 'Paste Curve to All Keyframes', () => _onEveryKey(ws, copied)),
               ],
               if (bezier) ('overshoot', overshoot ? 'Disable Overshoot' : 'Enable Overshoot', () => setState(() {
@@ -251,7 +260,7 @@ class DeskEaseState extends State<DeskEase> {
           ),
         ),
         Expanded(
-          flex: 575 + 169,
+          flex: 575 + 150,
           child: DragTarget<Object>(
             onWillAcceptWithDetails: (d) {
               if (d.data case final Ease e) setState(() => _held = laidOn(e));
@@ -282,19 +291,29 @@ class DeskEaseState extends State<DeskEase> {
                           ),
                           if (span == null) Positioned.fill(child: Center(child: Padding(padding: EdgeInsets.all(Shape.s(8)), child: Text('Put the playhead between two keys, or pick a key', textAlign: TextAlign.center, style: T.label(Grey.g63))))),
                           if (_trouble case final why?) Positioned(left: Shape.s(4), right: Shape.s(4), top: Shape.s(2), child: Text(why, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63))),
+                          if (span case final s?) Positioned(left: Shape.s(6), top: Shape.s(4), right: Shape.s(6), child: IgnorePointer(child: Text('${s.layer.name}  ${s.from} → ${s.to}', key: const ValueKey('ease-span'), maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(Grey.g63)))),   // (which thing, which stretch)
                           Positioned(left: Shape.s(2), bottom: Shape.s(2), child: EaseStep(span: span, back: true)),
                           Positioned(right: Shape.s(2), bottom: Shape.s(2), child: EaseStep(span: span, back: false)),
                         ],
                       ),
                     ),
                   ),
-                  Expanded(flex: 169, child: EaseCards(cards: pile, now: at, whole: pile.length > 1 ? _held ?? ease : null, onPress: (i) => setState(() => _card = i), onOff: (i) => set(easeLaid([...cards]..removeAt(i))))),
+                  Expanded(flex: 150, child: EaseCards(cards: pile, now: at, whole: pile.length > 1 ? _held ?? ease : null, onPress: (i) => setState(() => _card = i), onOff: (i) => set(easeLaid([...cards]..removeAt(i))), onMove: (from, to) {
+                    final next = [...cards];
+                    next.insert(to, next.removeAt(from));
+                    _card = to;
+                    set(easeLaid(next));
+                  }, onLay: (e, i) {
+                    _held = null;
+                    _card = i;
+                    set(easeLaid([...cards]..insertAll(i, [for (final c in easeCards(said(e))) easeCard(c, ws.inside)])));
+                  }, onHold: (e, i) => setState(() => _held = e == null ? null : easeLaid([...cards]..insertAll(i, [for (final c in easeCards(said(e))) easeCard(c, ws.inside)]))))),
                 ],
               ),
             ),
           ),
         ),
-        Expanded(flex: 169, child: EaseShapes(ease: card, shapes: easeRow(unseated(ws)), onPick: put)),
+        Expanded(flex: 150, child: EaseShapes(ease: card, shapes: easeRow(unseated(ws)), onPick: put)),
       ],
     );
   }

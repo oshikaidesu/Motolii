@@ -21,6 +21,8 @@ static int define_is(Motolii* m, const char* way, const char* expression) {   //
         if (!here && !doc_define(d, name.c_str(), goes.c_str())) d.act_ok = false;
     }
     if (!doc_define(d, way, expression)) d.act_ok = false;
+    // (ways laid or turned that nothing goes by any more, nor any other way asks for: the window makes one at each step of a hand)
+    if (d.act_ok && !doc_change(d, sqlite3_mprintf("delete from way where (name glob '*×*' or name glob 'Reverse:*') and name <> %Q and name not in (select way from fact where way is not null) and not exists (select 1 from way o where o.name <> way.name and o.goes like '%%''' || way.name || '%%')", way))) d.act_ok = false;
     return changes(m, (int)doc_acted(d));
 }
 const char* motolii_effect_names(Motolii* m) { return by_look(m, [m] { return (m->listed = doc_effect_names()).c_str(); }); }
