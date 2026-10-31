@@ -502,5 +502,6 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] 効果の物差しが物に付いていない（10/31 測定）：同じ物に同じ模様で、物の幅に入る本数が 中央 14.0 → 端へ動かす 24.4、45° 回す 11.1、1.5 倍 16.6、カメラを引く 10.8。中心も最大 185 px 外れる。物差しが「見えている箱＋余白 128＋舞台で切る」のため。案：物差しは物の箱で固定し、絵の広さと分ける（AbsentMotion の `effects.cpp` は `area` と `bounds` を分けている）
 - [ ] 窓のプレビューと書き出しで効果の余白が変わるはず（`doc_moment_fx.h` の `m`、計算だけで未測）
 - [ ] 世界ビューとカメラビュー（10/31 ユーザー：「どっちも見ておきたい」）：目を 2 つにする。作業の目は書類に入らず、書き出しはカメラの目だけ（After Effects の working 3D views と Active Camera、AbsentMotion の `cameraMode` と `SetCameraView(true)`）。物の効果はどちらにも出て、掛かり方は変わらない（Adobe：「All effects are 2D」、AbsentMotion の `effects.cpp` は `area` を変えない）。ピント・霧・ブレはカメラの目だけ（`camera.cpp` の `AddCameraEffects`）。2D はカメラビューだけ（Adobe の working 3D views）。カメラを置くまでは隠れた既定のカメラで、分けない（Default Camera、`preview.cpp` の `world`）。部品は `kit_things.h` の `god_view`。2D の張り付き先は今 `s.camera` なので `s.film` に替える。効果の修正の後に行う
+- [ ] カメラのギズモ（10/31 ユーザー：「カメラのギズモが必要」「ターゲットに回り込む動きも欲しい」「それが必要だと思ってカメラのタブを作っていた」）：世界ビューの後に。今あるもの：回り込みは C の道具（After Effects の Unified Camera tool、`stage_view_2.dart`、見ている点の周りを回る）、カメラのタブは上から見た奥行き（`desk_depth.dart`）。無いもの：ターゲットの点は見えず掴めない（カメラの前 distance の所に計算上あるだけ、`doc_kinds.h`）。カメラ自身もステージに見えない。Target・Orbit の絵は見本帳にだけある（`inspector_gui_set_3.dart` の CameraGui、窓には未接続）。カメラを掴めるのは作業の目からだけ（After Effects の working 3D views、Alight も枠を掴めるのはカメラビューの外だけ：AbsentMotion `styles.cpp:1281`）。ギズモの形の見本は未調査
 
 合計：400 箱。
