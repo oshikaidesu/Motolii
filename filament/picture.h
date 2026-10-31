@@ -205,6 +205,7 @@ static void picture_moment(Motolii* m) {
         double frame[8], box[4];
         if (doc_frame(d, t, at, frame)) { w.Key("frame"), w.StartArray(); for (double f : frame) w.Double(f); w.EndArray(); }
         if (doc_seen_box(d, t, at, box)) { w.Key("seen"), w.StartArray(); for (double b : box) w.Double(b); w.EndArray(); }
+        if (const std::string g = doc_gizmo(d, t, at); !g.empty()) w.Key("gizmo"), w.String(g.c_str());
         w.Key("shows"), w.StartObject();   // (as the stage shows it: [value, driven by a relation or behaviour])
         for (const char* name : {"x", "y", "z", "rotate", "scale_x", "scale_y", "opacity"})
             if (double v = 0; const int got = motolii_shows(m, t, name, at, &v)) w.Key(name), w.StartArray(), w.Double(v), w.Bool(got == 2), w.EndArray();

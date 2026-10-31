@@ -42,7 +42,7 @@ class _ViewPainter extends CustomPainter {
     c.save();
     c.clipRect(comp);
     if (grid) _grid(c, comp);
-    if (safe) _safe(c, comp);
+    if (safe && scene.gizmos.isEmpty) _safe(c, comp);
     c.restore();
     _guides(c);
     if (trail case final w? when w.length > 1) {   // (thin, an arrow every so often the way it goes)
@@ -66,6 +66,7 @@ class _ViewPainter extends CustomPainter {
       }
     }
     if (WsArt.boxOf(scene, parent) case final b?) c.drawPath(_boxPath(b), _line(Grey.g63, 1));   // (what the picked thing goes with: its frame, grey)
+    for (final id in scene.gizmos.keys) _gizmo(c, id);
     if (marked) return c.restore();
     if (WsArt.boxOf(scene, hover) case final b?) _legible(c, _boxPath(b), wsLabel(hover!), 1);   // (in its label colour, as its row)
     if (WsArt.boxOf(scene, sel) case final b?) _selection(c, b, scene.layer(sel)!);
@@ -121,6 +122,29 @@ class _ViewPainter extends CustomPainter {
     for (final gy in scene.guidesY) {
       final y = v.toScreen(Offset(0, gy)).dy.roundToDouble() + .5;
       c.drawLine(Offset(v.area.left, y), Offset(v.area.right, y), p);
+    }
+  }
+
+  /// A camera in the working eye: its frame, crossed, as AbsentMotion's DrawCameraFrames, the lines to where it is and
+  /// the point it looks at as After Effects' camera. Picked, its corners take a hand (the frame's size is the lens).
+  void _gizmo(Canvas c, String id) {
+    final g = [for (final p in scene.gizmo(id)) p == null ? null : _scr(p)], picked = id == sel;
+    if (g.length < 6) return;
+    final ink = picked ? WsT.accent : Grey.g76, frame = [g[0], g[1], g[2], g[3]].nonNulls.toList(), eye = g[5];
+    if (frame.length == 4) {
+      _legible(c, Path()..addPolygon(frame, true), ink, picked ? 2 : 1);
+      c.drawLine(frame[0], frame[2], _line(ink.withValues(alpha: .35), 1));
+      c.drawLine(frame[1], frame[3], _line(ink.withValues(alpha: .35), 1));
+      if (eye != null) for (final p in frame) c.drawLine(eye, p, _line(ink.withValues(alpha: .35), 1));
+      if (picked) for (final p in frame) c.drawRect(Rect.fromCenter(center: p, width: 7, height: 7), Paint()..color = ink);
+    }
+    if (g[4] case final look?) {
+      c.drawCircle(look, 5, _line(Grey.g00, 3));
+      c.drawCircle(look, 5, _line(ink, 1.4));
+    }
+    if (eye != null) {
+      c.drawCircle(eye, 6, Paint()..color = Grey.g00);
+      c.drawCircle(eye, 6, Paint()..color = ink..style = PaintingStyle.stroke..strokeWidth = 2);
     }
   }
 

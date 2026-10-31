@@ -322,6 +322,19 @@ static std::vector<float> doc_sound_now(Doc& d, int thing, const std::string& fi
     const double start = doc_number(d, t, "start", 0, 0), begin = doc_number(d, t, "begin", 0, 0), speed = doc_number(d, t, "speed", 0, 1);
     return sound_at(read, fft, wide, now < start ? -1.0 : begin + (now - start) * speed);
 }
+// Where a camera looks from (none: the stage's own eye): it looks at where it is, from round about it as it is turned
+// (y: about, x: up and down, z: its lean), `distance` times the stage's own way off, `zoom` times as near.
+struct DocEye { math::mat4 round; math::double3 look, eye, up; double far, fov; };
+static DocEye doc_camera_eye(Doc& d, int camera, double now) {
+    const auto turned = [&](const char* name, math::double3 about) { return camera ? math::mat4::rotation(doc_number(d, camera, name, now, 0) * (double)TAU / 360.0, about) : math::mat4{}; };
+    DocEye e;
+    e.round = turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * turned("rotate", {0, 0, 1});
+    e.look = camera ? (doc_place(d, camera, now) * math::double4{0, 0, 0, 1}).xyz : math::double3{0.0};
+    e.far = camera ? doc_number(d, camera, "distance", now, 1) : 1.0;
+    e.fov = 2.0 * std::atan(std::tan(15.0 * (double)TAU / 360.0) / (camera ? doc_number(d, camera, "zoom", now, 1) : 1.0));
+    e.eye = e.look + (e.round * math::double4{0, 0, 6.0 * e.far, 0}).xyz, e.up = (e.round * math::double4{0, 1, 0, 0}).xyz;
+    return e;
+}
 static void doc_look(Doc& d) {
     Stage& s = *d.stage;
     const auto hex = [&](const char* name, float3 otherwise) { const std::string w = doc_word(d, 0, name); return w.size() == 6 ? float3{(float)((std::strtol(w.c_str(), nullptr, 16) >> 16) & 255), (float)((std::strtol(w.c_str(), nullptr, 16) >> 8) & 255), (float)(std::strtol(w.c_str(), nullptr, 16) & 255)} / 255.f : otherwise; };

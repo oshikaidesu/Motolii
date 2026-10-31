@@ -379,11 +379,16 @@ static bool doc_carry(Doc& d, const char* by, double a, double b) {
     const auto tries = [&](const char* name, double is) { return doc_knows(d, h.thing, name, &is) && (h.tried[name] = is, true); };
     bool ok = true;
     if (!strcmp(by, "place")) {
-        if (!h.from.count(" point")) h.from[" point"] = doc_point(d, h.thing, now);   // (remembered with the hold: one unit of the stage in points of the picture, where the thing stood)
-        const double x = was("x"), y = was("y"), point = h.from[" point"];
+        // (by the working eye the hand's travel is that eye's, the way After Effects' working views move a 3D layer)
+        const math::mat3 ways = d.working ? d.stage->camera->getModelMatrix().upperLeft() : math::mat3{};
+        if (!h.from.count(" point")) {   // (remembered with the hold: one unit of the stage in points of the picture, where the thing stood)
+            const math::double3 at = (doc_above(d, h.thing, now) * math::double4{doc_number(d, h.thing, "x", now, 0), doc_number(d, h.thing, "y", now, 0), doc_number(d, h.thing, "z", now, 0), 1.0}).xyz;
+            h.from[" point"] = d.working ? doc_seen(d, at + ways[0]).x - doc_seen(d, at).x : doc_point(d, h.thing, now);
+        }
+        const double x = was("x"), y = was("y"), z = d.working ? was("z") : 0.0, point = h.from[" point"];
         // (the hand's travel is the stage's; a thing that goes with another is moved in that one's own turned and sized way)
-        const math::double3 by = inverse(doc_above(d, h.thing, now).upperLeft()) * math::double3{a / point, -b / point, 0.0};
-        ok = tries("x", x + by.x) && tries("y", y + by.y);
+        const math::double3 by = inverse(doc_above(d, h.thing, now).upperLeft()) * (ways * math::double3{a / point, -b / point, 0.0});
+        ok = tries("x", x + by.x) && tries("y", y + by.y) && (!d.working || tries("z", z + by.z));
     } else if (!strcmp(by, "grip")) {   // (where on the picture the hand took hold, points from the top left: what scale, turn and pivot reckon from)
         double frame[8];
         if (!doc_frame(d, h.thing, now, frame)) return d.trouble = "it has no frame on the picture", false;

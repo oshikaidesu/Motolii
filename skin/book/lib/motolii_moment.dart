@@ -42,6 +42,9 @@ extension MotoliiMoment on Motolii {
     return v == null ? null : ((v[0] as num).toDouble(), v[1] as bool);
   }
 
+  /// A camera as the working eye sees it, the inside's words (doc_gizmo); '': by the camera's own eye.
+  String gizmo(int thing) => _momentOf(thing)?['gizmo'] as String? ?? '';
+
   /// A thing's frame on the picture at the stage's moment: its middle (x, y), how wide, how high (points of the picture,
   /// from the top left), how far it is turned (degrees, clockwise as seen), the point it turns about (x, y), and how deep
   /// it is (0: flat). null: not shown.

@@ -44,10 +44,22 @@ class ArtScene {
       guidesY = [for (final (a, at) in ws.guides) if (a == 'y') at],
       layers = List.unmodifiable([for (final l in ws.layers) ArtLayer(l)]),
       rev = ws.rev,
+      eye = ws.eye,
+      gizmos = {if (ws.freeEye) for (final l in ws.layers) if (l.kind == WsKind.camera) l.id: ws.inside?.gizmo(int.parse(l.id)) ?? ''},
       _inside = ws.inside;
 
   final Motolii? _inside;
   final _asked = <String, ArtBox?>{};
+
+  /// Where the working eye stood, and each camera as it sees it: the inside's words (doc_gizmo), read with each picture.
+  final List<double> eye;
+  final Map<String, String> gizmos;
+
+  /// A camera's points on the picture: its frame's four corners, the point it looks at, where it is. Null: one behind the eye.
+  List<Offset?> gizmo(String id) {
+    final n = (gizmos[id] ?? '').trim().split(' ').map(double.tryParse).toList();
+    return [for (var i = 0; i + 1 < n.length; i += 2) if (n[i] case final x?) Offset(x, n[i + 1]!) else null];
+  }
 
   /// A thing's frame on the picture as the inside sees it at this moment, asked when it is wanted (a hand on the
   /// stage, the picked one's line), not for every thing at every picture: null, not shown.
@@ -68,7 +80,7 @@ class ArtScene {
   ArtLayer? layer(String? id) => layers.where((l) => l.id == id).firstOrNull;
   @override
   bool operator ==(Object other) =>
-      other is ArtScene && other.frame == frame && other.rev == rev && other.camera == camera && listEquals(other.layers, layers);
+      other is ArtScene && other.frame == frame && other.rev == rev && other.camera == camera && identical(other.eye, eye) && mapEquals(other.gizmos, gizmos) && listEquals(other.layers, layers);
   @override
   int get hashCode => Object.hash(frame, camera, Object.hashAll(layers));
 }

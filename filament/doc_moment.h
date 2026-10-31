@@ -22,9 +22,7 @@ static void doc_moment(Doc& d, double now) {
         Lies one{thing, &found->second, since >= 0.0 && (lasts < 0.0 || since < lasts) && doc_number(d, thing, "visible", 0, 1) > 0.5 && (!solo || doc_number(d, thing, "solo", 0, 0) > 0.5), found->second.space != 2, since};   // (a sheet in the world settles depth with the solid things)
         lies.push_back(one);
     }
-    // The camera: the nearest one in the order of the things that is on (the past repository's choice); none, the
-    // stage's own. It looks at where it is, from round about it as it is turned (y: about, x: up and down, z: its lean),
-    // `distance` times the stage's own way off, `zoom` times as near.
+    // The camera: the nearest one in the order of the things that is on (the past repository's choice); none, the stage's own.
     {
         int camera = 0;
         for (int thing : lie)
@@ -35,13 +33,10 @@ static void doc_moment(Doc& d, double now) {
         d.working = d.eyeAsked && camera && !d.writing;
         god_view(s, d.working);
         d.looking = d.working ? 0 : camera;   // (its fog, if it says one: doc_look)
-        const auto turned = [&](const char* name, math::double3 about) { return camera ? math::mat4::rotation(doc_number(d, camera, name, now, 0) * (double)TAU / 360.0, about) : math::mat4{}; };
-        const math::mat4 round = turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * turned("rotate", {0, 0, 1});
-        const math::double3 look = camera ? (doc_place(d, camera, now) * math::double4{0, 0, 0, 1}).xyz : math::double3{0.0};
-        const double far = camera ? doc_number(d, camera, "distance", now, 1) : 1.0, near = camera ? doc_number(d, camera, "zoom", now, 1) : 1.0;
-        const math::double3 eye = look + (round * math::double4{0, 0, 6.0 * far, 0}).xyz, up = (round * math::double4{0, 1, 0, 0}).xyz;
+        const DocEye seen = doc_camera_eye(d, camera, now);
+        const math::double3 eye = seen.eye, look = seen.look, up = seen.up;
+        const double far = seen.far, fov = seen.fov;
         s.film->lookAt(eye, look, up);
-        const double fov = 2.0 * std::atan(std::tan(15.0 * (double)TAU / 360.0) / near);
         if (camera && doc_word(d, camera, "projection") == "orthographic") {   // (as large at the point it looks at as the perspective one shows it there)
             const double high = 6.0 * far * std::tan(0.5 * fov), wide = high * double(s.w) / double(s.h);
             s.film->setProjection(Camera::Projection::ORTHO, -wide, wide, -high, high, 0.05, 60.0 * std::max(1.0, far));

@@ -370,6 +370,41 @@ class _StageViewState extends State<StageView> implements StageHandles {
     });
   }
 
+  double _orbitRate = .25;   // (degrees a pixel)
+  ({double zoom, double reach, Offset middle})? _lensFrom;   // (the frame's size when the hand took hold)
+
+  /// A hand on a camera in the working eye: where it is goes round the point it looks at (After Effects' camera and point
+  /// of interest), a picked one's corner sizes the frame, which is the lens (AbsentMotion's withCameraFrameScaled), and
+  /// the frame or that point moves it (cameraGesture). [inside]: anywhere in the frame, or only on its marks.
+  bool _gizmoHold(_View v, Offset local, {required bool inside}) {
+    final ws = WsScope.read(context), m = ws.inside!, scene = widget.scene, at = ws.frame / Ws.fps;
+    for (final id in scene.gizmos.keys) {
+      final g = [for (final p in scene.gizmo(id)) p == null ? null : v.toScreen(WsArt.toView(scene, p))], cam = int.parse(id);
+      if (g.length < 6) continue;
+      final frame = [g[0], g[1], g[2], g[3]].nonNulls.toList();
+      bool on(Offset? p, double reach) => p != null && (p - local).distance <= reach;
+      final String by;
+      if (on(g[5], 10)) {
+        by = 'gizmo orbit';
+        _orbitRate = g[4] == null ? .25 : 180 / math.pi / math.max((g[5]! - g[4]!).distance, 60);   // (a turn as far as the hand has gone on the circle it goes round)
+        _orbitFrom = (x: m.value(cam, 'rotate_x', at) ?? 0, y: m.value(cam, 'rotate_y', at) ?? 0);
+      } else if (widget.selected == id && frame.any((p) => on(p, 8)) && g[4] != null) {
+        by = 'gizmo lens';
+        _lensFrom = (zoom: m.value(cam, 'zoom', at) ?? 1, reach: (local - g[4]!).distance, middle: g[4]!);
+      } else if (on(g[4], 10) || (inside && frame.length == 4 && (Path()..addPolygon(frame, true)).contains(local))) {
+        by = 'place';
+      } else {
+        continue;
+      }
+      m.take(cam);
+      ws.select(id);
+      if (ws.playing) ws.playing = false;
+      _held = (from: local, moved: false, by: by == 'place' ? null : by);
+      return true;
+    }
+    return false;
+  }
+
   void _hold(_View v, Offset local) {
     if (widget.make == 'camera') {   // (After Effects' Unified Camera tool: a drag turns the camera round where it looks)
       final ws = WsScope.read(context), m = ws.inside, cam = _cameraOf(ws);
@@ -427,8 +462,10 @@ class _StageViewState extends State<StageView> implements StageHandles {
         return;
       }
     }
+    if (m != null && _gizmoHold(v, local, inside: false)) return;
     if (_pull(v, local)) return; // (a guide out of a ruler, or one taken hold of: after the handles, which lie over everything)
     final id = m == null ? null : _hit(v, local), t = int.tryParse(id ?? '');
+    if (m != null && t == null && _gizmoHold(v, local, inside: true)) return;   // (AbsentMotion's TopLayerAt: the things first, then the frame they lie in)
     if (m != null && t == null) { // (where no thing is: drawn round)
       ws.select(null);
       setState(() => _lasso = [local]);
@@ -445,6 +482,19 @@ class _StageViewState extends State<StageView> implements StageHandles {
   void _carry(_View v, Offset local) {
     final h = _held, ws = WsScope.read(context), m = ws.inside;
     if (h == null || m == null) return;
+    if (h.by == 'gizmo orbit' && _orbitFrom != null) {   // (it goes the way the hand does)
+      final d = (local - h.from) * _orbitRate, o = _orbitFrom!;
+      m.carry('rotate_y', o.y + d.dx);
+      m.carry('rotate_x', (o.x + d.dy).clamp(-89.0, 89.0));
+      _held = (from: h.from, moved: true, by: h.by);
+      return;
+    }
+    if (h.by == 'gizmo lens' && _lensFrom != null) {   // (as far from the middle as the hand now is, against where it took hold: a larger frame, a wider lens)
+      final l = _lensFrom!;
+      m.carry('zoom', (l.zoom * l.reach / math.max((local - l.middle).distance, 1)).clamp(.01, 100.0));
+      _held = (from: h.from, moved: true, by: h.by);
+      return;
+    }
     if (h.by == 'orbit' && _orbitFrom != null) {   // (sideways round it, up and down over it: a quarter of a degree a pixel)
       final d = local - h.from, o = _orbitFrom!;
       if (ws.freeEye) return ws.setView('stage.eye', [o.y - d.dx * .25, (o.x - d.dy * .25).clamp(-89.0, 89.0), ws.eye[2]]);
@@ -487,9 +537,10 @@ class _StageViewState extends State<StageView> implements StageHandles {
   }
 
   void _letGo({bool keep = true}) {
-    final h = _held, ws = WsScope.read(context), m = ws.inside, free = _orbitFrom != null && ws.freeEye;
+    final h = _held, ws = WsScope.read(context), m = ws.inside, free = h?.by == 'orbit' && ws.freeEye;
     _held = null;
     _orbitFrom = null;
+    _lensFrom = null;
     _snapTo = null;
     if (_grip != null) setState(() => _grip = null);
     if (_met != (null, null)) setState(() => _met = (null, null));

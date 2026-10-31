@@ -654,6 +654,23 @@ static math::double2 doc_seen(Doc& d, math::double3 p) {
     const math::double4 c = s.camera->getProjectionMatrix() * s.camera->getViewMatrix() * math::double4{p, 1.0};
     return math::double2{(0.5 + 0.5 * c.x / c.w) * s.w, (0.5 - 0.5 * c.y / c.w) * s.h};
 }
+// A camera as the working eye sees it, the picture's own points, spaced: its frame's four corners, the point it looks at,
+// where it is. AbsentMotion's CameraFrame: the picture's rectangle where it looks, as large as the lens takes in there;
+// After Effects' point of interest and camera. A point behind the eye: "x". Not by the working eye: nothing.
+static std::string doc_gizmo(Doc& d, int thing, double now) {
+    if (!d.working || doc_word(d, thing, "kind") != "camera") return "";
+    Stage& s = *d.stage;
+    const DocEye e = doc_camera_eye(d, thing, now);
+    const double high = 6.0 * e.far * std::tan(0.5 * e.fov), wide = high * double(s.w) / double(s.h);
+    const math::double3 x = (e.round * math::double4{wide, 0, 0, 0}).xyz, y = (e.round * math::double4{0, high, 0, 0}).xyz;
+    std::string said;
+    for (const math::double3 p : {e.look - x + y, e.look + x + y, e.look + x - y, e.look - x - y, e.look, e.eye}) {
+        const math::double4 c = s.camera->getProjectionMatrix() * s.camera->getViewMatrix() * math::double4{p, 1.0};
+        const math::double2 at = doc_seen(d, p);
+        said += c.w <= 0.0 ? "x x " : std::to_string(at.x) + " " + std::to_string(at.y) + " ";
+    }
+    return said;
+}
 // How many points of the picture one unit of the stage is, where a thing stands (at its own depth).
 static double doc_point(Doc& d, int thing, double now) {
     const math::double3 at = (doc_above(d, thing, now) * math::double4{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0), 1.0}).xyz;

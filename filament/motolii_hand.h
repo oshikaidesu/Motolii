@@ -432,6 +432,7 @@ static int eye_is(Motolii* m, const char* word) {   // ("about over far": the wi
     Doc& d = doc(m);
     d.eyeAsked = std::sscanf(word, "%lf %lf %lf", &d.eyeIs[0], &d.eyeIs[1], &d.eyeIs[2]) == 3;
     time_is(*m->s, m->now);
+    picture_moment(m);
     m->changed = true;
     return 1;
 }
