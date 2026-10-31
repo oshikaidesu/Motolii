@@ -113,8 +113,8 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
                     else numbers[sc->knobs[i].name] = doc_number(d, thing, sc->names[i].c_str(), said, sc->knobs[i].usual);
                 }
                 kept.at = said, kept.made = doc_scripts_made(d);
-                const double begins = doc_literal(d, thing, "start", 0, 0);
-                numbers["duration"] = doc_literal(d, thing, "duration", 0, -1);   // (how long the thing lasts: an Out ends before it)
+                const double gone = doc_literal(d, thing, "begin", 0, 0), begins = doc_literal(d, thing, "start", 0, 0) - gone;   // (a part after a cut goes on from where it was: doc_own_clock)
+                numbers["duration"] = doc_literal(d, thing, "duration", 0, -1) + (doc_literal(d, thing, "duration", 0, -1) > 0.0 ? gone : 0.0);   // (how long the thing lasts: an Out ends before it)
                 kept.copies = sc->run->copies(n, said - begins, numbers, words, (double)d.stage->h / std::max(1.0, doc_number(d, 0, "high", 0, 1080) * doc_point(d, thing, said)));   // (a pixel of the document, where the thing stands)
             }
             const ScriptCopy c = copy < n ? kept.copies[(size_t)copy] : ScriptCopy{};

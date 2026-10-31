@@ -367,6 +367,13 @@ static bool doc_hold(Doc& d, int thing) {
     if (d.held.thing != thing) d.held = Doc::Held{}, d.held.thing = thing;   // (held already: the same hold goes on)
     return true;
 }
+// How far its own clock has gone when `by` of its beginning is cut away: a film's at its speed, a thing with a script's as
+// the stage's (After Effects' Split Layer and in-point leave a layer's keys where they are, so what it was doing goes on:
+// golf_noise.md (115)); 0: it has no clock of its own.
+static double doc_own_clock(Doc& d, int t, double by) {
+    if (doc_word(d, t, "kind") == "film") return by * std::fabs(doc_number(d, t, "speed", 0, 1));
+    return doc_word(d, t, "script").empty() ? 0.0 : by;
+}
 static bool doc_carry(Doc& d, const char* by, double a, double b) {
     Doc::Held& h = d.held;
     if (h.thing < 0) return d.trouble = "nothing is held", false;
@@ -457,7 +464,7 @@ static bool doc_carry(Doc& d, const char* by, double a, double b) {
     } else if (!strcmp(by, "head")) {
         const double start = was("start"), lasts = was("duration"), to = std::clamp(start + a, 0.0, lasts > 0.0 ? start + lasts - 1e-3 : 1e6);
         ok = tries("start", to) && (lasts <= 0.0 || tries("duration", start + lasts - to));
-        if (ok && doc_word(d, h.thing, "kind") == "film") ok = tries("begin", std::max(0.0, was("begin") + (to - start) * std::fabs(was("speed"))));
+        if (const double on = doc_own_clock(d, h.thing, to - start); ok && on != 0.0) ok = tries("begin", std::max(0.0, was("begin") + on));
     } else if (!strcmp(by, "tail")) {
         const double start = was("start"), lasts = was("duration");
         ok = tries("duration", std::max(1e-3, (lasts > 0.0 ? lasts : doc_seconds(d) - start) + a));
@@ -486,7 +493,7 @@ static int doc_split(Doc& d, int thing, double at) {
     doc_act(d);
     const int made = doc_duplicate(d, thing);
     bool ok = made && doc_set(d, thing, "duration", at - start) && doc_set(d, made, "start", at) && doc_set(d, made, "duration", end - at);
-    if (ok && doc_word(d, thing, "kind") == "film") ok = doc_set(d, made, "begin", doc_number(d, thing, "begin", 0, 0) + (at - start) * std::fabs(doc_number(d, thing, "speed", 0, 1)));
+    if (const double on = doc_own_clock(d, thing, at - start); ok && on != 0.0) ok = doc_set(d, made, "begin", doc_number(d, thing, "begin", 0, 0) + on);
     if (ok) {   // (the part after lies just above the part before, as After Effects' Split Layer puts the new layer: a copy is made on top of all)
         doc_forget(d);
         const std::vector<int> lie = doc_laid(d);
@@ -591,7 +598,7 @@ static bool doc_time_align(Doc& d, const std::vector<int>& things, const std::st
         else if (how == "extend") {
             if (now >= was + lasts - 1e-3) continue;   // (the playhead past its end: nothing to draw out to)
             ok = doc_set(d, t, "start", std::max(0.0, now)) && doc_set(d, t, "duration", was + lasts - std::max(0.0, now));
-            if (ok && doc_word(d, t, "kind") == "film") ok = doc_set(d, t, "begin", std::max(0.0, doc_number(d, t, "begin", 0, 0) + (std::max(0.0, now) - was) * std::fabs(doc_number(d, t, "speed", 0, 1))));
+            if (const double on = doc_own_clock(d, t, std::max(0.0, now) - was); ok && on != 0.0) ok = doc_set(d, t, "begin", std::max(0.0, doc_number(d, t, "begin", 0, 0) + on));
             continue;
         } else if (how == "trim_end") {   // (Final Cut Pro's Trim End: its end to the playhead, the playhead inside it)
             if (now > was + 1e-3 && now < was + lasts - 1e-3) ok = doc_set(d, t, "duration", now - was);

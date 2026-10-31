@@ -50,6 +50,12 @@ int main(int argc, char** argv) {
             const int n = (int)number(2), ticket = numbers ? motolii_later(m, w[1].c_str(), n, "", w.size() > 3 ? rest(3).c_str() : "", 0) : 0;
             while (numbers && (ok = motolii_answer(m, ticket)) < 0) std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
+        else if (call == "split" && w.size() == 3) {   // (Split at a moment, as the window's thing menu asks it)
+            const int n = thing();
+            const double at = number(2);
+            const int ticket = numbers ? motolii_later(m, "split", n, "", "", at) : 0;
+            while (numbers && (ok = motolii_answer(m, ticket)) < 0) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
         else if (call == "outline" && w.size() == 2) {   // (Convert to Outline, as the window's thing menu asks it)
             const int n = thing(), ticket = numbers ? motolii_later(m, "outline", n, "", "", 0) : 0;
             while (numbers && (ok = motolii_answer(m, ticket)) < 0) std::this_thread::sleep_for(std::chrono::milliseconds(2));
