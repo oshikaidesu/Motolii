@@ -71,7 +71,9 @@ class WtRow {
     this.lane,
     this.laneWays,
     this.laneOn,
+    this.whole,
   });
+  final (int, int)? whole;   // (a film's whole length as it lies, cut or not: the pale slip-edit bar of After Effects)
   final List<WsStretch> stretches;   // (how it goes between its keys: each stretch's way drawn between them)
 
   /// A value's own lane in place of a bar (Ableton's automation lane): each key's frame and where its value stands
@@ -115,6 +117,7 @@ class WtRow {
       other.dim == dim &&
       other.locked == locked &&
       other.clipped == clipped &&
+      other.whole == whole &&
       identical(other.wave, wave) &&
       identical(other.frames, frames) &&   // (read once a change: the same list until the document changes)
       other.form == form &&
@@ -289,8 +292,9 @@ void _wayLine(Path p, List<double> way, double xa, double xb, double width, doub
 }
 
 class WtTracksPainter extends CustomPainter {
-  const WtTracksPainter({required this.rows, required this.view, required this.fps, required this.vscroll, this.tempo});
+  const WtTracksPainter({required this.rows, required this.view, required this.fps, required this.vscroll, this.tempo, this.restAt});
   final WsBeats? tempo;
+  final int? restAt;   // (where the hand has come to rest: Alight Motion's SnapLine)
   final List<WtRow> rows;
   final WtView view;
   final int fps;
@@ -314,13 +318,14 @@ class WtTracksPainter extends CustomPainter {
       if (top > s.height || top + WtM.row < 0) continue;
       _row(c, s, rows[i], top + WtM.row / 2 - .5);
     }
+    if (restAt case final f?) c.drawRect(Rect.fromLTWH(view.x(f).roundToDouble(), 0, 1, s.height), p..color = WsT.accent);
   }
 
   void _row(Canvas c, Size s, WtRow r, double cy) {
     if (r.lane case final pts? when pts.isNotEmpty) return _lane(c, s, r, pts, cy);
-    final p = Paint(), x0 = view.x(r.inF), x1 = math.max(view.x(r.outF), x0 + 4);
+    final p = Paint(), x0 = view.x(r.inF), x1 = math.max(view.x(r.outF), x0 + 4), h = Forms.worn.trackBar(selected: r.selected);
+    if (r.whole case (final a, final b)?) c.drawRect(Rect.fromLTRB(view.x(a), cy - h / 2, view.x(b), cy + h / 2), p..color = wtBarFill(r).withValues(alpha: .18));
     if (x1 < 0 || x0 > s.width) return;
-    final h = Forms.worn.trackBar(selected: r.selected);
     final bar = Rect.fromLTRB(x0, cy - h / 2, x1, cy + h / 2), rr = RRect.fromRectAndRadius(bar, Radius.circular(Forms.worn.trackRadius));
     final fill = wtBarFill(r), ink = r.dim ? Grey.g56 : WsT.onAccent, grip = Color.lerp(fill, Grey.g00, .28)!;
     final mix = r.mix;
@@ -466,7 +471,7 @@ class WtTracksPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(WtTracksPainter o) => o.view != view || o.fps != fps || o.vscroll != vscroll || !_listEq(o.rows, rows);
+  bool shouldRepaint(WtTracksPainter o) => o.view != view || o.fps != fps || o.vscroll != vscroll || o.restAt != restAt || !_listEq(o.rows, rows);
 }
 
 // ---------------------------------------------------------------- playhead

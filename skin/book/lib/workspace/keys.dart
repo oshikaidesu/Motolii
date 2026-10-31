@@ -57,6 +57,8 @@ const defaultKeys = <(String, String)>[
   ('w', 'zoom.width'),
   (',', 'frame.previous'),   // (Live has none: Rive's and Jitter's)
   ('.', 'frame.next'),
+  ('j', 'frame.previousStop'),   // (After Effects': J and K, the previous and next visible item in the time ruler)
+  ('k', 'frame.nextStop'),
   ('shift+,', 'frame.back10'),
   ('shift+.', 'frame.forward10'),
   ('home', 'frame.first'),   // (Live 42.20: move insert marker to beginning)

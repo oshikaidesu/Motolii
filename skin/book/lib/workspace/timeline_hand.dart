@@ -62,6 +62,11 @@ extension _WsTimelineHand on _WsTimelineState {
     }
   }
 
+  bool _onPale(Ws ws, WsLayer l, Offset p) {
+    final w = _wholeOf(ws, l);
+    return w != null && p.dx >= _view.x(w.$1) && p.dx <= _view.x(w.$2);
+  }
+
   MouseCursor _cursorAt(Offset p) {
     final ws = _ws!, v = _view, r = _rowAt(p.dy);
     if (r == null) return MouseCursor.defer;
@@ -71,7 +76,7 @@ extension _WsTimelineHand on _WsTimelineState {
       final at = ws.inside!.keyMoments(t, n), f = v.frameAt(p.dx) / Ws.fps;
       return at.any((k) => (v.x((k * Ws.fps).round()) - p.dx).abs() <= WtM.keyPicked + 2) || (at.isNotEmpty && f > at.first && f < at.last) ? SystemMouseCursors.click : SystemMouseCursors.precise;
     }
-    if (_isLocked(ws, l.id) || p.dx < a - 6 || p.dx > b + 6) return SystemMouseCursors.precise;
+    if (_isLocked(ws, l.id) || p.dx < a - 6 || p.dx > b + 6) return _onPale(ws, l, p) ? SystemMouseCursors.grab : SystemMouseCursors.precise;
     if (l.keys.any((k) => (v.x(k) - p.dx).abs() <= WtM.keyPicked + 2)) return SystemMouseCursors.click;
     return (p.dx - a).abs() <= 6 || (p.dx - b).abs() <= 6 ? SystemMouseCursors.resizeLeftRight : SystemMouseCursors.grab;
   }
@@ -82,13 +87,15 @@ extension _WsTimelineHand on _WsTimelineState {
     if (m == null || r == null) return false;
     if (r.value != null) return true;   // (a lane: nothing carried, and no box drawn from it)
     final l = r.l, a = v.x(l.inF), b = v.x(l.outF);
-    if (_isLocked(_ws!, l.id) || p.dx < a - 6 || p.dx > b + 6) return false;
+    final off = p.dx < a - 6 || p.dx > b + 6;
+    if (_isLocked(_ws!, l.id) || (off && !_onPale(ws, l, p))) return false;
     for (final k in l.keys) {
       if ((v.x(k) - p.dx).abs() > WtM.keyPicked + 2) continue;
       final held = (layer: l.id, frame: k), all = ws.keys.contains(held) ? ws.keys.toList() : [held];
       if (!ws.keys.contains(held)) ws.pickKey(held);
       if (ws.playing) ws.playing = false;
       _slide = (keys: all, grab: k, by: 0);
+      _stops = ws.stops(skip: {l.id})..add(ws.frame);
       return true;
     }
     m.take(int.parse(l.id));
@@ -96,7 +103,10 @@ extension _WsTimelineHand on _WsTimelineState {
     if (ws.playing) ws.playing = false;
     _barIn = l.inF;
     _barOut = l.outF;
-    _bar = (id: l.id, part: (p.dx - b).abs() <= 6 ? 'tail' : ((p.dx - a).abs() <= 6 ? 'head' : 'bar'), grab: v.frameAt(p.dx), moved: false);
+    _stops = ws.stops(skip: {l.id, ...ws.many})..add(ws.frame);
+    _barWhole = _wholeOf(ws, l);
+    if (off && (ws.frame < l.inF || ws.frame >= l.outF)) ws.frame = l.inF;
+    _bar = (id: l.id, part: off ? 'slip' : (p.dx - b).abs() <= 6 ? 'tail' : ((p.dx - a).abs() <= 6 ? 'head' : 'bar'), grab: v.frameAt(p.dx), moved: false);
     return true;
   }
 }

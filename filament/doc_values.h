@@ -106,6 +106,7 @@ static const DocShown doc_shown[] = {
     {"emissive", "", "×", "Light up", 0, 10, nullptr},
     {"marker", "", "", "Part", 0, 0, nullptr},
     {"animation", "", "", "Movement", 0, 0, nullptr},
+    {"begin", "", "s", "In", 0, 60, nullptr},
     {"speed", "", "×", "Speed", -4, 4, nullptr},
     {"speed_hold", "", "", "Hold at", 0, 0, nullptr},
     {"retime", "", "", "Re-timing", 0, 0, nullptr}, {"retime_in", "", "s", "End of intro", 0, 10, nullptr}, {"retime_out", "", "s", "Start of outro", 0, 10, nullptr},   // (an element's, Alight Motion's)
@@ -355,6 +356,7 @@ static const DocCard doc_cards[] = {
     {"Shine", "emissive", "kind", "!solid", true},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
     {"Motion", "orient", "kind", "!camera", true},   // (how it goes along its way: turned the way it is going, After Effects' Auto-Orient)
     {"Play", "marker animation speed speed_hold frame_rate", "kind", "!stage", true},   // (a thing's; the stage's own frame rate is said in the size box)
+    {"Source", "begin", "kind", "film"},   // (where in its file it starts: Premiere Pro's Slip takes a number typed as the hand's drag does; the timeline's pale bar is the same value carried)
     {"Sound", "volume beats", "kind", "film"},   // (its beats: shown on the timeline's ruler where it strikes)
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Parent", "parent_rotate parent_size roll roll_radius", "parent", "!0"},   // (Alight Motion's Parenting Helper: how much of its parent's turn and size it takes, and rolling as a wheel; while it has a parent)

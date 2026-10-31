@@ -85,6 +85,7 @@ class Ws extends ChangeNotifier {
   String? _notice;
   String? get notice => _notice;
   Timer? _noticeEnds;
+  List<int> strikes = const [];   // (the sounds' strikes, in frames, as the timeline last had them: its Beats)
   set notice(String? said) {
     if (said == _notice) return;
     _notice = said;
@@ -407,6 +408,14 @@ class Ws extends ChangeNotifier {
   /// Joined: the work area, the marks, the guides: the document's picture's.
   (double, double) get work => _inside!.work;
   List<(double, String)> get marks => _inside!.marks;
+
+  /// Where the hand comes to rest and J and K go: Alight Motion's snapTargets, the marks and the other things' ends and
+  /// keys; and a sound's strikes, the beat marks CapCut's bars snap to.
+  Set<int> stops({Set<String> skip = const {}}) => {
+    for (final (at, _) in marks) (at * fps).round(),
+    for (final l in layers) if (!skip.contains(l.id)) ...[l.inF, l.outF, ...l.keys],
+    ...strikes,
+  };
   Map<double, int> get markColours => _inside!.markColours;
   List<(String, double)> get guides => _inside!.guides;
   set animating(bool on) {

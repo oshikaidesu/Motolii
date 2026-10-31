@@ -136,6 +136,58 @@ void main() {
     await closeWorkspace(t);
   }, skip: !insideBuilt);
 
+  testWidgets("a key rests on a mark, its line there (Alight Motion's snapTargets); K and J go from stop to stop; a film's pale bar slips what it shows", (t) async {
+    final (ws, cube) = await opened(t);
+    final m = ws.inside!;
+    ws.after(m.later('mark', number: 3, word: 'here'));
+    await settled(t, ws);
+    final tracks = find.byWidgetPredicate((w) => w is CustomPaint && w.painter is WtTracksPainter);
+    WtTracksPainter painter() => t.widget<CustomPaint>(tracks).painter! as WtTracksPainter;
+    final r = t.getRect(tracks), y = r.top + WtM.row / 2, view = painter().view;
+    final hand = await t.startGesture(Offset(r.left + view.x(120), y), kind: PointerDeviceKind.mouse);
+    await hand.moveBy(const Offset(4, 0));
+    await t.pump();
+    await hand.moveTo(Offset(r.left + view.x(180) + 3, y));
+    await t.pump();
+    expect(painter().restAt, 180, reason: 'the line where it rests');
+    await hand.up();
+    await settled(t, ws);
+    await hand.removePointer();
+    await t.pumpAndSettle();
+    expect(m.keyMoments(cube, 'x'), [0, 3], reason: 'on the mark: ${m.trouble}');
+    expect(painter().restAt, isNull, reason: 'let go, no line');
+    ws.frame = 1;
+    await t.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await t.pump();
+    expect(ws.frame, 180, reason: 'K: the next stop');
+    await t.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await t.pump();
+    expect(ws.frame, 0, reason: 'J: the one before');
+
+    final film = m.add('', '$motoliiDir/out/vid/check_film.mp4');
+    m.set(film, 'begin', 1);
+    m.set(film, 'duration', 1);
+    m.set(film, 'start', 2);
+    await settled(t, ws);
+    await t.pumpAndSettle();
+    final row = painter().rows.first;
+    expect(row.whole, isNotNull, reason: "a film's whole length lies along its row");
+    expect(row.whole!.$1, 120 - 60, reason: 'a second of it before the bar');
+    final now = painter().view, top = r.top + WtM.row / 2, slip = await t.startGesture(Offset(r.left + now.x(70), top), kind: PointerDeviceKind.mouse);
+    await slip.moveBy(const Offset(4, 0));
+    await t.pump();
+    await slip.moveTo(Offset(r.left + now.x(70) + 30 * now.ppf, top));
+    await t.pump();
+    await slip.up();
+    await settled(t, ws);
+    await slip.removePointer();
+    await t.pumpAndSettle();
+    expect(m.value(film, 'start', 0), 2, reason: 'the bar stays');
+    expect(m.value(film, 'begin', 0), closeTo(.5, .02), reason: 'carried half a second on, it shows half a second sooner: ${m.trouble}');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
   testWidgets('the Ease graph shows the beats of its stretch, and a handle stays on one: as many waves a beat as the hand says', (t) async {
     final (ws, cube) = await opened(t);
     await tempo(t, ws, '120');

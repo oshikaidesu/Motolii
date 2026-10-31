@@ -28,6 +28,12 @@ Map<String, void Function()> wsAbletonCommands(Ws ws) {
     ws.frame = ws.frame + by;
   }
 
+  /// The playhead on the nearest stop that way (After Effects' J and K).
+  void hop(int way) {
+    final all = ws.stops().where((f) => (f - ws.frame) * way > 0).toList()..sort();
+    if (all.isNotEmpty) step((way > 0 ? all.first : all.last) - ws.frame);
+  }
+
   /// The picked keys, else the picked thing's bar, carried [by] frames (Live 42.16: Nudge Selection Left/Right); with
   /// nothing picked, the playhead (Live moves its insert marker so).
   void nudge(int by) {
@@ -86,6 +92,8 @@ Map<String, void Function()> wsAbletonCommands(Ws ws) {
     'zoom.width': () => wsAskTimeline('fit'),   // (Live 42.16 W: optimize arrangement width)
     'frame.previous': () => step(-1),   // (Live has no frame step; Rive's and Jitter's , and .)
     'frame.next': () => step(1),
+    'frame.previousStop': () => hop(-1),
+    'frame.nextStop': () => hop(1),
     'frame.back10': () => step(-10),
     'frame.forward10': () => step(10),
   };

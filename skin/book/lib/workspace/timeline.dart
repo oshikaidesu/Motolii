@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../forms/forms.dart';
+import '../motolii.dart' show Motolii, mediaSecondsOf;
 import 'two_fingers.dart';
 import 'ableton.dart' show wsTimelineAsk, wsAskRename, wsAskTimeline, wsMarkPicked;
 import '../sets/panels/timeline_parts_parts.dart' show TpGlyph, TpGlyphPainter;
@@ -30,6 +31,8 @@ part 'timeline_view.dart';
 part 'timeline_hand.dart';
 part 'timeline_rows.dart';
 part 'timeline_ruler.dart';
+part 'timeline_snap.dart';
+part 'timeline_slip.dart';
 part 'timeline_header.dart';
 part 'timeline_labels.dart';
 part 'timeline_overview.dart';
@@ -158,6 +161,10 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   // is held and how many seconds the hand has gone; what that does to the thing (its limits, a film's head) is the
   // inside's, and the bar is drawn from what the inside then says.
   ({String id, String part, double grab, bool moved})? _bar;
+  Set<int> _stops = const {};   // (what the hand may come to rest on, taken when it took hold: timeline_snap.dart)
+  int? _restAt;   // (where it has, its line drawn there)
+  (int, int)? _barWhole;   // (the held film whole when it was taken: timeline_slip.dart)
+  final _filmSeconds = <String, double>{};
   int _barIn = 0, _barOut = 0;   // (the held bar's ends when it was taken: a cut stops one frame short of nothing, since a bar cut to nothing cannot be seen, taken again, or kept: the document is as long as its longest thing)
 
   // The pointer over a bar says what it would do: an end cuts, the body slides, a key slides; the room between draws a box.
@@ -200,26 +207,22 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     }
   }
 
-  // (a frame near a beat, on it: clips and the hand snap to Live's grid unless Cmd is held, its manual 6.7 and 6.10)
-  int _onBeat(int f) {
-    final b = _ws!.beats;
-    if (b == null || HardwareKeyboard.instance.isMetaPressed) return f;
-    final near = b.nearest(f);
-    return (near - f).abs() * _view.ppf <= Shape.z(6) ? near : f;
-  }
-
   void _barMove(Offset p) {
     if (_box case (final from, _)?) return setState(() => _box = (from, p));
     if (_slide case final s?) {
-      final by = _onBeat(_view.frameAt(p.dx).round()) - s.grab;
-      _slide = (keys: s.keys, grab: s.grab, by: by);
+      final by = _rested(_view.frameAt(p.dx).round() - s.grab, [s.grab]);
+      setState(() => _slide = (keys: s.keys, grab: s.grab, by: by));
       _ws!.frame = (s.grab + by).clamp(0, Ws.duration);
       return;
     }
     final h = _bar, ws = _ws!, m = ws.inside;
     if (h == null || m == null) return;
     var by = (_view.frameAt(p.dx) - h.grab).round();   // (by whole frames)
-    by = h.part == 'tail' ? _onBeat(_barOut + by) - _barOut : _onBeat(_barIn + by) - _barIn;
+    if (h.part == 'slip') {
+      _bar = (id: h.id, part: h.part, grab: h.grab, moved: true);
+      return _slip(ws, int.parse(h.id), by);
+    }
+    by = _rested(by, [if (h.part != 'tail') _barIn, if (h.part != 'head') _barOut]);
     if (h.part == 'tail') by = math.max(by, _barIn + 1 - _barOut);
     if (h.part == 'head') by = math.min(by, _barOut - 1 - _barIn);
     m.carry(h.part, by / Ws.fps);
@@ -228,6 +231,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   }
 
   void _barUp({bool keep = true}) {
+    if (_restAt != null) setState(() => _restAt = null);
     if (_box != null) return keep ? _boxUp() : setState(() => _box = null);
     if (_slide case final s?) {
       _slide = null;
@@ -286,7 +290,9 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
           _workOut = a + len;
         });
       default:
-        _ws!.frame = f;
+        final shift = HardwareKeyboard.instance.isShiftPressed;   // (After Effects': Shift held while the time indicator is dragged, it rests on what it passes)
+        if (shift) _stops = _ws!.stops();
+        _ws!.frame = shift ? _restOn(f) ?? f : f;
     }
   }
 
@@ -348,7 +354,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
       if (rise > 0 && _waveOf(ws, l) != null) asks.add(m.strikes(t!, rise));   // (only once its sound is read)
     }
     final reads = _beatsAsked = ws.reads;
-    Future.wait(asks).then((all) => mounted ? setState(() => _beats = (reads, [for (final s in all) for (final at in s) (at * Ws.fps).round()])) : null);
+    Future.wait(asks).then((all) => mounted ? setState(() => _beats = (reads, ws.strikes = [for (final s in all) for (final at in s) (at * Ws.fps).round()])) : null);
     return _beats?.$2 ?? const [];
   }
 
@@ -473,6 +479,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
           outline: _formOf(ws, l)?.$3 ?? false,
           tone: l.tone,
           mix: _mixOf(ws, l.id),
+          whole: _wholeOf(ws, l),
         ),
     ];
     return Focus(
@@ -569,7 +576,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                     child: RepaintBoundary(
                       child: CustomPaint(
                         size: Size.infinite,
-                        painter: WtTracksPainter(rows: rows, view: v, fps: Ws.fps, vscroll: _vscroll, tempo: ws.beats),
+                        painter: WtTracksPainter(rows: rows, view: v, fps: Ws.fps, vscroll: _vscroll, tempo: ws.beats, restAt: _restAt),
                       ),
                     ),
                   ),
