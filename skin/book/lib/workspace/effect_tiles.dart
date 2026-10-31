@@ -72,7 +72,15 @@ abstract final class EffectTiles {
   }
 
   static Map<String, dynamic>? _table;
-  static bool _shownBy(String file) => showcase(file, '', _table ??= table(motoliiDir)) != null;
+  static bool _shownBy(String file) => file.endsWith('.fs') || showcase(file, '', _table ??= table(motoliiDir)) != null;
+
+  /// An ISF effect that works on the picture has no line in AbsentMotion's table: split where the table's splits are
+  /// (0.4, its 22 effects with one), before at its left, so what it does is seen beside what it did it to (golf ⑪).
+  static double? _isfSplit(String file) {
+    if (!file.endsWith('.fs')) return null;
+    final head = File(file).readAsStringSync();
+    return RegExp(r'"NAME"\s*:\s*"inputImage"').hasMatch(head) && !RegExp(r'"NAME"\s*:\s*"progress"').hasMatch(head) ? 0.4 : null;
+  }
 
   /// Its moving pictures: home_0.jpg … home_7.jpg beside its still (none for a picture not drawn here).
   static String frame(String home, int k) => '${home.substring(0, home.length - 4)}_$k.jpg';
@@ -208,7 +216,7 @@ abstract final class EffectTiles {
       if (made.length < moments.length) made = shoot(home);   // (put on but not drawn, a script that stops: the sample as it is)
       if (made.length < moments.length) continue;
       final same = sample.length == moments.length && _unseen(home, folder.path);
-      if (show?.split case final at? when sample.length == moments.length) {   // (before at its left, as AbsentMotion's effect_thumbs.py lays the photo over it up to there, a white line where they meet)
+      if ((show?.split ?? _isfSplit(f)) case final at? when sample.length == moments.length) {   // (before at its left, as AbsentMotion's effect_thumbs.py lays the photo over it up to there, a white line where they meet)
         for (final (k, _) in moments.indexed) {
           Process.runSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', _drawn(home, k), '-i', '${folder.path}/sample_$k.png', '-filter_complex',
               '[1:v]crop=iw*$at:ih:0:0[b];[0:v][b]overlay=0:0,drawbox=x=iw*$at-2:y=0:w=2:h=ih:color=white:t=fill', '${folder.path}/split.png']);
@@ -223,7 +231,7 @@ abstract final class EffectTiles {
       try {
         same ? File('$home.same').writeAsStringSync('') : File('$home.same').deleteSync();
       } catch (_) {}
-      if (show != null) File('$home.showcase').writeAsStringSync('');   // (drawn as AbsentMotion shows it)
+      if (_shownBy(f)) File('$home.showcase').writeAsStringSync('');   // (drawn as AbsentMotion shows it)
       drawn.add((home, same));
     }
     m.close();
