@@ -337,7 +337,7 @@ class Ws extends ChangeNotifier {
   }
 
   /// Whether the stage is seen by the working eye, not the camera (AbsentMotion's cameraMode off): only a document with a camera has two eyes.
-  bool get freeEye => !viewOf('stage.camera', true) && layers.any((l) => l.kind == WsKind.camera);
+  bool get freeEye => !viewOf('stage.camera', false) && layers.any((l) => l.kind == WsKind.camera);
 
   /// Where the working eye stands round the world's middle: about, over, how far.
   List<double> get eye => viewOf('stage.eye', const [0.0, 0.0, 1.0]);

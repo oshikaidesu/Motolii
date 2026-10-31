@@ -514,6 +514,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] カメラの動きのプリセット（10/31）：Push In・Pull Out・Orbit・Pan・Dolly Zoom・Handheld を押すとキーが書かれる（AbsentMotion の `CameraMove`）。まだ無い
 - [ ] カメラ本体が作業の目の後ろにあると丸が出ず、掴めない（10/31）：引くと出る
 - [x] カメラのタブ — 済（10/31 ユーザー：「ステージとは別にカメラのタブが必要だ」）：`Camera View` タブ。タブを舞台の横へ運ぶと世界とカメラを同時に見られる（After Effects の 2 Views）。Filament の View は Camera を替えて描ける（`live_camera`）ので、1 拍に 2 回描く。測った（p90 と立方体と効果、再生中）：手の仕事 0.3 → 7.3 ms、60fps のまま。タブが裏にある間は描かない。カメラの絵は舞台サイズの `Live`
+- [x] Stage と Camera View が同じ絵だった（11/1 ユーザー：「カメラとステージが一緒のビューになっているように見える」）：カメラのある書類で舞台の初期の目が `Camera` だったので、横に並べても 2 面が同じ絵になった。舞台の初期は世界（`Free`）に直した（AbsentMotion の `EditorState.kt`：`cameraView` は false で始まる）。切り替えの出る条件も同じ行に合わせた（`PreviewMode.kt`：`cameraMode` か、カメラがある時）。2 面に分ける使い方は After Effects の 2 Views と同じ（片方 Top、片方 Active Camera）。After Effects 自身の舞台の初期は Active Camera で、ここは Alight Motion を床にする。
 - [ ] 目ごとに `doc_moment` を 2 回走らせている（10/31）：今は足りているが、物が多い書類は未測。重ければ View を 2 つ持ち、差は Filament の `setVisibleLayers` と View の設定で持つ（ユーザー：「フィラメントで簡単にできるはず」）
 - [ ] 効果のある書類の `Free` は、世界の絵が舞台の四角で切れる（10/31）：`live_draw` の placed の道。枠の外に効果の無い物が見えない
 

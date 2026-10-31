@@ -80,9 +80,13 @@ void main() {
     await t.pump();
     await t.tap(find.text('Grid'));
     await t.tap(find.text('Safe'));
-    await t.tap(find.text('Camera'));
+    expect(find.text('Free'), findsNothing, reason: 'no camera, one eye (AbsentMotion\'s PreviewMode)');
+    m.add('camera', 'camera');
+    ws.reread();
     await t.pump();
-    expect(find.text('Free'), findsOneWidget);
+    await t.tap(find.text('Free'));   // (the world's first: AbsentMotion's cameraView starts off)
+    await t.pump();
+    expect(find.text('Camera'), findsOneWidget);
     expect(t.takeException(), isNull);
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
@@ -193,7 +197,8 @@ void main() {
     m.add('shape', 'rect');
     ws
       ..reread()
-      ..select(null);
+      ..select(null)
+      ..setView('stage.camera', true);   // (seen by the camera: by the working eye the tool moves that)
     await _stage(t, ws, const Size(924, 616));
     await t.tap(find.byKey(const ValueKey('ws-tool-7')));
     await t.pump();
