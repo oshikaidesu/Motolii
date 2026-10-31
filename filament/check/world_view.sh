@@ -13,6 +13,7 @@ shot faces "add shape rect\nsay 1 fill ff3366\nsay 1 space 2.5d\nadd camera eye\
 shot turned "$world\nlater eye 0 50 -10 1.5\nstill $W/eye3.png"
 shot fog "$world\nset 4 fog 1\nset 4 fog_near 0\nset 4 fog_far 8\nstill $W/fog.png\nlater eye 0 0 20 1\nstill $W/fog_eye.png"
 printf "add solid cube\nadd camera eye\nlater eye 0 90 0 1\nstill $W/x.png\nlater hold 1\ncarry place 120 0\nstill $W/y.png\nvalue 1 x 0\nvalue 1 z 0\n" | ./edit.sh $W/side.motolii > $W/side.txt 2>&1
+shot fill "add camera eye\nset 1 duration 5\nlater eye 0 40 20 1\nat 2\nstill $W/fill.png\nmake White Flash\nlater eye 0\nstill $W/fill.png"
 shot none "add shape rect\nsay 1 fill 33ff66\nstill $W/plain.png\nlater eye 0 40 20 1\nstill $W/plain_eye.png"
 shot film "$world\nset 0 duration 0.1\nwrite $W/film_camera.mp4\nlater eye 0 40 20 1\nwrite $W/film_eye.mp4"
 shot kept "$world\nlater eye 0 40 20 1\nlater eye 0"; shot plain "$world"; sqlite3 $W/kept.motolii .dump > $W/kept.sql; sqlite3 $W/plain.motolii .dump > $W/plain.sql
@@ -32,6 +33,7 @@ a, b = red('face'), red('edge'); say('a 2.5D sheet goes on facing the camera, se
 n = changed('eye', 'eye3'); say('the working eye turned, its picture turns', n > 2000, '%d pixels' % n)
 a, b = green('camera'), green('eye'); say('a 2D thing is in the camera\'s picture and not the world\'s', a > 500 and b == 0, '%d and %d pixels' % (a, b))
 n = changed('eye', 'fog_eye'); m = changed('camera', 'fog'); say('a camera\'s fog is in its picture alone', n == 0 and m > 500, '%d in the eye, %d in the camera' % (n, m))
+say('White Flash fills the film though the working eye looks', Image.open(f'$W/fill.png').convert('RGB').getpixel((4, 4)) == (255, 255, 255), str(Image.open(f'$W/fill.png').convert('RGB').getpixel((4, 4))))
 n = changed('plain', 'plain_eye'); say('with no camera there is one eye', n == 0, '%d pixels' % n)"
 cmp -s $W/film_camera.mp4 $W/film_eye.mp4 && echo "a film is the camera's whichever eye the window has: yes" || echo "a film is the camera's whichever eye the window has: NO"
 diff -q <(sed -E 's/,[0-9.]+\);$/);/' $W/kept.sql) <(sed -E 's/,[0-9.]+\);$/);/' $W/plain.sql) > /dev/null && echo "the working eye is not in the document: yes" || echo "the working eye is not in the document: NO"

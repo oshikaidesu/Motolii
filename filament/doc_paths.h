@@ -276,9 +276,12 @@ static bool doc_fit(Doc& d, int thing, const std::string& how) {
         doc_forget(d);
         if (d.act_ok && !doc_match(d)) d.act_ok = false;
     }
-    if (!doc_seen_box(d, thing, now, b) || b[2] - b[0] < 1e-6 || b[3] - b[1] < 1e-6) return d.trouble = "it is not seen now", false;
+    const bool eye = d.eyeAsked;   // (the film's picture is what it fills, by whichever eye the window looks: After Effects' Fit to Comp; the camera taken as picture_update takes it)
+    if (eye) d.eyeAsked = false, doc_moment(d, now);
+    const auto back = [&](bool ok) { if (eye) d.eyeAsked = true, doc_moment(d, now); return ok; };
+    if (!doc_seen_box(d, thing, now, b) || b[2] - b[0] < 1e-6 || b[3] - b[1] < 1e-6) return d.trouble = "it is not seen now", back(false);
     const double wx = (double)d.stage->w / (b[2] - b[0]), wy = (double)d.stage->h / (b[3] - b[1]);
-    if (how != "fit" && how != "fill" && how != "stretch") return d.trouble = "made to fit, fill or stretch", false;
+    if (how != "fit" && how != "fill" && how != "stretch") return d.trouble = "made to fit, fill or stretch", back(false);
     doc_act(d);
     bool ok = how == "stretch" ? doc_value_by(d, thing, "scale_x", 0, wx) && doc_value_by(d, thing, "scale_y", 0, wy) : doc_value_by(d, thing, "size", 0, how == "fit" ? std::min(wx, wy) : std::max(wx, wy));
     if (ok) {
@@ -286,7 +289,7 @@ static bool doc_fit(Doc& d, int thing, const std::string& how) {
         ok = doc_seen_box(d, thing, now, b) && doc_move_seen(d, thing, d.stage->w / 2.0 - (b[0] + b[2]) / 2, d.stage->h / 2.0 - (b[1] + b[3]) / 2, now);
     }
     if (!ok) d.act_ok = false;
-    return doc_acted(d) && ok;
+    return back(doc_acted(d) && ok);
 }
 // The upright box of the picture a thing covers at a moment, however it is turned or leans: left, top, wide, high.
 static bool doc_covers(Doc& d, int thing, double now, double* box) {

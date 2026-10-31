@@ -187,6 +187,7 @@ static std::map<std::string, std::string> doc_own_ways() {
     return kept;
 }
 // The recipe of that name made at the stage's present moment, one step (0: not made, d.trouble says why).
+static bool doc_fit(Doc& d, int thing, const std::string& how);
 static int doc_make(Doc& d, const char* name) {
     std::vector<DocRecipe> all = doc_recipes();
     const DocRecipe* r = nullptr;
@@ -194,6 +195,7 @@ static int doc_make(Doc& d, const char* name) {
     if (!r) return d.trouble = std::string("there is no recipe ") + name, 0;
     doc_act(d);
     int now = 0, first = 0, before = 0;   // (the thing the lines tell: "make" the first, "then" another, each named as the recipe)
+    double from = 0.0;   // (where its keys count from: "here" says the playhead)
     for (const std::string& line : r->lines) {
         std::istringstream w(line);
         std::string call, value;
@@ -213,7 +215,9 @@ static int doc_make(Doc& d, const char* name) {
         if (!thing) break;
         if (call == "set") doc_set(d, thing, value.c_str(), rest == "first" ? first : rest == "before" ? before : rest == "behind" ? first - 0.5 : std::atof(rest.c_str()));   // (a thing it goes with: the recipe's first, or the one made before this one; an order just behind the first)
         else if (call == "say") doc_say(d, thing, value.c_str(), value == "script" && rest == "this" ? r->path.c_str() : rest.c_str());   // (another of its things run by the recipe's own code: "this")
-        else if (call == "key") { std::istringstream k(rest); double at = 0, is = 0; k >> at >> is; doc_key(d, thing, value.c_str(), at, is); }   // (at that moment of the document, wherever the stage stands: its film loops as made)
+        else if (call == "here") from = d.stage->now, doc_set(d, thing, "start", from);   // (it begins where the playhead is, as a clip is placed: not a picture that goes round)
+        else if (call == "fit") doc_fit(d, thing, value);
+        else if (call == "key") { std::istringstream k(rest); double at = 0, is = 0; k >> at >> is; doc_key(d, thing, value.c_str(), from + at, is); }   // (at that moment of the document, wherever the stage stands: its film loops as made)
     }
     return doc_acted(d) && now ? first : 0;
 }
