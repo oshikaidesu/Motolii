@@ -30,6 +30,29 @@ static bool doc_thing_stands(Doc& d, int thing, ThingFx& e) {
     float deep = 0.f;
     return shown != d.shown.end() && !shown->second.solid && doc_members(d, thing) == 1 && doc_half(d, thing, &half, &deep) && deep == 0.f;
 }
+// Whether a solid stays in the world and shows its picture itself (effected_solid.mat): one whose effects work on its own
+// picture, as a stood thing's.
+static bool doc_thing_shows(Doc& d, int thing, ThingFx& e) {
+    thing_effects(*d.stage, e.st, doc_fx_join(doc_fx_steps(d, thing)));
+    for (const std::string& w : doc_fx_list(d, thing)) if (solid_is(w)) return false;
+    const auto shown = d.shown.find(thing);
+    float2 half{0.f};
+    float deep = 0.f;
+    return shown != d.shown.end() && shown->second.space != 2 && !e.st.readsBehind && !e.st.wide && e.st.aviutl.empty() && (shown->second.solid || (doc_half(d, thing, &half, &deep) && deep > 0.f));
+}
+// Its picture on its faces while the stage is drawn, or their own looks back, for it to be filmed and told by the document.
+static void doc_thing_shell(Doc& d, int thing, ThingFx& e, bool on) {
+    const auto t = d.shown.find(thing);
+    if (t == d.shown.end() || on != e.looks.empty()) return;
+    size_t n = 0;
+    doc_parts(*d.stage, t->second, [&](RenderableManager& faces, RenderableManager::Instance one) {
+        for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part, ++n) {
+            if (on) e.looks.push_back(faces.getMaterialInstanceAt(one, part)), faces.setMaterialInstanceAt(one, part, e.look);
+            else if (n < e.looks.size() && faces.getMaterialInstanceAt(one, part) == e.look) faces.setMaterialInstanceAt(one, part, e.looks[n]);
+        }
+    });
+    if (!on) e.looks.clear();
+}
 static void doc_thing_stand(Doc& d, int thing, ThingFx& e) {   // (before the frame)
     math::mat4 place;
     float2 half{0.5f};
@@ -92,7 +115,7 @@ static double doc_aviutl_asked(Doc& d, int thing, const double* box, const std::
 
 static void doc_things_fx(Doc& d) {
     Stage& s = *d.stage;
-    s.before.clear(), s.aim.clear();
+    s.before.clear(), s.aim.clear(), s.after.clear();
     for (auto& [thing, e] : d.thingFx) {   // (each drawn alone into a picture, its effects run on it, before the stage's own view: thing_fx.h)
         thing_effects(s, e.st, doc_fx_join(doc_fx_steps(d, thing)));
         e.solidFile.clear();
@@ -192,7 +215,7 @@ static void doc_things_fx(Doc& d) {
             if (e.world) doc_thing_stand(d, thing, e);
             else thing_fx_aim(s, e, box);
             thing_fx_pictures(s, e.st, e.view);
-            if (e.look) e.look->setParameter("image", thing_fx_seen(e.st), TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
+            if (e.look) e.look->setParameter("image", thing_fx_seen(e.st), e.shell ? TextureSampler(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST) : TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
             if (e.look) {   // (its glow over what its effects made: the stage's bloom, as a thing without effects glows (doc_moment))
                 std::lock_guard<std::recursive_timed_mutex> hold(d.lock);
                 e.look->setParameter("glowing", (float)doc_number(d, thing, "emissive", d.stage->now, 0) + (doc_word(d, thing, "glow").empty() ? 0.f : 0.35f * (float)doc_number(d, thing, "glow_opacity", d.stage->now, 1)));
@@ -201,6 +224,8 @@ static void doc_things_fx(Doc& d) {
         s.before.push_back([&d, thing = thing, &e = e, numbers, thorFx] {   // (in the frame: drawn alone, its effects run)
             if (!e.solidFile.empty()) return doc_thing_solid(d, thing, e, numbers, thorFx);
             thing_effects_draw(*d.stage, e.st, e.view, numbers, thorFx);
+            if (e.shell) doc_thing_shell(d, thing, e, true);
         });
+        if (e.shell) s.after.push_back([&d, thing = thing, &e = e] { doc_thing_shell(d, thing, e, false); });
     }
 }

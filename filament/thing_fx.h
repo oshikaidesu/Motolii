@@ -152,6 +152,8 @@ struct ThingFx {
     bool world = false;                    // (its sheet stands where it lies in the world, its picture filmed square to it: thing_fx_stand; else laid on the screen)
     double own[5] = {0, 0, 0, 0, 0};       // (stood: where it is on its picture, its middle, its width and height, in its points, and how many points a unit of the world)
     math::mat4 square;                     // (stood: where its picture is filmed from, the thing's own place, unscaled)
+    bool shell = false;                    // (a solid: it stays in the world and shows its picture itself, `look` on its faces while the stage is drawn: effected_solid.mat)
+    std::vector<MaterialInstance*> looks;  // (its faces' own looks while that one is on them: doc_thing_shell)
     // (its picture on a solid's faces, when its fx names a shape (solids/*.js): the shape's file, what the solid was last
     //  made of, the solid and its look; for one made of its outline, its coverage as last read back, and how many times)
     std::string solidFile, solidSaid, solidAs;   // (solidAs: its look's material)
@@ -182,17 +184,18 @@ static View* thing_fx_view(Stage& s, ThingFx& e) {
 }
 
 // The sheet: the whole picture, samples/materials/image.mat's way (its points are the screen's own corners).
-static ThingFx& thing_fx_made(Stage& s, ThingFx& e, const std::string& lay = "", bool world = false) {
-    if (e.view && e.lay == lay && e.world == world) return e;
+static ThingFx& thing_fx_made(Stage& s, ThingFx& e, const std::string& lay = "", bool world = false, bool shell = false) {
+    if (e.view && e.lay == lay && e.world == world && e.shell == shell) return e;
     if (!e.view) e.view = thing_fx_view(s, e);
     if (e.sheet) take_off(s, e.sheet), delete e.sheet;   // (another way of lying: its sheet made again in it)
-    e.lay = lay, e.world = world;
+    e.lay = lay, e.world = world, e.shell = shell;
     e.sheet = new Mesh;
     for (float2 c : {float2{-1, -1}, float2{1, -1}, float2{1, 1}, float2{-1, 1}}) e.sheet->pos.push_back({c.x, c.y, 0.f}), e.sheet->nrm.push_back({0, 0, 1}), e.sheet->uv.push_back(c * 0.5f + 0.5f);
     e.sheet->idx = {0, 1, 2, 0, 2, 3};
-    e.look = add(s, e.sheet, (std::string(world ? "effected_world" : "effected") + (lay.empty() ? "" : "_" + lay) + ".filamat").c_str());
+    e.look = add(s, e.sheet, shell ? "effected_solid.filamat" : (std::string(world ? "effected_world" : "effected") + (lay.empty() ? "" : "_" + lay) + ".filamat").c_str());
+    if (shell) move(s, e.sheet, [](int, const mat4f&) { return mat4f::scaling(float3{0.f}); });   // (the look is what is wanted of it: its sheet nowhere)
     e.look->setParameter("image", white_point(s), TextureSampler());
-    if (!world) e.look->setParameter("place", math::mat4f{});   // (the whole stage till it is aimed)   // (a picture from the start, as image.mat's sample sets it at once: Filament readies every instance before any view, the thing's own drawn first; never seen, its picture set before the stage's view)
+    if (!world && !shell) e.look->setParameter("place", math::mat4f{});   // (the whole stage till it is aimed)   // (a picture from the start, as image.mat's sample sets it at once: Filament readies every instance before any view, the thing's own drawn first; never seen, its picture set before the stage's view)
     return e;
 }
 
@@ -209,9 +212,11 @@ static void thing_fx_off(Stage& s, ThingFx& e) {
 // setModelMatrix), the projection narrowed to the box so the box is the whole of its picture (After Effects' layer: its
 // effects work on the layer's own picture, an ISF effect's centre its middle); its picture as many pixels as the box
 // covers on the stage's view; its sheet laid on the box (effected.mat place).
-static void thing_fx_aim(Stage& s, ThingFx& e, const double* box) {
-    std::copy(box, box + 4, e.box), std::copy(box, box + 4, e.st.box);
+static void thing_fx_aim(Stage& s, ThingFx& e, const double* said) {
     const double ppp = (double)s.view->getViewport().width / std::max(1, s.w);
+    double box[4] = {said[0], said[1], said[2], said[3]};
+    if (e.shell) box[0] = std::floor(box[0] * ppp) / ppp, box[1] = std::floor(box[1] * ppp) / ppp, box[2] = std::ceil(box[2] * ppp) / ppp, box[3] = std::ceil(box[3] * ppp) / ppp;   // (on the stage's own pixels: a solid reads its picture point for point)
+    std::copy(box, box + 4, e.box), std::copy(box, box + 4, e.st.box);
     const double x0 = 2 * box[0] / s.w - 1, x1 = 2 * box[2] / s.w - 1, y0 = 1 - 2 * box[3] / s.h, y1 = 1 - 2 * box[1] / s.h;   // (the box in the stage's clip space, y up)
     math::mat4 crop;
     crop[0][0] = 2 / (x1 - x0), crop[1][1] = 2 / (y1 - y0), crop[3][0] = -(x0 + x1) / (x1 - x0), crop[3][1] = -(y0 + y1) / (y1 - y0);
@@ -222,7 +227,8 @@ static void thing_fx_aim(Stage& s, ThingFx& e, const double* box) {
     e.view->setViewport({0, 0, (uint32_t)std::max(1L, std::lround((box[2] - box[0]) * ppp)), (uint32_t)std::max(1L, std::lround((box[3] - box[1]) * ppp))});
     math::mat4f place;
     place[0][0] = (float)((x1 - x0) / 2), place[1][1] = (float)((y1 - y0) / 2), place[3][0] = (float)((x0 + x1) / 2), place[3][1] = (float)((y0 + y1) / 2);
-    e.look->setParameter("place", place);
+    if (e.shell) e.look->setParameter("box", float4{(float)(box[0] / s.w), (float)(box[1] / s.h), (float)((box[2] - box[0]) / s.w), (float)((box[3] - box[1]) / s.h)});
+    else e.look->setParameter("place", place);
 }
 
 // Aimed square at the thing's own face, for a solid's faces (its picture the same however it is turned): an orthographic

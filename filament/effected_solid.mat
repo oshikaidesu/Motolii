@@ -1,0 +1,30 @@
+// effected_solid.mat: a solid's picture with its effects on, shown by the solid itself where it stands in the world: three.js'
+// webgpu_portal.html (MIT), a picture filmed apart by the same eye and read at the screen's own point on the mesh's
+// faces, so depth, fog and focus are the solid's own. Read as flat.mat reads what is under it.
+material {
+    name : EffectedSolid,
+    parameters : [
+        { type : sampler2d, name : image },
+        { type : float4, name : box },   // (where its picture lies on the stage, in shares: left, top, width, height)
+        { type : float, name : glowing },
+        { type : sampler2d, name : matte0 }, { type : sampler2d, name : matte1 }, { type : sampler2d, name : matte2 }, { type : sampler2d, name : matte3 },
+        { type : mat4, name : matteEye0 }, { type : mat4, name : matteEye1 }, { type : mat4, name : matteEye2 }, { type : mat4, name : matteEye3 },
+        { type : float4, name : matteUse }, { type : float4, name : matteSoft }
+    ],
+    blending : masked,
+    shadingModel : unlit,
+    doubleSided : true,
+    variantFilter : [ shadowReceiver, vsm ]
+}
+
+fragment {
+#include "matte.glsl"
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        highp vec2 at = getNormalizedViewportCoord().xy;
+        highp vec2 uv = (vec2(at.x, 1.0 - at.y) - materialParams.box.xy) / materialParams.box.zw;
+        material.baseColor = max(texture(materialParams_image, uv), 0.0);
+        material.baseColor.rgb *= 1.0 + materialParams.glowing;
+        material.baseColor.a *= matteLeft();
+    }
+}

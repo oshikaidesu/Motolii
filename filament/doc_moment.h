@@ -78,7 +78,13 @@ static void doc_moment(Doc& d, double now) {
         Doc::Shown& t = *lies[i].shown;
         const bool own = doc_fx_files(doc_fx_steps(d, lies[i].thing));   // (with effects of its own: drawn alone, its picture laid here: thing_fx.h)
         const std::string laid = own ? doc_word(d, lies[i].thing, "blend") : std::string();   // (its sheet lies on what is behind as it says: Filament's own blending; one that reads what is under, as normal yet)
-        Scene* into = own ? thing_fx_made(s, d.thingFx[lies[i].thing], laid == "add" || laid == "multiply" || laid == "screen" ? laid : "", doc_thing_stands(d, lies[i].thing, d.thingFx[lies[i].thing])).view->getScene() : s.scene;   // (one view: every other run in the stage's own scene, kept in order by Filament's channels)
+        const bool shows = own && doc_thing_shows(d, lies[i].thing, d.thingFx[lies[i].thing]);   // (a solid that shows its picture itself stays in the stage's scene, and is filmed by its view too, the stage's lights with it)
+        Scene* into = own ? thing_fx_made(s, d.thingFx[lies[i].thing], shows ? "" : laid == "add" || laid == "multiply" || laid == "screen" ? laid : "", !shows && doc_thing_stands(d, lies[i].thing, d.thingFx[lies[i].thing]), shows).view->getScene() : s.scene;
+        if (shows) {
+            s.scene->forEach([&, film = into](utils::Entity e) { if (s.engine->getLightManager().hasComponent(e)) film->addEntity(e); });
+            doc_entities(s, t, [film = into](utils::Entity e) { film->addEntity(e); });
+            into = s.scene;
+        }   // (one view: every other run in the stage's own scene, kept in order by Filament's channels)
         Scene* const was = t.scene ? t.scene : s.scene;
         if (was != into) {   // (into the scene of its run; one not seen goes in when it is seen)
             if (t.in) doc_entities(s, t, [&](utils::Entity e) { was->remove(e), into->addEntity(e); });

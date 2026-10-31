@@ -15,7 +15,7 @@ mkdir -p out/wgpu_kit/out
 [ -f out/small_studio/small_studio_ibl.ktx ] || $SRC/out/wgpu/tools/cmgen/cmgen -q -x out/small_studio --format=ktx --size=512 $SRC/third_party/environments/studio_small_02_2k.hdr
 [ -f out/lightroom/lightroom_ibl.ktx ] || $SRC/out/wgpu/tools/cmgen/cmgen -q -x out/lightroom --format=ktx --size=512 $SRC/third_party/environments/lightroom_14b.hdr
 for d in lightroom small_studio graffiti_shelter_2k studio_small_02_2k venetian_crossroads_2k parking_garage_2k pillars_2k; do [ -d out/$d ] && ln -sfn ../../$d out/wgpu_kit/out/$d 2> /dev/null; done; true
-for f in paper paper_copy floor_shade effected effected_world thick_glass far_side far_look glasslight glassbox boxlight bubble poster own_glass flat blade matte floor_lit solid_cloth solid_subsurface shape points solid_image; do
+for f in paper paper_copy floor_shade effected effected_world effected_solid thick_glass far_side far_look glasslight glassbox boxlight bubble poster own_glass flat blade matte floor_lit solid_cloth solid_subsurface shape points solid_image; do
     [ -f $f.mat ] || continue
     [ out/wgpu_kit/$f.filamat -nt $f.mat ] && [ out/wgpu_kit/$f.filamat -nt studio.glsl ] && [ out/wgpu_kit/$f.filamat -nt spectrum.glsl ] && [ out/wgpu_kit/$f.filamat -nt matte.glsl ] && continue
     $MATC -a webgpu -a metal -p desktop -TBLENDING=transparent -TCUT=opaque -TSHADE=lit -o out/wgpu_kit/$f.filamat $f.mat > out/wgpu_kit/$f.log 2>&1 ||

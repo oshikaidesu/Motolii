@@ -92,6 +92,7 @@ struct Stage {
     View* view_behind;   // the same scene without the glass (layer 2), drawn first into `behind`: what a block shows
     Texture* behind;
     bool behindRead = false;   // whether anything reads `behind` (glass, the paper): until then it is not drawn
+    std::vector<std::function<void()>> after;   // (once the picture is drawn: a solid's own looks back, doc_thing_shell)
     bool backdropRead = false;   // whether a thing's effect reads `behind` (AbsentMotion's backdrop): then it is drawn before the things' effects too
     View* view_through = nullptr; // the glass's far faces alone (layer 8), drawn second into `through`: which way they face (far_side.mat)
     Texture* through = nullptr;
