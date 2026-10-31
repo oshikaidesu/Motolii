@@ -503,7 +503,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] 立体の輪郭を越える効果は切れる（10/31、Ring の外側の光で見えた）：①は立体の面にしか描けないため。下の②③は越えられるが奥行きを失う。越える分の出典は未確定
 - [ ] 効果を付けた立体の面に、ほかの物の影が落ちない（10/31）：面の材料が unlit のため。未修正
 - [ ] コピーのある物、後ろの絵を読む効果、AviUtl2 のスクリプトはまだ世界から抜ける
-- [ ] 立体のある書類を開くと、舞台が空のまま止まる（10/31 測った）：Dawn が Metal のパイプラインを作る間、エンジンの糸が `desk_is` の fence で待つ。56 秒。次に開いた時は 20 秒で済んだ。立体が無ければ起きず、今の push 済みのエンジンでも同じ。出典はまだ探していない（Dawn の非同期パイプライン、パイプラインのキャッシュ）
+- [x] 立体のある書類を初めて開くと、舞台が空のまま止まる（10/31 直した）：犯人はシェーダー 1 本。92 本で 79 秒のうち 76 秒がその 1 本で、最適化を切っても同じ、Clang の入口で詰まっていた。Tint が構造体の let に書く `const` の連鎖を、Clang が読むたび定数として計算し直す。構造体の `const` だけ書かないようにして 76 秒 → 0.26 秒、起動の全体は 86 秒 → 19 秒（うち 18 秒は開発時の Flutter ビルド）。出典：Dawn の Tint `msl/writer/printer/printer.cc` `EmitLet`。上流に同じ報告は見つからず、この切り分けは自分で測った（`xcrun metal -ftime-report`、関数ごとに空にして計測）。`dawn_probe/tint_msl_let.patch`。Apple の `optimizationLevel` は効かない：`-O0` でも 70 秒。
 - 立体の出典（10/31）：① three.js `webgpu_portal.html`：別撮りの絵を、世界にある立体の色として画面座標で貼る（`pass(scene, camera)` + `screenUV`、棚にあり）。奥行き・霧・ピントは立体そのままで付く。Filament では `flat.mat` の `uvToRenderTargetUV(getNormalizedViewportCoord().xy)` が同じ読み方。はみ出す分（光・波紋）は出ない ② Unreal の Custom Depth Stencil + Post Process Material：画面全体の後で物のマスクに掛ける ③ three.js `webgpu_postprocessing_bloom_selective.html`：マスクを掛けた光を最後の絵に足す。はみ出すが奥行きは無い ④ Blender Depth Combine、Unity HDRP の Custom Pass：色と奥行きを別に持って重ねる。Filament には面の材料で奥行きを書く道が無い（`gl_FragDepth` は post_process だけ）。①を採った
 - [x] 効果の物差しが物に付いた（10/31）：位置を変えても 14.0 本のまま（前は 14.0〜24.4 本）。回す、カメラで寄る、引くでも物に付いて回る。寄ると、見えている分だけ細かく撮るので縁は甘くならない
 - [ ] 物の大きさを変えると模様の本数が変わる（×1.5 で 15.6、×0.5 で 10.8）：余白が物の大きさに比例しないため。After Effects は物の枠だけが基準（Grow Bounds で広げる）。また、ピクセルで長さを持つ効果は、寄ると画面のピクセルのままで、物に付いて大きくならない（ぼかしの半径など）。ISF の RENDERSIZE を使うものが 327 本中 144 本（未修正）

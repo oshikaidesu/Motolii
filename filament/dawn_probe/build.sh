@@ -15,6 +15,7 @@ fi
 # (Filament's WebGPU viewport turned to WebGPU's top-left origin, as its own scissor() does: upstream's TODO in
 #  beginRenderPass, still there on main 10/27. Put on a tree made before it too, once)
 (cd "$SRC" && { git apply --reverse --check "$HERE/filament_webgpu_viewport.patch" 2>/dev/null || git apply "$HERE/filament_webgpu_viewport.patch"; })
+(cd "$SRC" && { git apply --reverse --check "$HERE/tint_msl_let.patch" 2>/dev/null || git apply "$HERE/tint_msl_let.patch"; })   # (a first open of a 立体 took 76 s in Apple's compiler, on one shader, for a `const`)
 mkdir -p "$SRC/out/wgpu" out/shots
 cd "$SRC/out/wgpu"
 [ -f build.ninja ] || cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DFILAMENT_SUPPORTS_WEBGPU=ON -DFILAMENT_SKIP_SAMPLES=ON \

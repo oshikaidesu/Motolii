@@ -1,0 +1,15 @@
+diff --git a/third_party/dawn/src/tint/lang/msl/writer/printer/printer.cc b/third_party/dawn/src/tint/lang/msl/writer/printer/printer.cc
+index c430a35fc..9d2c477e1 100644
+--- a/third_party/dawn/src/tint/lang/msl/writer/printer/printer.cc
++++ b/third_party/dawn/src/tint/lang/msl/writer/printer/printer.cc
+@@ -708,7 +708,9 @@ class Printer : public tint::TextGenerator {
+         }
+         EmitType(out, l->Result()->Type());
+         out << " ";
+-        if (current_function_ != nullptr) {
++        // Not on a struct: Clang tries a const struct's initializer as a constant each time one is
++        // read, so a chain of them, each copying the last member by member, takes minutes.
++        if (current_function_ != nullptr && !l->Result()->Type()->Is<core::type::Struct>()) {
+             out << "const ";
+         }
+         out << NameOf(l->Result()) << " = ";
