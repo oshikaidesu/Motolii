@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 W=$(mktemp -d)
 python3 - $W <<'P'
 import subprocess,sys,math,os
-from PIL import Image
+from PIL import Image,ImageChops
 W=sys.argv[1]
 b=(0xcc/255,0x66/255,0x33/255); s=(0x4d/255,0x99/255,0xe6/255)
 lum=lambda c:.3*c[0]+.59*c[1]+.11*c[2]
@@ -55,6 +55,9 @@ run('two',['add shape rect','say 1 fill ffffff','add shape rect','say 2 fill fff
 print('one over another reads it as laid:','yes' if sum(at('two'))>750 else f"NO {at('two')}")
 run('copy',['add shape rect','say 1 fill 3399cc','add shape rect','say 2 fill behind',f'say 2 fx {os.getcwd()}/effects/Color Invert.fs',f'still {W}/copy.png'])
 print('a fill of what is behind takes the effect on it:','yes' if abs(at('copy')[0]-0xcc)<6 and abs(at('copy')[1]-0x66)<6 else f"NO {at('copy')}")
+run('place',['add shape rect','say 1 fill ff0000','set 1 size 0.3','set 1 x 0.6',f'still {W}/place0.png','add shape rect','set 2 size 3','say 2 fill behind',f'say 2 fx {os.getcwd()}/effects/Shake.fs',f'still {W}/place1.png'])
+moved=ImageChops.difference(*[Image.open(f'{W}/place{i}.png').convert('L') for i in (0,1)]).point(lambda v:255 if v>16 else 0).histogram()
+print('with an effect on it, it stays where what is behind it is:','yes' if moved[255]/sum(moved)<.002 else f'NO {moved[255]/sum(moved)*100:.2f} %')
 run('fx',['add shape rect','say 1 fill cc6633','add shape rect','say 2 fill 4d99e6',f'say 2 fx {os.getcwd()}/effects/Color Invert.fs','say 2 blend difference',f'still {W}/fx.png'])
 print('a thing with effects reads too, after them:','yes' if max(abs(g-h) for g,h in zip(at('fx'),(0x1a,0,0x1a)))<6 else f"NO {at('fx')}")
 P

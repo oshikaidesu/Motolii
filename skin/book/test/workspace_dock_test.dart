@@ -209,6 +209,28 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('a file\'s effect with nothing picked comes on an adjustment layer over all else, picked (After Effects, Photoshop\'s Adjustments panel)', (t) async {
+    final ws = _joined();
+    await _shelf(t, ws, const Size(600, 918), 'Effects');
+    final m = ws.inside!;
+    final was = m.things.length;
+    final tile = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('ws-screen-')).first;
+    final id = (t.widget(tile).key as ValueKey<String>).value.substring('ws-screen-'.length);
+    await t.tap(tile);
+    await t.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+    await t.pumpAndSettle();
+    expect(find.text('new layer'), findsOneWidget, reason: 'as the foot says');
+    await t.tap(find.text('Add'));
+    for (var i = 0; i < 200 && (ws.waiting || ws.selected == null); i++) {   // (asked without waiting)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await t.pump();
+    }
+    expect(m.things.length, was + 1);
+    final board = int.parse(ws.selected!);
+    expect([m.word(board, 'fill'), m.word(board, 'name'), m.word(board, 'fx')], ['behind', 'Adjustment', contains(id)]);
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
   testWidgets('an effect pressed once shows its moving pictures large above its name (Alight Motion\'s large moving sample)', (t) async {
     final ws = _joined();
     await _shelf(t, ws, const Size(600, 918), 'Effects');

@@ -400,6 +400,7 @@ final _makes = <(String, List<_Make>)>[
       _Make('Text', DockG.text, WsT.toneText, 'T', 'Type layer'),
       _Make('Camera', DockG.camera, WsT.toneCamera, '⇧C', '3D camera, 45 mm'),   // (the lens it comes with: the stage's 30 degrees on Filament's 24 mm film, desk_depth.dart _filmMm, as the Camera desk says)
       _Make('Null', DockG.nullObj, Grey.g76, '⇧N', 'Invisible parent'),
+      _Make('Adjustment', DockG.nullObj, Grey.g76, '', 'What is put on it works on all under it'),
     ],
   ),
   (
@@ -493,6 +494,7 @@ void _make(DockCtx c, _Make tile) {
     c.ws.after(m.later('make', word: name), (done, why) => c.set(() => done ? c.mem.trouble.remove(name) : c.mem.trouble[name] = why), (made) => c.ws.select('$made'));   // (without waiting: picked once made)
     return;
   }
+  if (name == 'Adjustment') return c.ws.adjustment();   // (After Effects' New > Adjustment Layer)
   if (_worn[name] case final fill?) {
     final t = int.tryParse(c.ws.selected ?? '');
     if (t == null || m.word(t, 'kind') != 'solid') return c.set(() => c.mem.trouble[name] = 'Pick a solid to make it ${name.toLowerCase()}');

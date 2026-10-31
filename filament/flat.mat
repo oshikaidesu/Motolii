@@ -20,6 +20,7 @@ material {
         { type : sampler2d, name : backdrop },   // what lies under it as drawn so far, when its way of lying reads it (kit.h pictures_of)
         { type : float, name : blendWay },       // that way (doc.h doc_blend_way: 1 darken ... 13 luminosity; 0: the GPU's own blending)
         { type : float, name : behind },         // 1: its fill is what is behind it, as it is (doc.h: fill behind, a copy of the background; then its blend as said)
+        { type : mat4, name : behindEye },       // where the stage's eye sees a point of the world: where in that picture a point of it is, on the stage or on a sheet of its own (matte.glsl's matteEye)
         { type : float4[8], name : ramp },   // its copies' colours from the first to the last (copy_fill), when they are drawn in one go
         { type : float4, name : rampOf },    // which copy the first of this one draw is, how many copies there are, how many colours, 1: one each in turn (0 copies: none)
         { type : float4, name : copyFade },  // the last copy's clearness, how many copies, which copy the first of this one draw is, 1: on (After Effects' Repeater, End Opacity)
@@ -163,7 +164,8 @@ fragment {
         if (fade.w > 0.5) material.baseColor *= mix(1.0, fade.x, fade.y > 1.0 ? (fade.z + variable_copyOf.x) / (fade.y - 1.0) : 0.0);   // (each copy clearer along them, from the first, as itself, to the last)
         material.baseColor.rgb *= 1.0 + materialParams.glowing;   // (a neon: its own colour, brighter than white)
         if (materialParams.behind > 0.5 && material.baseColor.a > 1e-4) {   // (its fill what is behind it, where it is: a copy of the background in its shape)
-            vec4 behind = textureLod(materialParams_backdrop, uvToRenderTargetUV(getNormalizedViewportCoord().xy), 0.0);
+            highp vec4 seen = materialParams.behindEye * vec4(getUserWorldPosition(), 1.0);
+            vec4 behind = textureLod(materialParams_backdrop, uvToRenderTargetUV(seen.xy / max(seen.w, 1e-6) * 0.5 + 0.5), 0.0);
             material.baseColor.rgb = (behind.a > 1e-4 ? behind.rgb / behind.a : vec3(0.0)) * material.baseColor.a;
         }
         if (materialParams.blendWay > 0.5 && material.baseColor.a > 1e-4) material.baseColor.rgb = wayLaid(material.baseColor);

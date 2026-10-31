@@ -40,7 +40,7 @@ class EffectsShelf extends StatelessWidget {
           (id: n, name: n, label: m.label(n), on: on.contains(n), apply: chosen(n, () => ws.fxToggle(n)), said: _said(ws, n),
            tile: _Tile(n, file: m.picture(n), look: _FxLook(n), on: on.contains(n) ? 'ON' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: chosen(n, () => ws.fxToggle(n)), star: c)),
       for (final (n, f) in _byName[m.effects] ??= ([...m.effects]..sort((a, b) => a.$1.toLowerCase().compareTo(b.$1.toLowerCase()))))
-        (id: f, name: n, label: m.label(n), on: screen.contains(f), apply: chosen(f, () => ws.screenToggle(f)), said: m.about(f).isEmpty ? 'On the picked thing' : m.about(f),
+        (id: f, name: n, label: m.label(n), on: screen.contains(f), apply: chosen(f, () => ws.screenToggle(f)), said: m.about(f).isEmpty ? (picked ? 'On the picked thing' : 'On all under it') : m.about(f),
          tile: _Tile(n, key: ValueKey('ws-screen-$f'), file: m.picture(f), same: m.tileSame(f), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, picked: c.sel == f, onTap: () => c.pick(f), onApply: chosen(f, () => ws.screenToggle(f)), star: c, starId: f)),
       if (picked)   // (a look kept by its name, Save Look: given to the picked thing, its values, effects and keys)
         for (final (n, f) in m.looks)
@@ -93,7 +93,7 @@ class EffectsShelf extends StatelessWidget {
         ),
         if (sel != null && m.picture(sel.id).isNotEmpty)   // (its pictures large and moving, as Alight Motion's effect browser opens a large moving sample of the one pressed)
           SizedBox(key: const ValueKey('ws-fx-preview'), height: Shape.z(140), child: _Moving(m.picture(sel.id), playing: true)),
-        if (sel != null) _FxFooter(sel.name, kind: sel.label, said: sel.said, done: sel.on, ws: ws, onAction: sel.apply, needs: !picked),   // (an effect is always a thing's: none picked, none put on)
+        if (sel != null) _FxFooter(sel.name, kind: sel.label, said: sel.said, done: sel.on, ws: ws, onAction: sel.apply, needs: !picked),   // (none picked: a file's goes on a board of its own, one of a thing's waits for a thing)
       ],
     );
   }
@@ -213,8 +213,7 @@ class _FxFooter extends StatelessWidget {
     title: name,
     meta: kind.isEmpty ? said : '$kind · $said · double-click to add',
     action: done ? 'Remove' : 'Add',
-    done: needs,
-    doneLabel: 'Pick a thing',
+    fresh: needs,
     onAction: onAction,
   );
 }

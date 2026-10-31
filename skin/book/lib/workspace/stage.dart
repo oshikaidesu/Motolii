@@ -260,18 +260,7 @@ class _IconPainter extends CustomPainter {
 
 /// A shape tool pressed twice: one as large as the picture, at once (After Effects': Adobe's own lesson on adding layers).
 void _whole(Ws ws, String kind) {
-  final m = ws.inside;
-  if (m == null) return;
-  m.later('together', number: 1);
-  var made = 0;
-  ws.after(m.later('add', name: 'shape', word: kind), null, (t) => made = t);
-  m
-    ..later('set', thing: -1, name: 'size', number: WsArt.comp.height / m.point)
-    ..later('set', thing: -1, name: 'wide', number: WsArt.comp.width / WsArt.comp.height);
-  wsInked(ws, 'shape', kind);
-  ws.after(m.later('together'), (done, _) {
-    if (done && made > 0) ws.select('$made');
-  });
+  ws.whole(kind);
   ws.setView('stage.tool', 0);
 }
 

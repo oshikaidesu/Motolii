@@ -260,10 +260,12 @@ static void doc_things_fx(Doc& d) {
 
 // Told a thing's way of reading what is under it, and the picture of that.
 static void doc_reading(Stage& s, Doc::Shown& t, float way, float behind, Texture* picture) {
+    const Camera& eye = s.view->getCamera();
+    const mat4f seen = mat4f(eye.getProjectionMatrix() * eye.getViewMatrix());
     doc_parts(s, t, [&](RenderableManager& faces, RenderableManager::Instance one) {
         for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part)
             if (MaterialInstance* look = faces.getMaterialInstanceAt(one, part); look->getMaterial()->hasParameter("blendWay"))
-                look->setParameter("blendWay", way), look->setParameter("behind", behind), look->setParameter("backdrop", picture, TextureSampler(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST));
+                look->setParameter("blendWay", way), look->setParameter("behind", behind), look->setParameter("behindEye", seen), look->setParameter("backdrop", picture, TextureSampler(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST));
     });
 }
 // The same for a thing with effects: what it lays is its sheet, its way taken after its effects (After Effects: a layer's

@@ -460,10 +460,41 @@ class Ws extends ChangeNotifier {
     ];
   }
 
-  /// Joined: an effect put over the others on the picked thing, or taken off (one step either way). Nothing picked: nothing.
+  /// A shape as large as the picture, picked, one step with what [also] says to it.
+  void whole(String kind, [void Function(Motolii m)? also]) {
+    final m = _inside;
+    if (m == null) return;
+    m.later('together', number: 1);
+    var made = 0;
+    after(m.later('add', name: 'shape', word: kind), null, (t) => made = t);
+    m
+      ..later('set', thing: -1, name: 'size', number: WsArt.comp.height / m.point)
+      ..later('set', thing: -1, name: 'wide', number: WsArt.comp.width / WsArt.comp.height);
+    wsInked(this, 'shape', kind);
+    also?.call(m);
+    after(m.later('together'), (done, _) {
+      if (done && made > 0) select('$made');
+    });
+  }
+
+  /// A board as large as the picture whose fill is what is behind it: what is on it works on all under it (After Effects'
+  /// Adjustment Layer).
+  void adjustment([String? file]) => whole('rect', (m) {
+    m
+      ..later('say', thing: -1, name: 'fill', word: 'behind')
+      ..later('say', thing: -1, name: 'name', word: 'Adjustment');
+    if (file != null) m.later('fx_file', thing: -1, word: file);
+  });
+
+  /// Joined: an effect put over the others on the picked thing, or taken off (one step either way). Nothing picked: a new
+  /// adjustment layer with it (Photoshop's Adjustments panel: a press there adds a layer over the rest).
   bool screenToggle(String file) {
     final m = _inside, t = int.tryParse(selected ?? '');
-    if (m == null || t == null) return false;
+    if (m == null) return false;
+    if (t == null) {
+      adjustment(file);
+      return true;
+    }
     // (at the end of its effects or out, by the inside's rule for its list; not taken, said why: a camera takes motions only)
     after(m.later('fx_file', thing: t, word: file), (done, why) => done || why.isEmpty ? null : notice = 'Not taken: ${why.split(':').first}');
     return true;
