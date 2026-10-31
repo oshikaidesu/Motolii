@@ -120,6 +120,9 @@ typedef WsStretch = ({int from, int to, String way, List<double> shape});
 /// A key the user picked: which layer, which frame.
 typedef WsKey = ({String layer, int frame});
 
+/// A stretch of one value picked by its line in the timeline: from a key, [at] seconds, to the next of that value (frames).
+typedef WsStretchPicked = ({String layer, String name, double at, int from, int to});
+
 /// The window's state: the document's things as rows (read again from the inside), what is picked, the moment, the
 /// view. Every seat listens to this and nothing else; a seat never keeps a copy of what is here.
 /// contract: changes notify once per user action; nothing here ticks while idle (play advances only while [playing]).

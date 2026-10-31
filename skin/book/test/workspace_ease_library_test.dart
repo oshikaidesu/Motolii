@@ -16,6 +16,7 @@ import 'package:lab_book/sets/inspector/inspector_rows.dart' show FoldMark;
 import 'package:lab_book/workspace/desk_ease_numbers.dart';
 import 'package:lab_book/workspace/desk_ease_side.dart';
 import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
+import 'package:lab_book/workspace/keys.dart' show WsKeys;
 import 'package:lab_book/workspace/timeline.dart' show WsTimeline;
 
 import 'door.dart';
@@ -649,6 +650,29 @@ void main() {
     expect(easeIsUsual('Cyclic 0.125 0 0.5 0 0'), isFalse, reason: 'its tile draws its own curve');
     expect(easeIsUsual('Bounce'), isTrue);
     expect(easeIsUsual('Bezier 0.42 0.0 1.0 1.0'), isTrue, reason: 'it draws its numbers as it is');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
+  testWidgets('a stretch picked by its line: Ease is on that value\'s alone, the other value keyed there stays; Delete puts it straight, the thing stays', (t) async {
+    final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    expect(m.key(cube, 'x', 0, 0) && m.key(cube, 'x', 1, 1) && m.key(cube, 'y', 0, 0) && m.key(cube, 'y', .5, 1), isTrue, reason: m.trouble);
+    ws.reread();
+    await t.pumpAndSettle();
+    ws.pickStretch('$cube', 'x', 0);
+    await t.pumpAndSettle();
+    expect(find.byType(DeskEase), findsOneWidget, reason: 'Ease to the front');
+    expect(easeSpan(ws)?.to, 60, reason: 'to that value\'s next key, not y\'s at 0.5 s');
+    await t.tap(_in(find.byKey(const ValueKey('ease.Bounce'))));
+    await settled(t, ws);
+    expect(m.wayOf(cube, 'x', 0), startsWith('Bounce'), reason: m.trouble);
+    expect(m.wayOf(cube, 'y', 0), 'Linear', reason: 'y keyed at the same frame stays as it was');
+    t.widget<WsKeys>(find.byType(WsKeys)).commands['thing.remove']!();
+    await settled(t, ws);
+    await t.pumpAndSettle();
+    expect(m.wayOf(cube, 'x', 0), 'Linear', reason: 'Delete: straight again, ${m.trouble}');
+    expect(m.things, contains(cube), reason: 'and the thing still there');
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, skip: !insideBuilt);

@@ -11,8 +11,9 @@ extension _WsTimelineHand on _WsTimelineState {
     return (i: i, l: _ws!.layers[_order[i].layer], value: _order[i].value);
   }
 
-  // A tap on a value's lane, as on Ableton's envelope (Live 12 manual 25.5.2): on a breakpoint, it is taken away; on
-  // the line, one is put there (the value the thing has there). Each one step.
+  // A press on a value's lane: on a breakpoint it is taken away, as on Ableton's envelope (Live 12 manual 25.5.2). Between
+  // two it picks that stretch, as Theatre.js's connector (the maker, 10/31: Live's line takes a breakpoint at one press, and
+  // "区間を選択できない"), and a second press in the same place puts a key there, as Live's double click off the line.
   void _laneTap(Offset p) {
     final ws = _ws!, m = ws.inside, r = _rowAt(p.dy), v = _view;
     if (m == null || r == null || r.value == null || _isLocked(ws, r.l.id)) return;
@@ -21,18 +22,13 @@ extension _WsTimelineHand on _WsTimelineState {
     for (final k in m.keyMoments(t, name)) {
       if ((v.x((k * Ws.fps).round()) - p.dx).abs() <= WtM.keyPicked + 2) return ws.after(m.later('unkey', thing: t, name: name, number: k));
     }
-    final f = v.frameAt(p.dx), top = r.i * WtM.row - _vscroll + 4, h = WtM.row - 9;
-    var at = pts.first.$2;   // (the line: level before the first and after the last, between as it goes, drawn so)
-    for (var i = 0; i < pts.length; i++) {
-      if (f >= pts[i].$1) at = pts[i].$2;
-      if (i + 1 < pts.length && f >= pts[i].$1 && f < pts[i + 1].$1) {
-        final way = row.laneWays?.elementAtOrNull(i) ?? const [0.0, 1.0], u = (f - pts[i].$1) / (pts[i + 1].$1 - pts[i].$1) * (way.length - 1);
-        final j = u.floor().clamp(0, way.length - 2), w = way[j] + (way[j + 1] - way[j]) * (u - j);
-        at = pts[i].$2 + (pts[i + 1].$2 - pts[i].$2) * w;
-      }
-    }
-    if ((top + (1 - at) * h - p.dy).abs() > 5) return;   // (off the line: Ableton puts one there by a double click)
-    ws.after(m.later('key_here', thing: t, name: name, number: f.round().clamp(0, Ws.duration) / Ws.fps));
+    final now = DateTime.now(), twice = _lanePressed != null && now.difference(_lanePressed!) < kDoubleTapTimeout && (p - _laneAt).distance < kDoubleTapSlop;
+    _lanePressed = twice ? null : now;
+    _laneAt = p;
+    final f = v.frameAt(p.dx);
+    if (twice) return ws.after(m.later('key_here', thing: t, name: name, number: f.round().clamp(0, Ws.duration) / Ws.fps));
+    final from = pts.where((q) => q.$1 <= f).lastOrNull?.$1, inside = from != null && pts.any((q) => q.$1 > f);
+    inside ? ws.pickStretch(r.l.id, name, from) : ws.clearKeys();
   }
 
   void _trackDown(Offset p) {
@@ -72,7 +68,8 @@ extension _WsTimelineHand on _WsTimelineState {
     final l = r.l, a = v.x(l.inF), b = v.x(l.outF);
     if (r.value case final n?) {   // (a lane: over a breakpoint, it is taken by a click)
       final t = int.parse(l.id);
-      return ws.inside!.keyMoments(t, n).any((k) => (v.x((k * Ws.fps).round()) - p.dx).abs() <= WtM.keyPicked + 2) ? SystemMouseCursors.click : SystemMouseCursors.precise;
+      final at = ws.inside!.keyMoments(t, n), f = v.frameAt(p.dx) / Ws.fps;
+      return at.any((k) => (v.x((k * Ws.fps).round()) - p.dx).abs() <= WtM.keyPicked + 2) || (at.isNotEmpty && f > at.first && f < at.last) ? SystemMouseCursors.click : SystemMouseCursors.precise;
     }
     if (_isLocked(ws, l.id) || p.dx < a - 6 || p.dx > b + 6) return SystemMouseCursors.precise;
     if (l.keys.any((k) => (v.x(k) - p.dx).abs() <= WtM.keyPicked + 2)) return SystemMouseCursors.click;

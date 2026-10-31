@@ -70,6 +70,7 @@ class WtRow {
     this.stretches = const [],
     this.lane,
     this.laneWays,
+    this.laneOn,
   });
   final List<WsStretch> stretches;   // (how it goes between its keys: each stretch's way drawn between them)
 
@@ -79,6 +80,7 @@ class WtRow {
 
   /// How the lane goes from each key to the next: its way's shape, 0 at the key and 1 at the next (as a stretch's).
   final List<List<double>>? laneWays;
+  final int? laneOn;   // (the stretch picked by its line: its place among them)
   final Color? tone;   // (its label colour; none: its kind's)
   final List<Color>? mix;   // (a relation's: its things' label colours, its bar their gradient)
   final String name;
@@ -119,6 +121,7 @@ class WtRow {
       other.fill == fill &&
       other.outline == outline &&
       listEquals(other.lane, lane) &&
+      other.laneOn == laneOn &&
       other.stretches.length == stretches.length &&
       [for (var i = 0; i < stretches.length; i++) other.stretches[i].from == stretches[i].from && other.stretches[i].to == stretches[i].to && other.stretches[i].way == stretches[i].way].every((same) => same);
   @override
@@ -432,6 +435,7 @@ class WtTracksPainter extends CustomPainter {
       }
     }
     line.lineTo(s.width, at(pts.last).dy);
+    if (r.laneOn case final i? when i + 1 < pts.length) c.drawRect(Rect.fromLTRB(at(pts[i]).dx, cy - WtM.row / 2, at(pts[i + 1]).dx, cy + WtM.row / 2), Paint()..color = WsT.accent.withValues(alpha: .18));   // (Theatre.js's connector, lit while it is what the curve editor holds)
     c.drawPath(line, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.2..strokeJoin = StrokeJoin.round..isAntiAlias = true..color = col);
     for (final q in pts) {
       c.drawCircle(at(q), WtM.key * .75, Paint()..color = col);

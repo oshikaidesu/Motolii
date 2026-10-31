@@ -7,7 +7,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flutter/gestures.dart' show DragStartBehavior, PointerScrollEvent, PointerSignalEvent;
+import 'package:flutter/gestures.dart' show kDoubleTapSlop, kDoubleTapTimeout, DragStartBehavior, PointerScrollEvent, PointerSignalEvent;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -79,6 +79,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
       locked: _isLocked(ws, l.id),
       lane: [for (var i = 0; i < n; i++) ((at[i] * Ws.fps).round(), hi > lo ? (vs[i] - lo) / (hi - lo) : .5)],
       laneWays: [for (var i = 0; i + 1 < n; i++) _wayShape(ws, m.wayOf(t, name, at[i]))],
+      laneOn: switch (ws.stretch) { final s? when s.layer == l.id && s.name == name => [for (var i = 0; i < n; i++) (at[i] * Ws.fps).round()].indexOf(s.from), _ => null },
     );
   }
 
@@ -166,6 +167,8 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
 
   // A key held by a hand: it (and the keys picked with it) slides in time; the playhead shows where, let go it is so.
   ({List<WsKey> keys, int grab, int by})? _slide;
+  DateTime? _lanePressed;   // (when and where a lane was last pressed: a second press there is a double one)
+  Offset _laneAt = Offset.zero;
 
   // A box drawn over the empty room of the tracks (any direction): the keys inside it are picked, else the things whose
   // bars it touches (Ableton's and After Effects' marquee). Corners, in the tracks' own points.

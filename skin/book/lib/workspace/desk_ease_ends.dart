@@ -17,6 +17,7 @@ mixin _EaseEnds on State<DeskEase> {
   Iterable<(String, List<int>, List<double>, int, double)> _ends(Ws ws, EaseSpan span, bool start, double by) sync* {
     final m = ws.inside!, t = int.parse(span.layer.id), from = _from(ws, span);
     for (final name in m.moving(t)) {
+      if (ws.stretch case final s? when s.name != name) continue;   // (a line picked: that value's ends alone)
       final at = [for (final s in m.keyMoments(t, name)) (s * Ws.fps).round()], vs = m.keyValues(t, name);
       final i = at.indexOf(span.from), j = at.indexOf(span.to), k = start ? i : j;
       if (i < 0 || j < 0 || k >= vs.length || j >= vs.length) continue;

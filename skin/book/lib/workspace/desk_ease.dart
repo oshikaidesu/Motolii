@@ -75,6 +75,9 @@ double bezierY(Offset p1, Offset p2, double x) {
 typedef EaseSpan = ({WsLayer layer, int from, int to, int picked});
 
 EaseSpan? easeSpan(Ws ws) {
+  if (ws.stretch case final s?) {
+    if (ws.layers.where((l) => l.id == s.layer).firstOrNull case final l?) return (layer: l, from: s.from, to: s.to, picked: 1);
+  }
   if (ws.keys.isEmpty) {   // (no key picked: the stretch the playhead is in, of the picked thing, as Alight Motion opens its ease when the playhead is between two keys: reports/alight_ui.md, イーズ)
     final layer = ws.layers.where((l) => l.id == ws.selected).firstOrNull, f = ws.frame;
     final keys = layer == null ? const <int>[] : ([...layer.keys]..sort());
@@ -120,6 +123,7 @@ Ease heard(String said) {
 /// Joined: the values of the span's thing that have a key where the span begins, each with that key's own moment.
 Map<String, double> keysAt(Ws ws, EaseSpan span) {
   final m = ws.inside!, t = int.parse(span.layer.id);
+  if (ws.stretch case final s?) return {s.name: s.at};   // (a line picked: that value's alone)
   // (asked again only when the document is read again: not each picture a playing stage shows)
   if (_keysAtOf[ws] case (final r, final id, final f, final at) when r == ws.reads && id == span.layer.id && f == span.from) return at;
   final at = _keysAt(m, t, span);

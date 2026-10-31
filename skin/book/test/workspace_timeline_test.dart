@@ -105,7 +105,44 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
-  testWidgets('animating, each keyed value has its own lane, as Ableton\'s automation lanes: a point clicked is taken away, the line clicked puts one', (t) async {
+  testWidgets('a stretch of a lane pressed is picked, no key put; pressed twice a key goes there', (t) async {
+    final j = _joined(), m = j.ws.inside!, ws = j.ws;
+    await _pump(t, ws);
+    expect(m.key(j.rect, 'x', 2, 500) && m.key(j.rect, 'y', .8, 100) && m.key(j.rect, 'y', 2, 300), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..animating = true;
+    await t.pumpAndSettle();
+    final lane = find.byKey(ValueKey('ws-tl-lane-${j.rect}-x'));
+    final y = t.getCenter(lane).dy, line = Offset(_at(ws, j.rect, 80).dx, y), keys = m.keyMoments(j.rect, 'x').length;
+    await t.tapAt(line);
+    await t.pumpAndSettle();
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 350)));   // (past a second press)
+    await t.pump();
+    expect(ws.stretch?.name, 'x', reason: 'picked, ${ws.stretch}');
+    expect((ws.stretch!.from, ws.stretch!.to), (48, 96), reason: 'to the next key of that value');
+    expect(m.keyMoments(j.rect, 'x'), hasLength(keys), reason: 'and no key put there');
+    expect(ws.keys, isEmpty);
+    final tracks = find.byWidgetPredicate((w) => w is CustomPaint && w.painter is WtTracksPainter);
+    expect((t.widget<CustomPaint>(tracks).painter! as WtTracksPainter).rows.firstWhere((r) => r.lane != null && r.name == 'x').laneOn, isNotNull, reason: 'lit');
+    await t.tapAt(line);
+    await t.pump(const Duration(milliseconds: 60));
+    await t.tapAt(line);
+    for (var i = 0; i < 100 && m.keyMoments(j.rect, 'x').length == keys; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await t.pump();
+    }
+    expect(m.keyMoments(j.rect, 'x'), hasLength(keys + 1), reason: 'pressed twice: a key there');
+    ws.reread();
+    await t.pumpAndSettle();
+    expect(ws.stretch?.to, 80, reason: 'the stretch picked now ends at it');
+    ws.pickKey((layer: '${j.rect}', frame: 48));
+    expect(ws.stretch, isNull, reason: 'a key picked: no stretch');
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
+  testWidgets('animating, each keyed value has its own lane, as Ableton\'s automation lanes: a point clicked is taken away, the line pressed twice puts one', (t) async {
     final j = _joined(), m = j.ws.inside!;
     await _pump(t, j.ws);
     final lane = find.byKey(ValueKey('ws-tl-lane-${j.rect}-x'));
@@ -135,8 +172,10 @@ void main() {
     await until(() => m.keyMoments(j.rect, 'x').length == 1);
     expect(m.keyMoments(j.rect, 'x'), [closeTo(1.6, 1e-6)], reason: 'a breakpoint clicked: taken away (25.5.2)');
     await t.tapAt(Offset(_at(j.ws, j.rect, 150).dx, y));   // (on the line: level after its one key)
+    await t.pump(const Duration(milliseconds: 60));
+    await t.tapAt(Offset(_at(j.ws, j.rect, 150).dx, y));
     await until(() => m.keyMoments(j.rect, 'x').length == 2);
-    expect(m.keyMoments(j.rect, 'x'), [closeTo(1.6, 1e-6), closeTo(2.5, 1e-6)], reason: 'the line clicked: a breakpoint put there (25.5.2)');
+    expect(m.keyMoments(j.rect, 'x'), [closeTo(1.6, 1e-6), closeTo(2.5, 1e-6)], reason: 'pressed twice: a breakpoint put there (25.5.2: its double click)');
     j.ws.animating = false;
     await t.pumpAndSettle();
     expect(lane, findsNothing);

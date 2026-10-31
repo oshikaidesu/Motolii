@@ -308,6 +308,7 @@ class _WorkspaceState extends State<Workspace> {
           wsMarkPicked.value = null;
           return ws.after(m.later('mark', number: at));
         }
+        if (ws.stretch case final s?) return ws.after(m.later('way', thing: int.parse(s.layer), name: s.name, number: s.at, word: 'Linear'), (_, _) => ws.reread());   // (a stretch picked: its way off, straight again, not the thing)
         if (ws.keys.isNotEmpty) return wsRemoveKeys(ws, ws.keys.toList());   // (keys picked: those, not the thing)
         final all = ws.many.isNotEmpty ? ws.many.toList() : [if (ws.selected != null) ws.selected!];   // (things picked together: all of them, one step)
         final ts = [for (final id in all) if (int.tryParse(id) case final t?) t];

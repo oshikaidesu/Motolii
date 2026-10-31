@@ -70,7 +70,9 @@ class DeskEaseState extends State<DeskEase> with _EaseEnds {
   // Every picked key's stretch, on whatever bar it is: each value keyed there. A last key has no stretch after it: the
   // one that ends at it, as the desk shows.
   List<(int, String, double)> _stretches(Ws ws) => [
-      if (ws.keys.isEmpty)   // (none picked: the stretch the playhead is in)
+      if (ws.stretch case final s?)
+        (int.parse(s.layer), s.name, s.at)
+      else if (ws.keys.isEmpty)   // (none picked: the stretch the playhead is in)
         if (easeSpan(ws) case final s?)
           for (final at in keysAt(ws, s).entries) (int.parse(s.layer.id), at.key, at.value),
       for (final k in ws.keys)

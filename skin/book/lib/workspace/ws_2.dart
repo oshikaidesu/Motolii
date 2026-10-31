@@ -193,6 +193,7 @@ class Ws extends ChangeNotifier {
       ]);
     if (_sel != null && layers.every((l) => l.id != _sel)) _sel = layers.firstOrNull?.id; // (a picked thing gone: the first; nothing picked stays so, the stage's)
     _keys.removeWhere((k) => !layers.any((l) => l.id == k.layer && l.keys.contains(k.frame))); // (a picked key stays picked while it is still there)
+    if (_stretch case final s?) _stretch = _stretchOf(s.layer, s.name, s.from);   // (and a picked stretch: to where that value's next key now is)
     tl.finish();
     _tell(WsAspect.document);
   }
@@ -231,6 +232,7 @@ class Ws extends ChangeNotifier {
     many.clear();
     _aim = null;
     _keys.clear();
+    _stretch = null;
     deskManual = null;
     _tell(WsAspect.picked);
   }
@@ -251,6 +253,7 @@ class Ws extends ChangeNotifier {
   void pickKey(WsKey k, {bool add = false}) {
     if (!add) _keys.clear();
     _keys.add(k);
+    _stretch = null;
     _sel = k.layer;
     deskManual = null;
     _tell(WsAspect.picked);
@@ -261,15 +264,36 @@ class Ws extends ChangeNotifier {
     _keys
       ..clear()
       ..addAll(ks);
+    _stretch = null;
     if (_keys.isNotEmpty) _sel = _keys.first.layer;
     deskManual = null;
     _tell(WsAspect.picked);
   }
 
   void clearKeys() {
-    if (_keys.isEmpty) return;
+    if (_keys.isEmpty && _stretch == null) return;
     _keys.clear();
+    _stretch = null;
     _tell(WsAspect.picked);
+  }
+
+  /// The stretch picked by its line, as Theatre.js's connector between two keyframes is pressed to edit its curve
+  /// (BasicKeyframeConnector.tsx, Apache-2.0): one value's, where a key is every value's there.
+  WsStretchPicked? _stretch;
+  WsStretchPicked? get stretch => _stretch;
+  WsStretchPicked? _stretchOf(String layer, String name, int from) {
+    final t = int.tryParse(layer), at = t == null ? const <double>[] : _inside?.keyMoments(t, name) ?? const <double>[];
+    final i = at.indexWhere((s) => (s * Ws.fps).round() == from);
+    return i < 0 || i + 1 >= at.length ? null : (layer: layer, name: name, at: at[i], from: from, to: (at[i + 1] * Ws.fps).round());
+  }
+
+  void pickStretch(String layer, String name, int from) {
+    _keys.clear();
+    _stretch = _stretchOf(layer, name, from);
+    _sel = layer;
+    deskManual = null;
+    _tell(WsAspect.picked);
+    if (_stretch != null) front('Ease');
   }
 
   /// The playhead, told on its own (Flutter's ValueNotifier): only what shows the moment listens ([WsScope.frameOf]),
