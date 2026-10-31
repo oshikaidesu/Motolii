@@ -612,6 +612,36 @@ void _tests3() {
     await _close(t);
   }, tags: 'main', skip: !_built);
 
+  testWidgets('a shape recipe begins at the playhead; a colour takes a picture fill\'s place; ⌘[ and ⌘] send it back and forward', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final under = m.add('shape', 'rect');
+    ws.reread();
+    await t.pumpAndSettle();
+    ws.frame = Ws.fps * 2;
+    await settled(t, ws);
+    final ring = m.make('Ring');
+    expect(m.value(ring, 'start', 0), 2, reason: 'as a clip is placed (AbsentMotion places at the playhead): ${m.trouble}');
+    ws
+      ..reread()
+      ..select('$ring');
+    await settled(t, ws);
+    expect(m.say(under, 'fill_media', '/nope.jpg'), isTrue, reason: m.trouble);
+    expect(m.say(under, 'fill', 'ff3366') && m.word(under, 'fill_media').isEmpty, isTrue, reason: 'a fill is a colour or a picture (Alight Motion\'s Fill)');
+    final before = m.things.indexOf(ring);
+    await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await t.sendKeyEvent(LogicalKeyboardKey.bracketLeft);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await settled(t, ws);
+    expect(m.things.indexOf(ring), before - 1, reason: 'one back: ${m.trouble}');
+    await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await t.sendKeyEvent(LogicalKeyboardKey.bracketRight);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await settled(t, ws);
+    expect(m.things.indexOf(ring), before, reason: 'and forward');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a shape tool pressed twice makes one as large as the picture, and the hand is free (After Effects\')', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     ws.reread();

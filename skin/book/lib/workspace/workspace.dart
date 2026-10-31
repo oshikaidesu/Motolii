@@ -382,6 +382,8 @@ class _WorkspaceState extends State<Workspace> {
         final all = _picked();
         if (all.isNotEmpty) ws.after(m.later('time_align', word: '$how ${all.join(' ')}', number: ws.frame / Ws.fps));
       },
+      'thing.forward': () => _eachPicked((t) => m.later('raise', thing: t, number: 1)),
+      'thing.backward': () => _eachPicked((t) => m.later('raise', thing: t, number: -1)),
       'arrange.flipX': () => _eachPicked((t) => m.later('flip', thing: t, word: 'x')),
       'arrange.flipY': () => _eachPicked((t) => m.later('flip', thing: t, word: 'y')),
       'layers.sequence': () => ws.after(m.later('sequence')),   // (After Effects' Keyframe Assistant: one after another, from the top)
@@ -502,6 +504,7 @@ class _WorkspaceState extends State<Workspace> {
           PlatformMenuItemGroup(members: [for (final (label, how) in _aligns) item(label, 'arrange.$how')]),
           PlatformMenuItemGroup(members: [item('Fit to Picture', 'arrange.fit'), item('Fill Picture', 'arrange.fill'), item('Stretch to Picture', 'arrange.stretch')]),
           PlatformMenuItemGroup(members: [item('Flip Horizontal', 'arrange.flipX'), item('Flip Vertical', 'arrange.flipY')]),
+          PlatformMenuItemGroup(members: [item('Bring Forward', 'thing.forward'), item('Send Backward', 'thing.backward')]),
         ],
       ),
       PlatformMenu(

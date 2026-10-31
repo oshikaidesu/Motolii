@@ -217,12 +217,12 @@ static void picture_moment(Motolii* m) {
             w.EndObject();
         }
         if (t == m->pick) {
-            double xy[512], of[256];
+            double xy[512], of[512];
             const int p = std::min(doc_points(d, t, at, xy, 256), 256);
             w.Key("points"), w.StartArray(); for (int k = 0; k < 2 * p; ++k) w.Double(xy[k]); w.EndArray();
             const int h = std::min(doc_points(d, t, at, xy, 256, true, of), 256);
             w.Key("handles"), w.StartArray(); for (int k = 0; k < 2 * h; ++k) w.Double(xy[k]); w.EndArray();
-            w.Key("of"), w.StartArray(); for (int k = 0; k < h; ++k) w.Double(of[k]); w.EndArray();
+            w.Key("of"), w.StartArray(); for (int k = 0; k < 2 * h; ++k) w.Double(of[k]); w.EndArray();
         }
         w.EndObject();
     }

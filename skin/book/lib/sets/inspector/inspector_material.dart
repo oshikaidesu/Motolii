@@ -71,19 +71,20 @@ class FillStroke extends StatelessWidget {
   // contract: the field shows the value and hands over to the Colours tool aimed at THIS slot (I1). Stroke width counts only while a stroke exists.
   Widget build(BuildContext context) {
     final doc = Ctx.of(context).doc, none = (doc.s2['v_stroke'] ?? '—') == '—', edge = doc.seat('v_stroke'); // (a solid or a light has no edge)
+    final media = (doc.s2['v_fill_media'] ?? '—').split('/').last, fill = media == '—' || media.isEmpty ? doc.s2['v_fill'] ?? '—' : media;   // (filled with a picture, it says so: a colour picked takes its place)
     return Sect(
       title: edge ? 'Fill and stroke' : 'Fill',
       first: false,
       tone: Pop.toneFill,
       keyIds: const ['v_stroke_width'],
       mark: CardMark.fill,
-      brief: [doc.s2['v_fill'] ?? '—', if (edge) none ? 'No stroke' : '${doc.s2['v_stroke']} ${brief(doc.get('v_stroke_width'))} px'],
+      brief: [fill, if (edge) none ? 'No stroke' : '${doc.s2['v_stroke']} ${brief(doc.get('v_stroke_width'))} px'],
       children: [
         PropRow(
           id: 'v_fill',
           label: 'Fill',
           keyable: false,
-          cells: [PanelLink(to: LinkTo.colors, id: 'v_fill', value: doc.s2['v_fill'] ?? '—', lead: LinkSwatch(doc.s2['v_fill'] ?? '—'))],
+          cells: [PanelLink(to: LinkTo.colors, id: 'v_fill', value: fill, lead: LinkSwatch(fill))],
         ),
         if (edge) ...[
         PropRow(

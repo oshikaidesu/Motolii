@@ -61,7 +61,7 @@ extension MotoliiMoment on Motolii {
 
   /// Its curves' handles the same way, each with the point it is the handle of.
   List<(Offset, Offset)> handles(int thing) {
-    final h = Motolii._numbers(_momentOf(thing)?['handles']), of = Motolii._numbers(_momentOf(thing)?['of']), p = points(thing);
-    return [for (var i = 0; i + 1 < h.length; i += 2) (Offset(h[i], h[i + 1]), i ~/ 2 < of.length && of[i ~/ 2].toInt() < p.length ? p[of[i ~/ 2].toInt()] : Offset.zero)];
+    final h = Motolii._numbers(_momentOf(thing)?['handles']), of = Motolii._numbers(_momentOf(thing)?['of']);
+    return [for (var i = 0; i + 1 < h.length; i += 2) (Offset(h[i], h[i + 1]), i + 1 < of.length ? Offset(of[i], of[i + 1]) : Offset(h[i], h[i + 1]))];
   }
 }

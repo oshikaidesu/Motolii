@@ -11,7 +11,7 @@ import 'package:flutter/widgets.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
 
 import '../sets/inspector/inspector_parts.dart' show Pop;
-import '../sets/foundations/text_hand.dart' show wordsPicked;
+import '../sets/foundations/text_hand.dart' show TextHand, wordsPicked;
 import '../sets/panels/media_parts.dart' show MiniSlider;
 import '../tokens.dart';
 import 'desk_kit.dart' show DeskChip;
@@ -458,7 +458,7 @@ class ColorsShelf extends StatelessWidget {
           children: [
             Container(width: Shape.z(22), height: Shape.z(22), decoration: BoxDecoration(color: _wheel.toColor(), borderRadius: BorderRadius.all(Shape.r(4)), border: Border.all(color: Grey.g26))),
             SizedBox(width: Shape.s(8)),
-            Text(_hex(_wheel.toColor()), style: T.value(Grey.g91).copyWith(fontWeight: FontWeight.w600)),
+            Expanded(child: _HexField(_hex(_wheel.toColor()), (col) => to(HSVColor.fromColor(col)))),
           ],
         ),
         SizedBox(height: Shape.s(6)),

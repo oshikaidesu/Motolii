@@ -158,6 +158,11 @@ static bool doc_set(Doc& d, int thing, const char* name, double is) {
 }
 static bool doc_put(Doc& d, int thing, const char* name, double at, double is);
 static bool doc_say(Doc& d, int thing, const char* name, const char* word) {
+    if (!strcmp(name, "fill") && !doc_word(d, thing, "fill_media").empty()) {   // (Alight Motion's Fill is one of a colour, a gradient or media: a colour takes the picture's place)
+        doc_act(d);
+        doc_say(d, thing, "fill_media", ""), doc_say(d, thing, name, word);
+        return doc_acted(d);
+    }
     if (doc_knows(d, thing, name, nullptr, word)) return doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %Q) on conflict do update set value = excluded.value", thing, name, word));
     // (an effect's colour, ISF's one input that Motolii holds as three numbers and an alpha (isf.cpp: _x, _y, _z, _w),
     //  said as one colour, as the Colors shelf says a colour to a card's value: each put at the stage's moment by the rule

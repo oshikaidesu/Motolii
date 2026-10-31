@@ -268,6 +268,7 @@ void _whole(Ws ws, String kind) {
   m
     ..later('set', thing: -1, name: 'size', number: WsArt.comp.height / m.point)
     ..later('set', thing: -1, name: 'wide', number: WsArt.comp.width / WsArt.comp.height);
+  wsInked(ws, 'shape', kind);
   ws.after(m.later('together'), (done, _) {
     if (done && made > 0) ws.select('$made');
   });

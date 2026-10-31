@@ -28,6 +28,8 @@ const defaultKeys = <(String, String)>[
   ('cmd+d', 'thing.duplicate'),   // (Live 42.5)
   ('cmd+g', 'thing.group'),   // (Figma's, Keynote's: Group)
   ('cmd+shift+g', 'thing.ungroup'),
+  ('cmd+]', 'thing.forward'),   // (After Effects', Figma's, Illustrator's: Bring Forward, Send Backward)
+  ('cmd+[', 'thing.backward'),
   ('cmd+e', 'thing.split'),   // (Live 42.5: Split)
   ('[', 'time.playhead'),   // (After Effects': Move Layer In Point to current time, Out Point)
   (']', 'time.playhead_end'),
