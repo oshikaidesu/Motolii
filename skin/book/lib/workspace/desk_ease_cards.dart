@@ -32,43 +32,56 @@ Ease easeLaid(List<Ease> cards) => cards.length == 1
         for (var i = 0; i <= 96; i++) cards.fold<double>(1, (v, c) => v * c.at(i / 96)),
       ]);
 
-/// The flow: the ways laid, top to bottom, each multiplied by the next (the maker's arrows, 10/31; Blender's stack), what
-/// they make the graph beside them; an empty frame under them for the next (Monster Train's empty slots: it says it takes
-/// one, and nothing need be learnt). A card carried off the flow comes off.
+/// The flow: the ways laid, top to bottom, each multiplied by the next (the maker's arrows, 10/31; Blender's stack); an
+/// empty frame under them for the next (Monster Train's empty slots: it says it takes one, and nothing need be learnt);
+/// what they make small at its foot. The card pressed is the one the graph shows, its handles in hand (the maker: seen
+/// always, the whole has no handles). A card carried off the flow comes off.
 class EaseCards extends StatelessWidget {
-  const EaseCards({super.key, required this.cards, required this.onOff});
+  const EaseCards({super.key, required this.cards, required this.now, required this.whole, required this.onPress, required this.onOff});
   final List<Ease> cards;
-  final ValueChanged<int> onOff;
+  final int now;
+  final Ease? whole;
+  final ValueChanged<int> onPress, onOff;
 
   @override
   Widget build(BuildContext context) {
     final side = Size.square(Shape.z(30));
-    Widget card(Ease c) => SizedBox.fromSize(size: side, child: PresetTile(c, on: true, onTap: () {}, carried: false));
+    Widget card(int i, Ease c) => SizedBox.fromSize(size: side, child: PresetTile(c, on: i == now, onTap: () => onPress(i), carried: false));
     Widget arrow() => CustomPaint(size: Size(side.width, Shape.z(12)), painter: _Arrow(Grey.g56));
     return ColoredBox(
       color: WsT.card,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.symmetric(vertical: Shape.s(4)),
-        child: Column(
-          children: [
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(vertical: Shape.s(4)),
+              child: Column(
+                children: [
             for (final (i, c) in cards.indexed) ...[
               if (i > 0) arrow(),
               cards.length < 2
-                  ? card(c)
+                  ? card(i, c)
                   : Draggable<int>(
                       key: ValueKey('ease.card.$i'),
                       data: i,
                       dragAnchorStrategy: pointerDragAnchorStrategy,
-                      feedback: easeHeld(card(c)),
-                      childWhenDragging: Opacity(opacity: .3, child: card(c)),
+                      feedback: easeHeld(card(i, c)),
+                      childWhenDragging: Opacity(opacity: .3, child: card(i, c)),
                       onDraggableCanceled: (_, _) => onOff(i),   // (let go on the flow or the graph it is accepted there, and stays)
-                      child: card(c),
+                      child: card(i, c),
                     ),
             ],
             arrow(),
             CustomPaint(key: const ValueKey('ease.slot'), size: side, painter: _Slot(Grey.g38)),
-          ],
-        ),
+                ],
+              ),
+            ),
+          ),
+          if (whole case final w?) Padding(
+            padding: EdgeInsets.only(top: Shape.s(4), bottom: Shape.s(6)),
+            child: CustomPaint(key: const ValueKey('ease.whole'), size: side, painter: EaseIcon(w, Grey.g95)),
+          ),
+        ],
       ),
     );
   }

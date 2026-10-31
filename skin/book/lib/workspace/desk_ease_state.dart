@@ -28,6 +28,7 @@ class DeskEaseState extends State<DeskEase> {
   // one at a time (one still on its way: the next waits, those between are skipped); all of it one step of undo.
   bool _down = false, _open = false, _going = false;
   Ease? _pending, _waiting;
+  int _card = 0;   // (of a way laid from cards, the one the graph shows)
   Ease? _held;   // (what a tile held over the graph would make: seen before it is let go, Final Cut Pro's skimming of an effect)
   bool _overLocked = false, _noOver = false;   // (AbsentMotion's lockOvershoot, disableOvershoot: once it looks past 0 and 1 it stays so, until the menu says)
   String? _trouble;
@@ -71,6 +72,7 @@ class DeskEaseState extends State<DeskEase> {
   // (while the hand is down: the newest ease told, one at a time; the step opened at the first)
   void _live(Ws ws, Ease e) {
     final m = ws.inside!;
+    if (easeIsLaid(said(e))) return;   // (a way laid is defined when the hand lets go, not at each step of it)
     if (_going) {
       _waiting = e;
       return;
@@ -220,21 +222,23 @@ class DeskEaseState extends State<DeskEase> {
     final cards = easeIsLaid(said(ease)) ? [for (final c in easeCards(said(ease))) easeCard(c, ws.inside)] : [ease];
     Ease laidOn(Ease e) => easeLaid([...cards, for (final c in easeCards(said(e))) easeCard(c, ws.inside)]);
     final pile = _held == null ? cards : [for (final c in easeCards(said(_held!))) easeCard(c, ws.inside)];
-    final bezier = easeIsBezier(ease);
-    final overshoot = bezier && !_noOver && (easeOvershoot || _overLocked || [ease.p1.dy, ease.p2.dy].any((y) => y < 0 || y > 1));
+    final at = _card.clamp(0, cards.length - 1), card = cards[at], laid = cards.length > 1;
+    void put(Ease e) => set(laid ? easeLaid([...cards]..[at] = easeCard(said(e), ws.inside)) : e);   // (a press, a handle, a turn: on the card pressed)
+    final bezier = easeIsBezier(card);
+    final overshoot = bezier && !_noOver && (easeOvershoot || _overLocked || [card.p1.dy, card.p2.dy].any((y) => y < 0 || y > 1));
     _overLocked = overshoot;
-    final reverse = ease.reversed();
+    final reverse = card.reversed();
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
           flex: 168,
           child: EaseLeft(
-            onReverse: bezier && ease != easePreset('Linear') && reverse != ease ? () => set(reverse) : null,
+            onReverse: bezier && card != easePreset('Linear') && reverse != card ? () => put(reverse) : null,
             menu: [
-              ('copy', 'Copy Curve', () => setState(() => easeCopied = ease)),
+              ('copy', 'Copy Curve', () => setState(() => easeCopied = card)),
               if (easeCopied case final copied?) ...[
-                ('paste', 'Paste Curve', () => set(copied)),
+                ('paste', 'Paste Curve', () => put(copied)),
                 if (ws.inside != null) ('all', 'Paste Curve to All Keyframes', () => _onEveryKey(ws, copied)),
               ],
               if (bezier) ('overshoot', overshoot ? 'Disable Overshoot' : 'Enable Overshoot', () => setState(() {
@@ -256,7 +260,10 @@ class DeskEaseState extends State<DeskEase> {
             onLeave: (_) => setState(() => _held = null),
             onAcceptWithDetails: (d) {
               _held = null;
-              if (d.data case final Ease e) set(laidOn(e));
+              if (d.data case final Ease e) {
+                _card = cards.length;   // (the one just laid is the one in hand)
+                set(laidOn(e));
+              }
             },
             builder: (_, hot, _) => DecoratedBox(
               position: DecorationPosition.foreground,
@@ -271,7 +278,7 @@ class DeskEaseState extends State<DeskEase> {
                       child: Stack(
                         children: [
                           Positioned.fill(
-                            child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: _held ?? ease, span: span, frame: frame, onChanged: set, jump: easeJump, overshoot: overshoot, onEnd: ws.inside == null ? null : (start, by) => _moveEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by))),   // (only the graph follows the playhead)
+                            child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: card, onion: _held ?? (laid ? ease : null), span: span, frame: frame, onChanged: put, jump: easeJump, overshoot: overshoot, onEnd: ws.inside == null ? null : (start, by) => _moveEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by))),   // (only the graph follows the playhead)
                           ),
                           if (span == null) Positioned.fill(child: Center(child: Padding(padding: EdgeInsets.all(Shape.s(8)), child: Text('Put the playhead between two keys, or pick a key', textAlign: TextAlign.center, style: T.label(Grey.g63))))),
                           if (_trouble case final why?) Positioned(left: Shape.s(4), right: Shape.s(4), top: Shape.s(2), child: Text(why, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63))),
@@ -281,13 +288,13 @@ class DeskEaseState extends State<DeskEase> {
                       ),
                     ),
                   ),
-                  Expanded(flex: 169, child: EaseCards(cards: pile, onOff: (i) => set(easeLaid([...cards]..removeAt(i))))),
+                  Expanded(flex: 169, child: EaseCards(cards: pile, now: at, whole: pile.length > 1 ? _held ?? ease : null, onPress: (i) => setState(() => _card = i), onOff: (i) => set(easeLaid([...cards]..removeAt(i))))),
                 ],
               ),
             ),
           ),
         ),
-        Expanded(flex: 169, child: EaseShapes(ease: ease, shapes: easeRow(unseated(ws)), onPick: set)),
+        Expanded(flex: 169, child: EaseShapes(ease: card, shapes: easeRow(unseated(ws)), onPick: put)),
       ],
     );
   }

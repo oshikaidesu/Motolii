@@ -5,6 +5,7 @@ import 'package:lab_book/sets/inspector/inspector_effects.dart' show CardMore;
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show Hov;
 import 'package:lab_book/tokens.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
+import 'package:lab_book/workspace/desk_ease_cards.dart';
 import 'package:lab_book/workspace/desk_ease_presets.dart';
 import 'package:lab_book/workspace/desk_kit.dart';
 import 'package:lab_book/workspace/ws.dart';
@@ -18,7 +19,7 @@ bool easeIsBezier(Ease e) => const {'Linear', 'Bezier'}.contains(said(e).split('
 /// The row: the shapes, then, scrolled to, what has no seat among them: Hold, and the ways of the window and the document.
 List<Ease> easeRow(List<Ease> ways) {
   Ease? named(String n) => easePresets.where((p) => p.name == n).firstOrNull ?? ways.where((w) => w.name == n).firstOrNull;
-  return [for (final n in easeShapes) ?named(n), easePreset('Hold'), for (final w in ways) if (!easeShapes.contains(w.name)) w];
+  return [for (final n in easeShapes) ?named(n), easePreset('Hold'), for (final w in ways) if (!easeShapes.contains(w.name) && !easeIsLaid(w.name!)) w];   // (cards laid stay on their stretches: no shape of their own)
 }
 
 /// Whether the way now is this shape: a curve pulled from the straight line is still of it; its numbers its own.

@@ -115,7 +115,7 @@ void main() {
     }
 
     await carry(_in(find.byKey(const ValueKey('ease.Bounce'))), t.getCenter(graph), held: () async {
-      expect(t.widget<EaseGraph>(graph).ease.name, contains('×'), reason: 'what it would make, seen while held');
+      expect(t.widget<EaseGraph>(graph).onion?.name, contains('×'), reason: 'what it would make, seen while held');
       expect(m.wayOf(cube, 'x', 0), alone, reason: 'nothing changed until it is let go');
     });
     final laid = m.wayOf(cube, 'x', 0);
@@ -137,9 +137,15 @@ void main() {
     expect(_in(find.byKey(const ValueKey('ease.card.0'))), findsNothing, reason: 'one way: its numbers again');
     await carry(_in(find.byKey(const ValueKey('ease.Bounce'))), t.getCenter(graph));
     expect(m.wayOf(cube, 'x', 0), contains('×'), reason: m.trouble);
-    await t.tap(_in(find.byKey(const ValueKey('ease.Linear'))));
+    expect(_in(find.byKey(const ValueKey('ease.whole'))), findsOneWidget, reason: 'what they make, at the foot of the flow');
+    expect(t.widget<EaseGraph>(graph).onion?.name, contains('×'), reason: 'and faint behind the card in hand');
+    await t.tap(_in(find.byKey(const ValueKey('ease.card.0'))));
+    await t.pumpAndSettle();
+    expect(t.widget<EaseGraph>(graph).ease.p1, const Offset(.42, 0), reason: 'a card pressed: the graph shows it, its handles in hand');
+    await t.tap(_in(find.byKey(const ValueKey('ease.Elastic'))));
     await settled(t, ws);
-    expect(m.wayOf(cube, 'x', 0), 'Linear', reason: 'a press: in place of them all');
+    expect(m.wayOf(cube, 'x', 0), startsWith('Elastic'), reason: 'a press: in place of the card pressed, and the other stays');
+    expect(m.wayOf(cube, 'x', 0), contains('Bounce'), reason: m.trouble);
     await carry(_in(find.byKey(const ValueKey('ease.Bounce'))), t.getCenter(graph));
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);

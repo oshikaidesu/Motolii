@@ -16,8 +16,9 @@ import 'two_fingers.dart';
 /// how far, in the graph's own measure (1: from the one key's value to the other's); with [jump] on, a dashed line shows
 /// the value jumping there, as the keys it makes will.
 class EaseGraph extends StatefulWidget {
-  const EaseGraph({super.key, required this.ease, required this.span, required this.frame, required this.onChanged, this.onEnd, this.endSays, this.jump = true, this.overshoot = false});
+  const EaseGraph({super.key, required this.ease, required this.span, required this.frame, required this.onChanged, this.onEnd, this.endSays, this.jump = true, this.overshoot = false, this.onion});
   final Ease ease;
+  final Ease? onion;   // (what all the cards make, faint behind the one a hand shapes)
   final EaseSpan? span;
   final int frame;
   final ValueChanged<Ease> onChanged;
@@ -122,6 +123,7 @@ class _EaseGraphState extends State<EaseGraph> {
               endAt: _endAt,
               jump: widget.jump,
               overshoot: widget.overshoot,
+              onion: widget.onion,
             ),
           ),
           if (_drag != null && _drag! >= _end && _endAt != null ? widget.endSays?.call(_drag == _end, _endAt! - (_drag == _end ? 0 : 1)) : null case final says?)
@@ -151,12 +153,13 @@ List<(double, Color)> _ghosts(Ws ws, EaseSpan? span) {
 }
 
 class _GraphPainter extends CustomPainter {
-  const _GraphPainter({required this.ease, required this.from, required this.to, required this.frame, required this.active, required this.dragging, this.ghosts = const [], this.overshoot = false, this.endAt, this.jump = true});
+  const _GraphPainter({required this.ease, required this.from, required this.to, required this.frame, required this.active, required this.dragging, this.ghosts = const [], this.overshoot = false, this.onion, this.endAt, this.jump = true});
   final List<(double, Color)> ghosts;   // (a relation's things: how much later each, across the stretch, and its colour)
   final Ease ease;
   final int? from, to, active;
   final int frame;
   final bool dragging, jump, overshoot;
+  final Ease? onion;
   final double? endAt;   // (the key at an end, while it is pulled: where it is)
 
   @override
@@ -207,6 +210,14 @@ class _GraphPainter extends CustomPainter {
       c.drawPath(copy, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.2..color = hue.withValues(alpha: .55));
     }
     c.restore();
+    if (onion case final whole?) {
+      final skin = Path()..moveTo(a.dx, a.dy);
+      for (var i = 1; i <= 96; i++) {
+        final o = px(Offset(i / 96, whole.at(i / 96)));
+        skin.lineTo(o.dx, o.dy);
+      }
+      c.drawPath(skin, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.6..strokeJoin = StrokeJoin.round..color = Grey.g56);
+    }
     // The stems (on the curve as it is pulled: its handles go with its ends).
     Offset handle(double x, double y) => px(Offset(x, y0 + (y1 - y0) * y));
     for (final h in handles) {
@@ -257,6 +268,6 @@ class _GraphPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_GraphPainter o) => o.ease != ease || o.overshoot != overshoot || o.endAt != endAt || o.jump != jump || o.from != from || o.to != to || o.frame != frame || o.active != active || o.dragging != dragging || o.ghosts.length != ghosts.length || (ghosts.isNotEmpty && o.ghosts.first.$1 != ghosts.first.$1);
+  bool shouldRepaint(_GraphPainter o) => o.ease != ease || o.onion != onion || o.overshoot != overshoot || o.endAt != endAt || o.jump != jump || o.from != from || o.to != to || o.frame != frame || o.active != active || o.dragging != dragging || o.ghosts.length != ghosts.length || (ghosts.isNotEmpty && o.ghosts.first.$1 != ghosts.first.$1);
 }
 
