@@ -253,6 +253,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   double _markGrab = 0;   // (where on its flag it was taken, in frames: kept while carried, as Live's locators are dragged (6.4) and as the work area here keeps _workGrab; carried to the hand's own spot, one taken by its name's end jumped 0.47 s)
   final _rulerMenu = GlobalKey<WsMenuState>();
   final _trackMenu = GlobalKey<WsMenuState>();   // (a bar's own menu: timeline_asked.dart _trackRight)
+  final _labelMenu = GlobalKey<WsMenuState>();
   bool _markOff = false;
   (double, String)? _naming;
   final _markWords = TextEditingController();

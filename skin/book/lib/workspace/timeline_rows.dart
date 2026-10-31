@@ -29,6 +29,8 @@ extension _WsTimelineRows on _WsTimelineState {
     children: [
       _LabelHeader(count: ws.layers.length, solo: _anySolo(ws)),
       Expanded(
+        child: WsMenu(
+        key: _labelMenu,
         child: Listener(
           onPointerSignal: _wheel,
           child: WsTwoFingers(
@@ -59,6 +61,7 @@ extension _WsTimelineRows on _WsTimelineState {
                         // Joined: a row carried up or down is the thing brought nearer or further back, by as many rows as it was carried.
                         child: GestureDetector(
                           supportedDevices: wsPressing,
+                          onSecondaryTapDown: (d) => _labelRight(l, d.globalPosition),
                           dragStartBehavior: DragStartBehavior.down, // (all of the way it was carried counts, from where the hand came down)
                           onVerticalDragStart: (_) => _lift = 0,
                           onVerticalDragUpdate: (d) => _lift += d.delta.dy,
@@ -89,6 +92,7 @@ extension _WsTimelineRows on _WsTimelineState {
             ),
           ),
           ),
+        ),
         ),
       ),
     ],

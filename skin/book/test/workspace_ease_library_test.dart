@@ -714,6 +714,14 @@ void main() {
     await t.pumpAndSettle();
     expect(easeSpan(ws), isNull);
     expect(_in(find.byKey(const ValueKey('ease-no-span'))), findsOneWidget, reason: 'it says so');
+    ws
+      ..select('$cube')
+      ..frame = 60;
+    expect([easeSpan(ws)?.from, easeSpan(ws)?.to], [0, 60], reason: 'on its last key, as a value just typed there: the stretch that ends there');
+    ws
+      ..select(null)
+      ..frame = 0;
+    await t.pumpAndSettle();
     final graph = _in(find.byType(EaseGraph));
     await t.tap(_in(find.byKey(const ValueKey('ease.Bounce'))));
     await t.pump();

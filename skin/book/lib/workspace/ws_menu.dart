@@ -9,6 +9,24 @@ import 'package:flutter/widgets.dart';
 
 import '../sets/inspector/inspector_small.dart' show FloatShut, Hov;
 import '../tokens.dart';
+import 'keys.dart' show CommandIntent;
+import 'ws.dart';
+
+/// A thing's own menu by a right click, on its bar, its row or the stage (Ableton Live's clip context menu: Rename,
+/// Duplicate, Split, Deactivate, Delete; Figma's right click on a layer or a thing: mouse_map.md, 7), each the window's
+/// own command as the menu bar and the keys say it; the thing is picked first, so it is the one they work on.
+List<WsMenuItem> wsThingMenu(BuildContext context, Ws ws, WsLayer l) {
+  ws.select(l.id);
+  void say(String c) => Actions.maybeInvoke(context, CommandIntent(c, false));
+  return [
+    WsMenuItem('Rename…', () => say('thing.rename'), keys: '⌘R'),
+    WsMenuItem('Duplicate', () => say('thing.duplicate'), keys: '⌘D'),
+    WsMenuItem('Split', ws.frame > l.inF && ws.frame < l.outF ? () => say('thing.split') : null, keys: '⌘E', why: 'The playhead is not inside it'),
+    const WsMenuItem.rule(),
+    WsMenuItem(l.hidden ? 'Activate' : 'Deactivate', () => say('thing.deactivate'), keys: '0'),
+    WsMenuItem('Delete', () => say('thing.remove'), keys: '⌫'),
+  ];
+}
 
 /// One row: [go] null, it cannot be done now and [why] says why; [keys] what it is pressed with too (never the only way).
 /// A rule between groups: [WsMenuItem.rule].

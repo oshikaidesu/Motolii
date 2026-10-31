@@ -340,6 +340,22 @@ void _tests3() {
     await menu('Delete');
     expect(m.things.length, 1, reason: 'the bar right-clicked taken out');
     expect(t.takeException(), isNull);
+    final label = t.getCenter(find.byKey(ValueKey('ws-tl-label-$a')));
+    await t.tapAt(label, buttons: kSecondaryButton);
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('ws-menu-Duplicate')));
+    await settled(t, ws);
+    expect(m.things.length, 2, reason: 'the same menu on its row\'s name');
+    ws
+      ..select(null)
+      ..frame = 30;   // (its piece before the cut)
+    await t.pumpAndSettle();
+    await t.tapAt(t.getRect(find.byKey(const ValueKey('ws-stage-comp'))).center, buttons: kSecondaryButton);
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('ws-menu-Delete')));
+    await settled(t, ws);
+    expect(m.things.length, 1, reason: 'and on the thing on the stage (Figma)');
+    expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
 

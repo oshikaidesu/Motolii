@@ -606,13 +606,17 @@ class _StageViewState extends State<StageView> implements StageHandles {
     return _trail.$2;
   }
 
+  final _menu = GlobalKey<WsMenuState>();
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
       final v = _shown = _view(box.biggest), scene = widget.scene, trail = _trailOf();
       _deskTo(v);
       _pickTo();
-      return Listener(
+      return WsMenu(
+        key: _menu,
+        child: Listener(
         onPointerSignal: (e) => _scroll(e, v),
         child: WsTwoFingers(
         onPan: (by, _) => _panBy(by, v),
@@ -629,6 +633,10 @@ class _StageViewState extends State<StageView> implements StageHandles {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             supportedDevices: wsPressing,
+            onSecondaryTapDown: (d) {   // (the thing under the hand, its menu as on its bar)
+              final ws = WsScope.read(context), id = _hit(v, d.localPosition), l = ws.layers.where((l) => l.id == id).firstOrNull;
+              if (l != null) _menu.currentState?.show(d.localPosition, wsThingMenu(context, ws, l));
+            },
             onTapUp: (d) {
               widget.onPoke?.call();
               if (widget.make == 'pen') return _pen(v, d.localPosition, d.localPosition); // (a tap: a corner)
@@ -728,6 +736,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
               ],
             ),
           ),
+        ),
         ),
         ),
       );
