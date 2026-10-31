@@ -470,7 +470,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] 区間の繰り返しの入口：エンジンは済（`<値>_loop`、cycle・pingpong・offset）。窓から選ぶ入口がまだ
 - [ ] レーンの箱（Ableton の Stretching and Skewing Envelopes、Live 12 手引き 26.7.2）。作る前に Logic と FL Studio も見る
 - [ ] レーンへの形の差し込み（Ableton の Insert Shape）
-- [x] 作った形を残す — 済（10/31）：流れのカード、足元の結果を形の列へ運ぶと列の足元に残る。押すと戻る、× で消える。`~/.motolii/ease_kept.json`（Live の手引き 23.2.5 Saving Presets の、装置を棚へ運ぶと残る動き。`desk_ease_side.dart` の easeKeep）
+- [x] 作った形を残す — 済（10/31）：右端のつまみで出し入れする棚（列が右から入って全体を左へ押す。流れは隠れない）。流れのカードや足元の結果を棚へ運ぶ、または棚の空き枠を押すと残る。重ねた結果も 1 つで残り、押すと 1 枚ずつのカードで戻る。× で消える。50 個で確かめた。`~/.motolii/ease_kept.json`（Live の手引き 23.2.5 Saving Presets、Photoshop の Swatches の空き、macOS の spring-loaded folders、Easey の presetsPage.js。`desk_ease_shelf.dart`）
 - [ ] `cubic-bezier(...)`・`linear(...)` を貼ってイーズにする（ways/ のファイルの仕組みに載せる）
 - [ ] 区間の波の数を拍で決める
 - [ ] 区間に重ねる（Blender の F-Curve Modifiers）

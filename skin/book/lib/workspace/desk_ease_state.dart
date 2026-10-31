@@ -8,6 +8,7 @@ import 'package:lab_book/tokens.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/desk_ease_cards.dart';
 import 'package:lab_book/workspace/desk_ease_graph.dart';
+import 'package:lab_book/workspace/desk_ease_shelf.dart';
 import 'package:lab_book/workspace/desk_ease_side.dart';
 import 'package:lab_book/workspace/ws.dart';
 
@@ -36,6 +37,7 @@ class DeskEaseState extends State<DeskEase> {
   int _card = 0;   // (of a way laid from cards, the one the graph shows, below 0 the whole; another stretch: its first)
   String _cardOf = '';
   Ease? _held;   // (what a tile held over the graph would make: seen before it is let go, Final Cut Pro's skimming of an effect)
+  bool _shelf = false, _shelfShown = false;   // (drawn out; and built, until it has slid away)
   bool _overLocked = false, _noOver = false;   // (AbsentMotion's lockOvershoot, disableOvershoot: once it looks past 0 and 1 it stays so, until the menu says)
   String? _trouble;
 
@@ -325,10 +327,25 @@ class DeskEaseState extends State<DeskEase> {
             ],
           ),
         );
-      final shapes = EaseShapes(ease: whole ? ease : card, side: side, across: tall, shapes: easeRow(unseated(ws)), kept: [for (final w in easeKept()) easeCard(w, ws.inside)], onPick: (e) {
-        if (whole) _card = at;   // (the last card takes it, in hand)
-        put(e);
-      }, onKeep: (i) => setState(() => easeKeep(said(i < 0 ? easeLaid(cards) : cards[i]))), onForget: (e) => setState(() => easeKeep(said(e), off: true)));
+      void shelf(bool open) => setState(() {
+        _shelf = open;
+        _shelfShown = _shelfShown || open;
+      });
+      void keep(int i) {
+        final word = said(i < 0 ? easeLaid(cards) : cards[i]);
+        if (word != 'Linear') setState(() => easeKeep(word));
+      }
+      final shapes = DragTarget<int>(
+        onWillAcceptWithDetails: (_) {
+          shelf(true);
+          return true;
+        },
+        onAcceptWithDetails: (d) => keep(d.data),
+        builder: (_, _, _) => EaseShapes(ease: whole ? ease : card, side: side, across: tall, shapes: easeRow(unseated(ws)), onPick: (e) {
+          if (whole) _card = at;   // (the last card takes it, in hand)
+          put(e);
+        }),
+      );
       final target = DragTarget<Object>(
             onWillAcceptWithDetails: (d) {
               if (d.data case final Ease e) setState(() => _held = laidOn(e));
@@ -380,12 +397,54 @@ class DeskEaseState extends State<DeskEase> {
               ),
             ),
           );
-      return tall
-          ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Expanded(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [leftColumn, Expanded(child: target)])),
-              SizedBox(height: column, child: shapes),
-            ])
-          : Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [leftColumn, Expanded(child: target), SizedBox(width: column, child: shapes)]);
+      final across = (box.maxWidth * .3 / column).floor().clamp(1, 6), wide = across * column;
+      const slide = Duration(milliseconds: 200);   // (as the colours' boxes move, dock_make_2.dart)
+      return Stack(
+        clipBehavior: Clip.hardEdge,
+        children: [
+          Positioned.fill(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: tall
+                      ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                          Expanded(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [leftColumn, Expanded(child: target)])),
+                          SizedBox(height: column, child: shapes),
+                        ])
+                      : Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [leftColumn, Expanded(child: target), SizedBox(width: column, child: shapes)]),
+                ),
+                ClipRect(
+                  child: AnimatedContainer(
+                    duration: slide,
+                    curve: Curves.easeOutCubic,
+                    width: _shelf ? wide : 0,
+                    onEnd: () => _shelf ? null : setState(() => _shelfShown = false),   // (put away: not built as a hand moves a handle)
+                    child: !_shelfShown
+                        ? null
+                        : OverflowBox(
+                            alignment: Alignment.centerLeft,
+                            minWidth: wide,
+                            maxWidth: wide,
+                            child: EaseShelf(now: said(ease), ways: easeOthers(unseated(ws)), columns: across, pitch: side + Shape.s(6), side: side, inside: ws.inside, onKeep: keep, onForget: (e) => setState(() => easeKeep(said(e), off: true)), onPick: (e) {
+                              _card = 0;   // (a preset is the whole way)
+                              set(e);
+                            }),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          AnimatedPositioned(
+            duration: slide,
+            curve: Curves.easeOutCubic,
+            top: Shape.s(8),
+            right: _shelf ? wide : 0,
+            child: EaseGrip(key: const ValueKey('ease.shelf'), open: _shelf, onTap: () => shelf(!_shelf)),
+          ),
+        ],
+      );
     });
   }
 }

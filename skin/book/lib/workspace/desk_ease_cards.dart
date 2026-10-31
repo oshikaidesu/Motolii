@@ -184,7 +184,7 @@ class EaseCards extends StatelessWidget {
               if (cards.length > 1) place(i, carried(i, c)) else if (c == easePreset('Linear')) card(i, c) else carried(i, c),   // (a straight line alone: nothing to carry)
             ],
             arrow(),
-            CustomPaint(key: const ValueKey('ease.slot'), size: side, painter: _Slot(Grey.g38)),
+            EaseSlot(key: const ValueKey('ease.slot'), side: this.side, ink: Grey.g38),
                 ],
               ),
             ),
@@ -239,6 +239,15 @@ class _Arrow extends CustomPainter {
 
   @override
   bool shouldRepaint(_Arrow o) => o.ink != ink || o.across != across;
+}
+
+/// An empty frame, dashed: it says it takes one (Monster Train's empty slots).
+class EaseSlot extends StatelessWidget {
+  const EaseSlot({super.key, required this.side, required this.ink});
+  final double side;
+  final Color ink;
+  @override
+  Widget build(BuildContext context) => CustomPaint(size: Size.square(side), painter: _Slot(ink));
 }
 
 class _Slot extends CustomPainter {

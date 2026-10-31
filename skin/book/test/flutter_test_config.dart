@@ -6,7 +6,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:lab_book/workspace/create_preview.dart' show RecipeMotions;
-import 'package:lab_book/workspace/desk_ease_side.dart' show easeKeptAt;
+import 'package:lab_book/workspace/desk_ease_shelf.dart' show easeKeptAt;
 import 'package:lab_book/workspace/dock_make.dart' show coloursAt;
 
 import 'mac_fonts.dart';

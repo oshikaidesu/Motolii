@@ -10,6 +10,7 @@ import 'package:lab_book/workspace/desk_ease_state.dart' show easeOvershoot;
 import 'package:lab_book/workspace/desk_ease_cards.dart' show EaseCards;
 import 'package:lab_book/workspace/desk_ease_graph.dart';
 import 'package:lab_book/workspace/desk_ease_handles.dart';
+import 'package:lab_book/workspace/desk_ease_shelf.dart';
 import 'package:lab_book/workspace/desk_ease_side.dart';
 
 import 'door.dart';
@@ -224,7 +225,7 @@ void main() {
     await closeWorkspace(t);
   }, skip: !insideBuilt);
 
-  testWidgets('Alight Motion\'s four beziers; a curve or all the cards carried to the shapes stay there, a press brings them back, their × takes them off', (t) async {
+  testWidgets('Alight Motion\'s four beziers; the shelf drawn out and put away; a curve or what the cards make kept on it, a press brings it back whole, its × takes it off', (t) async {
     final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
     final cube = m.add('solid', 'cube');
     expect(m.key(cube, 'x', 0, 0) && m.key(cube, 'x', 1, 1), isTrue, reason: m.trouble);
@@ -252,27 +253,35 @@ void main() {
       await settled(t, ws);
       expect(m.wayOf(cube, 'x', 0), word, reason: m.trouble);
     }
+    expect(find.byType(EaseShelf), findsNothing, reason: 'put away, it is not there');
     await carry(_in(find.byKey(const ValueKey('ease.Bounce'))), t.getCenter(graph));
     final laid = m.wayOf(cube, 'x', 0);
     expect(laid, contains('×'), reason: m.trouble);
     await carry(_in(find.byKey(const ValueKey('ease.whole'))), column);
-    expect(easeKept(), [laid], reason: 'all the cards, kept as one');
+    expect(find.byType(EaseShelf), findsOneWidget, reason: 'a card carried to the shapes opens it');
+    expect(easeKept(), [laid], reason: 'what the cards make, kept as one');
     expect(m.wayOf(cube, 'x', 0), laid, reason: 'and still on the stretch');
     expect(m.way(cube, 'x', 0, 'Bezier 0.2 0 0 1'), isTrue, reason: m.trouble);
     ws.reread();
     await t.pumpAndSettle();
-    await carry(_in(find.byKey(const ValueKey('ease.card.0'))), column);
-    expect(easeKept().last, 'Bezier 0.2 0.0 0.0 1.0', reason: 'one card, kept');
-    expect(m.wayOf(cube, 'x', 0), 'Bezier 0.2 0 0 1', reason: 'and still on the stretch');
+    await t.tap(_in(find.byKey(const ValueKey('ease.shelf.slot'))));
+    await t.pumpAndSettle();
+    expect(easeKept().last, 'Bezier 0.2 0.0 0.0 1.0', reason: 'the empty frame pressed: what is on the stretch');
     easeKeptAt(file);
     expect(easeKept(), hasLength(2), reason: 'and still there when the window opens again');
-    expect(m.way(cube, 'x', 0, 'Linear'), isTrue, reason: m.trouble);
-    ws.reread();
-    await t.pumpAndSettle();
+    expect(find.byType(EaseCards), findsOneWidget);
     await t.tap(_in(find.byKey(ValueKey('ease.kept.$laid'))));
     await settled(t, ws);
-    expect(m.wayOf(cube, 'x', 0), laid, reason: 'a press brings them back, ${m.trouble}');
+    expect(m.wayOf(cube, 'x', 0), laid, reason: 'a press brings it back, ${m.trouble}');
     expect(find.byKey(const ValueKey('ease.card.1')), findsOneWidget, reason: 'each its own card again');
+    await t.tap(_in(find.byKey(const ValueKey('ease.kept.Bezier 0.2 0.0 0.0 1.0'))));
+    await settled(t, ws);
+    expect(m.wayOf(cube, 'x', 0), 'Bezier 0.2 0 0 1', reason: 'a press on another: in place of all of it, ${m.trouble}');
+    await t.tap(_in(find.byKey(ValueKey('ease.kept.$laid'))));
+    await settled(t, ws);
+    await t.tap(_in(find.byKey(ValueKey('ease.kept.$laid'))));
+    await settled(t, ws);
+    expect(m.wayOf(cube, 'x', 0), laid, reason: 'pressed again: as it was, no more cards');
     final hand = await t.createGesture(kind: PointerDeviceKind.mouse);
     await hand.addPointer(location: t.getCenter(_in(find.byKey(ValueKey('ease.kept.$laid')))));
     await t.pump();
@@ -286,8 +295,59 @@ void main() {
     await hand.removePointer();
     expect(easeKept(), ['Bezier 0.2 0.0 0.0 1.0'], reason: 'its × takes it off');
     expect(m.wayOf(cube, 'x', 0), laid, reason: 'not off the stretch');
+    await t.tap(_in(find.byKey(const ValueKey('ease.shelf'))));
+    await t.pumpAndSettle();
+    expect(find.byType(EaseShelf), findsNothing, reason: 'put away');
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
+  testWidgets('the shelf holds fifty: what is kept scrolls, none of it lost', (t) async {
+    final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    expect(m.key(cube, 'x', 0, 0) && m.key(cube, 'x', 1, 1), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..pickKey((layer: '$cube', frame: 0))
+      ..front('Ease');
+    await t.pumpAndSettle();
+    for (var i = 0; i < 50; i++) {
+      easeKeep('Bounce~${(.2 + i / 100).toStringAsFixed(2)}~0.8×Elastic');
+    }
+    await t.tap(_in(find.byKey(const ValueKey('ease.shelf'))));
+    await t.pumpAndSettle();
+    final last = find.byKey(ValueKey('ease.kept.${easeKept().last}')), row = find.descendant(of: find.byType(EaseShelf), matching: find.byType(Scrollable));
+    expect(last, findsNothing, reason: 'the fiftieth is further down');
+    final wheel = t.state<ScrollableState>(row).position;   // (a hand held on a tile carries it)
+    wheel.jumpTo(wheel.maxScrollExtent);
+    await t.pump();
+    expect(last.hitTestable(), findsOneWidget);
+    await t.tap(last);
+    await settled(t, ws);
+    expect(m.wayOf(cube, 'x', 0), easeKept().last, reason: m.trouble);
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
+  testWidgets('the shelf out, in a small window and a tall one, pushes the rest aside: nothing cut, the flow still in reach', (t) async {
+    for (final size in [const Size(1100, 700), tallWindow]) {
+      final ws = await openWorkspace(t, size: size), m = ws.inside!;
+      final cube = m.add('solid', 'cube');
+      expect(m.key(cube, 'x', 0, 0) && m.key(cube, 'x', 1, 1), isTrue, reason: m.trouble);
+      ws
+        ..reread()
+        ..pickKey((layer: '$cube', frame: 0))
+        ..front('Ease');
+      await t.pumpAndSettle();
+      final before = t.getRect(_in(find.byType(EaseGraph)));
+      await t.tap(_in(find.byKey(const ValueKey('ease.shelf'))));
+      await t.pumpAndSettle();
+      expect(t.getRect(_in(find.byType(EaseGraph))).width, lessThan(before.width), reason: 'the graph gives it room');
+      expect(_in(find.byKey(const ValueKey('ease.slot'))).hitTestable(), findsOneWidget, reason: 'the flow not under it');
+      expect(_in(find.byKey(const ValueKey('ease.shelf.slot'))).hitTestable(), findsOneWidget);
+      expect(t.takeException(), isNull);
+      await closeWorkspace(t);
+    }
   }, skip: !insideBuilt);
 
   testWidgets('a wave turned end for end, and back (AbsentMotion\'s reverse)', (t) async {
