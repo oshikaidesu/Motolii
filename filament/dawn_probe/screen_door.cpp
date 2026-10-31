@@ -59,8 +59,6 @@ struct Screen {
     ProgramHandle program;
     DescriptorSetLayoutHandle layout;
     int pictures = 1;
-    struct Set { std::vector<TextureHandle> read; int pass = 0, sampler = 0; DescriptorSetHandle handle; };
-    std::vector<Set> sets;   // one for each pictures read and pass: a set once used is not told otherwise (Filament's WebGPU keeps what it made of it)
     std::vector<BufferObjectHandle> knobs;   // a pass's own (written several times in one frame, one buffer would show its last)
     uint32_t knobBytes = 0;
     struct Mesh { VertexBuffer* vb = nullptr; IndexBuffer* ib = nullptr; RenderPrimitiveHandle primitive; uint32_t room = 0; };
@@ -179,19 +177,15 @@ void draw(Engine* engine, Screen* s, Texture* const* from, RenderTarget* to, uin
     DriverApi& d = driver(engine);
     if (s->mesh && (!corners || count < 3)) return;
     const RenderPrimitiveHandle primitive = s->mesh ? meshOf(engine, s, pass, corners, count) : downcast(engine)->getFullScreenRenderPrimitive();
-    std::vector<TextureHandle> read;
-    for (int i = 0; i < s->pictures; ++i) read.push_back(downcast(from[i])->getHwHandle());
-    DescriptorSetHandle set;
-    for (const Screen::Set& one : s->sets) if (one.read == read && one.pass == pass && one.sampler == sampler) set = one.handle;
-    if (!set) {   // (pictures not read so before: a set of their own, made once)
-        SamplerParams linear{};
-        linear.filterMag = sampler == 1 ? SamplerMagFilter::NEAREST : SamplerMagFilter::LINEAR, linear.filterMin = sampler == 1 ? SamplerMinFilter::NEAREST : SamplerMinFilter::LINEAR;
-        linear.wrapS = linear.wrapT = sampler == 2 ? SamplerWrapMode::REPEAT : sampler == 3 ? SamplerWrapMode::MIRRORED_REPEAT : SamplerWrapMode::CLAMP_TO_EDGE;
-        set = d.createDescriptorSet(s->layout, utils::ImmutableCString{"screen"});
-        for (int i = 0; i < s->pictures; ++i) d.updateDescriptorSetTexture(set, descriptor_binding_t(i), read[(size_t)i], linear);
-        if (s->knobBytes) d.updateDescriptorSetBuffer(set, descriptor_binding_t(s->pictures), knobsOf(engine, s, pass), 0, s->knobBytes);
-        s->sets.push_back({read, pass, sampler, set});
-    }
+    // A set of its own each time, as Filament's DescriptorSet::commitSlow makes one when what it reads has changed: a set
+    // once used is not told otherwise (Filament's WebGPU keeps what it made of it), and one kept by the handles it read
+    // would read another's old picture when a handle comes round (HandleAllocator.h: 4 bits of age).
+    SamplerParams linear{};
+    linear.filterMag = sampler == 1 ? SamplerMagFilter::NEAREST : SamplerMagFilter::LINEAR, linear.filterMin = sampler == 1 ? SamplerMinFilter::NEAREST : SamplerMinFilter::LINEAR;
+    linear.wrapS = linear.wrapT = sampler == 2 ? SamplerWrapMode::REPEAT : sampler == 3 ? SamplerWrapMode::MIRRORED_REPEAT : SamplerWrapMode::CLAMP_TO_EDGE;
+    DescriptorSetHandle set = d.createDescriptorSet(s->layout, utils::ImmutableCString{"screen"});
+    for (int i = 0; i < s->pictures; ++i) d.updateDescriptorSetTexture(set, descriptor_binding_t(i), downcast(from[i])->getHwHandle(), linear);
+    if (s->knobBytes) d.updateDescriptorSetBuffer(set, descriptor_binding_t(s->pictures), knobsOf(engine, s, pass), 0, s->knobBytes);
     RenderPassParams params{};
     params.viewport = at ? backend::Viewport{at[0], at[1], (uint32_t)at[2], (uint32_t)at[3]} : backend::Viewport{0, 0, w, h};
     params.flags.discardStart = over ? TargetBufferFlags::NONE : TargetBufferFlags::ALL;   // (laid over: what is there is kept)
@@ -218,13 +212,13 @@ void draw(Engine* engine, Screen* s, Texture* const* from, RenderTarget* to, uin
     d.draw(pipeline, primitive, 0, s->mesh ? count : 3, 1);
     d.endRenderPass();
     d.bindDescriptorSet({}, 0, {});
+    d.destroyDescriptorSet(std::move(set));
 }
 
 void drop(Engine* engine, Screen* s) {
     DriverApi& d = driver(engine);
     for (BufferObjectHandle k : s->knobs) d.destroyBufferObject(k);
     for (const Screen::Mesh& m : s->meshes) if (m.vb) d.destroyRenderPrimitive(m.primitive), engine->destroy(m.vb), engine->destroy(m.ib);
-    for (const Screen::Set& one : s->sets) d.destroyDescriptorSet(one.handle);
     d.destroyDescriptorSetLayout(s->layout);
     d.destroyProgram(s->program);
     delete s;
