@@ -477,6 +477,7 @@ class _WorkspaceState extends State<Workspace> {
             ],
           ),
           item('Solo', 'thing.solo'),
+          item('Keyed Values', 'thing.lanes'),
           item('Deactivate', 'thing.deactivate'),
         ],
       ),

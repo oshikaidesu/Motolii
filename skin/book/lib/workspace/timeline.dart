@@ -52,7 +52,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   int _workIn = 12, _workOut = 228;
   int _last = -1;
 
-  // The rows as laid: each layer's own, then, while animating, a lane for each of its values that moves (Ableton's
+  // The rows as laid: each layer's own, then, while it stands open, a lane for each of its values that moves (Ableton's
   // automation lanes, Live 12 manual 25.5: with Cmd, every automated envelope in a lane of its own). value: the lane's.
   List<({int layer, String? value})> _order = const [];
 
@@ -448,7 +448,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     _order = [
       for (final (i, l) in ws.layers.indexed) ...[
         (layer: i, value: null),
-        if (ws.animating)
+        if (ws.lanesOpen(l.id))
           for (final n in _moving(ws, l)) (layer: i, value: n),
       ],
     ];

@@ -39,6 +39,8 @@ class _LabelRow extends StatefulWidget {
     required this.row,
     required this.hidden,
     required this.solo,
+    required this.lanes,
+    required this.onLanes,
     required this.onSelect,
     required this.onEye,
     required this.onSolo,
@@ -47,7 +49,8 @@ class _LabelRow extends StatefulWidget {
   final int index;
   final WtRow row;
   final bool hidden, solo;
-  final VoidCallback onSelect, onEye, onSolo, onLock;
+  final bool? lanes;   // (whether its keyed values stand open; null: it has no keys)
+  final VoidCallback onLanes, onSelect, onEye, onSolo, onLock;
   @override
   State<_LabelRow> createState() => _LabelRowState();
 }
@@ -69,7 +72,13 @@ class _LabelRowState extends State<_LabelRow> {
           dim: r.dim,
           hot: _h,
           onSelect: widget.onSelect,
-          kind: WtThumb(r),   // (its own small picture, as Alight Motion's row)
+          kind: Row(   // (its own small picture, as Alight Motion's row; before it the triangle of a row with keys, After Effects' twirl)
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.lanes case final open?) _Toggle(open ? TpGlyph.caretD : TpGlyph.caretR, on: false, lit: true, onTap: widget.onLanes) else SizedBox(width: Shape.z(20)),
+              WtThumb(r),
+            ],
+          ),
           eye: _Toggle(widget.hidden ? TpGlyph.eyeOff : TpGlyph.eye, on: false, lit: !widget.hidden, onTap: widget.onEye),
           solo: _Toggle(TpGlyph.solo, on: widget.solo, lit: _h || sel, onTap: widget.onSolo),
           lock: _Toggle(r.locked ? TpGlyph.lock : TpGlyph.unlock, on: false, lit: r.locked || _h || sel, strong: r.locked, onTap: widget.onLock),

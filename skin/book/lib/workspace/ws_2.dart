@@ -420,6 +420,17 @@ class Ws extends ChangeNotifier {
   List<(String, double)> get guides => _inside!.guides;
   set animating(bool on) {
     _inside?.keying(on);
+    if (!on) _lanesShut.clear();
+    _tell(WsAspect.animating);
+  }
+
+  // Which things' keyed values stand in lanes under their rows: opened by hand (After Effects' twirl, Ableton's track
+  // unfolded), or, with Animate on, every thing's (golf ③), and then what is kept is the ones shut by hand.
+  final _lanesOpen = <String>{}, _lanesShut = <String>{};
+  bool lanesOpen(String id) => animating ? !_lanesShut.contains(id) : _lanesOpen.contains(id);
+  void twirl(Iterable<String> ids) {
+    final open = ids.any(lanesOpen), s = animating ? _lanesShut : _lanesOpen;
+    open == animating ? s.addAll(ids) : s.removeAll(ids);
     _tell(WsAspect.animating);
   }
 

@@ -74,6 +74,8 @@ extension _WsTimelineRows on _WsTimelineState {
                             row: rows[i],
                             hidden: _isHidden(ws, l.id),
                             solo: _isSolo(ws, l.id),
+                            lanes: l.keys.isEmpty ? null : ws.lanesOpen(l.id),
+                            onLanes: () => ws.twirl([l.id]),
                             onSelect: () => HardwareKeyboard.instance.isShiftPressed
                                 ? wsPickRange(ws, l.id)   // (Shift: every row from the last picked to this, After Effects' manner)
                                 : HardwareKeyboard.instance.isMetaPressed ? wsPickAlso(ws, l.id) : ws.select(l.id),   // (Cmd: one more, or one less)

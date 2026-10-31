@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
+import 'package:lab_book/sets/panels/timeline_parts_parts.dart';
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/timeline_paint.dart';
 
@@ -102,6 +103,30 @@ void main() {
     expect(j.ws.keys.length, 2);
     await t.tapAt(_at(j.ws, j.ring, 10)); // (the ring's row, before it comes on)
     expect(j.ws.keys, isEmpty);
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
+  testWidgets('a row with keys opens by its own triangle, keying nothing (After Effects\' twirl); Animate on opens them all, and a row shut then comes back as it was', (t) async {
+    final j = _joined(), m = j.ws.inside!, ws = j.ws;
+    await _pump(t, ws);
+    expect(m.key(j.rect, 'x', 2, 500), isTrue, reason: m.trouble);
+    ws.reread();
+    await t.pumpAndSettle();
+    final lane = find.byKey(ValueKey('ws-tl-lane-${j.rect}-x'));
+    Finder caret(String id) => find.descendant(of: find.byKey(ValueKey('ws-tl-label-$id')), matching: find.byWidgetPredicate((w) => w is CustomPaint && w.painter is TpGlyphPainter && {TpGlyph.caretR, TpGlyph.caretD}.contains((w.painter! as TpGlyphPainter).g)));
+    expect(caret('${j.ring}'), findsNothing, reason: 'no keys, nothing to open');
+    await t.tap(caret('${j.rect}'));
+    await t.pumpAndSettle();
+    expect(lane, findsOneWidget);
+    expect(ws.animating, isFalse, reason: 'looking is not keying');
+    ws.animating = true;
+    await t.pumpAndSettle();
+    await t.tap(caret('${j.rect}'));
+    await t.pumpAndSettle();
+    expect(lane, findsNothing, reason: 'shut by hand, Animate on or not');
+    ws.animating = false;
+    await t.pumpAndSettle();
+    expect(lane, findsOneWidget, reason: 'as it stood before Animate');
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 

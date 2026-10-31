@@ -84,6 +84,10 @@ Map<String, void Function()> wsAbletonCommands(Ws ws) {
       if (t == null || m == null) return;
       ws.after(m.later('set', thing: t, name: 'solo', number: ws.layer?.solo == true ? 0 : 1));
     },
+    'thing.lanes': () {   // (After Effects' U: the picked layers' keyed properties shown, pressed again gone)
+      final ids = {...ws.many, ?ws.selected};
+      if (ids.isNotEmpty) ws.twirl(ids);
+    },
     'loop.toggle': () => wsAskTimeline('loop'),   // (Live 42.16 Cmd+L: toggle loop brace)
     'zoom.in': () => wsAskTimeline('in'),   // (Live 42.9 +: zoom in time ruler)
     'zoom.out': () => wsAskTimeline('out'),   // (Live 42.9 -)
