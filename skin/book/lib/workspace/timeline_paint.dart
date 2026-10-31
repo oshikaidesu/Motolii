@@ -434,12 +434,13 @@ class WtTracksPainter extends CustomPainter {
 
   /// A value's lane, as Ableton draws an envelope in its own lane (Live 12 manual 25.5): its keys as breakpoints at
   /// their values, lowest at the bottom, joined as each goes there (its way's shape: Ableton draws a curved segment
-  /// curved, 25.5.2; the bar's own stretches the same), level before the first and after the last; the line in the
-  /// bar's colour made lighter, as the bar's own automation line (golf_noise.md ⑫: it was straight whatever the ease).
+  /// curved, 25.5.2; the bar's own stretches the same), and nothing before the first or after the last: with many lanes
+  /// a line across the whole row tells nothing (the maker, 11/1; Theatre.js's connector goes from key to key); the line
+  /// in the bar's colour made lighter, as the bar's own automation line (golf_noise.md ⑫: it was straight whatever the ease).
   void _lane(Canvas c, Size s, WtRow r, List<(int, double)> pts, double cy) {
     final top = cy - WtM.row / 2 + 4, h = WtM.row - 9, col = Color.lerp(wtBarFill(r), Grey.g100, r.dim ? .25 : .6)!;
     Offset at((int, double) q) => Offset(view.x(q.$1), top + (1 - q.$2) * h);
-    final line = Path()..moveTo(0, at(pts.first).dy);
+    final line = Path()..moveTo(at(pts.first).dx, at(pts.first).dy);
     for (var i = 0; i < pts.length; i++) {
       final a = at(pts[i]), way = i + 1 < pts.length ? r.laneWays?.elementAtOrNull(i) : null;
       line.lineTo(a.dx, a.dy);
@@ -447,7 +448,6 @@ class WtTracksPainter extends CustomPainter {
       final b = at(pts[i + 1]);
       _wayLine(line, way, a.dx, b.dx, s.width, (v) => (a.dy + (b.dy - a.dy) * v).clamp(top - 3, top + h + 3));   // (an overshoot kept within its own lane)
     }
-    line.lineTo(s.width, at(pts.last).dy);
     if (r.laneOn case final i? when i + 1 < pts.length) c.drawRect(Rect.fromLTRB(at(pts[i]).dx, cy - WtM.row / 2, at(pts[i + 1]).dx, cy + WtM.row / 2), Paint()..color = WsT.accent.withValues(alpha: .18));   // (Theatre.js's connector, lit while it is what the curve editor holds)
     c.drawPath(line, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.2..strokeJoin = StrokeJoin.round..isAntiAlias = true..color = col);
     for (final q in pts) {
