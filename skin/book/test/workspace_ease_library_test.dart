@@ -750,6 +750,39 @@ void main() {
     await closeWorkspace(t);
   }, skip: !insideBuilt);
 
+  testWidgets('overshoot: off, a curve past 0 and 1 comes back inside, its handles in reach; on one stretch it does not stay on the next; a curve past them is always seen', (t) async {
+    final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    expect(m.key(cube, 'x', 0, 0) && m.key(cube, 'x', 1, 1) && m.key(cube, 'x', 2, 0) && m.way(cube, 'x', 0, 'Bezier 0.2 2.5 0.8 -1.5') && m.way(cube, 'x', 1, 'Bezier 0.42 0 1 1'), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..pickKey((layer: '$cube', frame: 0))
+      ..front('Ease');
+    await t.pumpAndSettle();
+    EaseGraph g() => t.widget<EaseGraph>(_in(find.byType(EaseGraph)));
+    expect(g().overshoot, isTrue, reason: 'past 0 and 1: looks that far');
+    ws.pickKey((layer: '$cube', frame: 60));
+    await t.pumpAndSettle();
+    expect(g().overshoot, isFalse, reason: 'the next stretch does not go past them: not left looking so far');
+    ws.pickKey((layer: '$cube', frame: 0));
+    await t.pumpAndSettle();
+    await menu(t, 'overshoot');
+    await settled(t, ws);
+    await t.pumpAndSettle();
+    expect(g().overshoot, isFalse, reason: 'off');
+    expect(m.wayOf(cube, 'x', 0), 'Bezier 0.2 1 0.8 0', reason: 'and the handles back inside, where a hand can reach them: ${m.trouble}');
+    expect(m.undo() && m.wayOf(cube, 'x', 0) == 'Bezier 0.2 2.5 0.8 -1.5', isTrue, reason: 'one step');
+    ws.reread();
+    await t.pumpAndSettle();
+    expect(g().overshoot, isTrue);
+    await t.tap(_in(find.byKey(const ValueKey('ease.Bounce'))));
+    await settled(t, ws);
+    final (lo, hi) = easeReach(heard('Reverse:Elastic~0.25~1~0.5~1'));
+    expect([lo, hi], [closeTo(-1.45, 1e-9), closeTo(.9, 1e-9)], reason: 'AbsentMotion\'s geoOf: a turned Elastic turns about 0.6');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
   testWidgets('a wave turned end for end, and back (AbsentMotion\'s reverse)', (t) async {
     final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
     final cube = m.add('solid', 'cube');

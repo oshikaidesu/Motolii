@@ -42,7 +42,7 @@ class DeskEaseState extends State<DeskEase> with _EaseEnds {
   bool _adding = false;   // (the flow's empty frame pressed: what is picked next is laid there, as what is picked from Bitwig's + goes in at it)
   Ease? _base;   // (the way as it was: while one is held the stage shows it in an open step, and nothing is kept unless it is let go there)
   bool _shelf = false, _shelfShown = false;   // (drawn out; and built, until it has slid away)
-  bool _overLocked = false, _noOver = false;   // (AbsentMotion's lockOvershoot, disableOvershoot: once it looks past 0 and 1 it stays so, until the menu says)
+  bool _overLocked = false;   // (AbsentMotion's lockOvershoot: once it looks past 0 and 1 it stays so, a hand bringing a handle back, until the menu says or another card or stretch comes)
 
   // (with no key picked the stretch follows the playhead: built again when it comes into another stretch, not every frame)
   Ws? _ws;
@@ -219,11 +219,11 @@ class DeskEaseState extends State<DeskEase> with _EaseEnds {
     // (on a straight line alone there is nothing to lay it on: it goes there as a press would)
     Ease laidOn(Ease e) => said(ease) == 'Linear' ? e : easeLaid([...cards, for (final c in easeCards(said(e))) easeCard(c, ws.inside)]);
     final pile = _held == null ? cards : [for (final c in easeCards(said(_held!))) easeCard(c, ws.inside)];
-    if (spanId(span) != _cardOf) (_cardOf = spanId(span), _card = 0, _adding = false);
+    if (spanId(span) != _cardOf) (_cardOf = spanId(span), _card = 0, _adding = false, _overLocked = false);
     final at = _card.clamp(0, cards.length - 1), card = cards[at], laid = cards.length > 1, whole = laid && _card < 0;
     void put(Ease e) => set(laid ? easeLaid([...cards]..[at] = easeCard(said(e), ws.inside)) : e);   // (a press, a handle, a turn: on the card pressed)
     final bezier = easeIsBezier(card);
-    final overshoot = bezier && !_noOver && (easeOvershoot || _overLocked || [card.p1.dy, card.p2.dy].any((y) => y < 0 || y > 1));
+    final overshoot = bezier && (easeOvershoot || _overLocked || [card.p1.dy, card.p2.dy].any((y) => y < 0 || y > 1));
     _overLocked = overshoot;
     // (where the beats fall on the card in hand: one that takes what is above it through it is walked by that, not by the
     //  clock, so a beat is where that has come to then, or a handle put on a line would miss the beat in the film)
@@ -280,11 +280,14 @@ class DeskEaseState extends State<DeskEase> with _EaseEnds {
               }),
               ('paste', 'Paste Curve', () => paste(set)),   // (what was copied here, or a cubic-bezier() or linear() from a page: easeFromText)
               if (easeCopied != null && ws.inside != null) ('all', 'Paste Curve to All Keyframes', () => paste((e) => _onEveryKey(ws, e))),
-              if (bezier) ('overshoot', overshoot ? 'Disable Overshoot' : 'Enable Overshoot', () => setState(() {
-                easeOvershoot = !overshoot;
-                _noOver = overshoot;
-                _overLocked = !overshoot;
-              })),
+              if (bezier && !whole) ('overshoot', overshoot ? 'Disable Overshoot' : 'Enable Overshoot', () {
+                setState(() {
+                  easeOvershoot = !overshoot;
+                  _overLocked = !overshoot;
+                });
+                // (off, the handles come back inside: AbsentMotion only looks less far, and a curve left out there has handles no hand can reach)
+                if (overshoot && [card.p1.dy, card.p2.dy].any((y) => y < 0 || y > 1)) put(card.withHandles(Offset(card.p1.dx, card.p1.dy.clamp(0.0, 1.0)), Offset(card.p2.dx, card.p2.dy.clamp(0.0, 1.0))));
+              }),
               ('jump', easeJump ? 'Jump On' : 'Jump Off', () => setState(() => easeJump = !easeJump)),
             ],
           ),
@@ -352,7 +355,7 @@ class DeskEaseState extends State<DeskEase> with _EaseEnds {
                       ),
                     ),
                   ),
-                  SizedBox(width: tall ? null : column, height: tall ? column : null, child: EaseCards(side: side, across: tall, cards: pile, adding: _adding, onSlot: () => setState(() => _adding = !_adding), now: whole ? -1 : at, whole: pile.length > 1 ? _held ?? easeLaid(cards) : null, onWhole: () => setState(() => _card = -1), onPress: (i) => setState(() => (_card = i, _adding = false)), onOff: (i) => set(cards.length > 1 ? easeLaid([...cards]..removeAt(i)) : easePreset('Linear')), onMove: (from, to) {
+                  SizedBox(width: tall ? null : column, height: tall ? column : null, child: EaseCards(side: side, across: tall, cards: pile, adding: _adding, onSlot: () => setState(() => _adding = !_adding), now: whole ? -1 : at, whole: pile.length > 1 ? _held ?? easeLaid(cards) : null, onWhole: () => setState(() => _card = -1), onPress: (i) => setState(() => (_card = i, _adding = false, _overLocked = false)), onOff: (i) => set(cards.length > 1 ? easeLaid([...cards]..removeAt(i)) : easePreset('Linear')), onMove: (from, to) {
                     final next = [...cards];
                     next.insert(to, next.removeAt(from));
                     _card = to;

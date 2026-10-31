@@ -109,7 +109,7 @@ List<EaseHandle> easeHandles(Ease e) {
 (double, double) easeReach(Ease e, [bool overshoot = false]) => overshoot
     ? (-2, 3)
     : easeIsTurned(said(e))
-    ? switch (easeReach(heard(easeTurn(said(e))))) { (final lo, final hi) => (1 - hi, 1 - lo) }
+    ? switch ((easeReach(heard(easeTurn(said(e)))), said(e).startsWith('Reverse:Elastic') ? .6 : 1.0)) { ((final lo, final hi), final origin) => (origin - hi, origin - lo) }
     : switch (e.kind == EaseKind.hold || !easeOther(e) ? 'Bezier' : e.name!.split(' ').first) {
         'Elastic' => (-.3, 2.05),
         'Cyclic' => (-.5, 1.5),

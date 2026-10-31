@@ -107,7 +107,8 @@ class EaseIcon extends CustomPainter {
     }
 
     final word = said(ease).split(' ').first;
-    switch (easeIsUsual(said(ease)) ? word : '') {   // (its numbers changed: its own curve, or a card or a kept one with 8 waves would look like 3.5)
+    final out = word == 'Bezier' && [ease.p1.dy, ease.p2.dy].any((y) => y < 0 || y > 1);   // (past 0 and 1: drawn as it is it leaves its square)
+    switch (easeIsUsual(said(ease)) && !out ? word : '') {   // (its numbers changed: its own curve, or a card or a kept one with 8 waves would look like 3.5)
       case 'Linear':
         bezier(const Offset(.25, .25), const Offset(.75, .75));
       case 'Bezier':
