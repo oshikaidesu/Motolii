@@ -279,8 +279,9 @@ class _Grip extends CustomPainter {
 /// An effect card's ⋮ (AbsentMotion's EffectHeader More): what else is done with it, in a short list over the panel,
 /// as Chooser's lists look; one picked, it does that and closes.
 class CardMore extends StatefulWidget {
-  const CardMore({super.key, required this.name, required this.items, this.word = '⋮'});
+  const CardMore({super.key, required this.name, required this.items, this.word = '⋮', this.above = false});
   final String name, word;
+  final bool above;   // (opened upward, for one at the window's foot: AbsentMotion's AboveAnchor)
   final List<(String key, String label, VoidCallback does)> items;
   @override
   State<CardMore> createState() => _CardMoreState();
@@ -298,8 +299,8 @@ class _CardMoreState extends State<CardMore> {
             alignment: Alignment.topLeft,
             child: CompositedTransformFollower(
               link: _link,
-              targetAnchor: Alignment.bottomRight,
-              followerAnchor: Alignment.topRight,
+              targetAnchor: widget.above ? Alignment.topLeft : Alignment.bottomRight,
+              followerAnchor: widget.above ? Alignment.bottomLeft : Alignment.topRight,
               child: FloatShut(shut: _portal.hide, group: _link, child: TinyMenu(name: 'card', of: widget.name, items: widget.items, hide: _portal.hide)),
             ),
           ),

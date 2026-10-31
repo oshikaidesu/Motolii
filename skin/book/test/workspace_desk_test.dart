@@ -3,9 +3,9 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lab_book/tokens.dart' show Shape;
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/desk_ease_graph.dart';
+import 'package:lab_book/workspace/desk_ease_state.dart' show easeJump;
 import 'package:lab_book/workspace/desk_kit.dart';
 import 'package:lab_book/workspace/ws.dart' show WsHeader;
 
@@ -79,12 +79,12 @@ void main() {
       ..pickKey((layer: '$cube', frame: 0))
       ..front('Ease');   // (a pane of its own since c1d8253)
     await t.pumpAndSettle();
-    for (final (tile, said) in const [('Back', 'Bezier 0.34 1.56'), ('Out', 'Bezier 0 0 0.58 1')]) {
-      await t.tap(find.descendant(of: find.byType(DeskEase), matching: find.text(tile)).first);
+    for (final (tile, said) in const [('In', 'Bezier 0.42 0 1 1'), ('Out', 'Bezier 0 0 0.58 1')]) {
+      await t.tap(find.byKey(ValueKey('ease.$tile')));
       await settled(t, ws);
       expect(m.wayOf(cube, 'x', 0), startsWith(said), reason: tile);
     }
-    await t.tap(find.descendant(of: find.byType(DeskEase), matching: find.byType(DeskIconButton)).last); // (Reverse)
+    await t.tap(find.byKey(const ValueKey('ease-reverse')));
     await settled(t, ws);
     expect(m.wayOf(cube, 'x', 0), startsWith('Bezier 0.42 0 1 1'), reason: 'Out turned is In');
     // (no key picked: the stretch the playhead is in, of the picked thing, as Alight Motion opens its ease: golf_noise.md ⑫)
@@ -93,15 +93,13 @@ void main() {
       ..select('$cube')
       ..frame = 30;   // (0.5 s, between its keys at 0 and 1 s)
     await t.pumpAndSettle();
-    expect(find.textContaining('No stretch'), findsNothing, reason: 'the stretch from 0 to 60 is shown');
-    expect(find.byKey(const ValueKey('ease-jump')), findsOneWidget, reason: 'its ends can be pulled');
-    await t.tap(find.descendant(of: find.byType(DeskEase), matching: find.text('Out')).first);
+    expect(find.textContaining('between two keys'), findsNothing, reason: 'the stretch from 0 to 60 is shown');
+    await t.tap(find.byKey(const ValueKey('ease.Out')));
     await settled(t, ws);
     expect(m.wayOf(cube, 'x', 0), startsWith('Bezier 0 0 0.58 1'), reason: 'put on the stretch the playhead is in');
     ws.frame = 90;   // (after the last key: no stretch)
     await t.pumpAndSettle();
-    expect(find.textContaining('No stretch'), findsOneWidget);
-    expect(find.byKey(const ValueKey('ease-jump')), findsNothing, reason: 'no stretch, no end to pull: the hint is not hidden under it (golf (66))');
+    expect(find.textContaining('between two keys'), findsOneWidget, reason: 'no stretch: it says how to have one (golf (66))');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t); // (what the desk shows is read back from the document, not kept by the window)
     await closeWorkspace(t);
@@ -116,8 +114,8 @@ void main() {
       ..pickKey((layer: '$cube', frame: 30))
       ..front('Ease');
     await t.pumpAndSettle();
-    final r = t.getRect(find.byType(EaseGraph)), g = Rect.fromLTRB(r.left + Shape.s(30), r.top + Shape.s(10), r.right - Shape.s(14), r.bottom - Shape.s(22));
-    double y(double v) => g.bottom - (v + .42) / 2.04 * g.height;   // (the graph's measure: desk_ease_graph.dart _ymin, _ymax)
+    final r = t.getRect(find.byType(EaseGraph)), g = r.deflate(r.width * 42 / 575);   // (AbsentMotion's geoOf)
+    double y(double v) => g.bottom - (v + .25) / 1.5 * g.height;   // (the graph's measure: desk_ease_handles.dart easeReach)
     Future<void> pull(Offset from, double to, {String? says}) async {
       final hand = await t.startGesture(from, kind: PointerDeviceKind.mouse);
       await hand.moveBy(const Offset(0, -6));   // (up and down first: the key, not the handle on it)
@@ -135,12 +133,45 @@ void main() {
     expect(m.keyValues(cube, 'x')[0], closeTo(0, 1e-9));
     expect(m.keyValues(cube, 'x')[1], closeTo(2, .1), reason: 'the start key moved up: it jumps there');
     expect(m.keyValues(cube, 'x')[2], closeTo(0, 1e-9), reason: 'and the stretch goes down to the end key\'s value, as it was');
-    await t.tap(find.byKey(const ValueKey('ease-jump')));
+    await t.tap(find.byKey(const ValueKey('card-more:Ease')));
     await t.pumpAndSettle();
-    expect(find.text('Jump Off'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('card-jump:Ease')));
+    await t.pumpAndSettle();
+    addTearDown(() => easeJump = true);
+    expect(easeJump, isFalse);
     await pull(Offset(g.right, y(1)), .5);   // (the end down half the way to the start's value: 2 to 0, so 1)
     expect(keys(), [29, 30, 60], reason: 'Jump off: no key after it');
     expect(m.keyValues(cube, 'x')[2], closeTo(1, .1));
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
+  testWidgets('Ease: AbsentMotion\'s panel: the family\'s shapes beside the graph, the other families a press away, each shape\'s own handles on its curve', (t) async {
+    final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    expect(m.key(cube, 'x', 0, 0) && m.key(cube, 'x', 1, 1), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..pickKey((layer: '$cube', frame: 0))
+      ..front('Ease');
+    await t.pumpAndSettle();
+    for (final name in ['Linear', 'In', 'Out', 'In-out']) {
+      expect(find.byKey(ValueKey('ease.$name')), findsOneWidget, reason: 'the family the stretch is of');
+    }
+    expect(find.byKey(const ValueKey('ease.Cyclic')), findsNothing, reason: 'the others a press away');
+    await t.tap(find.byKey(const ValueKey('ease.family.1')));
+    await settled(t, ws);
+    expect(m.wayOf(cube, 'x', 0), startsWith('Bounce'), reason: 'a family pressed: its first shape on the stretch');
+    await t.tap(find.byKey(const ValueKey('ease.Cyclic')));
+    await settled(t, ws);
+    final said = m.wayOf(cube, 'x', 0).split(' ');
+    expect(said.first, 'Cyclic', reason: m.trouble);
+    final graph = find.byType(EaseGraph), r = t.getRect(graph), g = r.deflate(r.width * 42 / 575);
+    Offset px(double x, double y) => Offset(g.left + x * g.width, g.bottom - (y + .5) / 2 * g.height);   // (Cyclic's reach: easeReach)
+    final period = double.parse(said[1]);
+    await t.timedDragFrom(px(period, 0), px(period + .2, 0) - px(period, 0), const Duration(milliseconds: 300));
+    await settled(t, ws);
+    expect(double.parse(m.wayOf(cube, 'x', 0).split(' ')[1]), closeTo(period + .2, .03), reason: 'its handle carries its period along');
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, skip: !insideBuilt);

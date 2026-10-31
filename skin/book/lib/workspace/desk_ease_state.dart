@@ -8,9 +8,7 @@ import 'package:lab_book/tokens.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/desk_ease_cards.dart';
 import 'package:lab_book/workspace/desk_ease_graph.dart';
-import 'package:lab_book/workspace/desk_ease_numbers.dart';
-import 'package:lab_book/workspace/desk_ease_presets.dart';
-import 'package:lab_book/workspace/desk_ease_span_strip.dart';
+import 'package:lab_book/workspace/desk_ease_side.dart';
 import 'package:lab_book/workspace/ws.dart';
 
 /// The curve copied in the Ease desk, kept while the window is open (Alight Motion's Copy of a curve).
@@ -22,12 +20,16 @@ Ease? easeCopied;
 /// 決めれると良い、ユーザに託す", "easeにon/offであるといい"). Kept while the window is open.
 bool easeJump = true;
 
+/// Whether the graph looks past 0 and 1 (Alight Motion's Enable Overshoot). Kept while the window is open.
+bool easeOvershoot = false;
+
 class DeskEaseState extends State<DeskEase> {
   // Joined: while a hand is down the ease is told to the document as it goes (the stage and the bars follow), the newest
   // one at a time (one still on its way: the next waits, those between are skipped); all of it one step of undo.
   bool _down = false, _open = false, _going = false;
   Ease? _pending, _waiting;
   Ease? _held;   // (what a tile held over the graph would make: seen before it is let go, Final Cut Pro's skimming of an effect)
+  bool _overLocked = false, _noOver = false;   // (AbsentMotion's lockOvershoot, disableOvershoot: once it looks past 0 and 1 it stays so, until the menu says)
   String? _trouble;
 
   // (with no key picked the stretch follows the playhead: built again when it comes into another stretch, not every frame)
@@ -213,67 +215,79 @@ class DeskEaseState extends State<DeskEase> {
     return _body(ws, span, ease, (e) => setState(() => store[id] = e));
   }
 
+  // The panel as AbsentMotion's EasingPanel.kt lays it: the left column, the graph, the shapes, the families, their widths its weights.
   Widget _body(Ws ws, EaseSpan? span, Ease ease, ValueChanged<Ease> set) {
     final cards = easeIsLaid(said(ease)) ? [for (final c in easeCards(said(ease))) easeCard(c, ws.inside)] : [ease];
     Ease laidOn(Ease e) => easeLaid([...cards, for (final c in easeCards(said(e))) easeCard(c, ws.inside)]);
     final pile = _held == null ? cards : [for (final c in easeCards(said(_held!))) easeCard(c, ws.inside)];
-    return Column(
+    final family = easeFamilyOf(ease), ways = unseated(ws), bezier = family == 0;
+    final overshoot = bezier && !_noOver && (easeOvershoot || _overLocked || [ease.p1.dy, ease.p2.dy].any((y) => y < 0 || y > 1));
+    _overLocked = overshoot;
+    final reverse = ease.reversed();
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SpanStrip(
-          span: span,
-          jump: easeJump,
-          onJump: () => setState(() => easeJump = !easeJump),
-          onReverse: () => set(ease.reversed()),
-          onCopy: () => setState(() => easeCopied = ease),
-          onPaste: easeCopied == null ? null : () => set(easeCopied!),
-          onPasteAll: easeCopied == null || ws.inside == null ? null : () => _onEveryKey(ws, easeCopied!),
-        ),
-        if (_trouble case final why?) Text(why, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63)),
-        const SizedBox(height: WsT.gutter),
         Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: DragTarget<Object>(
-                  onWillAcceptWithDetails: (d) {
-                    if (d.data case final Ease e) setState(() => _held = laidOn(e));
-                    return true;   // (a card of the stack too: let go on it, it stays)
-                  },
-                  onLeave: (_) => setState(() => _held = null),
-                  onAcceptWithDetails: (d) {
-                    _held = null;
-                    if (d.data case final Ease e) set(laidOn(e));
-                  },
-                  builder: (_, hot, _) => DecoratedBox(
-                    position: DecorationPosition.foreground,
-                    decoration: BoxDecoration(border: hot.isEmpty ? null : Border.all(color: WsT.accent, width: 2)),   // (as the stage shows a tile held over it)
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (pile.length > 1) EaseCards(cards: pile, onOff: (i) => set(easeLaid([...cards]..removeAt(i)))),
-                        Expanded(
-                          child: ColoredBox(
-                            color: WsT.card,
-                            child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: _held ?? ease, span: span, frame: frame, onChanged: set, jump: easeJump, onEnd: ws.inside == null ? null : (start, by) => _moveEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by)))   // (only the graph follows the playhead),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: WsT.gutter),
-              SizedBox(
-                width: Shape.z(128),
-                child: EaseNumbers(ease: ease, span: span, onChanged: set),
-              ),
+          flex: 168,
+          child: EaseLeft(
+            onReverse: bezier && ease != easePreset('Linear') && reverse != ease ? () => set(reverse) : null,
+            menu: [
+              ('copy', 'Copy Curve', () => setState(() => easeCopied = ease)),
+              if (easeCopied case final copied?) ...[
+                ('paste', 'Paste Curve', () => set(copied)),
+                if (ws.inside != null) ('all', 'Paste Curve to All Keyframes', () => _onEveryKey(ws, copied)),
+              ],
+              if (bezier) ('overshoot', overshoot ? 'Disable Overshoot' : 'Enable Overshoot', () => setState(() {
+                easeOvershoot = !overshoot;
+                _noOver = overshoot;
+                _overLocked = !overshoot;
+              })),
+              ('jump', easeJump ? 'Jump On' : 'Jump Off', () => setState(() => easeJump = !easeJump)),
             ],
           ),
         ),
-        const SizedBox(height: WsT.gutter),
-        Presets(ease: ease, onPick: set, more: unseated(ws)),
+        Expanded(
+          flex: 575,
+          child: DragTarget<Object>(
+            onWillAcceptWithDetails: (d) {
+              if (d.data case final Ease e) setState(() => _held = laidOn(e));
+              return true;   // (a card of the stack too: let go on it, it stays)
+            },
+            onLeave: (_) => setState(() => _held = null),
+            onAcceptWithDetails: (d) {
+              _held = null;
+              if (d.data case final Ease e) set(laidOn(e));
+            },
+            builder: (_, hot, _) => DecoratedBox(
+              position: DecorationPosition.foreground,
+              decoration: BoxDecoration(border: hot.isEmpty ? null : Border.all(color: WsT.accent, width: 2)),   // (as the stage shows a tile held over it)
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (pile.length > 1) EaseCards(cards: pile, onOff: (i) => set(easeLaid([...cards]..removeAt(i)))),
+                  Expanded(
+                    child: ColoredBox(
+                      color: WsT.well,
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: _held ?? ease, span: span, frame: frame, onChanged: set, jump: easeJump, overshoot: overshoot, onEnd: ws.inside == null ? null : (start, by) => _moveEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by))),   // (only the graph follows the playhead)
+                          ),
+                          if (span == null) Positioned.fill(child: Center(child: Padding(padding: EdgeInsets.all(Shape.s(8)), child: Text('Put the playhead between two keys, or pick a key', textAlign: TextAlign.center, style: T.label(Grey.g63))))),
+                          if (_trouble case final why?) Positioned(left: Shape.s(4), right: Shape.s(4), top: Shape.s(2), child: Text(why, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63))),
+                          Positioned(left: Shape.s(2), bottom: Shape.s(2), child: EaseStep(span: span, back: true)),
+                          Positioned(right: Shape.s(2), bottom: Shape.s(2), child: EaseStep(span: span, back: false)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        Expanded(flex: 169, child: EasePresets(ease: ease, shapes: easesOfFamily(family, ways), onPick: set)),
+        Expanded(flex: 168, child: EaseFamilies(family: family, ways: ways, onPick: set)),
       ],
     );
   }

@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lab_book/tokens.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/desk_ease_cards.dart';
+import 'package:lab_book/workspace/desk_ease_handles.dart';
 import 'package:lab_book/workspace/desk_kit.dart';
 import 'package:lab_book/workspace/ws.dart';
 import 'two_fingers.dart';
@@ -15,45 +16,57 @@ import 'two_fingers.dart';
 /// how far, in the graph's own measure (1: from the one key's value to the other's); with [jump] on, a dashed line shows
 /// the value jumping there, as the keys it makes will.
 class EaseGraph extends StatefulWidget {
-  const EaseGraph({super.key, required this.ease, required this.span, required this.frame, required this.onChanged, this.onEnd, this.endSays, this.jump = true});
+  const EaseGraph({super.key, required this.ease, required this.span, required this.frame, required this.onChanged, this.onEnd, this.endSays, this.jump = true, this.overshoot = false});
   final Ease ease;
   final EaseSpan? span;
   final int frame;
   final ValueChanged<Ease> onChanged;
   final void Function(bool start, double by)? onEnd;
   final String? Function(bool start, double by)? endSays;   // (what the end pulled makes its value, shown beside it while it is pulled)
-  final bool jump;
+  final bool jump, overshoot;   // (overshoot: looks past 0 and 1, and a handle goes there: Alight Motion's Enable Overshoot)
   @override
   State<EaseGraph> createState() => _EaseGraphState();
 }
 
 class _EaseGraphState extends State<EaseGraph> {
-  int? _drag, _hot;   // (0, 1: the handles; 2, 3: the keys at the start and the end)
+  static const _end = 100;   // (_drag, _hot: a handle's place in easeHandles, or the key at the start, or at the end)
+  int? _drag, _hot;
   (int, int)? _tie;   // (a handle on a key, as Linear's are: the first move tells which, up and down being the key's)
   double? _endAt;   // (where the end pulled is, in the graph's measure, while it is pulled)
-  static const _ymin = -.42, _ymax = 1.62;
+  Offset _from = Offset.zero, _handle = Offset.zero;   // (where the hand took it, and where the handle was: it goes by the hand's move, as Alight Motion's)
 
-  static Rect _box(Size s) {
-    final r = EdgeInsets.fromLTRB(Shape.s(30), Shape.s(10), Shape.s(14), Shape.s(22)).deflateRect(Offset.zero & s);
-    return Rect.fromLTRB(r.left, r.top, math.max(r.left + 1, r.right), math.max(r.top + 1, r.bottom));
+  static Rect _box(Size s) {   // (AbsentMotion's geoOf: 42 of 575 kept round the curve)
+    final m = s.width * 42 / 575;
+    return Rect.fromLTRB(m, m, math.max(m + 1, s.width - m), math.max(m + 1, s.height - m));
   }
 
-  static Offset _px(Rect g, Offset v) => Offset(g.left + v.dx * g.width, g.bottom - (v.dy - _ymin) / (_ymax - _ymin) * g.height);
-  static Offset _val(Rect g, Offset p) =>
-      Offset(((p.dx - g.left) / g.width).clamp(0.0, 1.0), (_ymin + (g.bottom - p.dy) / g.height * (_ymax - _ymin)).clamp(_ymin + .02, _ymax - .02));
+  Offset _px(Rect g, Offset v) => _pxIn(g, easeReach(widget.ease, widget.overshoot), v);
+  static Offset _pxIn(Rect g, (double, double) reach, Offset v) => Offset(g.left + v.dx * g.width, g.bottom - (v.dy - reach.$1) / (reach.$2 - reach.$1) * g.height);
 
   int? _near(Rect g, Offset p) {
-    final at = [widget.ease.p1, widget.ease.p2, Offset.zero, const Offset(1, 1)];
-    final d = [for (final (i, v) in at.indexed) if (i < 2 || (widget.onEnd != null && widget.span != null)) ((_px(g, v) - p).distance, i)]..sort((a, b) => a.$1.compareTo(b.$1));
+    final hs = easeHandles(widget.ease);
+    final at = [for (final (i, h) in hs.indexed) (i, Offset(h.x, h.y)), if (widget.onEnd != null && widget.span != null) ...[(_end, Offset.zero), (_end + 1, const Offset(1, 1))]];
+    final d = [for (final (i, v) in at) ((_px(g, v) - p).distance, i)]..sort((a, b) => a.$1.compareTo(b.$1));
     if (d.isEmpty || d.first.$1 > 14) return null;
-    _tie = d.length > 1 && d[1].$1 - d.first.$1 < 2 && (d.first.$2 < 2) != (d[1].$2 < 2) ? (math.min(d.first.$2, d[1].$2), math.max(d.first.$2, d[1].$2)) : null;
+    _tie = d.length > 1 && d[1].$1 - d.first.$1 < 2 && (d.first.$2 < _end) != (d[1].$2 < _end) ? (math.min(d.first.$2, d[1].$2), math.max(d.first.$2, d[1].$2)) : null;
     return d.first.$2;
   }
 
+  void _take(int? which, Offset at) {
+    _drag = which;
+    _from = at;
+    final hs = easeHandles(widget.ease);
+    if (which != null && which < hs.length) _handle = Offset(hs[which].x, hs[which].y);
+  }
+
   void _move(Rect g, Offset p) {
-    final v = _val(g, p), e = widget.ease;
-    if (_drag! >= 2) return setState(() => _endAt = v.dy);
-    widget.onChanged(_drag == 0 ? e.withHandles(v, e.p2) : e.withHandles(e.p1, v));
+    final (lo, hi) = easeReach(widget.ease, widget.overshoot);
+    if (_drag! >= _end) return setState(() => _endAt = (lo + (g.bottom - p.dy) / g.height * (hi - lo)).clamp(lo + .02, hi - .02));
+    final hs = easeHandles(widget.ease);
+    if (_drag! >= hs.length) return;
+    final h = hs[_drag!], d = (p - _from) * h.damping;
+    final u = (_handle.dx + d.dx / g.width).clamp(0.0, 1.0), v = _handle.dy - d.dy / g.height * (hi - lo);
+    widget.onChanged(h.moved(u, h.overshoot || widget.overshoot ? v.clamp(lo, hi) : v.clamp(0.0, 1.0)));
   }
 
   void _let(_) {
@@ -61,7 +74,7 @@ class _EaseGraphState extends State<EaseGraph> {
     setState(() {
       _drag = _endAt = _tie = null;
     });
-    if (end != null && end >= 2 && at != null) widget.onEnd?.call(end == 2, at - (end == 2 ? 0 : 1));
+    if (end != null && end >= _end && at != null) widget.onEnd?.call(end == _end, at - (end == _end ? 0 : 1));
   }
 
   @override
@@ -81,13 +94,13 @@ class _EaseGraphState extends State<EaseGraph> {
           supportedDevices: wsPressing,
           behavior: HitTestBehavior.opaque,
           onPanDown: (d) {
-            _drag = _near(g, d.localPosition);
+            _take(_near(g, d.localPosition), d.localPosition);
             if (_drag != null) setState(() {});
           },
           onPanUpdate: (d) {
             if (_tie case (final handle, final key)?) {
               _tie = null;
-              _drag = d.delta.dy.abs() > d.delta.dx.abs() ? key : handle;
+              _take(d.delta.dy.abs() > d.delta.dx.abs() ? key : handle, _from);
             }
             if (_drag != null) _move(g, d.localPosition);
           },
@@ -108,12 +121,13 @@ class _EaseGraphState extends State<EaseGraph> {
               dragging: _drag != null,
               endAt: _endAt,
               jump: widget.jump,
+              overshoot: widget.overshoot,
             ),
           ),
-          if (_drag != null && _drag! >= 2 && _endAt != null ? widget.endSays?.call(_drag == 2, _endAt! - (_drag == 2 ? 0 : 1)) : null case final says?)
+          if (_drag != null && _drag! >= _end && _endAt != null ? widget.endSays?.call(_drag == _end, _endAt! - (_drag == _end ? 0 : 1)) : null case final says?)
             Positioned(
-              left: _drag == 2 ? _px(g, Offset(0, _endAt!)).dx + 10 : null,
-              right: _drag == 3 ? box.maxWidth - _px(g, Offset(1, _endAt!)).dx + 10 : null,
+              left: _drag == _end ? _px(g, Offset(0, _endAt!)).dx + 10 : null,
+              right: _drag == _end + 1 ? box.maxWidth - _px(g, Offset(1, _endAt!)).dx + 10 : null,
               top: (_px(g, Offset(0, _endAt!)).dy - 18).clamp(0.0, math.max(0.0, box.maxHeight - 16)),
               child: IgnorePointer(child: Text(says, key: const ValueKey('ease-end-says'), style: T.value(Grey.g95).copyWith(fontSize: T.px(10)))),
             ),
@@ -137,64 +151,49 @@ List<(double, Color)> _ghosts(Ws ws, EaseSpan? span) {
 }
 
 class _GraphPainter extends CustomPainter {
-  const _GraphPainter({required this.ease, required this.from, required this.to, required this.frame, required this.active, required this.dragging, this.ghosts = const [], this.endAt, this.jump = true});
+  const _GraphPainter({required this.ease, required this.from, required this.to, required this.frame, required this.active, required this.dragging, this.ghosts = const [], this.overshoot = false, this.endAt, this.jump = true});
   final List<(double, Color)> ghosts;   // (a relation's things: how much later each, across the stretch, and its colour)
   final Ease ease;
   final int? from, to, active;
   final int frame;
-  final bool dragging, jump;
+  final bool dragging, jump, overshoot;
   final double? endAt;   // (the key at an end, while it is pulled: where it is)
 
   @override
-  void paint(Canvas c, Size s) {
-    final g = _EaseGraphState._box(s);
-    Offset px(Offset v) => _EaseGraphState._px(g, v);
+  void paint(Canvas c, Size s) {   // (AbsentMotion's EasingPanel.kt drawGraph: its grid, its dashed 0 and 1, the stems, the curve, the handles)
+    final g = _EaseGraphState._box(s), reach = easeReach(ease, overshoot), handles = easeHandles(ease), end = _EaseGraphState._end;
+    Offset px(Offset v) => _EaseGraphState._pxIn(g, reach, v);
     // (an end pulled: the curve goes from where its start is to where its end is, as the keys it makes will)
-    final pulled = endAt != null && dragging && (active ?? 0) >= 2 ? active : null;
-    final y0 = pulled == 2 ? endAt! : 0.0, y1 = pulled == 3 ? endAt! : 1.0;
+    final pulled = endAt != null && dragging && (active ?? 0) >= end ? active : null;
+    final y0 = pulled == end ? endAt! : 0.0, y1 = pulled == end + 1 ? endAt! : 1.0;
     double along(double x) => y0 + (y1 - y0) * ease.at(x);
     final a = px(Offset(0, y0)), b = px(Offset(1, y1)), home = (px(Offset.zero), px(const Offset(1, 1)));
-    final fill = Paint();
-    // The unit band (0..100 %) is a well; overshoot above and below stays on the card.
-    c.drawRect(Rect.fromLTRB(g.left, home.$2.dy, g.right, home.$1.dy), fill..color = Grey.g10);
+    final top = home.$2.dy, bottom = home.$1.dy, step = g.width / 32;
     final grid = Paint()..strokeWidth = 1;
-    for (var i = 0; i <= 8; i++) {
-      final x = (g.left + g.width * i / 8).floorToDouble() + .5;
-      c.drawLine(Offset(x, g.top), Offset(x, g.bottom), grid..color = i % 4 == 0 ? Grey.g26 : Grey.g15);
+    for (var i = 0; i <= 32; i++) {
+      final x = (g.left + i * step).floorToDouble() + .5;
+      c.drawLine(Offset(x, g.top), Offset(x, g.bottom), grid..color = Grey.g13);
+      c.drawLine(Offset(x, top), Offset(x, bottom), grid..color = i % 8 == 0 ? Grey.g26 : Grey.g20);
     }
-    for (var i = -2; i <= 6; i++) {
-      final y = px(Offset(0, i / 4)).dy.floorToDouble() + .5;
-      if (y < g.top || y > g.bottom) continue;
-      c.drawLine(Offset(g.left, y), Offset(g.right, y), grid..color = i == 0 || i == 4 ? Grey.g38 : Grey.g15);
+    for (var y = bottom; y >= g.top; y -= step) {
+      c.drawLine(Offset(g.left, y), Offset(g.right, y), grid..color = y >= top ? Grey.g20 : Grey.g13);
     }
-    final lab = T.label(Grey.g56).copyWith(fontSize: T.px(10));
-    deskText(c, '100', Offset(g.left - 5, home.$2.dy), lab, ax: 1, ay: .5);
-    deskText(c, '50', Offset(g.left - 5, px(const Offset(0, .5)).dy), lab, ax: 1, ay: .5);
-    deskText(c, '0', Offset(g.left - 5, home.$1.dy), lab, ax: 1, ay: .5);
-    // Frame ticks under the box.
-    if (from != null && to != null) {
-      final span = to! - from!;
-      final step = span <= 12 ? 2 : (span <= 30 ? 6 : (span <= 60 ? 12 : 24));
-      for (var f = from!; f <= to!; f++) {
-        if ((f - from!) % step != 0 && f != to) continue;
-        final x = g.left + g.width * (f - from!) / span;
-        c.drawLine(Offset(x, g.bottom), Offset(x, g.bottom + 3), grid..color = Grey.g38);
-        if (f == from || f == to || (to! - f) >= step * .6) {
-          deskText(c, '$f', Offset(x, g.bottom + 6), T.value(Grey.g63).copyWith(fontSize: T.px(9.5)), ax: f == from ? 0 : (f == to ? 1 : .5));
-        }
+    for (var y = bottom + step; y <= g.bottom; y += step) {
+      c.drawLine(Offset(g.left, y), Offset(g.right, y), grid..color = Grey.g13);
+    }
+    void dashed(Offset p, Offset q, Color ink, double wide, double on, double off) {
+      final line = Paint()..color = ink..strokeWidth = wide, far = (q - p).distance;
+      for (var d = 0.0; d < far; d += on + off) {
+        c.drawLine(Offset.lerp(p, q, d / far)!, Offset.lerp(p, q, math.min(1, (d + on) / far))!, line);
       }
-    } else {
-      deskText(c, 'start', Offset(g.left, g.bottom + 6), lab);
-      deskText(c, 'end', Offset(g.right, g.bottom + 6), lab, ax: 1);
     }
-    final bez = ease.kind == EaseKind.bezier;
-    final stroke = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    // Handle stems (on the curve as it is pulled: its handles go with its ends).
-    Offset handle(Offset h) => px(Offset(h.dx, y0 + (y1 - y0) * h.dy));
-    c.drawLine(a, handle(ease.p1), stroke..color = bez ? Grey.g63 : Grey.g26);
-    c.drawLine(b, handle(ease.p2), stroke);
+    dashed(Offset(g.left, top), Offset(g.right, top), Grey.g56, 1, 4, 3);
+    dashed(Offset(g.left, bottom), Offset(g.right, bottom), Grey.g56, 1, 4, 3);
+    // The playhead, when it is inside the span.
+    if (from != null && to != null && frame >= from! && frame <= to! && to! > from!) {
+      final x = g.left + g.width * (frame - from!) / (to! - from!);
+      dashed(Offset(x, top), Offset(x, bottom), Grey.g95, 1.2, 5, 3);
+    }
     // A relation's things' copies of the curve, each so much later (thin, faint, under the one a hand shapes).
     c.save();
     c.clipRect(g);
@@ -208,6 +207,17 @@ class _GraphPainter extends CustomPainter {
       c.drawPath(copy, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.2..color = hue.withValues(alpha: .55));
     }
     c.restore();
+    // The stems (on the curve as it is pulled: its handles go with its ends).
+    Offset handle(double x, double y) => px(Offset(x, y0 + (y1 - y0) * y));
+    for (final h in handles) {
+      if (h.fromX == null || h.fromY == null) continue;
+      final o = handle(h.fromX!, h.fromY!), ink = h.param ? WsT.keyDot : Grey.g95;
+      if (h.dashed) {
+        dashed(o, handle(h.x, 0), ink, 1, 2.5, 2.5);
+      } else {
+        c.drawLine(o, handle(h.x, h.y), Paint()..color = ink..strokeWidth = 2.2..strokeCap = StrokeCap.round);
+      }
+    }
     // The curve.
     final path = Path()..moveTo(a.dx, a.dy);
     const n = 96;
@@ -217,83 +227,36 @@ class _GraphPainter extends CustomPainter {
       if (ease.kind == EaseKind.hold && i == n) path.lineTo(o.dx, a.dy);
       path.lineTo(o.dx, o.dy);
     }
-    c.drawPath(
-      path,
-      stroke
-        ..strokeWidth = 2.2
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..color = WsT.accentInk,
-    );
-    // The playhead, when it is inside the span.
-    if (from != null && to != null && frame >= from! && frame <= to! && to! > from!) {
-      final t = (frame - from!) / (to! - from!), p = px(Offset(t, along(t)));
-      c.drawLine(Offset(p.dx, g.top), Offset(p.dx, g.bottom), Paint()..color = Grey.g44);
-      c.drawCircle(p, 3.5, fill..color = Grey.g95);
-      c.drawCircle(
-        p,
-        3.5,
-        Paint()
-          ..color = Grey.g07
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2,
-      );
-    }
+    c.drawPath(path, Paint()..style = PaintingStyle.stroke..strokeWidth = 2.4..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round..color = WsT.accentInk);
     // The value jumping at the end pulled: from where it was (the key the jump leaves outside) to where it is now.
     if (pulled != null && jump) {
-      final from = pulled == 2 ? home.$1 : home.$2, to = pulled == 2 ? a : b, line = Paint()..color = Role.warning..strokeWidth = 1.6;
-      for (var d = 0.0; d < (to - from).distance; d += 6) {
-        c.drawLine(Offset.lerp(from, to, d / (to - from).distance)!, Offset.lerp(from, to, math.min(1, (d + 3.5) / (to - from).distance))!, line);
-      }
-      c.drawCircle(from, 3, fill..color = Grey.g63);
+      final was = pulled == end ? home.$1 : home.$2, now = pulled == end ? a : b;
+      dashed(was, now, Role.warning, 1.6, 3.5, 2.5);
+      c.drawCircle(was, 3, Paint()..color = Grey.g63);
     }
     // Keys at both ends (the one pulled, bigger: it is grabbed).
     for (final (i, k) in [a, b].indexed) {
-      final r = active == i + 2 ? 5.0 : 4.0;
+      final r = active == end + i ? 4.5 : 3.0;
       c.save();
       c.translate(k.dx, k.dy);
       c.rotate(math.pi / 4);
-      c.drawRect(Rect.fromLTWH(-r, -r, 2 * r, 2 * r), fill..color = active == i + 2 ? WsT.accent : WsT.keyDot);
-      c.drawRect(
-        Rect.fromLTWH(-r, -r, 2 * r, 2 * r),
-        Paint()
-          ..color = Grey.g07
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2,
-      );
+      c.drawRect(Rect.fromLTWH(-r, -r, 2 * r, 2 * r), Paint()..color = active == end + i ? WsT.accent : WsT.accentInk);
       c.restore();
     }
-    // Handles.
-    for (var i = 0; i < 2; i++) {
-      final o = handle(i == 0 ? ease.p1 : ease.p2), on = active == i;
-      final r = on ? 5.0 : 4.0;
-      c.drawCircle(o, r, fill..color = !bez ? Grey.g38 : (on ? WsT.accent : Grey.g95));
-      c.drawCircle(
-        o,
-        r,
-        Paint()
-          ..color = Grey.g07
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5,
-      );
-      if (dragging && on) {
-        final v = i == 0 ? ease.p1 : ease.p2;
-        deskText(
-          c,
-          '${v.dx.toStringAsFixed(2)}, ${v.dy.toStringAsFixed(2)}',
-          o + Offset(i == 0 ? 9 : -9, -9),
-          T.value(Grey.g95).copyWith(fontSize: T.px(10)),
-          ax: i == 0 ? 0 : 1,
-          ay: 1,
-        );
+    // The handles: large, a hand's: yellow the shape's, white where it runs.
+    for (final (i, h) in handles.indexed) {
+      final o = handle(h.x, h.y), on = active == i, ink = h.param ? WsT.keyDot : Grey.g95;
+      c.drawCircle(o, on ? 7 : 6, Paint()..color = ink);
+      if (dragging && on && !h.param) {
+        deskText(c, '${h.x.toStringAsFixed(2)}, ${h.y.toStringAsFixed(2)}', o + Offset(h.x < .5 ? 9 : -9, -9), T.value(Grey.g95).copyWith(fontSize: T.px(10)), ax: h.x < .5 ? 0 : 1, ay: 1);
       }
     }
-    // Name of the shape, top-left inside the box.
-    final name = (easeName(ease) ?? 'Custom').split(' ').first;   // (a kind with its numbers: its name; the numbers stand beside)
-    if (!easeIsLaid(said(ease))) deskText(c, name.toUpperCase(), Offset(g.left + 6, g.top + 5), T.micro(Grey.g76).copyWith(fontWeight: FontWeight.w700, letterSpacing: 1));   // (cards laid: each says its own)
+    // What it is, under it, as Alight Motion's.
+    final name = (easeName(ease) ?? 'Cubic Bezier').split(' ').first;
+    if (!easeIsLaid(said(ease))) deskText(c, name.toUpperCase(), Offset(g.center.dx, s.height - 5), T.micro(Grey.g63).copyWith(letterSpacing: .6), ax: .5, ay: 1);   // (cards laid: each says its own)
   }
 
   @override
-  bool shouldRepaint(_GraphPainter o) => o.ease != ease || o.endAt != endAt || o.jump != jump || o.from != from || o.to != to || o.frame != frame || o.active != active || o.dragging != dragging || o.ghosts.length != ghosts.length || (ghosts.isNotEmpty && o.ghosts.first.$1 != ghosts.first.$1);
+  bool shouldRepaint(_GraphPainter o) => o.ease != ease || o.overshoot != overshoot || o.endAt != endAt || o.jump != jump || o.from != from || o.to != to || o.frame != frame || o.active != active || o.dragging != dragging || o.ghosts.length != ghosts.length || (ghosts.isNotEmpty && o.ghosts.first.$1 != ghosts.first.$1);
 }
 

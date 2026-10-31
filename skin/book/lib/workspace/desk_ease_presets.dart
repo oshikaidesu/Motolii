@@ -1,4 +1,4 @@
-// The presets, each a tiny curve.
+// A way as a tile, its curve small.
 
 import 'dart:math' as math;
 
@@ -7,43 +7,7 @@ import 'package:lab_book/sets/inspector/inspector_parts.dart' show Hov;
 import 'package:lab_book/tokens.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/desk_ease_cards.dart';
-import 'package:lab_book/workspace/desk_ease_library.dart';
 import 'package:lab_book/workspace/ws.dart';
-
-/// The presets, each a tiny curve; the one in use is lit in the accent.
-class Presets extends StatelessWidget {
-  const Presets({super.key, required this.ease, required this.onPick, this.more = const []});
-  final Ease ease;
-  final ValueChanged<Ease> onPick;
-
-  /// Tiles under the sample's eight (joined: the document's ways that have no seat among them).
-  final List<Ease> more;
-
-  Widget _row(List<Ease> tiles, bool Function(Ease) on) => Container(
-    height: Shape.z(50),
-    color: WsT.card,
-    padding: EdgeInsets.all(Shape.s(5)),
-    child: Row(
-      children: [
-        for (final (i, p) in tiles.indexed) ...[
-          if (i > 0) SizedBox(width: Shape.s(3)),
-          Expanded(
-            child: PresetTile(p, key: ValueKey('ease.${p.name}'), on: on(p), onTap: () => on(p) ? null : onPick(p)),   // (the one it is already: its own numbers kept)
-          ),
-        ],
-      ],
-    ),
-  );
-
-  @override
-  Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      _row(easePresets, (p) => p == ease && !easeOther(ease)),
-      if (more.isNotEmpty) EaseLibrary(ease: ease, more: more, onPick: onPick),
-    ],
-  );
-}
 
 class PresetTile extends StatelessWidget {
   const PresetTile(this.ease, {super.key, required this.on, required this.onTap, this.label, this.carried = true});
@@ -84,8 +48,8 @@ class PresetTile extends StatelessWidget {
             Expanded(
               child: CustomPaint(size: Size.infinite, painter: EaseThumb(ease, ink, on ? WsT.onAccent : Grey.g38)),
             ),
-            SizedBox(height: Shape.s(3)),
-            FittedBox( // (a name wider than its tile is drawn smaller, never cut)
+            if (label != '') SizedBox(height: Shape.s(3)),
+            if (label != '') FittedBox( // (a name wider than its tile is drawn smaller, never cut)
               fit: BoxFit.scaleDown,
               child: Text(
                 label ?? easeTitle(ease),
