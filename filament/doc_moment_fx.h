@@ -266,6 +266,14 @@ static void doc_reading(Stage& s, Doc::Shown& t, float way, float behind, Textur
                 look->setParameter("blendWay", way), look->setParameter("behind", behind), look->setParameter("backdrop", picture, TextureSampler(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST));
     });
 }
+// The same for a thing with effects: what it lays is its sheet, its way taken after its effects (After Effects: a layer's
+// blending mode comes after its effects).
+static void doc_sheet_reads(Doc& d, int thing, float way, Texture* picture) {
+    const auto own = d.thingFx.find(thing);
+    if (own == d.thingFx.end() || !own->second.look || !own->second.look->getMaterial()->hasParameter("blendWay")) return;
+    own->second.look->setParameter("blendWay", way);
+    own->second.look->setParameter("backdrop", picture, TextureSampler(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST));
+}
 // What a thing reads of what is under it, by a way of lying the GPU's own blending has not (the W3C's backdrop) or a fill
 // of what is behind it (After Effects' Adjustment Layer): the stage without it and without all that lies over it, drawn
 // into a picture of its own before it is drawn, in the order they lie, so one reads those under it as they are laid. The
@@ -276,6 +284,7 @@ static void doc_things_read(Doc& d, const std::vector<std::pair<int, Doc::Shown*
     for (auto r = d.reads.begin(); r != d.reads.end();) {   // (no longer reading, or gone: let go)
         if (d.shown.count(r->first) && reads(r->first)) { ++r; continue; }
         if (const auto t = d.shown.find(r->first); t != d.shown.end()) doc_reading(s, t->second, 0.f, 0.f, white_point(s));
+        doc_sheet_reads(d, r->first, 0.f, white_point(s));
         s.engine->destroy(r->second.into), s.engine->destroy(r->second.seen), r = d.reads.erase(r);
     }
     if (std::none_of(laid.begin(), laid.end(), [&](const auto& l) { return reads(l.first); })) return;
@@ -297,7 +306,9 @@ static void doc_things_read(Doc& d, const std::vector<std::pair<int, Doc::Shown*
                 r.seen = Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).format(Texture::InternalFormat::RGBA16F).build(*s.engine);
                 r.into = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, r.seen).texture(RenderTarget::AttachmentPoint::DEPTH, s.behindDepth).build(*s.engine);
             }
-            doc_reading(s, *laid[i].second, d.thingFx.count(thing) ? 0.f : (float)doc_blend_way(doc_word(d, thing, "blend")), doc_word(d, thing, "fill") == "behind" ? 1.f : 0.f, r.seen);
+            const float way = (float)doc_blend_way(doc_word(d, thing, "blend"));
+            doc_reading(s, *laid[i].second, d.thingFx.count(thing) ? 0.f : way, doc_word(d, thing, "fill") == "behind" ? 1.f : 0.f, r.seen);
+            doc_sheet_reads(d, thing, way, r.seen);
             s.before.push_back([&s, over = std::vector<utils::Entity>(parts.begin() + (long)from[i], parts.end()), into = r.into] {
                 auto& faces = s.engine->getRenderableManager();
                 std::vector<uint8_t> masks;

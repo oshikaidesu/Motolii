@@ -9,7 +9,8 @@ material {
         { type : float, name : opacity },
         { type : sampler2d, name : matte0 }, { type : sampler2d, name : matte1 }, { type : sampler2d, name : matte2 }, { type : sampler2d, name : matte3 },
         { type : mat4, name : matteEye0 }, { type : mat4, name : matteEye1 }, { type : mat4, name : matteEye2 }, { type : mat4, name : matteEye3 },
-        { type : float4, name : matteUse }, { type : float4, name : matteSoft }   // (matte.glsl, as flat.mat's: the thing cut after its effects)
+        { type : float4, name : matteUse }, { type : float4, name : matteSoft },   // (matte.glsl, as flat.mat's: the thing cut after its effects)
+        { type : sampler2d, name : backdrop }, { type : float, name : blendWay }   // (what lies under it, as flat.mat's, when its way of lying reads it)
     ],
     requires : [ uv0 ],
     depthWrite : true,   // (as flat.mat: a 2D thing's sheet is told otherwise, doc_moment.h)
@@ -21,6 +22,7 @@ material {
 
 fragment {
 #include "matte.glsl"
+#include "blend_way.glsl"
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         material.baseColor = max(texture(materialParams_image, saturate(getUV0())), 0.0);   // (getUV0 is already flipped as a texture reads: flipUV, Filament's own default)
@@ -28,6 +30,7 @@ fragment {
         material.baseColor.rgb *= material.baseColor.a;   // (effects give straight colour; Filament's transparent wants it times alpha, as effected.mat)
         material.baseColor.rgb *= 1.0 + materialParams.glowing;
         material.baseColor *= matteLeft() * materialParams.opacity;   // (how clear it is after its effects, as effected.mat)
+        if (materialParams.blendWay > 0.5 && material.baseColor.a > 1e-4) material.baseColor.rgb = wayLaid(material.baseColor);   // (after its effects, as After Effects lays a layer)
 #if defined(LAY_multiply)
         material.baseColor.rgb += 1.0 - material.baseColor.a;   // (where it is clear, what is behind is left as it is: times one, as flat.mat)
 #endif

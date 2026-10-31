@@ -55,5 +55,7 @@ run('two',['add shape rect','say 1 fill ffffff','add shape rect','say 2 fill fff
 print('one over another reads it as laid:','yes' if sum(at('two'))>750 else f"NO {at('two')}")
 run('copy',['add shape rect','say 1 fill 3399cc','add shape rect','say 2 fill behind',f'say 2 fx {os.getcwd()}/effects/Color Invert.fs',f'still {W}/copy.png'])
 print('a fill of what is behind takes the effect on it:','yes' if abs(at('copy')[0]-0xcc)<6 and abs(at('copy')[1]-0x66)<6 else f"NO {at('copy')}")
+run('fx',['add shape rect','say 1 fill cc6633','add shape rect','say 2 fill 4d99e6',f'say 2 fx {os.getcwd()}/effects/Color Invert.fs','say 2 blend difference',f'still {W}/fx.png'])
+print('a thing with effects reads too, after them:','yes' if max(abs(g-h) for g,h in zip(at('fx'),(0x1a,0,0x1a)))<6 else f"NO {at('fx')}")
 P
 rm -rf $W

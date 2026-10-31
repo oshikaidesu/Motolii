@@ -281,7 +281,7 @@ class _RelateChip extends StatelessWidget {
       margin: EdgeInsets.only(right: Shape.s(4)),
       padding: EdgeInsets.symmetric(horizontal: Shape.s(10), vertical: Shape.s(5)),
       decoration: BoxDecoration(color: outlined ? WsT.body : WsT.accent, border: outlined ? Border.all(color: WsT.accent) : null, borderRadius: BorderRadius.all(Shape.r(12))),
-      child: glyph != null ? TpGlyphView(glyph!, WsT.onAccent, size: Shape.z(12)) : Text(kind[0].toUpperCase() + kind.substring(1), style: T.label(outlined ? WsT.accent : WsT.onAccent)),
+      child: glyph != null ? TpGlyphView(glyph!, WsT.onAccent, size: Shape.z(12)) : Text(kind == 'group' ? 'Move in' : kind[0].toUpperCase() + kind.substring(1), style: T.label(outlined ? WsT.accent : WsT.onAccent)),
     ),
   );
 }
