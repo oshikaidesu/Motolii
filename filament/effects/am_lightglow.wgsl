@@ -1,9 +1,9 @@
-// Light Glow: AbsentMotion's lightglow (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
+// Glow: AbsentMotion's lightglow (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)
 // --label:Stylize
 // --pass@h:0,1,s1,s1
 // --pass@blurPicture:0,1,s1,s1
 // --pass@:0,0,s1,s1
-// --about:Adds a colored glow around the parts of the picture brighter than a threshold.
+// --about:Adds a colored glow around the parts of the picture brighter than a threshold. Light Glow in AbsentMotion.
 // --track@blur:Size,0,300,90.0,0.1
 // --track@threshold:Threshold,0,1,0.6,0.01
 // --track@intensity:Intensity,0,10,1.0,0.01

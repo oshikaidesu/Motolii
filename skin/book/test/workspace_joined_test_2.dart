@@ -345,7 +345,7 @@ void _tests2() {
     expect(ws.fxOf('$rect'), ['Duotone', 'Gradient Map']);
 
     await pick('Glow');
-    expect(m.word(rect, 'glow'), 'on', reason: m.trouble);   // (Filament's bloom on its own picture, its strength glow_opacity: 72e9aea)
+    expect(ws.fxOf('$rect'), contains('Glow'), reason: m.trouble);   // (AbsentMotion's am_lightglow.wgsl, the shelf's Glow: golf (79))
 
     await pick('Trim Paths');
     expect(m.keyMoments(rect, 'trim'), [0, 1], reason: 'drawn on in a second, from the playhead');

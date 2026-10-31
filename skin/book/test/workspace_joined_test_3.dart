@@ -174,7 +174,7 @@ void _tests3() {
     await t.pumpAndSettle();
     ws
       ..fxToggle('Drop Shadow')
-      ..fxToggle('Glow');   // (sent without waiting: put on as the window looks again)
+      ..screenToggle(m.effects.firstWhere((e) => e.$1 == 'Glow').$2);   // (sent without waiting: put on as the window looks again)
     await settled(t, ws);
     expect(inspectorCards(t), containsAll(['Drop Shadow', 'Glow']), reason: 'an effect on it is one of its cards');
     final far = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_shadow_distance'), was = m.value(a, 'shadow_distance', 0);

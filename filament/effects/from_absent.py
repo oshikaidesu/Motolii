@@ -12,6 +12,8 @@
 # usage: from_absent.py <id>.json out.wgsl skslc   (an effect reading another picture, or another native, is refused)
 import json, os, re, subprocess, sys
 
+SHELF_NAMES = {'lightglow': 'Glow'}   # (the name After Effects and Alight Motion give it, golf_noise.md (79): threshold 60 %, After Effects Glow's own)
+
 src, out, skslc = sys.argv[1], sys.argv[2], sys.argv[3]
 d = json.load(open(src))
 moves = ('autoshake', 'randomdisplace', 'randomjitter', 'oscillate', 'swing', 'spin', 'pulsesize', 'pulseopacity')   # (AbsentMotion's motion.cpp ApplyMotion: what it moves the layer by; MotionOpacity: its opacity)
@@ -114,7 +116,7 @@ wgsl = open(out + '.raw.wgsl').read()
 fields = re.findall(r'^\s*(\w+)\s*:', re.search(r'struct Knobs\s*\{([^}]*)\}', wgsl).group(1), re.M)
 named = {re.sub(r'^R_', '', n): n for n in fields}
 named.update({r: r + '_' for r in reserved if r + '_' in fields})   # (its own param by that name, as its JSON says it)   # (skslc's R_ before a name WGSL keeps for itself: center)
-lines = [f"// {d['name']}: AbsentMotion's {d['id']} (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)"]
+lines = [f"// {SHELF_NAMES.get(d['id'], d['name'])}: AbsentMotion's {d['id']} (Apache-2.0, Copyright 2026 The AbsentMotion authors, github.com/Comett1225/AbsentMotion), its SkSL made WGSL by Skia's skslc (filament/effects/from_absent.py)"]
 lines.append(f"// --label:{d.get('category', '').capitalize()}")
 if blur:
     lines += [f'// --pass@{across}:0,1,s1,s1', '// --pass@blurPicture:0,1,s1,s1', '// --pass@:0,0,s1,s1']   # (across, down, then the effect itself)
@@ -123,6 +125,6 @@ if back:
 if below:
     lines.append('// --picture@below:Map layer')   # (a thing chosen on its card: AbsentMotion's layer beneath)
 if d.get('description'):
-    lines.append(f"// --about:{' '.join(d['description'].split())}")   # (what it does, in AbsentMotion's words: the shelf finds it by them)
+    lines.append(f"// --about:{' '.join(d['description'].split())}" + (f" {d['name']} in AbsentMotion." if d['id'] in SHELF_NAMES else ''))   # (what it does, in AbsentMotion's words: the shelf finds it by them)
 lines += knob_lines(named, ('float', 'int', 'bool', 'choice', 'angle'))
 open(out, 'w').write('\n'.join(lines) + '\n' + wgsl)

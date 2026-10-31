@@ -430,7 +430,7 @@ struct DocEffect { const char* name; const char* value; const char* on; bool wor
 static const DocEffect doc_effects[] = {
     {"Gaussian Blur", "blur", "12", false, "Light"},
     {"Drop Shadow", "shadow", "000000", true, "Light", "shadow_distance=10 shadow_angle=135 shadow_blur=10 shadow_opacity=0.5"},
-    {"Glow", "glow", "on", true, "Light", "glow_opacity=1"},
+    {"Glow", "glow", "on", true, "", "glow_opacity=1"},   // (a document that has it; the shelf's Glow is the file am_lightglow.wgsl: golf (79))
     {"Trim Paths", "trim", "keys 0 1 1 0", false, "Path"},
     {"Datamosh", "mosh", "1", false, "Glitch", "mosh_at=1"},
     {"Duotone", "tint", "1", false, "Color", "tint_black:1b1f5c tint_white:ff8a65"},
@@ -443,6 +443,7 @@ static std::string doc_effect_names() {
     std::string all;
     std::error_code wrong;
     for (const DocEffect& e : doc_effects) {
+        if (!*e.label) continue;
         const std::filesystem::path picture = doc_folders("effects").front() / ("thing_" + std::string(e.value) + ".png");
         all += (all.empty() ? "" : "\n") + std::string(e.name) + "\t" + e.value + "\t" + e.label + "\t" + (std::filesystem::exists(picture, wrong) ? picture.string() : "") + "\t\t\t" + e.about;
     }

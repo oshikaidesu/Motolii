@@ -237,11 +237,6 @@ class _FxLook extends CustomPainter {
           ..color = const Color(0xFF000000)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.2));
         c.drawRect(r, Paint()..color = ink);
-      case 'Glow':
-        c.drawRect(r, Paint()
-          ..color = const Color(0xFFFFE6A8)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 3));
-        c.drawRect(r, Paint()..color = ink);
       case 'Trim Paths':
         c.drawArc(Rect.fromCircle(center: r.center, radius: 5.5), -1.6, 3.8, false, Paint()
           ..color = ink
