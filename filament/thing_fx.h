@@ -149,7 +149,7 @@ struct ThingFx {
     utils::Entity eye;                     // (its own camera's: told the stage's each picture, as samples/rendertarget.cpp's offscreen camera is)
     Camera* camera = nullptr;
     double box[4] = {0, 0, 0, 0};          // (where it is seen, in points of the stage: left, top, right, bottom)
-    double reach = 128.0;                  // (points of room round it for what its effects draw outside it: doc_fx_reach)
+    double sides[4] = {0, 0, 0, 0};        // (stood: how far the stage is from it along its own face, left, right, down, up, in units of the world: AbsentMotion's effects are cut by the scene, effects.cpp EffectRuntime::draw)
     bool world = false;                    // (its sheet stands where it lies in the world, its picture filmed square to it: thing_fx_stand; else laid on the screen)
     double own[5] = {0, 0, 0, 0, 0};       // (stood: where it is on its picture, its middle, its width and height, in its points, and how many points a unit of the world)
     math::mat4 square;                     // (stood: where its picture is filmed from, the thing's own place, unscaled)
@@ -236,35 +236,38 @@ static void thing_fx_aim(Stage& s, ThingFx& e, const double* said) {
 // camera on its own z line, as wide and high as it is (Filament's Camera::setProjection ORTHO; told each frame, as
 // samples/rendertarget.cpp tells its offscreen camera), its picture 1024 pixels along its longer side, or as many a unit
 // of the world as `dense` says, with `room` round it.
-static void thing_fx_face(Stage& s, ThingFx& e, const math::mat4& place, float2 half, double room = 0.0, double dense = 0.0) {
+static void thing_fx_face(Stage& s, ThingFx& e, const math::mat4& place, float2 half, double room = 0.0, double dense = 0.0, const double* sides = nullptr) {
     math::double3 x = place[0].xyz, y = place[1].xyz;
-    const double sx = length(x), sy = length(y), wide = half.x * sx + room, high = half.y * sy + room, far = 4.0 * std::max(wide, high) + 1.0;
+    const double sx = length(x), sy = length(y), wide = half.x * sx + room, high = half.y * sy + room;
+    const double l = sides ? sides[0] : wide, r = sides ? sides[1] : wide, b = sides ? sides[2] : high, t = sides ? sides[3] : high, far = 4.0 * std::max({l, r, b, t}) + 1.0;
     if (wide < 1e-9 || high < 1e-9) return;
     x /= sx, y = normalize(y - dot(y, x) * x);
     const math::double3 z = cross(x, y);
     e.square = math::mat4(math::double4{x, 0}, math::double4{y, 0}, math::double4{z, 0}, place[3]);
     e.camera->setModelMatrix(e.square * math::mat4::translation(math::double3{0, 0, 0.5 * far}));
-    e.camera->setProjection(Camera::Projection::ORTHO, -wide, wide, -high, high, 0.0, far);
+    e.camera->setProjection(Camera::Projection::ORTHO, -l, r, -b, t, 0.0, far);
     const Camera& c = *s.camera;
     e.camera->setExposure(c.getAperture(), c.getShutterSpeed(), c.getSensitivity());
-    const double k = dense > 0.0 ? 2.0 * dense : 1024.0 / std::max(wide, high);
-    e.view->setViewport({0, 0, (uint32_t)std::max(1L, std::lround(k * wide)), (uint32_t)std::max(1L, std::lround(k * high))});
+    const double k = dense > 0.0 ? dense : 2048.0 / std::max(l + r, b + t);
+    e.view->setViewport({0, 0, (uint32_t)std::max(1L, std::lround(k * (l + r))), (uint32_t)std::max(1L, std::lround(k * (b + t)))});
 }
 
 // A flat thing's picture stood in the world (After Effects' layer: "masks, effects, transformations"): filmed square to
-// its own face, with room round it for what its effects draw outside it (sashimono-edit's BAKE_MARGIN, 128 points of the
-// stage), its picture's room and shares the same wherever the eye is, so that what its effects make keeps to it; as many
+// its own face, as far as the stage goes (e.sides), with the frame its effects reckon by round it (sashimono-edit's
+// BAKE_MARGIN, 128 points of the stage), its room and shares the same wherever the eye is, so that what its effects make keeps to it; as many
 // pixels as the eye sees of it when it is near (`seen`: points of the stage a unit of the world where it is), so that it
 // is as sharp as it is without them. Its sheet lies where it lies.
 static void thing_fx_stand(Stage& s, ThingFx& e, const math::mat4& place, float2 half, double seen) {
     const double ppp = (double)s.view->getViewport().width / std::max(1, s.w), usual = s.h / (12.0 * std::tan(15.0 * M_PI / 180.0));   // (points a unit of the world, by the stage's own eye: doc_moment.h)
-    const double room = e.reach / usual, sx = length(place[0].xyz), sy = length(place[1].xyz), wide = half.x * sx + room, high = half.y * sy + room;
-    const double point = std::min(std::max(usual, seen), 2048.0 / (ppp * std::max(wide, high)));   // (4096 pixels at the most)
-    thing_fx_face(s, e, place, half, room, point * ppp);
-    e.box[0] = e.box[1] = 0, e.box[2] = 2 * wide * point, e.box[3] = 2 * high * point;
+    const double room = 128.0 / usual, sx = length(place[0].xyz), sy = length(place[1].xyz), wide = half.x * sx + room, high = half.y * sy + room;
+    const double c[4] = {std::max(wide, e.sides[0]), std::max(wide, e.sides[1]), std::max(high, e.sides[2]), std::max(high, e.sides[3])}, across = c[0] + c[1], tall = c[2] + c[3];
+    const double point = std::min(std::max(usual, seen), 4096.0 / (ppp * std::max(across, tall)));   // (4096 pixels at the most)
+    thing_fx_face(s, e, place, half, room, point * ppp, c);
+    e.box[0] = e.box[1] = 0, e.box[2] = across * point, e.box[3] = tall * point;
     std::copy(e.box, e.box + 4, e.st.box);
-    e.own[0] = wide * point, e.own[1] = high * point, e.own[2] = 2 * half.x * sx * point, e.own[3] = 2 * half.y * sy * point, e.own[4] = point;
-    const mat4f sheet = mat4f(e.square * math::mat4::scaling(math::double3{wide, high, 1.0}));
+    e.st.frame[0] = (c[0] - wide) / across, e.st.frame[1] = (c[3] - high) / tall, e.st.frame[2] = 2 * wide / across, e.st.frame[3] = 2 * high / tall;
+    e.own[0] = c[0] * point, e.own[1] = c[3] * point, e.own[2] = 2 * half.x * sx * point, e.own[3] = 2 * half.y * sy * point, e.own[4] = point;
+    const mat4f sheet = mat4f(e.square * math::mat4::translation(math::double3{(c[1] - c[0]) / 2, (c[3] - c[2]) / 2, 0.0}) * math::mat4::scaling(math::double3{across / 2, tall / 2, 1.0}));
     move(s, e.sheet, [&](int, const mat4f&) { return sheet; });
 }
 

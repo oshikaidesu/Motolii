@@ -53,18 +53,23 @@ static void doc_thing_shell(Doc& d, int thing, ThingFx& e, bool on) {
     });
     if (!on) e.looks.clear();
 }
-// The room round a thing for what its effects draw outside it: sashimono-edit's 128 points, and as a knob is typed past
-// where its author's range ends (doc_edit.h), that much further, by its range's lengths, as far as the stage is long. An
-// effect's reach cannot be read from it; this is Motolii's own measure, without a model.
-static double doc_fx_reach(Doc& d, int thing) {
-    double past = 0.0;
-    for (const DocScript* sc : doc_scripts_on(d, thing))
-        for (const DocValue& v : sc->values)
-            if (v.open) {
-                const double at = doc_number(d, thing, v.name, d.stage->now, v.low);
-                past = std::max({past, (at - v.high) / (v.high - v.low), (v.low - at) / (v.high - v.low)});
-            }
-    return 128.0 + std::min(past, 1.0) * std::max(d.stage->w, d.stage->h);
+// How far the stage is from a stood thing along its own face (e.sides): a stage's corner laid back on its face, as the eye
+// sees a unit along it there; rounded out, so that its picture is made again only as it moves that far. A face seen
+// edge on sees no further than the stage's length thrice.
+static void doc_fx_sides(Doc& d, const math::mat4& place, double seen, double* sides) {
+    const math::double3 x = normalize(place[0].xyz), y = normalize(place[1].xyz - dot(place[1].xyz, x) * x);
+    const math::double2 at = doc_seen(d, place[3].xyz), across = doc_seen(d, place[3].xyz + x) - at, up = doc_seen(d, place[3].xyz + y) - at;
+    const double det = across.x * up.y - across.y * up.x, w = d.stage->w, h = d.stage->h;
+    std::fill(sides, sides + 4, 0.0);
+    if (std::fabs(det) < 1e-9 || seen <= 0.0) return;
+    const math::double2 corners[4] = {{0, 0}, {w, 0}, {0, h}, {w, h}};
+    for (const math::double2& q : corners) {
+        const math::double2 v = q - at;
+        const double a = (v.x * up.y - v.y * up.x) / det, b = (across.x * v.y - across.y * v.x) / det;
+        sides[0] = std::max(sides[0], -a), sides[1] = std::max(sides[1], a), sides[2] = std::max(sides[2], -b), sides[3] = std::max(sides[3], b);
+    }
+    const double most = 3.0 * std::max(w, h) / seen, step = 256.0 / seen;
+    for (int i = 0; i < 4; ++i) sides[i] = std::ceil(std::min(sides[i], most) / step) * step;
 }
 static void doc_thing_stand(Doc& d, int thing, ThingFx& e) {   // (before the frame)
     math::mat4 place;
@@ -75,7 +80,7 @@ static void doc_thing_stand(Doc& d, int thing, ThingFx& e) {   // (before the fr
         place = doc_shown_at(d, thing, d.stage->now), doc_half(d, thing, &half);
         const math::double2 a = doc_seen(d, place[3].xyz), b = doc_seen(d, place[3].xyz + normalize(d.facing[0].xyz));
         seen = length(b - a);   // (a unit across the eye's sight, where it is)
-        e.reach = doc_fx_reach(d, thing);
+        doc_fx_sides(d, place, seen, e.sides);
     }
     thing_fx_stand(*d.stage, e, place, half, seen);
 }
@@ -210,12 +215,16 @@ static void doc_things_fx(Doc& d) {
                 const bool found = doc_seen_box(d, thing, d.stage->now, seen);
                 if (found) {   // (where it is seen, as much of it as is on the stage: its picture, After Effects' layer;
                     //  with room around it for what its effects draw outside it, sashimono-edit's BAKE_MARGIN: 128 pixels,
-                    //  engine/render/script_bake.py; its effects' own reach read from their knobs is not, ISF's not in pixels)
-                    e.reach = doc_fx_reach(d, thing);
-                    const double m = e.reach * s.w / std::max(1u, s.view->getViewport().width);
+                    //  engine/render/script_bake.py)
+                    const double m = 128.0 * s.w / std::max(1u, s.view->getViewport().width);
                     box[0] = std::max(0.0, seen[0] - m), box[1] = std::max(0.0, seen[1] - m), box[2] = std::min((double)s.w, seen[2] + m), box[3] = std::min((double)s.h, seen[3] + m);
                 }
                 if (box[2] - box[0] < 1 || box[3] - box[1] < 1) box[0] = box[1] = 0, box[2] = s.w, box[3] = s.h;   // (none of it on the stage: the whole)
+                e.st.frame[0] = 0, e.st.frame[1] = 0, e.st.frame[2] = 1, e.st.frame[3] = 1;
+                if (!e.shell && !e.st.wide) {   // (that its frame; its picture the whole stage, as AbsentMotion's effects are cut by the scene: effects.cpp EffectRuntime::draw)
+                    e.st.frame[0] = box[0] / s.w, e.st.frame[1] = box[1] / s.h, e.st.frame[2] = (box[2] - box[0]) / s.w, e.st.frame[3] = (box[3] - box[1]) / s.h;
+                    box[0] = box[1] = 0, box[2] = s.w, box[3] = s.h;
+                }
                 if (e.st.wide) {   // (an AviUtl2 script that draws it: the whole stage its frame, as AviUtl2's object is drawn on the screen and sashimono-edit lays a script's draws in the screen's pixels (engine/render/renderer.py _draw_calls); where it is seen told it)
                     std::copy(found ? seen : box, (found ? seen : box) + 4, e.st.thingSeen);
                     box[0] = box[1] = 0, box[2] = s.w, box[3] = s.h;

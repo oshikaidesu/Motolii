@@ -1,8 +1,7 @@
 #!/bin/zsh
 # An effect's number typed past its author's range, and what it then draws: the range is where its knob ends, as After
 # Effects' slider range is not its valid range (PF_FloatSliderDef); a count stays closed, a range from 0 holds at 0; a
-# thing's picture grows by as much, so a ripple comes out of the box it was cut by, and within the range all is
-# as it was.
+# ripple comes out of the box of its thing, and within the range all is as it was.
 #   ./check/fx_reach.sh
 cd "$(dirname "$0")/.."
 W=$(mktemp -d)

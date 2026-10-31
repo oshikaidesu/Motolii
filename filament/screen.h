@@ -44,6 +44,8 @@ struct ScreenFx {
     // sees it, the thing chosen on its card: read last, after the passes' pictures and the past frames.
     std::vector<std::string> others;
     std::vector<Texture*> othersNow;   // (what each is this time: given before it is drawn; none, its own picture)
+    std::vector<bool> othersOwn;       // (whether each is its own picture, this time)
+    double frame[4] = {0, 0, 1, 1}, pass[4] = {0, 0, 1, 1};   // (the frame on the picture (ScreenStack), and on the picture this pass draws: a pass of a set size has none of it, on that side)
     // Its audio inputs (// --sound@name: ISF's audio and audioFFT), among the others in their places: each another
     // thing's sound at this moment, a row of `wide` values (ISF_Spec: an image a row a channel), half floats as the spec
     // asks for high precision (32- or 16-bit float textures; a 16-bit one is filtered by WebGPU as it is).
@@ -58,6 +60,27 @@ static std::filesystem::file_time_type screen_stamp(const std::string& file) {
     return std::filesystem::last_write_time(fx_source(file), wrong);
 }
 
+// A WGSL effect that knows no layerRect told the frame as an ISF one is (isf.cpp): its uv and its pixel the frame's, what it
+// reads read through it. Its own lines are kept, only their names turned: a file written for a whole picture works on a thing.
+static void screen_framed(std::string& code) {
+    std::smatch knobs, way;
+    if (code.find("texture_2d_array") != std::string::npos || !std::regex_search(code, knobs, std::regex(R"(var<uniform>\s+(\w+)\s*:\s*(\w+)\s*;)"))) return;
+    if (!std::regex_search(code, way, std::regex(R"(@fragment\s+fn\s+\w+\s*\([^)]*@location\(0\)\s+(\w+)\s*:\s*vec2(?:f|<f32>)[^)]*\)[^{]*\{)"))) return;
+    const std::string k = knobs[1], made = knobs[2], uv = way[1];
+    std::string head = way.str();
+    const bool pixel = std::regex_search(head, std::regex(R"(@builtin\(position\)\s+frag\s*:)"));
+    head = std::regex_replace(std::regex_replace(head, std::regex("\\b" + uv + "(\\s*:)"), uv + "_on$1"), std::regex(R"(\bfrag(\s*:))"), "frag_on$1");
+    head += "\n    let " + uv + " = (" + uv + "_on - " + k + ".frameRect.xy) / " + k + ".frameRect.zw;\n";
+    if (pixel) head += "    let frag = vec4f(" + uv + " * " + k + ".resolution, frag_on.zw);\n";
+    const size_t at = (size_t)way.position(), end = at + (size_t)way.length();
+    std::string out = code.substr(0, at) + head + code.substr(end);
+    out = std::regex_replace(std::regex_replace(out, std::regex(R"(\btextureSampleLevel\s*\()"), "frame_level("), std::regex(R"(\btextureSample\s*\()"), "frame_sample(");
+    out = std::regex_replace(out, std::regex("struct\\s+" + made + "\\s*\\{"), "struct " + made + " {\n    frameRect: vec4f,");
+    std::smatch line;
+    std::regex_search(out, line, std::regex(R"(var<uniform>[^;]*;)"));
+    const std::string reads = "\nfn frame_level(t: texture_2d<f32>, s: sampler, c: vec2f, l: f32) -> vec4f { return textureSampleLevel(t, s, c * " + k + ".frameRect.zw + " + k + ".frameRect.xy, l); }\nfn frame_sample(t: texture_2d<f32>, s: sampler, c: vec2f) -> vec4f { return textureSample(t, s, c * " + k + ".frameRect.zw + " + k + ".frameRect.xy); }\n";
+    code = out.substr(0, (size_t)line.position() + (size_t)line.length()) + reads + out.substr((size_t)line.position() + (size_t)line.length());
+}
 // The file as Filament's driver takes it: the picture at binding 0, its sampler at 1, the knobs at 2 (Filament's
 // descriptor 0 a sampled texture, 1 a uniform buffer), its entry `main`; and the knobs' struct read for where each is.
 static bool screen_read(ScreenFx& fx, std::string& code) {
@@ -68,6 +91,7 @@ static bool screen_read(ScreenFx& fx, std::string& code) {
     std::stringstream all;
     all << in.rdbuf();
     code = all.str();
+    if (code.find("layerRect") == std::string::npos && code.find("frameRect") == std::string::npos) screen_framed(code);
     const std::regex bound(R"(@group\(\s*\d+u?\s*\)\s*@binding\(\s*\d+u?\s*\)\s*var(<\s*uniform\s*>)?\s+(\w+)\s*:\s*([A-Za-z_][\w<>]*))");
     int reads = 0;   // (the pictures it reads: the k-th at 2k, the k-th sampler at 2k+1, the knobs after them all)
     std::vector<std::smatch> said;   // (in the order of the bindings it says, not of where they are said: Tint puts them as it likes)
@@ -173,6 +197,7 @@ struct ScreenStack {
     bool readsBehind = false;   // (one of its effects reads what is behind the thing: AbsentMotion's backdrop, the stage's behind)
     bool wide = false;          // (one of its effects draws the thing where it will on the screen: an AviUtl2 script's obj.draw; its box the whole stage)
     double thingSeen[4] = {0, 0, 0, 0};   // (then where the thing itself is seen, points of the stage: left, top, right, bottom)
+    double frame[4] = {0, 0, 1, 1};       // (a thing's: where the frame its effects reckon by lies on the picture they draw, left, top, width, height, each a share of it; the picture is larger: After Effects' width and height against its buffer (PF_InData))
     double box[4] = {0, 0, 0, 0};   // (a thing's: where it is seen, points of the stage, thing_fx_aim)
     int ground = -1;                // (the stage's colour behind everything, 0xRRGGBB; -1 none)
     std::map<std::string, ScreenFx*> made;   // every effect made so far, by its file, kept (a shader is made once: making one takes a picture's time or ten)
@@ -218,11 +243,18 @@ static Texture* screen_picture(Stage& s) {
 }
 static void screen_knobs(Stage& s, ScreenFx& fx, const ScreenNumbers& numbers, int pass = 0, double pw = 0, double ph = 0) {
     std::vector<float> at(fx.bytes / 4, 0.f);
-    const double w = pw > 0 ? pw : s.w, h = ph > 0 ? ph : s.h;   // (the picture it draws into, in its pixels: ISF's RENDERSIZE, each pass its own (ISF_Spec, VVISF);
+    const bool framed = std::any_of(fx.fields.begin(), fx.fields.end(), [](const ScreenFx::Field& f) { return f.name == "frameRect"; });   // (an ISF effect: told its frame's size. A WGSL one reads its layerRect, or the whole picture)
+    const double w = (pw > 0 ? pw : s.w) * (framed ? fx.pass[2] : 1.0), h = (ph > 0 ? ph : s.h) * (framed ? fx.pass[3] : 1.0);   // (the picture it draws into, in its pixels: ISF's RENDERSIZE, each pass its own (ISF_Spec, VVISF);
     //  vgpu's rule too, a shader told its target's own size (target.size), as gl_FragCoord and @builtin(position) count)
     for (const ScreenFx::Field& f : fx.fields) {
         float v[4] = {0, 0, 0, 0};
         if (f.name == "time") v[0] = (float)s.now;
+        else if (f.name == "frameRect" || f.name == "passRect") for (int i = 0; i < 4; ++i) v[i] = (float)(f.name == "passRect" ? fx.pass : fx.frame)[i];
+        else if (f.name.rfind("isf_other_", 0) == 0) {   // (where a picture of its others is read: its own picture by the frame, another's whole)
+            const size_t k = (size_t)(std::find(fx.others.begin(), fx.others.end(), f.name.substr(10)) - fx.others.begin());
+            const bool own = k < fx.othersOwn.size() && fx.othersOwn[k];
+            for (int i = 0; i < 4; ++i) v[i] = own ? (float)fx.frame[i] : i < 2 ? 0.f : 1.f;
+        }
         else if (f.name == "aspect") v[0] = (float)(w / h);
         else if (f.name == "resolution") v[0] = (float)w, v[1] = (float)h;
         else if (f.name == "screen" && f.floats >= 4) v[2] = (float)w, v[3] = (float)h;   // (AbsentMotion's effects.cpp: screen is -area.left, -area.top, the scene's width and height. This picture is that scene, so a wave's reach is magnitude * min(screen.z, screen.w) * 0.01)
@@ -312,6 +344,13 @@ static void screen_tone(Stage& s, Texture* from, RenderTarget* to, uint32_t w, u
 // what `to` holds (a thing's effects, over what is under the thing), not drawn in its place.
 static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, RenderTarget* to, const ScreenNumbers& numbers, uint32_t w = 0, uint32_t h = 0, bool over = false) {
     if (!w) w = (uint32_t)s.w, h = (uint32_t)s.h;
+    std::copy(st.frame, st.frame + 4, fx.frame);
+    const auto passing = [&](int t) {
+        for (int i = 0; i < 2; ++i) {
+            const bool set = t >= 0 && fx.targets[(size_t)t].points[i];
+            fx.pass[i] = set ? 0.0 : fx.frame[i], fx.pass[2 + i] = set ? 1.0 : fx.frame[2 + i];
+        }
+    };
     screen_targets(s, fx, false, w, h);
     if (fx.historyFrames) {   // (this frame written into the next layer of the past frames, before it is read)
         const uint32_t hw = (uint32_t)std::max(2L, std::lround(w * fx.historyShare)), hh = (uint32_t)std::max(2L, std::lround(h * fx.historyShare));   // (as large as the picture it keeps)
@@ -345,10 +384,12 @@ static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, 
                 st.clear->setImage(*s.engine, 0, backend::PixelBufferDescriptor(new uint32_t(0), 4, backend::PixelDataFormat::RGBA, backend::PixelDataType::UBYTE, [](void* p, size_t, void*) { delete (uint32_t*)p; }));
             }
             read[k] = k - own < fx.othersNow.size() && fx.othersNow[k - own] ? fx.othersNow[k - own] : end ? st.clear : from;
+            fx.othersOwn.resize(fx.others.size()), fx.othersOwn[k - own] = read[k] == from;
         }
     };
     if (fx.passes.empty()) {
         gather();
+        passing(-1);
         screen_knobs(s, fx, numbers, 0, w, h);
         door::draw(s.engine, fx.door, read.data(), to, w, h, 0, nullptr, over);
         return;
@@ -356,6 +397,7 @@ static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, 
     for (size_t p = 0; p < fx.passes.size(); ++p) {
         gather();
         const int t = fx.passes[p];
+        passing(t);
         screen_knobs(s, fx, numbers, (int)p, t < 0 ? w : fx.targets[(size_t)t].w, t < 0 ? h : fx.targets[(size_t)t].h);
         if (t < 0) { door::draw(s.engine, fx.door, read.data(), to, w, h, (int)p, nullptr, over); continue; }
         ScreenFx::Target& into = fx.targets[(size_t)t];

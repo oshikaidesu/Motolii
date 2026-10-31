@@ -67,12 +67,14 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
         return said = "a" + std::to_string((int)v), true;
     };
     std::vector<std::string> targets, passLines;
+    std::map<std::string, std::pair<bool, bool>> setSize;   // (a pass's picture of a set size, on either side: not the frame's share)
     if (head.HasMember("PASSES") && head["PASSES"].IsArray())
         for (const auto& p : head["PASSES"].GetArray()) {
             const std::string t = str(p, "TARGET");
             std::string w, h;
             if (!size(p, "WIDTH", "WIDTH", w) || !size(p, "HEIGHT", "HEIGHT", h)) return why = "a pass's size it cannot say", "";
             if (!t.empty() && std::find(targets.begin(), targets.end(), t) == targets.end()) targets.push_back(t);
+            if (!t.empty()) setSize[t] = {w.rfind("a", 0) == 0, h.rfind("a", 0) == 0};
             const bool kept = p.HasMember("PERSISTENT") && num(p["PERSISTENT"], 0), fine = p.HasMember("FLOAT") && num(p["FLOAT"], 0);
             passLines.push_back("// --pass@" + t + ":" + (kept ? "1" : "0") + "," + (fine ? "1" : "0") + "," + w + "," + h);
         }
@@ -98,7 +100,7 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
         glsl += "layout(set = 0, binding = " + std::to_string(2 * k) + ") uniform texture2D isf_tex_" + read[k] + ";\nlayout(set = 0, binding = " + std::to_string(2 * k + 1) + ") uniform sampler isf_smp_" + read[k] + ";\n";
     for (size_t k = 0; k < others.size(); ++k)
         glsl += "layout(set = 0, binding = " + std::to_string(2 * (read.size() + k)) + ") uniform texture2D isf_tex_" + others[k] + ";\nlayout(set = 0, binding = " + std::to_string(2 * (read.size() + k) + 1) + ") uniform sampler isf_smp_" + others[k] + ";\n";
-    glsl += "layout(set = 0, binding = " + std::to_string(2 * (read.size() + others.size())) + ") uniform Knobs {\n  float time;\n  vec2 resolution;\n  float frame;\n  float passindex;\n  float clip_time;\n  float clip_length;\n";   // (and a thing's own: how far into it, how long it lasts, seconds, doc_moment_fx.h; the stage's: none)
+    glsl += "layout(set = 0, binding = " + std::to_string(2 * (read.size() + others.size())) + ") uniform Knobs {\n  float time;\n  vec2 resolution;\n  float frame;\n  float passindex;\n  float clip_time;\n  float clip_length;\n  vec4 frameRect;\n  vec4 passRect;\n";   // (and a thing's own: how far into it, how long it lasts, seconds, doc_moment_fx.h; the stage's: none)
     std::vector<std::string> switches;   // (an on/off knob: an int, as WGSL keeps no bool in a uniform, read as a bool where the shader names it, not where a colour's .r is)
     std::string lines;
     for (const auto& k : inputs.GetArray()) {
@@ -129,13 +131,18 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
             for (int i = 0; i < (t == "point2D" ? 2 : 4); ++i)
                 std::snprintf(line, sizeof line, "// --track@%s_%c:%s %c,%g,%g,%g,0.001\n", n.c_str(), "xyzw"[i], label.c_str(), (t == "point2D" ? "xyzw" : "rgba")[i], at("MIN", i, 0), at("MAX", i, 1), at("DEFAULT", i, 0)), lines += line;
     }
+    for (const std::string& n : others) glsl += "  vec4 isf_other_" + n + ";\n";
     glsl += "};\n";
     for (const std::string& n : switches)
         for (std::string* t : {&body, &vertex}) *t = std::regex_replace(*t, std::regex("(^|[^.\\w])" + n + "\\b"), "$1(" + n + "_on != 0)");
     // (ISF's place runs up from the bottom left, as WebGL's does (ISF_Spec); WebGPU's runs down from the top left: the place,
     //  the pixel's own and every picture read turned over alike, so a picture read where it is stays as it was)
     glsl += "layout(location = 0) in vec2 isf_FragNormCoord_down;\nlayout(location = 0) out vec4 isf_FragColor;\n";
-    glsl += "#define isf_FragNormCoord vec2(isf_FragNormCoord_down.x, 1.0 - isf_FragNormCoord_down.y)\n#define isf_up(c) vec2((c).x, 1.0 - (c).y)\n";
+    // (its place and what it reads are the frame's, 0 to 1 over the thing as ever, and go on past it where the picture is larger:
+    //  After Effects' width and height against its buffer, a point in the layer's own place (PF_InData). How far what it
+    //  draws goes is the host's to cut: AbsentMotion's EffectRuntime::chain, SkImageFilters::Crop after each effect)
+    glsl += "#define isf_here ((isf_FragNormCoord_down - passRect.xy) / passRect.zw)\n#define isf_FragNormCoord vec2(isf_here.x, 1.0 - isf_here.y)\n#define isf_up(c) vec2((c).x, 1.0 - (c).y)\n";
+    glsl += "#define isf_in(r, i, c) textureLod(i, isf_up(c) * (r).zw + (r).xy, 0.0)\n#define isf_in_pixel(r, i, c) isf_in(r, i, (c) / RENDERSIZE)\n#define isf_in_here(r, i) isf_in(r, i, isf_FragNormCoord)\n";
     for (const std::string& n : others) {
         std::string label = n;
         std::string sound;   // (an audio input: which, and how many it wants (MAX; none said, as many as are read))
@@ -154,7 +161,8 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
     glsl += "#define IMG_THIS_NORM_PIXEL(i) texture(i, isf_FragNormCoord)\n#define IMG_THIS_PIXEL(i) texture(i, isf_FragNormCoord)\n#define IMG_SIZE(i) RENDERSIZE\n";
     body = std::regex_replace(body, std::regex(R"((\bIMG_(?:NORM_PIXEL|PIXEL|THIS_PIXEL|THIS_NORM_PIXEL|SIZE)\s*\(\s*)(\w+))"), "$1isf_img_$2");
     glsl += "#define gl_FragColor isf_FragColor\n#define texture2D texture\n#define varying //\n";
-    glsl += "#define texture(i, c) textureLod(i, isf_up(c), 0.0)\n#define gl_FragCoord vec4(gl_FragCoord.x, RENDERSIZE.y - gl_FragCoord.y, gl_FragCoord.zw)\n";   // (WGSL samples with derivatives only where every pixel goes the same way: these read the top level anywhere)
+    glsl += "#define texture(i, c) textureLod(i, isf_up(c) * frameRect.zw + frameRect.xy, 0.0)\n#define gl_FragCoord vec4(isf_here.x * RENDERSIZE.x, (1.0 - isf_here.y) * RENDERSIZE.y, gl_FragCoord.zw)\n";
+    glsl += "#define textureSize(i, l) ivec2(vec2(textureSize(i, l)) * frameRect.zw + 0.5)\n#define isf_fetch(i, p, l) texelFetch(i, ivec2(p) + ivec2(frameRect.xy * RENDERSIZE / passRect.zw + 0.5), l)\n";   // (a picture's size and its pixels read by number: the frame's too)   // (WGSL samples with derivatives only where every pixel goes the same way: these read the top level anywhere)
     if (!vertex.empty()) {   // (its own vertex shader: what it hands on (neighbours' places, mostly) worked out at each pixel instead, before the pixel's own work: the same, being straight in the place)
         const std::regex said(R"(^[ \t]*(?:varying|out|in)[ \t]+(\w+)[ \t]+(\w+)([ \t]*\[[^\]]*\])?[ \t]*;)", std::regex::multiline);
         std::map<std::string, std::string> handed;   // (each by its name: its type, and how many when it is a row of them)
@@ -166,6 +174,19 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
         for (const auto& [n, type] : handed) glsl += type + " " + n + ";\n";
         vertex = std::regex_replace(vertex, std::regex(R"(\b(IMG_(?:NORM_PIXEL|PIXEL|THIS_PIXEL|THIS_NORM_PIXEL|SIZE)\s*\(\s*)(\w+))"), "$1isf_img_$2");
         body = std::regex_replace(vertex, std::regex(R"(^[ \t]*#version.*$)"), "") + "\n" + body + "\nvoid main() { isf_vs_main(); isf_fs_main(); }\n";
+    }
+    const std::regex flipped(R"(#define\s+texelFetch\s*\(\s*t\s*,\s*p\s*,\s*l\s*\)\s*texelFetch\b)");   // (a file's own turning over of a pixel's number, Sashimono's: kept, read through the frame)
+    const bool turns = std::regex_search(body, flipped);
+    body = std::regex_replace(std::regex_replace(body, flipped, "#define isf_turned(t, p, l) isf_fetch"), std::regex(R"(\btexelFetch\s*\()"), turns ? "isf_turned(" : "isf_fetch(");
+    std::map<std::string, std::string> apart;   // (the pictures not the frame's: its others, each where it is told; a set size's sides whole)
+    for (const std::string& n : others) apart[n] = "isf_other_" + n;
+    for (const auto& [n, set] : setSize)
+        if (set.first || set.second) apart[n] = std::string("vec4(") + (set.first ? "0.0" : "frameRect.x") + ", " + (set.second ? "0.0" : "frameRect.y") + ", " + (set.first ? "1.0" : "frameRect.z") + ", " + (set.second ? "1.0" : "frameRect.w") + ")";
+    for (const auto& [n, r] : apart) {
+        body = std::regex_replace(body, std::regex(R"(\bIMG_NORM_PIXEL\s*\(\s*isf_img_)" + n + R"(\b)"), "isf_in(" + r + ", isf_img_" + n);
+        body = std::regex_replace(body, std::regex(R"(\bIMG_PIXEL\s*\(\s*isf_img_)" + n + R"(\b)"), "isf_in_pixel(" + r + ", isf_img_" + n);
+        body = std::regex_replace(body, std::regex(R"(\bIMG_THIS(?:_NORM)?_PIXEL\s*\(\s*isf_img_)" + n + R"(\b)"), "isf_in_here(" + r + ", isf_img_" + n);
+        body = std::regex_replace(body, std::regex(R"(\btexture(?:2D)?\s*\(\s*(?:isf_img_)?)" + n + R"(\b)"), "isf_in(" + r + ", isf_img_" + n);
     }
     if (pictures.empty())   // (a generator: its last pass as clear as the thing under it is, Preserve Underlying Transparency)
         body = std::regex_replace(body, std::regex(R"(\bvoid\s+main\s*\()"), "void isf_source_main(") + "\nvoid main() { isf_source_main(); if (PASSINDEX == " + std::to_string(std::max<int>((int)passLines.size() - 1, 0)) + ") isf_FragColor.a *= texture(" + picture + ", isf_FragNormCoord).a; }\n";
@@ -263,7 +284,7 @@ std::string isf_file(const std::string& asked) {
     if (std::filesystem::path(file).extension() != ".fs" && !three_is(file)) return file;   // (a three.js effect: made ISF first, three_isf.cpp)
     struct stat st {};
     if (stat(file.c_str(), &st) != 0) return "";
-    const std::string key = "isf 12|" + file + "|" + std::to_string(st.st_mtimespec.tv_sec) + "." + std::to_string(st.st_mtimespec.tv_nsec) + "|" + std::to_string(st.st_size);
+    const std::string key = "isf 15|" + file + "|" + std::to_string(st.st_mtimespec.tv_sec) + "." + std::to_string(st.st_mtimespec.tv_nsec) + "|" + std::to_string(st.st_size);
     static std::mutex lock;
     static std::map<std::string, std::string> made;   // (what each file as it is became: "" could not be)
     std::lock_guard<std::mutex> hold(lock);
