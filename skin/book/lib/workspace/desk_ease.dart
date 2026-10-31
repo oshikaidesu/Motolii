@@ -28,7 +28,7 @@ class Ease {
   Ease reversed() => Ease(kind, Offset(1 - p2.dx, 1 - p2.dy), Offset(1 - p1.dx, 1 - p1.dy), name);
 
   @override
-  bool operator ==(Object other) => other is Ease && other.kind == kind && other.p1 == p1 && other.p2 == p2;
+  bool operator ==(Object other) => other is Ease && other.kind == kind && other.p1 == p1 && other.p2 == p2 && identical(other.drawn, drawn);
   @override
   int get hashCode => Object.hash(kind, p1, p2);
 }

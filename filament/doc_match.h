@@ -432,6 +432,16 @@ static Doc* doc_open(Stage& s, const char* path) {
         if (trouble.empty()) sqlite3_result_double(c, went);
         else sqlite3_result_error(c, trouble.c_str(), -1);
     }, nullptr, nullptr);
+    // (and how far another way has gone at u, as it is said: way('Cyclic', u), way('Bezier .2 0 0 1', u). Multiplied, ways
+    //  laid over one another: Blender's F-Curve Noise modifier's Multiply, GSAP's CustomWiggle's amplitudeEase; each begins
+    //  at its first key and ends at its next, so what they make does too)
+    sqlite3_create_function(d->file, "way", 2, SQLITE_UTF8 | SQLITE_DETERMINISTIC, d, [](sqlite3_context* c, int, sqlite3_value** v) {
+        const char* text = (const char*)sqlite3_value_text(v[0]);
+        const std::string said = text ? text : "";
+        const double u = sqlite3_value_double(v[1]);
+        Interp kind;
+        sqlite3_result_double(c, u <= 0.0 ? 0.0 : u >= 1.0 ? 1.0 : interp_said(said, &kind) == 0 ? interp_ease(kind, u) : doc_went_by(*(Doc*)sqlite3_user_data(c), said, u, u, 1.0, 0.0, 1.0));
+    }, nullptr, nullptr);
     sqlite3_busy_timeout(d->file, 2000);   // (another program at the same document is waited for)
     // (a key's `way` is how the stretch from it to the next key goes; `way` the table holds the ways defined in this document)
     if (sqlite3_exec(d->file, "create table if not exists fact(thing integer, name text, at numeric, value, way text, primary key(thing, name, at)) without rowid;"

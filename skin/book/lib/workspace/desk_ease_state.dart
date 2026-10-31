@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/tokens.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
+import 'package:lab_book/workspace/desk_ease_cards.dart';
 import 'package:lab_book/workspace/desk_ease_graph.dart';
 import 'package:lab_book/workspace/desk_ease_numbers.dart';
 import 'package:lab_book/workspace/desk_ease_presets.dart';
@@ -26,6 +27,7 @@ class DeskEaseState extends State<DeskEase> {
   // one at a time (one still on its way: the next waits, those between are skipped); all of it one step of undo.
   bool _down = false, _open = false, _going = false;
   Ease? _pending, _waiting;
+  Ease? _held;   // (what a tile held over the graph would make: seen before it is let go, Final Cut Pro's skimming of an effect)
   String? _trouble;
 
   // (with no key picked the stretch follows the playhead: built again when it comes into another stretch, not every frame)
@@ -110,6 +112,7 @@ class DeskEaseState extends State<DeskEase> {
     }
     if (told.isEmpty) return setState(() => _trouble = all.isEmpty ? 'No key where the stretch begins' : null);
     m.later('together', number: 1);   // (one step, without waiting)
+    if (easeIsLaid(to)) m.later('define', name: to, word: easeGoes(easeCards(to)));
     for (final (t, name, at) in told) {
       m.later('way', thing: t, name: name, number: at, word: to);
     }
@@ -211,6 +214,8 @@ class DeskEaseState extends State<DeskEase> {
   }
 
   Widget _body(Ws ws, EaseSpan? span, Ease ease, ValueChanged<Ease> set) {
+    final cards = easeIsLaid(said(ease)) ? [for (final c in easeCards(said(ease))) easeCard(c, ws.inside)] : [ease];
+    Ease laidOn(Ease e) => easeLaid([...cards, for (final c in easeCards(said(e))) easeCard(c, ws.inside)]);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -230,15 +235,30 @@ class DeskEaseState extends State<DeskEase> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: ColoredBox(
-                  color: WsT.card,
-                  child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: ease, span: span, frame: frame, onChanged: set, jump: easeJump, onEnd: ws.inside == null ? null : (start, by) => _moveEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by)))   // (only the graph follows the playhead),
+                child: DragTarget<Ease>(
+                  onWillAcceptWithDetails: (d) {
+                    setState(() => _held = laidOn(d.data));
+                    return true;
+                  },
+                  onLeave: (_) => setState(() => _held = null),
+                  onAcceptWithDetails: (d) {
+                    _held = null;
+                    set(laidOn(d.data));
+                  },
+                  builder: (_, hot, _) => DecoratedBox(
+                    position: DecorationPosition.foreground,
+                    decoration: BoxDecoration(border: hot.isEmpty ? null : Border.all(color: WsT.accent, width: 2)),   // (as the stage shows a tile held over it)
+                    child: ColoredBox(
+                      color: WsT.card,
+                      child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: _held ?? ease, span: span, frame: frame, onChanged: set, jump: easeJump, onEnd: ws.inside == null ? null : (start, by) => _moveEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by)))   // (only the graph follows the playhead),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: WsT.gutter),
               SizedBox(
                 width: Shape.z(128),
-                child: EaseNumbers(ease: ease, span: span, onChanged: set),
+                child: cards.length > 1 ? EaseCards(cards: cards, onOff: (i) => set(easeLaid([...cards]..removeAt(i)))) : EaseNumbers(ease: ease, span: span, onChanged: set),
               ),
             ],
           ),

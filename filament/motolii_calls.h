@@ -11,9 +11,21 @@ static int way_is(Motolii* m, int thing, const char* name, double at, const char
     return changes(m, (int)doc_acted(d));
 }
 int motolii_way(Motolii* m, int thing, const char* name, double at, const char* way) { return by_hand(m, [=] { return way_is(m, thing, name, at, way); }); }
+static int define_is(Motolii* m, const char* way, const char* expression) {   // (on the hand)
+    Doc& d = doc(m);
+    doc_act(d);
+    for (const auto& [name, goes] : doc_own_ways()) {   // (the maker's own among the ways it asks for: written into the document too, as way_is writes one put on a key)
+        if (!strstr(expression, ("way('" + name).c_str())) continue;
+        bool here = false;
+        doc_rows(d, sqlite3_mprintf("select 1 from way where name = %Q", name.c_str()), [&](sqlite3_stmt*) { here = true; });
+        if (!here && !doc_define(d, name.c_str(), goes.c_str())) d.act_ok = false;
+    }
+    if (!doc_define(d, way, expression)) d.act_ok = false;
+    return changes(m, (int)doc_acted(d));
+}
 const char* motolii_effect_names(Motolii* m) { return by_look(m, [m] { return (m->listed = doc_effect_names()).c_str(); }); }
 int motolii_effect(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)(doc_effect(doc(m), thing, name, at))); }); }
-int motolii_define(Motolii* m, const char* way, const char* expression) { return by_hand(m, [=] { return changes(m, (int)(doc_define(doc(m), way, expression))); }); }
+int motolii_define(Motolii* m, const char* way, const char* expression) { return by_hand(m, [=] { return define_is(m, way, expression); }); }
 const char* motolii_ways(Motolii* m) { return by_look(m, [m] { return (m->listed = doc_ways(*m->d)).c_str(); }); }
 int motolii_work_out(Motolii* m, const char* sum, double* is) {
     const std::string said(sum);
@@ -557,6 +569,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "unkey") ok = changes(m, (int)doc_unkey(doc(m), thing, n.c_str(), number));
             else if (c == "stay") ok = changes(m, (int)doc_stay(doc(m), thing, n.c_str(), number));
             else if (c == "way") ok = way_is(m, thing, n.c_str(), number, w.c_str());
+            else if (c == "define") ok = define_is(m, n.c_str(), w.c_str());   // (name: the way; word: how it goes)
             else if (c == "effect") ok = changes(m, (int)doc_effect(doc(m), thing, n.c_str(), number));
             else if (c == "pen") {   // (word: where the hand is and its handle, "x y hx hy", points of the picture; the answer is the path shape)
                 double x = 0.0, y = 0.0, hx = 0.0, hy = 0.0;

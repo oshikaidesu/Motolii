@@ -157,7 +157,7 @@ static std::string doc_aviutl_names() {
 // The ways a maker keeps of their own, as a maker's scripts are theirs: a file each in ways/ of their own folder
 // (doc_folders), and the few the library comes with (one put in either is a tile of the Ease desk at once). Its first line says its name
 // before the colon; the rest is how far it is, as a way defined in a document says it (doc_define: a, b, u, p1..p4,
-// bezier(u, x1, y1, x2, y2)). Put on a key, it is written into the document, so the document goes as it did wherever it
+// bezier(u, x1, y1, x2, y2), way('Cyclic', u)). Put on a key, it is written into the document, so the document goes as it did wherever it
 // is opened. The maker's own of a name goes before the library's.
 // One for the whole program, read by every document's hand and every window's look: held by a lock, given as a copy.
 static std::mutex& doc_own_ways_lock() { static std::mutex one; return one; }

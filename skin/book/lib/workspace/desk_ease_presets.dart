@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show Hov;
 import 'package:lab_book/tokens.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
+import 'package:lab_book/workspace/desk_ease_cards.dart';
 import 'package:lab_book/workspace/desk_ease_library.dart';
 import 'package:lab_book/workspace/ws.dart';
 
@@ -45,15 +46,30 @@ class Presets extends StatelessWidget {
 }
 
 class PresetTile extends StatelessWidget {
-  const PresetTile(this.ease, {super.key, required this.on, required this.onTap, this.label});
+  const PresetTile(this.ease, {super.key, required this.on, required this.onTap, this.label, this.carried = true});
   final Ease ease;
 
   /// What it is called on its tile, where that is less than its name (anime.js's Elastic, its way picked beside).
   final String? label;
   final bool on;
   final VoidCallback onTap;
+
+  /// Whether a hand may carry it to the graph, to lay it over the way there (desk_ease_cards.dart).
+  final bool carried;
   @override
-  Widget build(BuildContext context) => Hov(
+  Widget build(BuildContext context) {
+    final tile = _tile();
+    return !carried
+        ? tile
+        : Draggable<Ease>(
+            data: ease,
+            dragAnchorStrategy: pointerDragAnchorStrategy,
+            feedback: IgnorePointer(child: SizedBox(width: Shape.z(58), height: Shape.z(50), child: tile)),
+            child: tile,
+          );
+  }
+
+  Widget _tile() => Hov(
     onTap: onTap,
     builder: (_, h) {
       final ink = on ? WsT.onAccent : (h ? Grey.g95 : Grey.g76);
@@ -69,7 +85,7 @@ class PresetTile extends StatelessWidget {
             FittedBox( // (a name wider than its tile is drawn smaller, never cut)
               fit: BoxFit.scaleDown,
               child: Text(
-                label ?? ease.name ?? '',
+                label ?? easeTitle(ease),
                 maxLines: 1,
                 style: T.micro(ink).copyWith(fontSize: T.px(9.5), fontWeight: on ? FontWeight.w700 : FontWeight.w500),
               ),

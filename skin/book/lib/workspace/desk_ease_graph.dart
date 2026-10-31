@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/tokens.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
+import 'package:lab_book/workspace/desk_ease_cards.dart';
 import 'package:lab_book/workspace/desk_kit.dart';
 import 'package:lab_book/workspace/ws.dart';
 import 'two_fingers.dart';
@@ -288,7 +289,7 @@ class _GraphPainter extends CustomPainter {
       }
     }
     // Name of the shape, top-left inside the box.
-    final name = (easeName(ease) ?? 'Custom').split(' ').first;   // (a kind with its numbers: its name; the numbers stand beside)
+    final name = easeIsLaid(said(ease)) ? easeTitle(ease) : (easeName(ease) ?? 'Custom').split(' ').first;   // (a kind with its numbers: its name; the numbers stand beside)
     deskText(c, name.toUpperCase(), Offset(g.left + 6, g.top + 5), T.micro(Grey.g76).copyWith(fontWeight: FontWeight.w700, letterSpacing: 1));
   }
 
