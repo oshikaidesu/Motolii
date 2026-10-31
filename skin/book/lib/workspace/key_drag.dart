@@ -45,3 +45,38 @@ void wsRemoveKeys(Ws ws, Iterable<WsKey> keys) {
   ws.clearKeys();
   ws.after(m.later('together'), (_, _) => ws.reread());
 }
+
+/// The keys Cmd+C kept: the value, frames after the first of them, what it holds, its way. None: Cmd+C kept a thing.
+List<(String, int, double, String)> wsKeysKept = const [];
+
+/// The picked keys kept (After Effects' Copy and paste keyframes).
+void wsCopyKeys(Ws ws, Iterable<WsKey> keys) {
+  final m = ws.inside;
+  if (m == null || keys.isEmpty) return;
+  final first = keys.map((k) => k.frame).reduce((a, b) => a < b ? a : b);
+  wsKeysKept = [
+    for (final k in keys)
+      if (int.tryParse(k.layer) case final t?)
+        for (final n in m.moving(t))
+          if (m.keyMoments(t, n).any((s) => (s - k.frame / Ws.fps).abs() < .5 / Ws.fps))
+            (n, k.frame - first, m.value(t, n, k.frame / Ws.fps) ?? 0, m.wayOf(t, n, k.frame / Ws.fps)),
+  ];
+}
+
+/// Those keys on the picked thing, the first at the playhead, one step, picked.
+void wsPasteKeys(Ws ws) {
+  final m = ws.inside, t = int.tryParse(ws.selected ?? '');
+  if (m == null || t == null || wsKeysKept.isEmpty) return;
+  m.later('together', number: 1);
+  for (final (n, after, v, way) in wsKeysKept) {
+    final at = (ws.frame + after) / Ws.fps;
+    m.later('key', thing: t, name: n, word: '$at', number: v);
+    if (way.isNotEmpty) m.later('way', thing: t, name: n, number: at, word: way);
+  }
+  final pasted = [for (final f in {for (final k in wsKeysKept) ws.frame + k.$2}) (layer: '$t', frame: f)];
+  ws.after(m.later('together'), (_, _) {
+    ws
+      ..reread()
+      ..pickKeys(pasted);
+  });
+}

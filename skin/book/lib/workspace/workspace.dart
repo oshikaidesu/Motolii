@@ -265,9 +265,15 @@ class _WorkspaceState extends State<Workspace> {
         ws.after(m.later('remove', thing: t));
         ws.select(null);
       },
-      'edit.copy': () => _typed(CopySelectionTextIntent.copy) ? null : _copy('copy', 'thing'),
+      'edit.copy': () {
+        if (_typed(CopySelectionTextIntent.copy)) return;
+        wsKeysKept = const [];
+        ws.keys.isEmpty ? _copy('copy', 'thing') : wsCopyKeys(ws, ws.keys);
+      },
       'edit.paste': () => _typed(const PasteTextIntent(SelectionChangedCause.keyboard))
           ? null
+          : wsKeysKept.isNotEmpty
+          ? wsPasteKeys(ws)
           : File(_clipboard('thing')).existsSync()
           ? ws.after(m.later('paste', word: _clipboard('thing'), number: ws.frame / Ws.fps), null, (made) => ws.select('$made'))   // (at the playhead, the pasted one picked: Live's paste at the insert marker)
           : null,

@@ -9,6 +9,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/workspace/ableton.dart';
+import 'package:lab_book/workspace/key_drag.dart';
 import 'package:lab_book/workspace/keys.dart';
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/timeline_paint.dart';
@@ -85,6 +86,27 @@ void main() {
     ws.frame = 60;
     does['play.continue']!();
     expect((ws.playing, ws.frame), (false, 60), reason: 'stays where it stopped');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
+  testWidgets('picked keys pasted: the first at the playhead, the rest after it, picked (After Effects\' Copy and paste keyframes)', (t) async {
+    final j = _joined(), ws = j.ws, m = ws.inside!;
+    await _pump(t, ws);
+    final f = (.8 * Ws.fps).round();
+    final held = m.moving(j.rect).first, was = m.value(j.rect, held, .8);
+    ws.pickKey((layer: '${j.rect}', frame: f));
+    wsCopyKeys(ws, ws.keys);
+    ws.frame = 150;
+    wsPasteKeys(ws);
+    for (var i = 0; i < 200 && ws.waiting; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await t.pump();
+    }
+    await t.pumpAndSettle();
+    expect(ws.layers.firstWhere((l) => l.id == '${j.rect}').keys, containsAll([f, 150]));
+    expect(m.value(j.rect, held, 150 / Ws.fps), was);
+    expect(ws.keys, {(layer: '${j.rect}', frame: 150)});
+    wsKeysKept = const [];
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
