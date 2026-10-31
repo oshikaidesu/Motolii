@@ -5,7 +5,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' show ImageByteFormat;
 
-import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:flutter/gestures.dart' show PointerDeviceKind, kSecondaryButton;
 import 'package:flutter/rendering.dart' show OffsetLayer;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/workspace/desk.dart' show WsDesk;
+import 'package:lab_book/workspace/desk_ease_side.dart' show EaseShapes;
 import 'package:lab_book/workspace/dock.dart' show WsShelf;
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart' show Workspace;
@@ -70,22 +71,33 @@ void main() {
     final ruler = t.getRect(find.byKey(const ValueKey('ws-tl-ruler')));
     Future<void> twice(Offset p) async {
       await t.tapAt(p);
-      await t.pump(const Duration(milliseconds: 60));
+      await wait(70);   // (a real window's clock: a second press sooner than 40 ms is no double one, Flutter's kDoubleTapMinTime)
       await t.tapAt(p);
-      await t.pump(const Duration(milliseconds: 400));
-      await wait(50);
+      await wait(350);
       await t.pump();
     }
     final a1 = Offset(ruler.left + ruler.width * .3, ruler.top + 16), a2 = Offset(ruler.left + ruler.width * .6, ruler.top + 16);
-    await twice(a1);
-    await twice(a2);
+    Future<void> addMark(Offset p) async {   // (the ruler's right-click menu, as Live's Add Locator)
+      await t.tapAt(p, buttons: kSecondaryButton);
+      await t.pump(const Duration(milliseconds: 100));
+      await t.tap(find.byKey(const ValueKey('ws-menu-Add Marker')));
+      await t.pump(const Duration(milliseconds: 100));
+      await wait(100);
+      ws.reread();
+      await t.pump();
+    }
+    await addMark(a1);
+    await addMark(a2);
     final made = ws.marks.length;
     await twice(a1 + const Offset(4, 0));   // (on the first one's flag: its name written over)
-    (t.widget(find.byKey(const ValueKey('ws-tl-mark-name'))) as EditableText).controller.text = 'Drop';
+    t.widget<EditableText>(find.descendant(of: find.byKey(const ValueKey('ws-tl-mark-name')), matching: find.byType(EditableText))).controller.text = 'Drop';   // (a real window has no test's keyboard)
     FocusManager.instance.primaryFocus?.unfocus();
-    await t.pump();
-    await wait(100);
-    await t.pump();
+    await t.pump();   // (the field left at the next frame, and only then the name told: timeline.dart _named)
+    for (var i = 0; i < 100 && (ws.waiting || ws.marks.first.$2 != 'Drop'); i++) {
+      await wait(20);
+      ws.reread();
+      await t.pump();
+    }
     final named = ws.marks.map((m) => m.$2).toList();
     await shoot('Markers');
     Future<void> carry(Offset from, Offset by) async {
@@ -103,7 +115,7 @@ void main() {
     await carry(a1 + const Offset(4, 0), const Offset(40, 0));
     final moved = ws.marks.first;
     await carry(a2 + const Offset(4, 0), const Offset(0, 60));   // (the second, carried down off the ruler)
-    report.add('Markers: double clicks made $made (want 2); named $named (want Drop first); carried ${keep.$1.toStringAsFixed(2)} -> ${moved.$1.toStringAsFixed(2)} ${moved.$2} (want later, Drop); one carried off: ${ws.marks.length} left (want 1)');
+    report.add('Markers: the menu made $made (want 2); named $named (want Drop first); carried ${keep.$1.toStringAsFixed(2)} -> ${moved.$1.toStringAsFixed(2)} ${moved.$2} (want later, Drop); one carried off: ${ws.marks.length} left (want 1)');
     expect(made, 2);
     expect(named.first, 'Drop');
     expect(moved.$2, 'Drop');
@@ -236,6 +248,8 @@ void main() {
     await t.pump();
     await wait(100);
     final kept = m.wayOf(a, 'opacity', 0);
+    t.state<ScrollableState>(find.descendant(of: find.byType(EaseShapes), matching: find.byType(Scrollable))).position.jumpTo(0);   // (its row back to its head)
+    await t.pump();
     await t.tap(find.byKey(const ValueKey('ease.Linear')));
     await t.pump();
     await wait(100);

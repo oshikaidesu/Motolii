@@ -499,7 +499,11 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "let_go") ok = changes(m, (int)doc_let_go(doc(m), number != 0.0));
             else if (c == "undo") ok = (int)doc_undo(doc(m));
             else if (c == "redo") ok = (int)doc_redo(doc(m));
-            else if (c == "together") { ok = number != 0.0 ? (doc_act(*m->d), m->d->act_together = true, 1) : (m->d->act ? (int)doc_acted(*m->d) : 0); if (!m->d->act) m->d->act_together = false; }
+            else if (c == "together") {
+                ok = number < 0.0 ? (m->d->act ? (m->d->act_ok = false, (void)doc_acted(*m->d), m->revision.fetch_add(1, std::memory_order_release), picture_update(m), picture_moment(m), 1) : 0)   // (below 0: the open step given up, SQLite's rollback: a try on the stage, nothing kept; the window's pictures as they were again)
+                    : number != 0.0 ? (doc_act(*m->d), m->d->act_together = true, 1) : (m->d->act ? (int)doc_acted(*m->d) : 0);
+                if (!m->d->act) m->d->act_together = false;
+            }
             else if (c == "add") ok = m->made = changes(m, doc_add(doc(m), n.c_str(), w.c_str()));   // (name: the kind, word: the file; the answer is the new thing)
             else if (c == "make") ok = m->made = changes(m, doc_make(doc(m), w.c_str()));
             else if (c == "duplicate") ok = m->made = changes(m, doc_duplicate(doc(m), thing));   // (the answer is the new thing)

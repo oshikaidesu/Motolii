@@ -1,7 +1,9 @@
 // The desk's Ease tool: the curve between the picked key and the next one, its two handles, presets as thumbnails, and the numbers.
 
+import 'dart:async' show scheduleMicrotask;
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/tokens.dart';
@@ -37,6 +39,7 @@ class DeskEaseState extends State<DeskEase> {
   int _card = 0;   // (of a way laid from cards, the one the graph shows, below 0 the whole; another stretch: its first)
   String _cardOf = '';
   Ease? _held;   // (what a tile held over the graph would make: seen before it is let go, Final Cut Pro's skimming of an effect)
+  Ease? _base;   // (the way as it was: while one is held the stage shows it in an open step, and nothing is kept unless it is let go there)
   bool _shelf = false, _shelfShown = false;   // (drawn out; and built, until it has slid away)
   bool _overLocked = false, _noOver = false;   // (AbsentMotion's lockOvershoot, disableOvershoot: once it looks past 0 and 1 it stays so, until the menu says)
   String? _trouble;
@@ -107,6 +110,17 @@ class DeskEaseState extends State<DeskEase> {
     });
   }
 
+  // (a try on the stage given up: the step it opened goes whole, so nothing is kept, not even a step)
+  void _giveUp(Ws ws) {
+    _waiting = null;
+    if (!_open) {
+      _base = null;
+      return;
+    }
+    _open = false;
+    ws.after(ws.inside!.later('together', number: -1), (_, _) => mounted ? setState(() => _base = null) : null);
+  }
+
   void _define(Motolii m, String word) {
     for (final (name, goes) in easeDefines(word)) {
       m.later('define', name: name, word: goes);
@@ -117,6 +131,11 @@ class DeskEaseState extends State<DeskEase> {
     final e = _pending;
     _pending = null;
     _waiting = null;
+    if (e == null && _base != null) {   // (a tile tried and let go: on the graph or the flow it is told in this same event)
+      scheduleMicrotask(() => _pending == null && !_down ? _giveUp(ws) : null);
+      return;
+    }
+    _base = null;
     if (e == null || span == null) return;
     _told = e;
     final m = ws.inside!, to = said(e);
@@ -261,7 +280,7 @@ class DeskEaseState extends State<DeskEase> {
       final at = span == null ? const <String, double>{} : keysAt(ws, span);
       final inDocument = at.isEmpty ? easePreset('Linear') : heard(m.wayOf(int.parse(span!.layer.id), at.keys.first, at.values.first));
       if (_told case final t? when !ws.waiting || said(t) == said(inDocument)) _told = null;
-      var ease = _pending ?? _told ?? inDocument;
+      var ease = _pending ?? _told ?? _base ?? inDocument;
       if (easeOther(ease) && ease.drawn == null) ease = easeCard(said(ease), m);   // (no seat for this kind: its curve is the inside's own working of it, as said now)
       void set(Ease e) {
         setState(() => _pending = e);
@@ -296,6 +315,25 @@ class DeskEaseState extends State<DeskEase> {
     final bezier = easeIsBezier(card);
     final overshoot = bezier && !_noOver && (easeOvershoot || _overLocked || [card.p1.dy, card.p2.dy].any((y) => y < 0 || y > 1));
     _overLocked = overshoot;
+    void hold(Ease? e) {   // (on the stage too, as the graph shows it)
+      setState(() => _held = e);
+      if (ws.inside == null) return;
+      if (e == null) return _giveUp(ws);
+      _base ??= ease;
+      _live(ws, e);
+    }
+    Future<void> paste(void Function(Ease) put) async {
+      ClipboardData? words;
+      try {
+        words = await Clipboard.getData(Clipboard.kTextPlain);
+      } catch (_) {}   // (no clipboard to ask: what was copied here)
+      final e = easeFromText(words?.text, ws.inside) ?? easeCopied;
+      if (e != null) {
+        put(e);
+      } else {
+        ws.notice = 'No curve to paste';
+      }
+    }
     final turned = bezier ? card.reversed() : Ease(card.kind, card.p1, card.p2, easeTurn(said(card)));   // (AbsentMotion's reversed(): a bezier's handles turned, any other marked so)
     return LayoutBuilder(builder: (_, box) {
       // (the left column as wide as its two marks; the shapes as large as the height lets seven and a bit be, or the width
@@ -313,11 +351,12 @@ class DeskEaseState extends State<DeskEase> {
           child: EaseLeft(
             onReverse: !whole && card != easePreset('Linear') && turned != card ? () => put(turned) : null,
             menu: [
-              ('copy', 'Copy Curve', () => setState(() => easeCopied = ease)),
-              if (easeCopied case final copied?) ...[
-                ('paste', 'Paste Curve', () => set(copied)),
-                if (ws.inside != null) ('all', 'Paste Curve to All Keyframes', () => _onEveryKey(ws, copied)),
-              ],
+              ('copy', 'Copy Curve', () {
+                setState(() => easeCopied = ease);
+                Clipboard.setData(ClipboardData(text: easeText(ease))).catchError((_) {});   // (as words: for a page, or another window)
+              }),
+              ('paste', 'Paste Curve', () => paste(set)),   // (what was copied here, or a cubic-bezier() or linear() from a page: easeFromText)
+              if (easeCopied != null && ws.inside != null) ('all', 'Paste Curve to All Keyframes', () => paste((e) => _onEveryKey(ws, e))),
               if (bezier) ('overshoot', overshoot ? 'Disable Overshoot' : 'Enable Overshoot', () => setState(() {
                 easeOvershoot = !overshoot;
                 _noOver = overshoot;
@@ -342,16 +381,19 @@ class DeskEaseState extends State<DeskEase> {
         },
         onAcceptWithDetails: (d) => keep(d.data),
         builder: (_, _, _) => EaseShapes(ease: whole ? ease : card, side: side, across: tall, shapes: easeRow(unseated(ws)), onPick: (e) {
-          if (whole) _card = at;   // (the last card takes it, in hand)
+          if (whole) {   // (the whole in hand: it takes the place of the whole, as a press takes that of a card)
+            _card = 0;
+            return set(e);
+          }
           put(e);
         }),
       );
       final target = DragTarget<Object>(
             onWillAcceptWithDetails: (d) {
-              if (d.data case final Ease e) setState(() => _held = laidOn(e));
+              if (d.data case final Ease e) hold(laidOn(e));
               return true;   // (a card of the flow too: let go on it, it stays)
             },
-            onLeave: (_) => setState(() => _held = null),
+            onLeave: (d) => d is Ease ? hold(null) : null,
             onAcceptWithDetails: (d) {
               _held = null;
               if (d.data case final Ease e) {
@@ -392,7 +434,7 @@ class DeskEaseState extends State<DeskEase> {
                     _held = null;
                     _card = i;
                     set(easeLaid([...cards]..insertAll(i, [for (final c in easeCards(said(e))) easeCard(c, ws.inside)])));
-                  }, onHold: (e, i) => setState(() => _held = e == null ? null : easeLaid([...cards]..insertAll(i, [for (final c in easeCards(said(e))) easeCard(c, ws.inside)]))))),
+                  }, onHold: (e, i) => hold(e == null ? null : easeLaid([...cards]..insertAll(i, [for (final c in easeCards(said(e))) easeCard(c, ws.inside)]))))),
                 ],
               ),
             ),

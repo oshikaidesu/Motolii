@@ -511,7 +511,7 @@ static bool doc_acted(Doc& d) {
     sqlite3session_changeset(d.acting, &size, &changed);
     sqlite3session_delete(d.acting);
     d.acting = nullptr;
-    if (d.act_ok && size) doc_note(d, size, changed);
+    if (size) doc_note(d, size, changed);   // (an act given up changed them too, and back: shown as they are again)
     if (d.act_ok && size) {   // (what was undone and not done again is forgotten: a new step follows the last one that stands)
         sqlite3_exec(d.file, "delete from step where undone", nullptr, nullptr, nullptr);
         sqlite3_stmt* keep = nullptr;

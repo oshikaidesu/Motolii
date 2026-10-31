@@ -272,6 +272,9 @@ class _GraphPainter extends CustomPainter {
         c.drawLine(Offset(x, top - 8), Offset(x, bottom + 4), line);
         c.drawCircle(px(Offset(u, y)), 4.5, Paint()..color = WsT.playhead);
         if (frame != from && frame != to) deskText(c, '$frame', Offset(x, bottom + 6), T.micro(WsT.playhead).copyWith(fontWeight: FontWeight.w700), ax: .5);
+      } else if (g.width > Shape.z(80)) {   // (not in this stretch: which way it lies, and where)
+        final before = frame < from!;
+        deskText(c, before ? '‹ $frame' : '$frame ›', Offset(g.center.dx, bottom + 6), T.micro(WsT.playhead).copyWith(fontWeight: FontWeight.w700), ax: .5);
       }
     }
     // The value jumping at the end pulled: from where it was (the key the jump leaves outside) to where it is now.

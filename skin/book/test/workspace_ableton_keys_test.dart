@@ -204,6 +204,10 @@ void main() {
     await t.enterText(find.byKey(const ValueKey('ws-tl-mark-name')), 'Drop');
     await t.testTextInput.receiveAction(TextInputAction.done);
     await t.pumpAndSettle();
+    for (var i = 0; i < 200 && ws.waiting; i++) {   // (as menu above: settled is not done, under a loaded machine)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await t.pump();
+    }
     ws.reread();
     expect(ws.marks.single.$2, 'Drop', reason: 'the flag\'s menu names it');
     await t.tapAt(flag);

@@ -389,7 +389,7 @@
 - [x] 同：Random — 数と曲線は AbsentMotion の（Alight Motion のプリセット `Keyframes.kt`、式 `easing.cpp` をそのまま、`filament/interp.h` → `absent_motion.cpp` absent_ease）。10/29 edit.sh：キーの間の値が AbsentMotion の Ease と小数 4 桁まで同じ（u 0.1・0.25・0.4 で 19.07 -11.71 58.36）。曲線の上の取っ手は別の行
 - [x] 同：Steps（今は 6 段、Alight Motion は 4 段）：既定を 4 段に（0.25・0.5・0.75 で 4 分の 1 ずつ、終わりで 1。実機の絵 135 と同じ、10/28） — 済：`check/doc.sh`
 - [x] 同：Elastic Steps — 数と曲線は AbsentMotion の（Alight Motion のプリセット `Keyframes.kt`、式 `easing.cpp` をそのまま、`filament/interp.h` → `absent_motion.cpp` absent_ease）。10/29 edit.sh：キーの間の値が AbsentMotion の Ease と小数 4 桁まで同じ（u 0.1・0.25・0.4 で 0 20.79 20.00）。曲線の上の取っ手は別の行
-- [ ] イーズの取っ手を曲線の上で直接動かす（黄＝形、白＝始めと終わり）
+- [x] イーズの取っ手を曲線の上で直接動かす（黄＝形、白＝始めと終わり） — 済（10/31）：AbsentMotion の Keyframes.kt の handles をそのまま移した（`desk_ease_handles.dart`）。壊す試験 `workspace_ease_break_test.dart`
 - [x] ベジェの 4 つのプリセット（有る）：Ease の机の形の列の頭に Linear・In・Out・In-out（Alight Motion の直線・加速・減速・加速して減速と同じ形、数は AbsentMotion の EasingCatalog・CSS の ease-in・ease-out・ease-in-out）、ほかに Hold。一度列から落としていたのを 10/31 に戻した。曲線の白い取っ手 2 つは引ける（`skin/book/lib/workspace/desk_ease_side.dart` の easeShapes、`desk_ease_graph.dart`）
 - [x] 親：一覧で選ぶ（None・自分は灰色・音は出ない）：Transform カードの Parent（None と他の物の名前、自分は出ない） — 済：窓の試験（`workspace_joined_test_2.dart` の Parent）
 - [x] 親：子を選ぶと親の外枠を出す：親のある物を選ぶと、舞台に親の枠が灰色の線で（10/28） — 済：窓の試験（`workspace_joined_test_3.dart`）
@@ -466,14 +466,14 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] 同：Steps のあとに波や揺れを通す順では線が細かく刻まれて荒れる。触って詰める
 - [x] 同：札を押すと大きなグラフにその札が出て、丸で触れる。全部掛けた結果は流れの下の小さなプレビューと、グラフの裏の薄い線（10/31 ユーザー：「常に結果を見てるとハンドルが消える」「最終結果はオニオンスキン」）
 - [x] 同：波や段の形の反転。文書には `Reverse:` で始まる定義された形として持つ。札の並び替え、札と札の間への差し込み、丸と端の点の分離もここで直した（10/31 ユーザー）
-- [ ] イーズの掛け算（10/31 ユーザー：形はどんどん増える、掛け合わせたい）。決まり：形はカード。押すと入れ替わる、重ねると掛かる、外へ出すと外れる。窓に出した（`desk_ease_cards.dart`）。カードらしく見えないと言われ（10/31 ユーザー：「カードゲームみたいでもねえし」）、タイルは手の下で持ち上がり、持つと傾き、重ねた札はグラフの後ろに上端だけ積む形にした。細かい所は窓を触って詰める：Linear に重ねた時、列の形が増えた時、形の一覧を棚へ移すか。押すと重ねるで結果が変わるのは私の案で、出典はまだ無い
+- [x] イーズの掛け算（10/31 ユーザー：形はどんどん増える、掛け合わせたい）。決まり：形はカード。押すと入れ替わる、重ねると掛かる、外へ出すと外れる。窓に出した（`desk_ease_cards.dart`）。カードらしく見えないと言われ（10/31 ユーザー：「カードゲームみたいでもねえし」）、タイルは手の下で持ち上がり、持つと傾き、重ねた札はグラフの後ろに上端だけ積む形にした。細かい所は窓を触って詰める：Linear に重ねた時、列の形が増えた時、形の一覧を棚へ移すか。押すと重ねるで結果が変わるのは私の案で、出典はまだ無い — 済（10/31）：`desk_ease_cards.dart`
 - [ ] 区間の繰り返しの入口：エンジンは済（`<値>_loop`、cycle・pingpong・offset）。窓から選ぶ入口がまだ
 - [ ] レーンの箱（Ableton の Stretching and Skewing Envelopes、Live 12 手引き 26.7.2）。作る前に Logic と FL Studio も見る
 - [ ] レーンへの形の差し込み（Ableton の Insert Shape）
 - [x] 作った形を残す — 済（10/31）：右端のつまみで出し入れする棚（列が右から入って全体を左へ押す。流れは隠れない）。流れのカードや足元の結果を棚へ運ぶ、または棚の空き枠を押すと残る。重ねた結果も 1 つで残り、押すと 1 枚ずつのカードで戻る。× で消える。50 個で確かめた。`~/.motolii/ease_kept.json`（Live の手引き 23.2.5 Saving Presets、Photoshop の Swatches の空き、macOS の spring-loaded folders、Easey の presetsPage.js。`desk_ease_shelf.dart`）
-- [ ] `cubic-bezier(...)`・`linear(...)` を貼ってイーズにする（ways/ のファイルの仕組みに載せる）
+- [x] `cubic-bezier(...)`・`linear(...)` を貼ってイーズにする — 済（10/31）：⋯ の Paste Curve がクリップボードの文字から読む。文の途中にあってもよい（CSS Easing Functions 2、`linear()` は anime.js が解く。`desk_ease_cards.dart` の easeFromText）。Copy Curve は CSS の書き方で出す
 - [ ] 区間の波の数を拍で決める
-- [ ] 区間に重ねる（Blender の F-Curve Modifiers）
+- [x] 区間に重ねる（Blender の F-Curve Modifiers） — 済（10/31）：カードの流れ（`desk_ease_cards.dart`）
 - [ ] 本物の 3D のつづき：文字の輪郭を opentype.js で（4 本は取ったが、まだ入れていない）、Surface の札、ベベル
 - [ ] 窓を手で触って確かめる：Tab、右クリック、選ぶ欄のキー、More、+ Add Effect
 - [ ] 遅い CI の Mac でだけ落ちる 5 本（golf_noise.md (108)、retry: 2 で隔離中）
@@ -482,6 +482,6 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] Colors の棚：まっさらな状態（箱 52）だと、上の塊が高くて箱の一覧が短い。1600×960 の窓でも箱の真ん中が押せなかった
 - [ ] 色の目盛りをインスペクターの中に置くか：ユーザーの判断待ち
 - [ ] パネルごとに UX を評価する（10/30 ユーザーの案。出典：KLM、Cognitive Walkthrough、Nielsen のヒューリスティック）
-- [ ] 「locators as Live's…」の試験が束で流すと時々落ちる（Drop のはずが M1。1 本だけなら通る）。実物の窓の `integration_test/desk_test.dart` も 84 行目のマーカーの名前変更で止まり、その先のイーズまで届かない（10/31）
+- [x] 「locators as Live's…」の試験が束で流すと時々落ちる — 済（10/31）：名前を告げた後の返事を待たずに確かめていた。実物の窓の `integration_test/desk_test.dart` も印の所で止まっていたのは試験の側の古さで、今は Ease を通り、色の棚（335 行目から）で止まる。色の棚の作り替えに試験が追いついていない
 
 合計：393 箱。

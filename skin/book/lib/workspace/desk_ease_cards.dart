@@ -18,9 +18,12 @@ const _over = '×', _space = '~', _turned = 'Reverse:';   // (a way defined in a
 const _all = -1;   // (what the tile at the foot of the flow carries: all the cards, EaseShapes.onKeep)
 
 /// The ways a way is laid from, each as it is said; one not laid: itself.
-List<String> easeCards(String said) => [for (final w in said.split(_over)) w.startsWith(_turned) ? w : w.replaceAll(_space, ' ')];
+List<String> easeCards(String said) => [for (final w in said.split(_over)) w.startsWith(_turned) || easeIsPoints(w) ? w : w.replaceAll(_space, ' ')];
 
 bool easeIsLaid(String said) => said.contains(_over);
+
+/// A way said by its points, as CSS's linear() (one word: a space in it is said as ~; anime.js works it out: doc_match.h).
+bool easeIsPoints(String said) => said.startsWith('linear(');
 bool easeIsTurned(String said) => said.startsWith(_turned);
 
 /// A way turned end for end, as it is said, or turned back (AbsentMotion's "reverse": this document has no such word, so
@@ -54,7 +57,10 @@ String _quoted(String word) => word.replaceAll("'", "''");
 
 /// The ways a word needs defined before a stretch can go by it: name and how it goes.
 List<(String, String)> easeDefines(String word) => [
-  for (final c in easeCards(word)) if (easeIsTurned(c)) (c, "a + (b - a) * (1 - way('${easeTurn(c).replaceAll("'", "''")}', 1 - u))"),
+  for (final c in easeCards(word)) ...[
+    if (easeIsTurned(c)) (c, "a + (b - a) * (1 - way('${easeTurn(c).replaceAll("'", "''")}', 1 - u))"),
+    if (easeIsPoints(c)) (c, "a + (b - a) * anime('${c.replaceAllMapped(RegExp('[^(,)]*$_space[^(,)]*'), (stop) => '"${stop[0]!.replaceAll(_space, ' ')}"')}', u)"),   // (a stop with its place is a string to anime.js's linear())
+  ],
   if (easeIsLaid(word)) (word, 'a + (b - a) * (${_goes(easeCards(word))})'),
 ];
 
@@ -70,6 +76,7 @@ Ease easeCard(String word, Motolii? m) {
   }
   final e = heard(word);
   if (!easeOther(e) || m == null) return e;
+  if (easeIsPoints(word) && !_worked.containsKey(word) && m.wayExact(word, 1) < .5) return e;   // (not defined yet, so it ends nowhere: drawn when it is)
   if (_worked.length > 256) _worked.clear();
   return Ease(e.kind, e.p1, e.p2, e.name, _worked[word] ??= [for (var i = 0; i <= _steps; i++) m.wayExact(word, i / _steps)]);
 }
@@ -105,7 +112,28 @@ double _went(List<Ease> cards, double u) {
 /// What a way is called under the graph.
 String easeWord(Ease e) {
   final s = said(e);
-  return (easeIsTurned(s) ? easeTurn(s) : easeName(e) ?? 'Bezier').split(' ').first;
+  return easeIsPoints(s) ? 'linear()' : (easeIsTurned(s) ? easeTurn(s) : easeName(e) ?? 'Bezier').split(' ').first;
+}
+
+/// A way as words anyone can read: a bezier as CSS says it, so it can be pasted into a page too; any other as it is said.
+String easeText(Ease e) => easeIsBezierAlone(e) ? 'cubic-bezier(${e.p1.dx}, ${e.p1.dy}, ${e.p2.dx}, ${e.p2.dy})' : said(e);
+
+bool easeIsBezierAlone(Ease e) => said(e).startsWith('Bezier ');
+
+/// A way out of copied words: CSS's cubic-bezier() and linear() (CSS Easing Functions 2), wherever they stand in what was
+/// copied (a line of a page's style, cubic-bezier.com), or as [easeText] said it. None: no way in them.
+Ease? easeFromText(String? text, Motolii? m) {
+  final t = (text ?? '').trim();
+  if (RegExp(r'cubic-bezier\(([^)]*)\)').firstMatch(t) case final b?) {
+    final n = [for (final x in b[1]!.split(',')) double.tryParse(x.trim())];
+    if (n.length != 4 || n.contains(null) || n[0]! < 0 || n[0]! > 1 || n[2]! < 0 || n[2]! > 1) return null;   // (CSS's own rule: time goes only forward)
+    return Ease(EaseKind.bezier, Offset(n[0]!, n[1]!), Offset(n[2]!, n[3]!));
+  }
+  if (RegExp(r'linear\(([^)]*)\)').firstMatch(t) case final l?) {
+    final stops = [for (final s in l[1]!.split(',')) s.trim().replaceAll(RegExp(r'\s+'), _space)];
+    return stops.length < 2 ? null : heard('linear(${stops.join(',')})');
+  }
+  return const {'Linear', 'Hold', 'Bezier', 'Bounce', 'Elastic', 'Cyclic', 'Random', 'Steps', 'ElasticSteps'}.contains(t.split(RegExp('[ ~×]')).first) || easeIsTurned(t) ? easeCard(t, m) : null;
 }
 
 /// The flow: the ways laid, top to bottom, each acting on what is above it (the maker's arrows, 10/31; Blender's stack); an

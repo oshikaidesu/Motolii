@@ -271,6 +271,7 @@ double anime_ease(const std::string& bundle, const std::string& said, double u, 
         JS_FreeValue(cx, g);
     }
     if (!why.empty()) { if (trouble) *trouble = why; return u; }
+    JS_UpdateStackTop(rt);   // (asked on whichever thread asks: the hand's on the stage, the window's to draw a curve. QuickJS measures its stack from where it last was told)
     JSValue args[2] = {JS_NewStringLen(cx, said.c_str(), said.size()), JS_NewFloat64(cx, u)};
     JSValue out = JS_Call(cx, at, JS_UNDEFINED, 2, args);
     JS_FreeValue(cx, args[0]);
