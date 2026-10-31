@@ -16,6 +16,7 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
         tvg::Initializer::init(0);
         tvg::Paint* p = paints(d, &w, &h);
         if (!p || w <= 0 || h <= 0) return;
+        high *= d->tallBy;
         const float tall = (float)h;   // (what its effects' lengths are shares of: the thing as drawn, without room)
         if (fx.reach > 0.f) {
             const float room = std::ceil(fx.reach * (float)h);
@@ -294,6 +295,21 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
             t->layout(wide, 0.f);
             t->align(align, 0.f);
             measured = t->bounds(&x, &y, &wide, &tall) == tvg::Result::Success;
+        }
+        if (strchr(words, '\n') || fx.wrapWidth > 0.f) {   // (a size is a line's, as a font's: more lines, the sheet the taller; After Effects' and Alight Motion's Font Size)
+            std::string one(words);
+            one.erase(std::remove(one.begin(), one.end(), '\n'), one.end());
+            tvg::Text* line = tvg::Text::gen();
+            line->font(std::filesystem::path(fontFile).stem().string().c_str());
+            line->size(sized);
+            line->text(one.c_str());
+            float lineX, lineY, lineWide, lineTall;
+            if (line->bounds(&lineX, &lineY, &lineWide, &lineTall) == tvg::Result::Success && lineTall > 0.f) {
+                tvg::TextMetrics font;
+                if (fx.column && t->metrics(font) == tvg::Result::Success && font.advance > 0.f) t->spacing(fx.letters, fx.lines * lineTall / font.advance), t->bounds(&x, &y, &wide, &tall);
+                d->tallBy = tall / lineTall;
+            }
+            tvg::Paint::rel(line);
         }
         const float outline = edge.w * tall;   // (half of it lies outside the letters: the picture is that much larger all round)
         if (outline > 0.f) t->outline(outline, (uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));

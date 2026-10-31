@@ -2,6 +2,16 @@
 // The values that move a flat shape's points as it is drawn (flat.mat's vertex stage): a shape with any of them cut
 // fine all along, one with none only round its curves (a long line in four points, not two thousand).
 static const char* const doc_bending = "'warp','bend','twist','pinch','skew','squash','wiggle','stretch','pin_tl_x','pin_tl_y','pin_tr_x','pin_tr_y','pin_bl_x','pin_bl_y','pin_br_x','pin_br_y'";
+// A text's words for a column (After Effects' Vertical Type): the signs that lie along a line, in their forms that stand,
+// Unicode's own <vertical> table. The long vowel has none there: a stroke as heavy as the letters (no source: a font's vert feature would draw its own, and ThorVG reads no such feature).
+static std::string doc_column(std::string words) {
+    static const char* const forms[][2] = {{"，", "︐"}, {"、", "︑"}, {"。", "︒"}, {"：", "︓"}, {"；", "︔"}, {"！", "︕"}, {"？", "︖"}, {"〖", "︗"}, {"〗", "︘"}, {"…", "︙"}, {"‥", "︰"}, {"—", "︱"}, {"ー", "丨"}, {"–", "︲"},
+                                           {"（", "︵"}, {"）", "︶"}, {"｛", "︷"}, {"｝", "︸"}, {"〔", "︹"}, {"〕", "︺"}, {"【", "︻"}, {"】", "︼"}, {"《", "︽"}, {"》", "︾"}, {"〈", "︿"}, {"〉", "﹀"}, {"「", "﹁"}, {"」", "﹂"}, {"『", "﹃"}, {"』", "﹄"}, {"［", "﹇"}, {"］", "﹈"}};
+    for (const auto& form : forms)
+        for (size_t at = 0; (at = words.find(form[0], at)) != std::string::npos; at += strlen(form[1])) words.replace(at, strlen(form[0]), form[1]);
+    return words;
+}
+
 static bool doc_bends(Doc& d, int thing) {
     bool any = false;
     doc_rows(d, sqlite3_mprintf("select 1 from fact where thing = %d and (name in (%s) or (name glob '*_by' and substr(name, 1, length(name) - 3) in (%s))) and (value <> 0 or at <> 0) limit 1", thing, doc_bending, doc_bending),
@@ -136,7 +146,7 @@ static bool doc_match(Doc& d) {
         const std::string split = doc_word(d, thing, "split"), script = doc_word(d, thing, "script");
         fx.splitWords = split == "words";
         fx.split = split == "letters" || fx.splitWords || (split.empty() && !script.empty() && script != "none");   // (a text given a script moves letter by letter, as Cavalry's are, unless said none)
-        { const std::string w = doc_word(d, thing, "wrap"); fx.wrap = w == "character" ? 1 : w == "word" ? 2 : w == "smart" ? 3 : w == "ellipsis" ? 4 : fx.wrapWidth > 0.f ? 2 : 0; }   // (ThorVG's TextWrap; a box said and no way: by words)
+        { const std::string w = doc_word(d, thing, "wrap"); fx.wrap = w == "character" || w == "vertical" ? 1 : w == "word" ? 2 : w == "smart" ? 3 : w == "ellipsis" ? 4 : fx.wrapWidth > 0.f ? 2 : 0; if (w == "vertical") fx.wrapWidth = 1.f, fx.column = true; }   // (ThorVG's TextWrap; a box said and no way: by words; vertical: a box a letter wide)
         fx.letters = (float)doc_number(d, thing, "letter_spacing", 0, 1), fx.lines = (float)doc_number(d, thing, "line_spacing", 0, 1), fx.italic = (float)doc_number(d, thing, "italic", 0, 0);
         const auto which = [&](const char* name, const char* words) { const std::string w = doc_word(d, thing, name); if (w.empty()) return -1; int n = 0; for (const char* at = words; *at; ++n) { const size_t len = strcspn(at, " "); if (w == std::string(at, len)) return n; at += len + (at[len] ? 1 : 0); } return -1; };
         fx.cap = which("cap", "butt round square"), fx.join = which("join", "miter round bevel");
@@ -217,7 +227,7 @@ static bool doc_match(Doc& d) {
             const std::string words = doc_text_shown(d, thing, s.now, &made.wordsMove);   // (as typed, or as AbsentMotion's text effects show them now)
             made.words = words;
             if (!fill.empty() && fill != "behind" && rgb < 0) why = "a text's fill is six digits, as ff3366, or behind (what is behind it)";
-            else if ((stroke.empty() || edgeRgb >= 0) && fxOk) made.drawn = type(s, words.empty() ? std::filesystem::path(file).stem().string().c_str() : words.c_str(), file.c_str(), mat4f{}, 1.f, fill.empty() ? float3{0x11 / 255.f} : colour, lay, edge, (float)doc_number(d, thing, "align", 0, 0), fx);
+            else if ((stroke.empty() || edgeRgb >= 0) && fxOk) made.drawn = type(s, words.empty() ? std::filesystem::path(file).stem().string().c_str() : (fx.column ? doc_column(words) : words).c_str(), file.c_str(), mat4f{}, 1.f, fill.empty() ? float3{0x11 / 255.f} : colour, lay, edge, fx.column ? .5f : (float)doc_number(d, thing, "align", 0, 0), fx);
         } else if (kind == "shape") {   // (a flat shape in one colour: ThorVG's own rectangle or circle)
             if (!fill.empty() && fill != "none" && fill != "behind" && rgb < 0) why = "a shape's fill is six digits, as ff3366, none, or behind (what is behind it)";
             else if ((!stroke.empty() && edgeRgb < 0) || !fxOk) {}

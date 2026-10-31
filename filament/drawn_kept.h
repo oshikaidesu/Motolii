@@ -21,6 +21,7 @@
 struct DrawnFx { bool split = false;   // (a text's letters each a copy of their own)
     bool splitWords = false;   // (its words, not its letters: After Effects' Based On Words, Alight Motion's Text Transform)
     bool together = false;   // (its copies drawn in one go, each an instance of one thing: none coloured or cleared each of its own, kit.h add_parts)
+    bool column = false;   // (its letters one under another, a letter's height from each to the next)
     float letters = 1.f, lines = 1.f, italic = 0.f, wrapWidth = 0.f; int wrap = 0;   // (a text's lines broken in a box so many of its letters' heights wide, ThorVG's layout and wrap; 0: as typed)
     float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)
     int heads = 0; float headSize = 4.f; int headShape = 0, headStart = -1;   // (heads on an open edge's ends, as Cavalry's: 1 its end, 2 its start, 3 both; so many times its edge long; 0 arrow, 1 circle, 2 box, 3 chevron, 4 bar; from 5 Alight Motion's, drawn by AbsentMotion (drawn_flat.h); its start's own, -1 as its end's)
@@ -104,6 +105,7 @@ struct Drawn {
     float fromFrame = 0.f, toFrame = 0.f;   // the stretch it plays, when one is named (frames of the file)
     std::vector<tvg::Scene*> effects;  // ThorVG's scene its effects are on (driver thread only)
     float tall = 0.f;                  // how high it was drawn, in its own points: what its effects' lengths are shares of
+    float tallBy = 1.f;                // a text's lines: how many times as tall as one of them, whose height its size says
     DrawnFx fx;                        // its effects as last told
     tvg::Text* text = nullptr;         // a text's own words, ThorVG's (driver thread only): told again in place (words_at); none when split, wrapped or aligned
     std::string words;                 // (as last told)

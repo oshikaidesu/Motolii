@@ -358,7 +358,7 @@ static const DocValue doc_values[] = {
     {"stroke", "text shape picture", 0, 0, false, ""}, {"stroke_width", "text shape picture", 0, 1000, false, nullptr},   // (its edge: a colour, and how wide, in points of the picture at size 1)
     // (ThorVG's own: a text's letters and lines so many times as far apart as the font sets them, its slant; an edge's
     //  ends and corners, and dashes along it so long, with gaps as long, begun so far along)
-    {"wrap", "text", 0, 0, false, "none character word smart ellipsis"}, {"wrap_at", "text", 0, 1000, false, nullptr},   // (its lines broken in a box so many times as wide as its letters are high: ThorVG's layout and wrap; a text's size is the height of all its lines, so this goes with the letters, not the picture)
+    {"wrap", "text", 0, 0, false, "none character word smart ellipsis vertical"}, {"wrap_at", "text", 0, 1000, false, nullptr},   // (its lines broken in a box so many times as wide as its letters are high: ThorVG's layout and wrap; a text's size is the height of all its lines, so this goes with the letters, not the picture)
     {"split", "text", 0, 0, false, "none letters words"},   // (one line of it split into its letters or its words, each a copy of its own: they lie where they are, and move, wave and are coloured each in their order)
     {"letter_spacing", "text", 0, 10, false, nullptr}, {"line_spacing", "text", 0, 10, false, nullptr}, {"italic", "text", 0, 0.5, false, nullptr},
     // (a fill of two colours or more: across, ThorVG's linear gradient, or from the middle out, its radial; turned so far,
