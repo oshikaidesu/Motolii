@@ -275,6 +275,19 @@ Color wtBand(int i, bool selected) => Forms.worn.trackBand(i, selected);
 /// The bar's fill: the kind's hue, a step quieter when not selected; a hidden or soloed-out layer drops to grey.
 Color wtBarFill(WtRow r) => Forms.worn.trackFill(r.tone ?? wsTone(r.kind), dim: r.dim, selected: r.selected);
 
+// A way drawn from x [xa] to [xb]: as fine as the screen shows, where it is on the screen. What is left at 192 steps is more
+// than a short stretch has pixels for, and a long one still has its curve; Skia draws a curve as such lines too.
+void _wayLine(Path p, List<double> way, double xa, double xb, double width, double Function(double) y) {
+  final n = way.length - 1, wide = xb - xa;
+  if (wide <= 0) return;
+  final every = math.max(1, (n * 1.5 / wide).floor());
+  final from = ((-xa / wide * n).floor() - every).clamp(0, n), to = (((width - xa) / wide * n).ceil() + every).clamp(0, n);
+  for (var i = from + every; i < to; i += every) {
+    p.lineTo(xa + wide * i / n, y(way[i]));
+  }
+  p.lineTo(xa + wide * to / n, y(way[to]));
+}
+
 class WtTracksPainter extends CustomPainter {
   const WtTracksPainter({required this.rows, required this.view, required this.fps, required this.vscroll, this.tempo});
   final WsBeats? tempo;
@@ -376,11 +389,8 @@ class WtTracksPainter extends CustomPainter {
       final xa = view.x(st.from), xb = view.x(st.to);
       if (xb - xa < 6 || xb < 0 || xa > s.width) continue;
       final h = bar.height * .62, base = cy + h / 2;
-      final line = Path();
-      for (var i = 0; i < st.shape.length; i++) {
-        final x = xa + (xb - xa) * i / (st.shape.length - 1), y = base - st.shape[i].clamp(-.5, 1.5) * h;
-        i == 0 ? line.moveTo(x, y) : line.lineTo(x, y);
-      }
+      final line = Path()..moveTo(xa, base - st.shape.first.clamp(-.5, 1.5) * h);
+      _wayLine(line, st.shape, xa, xb, s.width, (v) => base - v.clamp(-.5, 1.5) * h);
       c.drawPath(line, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.2..strokeJoin = StrokeJoin.round..isAntiAlias = true..color = Color.lerp(fill, Grey.g100, r.dim ? .25 : .6)!);   // (Ableton's automation line: one thin line, the bar's own colour made lighter)
     }
     for (final k in r.keys) {
@@ -430,9 +440,7 @@ class WtTracksPainter extends CustomPainter {
       line.lineTo(a.dx, a.dy);
       if (way == null) continue;
       final b = at(pts[i + 1]);
-      for (var j = 1; j < way.length - 1; j++) {   // (an overshoot kept within its own lane)
-        line.lineTo(a.dx + (b.dx - a.dx) * j / (way.length - 1), (a.dy + (b.dy - a.dy) * way[j]).clamp(top - 3, top + h + 3));
-      }
+      _wayLine(line, way, a.dx, b.dx, s.width, (v) => (a.dy + (b.dy - a.dy) * v).clamp(top - 3, top + h + 3));   // (an overshoot kept within its own lane)
     }
     line.lineTo(s.width, at(pts.last).dy);
     if (r.laneOn case final i? when i + 1 < pts.length) c.drawRect(Rect.fromLTRB(at(pts[i]).dx, cy - WtM.row / 2, at(pts[i + 1]).dx, cy + WtM.row / 2), Paint()..color = WsT.accent.withValues(alpha: .18));   // (Theatre.js's connector, lit while it is what the curve editor holds)

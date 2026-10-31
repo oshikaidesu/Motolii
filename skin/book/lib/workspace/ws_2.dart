@@ -187,7 +187,7 @@ class Ws extends ChangeNotifier {
                 hidden: (m.value(t, 'visible', 0) ?? 1) < .5, solo: (m.value(t, 'solo', 0) ?? 0) > .5, locked: (m.value(t, 'lock', 0) ?? 0) > .5, clipped: (m.value(t, 'clip', 0) ?? 0) > .5,
                 stretches: [
                   for (final (a, b, way) in m.thingStretches(t))
-                    (from: (a * fps).round(), to: (b * fps).round(), way: way, shape: easeShape(way, m, 16)),
+                    (from: (a * fps).round(), to: (b * fps).round(), way: way, shape: easeCurve(way, m)),
                 ]);
           }(),
       ]);

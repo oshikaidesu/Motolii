@@ -2,7 +2,7 @@
 // This file is what every seat shares: the mock document they all read (Ws), and the window's own tokens (WsT).
 // Tone and manner come from the Inspector's Pop rules (sets/inspector_parts.dart): containers square and tiled edge to edge,
 // what you touch or read round, colour flat and opaque, one lime accent, each kind of thing wearing its own hue.
-import 'package:lab_book/workspace/desk_ease_cards.dart' show easeShape;
+import 'package:lab_book/workspace/desk_ease_cards.dart' show easeCurve;
 import 'dart:developer' show Timeline, TimelineTask;
 import 'dart:io' show Platform;
 import 'dart:math' as math;

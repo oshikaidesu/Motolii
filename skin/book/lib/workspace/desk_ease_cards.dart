@@ -85,12 +85,16 @@ Ease easeCard(String word, Motolii? m) {
   return Ease(e.kind, e.p1, e.p2, e.name, _worked[word] ??= [for (var i = 0; i <= _steps; i++) m.wayExact(word, i / _steps)]);
 }
 
-/// A way's curve at so many steps, for a bar: one laid or turned is worked out here, not asked of the inside, whose answer
-/// waits on its hand, for each step.
-List<double> easeShape(String way, Motolii m, int steps) {
-  if (!easeIsLaid(way) && !easeIsTurned(way)) return [for (var i = 0; i <= steps; i++) m.wayAt(way, i / steps)];
-  final cards = [for (final c in easeCards(way)) easeCard(c, m)];
-  return [for (var i = 0; i <= steps; i++) _went(cards, i / steps)];
+final _curves = <String, List<double>>{};
+
+/// How a way goes, at fine even steps of its stretch, for a timeline to draw at any size. Worked out once for each way as it
+/// is said, which says all of it: seventeen points could not hold eight waves (the maker, 10/31: "曲線じゃないのかな？").
+List<double> easeCurve(String way, Motolii m) {
+  if (_curves.length > 512) _curves.clear();
+  return _curves[way] ??= () {
+    final e = easeCard(way, m);
+    return List<double>.unmodifiable([for (var i = 0; i <= _steps; i++) e.at(i / _steps)]);
+  }();
 }
 
 /// The cards laid as one way; a card left alone: itself.

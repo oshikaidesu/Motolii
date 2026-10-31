@@ -160,7 +160,9 @@ void main() {
     await t.pumpAndSettle();
     final tracks = find.byWidgetPredicate((w) => w is CustomPaint && w.painter is WtTracksPainter);
     final row = (t.widget<CustomPaint>(tracks).painter! as WtTracksPainter).rows.firstWhere((r) => r.lane != null && r.name == 'x');
-    expect(row.laneWays!.first[4], greaterThan(.3), reason: 'Out rises quickly: a quarter along it is well past a quarter (${row.laneWays!.first})');
+    expect(row.laneWays!.first, hasLength(greaterThan(100)), reason: 'fine enough for eight waves: seventeen points were not');
+    expect(j.ws.layers.firstWhere((l) => l.id == '${j.rect}').stretches.first.shape, hasLength(greaterThan(100)), reason: 'on the bar too');
+    expect(row.laneWays!.first[48], greaterThan(.3), reason: 'Out rises quickly: a quarter along it is well past a quarter (${row.laneWays!.first})');
     Future<void> until(bool Function() done) async {
       for (var i = 0; i < 100 && !done(); i++) {
         await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
