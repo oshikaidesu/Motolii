@@ -501,5 +501,6 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] 効果を付けると物が世界から抜ける（10/31 測定）：何もしない効果で、奥の板が立体の手前へ出る・立体を貫かなくなる・霧とピンぼけから外れる。元は `thing_fx_view` の `createScene()`：効果を付けた物は別のシーンへ移り、環境光だけを持っていく。霧は舞台の view にしか入らず、板は奥行きを持たずに積み順で画面に貼られる（`effected.mat`）。案：シーンを 1 つに戻す。平らな物は `thing_fx_face` の絵を `flat.mat` の板に載せて世界に立てる。立体は世界のカメラと同じ目で、枠だけ物のものにして撮り、色と奥行きを持った絵を奥行きで重ねる（Blender の Depth Combine、4.4 では Z Combine。Filament で出来るかは未試行）
 - [ ] 効果の物差しが物に付いていない（10/31 測定）：同じ物に同じ模様で、物の幅に入る本数が 中央 14.0 → 端へ動かす 24.4、45° 回す 11.1、1.5 倍 16.6、カメラを引く 10.8。中心も最大 185 px 外れる。物差しが「見えている箱＋余白 128＋舞台で切る」のため。案：物差しは物の箱で固定し、絵の広さと分ける（AbsentMotion の `effects.cpp` は `area` と `bounds` を分けている）
 - [ ] 窓のプレビューと書き出しで効果の余白が変わるはず（`doc_moment_fx.h` の `m`、計算だけで未測）
+- [ ] 世界ビューとカメラビュー（10/31 ユーザー：「どっちも見ておきたい」）：目を 2 つにする。作業の目は書類に入らず、書き出しはカメラの目だけ（After Effects の working 3D views と Active Camera、AbsentMotion の `cameraMode` と `SetCameraView(true)`）。物の効果はどちらにも出て、掛かり方は変わらない（Adobe：「All effects are 2D」、AbsentMotion の `effects.cpp` は `area` を変えない）。ピント・霧・ブレはカメラの目だけ（`camera.cpp` の `AddCameraEffects`）。2D はカメラビューだけ（Adobe の working 3D views）。カメラを置くまでは隠れた既定のカメラで、分けない（Default Camera、`preview.cpp` の `world`）。部品は `kit_things.h` の `god_view`。2D の張り付き先は今 `s.camera` なので `s.film` に替える。効果の修正の後に行う
 
-合計：399 箱。
+合計：400 箱。
