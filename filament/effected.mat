@@ -27,6 +27,7 @@ material {
         worldAt
     ],
     vertexDomain : device,
+    vertexDomainDeviceJittered : true,   // (Filament pads its picture to a multiple of 16 on the right and top and a camera's projection is told so; a device sheet is only with this: Renderer.cpp, surface_main.vs)
     depthWrite : false,
     depthCulling : false,
     blending : ${BLENDING},   // (kit_wgpu.sh builds it once for each way a sheet lies on what is behind, as flat.mat: transparent, add, multiply, screen)
@@ -40,6 +41,7 @@ vertex {
         material.imageUV.st = getPosition().st * 0.5 + 0.5;
         material.clipSpaceTransform = materialParams.place;   // (where on the stage its picture lies: the box the thing is seen in, Filament's own way of moving a device-domain sheet)
         highp vec4 clip = materialParams.place * getPosition();   // (the point of the world it shows, as Filament's own computeWorldPosition finds one for a device-domain sheet, surface_getters.vs: there before the place, here after it;
+        clip.xy = clip.xy * frameUniforms.clipTransform.xy + clip.w * frameUniforms.clipTransform.zw;   // (padded as the sheet is: the world's own matrices are)
         clip.z = clip.z * -0.5 + 0.5;                             //  in the world as the user has it, as getUserWorldPosition says it, surface_getters.fs)
         material.worldAt = getUserWorldFromWorldMatrix() * (getWorldFromClipMatrix() * clip);
     }
