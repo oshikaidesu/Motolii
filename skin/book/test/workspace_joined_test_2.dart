@@ -238,6 +238,24 @@ void _tests2() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('the box of the Anchor and its name show a point chosen at once, a number being all that moved', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final text = m.add('text', ws.bodyFace);
+    ws
+      ..reread()
+      ..select('$text');
+    await t.pumpAndSettle();
+    await seen(t, find.byType(AnchorCube));
+    final box = t.getRect(find.byType(AnchorCube));
+    await t.tapAt(box.topLeft + AnchorGeometry(box.size).at(0, 0, 0));
+    await settled(t, ws);
+    Finder said(String word) => find.byWidgetPredicate((w) => w is Semantics && w.properties.label == 'Anchor: $word');
+    expect(said('Top left · Middle'), findsOneWidget, reason: 'the box, the hand still on it');
+    expect(said('Top left'), findsOneWidget, reason: 'the icon on the row');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, tags: 'main', skip: !_built);
+
   testWidgets('Parent: a thing goes with another without moving when it is given; moves with it after; no ring of parents', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect'), cube = m.add('solid', 'cube');

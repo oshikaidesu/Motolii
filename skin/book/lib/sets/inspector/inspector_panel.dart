@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/widgets.dart';
 import '../../tokens.dart';
 import 'inspector_direct_transform.dart';
@@ -123,7 +124,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           color: Grey.g07,
           // (only the cards in sight are built: a stage with seventy effects on it builds as one with seven; a text just
           //  placed waits for its card, out of sight under Transform: built for it, the box then scrolls itself to the caret)
-          child: ListView(controller: _scroll, padding: EdgeInsets.all(Pop.gap), cacheExtent: textToType ? 4000 : null, children: body),
+          child: ListView(controller: _scroll, padding: EdgeInsets.all(Pop.gap), scrollCacheExtent: textToType ? const ScrollCacheExtent.pixels(4000) : null, children: body),
         ),
       ),
     );

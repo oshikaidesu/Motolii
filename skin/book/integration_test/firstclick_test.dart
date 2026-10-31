@@ -13,7 +13,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:lab_book/motolii.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, ValuesCard, CopiesDrawing, LdTile, copiesRowOf, Ctx, Hov, LightDrawing, NumField, OnOff, PanelLink, Space, TextGroup, Chooser, GlyphPlate;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, ValuesCard, CopiesDrawing, copiesRowOf, Ctx, Hov, LightDrawing, NumField, OnOff, PanelLink, Space, TextGroup, Chooser, GlyphPlate;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart' show PropRow;
 import 'package:lab_book/workspace/dock_parts.dart' show DockHover, DockSearch;
 import 'package:lab_book/workspace/timeline.dart';
@@ -64,7 +64,7 @@ void main() {
       ('Tilt the selected card, as you would tilt a picture on a wall.', rect, null, num('v_rotate'), null),
       ('Make the selected card turn and grow around its bottom-left corner instead of its middle.', rect, null, find.byType(AnchorCube),
           (box) => Rect.fromCenter(center: box.topLeft + AnchorGeometry(box.size).at(0, 100, 0), width: 20, height: 20)),
-      ('Make the selected card go along with the box whenever the box moves.', rect, null, find.ancestor(of: chooser('v_parent'), matching: find.byType(LdTile)).first, null),
+      ('Make the selected card go along with the box whenever the box moves.', rect, null, chooser('v_parent'), null),
       ('Make the selected card lighten what lies under it, like a projector\'s light, instead of covering it.', rect, null, chooser('v_blend'), null),
       ('Let the selected card be seen only through the thing just beneath it.', rect, null, find.descendant(of: row('v_clip'), matching: find.byType(OnOff)), null),
       ('Let the selected card sit deeper in the scene, while it stays a flat card.', rect, null, find.byWidgetPredicate((w) => w is GlyphPlate && w.label == '2.5D'), null),

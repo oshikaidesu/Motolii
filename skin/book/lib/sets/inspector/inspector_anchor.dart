@@ -8,6 +8,9 @@ import 'inspector_parts.dart';
 
 const _depthNames = {-50: 'Front', 0: 'Middle', 50: 'Back'};
 
+/// A number alone tells only who watches it (Ctx.tick): the box, its name and the icon on the row watch the anchor's three.
+Listenable anchorMoved(Doc doc) => Listenable.merge([for (final id in const ['v_anchor_x', 'v_anchor_y', 'v_anchor_z']) doc.watch(id)]);
+
 String anchorName(double? x, double? y, double? z) {
   if (x == null || y == null || z == null) return 'Mixed';
   final grid = x % 50 == 0 && y % 50 == 0 && z % 50 == 0 && x >= 0 && x <= 100 && y >= 0 && y <= 100 && z.abs() <= 50; // (an anchor outside the box is Custom)
@@ -21,34 +24,43 @@ class AnchorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final x = Ctx.of(context), doc = x.doc;
-    final ax = doc.get('v_anchor_x'), ay = doc.get('v_anchor_y'), az = doc.get('v_anchor_z');
-    final open = doc.b['anchor.open'] ?? true;
-    final centre = ax == 50 && ay == 50 && az == 0;
-    return Sect(
-      title: 'Anchor',
-      tone: TransformZone.pivot.color,
-      mark: CardMark.anchor,
-      keyIds: const ['v_anchor'],
-      open: open,
-      hint: anchorName(ax, ay, az),
-      onToggle: () => doc.flag('anchor.open', !open),
-      trailing: centre || x.cfg.locked
-          ? null
-          : Hov(
-              onTap: () {
-                doc.beginGesture();
-                doc.setMany({'v_anchor_x': 50, 'v_anchor_y': 50, 'v_anchor_z': 0});
-                doc.endGesture();
-              },
-              builder: (_, h) => Container(
-                height: Pop.titleH,
-                padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(color: h ? Grey.g26 : Pop.well, borderRadius: BorderRadius.all(Shape.r(8))),
-                child: Text('Centre', style: T.label(h ? Grey.g95 : Grey.g76)),
-              ),
-            ),
-      children: const [AnchorCube()],
+    return ListenableBuilder(
+      listenable: anchorMoved(doc),
+      builder: (context, _) {
+        final ax = doc.get('v_anchor_x'), ay = doc.get('v_anchor_y'), az = doc.get('v_anchor_z');
+        final open = doc.b['anchor.open'] ?? true;
+        final centre = ax == 50 && ay == 50 && az == 0;
+        return Sect(
+          title: 'Anchor',
+          tone: TransformZone.pivot.color,
+          mark: CardMark.anchor,
+          keyIds: const ['v_anchor'],
+          open: open,
+          hint: anchorName(ax, ay, az),
+          onToggle: () => doc.flag('anchor.open', !open),
+          trailing: centre || x.cfg.locked
+              ? null
+              : Hov(
+                  onTap: () {
+                    doc.beginGesture();
+                    doc.setMany({'v_anchor_x': 50, 'v_anchor_y': 50, 'v_anchor_z': 0});
+                    doc.endGesture();
+                  },
+                  builder: (_, h) => Container(
+                    height: Pop.titleH,
+                    padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(color: h ? Grey.g26 : Pop.well, borderRadius: BorderRadius.all(Shape.r(8))),
+                    child: Text('Centre', style: T.label(h ? Grey.g95 : Grey.g76)),
+                  ),
+                ),
+          children: [
+            const AnchorCube(),
+            SizedBox(height: Pop.titleGap),
+            const AxisColumns(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [AxisHeader(), AnchorRow()])),
+          ],
+        );
+      },
     );
   }
 }
@@ -114,74 +126,79 @@ class _AnchorCubeState extends State<AnchorCube> {
   @override
   Widget build(BuildContext context) {
     final x = Ctx.of(context), doc = x.doc;
-    final ax = doc.get('v_anchor_x'), ay = doc.get('v_anchor_y'), az = doc.get('v_anchor_z');
-    final at = ax == null || ay == null || az == null ? null : (ax, ay, az);
-    final on = !x.cfg.locked && at != null;
-    final hot = doc.directHover == 'v_anchor';
-    return Semantics(
-      label: 'Anchor: ${anchorName(ax, ay, az)}',
-      child: LayoutBuilder(
-        builder: (context, box) {
-          final size = Size(box.maxWidth, AnchorCube.height);
-          final g = AnchorGeometry(size, yaw: _yaw, pitch: _pitch);
-          return MouseRegion(
-            cursor: _turning ? SystemMouseCursors.grabbing : (on && _near != null ? SystemMouseCursors.click : SystemMouseCursors.grab),
-            onHover: (e) {
-              final n = on ? g.pick(e.localPosition) : null;
-              if (n != _near) setState(() => _near = n);
-              if (on && !hot) doc.setDirectHover('v_anchor');
+    return ListenableBuilder(
+      listenable: anchorMoved(doc),
+      builder: (context, _) {
+        final ax = doc.get('v_anchor_x'), ay = doc.get('v_anchor_y'), az = doc.get('v_anchor_z');
+        final at = ax == null || ay == null || az == null ? null : (ax, ay, az);
+        final on = !x.cfg.locked && at != null;
+        final hot = doc.directHover == 'v_anchor';
+        return Semantics(
+          label: 'Anchor: ${anchorName(ax, ay, az)}',
+          child: LayoutBuilder(
+            builder: (context, box) {
+              final size = Size(box.maxWidth, AnchorCube.height);
+              final g = AnchorGeometry(size, yaw: _yaw, pitch: _pitch);
+              return MouseRegion(
+                cursor: _turning ? SystemMouseCursors.grabbing : (on && _near != null ? SystemMouseCursors.click : SystemMouseCursors.grab),
+                onHover: (e) {
+                  final n = on ? g.pick(e.localPosition) : null;
+                  if (n != _near) setState(() => _near = n);
+                  if (on && !hot) doc.setDirectHover('v_anchor');
+                },
+                onExit: (_) {
+                  setState(() => _near = null);
+                  if (hot) doc.setDirectHover(null);
+                },
+                // contract: a click on a point places the anchor; a drag anywhere turns the box to look; a double-click squares the view again. Turning never edits.
+                child: Listener(
+                  onPointerDown: (e) {
+                    if (e.buttons != kPrimaryButton) return;
+                    _down = e.localPosition;
+                    _turning = false;
+                  },
+                  onPointerMove: (e) {
+                    final d = _down;
+                    if (d == null) return;
+                    if (!_turning && (e.localPosition - d).distance < 4) return;
+                    setState(() {
+                      _turning = true;
+                      _near = null;
+                      _yaw += e.delta.dx * .012;
+                      _pitch = (_pitch + e.delta.dy * .012).clamp(-1.45, 1.45);
+                    });
+                  },
+                  onPointerUp: (e) {
+                    final d = _down;
+                    _down = null;
+                    if (_turning) {
+                      setState(() => _turning = false);
+                      return;
+                    }
+                    if (d == null || !on) return;
+                    final q = g.pick(e.localPosition);
+                    if (q == null) return;
+                    doc.beginGesture();
+                    doc.setMany({'v_anchor_x': q.$1, 'v_anchor_y': q.$2, 'v_anchor_z': q.$3});
+                    doc.endGesture();
+                  },
+                  onPointerCancel: (_) {
+                    _down = null;
+                    if (_turning) setState(() => _turning = false);
+                  },
+                  child: GestureDetector(
+                    onDoubleTap: () => setState(() {
+                      _yaw = AnchorGeometry.defaultYaw;
+                      _pitch = AnchorGeometry.defaultPitch;
+                    }),
+                    child: CustomPaint(size: size, painter: _CubePaint(g, at, _near, on, hot)),
+                  ),
+                ),
+              );
             },
-            onExit: (_) {
-              setState(() => _near = null);
-              if (hot) doc.setDirectHover(null);
-            },
-            // contract: a click on a point places the anchor; a drag anywhere turns the box to look; a double-click squares the view again. Turning never edits.
-            child: Listener(
-              onPointerDown: (e) {
-                if (e.buttons != kPrimaryButton) return;
-                _down = e.localPosition;
-                _turning = false;
-              },
-              onPointerMove: (e) {
-                final d = _down;
-                if (d == null) return;
-                if (!_turning && (e.localPosition - d).distance < 4) return;
-                setState(() {
-                  _turning = true;
-                  _near = null;
-                  _yaw += e.delta.dx * .012;
-                  _pitch = (_pitch + e.delta.dy * .012).clamp(-1.45, 1.45);
-                });
-              },
-              onPointerUp: (e) {
-                final d = _down;
-                _down = null;
-                if (_turning) {
-                  setState(() => _turning = false);
-                  return;
-                }
-                if (d == null || !on) return;
-                final q = g.pick(e.localPosition);
-                if (q == null) return;
-                doc.beginGesture();
-                doc.setMany({'v_anchor_x': q.$1, 'v_anchor_y': q.$2, 'v_anchor_z': q.$3});
-                doc.endGesture();
-              },
-              onPointerCancel: (_) {
-                _down = null;
-                if (_turning) setState(() => _turning = false);
-              },
-              child: GestureDetector(
-                onDoubleTap: () => setState(() {
-                  _yaw = AnchorGeometry.defaultYaw;
-                  _pitch = AnchorGeometry.defaultPitch;
-                }),
-                child: CustomPaint(size: size, painter: _CubePaint(g, at, _near, on, hot)),
-              ),
-            ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }

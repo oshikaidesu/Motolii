@@ -1,7 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/forms/forms.dart';
-import 'package:lab_book/sets/inspector/inspector_direct_transform_value_glyph.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import '../../tokens.dart';
@@ -231,11 +230,12 @@ class AnchorRow extends StatelessWidget {
   Widget build(BuildContext context) => PropRow(
     id: 'v_anchor',
     label: 'Anchor',
-    ids: ['v_anchor_x', 'v_anchor_y'],
+    ids: ['v_anchor_x', 'v_anchor_y', 'v_anchor_z'],
     lead: AnchorPad(),
     cells: [
       NumField(id: 'v_anchor_x', label: 'X', axis: axX, unit: '%', decimals: 0),
       NumField(id: 'v_anchor_y', label: 'Y', axis: axY, unit: '%', decimals: 0),
+      NumField(id: 'v_anchor_z', label: 'Z', axis: axZ, unit: '%', decimals: 0),
     ],
   );
 }
@@ -276,51 +276,57 @@ class _AnchorPadState extends State<AnchorPad> {
 
   @override
   Widget build(BuildContext context) {
-    final x = Ctx.of(context), doc = x.doc, ax = doc.get('v_anchor_x'), ay = doc.get('v_anchor_y');
-    final on = !x.cfg.locked && !RowOff.offOf(context) && ax != null && ay != null;
-    final at = ax == null || ay == null ? null : Offset(ax, ay);
-    final sel = at == null ? null : [for (var i = 0; i < 9; i++) i].where((i) => _snap(i) == at).firstOrNull;
-    final hot = doc.directHover == 'v_anchor';
-    return Semantics(
-      label: 'Anchor: ${at == null ? 'Mixed' : (sel != null ? anchorNames[sel] : 'Custom')}',
-      child: MouseRegion(
-        cursor: on ? SystemMouseCursors.precise : SystemMouseCursors.basic,
-        onHover: (e) {
-          if (!on) return;
-          final n = _nearest(_pct(e.localPosition));
-          if (n != _near) setState(() => _near = n);
-          if (!hot) doc.setDirectHover('v_anchor');
-        },
-        onExit: (_) {
-          setState(() => _near = null);
-          if (hot && !_down) doc.setDirectHover(null);
-        },
-        child: Listener(
-          onPointerDown: (e) {
-            if (!on || e.buttons != kPrimaryButton) return;
-            _doc = doc..beginGesture();
-            _down = true;
-            _moved = false;
-          },
-          onPointerMove: (e) {
-            if (!_down) return;
-            _moved = true;
-            _place(e.localPosition, snap: false);
-          },
-          onPointerUp: (e) {
-            if (!_down) return;
-            if (!_moved) _place(e.localPosition, snap: true);
-            _down = false;
-            _doc?.endGesture();
-          },
-          onPointerCancel: (_) {
-            if (!_down) return;
-            _down = false;
-            _doc?.cancelGesture();
-          },
-          child: CustomPaint(size: widget.size, painter: _AnchorPaint(at, _near, on, hot)),
-        ),
-      ),
+    final x = Ctx.of(context), doc = x.doc;
+    return ListenableBuilder(
+      listenable: anchorMoved(doc),
+      builder: (context, _) {
+        final ax = doc.get('v_anchor_x'), ay = doc.get('v_anchor_y');
+        final on = !x.cfg.locked && !RowOff.offOf(context) && ax != null && ay != null;
+        final at = ax == null || ay == null ? null : Offset(ax, ay);
+        final sel = at == null ? null : [for (var i = 0; i < 9; i++) i].where((i) => _snap(i) == at).firstOrNull;
+        final hot = doc.directHover == 'v_anchor';
+        return Semantics(
+          label: 'Anchor: ${at == null ? 'Mixed' : (sel != null ? anchorNames[sel] : 'Custom')}',
+          child: MouseRegion(
+            cursor: on ? SystemMouseCursors.precise : SystemMouseCursors.basic,
+            onHover: (e) {
+              if (!on) return;
+              final n = _nearest(_pct(e.localPosition));
+              if (n != _near) setState(() => _near = n);
+              if (!hot) doc.setDirectHover('v_anchor');
+            },
+            onExit: (_) {
+              setState(() => _near = null);
+              if (hot && !_down) doc.setDirectHover(null);
+            },
+            child: Listener(
+              onPointerDown: (e) {
+                if (!on || e.buttons != kPrimaryButton) return;
+                _doc = doc..beginGesture();
+                _down = true;
+                _moved = false;
+              },
+              onPointerMove: (e) {
+                if (!_down) return;
+                _moved = true;
+                _place(e.localPosition, snap: false);
+              },
+              onPointerUp: (e) {
+                if (!_down) return;
+                if (!_moved) _place(e.localPosition, snap: true);
+                _down = false;
+                _doc?.endGesture();
+              },
+              onPointerCancel: (_) {
+                if (!_down) return;
+                _down = false;
+                _doc?.cancelGesture();
+              },
+              child: CustomPaint(size: widget.size, painter: _AnchorPaint(at, _near, on, hot)),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -417,60 +423,6 @@ class ParentRow extends StatelessWidget {
     keyable: false,
     cells: [Chooser(id: 'v_parent', options: Ctx.of(context).doc.choices['v_parent'] ?? layers, searchable: true)],
   );
-}
-
-/// Opacity, Depth and Parent as blocks in the same flowing grid as an effect's parameters: three across in a normal panel.
-/// The picture in each block's corner is the row mark the Transform rows use.
-class LayerTiles extends StatelessWidget {
-  const LayerTiles({super.key});
-  @override
-  Widget build(BuildContext context) {
-    final doc = Ctx.of(context).doc, on = !Ctx.of(context).cfg.locked;
-    Widget num(String id, String caption, Widget glyph, {required String unit, double? min, double? max, double perPx = 1, String? zeroWord}) => _Revealed(
-      id: id,
-      child: RowInfo(
-        unit: null,
-        keys: doc.keys[id] ?? KeyS.off,
-        child: NumField(id: id, caption: caption, glyph: glyph, unit: unit, min: min, max: max, perPx: perPx, zeroWord: zeroWord, enabled: on),
-      ),
-    );
-    return LdGrid([
-      if (doc.seat('v_opacity')) LdCell(num('v_opacity', 'Opacity', const ValueGlyph(ValueShape.opacity), unit: '%', min: 0, max: 100, perPx: .5)), // (a solid or a light has none)
-      LdCell(
-        _Revealed(
-          id: 'v_parent',
-          child: GestureDetector( // (the whole tile, its chain too, opens the list of things to go with)
-            behavior: HitTestBehavior.translucent,
-            onTap: () => _parent.currentState?.open(),
-            child: LdTile(
-              label: 'Parent',
-              glyph: const ValueGlyph(ValueShape.parent),
-              child: SizedBox(
-                height: Shape.z(22),
-                child: Chooser(key: _parent, id: 'v_parent', options: doc.choices['v_parent'] ?? layers, searchable: true, enabled: on),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ]);
-  }
-}
-
-/// Brings a block on screen when its property shortcut fires (I2), as [PropRow] does for a row.
-final _parent = GlobalKey<ChooserState>();
-
-class _Revealed extends StatefulWidget {
-  const _Revealed({required this.id, required this.child});
-  final String id;
-  final Widget child;
-  @override
-  State<_Revealed> createState() => _RevealedState();
-}
-
-class _RevealedState extends State<_Revealed> {
-  @override
-  Widget build(BuildContext context) => widget.child;
 }
 
 class TransformGroup extends StatelessWidget {

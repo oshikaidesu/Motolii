@@ -563,6 +563,24 @@ void _tests3() {
     await _close(t);
   }, tags: 'main', skip: !_built);
 
+  testWidgets('Transform holds what After Effects\' Layer Transform holds, in its order; the anchor has its box and its numbers together in the card under them', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$rect');
+    await t.pumpAndSettle();
+    Finder word(String w) => find.descendant(of: find.byType(InspectorPanel), matching: find.text(w));
+    final rows = [for (final w in ['Transform', 'Position', 'Scale', 'Rotation', 'Opacity', 'Parent', 'Blend']) t.getTopLeft(word(w).first).dy];
+    expect(rows, [...rows]..sort(), reason: 'top to bottom');
+    expect(word('Layer'), findsNothing);
+    final anchor = find.byType(AnchorCard);
+    expect(find.descendant(of: anchor, matching: find.byType(AnchorCube)), findsOneWidget, reason: 'the box to point into stays in sight');
+    expect(find.descendant(of: anchor, matching: find.byWidgetPredicate((w) => w is NumField && w.id == 'v_anchor_z')), findsOneWidget, reason: 'its numbers beside it');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, tags: 'main', skip: !_built);
+
   testWidgets('a text placed with the Inspector short is typed at once all the same: the Text card, low in the stack, is made for it and comes into sight', (t) async {
     final ws = await _pump(t);
     ws.reread();

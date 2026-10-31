@@ -57,13 +57,13 @@ class DirectTransform extends StatelessWidget {
             title: 'Transform',
             first: first,
             tone: Pop.toneTransform,
-            keyIds: const ['v_position', 'v_scale', 'v_rotate'],
+            keyIds: const ['v_position', 'v_scale', 'v_rotate', 'v_opacity'],
             mark: CardMark.transform,
             trailing: CardWords('Transform', [for (final n in const ['anchor_x', 'anchor_y', 'anchor_z', 'x', 'y', 'z', 'scale_x', 'scale_y', 'scale_z', 'rotate_x', 'rotate_y', 'rotate', 'opacity']) if (doc.seat('v_$n')) n], more: [
               if (doc.onArrange case final to?)   // (Alight Motion's ⋯ on Move & Transform; they lay in the menu bar alone: golf_noise.md 【入口】)
                 for (final (how, word) in const [('flipX', 'Flip Horizontal'), ('flipY', 'Flip Vertical'), ('fit', 'Fit to Picture'), ('fill', 'Fill Picture'), ('stretch', 'Stretch to Picture')]) (how, word, () => to(how)),
             ]),
-            brief: ['${brief(doc.get('v_x'))}, ${brief(doc.get('v_y'))}', '${brief(doc.get('v_scale_x'))}%', '${brief(doc.get('v_rotate'))}°'],
+            brief: ['${brief(doc.get('v_x'))}, ${brief(doc.get('v_y'))}', '${brief(doc.get('v_scale_x'))}%', '${brief(doc.get('v_rotate'))}°', if (doc.seat('v_opacity')) '${brief(doc.get('v_opacity'), 0)}%', if (doc.s2['v_parent'] case final p? when p != 'None') p],
             children: [
               SpaceRow(),
               TransformCanvas(),
@@ -72,20 +72,12 @@ class DirectTransform extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
-                  children: [AxisHeader(), PosRow(), ScaleRow(), RotRow()],
+                  children: [AxisHeader(), PosRow(), ScaleRow(), RotRow(), if (doc.seat('v_opacity')) const OpacityRow(), const ParentRow()],   // (After Effects' Transform, in its order, its Anchor Point in the card below; Parent with them, as in the table of doc_values.h)
                 ),
               ),
             ],
           ),
-          const AnchorCard(),
-          Sect(
-            title: 'Layer',
-            tone: Pop.toneLayer,
-            keyIds: const ['v_opacity'],
-            mark: CardMark.layer,
-            brief: [if (doc.seat('v_opacity')) '${brief(doc.get('v_opacity'), 0)}%', if (doc.s2['v_parent'] case final p? when p != 'None') p],
-            children: const [LayerTiles()],
-          ),
+          const AnchorCard(),   // (the box in sight, its numbers with it: After Effects hides nine points behind an icon, a step back from this)
         ],
       ),
     );
