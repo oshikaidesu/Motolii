@@ -493,6 +493,48 @@ void main() {
     await closeWorkspace(t);
   }, skip: !insideBuilt);
 
+  testWidgets('a way\'s numbers: its name pressed opens them, a number written goes on the stretch, waves said by how many, a card of a stack and a turned one too', (t) async {
+    final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    expect(m.key(cube, 'x', 0, 0) && m.key(cube, 'x', 1, 1), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..pickKey((layer: '$cube', frame: 0))
+      ..front('Ease');
+    await t.pumpAndSettle();
+    Future<void> write(String number, String to) async {
+      final field = _in(find.byKey(ValueKey('ease-number-$number')));
+      await t.tap(field);
+      await t.pump();
+      await t.enterText(find.descendant(of: field, matching: find.byType(EditableText)), to);
+      await t.testTextInput.receiveAction(TextInputAction.done);
+      await t.pump();
+      await settled(t, ws);
+      await t.pumpAndSettle();
+    }
+
+    expect(_in(find.byKey(const ValueKey('ease-number-X1'))), findsNothing, reason: 'nothing shown unasked');
+    await t.tap(_in(find.byKey(const ValueKey('ease-numbers'))));
+    await t.pumpAndSettle();
+    await write('X1', '0.3');
+    await write('Y2', '1.5');
+    expect(m.wayOf(cube, 'x', 0), 'Bezier 0.3 0 1 1.5', reason: m.trouble);
+    await t.tap(_in(find.byKey(const ValueKey('ease.Cyclic'))));
+    await settled(t, ws);
+    await t.pumpAndSettle();
+    await write('Waves', '8');
+    expect(m.wayOf(cube, 'x', 0), startsWith('Cyclic 0.125 '), reason: 'how many: ${m.trouble}');
+    await write('Waves', '900');
+    expect(m.wayOf(cube, 'x', 0), startsWith('Cyclic 0.02 '), reason: 'no further than a hand can take it');
+    await t.tap(_in(find.byKey(const ValueKey('ease-reverse'))));
+    await settled(t, ws);
+    await t.pumpAndSettle();
+    await write('Waves', '4');
+    expect(m.wayOf(cube, 'x', 0), startsWith('Reverse:Cyclic~0.25~'), reason: 'turned, it stays so: ${m.trouble}');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
   testWidgets('a wave turned end for end, and back (AbsentMotion\'s reverse)', (t) async {
     final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
     final cube = m.add('solid', 'cube');

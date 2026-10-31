@@ -413,3 +413,6 @@ class _OkMarkPainter extends CustomPainter {
   @override
   bool shouldRepaint(_OkMarkPainter o) => o.c != c;
 }
+
+/// What was typed, a Japanese input method's wide letters and digits as plain ones (１２８：３０ is 128:30).
+String halfWidth(String said) => said.replaceAllMapped(RegExp('[！-～]'), (c) => String.fromCharCode(c[0]!.codeUnitAt(0) - 0xFEE0));

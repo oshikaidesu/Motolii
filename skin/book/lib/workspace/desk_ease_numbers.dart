@@ -1,0 +1,90 @@
+// A way's numbers, said exactly: under the graph its name, pressed, opens them over its foot, and pressed again they go, so
+// nothing is shown unasked (the maker, 10/31: "数値の指定"; where they stand is this window's own, the numbers as
+// Alight Motion has them only as handles). Their names are those of AbsentMotion's Keyframes.kt; waves and steps are said by
+// how many, not by how long each is, which is how they are thought of.
+import 'package:flutter/widgets.dart';
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show Hov;
+import 'package:lab_book/tokens.dart';
+import 'package:lab_book/workspace/desk_ease.dart';
+import 'package:lab_book/workspace/desk_ease_cards.dart';
+import 'package:lab_book/workspace/desk_kit.dart';
+import 'package:lab_book/workspace/ws.dart';
+
+typedef _Number = ({String name, int at, double lo, double hi, bool many});
+_Number _n(String name, int at, double lo, double hi, {bool many = false}) => (name: name, at: at, lo: lo, hi: hi, many: many);
+
+// (each kind's numbers as filament/interp.h has them, how far a hand takes each, and what they are when the way says none)
+final _kinds = <String, (List<double>, List<_Number>)>{
+  'Bezier': (const [0, 0, 1, 1], [_n('X1', 0, 0, 1), _n('Y1', 1, -2, 3), _n('X2', 2, 0, 1), _n('Y2', 3, -2, 3)]),
+  'Bounce': (const [.3, .8], [_n('Length', 0, .02, 1), _n('Bounce', 1, 0, .95)]),
+  'Elastic': (const [.25, 1, .5, 1], [_n('Half', 0, .02, .98), _n('Decay', 2, 0, 1), _n('Strength', 3, 0, 1)]),
+  'Cyclic': (const [2 / 7, 0, .5, 0, 0], [_n('Waves', 0, 1, 50, many: true), _n('Sharp', 1, 0, 1), _n('Crest', 2, .02, .98), _n('Floor', 3, 0, 1)]),
+  'Random': (const [.5, .5, .5, .5, .5, 0], [_n('Rate', 0, 0, 1), _n('Size', 1, 0, 1), _n('Seed', 2, 0, 1), _n('Fade', 3, 0, 1), _n('Warp', 4, 0, 1), _n('Tilt', 5, 0, 1)]),
+  'Steps': (const [.25, 0], [_n('Steps', 0, 1, 50, many: true), _n('Smooth', 1, 0, 1)]),
+  'ElasticSteps': (const [.2, .5], [_n('Steps', 0, 1, 20, many: true), _n('Over', 1, 0, 1)]),
+};
+
+class EaseNumbers extends StatefulWidget {
+  const EaseNumbers({super.key, required this.card, required this.onChanged});
+  final Ease card;
+  final ValueChanged<Ease> onChanged;
+  @override
+  State<EaseNumbers> createState() => _EaseNumbersState();
+}
+
+class _EaseNumbersState extends State<EaseNumbers> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final word = said(widget.card), turned = easeIsTurned(word), plain = turned ? easeTurn(word) : word;
+    final w = plain.split(' '), bezier = w.first == 'Linear' || w.first == 'Bezier', kind = _kinds[bezier ? 'Bezier' : w.first];
+    if (kind == null) return const SizedBox.shrink();
+    final said_ = [for (final x in w.skip(1)) double.tryParse(x) ?? 0];
+    final now = w.first == 'Linear' ? kind.$1 : [for (final (i, u) in kind.$1.indexed) i < said_.length ? said_[i] : u];
+    void change(int at, double to) {
+      final next = [...now]..[at] = to, made = bezier ? 'Bezier ${next.join(' ')}' : '${w.first} ${next.join(' ')}';
+      widget.onChanged(heard(turned ? easeTurn(made) : made));
+    }
+
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_open)
+            Container(
+              color: WsT.card,
+              padding: EdgeInsets.all(Shape.s(3)),
+              child: LayoutBuilder(
+                builder: (_, box) {
+                  final each = (box.maxWidth - Shape.s(3)) / (box.maxWidth / Shape.z(82)).floor().clamp(1, kind.$2.length) - Shape.s(3);
+                  return Wrap(
+                    spacing: Shape.s(3),
+                    runSpacing: Shape.s(3),
+                    children: [
+                      for (final n in kind.$2)
+                        SizedBox(
+                          width: each,
+                          child: DeskScrub(
+                            key: ValueKey('ease-number-${n.name}'),
+                            label: n.name,
+                            value: n.many ? 1 / now[n.at] : now[n.at],
+                            min: n.lo,
+                            max: n.hi,
+                            perPx: n.many ? .05 : (n.hi - n.lo) / 200,
+                            format: (v) => n.many ? v.toStringAsFixed(v == v.roundToDouble() ? 0 : 2) : v.toStringAsFixed(2),
+                            onChanged: (v) => change(n.at, n.many ? 1 / v : v),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          Hov(key: const ValueKey('ease-numbers'), onTap: () => setState(() => _open = !_open), builder: (_, _) => SizedBox(width: Shape.z(96), height: Shape.z(16))),
+        ],
+      ),
+    );
+  }
+}

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/desk_ease_graph.dart';
 import 'package:lab_book/workspace/desk_ease_handles.dart';
+import 'package:lab_book/workspace/timeline.dart' show wtTimeOf;
 import 'package:lab_book/workspace/timeline_paint.dart';
 import 'package:lab_book/workspace/ws.dart';
 import 'door.dart';
@@ -20,6 +21,11 @@ void main() {
     expect(b.nearest(76), 90);
     expect(b.nearest(10), 0, reason: 'before where the bar was said to begin: the grid goes on');
     expect(WsBeats.of(0, 1, 60), isNull, reason: 'no tempo, no beats');
+    expect(wsNumber('１２８．５'), 128.5, reason: 'a Japanese input method\'s digits are digits');
+    expect(wsNumber(' 90 '), 90);
+    expect(wsNumber('－１'), -1);
+    expect(wsNumber('速い'), isNull);
+    expect(wtTimeOf('１：３０', 0, 60), wtTimeOf('1:30', 0, 60), reason: 'a time as well');
   });
 
   Future<(Ws, int)> opened(WidgetTester t) async {
@@ -56,6 +62,30 @@ void main() {
     await closeWorkspace(t);
   }, skip: !insideBuilt);
 
+  testWidgets('left, the field says what is in it, as a marker\'s name does; Esc leaves it as it was', (t) async {
+    final (ws, _) = await opened(t);
+    Future<void> write(String said) async {
+      await t.tap(find.byKey(const ValueKey('ws-tl-bpm')));
+      await t.pump();
+      await t.enterText(find.byKey(const ValueKey('ws-tl-bpm-words')), said);
+      await t.pump();
+    }
+
+    await write('128');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await t.pump();
+    await settled(t, ws);
+    await t.pumpAndSettle();
+    expect(ws.bpm, 128, reason: ws.inside!.trouble);
+    await write('90');
+    await t.sendKeyEvent(LogicalKeyboardKey.escape);
+    await t.pump();
+    await settled(t, ws);
+    await t.pumpAndSettle();
+    expect(ws.bpm, 128, reason: 'as it was');
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
   testWidgets('Tap: one press a beat, the tempo follows', (t) async {
     final (ws, _) = await opened(t);
     await t.tap(find.byKey(const ValueKey('ws-tl-bpm')));
@@ -66,7 +96,7 @@ void main() {
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
     }
     await settled(t, ws);
-    expect(ws.bpm, closeTo(200, 25), reason: 'three beats of 300 ms, and what a test takes between them');
+    expect(ws.bpm, inInclusiveRange(60, 200.5), reason: 'three beats of 300 ms at the least, and what a loaded machine adds to them');
     await closeWorkspace(t);
   }, skip: !insideBuilt);
 

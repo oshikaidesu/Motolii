@@ -1,5 +1,9 @@
 // The document's beats, what the timeline's grid goes by when it has a tempo (Live's Tempo field and Editing Grid: its
 // manual, 6.10). Four to a bar, Live's first time signature. Alight Motion has no such grid.
+import '../tokens.dart' show halfWidth;
+
+/// A number as it was typed (null: none).
+double? wsNumber(String said) => double.tryParse(halfWidth(said).trim());
 
 class WsBeats {
   const WsBeats(this.first, this.every);

@@ -3,6 +3,7 @@
 import 'package:flutter/widgets.dart';
 import '../parts/skin_parts.dart';
 
+import '../sets/foundations/text_hand.dart';
 import '../sets/inspector/inspector_parts.dart' show Hov, Pop;
 import '../tokens.dart';
 import 'desk_align.dart';
@@ -235,7 +236,35 @@ class DeskScrub extends StatefulWidget {
 }
 
 class _DeskScrubState extends State<DeskScrub> {
-  bool _hot = false, _drag = false;
+  bool _hot = false, _drag = false, _typing = false;
+  final _words = TextEditingController();
+  final _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      if (_focus.hasFocus || !_typing) return;
+      setState(() => _typing = false);
+      if (wsNumber(_words.text) case final v?) widget.onChanged(v.clamp(widget.min, widget.max));
+    });
+  }
+
+  @override
+  void dispose() {
+    _words.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  // (pressed, it is written: as the window's other numbers. Its number alone, all of it picked: what is typed takes its place)
+  void _write() {
+    final now = RegExp(r'-?[\d.]+').stringMatch(widget.format(widget.value)) ?? '';
+    _words.value = TextEditingValue(text: now, selection: TextSelection(baseOffset: 0, extentOffset: now.length));
+    setState(() => _typing = true);
+    _focus.requestFocus();
+  }
+
   @override
   Widget build(BuildContext context) {
     final w = widget, f = ((w.value - w.min) / (w.max - w.min)).clamp(0.0, 1.0);
@@ -247,6 +276,7 @@ class _DeskScrubState extends State<DeskScrub> {
       child: GestureDetector(
         supportedDevices: wsPressing,
         behavior: HitTestBehavior.opaque,
+        onTap: w.enabled && !_typing ? _write : null,
         onHorizontalDragStart: w.enabled ? (_) => setState(() => _drag = true) : null,
         onHorizontalDragUpdate: w.enabled ? (d) => w.onChanged((w.value + d.delta.dx * w.perPx).clamp(w.min, w.max)) : null,
         onHorizontalDragEnd: w.enabled ? (_) => setState(() => _drag = false) : null,
@@ -281,11 +311,26 @@ class _DeskScrubState extends State<DeskScrub> {
                       child: FittedBox( // (a number wider than its field is drawn smaller, never cut)
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerRight,
-                        child: Text(
-                          w.format(w.value),
-                          maxLines: 1,
-                          style: T.value(w.enabled ? (_drag ? Grey.g100 : Grey.g91) : Grey.g56).copyWith(fontSize: T.px(10.5)),
-                        ),
+                        child: _typing
+                            ? SizedBox(
+                                width: Shape.z(44),
+                                child: TextHand(field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
+                                  controller: _words,
+                                  focusNode: _focus,
+                                  style: T.value(Grey.g100).copyWith(fontSize: T.px(10.5)),
+                                  cursorColor: WsT.accent,
+                                  backgroundCursorColor: Grey.g38,
+                                  selectionColor: WsT.accent.withValues(alpha: .3),
+                                  textAlign: TextAlign.right,
+                                  maxLines: 1,
+                                  onSubmitted: (_) => _focus.unfocus(),
+                                )),
+                              )
+                            : Text(
+                                w.format(w.value),
+                                maxLines: 1,
+                                style: T.value(w.enabled ? (_drag ? Grey.g100 : Grey.g91) : Grey.g56).copyWith(fontSize: T.px(10.5)),
+                              ),
                       ),
                     ),
                   ],

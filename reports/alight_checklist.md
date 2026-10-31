@@ -472,6 +472,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] レーンへの形の差し込み（Ableton の Insert Shape）
 - [x] 作った形を残す — 済（10/31）：右端のつまみで出し入れする棚（列が右から入って全体を左へ押す。流れは隠れない）。流れのカードや足元の結果を棚へ運ぶ、または棚の空き枠を押すと残る。重ねた結果も 1 つで残り、押すと 1 枚ずつのカードで戻る。× で消える。50 個で確かめた。`~/.motolii/ease_kept.json`（Live の手引き 23.2.5 Saving Presets、Photoshop の Swatches の空き、macOS の spring-loaded folders、Easey の presetsPage.js。`desk_ease_shelf.dart`）
 - [x] `cubic-bezier(...)`・`linear(...)` を貼ってイーズにする — 済（10/31）：⋯ の Paste Curve がクリップボードの文字から読む。文の途中にあってもよい（CSS Easing Functions 2、`linear()` は anime.js が解く。`desk_ease_cards.dart` の easeFromText）。Copy Curve は CSS の書き方で出す
+- [x] イーズの数を打って決める — 済（10/31）：グラフ下の形の名前を押すと数値が開く。Waves・Steps は「いくつ」で言う（数の名は AbsentMotion の Keyframes.kt、開く場所はこの窓の作り）。こする・押して打つ。`desk_ease_numbers.dart`
 - [x] 区間の波の数を拍で決める — 済（10/31）：文書に BPM（Alight Motion に無い。Live の Tempo と Tap、手引き 9.1.2）。定規と背景が拍になり、キーと帯は拍に吸い付く（⌘ で外す、6.7・6.10）。定規の右クリックに Set 1.1.1 Here。Ease のグラフにも拍の線が出て、取っ手が止まる（Cyclic の周期を 1 拍に、Steps も）。`ws_beats.dart`
 - [x] 区間に重ねる（Blender の F-Curve Modifiers） — 済（10/31）：カードの流れ（`desk_ease_cards.dart`）
 - [ ] 本物の 3D のつづき：文字の輪郭を opentype.js で（4 本は取ったが、まだ入れていない）、Surface の札、ベベル

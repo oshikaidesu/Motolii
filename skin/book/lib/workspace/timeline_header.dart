@@ -101,7 +101,7 @@ class _Header extends StatelessWidget {
 /// (852, 8:52 and 8.52 are 8 seconds 52 frames); begun with + or -, so far from where the playhead is (+30: 30 frames
 /// on). Null: not a time.
 int? wtTimeOf(String said, int now, int fps) {
-  final m = RegExp(r'^\s*([+-]?)([\d:.;]+)\s*$').firstMatch(said);
+  final m = RegExp(r'^\s*([+-]?)([\d:.;]+)\s*$').firstMatch(halfWidth(said));
   if (m == null) return null;
   final parts = m[2]!.split(RegExp(r'[:.;]'));
   final fields = parts.length > 1
@@ -251,15 +251,23 @@ class _TempoState extends State<_Tempo> {
   final _words = TextEditingController();
   final _focus = FocusNode();
   final _taps = <DateTime>[];
-  bool _typing = false, _tapping = false;   // (a hand on Tap takes the keyboard from the field: it stays while the beats go on)
+  bool _typing = false, _kept = false;
+  bool _tapping = false;   // (a hand on Tap takes the keyboard from the field: it stays while the beats go on)
   Timer? _tapped;
 
   @override
   void initState() {
     super.initState();
-    _focus.addListener(() {
-      if (!_focus.hasFocus && _typing && !_tapping) setState(() => _typing = false);
-    });
+    _focus.addListener(_left);
+  }
+
+  // (left, it is said, as a marker's name is; Esc: as it was)
+  void _left() {
+    if (_focus.hasFocus || !_typing || _tapping) return;
+    setState(() => _typing = false);
+    final bpm = wsNumber(_words.text) ?? 0;   // (nothing written: no tempo)
+    if (!_kept && bpm != widget.ws.bpm) _set(bpm);
+    _kept = false;
   }
 
   @override
@@ -319,7 +327,12 @@ class _TempoState extends State<_Tempo> {
         SizedBox(
           width: Shape.z(42),
           child: CallbackShortcuts(
-            bindings: {const SingleActivator(LogicalKeyboardKey.escape): _focus.unfocus},
+            bindings: {
+              const SingleActivator(LogicalKeyboardKey.escape): () {
+                _kept = true;
+                _focus.unfocus();
+              },
+            },
             child: TextHand(key: const ValueKey('ws-tl-bpm-words'), field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
               controller: _words,
               focusNode: _focus,
@@ -328,10 +341,7 @@ class _TempoState extends State<_Tempo> {
               backgroundCursorColor: Grey.g38,
               selectionColor: WsT.accent.withValues(alpha: .3),
               maxLines: 1,
-              onSubmitted: (said) {
-                _set(double.tryParse(said.trim()) ?? 0);   // (nothing written: no tempo)
-                _focus.unfocus();
-              },
+              onSubmitted: (_) => _focus.unfocus(),
             )),
           ),
         ),

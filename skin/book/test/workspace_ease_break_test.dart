@@ -134,6 +134,19 @@ void main() {
     await closeWorkspace(t);
   }, timeout: const Timeout(Duration(minutes: 3)));
 
+  testWidgets('two keys in one frame: a press stays on the one it was told, and is read from it', (tester) async {
+    await open(tester);
+    final m = ws.inside!;
+    expect(m.key(cube, 'x', 1.5, 0) && m.key(cube, 'x', 1.5 + .24 / 60, 0) && m.key(cube, 'x', 2, 1), isTrue, reason: m.trouble);
+    expect(m.way(cube, 'x', 1.5, 'Bounce'), isTrue, reason: m.trouble);
+    expect(m.way(cube, 'x', 1.5 + .24 / 60, 'Elastic'), isTrue, reason: m.trouble);
+    ws.reread();
+    await t.pump();
+    expect(m.wayOf(cube, 'x', 1.5).split(' ').first, 'Bounce');
+    expect(m.wayOf(cube, 'x', 1.5 + .24 / 60).split(' ').first, 'Elastic', reason: 'the nearer of them, not the first in the frame');
+    await closeWorkspace(t);
+  });
+
   testWidgets('a curve pulled straight is still a curve: its handles stay in the corners', (tester) async {
     await open(tester);
     await press('ease.Linear');

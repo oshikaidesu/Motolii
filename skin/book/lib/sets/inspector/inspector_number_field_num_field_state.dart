@@ -354,7 +354,7 @@ class NumFieldState extends State<NumField> {
       return KeyEventResult.handled;
     }
     if (e.logicalKey == LogicalKeyboardKey.arrowUp || e.logicalKey == LogicalKeyboardKey.arrowDown) {   // (After Effects' and Figma's: the number typed so far moved a step)
-      final t = double.tryParse(_ctl.text.trim()) ?? _x.doc.get(widget.id);
+      final t = double.tryParse(halfWidth(_ctl.text).trim()) ?? _x.doc.get(widget.id);
       if (t == null) return KeyEventResult.handled;
       final up = e.logicalKey == LogicalKeyboardKey.arrowUp ? 1 : -1;
       _ctl.text = fmt(_clamp(t + up * widget.step * _x.cfg.mult()), widget.decimals);
@@ -366,7 +366,7 @@ class NumFieldState extends State<NumField> {
 
   // (the number typed, or a sum: After Effects', Figma's and Blender's; one begun with * or / goes on from the value as it is)
   double? _typed() {
-    final said = _ctl.text.trim(), cur = _x.doc.get(widget.id);
+    final said = halfWidth(_ctl.text).trim(), cur = _x.doc.get(widget.id);
     return double.tryParse(said) ?? _x.doc.onSum?.call(said.startsWith(RegExp(r'[*/]')) && cur != null ? '$cur$said' : said);
   }
 

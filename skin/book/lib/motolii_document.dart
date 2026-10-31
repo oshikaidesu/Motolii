@@ -146,7 +146,11 @@ extension MotoliiDocument on Motolii {
   /// The way of the stretch that begins at a value's key, as it is said ('': no key there).
   String wayOf(int thing, String name, double at) {
     final keys = keyMoments(thing, name), ways = (_of(thing)['keyWays'] as Map<String, dynamic>?)?[name] as List<dynamic>?;
-    final i = keys.indexWhere((k) => (k - at).abs() < .5 / rate);
+    var i = -1;   // (the nearest within half a frame: two keys may lie in one frame, a stretched bar leaving them off its grid)
+    var near = .5 / rate;
+    for (final (k, s) in keys.indexed) {
+      if ((s - at).abs() < near) (i, near) = (k, (s - at).abs());
+    }
     return i < 0 || ways == null || i >= ways.length ? '' : ways[i] as String;
   }
 
