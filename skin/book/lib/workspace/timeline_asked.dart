@@ -120,6 +120,7 @@ mixin _TimelineAsked on State<WsTimeline> {
     _t._rulerMenu.currentState?.show(p, [
       WsMenuItem('Add Marker', taken ? null : () => _addMark(at, named: false), why: 'One is here'),
       WsMenuItem('Add Marker and Name…', taken ? null : () => _addMark(at, named: true), why: 'One is here'),
+      if (ws.beats != null) WsMenuItem('Set 1.1.1 Here', () => ws.after(m.later('set', thing: 0, name: 'bpm_from', number: at), (_, _) => ws.reread())),   // (a bar begins here: Live's)
     ]);
   }
 

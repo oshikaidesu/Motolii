@@ -58,6 +58,8 @@ class _Header extends StatelessWidget {
               SizedBox(width: Shape.s(8)),
               if (roomy) ...[Text('/ ${ws.timecode(Ws.duration)}', style: T.value(Grey.g56)), SizedBox(width: Shape.s(10))],
               _Chip('${Ws.fps} fps'),
+              SizedBox(width: Shape.s(4)),
+              _Tempo(ws: ws),
               SizedBox(width: Shape.s(12)),
               if (mid && layer != null)
                 Flexible(
@@ -232,6 +234,113 @@ class _BtnState extends State<_Btn> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The document's tempo, beside its frame rate as Live's is in its Control Bar: pressed, it is written, and Tap goes by the
+/// hand, one press a beat, the more the truer (Live's manual, 9.1.2 Tapping the Tempo). None written: no beats.
+class _Tempo extends StatefulWidget {
+  const _Tempo({required this.ws});
+  final Ws ws;
+  @override
+  State<_Tempo> createState() => _TempoState();
+}
+
+class _TempoState extends State<_Tempo> {
+  final _words = TextEditingController();
+  final _focus = FocusNode();
+  final _taps = <DateTime>[];
+  bool _typing = false, _tapping = false;   // (a hand on Tap takes the keyboard from the field: it stays while the beats go on)
+  Timer? _tapped;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      if (!_focus.hasFocus && _typing && !_tapping) setState(() => _typing = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _tapped?.cancel();
+    _words.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  static String _said(double bpm) => bpm == bpm.roundToDouble() ? '${bpm.round()}' : bpm.toStringAsFixed(1);
+
+  void _set(double bpm) {
+    final ws = widget.ws;
+    ws.after(ws.inside!.later('set', thing: 0, name: 'bpm', number: bpm.clamp(0, 999)), (_, _) => ws.reread());
+  }
+
+  void _tap() {
+    final now = DateTime.now();
+    _tapped?.cancel();
+    _tapped = Timer(const Duration(milliseconds: 2500), () {
+      _tapping = false;
+      if (mounted && !_focus.hasFocus) setState(() => _typing = false);
+    });
+    if (_taps.isNotEmpty && now.difference(_taps.last).inMilliseconds > 2000) _taps.clear();
+    _taps.add(now);
+    if (_taps.length < 2) return;
+    final bpm = (60000 * (_taps.length - 1) / now.difference(_taps.first).inMilliseconds).clamp(20.0, 999.0);
+    _words.text = _said((bpm * 10).roundToDouble() / 10);
+    _set((bpm * 10).roundToDouble() / 10);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ws = widget.ws, bpm = ws.bpm;
+    if (ws.inside == null) return const SizedBox.shrink();
+    if (!_typing) {
+      return MouseRegion(
+        cursor: SystemMouseCursors.text,
+        child: GestureDetector(
+          key: const ValueKey('ws-tl-bpm'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            final now = bpm > 0 ? _said(bpm) : '';
+            _words.value = TextEditingValue(text: now, selection: TextSelection(baseOffset: 0, extentOffset: now.length));
+            _taps.clear();
+            setState(() => _typing = true);
+            _focus.requestFocus();
+          },
+          child: _Chip(bpm > 0 ? '${_said(bpm)} BPM' : 'BPM'),
+        ),
+      );
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: Shape.z(42),
+          child: CallbackShortcuts(
+            bindings: {const SingleActivator(LogicalKeyboardKey.escape): _focus.unfocus},
+            child: TextHand(key: const ValueKey('ws-tl-bpm-words'), field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
+              controller: _words,
+              focusNode: _focus,
+              style: T.value(Grey.g95).copyWith(fontSize: T.px(10.5)),
+              cursorColor: WsT.accent,
+              backgroundCursorColor: Grey.g38,
+              selectionColor: WsT.accent.withValues(alpha: .3),
+              maxLines: 1,
+              onSubmitted: (said) {
+                _set(double.tryParse(said.trim()) ?? 0);   // (nothing written: no tempo)
+                _focus.unfocus();
+              },
+            )),
+          ),
+        ),
+        SizedBox(width: Shape.s(4)),
+        Listener(
+          onPointerDown: (_) => _tapping = true,
+          child: GestureDetector(key: const ValueKey('ws-tl-bpm-tap'), behavior: HitTestBehavior.opaque, onTap: _tap, child: const _Chip('Tap', mono: false)),
+        ),
+      ],
     );
   }
 }

@@ -167,6 +167,8 @@ static const DocValue doc_values[] = {
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film solid picture text shape", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
     {"poster_at", "stage", -1, 1e6, false, nullptr},   // (the moment the document's own picture is drawn at, seconds; below 0: where the playhead is as it is left: Alight Motion's Set Project Thumbnail, motolii_poster)
     {"layer_length", "stage", 0, 3600, false, nullptr},   // (how long a thing put in lasts, seconds; 0: to the document's end: AbsentMotion's New Layer Length, doc_add)
+    {"bpm", "stage", 0, 999, false, nullptr},   // (the document's tempo, beats a minute; 0: none. What the timeline's grid goes by: Live's Tempo field; Alight Motion has none)
+    {"bpm_from", "stage", 0, 1e6, false, nullptr},   // (where a bar begins, seconds: Live's Set 1.1.1 Here)
     {"frame_rate", "film picture text solid shape stage", 0, 60, false, nullptr},   // (the stage's: the document's frame rate, all of it seen only at its frames, kit_things.h time_is)
     {"speed_hold", "film solid picture text shape", 0, 0, false, "start now end"},   // (where its Speed holds it in time, as After Effects' Time Stretch: its start, the playhead, its end)   // (its own frames a second, 0 as the stage's: doc_stepped)
     {"volume", "film", 0, 2, true, nullptr},   // (how loud its sound is heard and written: 1 as it comes, 0 none, 2 twice; Alight Motion's Volume, 0 to 200%)

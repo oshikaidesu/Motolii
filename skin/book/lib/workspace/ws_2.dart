@@ -145,6 +145,10 @@ class Ws extends ChangeNotifier {
   }
 
   /// The document read again, after any change to it: what the seats list is what the document holds.
+  /// The document's tempo, beats a minute (0: none), and its beats.
+  double get bpm => _inside?.value(0, 'bpm', 0) ?? 0;
+  WsBeats? get beats => WsBeats.of(bpm, _inside?.value(0, 'bpm_from', 0) ?? 0, Ws.fps);
+
   /// The document's frame rate (its `frame_rate`, the stage's own), or the inside's when it says none.
   static int _fpsOf(Motolii m) => switch ((m.value(0, 'frame_rate', 0) ?? 0).round()) { > 0 && final r => r, _ => m.rate };
   void reread() => Timeline.timeSync('ws reread', _reread); // (named in Flutter's timeline: frames_test TRACE)

@@ -8,9 +8,10 @@ import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/desk_ease_cards.dart';
 
 class EaseHandle {
-  const EaseHandle(this.x, this.y, this.moved, {this.param = false, this.fromX, this.fromY, this.dashed = false, this.overshoot = false, this.damping = 1});
+  const EaseHandle(this.x, this.y, this.moved, {this.param = false, this.fromX, this.fromY, this.dashed = false, this.overshoot = false, this.damping = 1, this.along = false});
   final double x, y;
   final bool param, dashed, overshoot; // (param: yellow, the shape's; dashed: only its stem, on Random; overshoot: past 0 and 1)
+  final bool along;   // (it goes along the line x = y: where a beat holds its x, so its y)
   final double? fromX, fromY; // (its stem starts there)
   final double damping;
   final Ease Function(double x, double y) moved;
@@ -91,7 +92,7 @@ List<EaseHandle> easeHandles(Ease e) {
     case 'Steps':
       final length = p(0, .25, _shortest, 1), smoothing = p(1, 0, 0, 1);
       return [
-        EaseHandle(length, length, (x, y) => as([_legal((x + y) / 2, _shortest, 1), smoothing]), param: true),
+        EaseHandle(length, length, (x, y) => as([_legal((x + y) / 2, _shortest, 1), smoothing]), param: true, along: true),
         EaseHandle(length * (1 - smoothing), 0, (x, _) => as([length, _legal(1 - x / length, 0, 1)]), param: true, fromX: length, fromY: 0),
       ];
     case 'ElasticSteps':

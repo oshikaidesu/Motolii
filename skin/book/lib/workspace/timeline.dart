@@ -1,6 +1,7 @@
 // The workspace's Timeline seat: transport + timecode on top, layer labels beside the track area, a ruler with the work area, the playhead.
 // The document lives in Ws; this seat keeps only how it looks at it (zoom, scroll, loop, the row toggles, the work area).
 import 'package:lab_book/workspace/desk_ease_cards.dart' show easeShape;
+import 'dart:async' show Timer;
 import 'dart:developer' show Timeline;
 import 'dart:io';
 import 'dart:math' as math;
@@ -198,10 +199,18 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     }
   }
 
+  // (a frame near a beat, on it: clips and the hand snap to Live's grid unless Cmd is held, its manual 6.7 and 6.10)
+  int _onBeat(int f) {
+    final b = _ws!.beats;
+    if (b == null || HardwareKeyboard.instance.isMetaPressed) return f;
+    final near = b.nearest(f);
+    return (near - f).abs() * _view.ppf <= Shape.z(6) ? near : f;
+  }
+
   void _barMove(Offset p) {
     if (_box case (final from, _)?) return setState(() => _box = (from, p));
     if (_slide case final s?) {
-      final by = _view.frameAt(p.dx).round() - s.grab;
+      final by = _onBeat(_view.frameAt(p.dx).round()) - s.grab;
       _slide = (keys: s.keys, grab: s.grab, by: by);
       _ws!.frame = (s.grab + by).clamp(0, Ws.duration);
       return;
@@ -209,6 +218,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     final h = _bar, ws = _ws!, m = ws.inside;
     if (h == null || m == null) return;
     var by = (_view.frameAt(p.dx) - h.grab).round();   // (by whole frames)
+    by = h.part == 'tail' ? _onBeat(_barOut + by) - _barOut : _onBeat(_barIn + by) - _barIn;
     if (h.part == 'tail') by = math.max(by, _barIn + 1 - _barOut);
     if (h.part == 'head') by = math.min(by, _barOut - 1 - _barIn);
     m.carry(h.part, by / Ws.fps);
@@ -522,7 +532,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                 child: SizedBox(
                   height: WtM.ruler,
                   child: CustomPaint(
-                    painter: WtRulerPainter(view: v, fps: Ws.fps, workIn: _workIn, workOut: _workOut, markers: _marksOf(_ws!), markColours: _markColoursOf(_ws!), beats: _beatsOf(ws), retimed: _retimedOf(ws)),
+                    painter: WtRulerPainter(view: v, fps: Ws.fps, workIn: _workIn, workOut: _workOut, markers: _marksOf(_ws!), markColours: _markColoursOf(_ws!), beats: _beatsOf(ws), tempo: ws.beats, retimed: _retimedOf(ws)),
                     foregroundPainter: WtKeptPainter(view: v, kept: ws.kept), // (the pictures kept on disk for playing)
                   ),
                 ),
@@ -557,7 +567,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                     child: RepaintBoundary(
                       child: CustomPaint(
                         size: Size.infinite,
-                        painter: WtTracksPainter(rows: rows, view: v, fps: Ws.fps, vscroll: _vscroll),
+                        painter: WtTracksPainter(rows: rows, view: v, fps: Ws.fps, vscroll: _vscroll, tempo: ws.beats),
                       ),
                     ),
                   ),

@@ -15,7 +15,10 @@ export '../motolii.dart' show MotoliiDocument, MotoliiMoment, MotoliiWrites, Mot
 import '../theme.dart';
 import '../tokens.dart';
 import 'desk_kit.dart' show DeskTool, deskTools;
+import 'ws_beats.dart';
 import 'stage_art.dart' show WsArt;
+export 'ws_beats.dart';
+
 part 'ws_2.dart';
 part 'ws_3.dart';
 

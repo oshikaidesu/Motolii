@@ -2,6 +2,7 @@
 
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/tokens.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
@@ -38,7 +39,7 @@ double get easeBarOut => Shape.z(16);
 }
 
 class EaseGraph extends StatefulWidget {
-  const EaseGraph({super.key, required this.ease, required this.span, required this.frame, required this.onChanged, this.onEnd, this.onEndMove, this.endSays, this.jump = true, this.overshoot = false, this.onion, this.ends = (0, 1)});
+  const EaseGraph({super.key, required this.ease, required this.span, required this.frame, required this.onChanged, this.onEnd, this.onEndMove, this.endSays, this.jump = true, this.overshoot = false, this.beats = const [], this.onion, this.ends = (0, 1)});
   final Ease ease;
   final (double, double) ends;
   final Ease? onion;   // (what all the cards make, faint behind the one a hand shapes)
@@ -48,6 +49,7 @@ class EaseGraph extends StatefulWidget {
   final void Function(bool start, double by)? onEnd, onEndMove;   // (let go; and as it goes)
   final String? Function(bool start, double by)? endSays;   // (what the end pulled makes its value, shown beside it while it is pulled)
   final bool jump, overshoot;   // (overshoot: looks past 0 and 1, and a handle goes there: Alight Motion's Enable Overshoot)
+  final List<double> beats;   // (where the document's beats fall in the stretch, 0 to 1: a line each, and a handle stays on one it is brought near, as the timeline's grid)
   @override
   State<EaseGraph> createState() => _EaseGraphState();
 }
@@ -95,8 +97,14 @@ class _EaseGraphState extends State<EaseGraph> {
     final hs = easeHandles(widget.ease);
     if (_drag! >= hs.length) return;
     final h = hs[_drag!], d = (p - _from) * h.damping;
-    final u = (_handle.dx + d.dx / g.width).clamp(0.0, 1.0), v = _handle.dy - d.dy / g.height * (hi - lo) / ((y1 - y0).abs() < 1e-6 ? 1 : y1 - y0);
-    widget.onChanged(h.moved(u, h.overshoot || widget.overshoot ? v.clamp(lo, hi) : v.clamp(0.0, 1.0)));
+    var u = (_handle.dx + d.dx / g.width).clamp(0.0, 1.0);
+    final v = _handle.dy - d.dy / g.height * (hi - lo) / ((y1 - y0).abs() < 1e-6 ? 1 : y1 - y0);
+    if (!HardwareKeyboard.instance.isMetaPressed) {
+      for (final b in widget.beats) {
+        if ((b - u).abs() * g.width <= Shape.z(6)) u = b;
+      }
+    }
+    widget.onChanged(h.moved(u, h.along ? u : h.overshoot || widget.overshoot ? v.clamp(lo, hi) : v.clamp(0.0, 1.0)));
   }
 
   void _let(_) {
@@ -147,6 +155,7 @@ class _EaseGraphState extends State<EaseGraph> {
               dragging: _drag != null,
               endAt: _endAt,
               jump: widget.jump,
+              beats: widget.beats,
               overshoot: widget.overshoot,
               onion: widget.onion,
               ends: widget.ends,
@@ -180,9 +189,10 @@ List<(double, Color)> _ghosts(Ws ws, EaseSpan? span) {
 }
 
 class _GraphPainter extends CustomPainter {
-  const _GraphPainter({required this.ease, required this.from, required this.to, required this.frame, required this.active, required this.dragging, this.ghosts = const [], this.overshoot = false, this.onion, this.ends = (0, 1), required this.reach, this.endAt, this.jump = true});
+  const _GraphPainter({required this.ease, required this.from, required this.to, required this.frame, required this.active, required this.dragging, this.ghosts = const [], this.beats = const [], this.overshoot = false, this.onion, this.ends = (0, 1), required this.reach, this.endAt, this.jump = true});
   final (double, double) reach;
   final List<(double, Color)> ghosts;   // (a relation's things: how much later each, across the stretch, and its colour)
+  final List<double> beats;
   final Ease ease;
   final int? from, to, active;
   final int frame;
@@ -205,6 +215,10 @@ class _GraphPainter extends CustomPainter {
     for (var i = 0; i <= 8; i++) {
       final x = (g.left + i * g.width / 8).floorToDouble() + .5;
       c.drawLine(Offset(x, top), Offset(x, bottom), grid);
+    }
+    for (final b in beats) {
+      final x = g.left + g.width * b;
+      c.drawLine(Offset(x, top), Offset(x, bottom), Paint()..strokeWidth = 1..color = Grey.g38);
     }
     for (var i = 1; i < 4; i++) {
       final y = (top + i * (bottom - top) / 4).floorToDouble() + .5;
@@ -308,6 +322,6 @@ class _GraphPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_GraphPainter o) => o.reach != reach || o.ease != ease || o.onion != onion || o.ends != ends || o.overshoot != overshoot || o.endAt != endAt || o.jump != jump || o.from != from || o.to != to || o.frame != frame || o.active != active || o.dragging != dragging || o.ghosts.length != ghosts.length || (ghosts.isNotEmpty && o.ghosts.first.$1 != ghosts.first.$1);
+  bool shouldRepaint(_GraphPainter o) => o.beats != beats || o.reach != reach || o.ease != ease || o.onion != onion || o.ends != ends || o.overshoot != overshoot || o.endAt != endAt || o.jump != jump || o.from != from || o.to != to || o.frame != frame || o.active != active || o.dragging != dragging || o.ghosts.length != ghosts.length || (ghosts.isNotEmpty && o.ghosts.first.$1 != ghosts.first.$1);
 }
 

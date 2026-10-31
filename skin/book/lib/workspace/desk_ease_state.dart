@@ -315,6 +315,7 @@ class DeskEaseState extends State<DeskEase> {
     final bezier = easeIsBezier(card);
     final overshoot = bezier && !_noOver && (easeOvershoot || _overLocked || [card.p1.dy, card.p2.dy].any((y) => y < 0 || y > 1));
     _overLocked = overshoot;
+    final grid = ws.beats, beats = grid == null || span == null ? const <double>[] : [for (final (f, _) in grid.between(span.from + 1, span.to - 1)) (f - span.from) / (span.to - span.from)];
     void hold(Ease? e) {   // (on the stage too, as the graph shows it)
       setState(() => _held = e);
       if (ws.inside == null) return;
@@ -414,7 +415,7 @@ class DeskEaseState extends State<DeskEase> {
                       child: Stack(
                         children: [
                           Positioned.fill(
-                            child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: whole ? easeLaid(cards) : card, onion: _held ?? (laid && !whole ? easeLaid(cards) : null), ends: _endsOf(ws, span), span: span, frame: frame, onChanged: put, jump: easeJump, overshoot: overshoot && !whole, onEnd: ws.inside == null ? null : (start, by) => _toEnd(ws, span, start, by, done: true), onEndMove: ws.inside == null ? null : (start, by) => _toEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by))),   // (only the graph follows the playhead)
+                            child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(beats: beats, ease: whole ? easeLaid(cards) : card, onion: _held ?? (laid && !whole ? easeLaid(cards) : null), ends: _endsOf(ws, span), span: span, frame: frame, onChanged: put, jump: easeJump, overshoot: overshoot && !whole, onEnd: ws.inside == null ? null : (start, by) => _toEnd(ws, span, start, by, done: true), onEndMove: ws.inside == null ? null : (start, by) => _toEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by))),   // (only the graph follows the playhead)
                           ),
                           if (span == null) Positioned.fill(child: Center(child: Padding(padding: EdgeInsets.all(Shape.s(8)), child: Text('Put the playhead between two keys, or pick a key', textAlign: TextAlign.center, style: T.label(Grey.g63))))),
                           if (_trouble case final why?) Positioned(left: Shape.s(4), right: Shape.s(4), top: Shape.s(2), child: Text(why, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63))),

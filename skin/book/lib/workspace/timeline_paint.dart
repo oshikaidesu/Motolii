@@ -150,8 +150,14 @@ TextPainter _text(String s, TextStyle st) => TextPainter(
   maxLines: 1,
 )..layout();
 
-void _vLines(Canvas c, WtView v, int fps, double w, double top, double bottom, {required Color major, required Color fine}) {
+void _vLines(Canvas c, WtView v, int fps, double w, double top, double bottom, {required Color major, required Color fine, WsBeats? beats}) {
   final mj = tpMajor(v.ppf, fps), fn = tpFine(v.ppf, fps, mj), p = Paint();
+  if (beats != null) {   // (its grid by the beat, not the second, as far as they can be told apart: Live's grid widens as it is zoomed out)
+    for (final (f, bar) in beats.between(v.scroll, v.scroll + w / v.ppf)) {
+      if (bar || beats.every * v.ppf >= 8) c.drawRect(Rect.fromLTWH(v.x(f).roundToDouble(), top, 1, bottom - top), p..color = bar ? major : fine);
+    }
+    return;
+  }
   final f0 = (v.scroll / fn).floor() * fn;
   for (var f = f0; f <= Ws.duration; f += fn) {
     final x = v.x(f).roundToDouble();
@@ -164,7 +170,7 @@ void _vLines(Canvas c, WtView v, int fps, double w, double top, double bottom, {
 // ---------------------------------------------------------------- ruler
 
 class WtRulerPainter extends CustomPainter {
-  const WtRulerPainter({required this.view, required this.fps, required this.workIn, required this.workOut, required this.markers, this.markColours = const {}, this.beats = const [], this.retimed = const []});
+  const WtRulerPainter({required this.view, required this.fps, required this.workIn, required this.workOut, required this.markers, this.tempo, this.markColours = const {}, this.beats = const [], this.retimed = const []});
   final WtView view;
   final int fps, workIn, workOut;
   final List<(int, String)> markers;
@@ -172,6 +178,7 @@ class WtRulerPainter extends CustomPainter {
 
   /// Where the films' sound strikes (their Beats), frames: a short tick each at the ruler's foot.
   final List<int> beats;
+  final WsBeats? tempo;   // (the document's own beats: a tick each, taller where a bar begins)
   final List<int> retimed;   // (the picked element's end of intro and start of outro, frames: small yellow marks at the ruler's top, as Alight Motion shows them)
 
   @override
@@ -191,6 +198,11 @@ class WtRulerPainter extends CustomPainter {
     for (final f in beats) {
       final x = view.x(f).roundToDouble();
       if (x >= 0 && x <= s.width) c.drawRect(Rect.fromLTWH(x, bottom - 7, 2, 7), p..color = WsT.toneAudio);
+    }
+    if (tempo case final b?) {
+      for (final (f, bar) in b.between(view.scroll, view.scroll + s.width / view.ppf)) {
+        if (bar || b.every * view.ppf >= 8) c.drawRect(Rect.fromLTWH(view.x(f).roundToDouble(), bottom - (bar ? 11 : 6), 1, bar ? 11 : 6), p..color = bar ? WsT.accent : Grey.g56);
+      }
     }
     for (final f in retimed) {
       final x = view.x(f).roundToDouble();
@@ -261,7 +273,8 @@ Color wtBand(int i, bool selected) => Forms.worn.trackBand(i, selected);
 Color wtBarFill(WtRow r) => Forms.worn.trackFill(r.tone ?? wsTone(r.kind), dim: r.dim, selected: r.selected);
 
 class WtTracksPainter extends CustomPainter {
-  const WtTracksPainter({required this.rows, required this.view, required this.fps, required this.vscroll});
+  const WtTracksPainter({required this.rows, required this.view, required this.fps, required this.vscroll, this.tempo});
+  final WsBeats? tempo;
   final List<WtRow> rows;
   final WtView view;
   final int fps;
