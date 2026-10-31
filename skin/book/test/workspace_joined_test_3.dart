@@ -1294,19 +1294,20 @@ void _tests3() {
       await t.pump();
     }
     expect(find.byKey(const ValueKey('ws-size-box')), findsOneWidget);
-    final m = ws.inside!;
     await t.sendKeyEvent(LogicalKeyboardKey.escape);
     await t.pumpAndSettle();
     expect(find.byKey(const ValueKey('ws-size-box')), findsNothing);
-    final before = m.things.length;
+    final before = ws.inside!.things.length;
     await t.sendKeyEvent(LogicalKeyboardKey.keyT);
     await t.pumpAndSettle();
     await t.tapAt(comp.center);
-    for (var i = 0; i < 3000 && (ws.waiting || m.things.length == before); i++) {   // (30 s at most, as opening is given: a clean CI Mac)
+    for (var i = 0; i < 3000 && (ws.waiting || ws.inside!.things.length == before); i++) {   // (30 s at most, as opening is given: a clean CI Mac, whose new document may come after its box)
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
       await t.pump();
     }
-    expect([m.things.length, m.word(m.things.last, 'kind')], [before + 1, 'text'], reason: 'T took the text tool after Esc, and a press put a text');
+    final m = ws.inside!;
+    expect(m.things, hasLength(before + 1), reason: 'T took the text tool after Esc, and a press put a text');
+    expect(m.word(m.things.last, 'kind'), 'text');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

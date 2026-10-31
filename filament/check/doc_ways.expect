@@ -10,12 +10,12 @@
   2.3333
   0.0000
   0.0000
-  Hold, Linear, Bezier (x1 y1 x2 y2), Bounce (length bounce), Elastic (a b c d), Cyclic (a b c d e), Random (a b c d e f), Steps (width smooth), ElasticSteps (length magnitude); by name: SlowIn SlowOut SlowInSlowOut VerySlowIn VerySlowOut SpringOut SmallSpringOut BounceOut Overshoot
+  Hold, Linear, Bezier (x1 y1 x2 y2), Bounce (length bounce), Elastic (a b c d), Cyclic (a b c d e), Random (a b c d e f), Steps (length smoothing), ElasticSteps (length magnitude); by name: SlowIn SlowOut SlowInSlowOut VerySlowIn VerySlowOut SpringOut SmallSpringOut BounceOut Overshoot
   0.6000
   0.0000
 define: NOT done: a way begins at the one key's value and ends at the other's: from 0 to 1 this one begins at 0.5 and ends at 1.5
 define: NOT done: near "*": syntax error
-way: NOT done: a way is one of: Hold, Linear, Bezier (x1 y1 x2 y2), Bounce (length bounce), Elastic (a b c d), Cyclic (a b c d e), Random (a b c d e f), Steps (width smooth), ElasticSteps (length magnitude); by name: SlowIn SlowOut SlowInSlowOut VerySlowIn VerySlowOut SpringOut SmallSpringOut BounceOut Overshoot; defined here: overshoot
+way: NOT done: a way is one of: Hold, Linear, Bezier (x1 y1 x2 y2), Bounce (length bounce), Elastic (a b c d), Cyclic (a b c d e), Random (a b c d e f), Steps (length smoothing), ElasticSteps (length magnitude); by name: SlowIn SlowOut SlowInSlowOut VerySlowIn VerySlowOut SpringOut SmallSpringOut BounceOut Overshoot; defined here: overshoot
 way: NOT done: x has no key at that moment: a stretch begins at a key
 way: NOT done: start does not move: keys go on x, y, z, rotate, rotate_x, rotate_y, scale_x, scale_y, scale_z, size, anchor_x, anchor_y, anchor_z, parent_rotate, parent_size, scale_assist_amount, scale_assist_damp, roll_radius, dissolve, grain, emissive
 way: NOT done: Random is said alone or with its 6 numbers (a b c d e f)
