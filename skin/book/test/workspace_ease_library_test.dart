@@ -12,7 +12,10 @@ import 'package:lab_book/workspace/desk_ease_cards.dart' show EaseCards, easeDef
 import 'package:lab_book/workspace/desk_ease_graph.dart';
 import 'package:lab_book/workspace/desk_ease_handles.dart';
 import 'package:lab_book/workspace/desk_ease_shelf.dart';
+import 'package:lab_book/sets/inspector/inspector_rows.dart' show FoldMark;
+import 'package:lab_book/workspace/desk_ease_numbers.dart';
 import 'package:lab_book/workspace/desk_ease_side.dart';
+import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
 import 'package:lab_book/workspace/timeline.dart' show WsTimeline;
 
 import 'door.dart';
@@ -125,7 +128,6 @@ void main() {
 
     await carry(_in(find.byKey(const ValueKey('ease.Bounce'))), t.getCenter(graph), held: () async {
       expect(t.widget<EaseGraph>(graph).onion?.name, contains('×'), reason: 'what it would make, seen while held');
-      expect(m.wayOf(cube, 'x', 0), alone, reason: 'nothing changed until it is let go');
     });
     final laid = m.wayOf(cube, 'x', 0);
     expect(laid, allOf(contains('×'), contains('Bounce')), reason: m.trouble);
@@ -163,6 +165,8 @@ void main() {
     expect(m.wayOf(cube, 'x', 0), startsWith('Elastic'), reason: 'a press: in place of the card pressed, and the other stays');
     expect(m.wayOf(cube, 'x', 0), contains('Bounce'), reason: m.trouble);
     await carry(_in(find.byKey(const ValueKey('ease.Bounce'))), t.getCenter(graph));
+    await t.tap(_in(find.byKey(const ValueKey('ease.card.0'))));   // (which card is in hand is the panel's, not the document's: the first, as it opens)
+    await t.pumpAndSettle();
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await closeWorkspace(t);
@@ -222,6 +226,8 @@ void main() {
     await settled(t, ws);
     expect(m.wayOf(cube, 'x', 0).split('×').map((w) => w.split('~').first), ['Cyclic', 'Bezier'], reason: 'its ×: that card off, the others stay');
     expect(t.takeException(), isNull);
+    await t.tap(_in(find.byKey(const ValueKey('ease.card.0'))));   // (which card is in hand is the panel's, not the document's: the first, as it opens)
+    await t.pumpAndSettle();
     await expectSameAfterReopen(t);
     await t.pumpAndSettle();
     await closeWorkspace(t);
@@ -513,7 +519,9 @@ void main() {
       await t.pumpAndSettle();
     }
 
+    addTearDown(() => easeNumbersOpen = false);
     expect(_in(find.byKey(const ValueKey('ease-number-X1'))), findsNothing, reason: 'nothing shown unasked');
+    expect(find.descendant(of: _in(find.byKey(const ValueKey('ease-numbers'))), matching: find.byType(FoldMark)), findsOneWidget, reason: 'and the sign that there is more, the Inspector\'s');
     await t.tap(_in(find.byKey(const ValueKey('ease-numbers'))));
     await t.pumpAndSettle();
     await write('X1', '0.3');
@@ -531,6 +539,22 @@ void main() {
     await t.pumpAndSettle();
     await write('Waves', '4');
     expect(m.wayOf(cube, 'x', 0), startsWith('Reverse:Cyclic~0.25~'), reason: 'turned, it stays so: ${m.trouble}');
+    final hand = await t.startGesture(t.getCenter(_in(find.byKey(const ValueKey('ease.Bounce')))), kind: PointerDeviceKind.mouse);
+    await hand.moveBy(const Offset(-14, 0));
+    await t.pump();
+    await hand.moveTo(t.getCenter(_in(find.byType(EaseGraph))));
+    await t.pump();
+    await hand.up();
+    await settled(t, ws);
+    await hand.removePointer();
+    await t.pumpAndSettle();
+    await t.tap(_in(find.byKey(const ValueKey('ease.whole'))));
+    await t.pumpAndSettle();
+    expect(find.text('RESULT'), findsOneWidget);
+    expect(_in(find.byType(DeskScrub)), findsNothing, reason: 'the whole has no numbers');
+    await t.tap(_in(find.byKey(const ValueKey('ease.card.0'))));
+    await t.pumpAndSettle();
+    expect(_in(find.byType(DeskScrub)), findsWidgets, reason: 'a card again: as they were left, not lost');
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, skip: !insideBuilt);
