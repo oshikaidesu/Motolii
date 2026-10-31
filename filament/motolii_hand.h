@@ -125,15 +125,21 @@ static void stage_scale(Motolii* m) {
     o.enabled = want < 1.0, o.minScale = o.maxScale = math::float2{(float)want}, o.quality = QualityLevel::MEDIUM;
     m->s->view->setDynamicResolutionOptions(o);
 }
+// Why the asker's own last call was not done: its own, as each thread has its own errno (POSIX), so what the hand does
+// next for another asker never says over it (golf_noise.md ㉝).
+static thread_local std::string why_asked;
+static const char* motolii_why(Motolii* m);
 template <class Does> static auto asked(Motolii* m, Does does, bool changes, const char* who) -> decltype(does()) {
     std::packaged_task<decltype(does())()> task(does);
     auto done = task.get_future();
+    std::string why;
     {
         std::lock_guard<std::mutex> hold(m->asked_lock);
         m->lastPosted.clear();
-        m->asked.push_back([&task, m, changes, who] {
+        m->asked.push_back([&task, &why, m, changes, who] {
             const auto t0 = std::chrono::steady_clock::now();
             task();
+            why = motolii_why(m);
             if (changes) m->changed = true;
             const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
             m->spent[changes ? 0 : 1] += took, m->many[changes ? 0 : 1]++;
@@ -144,6 +150,7 @@ template <class Does> static auto asked(Motolii* m, Does does, bool changes, con
     m->asked_now.notify_one();
     const auto sent = std::chrono::steady_clock::now();
     auto out = done.get();
+    why_asked = why;
     const double round = std::chrono::duration<double>(std::chrono::steady_clock::now() - sent).count();   // (the shell waited this long for the hand: in the queue and at work)
     { std::lock_guard<std::mutex> hold(m->asked_lock); auto& r = m->rounds[who]; r.first = std::max(r.first, round), r.second += round > 0.004;
       if (pthread_main_np() && m->watching) { char why[160]; std::snprintf(why, sizeof why, "%s waited %.1f ms for the hand (a change the window may only send: motolii_later)", who, 1e3 * round); m->broke.push_back(why); if (m->broke.size() > 200) m->broke.pop_front(); m->broken++; }
@@ -201,6 +208,7 @@ template <class Does> static auto by_look(Motolii* m, Does does, const char* who
     const double waited = std::chrono::duration<double>(t0 - asked).count();   // (a read waits while the hand holds the document: telling a moment, making a change)
     m->read_waited += waited, m->read_waited_most = std::max(m->read_waited_most, waited), m->read_waits += waited > 0.002;
     auto out = does();
+    why_asked = motolii_why(m);
     const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     m->spent[1] += took, m->many[1]++;
     auto& door = m->by_door[who];
@@ -413,7 +421,8 @@ void motolii_close(Motolii* m) {
 // A word a call answers with, kept till that same thread asks again: each asker its own (the hand, the window, a question
 // on another isolate), as motolii_kept keeps its runs; one kept for all was written over while another still read it.
 static std::string& said_word() { static thread_local std::string w; return w; }
-const char* motolii_trouble(Motolii* m) { return m->trouble.empty() ? m->d->trouble.c_str() : m->trouble.c_str(); }
+static const char* motolii_why(Motolii* m) { return m->trouble.empty() ? m->d->trouble.c_str() : m->trouble.c_str(); }
+const char* motolii_trouble(Motolii* m) { return why_asked.empty() ? motolii_why(m) : why_asked.c_str(); }
 static int told(Motolii* m, bool ok, const char* otherwise = nullptr) { if (!ok && otherwise) m->trouble = otherwise; return ok ? 1 : 0; }
 static Doc& doc(Motolii* m) { m->trouble.clear(); m->d->trouble.clear(); return *m->d; }
 // What a call that changes the document answers. Refused within an act, at whatever door (a number out of its range

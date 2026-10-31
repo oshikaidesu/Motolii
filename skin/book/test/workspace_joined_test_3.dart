@@ -13,6 +13,8 @@ void _tests3() {
     expect(m.set(b, 'lock', 1), isTrue);
     expect(m.set(b, 'x', 1), isFalse);
     expect(m.trouble, 'it is locked');
+    final (_, other) = (await t.runAsync(() => m.answered(m.later('say', thing: 9999, name: 'fill', word: 'ff0000'))))!;
+    expect([other, m.trouble], [isNot('it is locked'), 'it is locked'], reason: 'why is each asker\'s own, as errno is each thread\'s (POSIX): golf ㉝');
     expect(m.remove(b), isFalse, reason: 'nor taken away');
     expect(m.set(b, 'lock', 0) && m.set(b, 'x', 1), isTrue, reason: 'unlocked, it is changed again');
     expect(m.looping, isTrue, reason: 'play goes round, as a document is opened');
