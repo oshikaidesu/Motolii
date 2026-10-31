@@ -125,6 +125,7 @@ void main() {
       await held?.call();
       await hand.up();
       await settled(t, ws);
+      await hand.removePointer();
     }
 
     await carry(_in(find.byKey(const ValueKey('ease.Bounce'))), t.getCenter(graph), held: () async {
@@ -191,6 +192,7 @@ void main() {
       await t.pump();
       await hand.up();
       await settled(t, ws);
+      await hand.removePointer();
     }
 
     await t.tap(_in(find.byKey(const ValueKey('ease.Cyclic'))));
@@ -689,6 +691,62 @@ void main() {
       if (was case final w?) expect((now - w).abs(), lessThan(.1), reason: 'no leap as Length goes: at ${l / 1000}');
       was = now;
     }
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
+  testWidgets('with no stretch the panel makes and tries a way of its own and keeps it on the shelf, the document told nothing', (t) async {
+    final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    expect(m.key(cube, 'x', 0, 0) && m.key(cube, 'x', 1, 1), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..front('Ease');
+    await t.pumpAndSettle();
+    expect(easeSpan(ws), isNull);
+    expect(_in(find.byKey(const ValueKey('ease-no-span'))), findsOneWidget, reason: 'it says so');
+    final graph = _in(find.byType(EaseGraph));
+    await t.tap(_in(find.byKey(const ValueKey('ease.Bounce'))));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 60));
+    expect(t.widget<EaseGraph>(graph).ease.name, 'Bounce');
+    expect(t.widget<EaseGraph>(graph).trial, isNotNull, reason: 'changed, it runs');
+    expect(t.widget<EaseGraph>(graph).ease.drawn, hasLength(greaterThan(100)), reason: 'its whole curve, not a tile\'s few points');
+    final hand = await t.startGesture(t.getCenter(_in(find.byKey(const ValueKey('ease.Cyclic')))), kind: PointerDeviceKind.mouse);
+    await hand.moveBy(const Offset(-14, 0));
+    await t.pump();
+    await hand.moveTo(t.getCenter(graph));
+    await t.pump();
+    expect(t.widget<EaseGraph>(graph).onion?.name, contains('×'), reason: 'seen while held');
+    await hand.up();
+    await t.pump();
+    await hand.moveBy(const Offset(1, 0));
+    await t.pump();
+    expect(t.widget<EaseGraph>(graph).trial, isNotNull, reason: 'running while the hand is on it');
+    await hand.removePointer();   // (it runs on while a hand is on it)
+    await t.pumpAndSettle();
+    expect(_in(find.byKey(const ValueKey('ease.card.1'))), findsOneWidget, reason: 'cards laid');
+    expect(t.widget<EaseGraph>(graph).trial, isNull, reason: 'run once, it stops of itself');
+    await t.tap(_in(find.byKey(const ValueKey('ease-numbers'))));
+    await t.pumpAndSettle();
+    addTearDown(() => easeNumbersOpen = false);
+    await t.tap(_in(find.byKey(const ValueKey('ease.shelf'))));
+    await t.pumpAndSettle();
+    await t.tap(_in(find.byKey(const ValueKey('ease.shelf.slot'))));
+    await t.pumpAndSettle();
+    expect(easeKept().single, allOf(contains('Bounce'), contains('×'), contains('Cyclic')), reason: 'kept with no stretch');
+    expect(m.wayOf(cube, 'x', 0), 'Linear', reason: 'and nothing told the document');
+    final made = easeKept().single;
+    ws.pickKey((layer: '$cube', frame: 0));
+    await t.pumpAndSettle();
+    expect(t.widget<EaseGraph>(graph).ease.name, isNot(contains('×')), reason: 'a key picked: its own way');
+    await t.tap(_in(find.byKey(ValueKey('ease.kept.$made'))));
+    await settled(t, ws);
+    expect(m.wayOf(cube, 'x', 0), made, reason: 'what was made goes on a stretch: ${m.trouble}');
+    ws.clearKeys();
+    ws.frame = 90;
+    await t.pumpAndSettle();
+    expect(t.widget<EaseGraph>(graph).onion?.name ?? t.widget<EaseGraph>(graph).ease.name, contains('×'), reason: 'back with no stretch: where it was left');
+    expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, skip: !insideBuilt);
 

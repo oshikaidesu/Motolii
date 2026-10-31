@@ -100,7 +100,7 @@ void main() {
     expect(m.wayOf(cube, 'x', 0), 'Linear', reason: 'put on the stretch the playhead is in, a curve back straight');
     ws.frame = 90;   // (after the last key: no stretch)
     await t.pumpAndSettle();
-    expect(find.textContaining('between two keys'), findsOneWidget, reason: 'no stretch: it says how to have one (golf (66))');
+    expect(find.byKey(const ValueKey('ease-no-span')), findsOneWidget, reason: 'no stretch: it says how to have one (golf (66))');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t); // (what the desk shows is read back from the document, not kept by the window)
     await closeWorkspace(t);

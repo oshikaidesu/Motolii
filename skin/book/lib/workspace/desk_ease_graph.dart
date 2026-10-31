@@ -39,7 +39,7 @@ double get easeBarOut => Shape.z(16);
 }
 
 class EaseGraph extends StatefulWidget {
-  const EaseGraph({super.key, required this.ease, required this.span, required this.frame, required this.onChanged, this.onEnd, this.onEndMove, this.endSays, this.jump = true, this.overshoot = false, this.beats = const [], this.onion, this.ends = (0, 1)});
+  const EaseGraph({super.key, required this.ease, required this.span, required this.frame, required this.onChanged, this.onEnd, this.onEndMove, this.endSays, this.jump = true, this.overshoot = false, this.beats = const [], this.trial, this.onion, this.ends = (0, 1)});
   final Ease ease;
   final (double, double) ends;
   final Ease? onion;   // (what all the cards make, faint behind the one a hand shapes)
@@ -49,6 +49,7 @@ class EaseGraph extends StatefulWidget {
   final void Function(bool start, double by)? onEnd, onEndMove;   // (let go; and as it goes)
   final String? Function(bool start, double by)? endSays;   // (what the end pulled makes its value, shown beside it while it is pulled)
   final bool jump, overshoot;   // (overshoot: looks past 0 and 1, and a handle goes there: Alight Motion's Enable Overshoot)
+  final double? trial;   // (where a trial of the way has come to, 0 to 1, with no stretch to go by: desk_ease_trial.dart)
   final List<double> beats;   // (where the document's beats fall in the stretch, 0 to 1: a line each, and a handle stays on one it is brought near, as the timeline's grid)
   @override
   State<EaseGraph> createState() => _EaseGraphState();
@@ -156,6 +157,7 @@ class _EaseGraphState extends State<EaseGraph> {
               endAt: _endAt,
               jump: widget.jump,
               beats: widget.beats,
+              trial: widget.trial,
               overshoot: widget.overshoot,
               onion: widget.onion,
               ends: widget.ends,
@@ -189,10 +191,11 @@ List<(double, Color)> _ghosts(Ws ws, EaseSpan? span) {
 }
 
 class _GraphPainter extends CustomPainter {
-  const _GraphPainter({required this.ease, required this.from, required this.to, required this.frame, required this.active, required this.dragging, this.ghosts = const [], this.beats = const [], this.overshoot = false, this.onion, this.ends = (0, 1), required this.reach, this.endAt, this.jump = true});
+  const _GraphPainter({required this.ease, required this.from, required this.to, required this.frame, required this.active, required this.dragging, this.ghosts = const [], this.beats = const [], this.trial, this.overshoot = false, this.onion, this.ends = (0, 1), required this.reach, this.endAt, this.jump = true});
   final (double, double) reach;
   final List<(double, Color)> ghosts;   // (a relation's things: how much later each, across the stretch, and its colour)
   final List<double> beats;
+  final double? trial;
   final Ease ease;
   final int? from, to, active;
   final int frame;
@@ -291,6 +294,13 @@ class _GraphPainter extends CustomPainter {
         deskText(c, before ? '‹ $frame' : '$frame ›', Offset(g.center.dx, bottom + 6), T.micro(WsT.playhead).copyWith(fontWeight: FontWeight.w700), ax: .5);
       }
     }
+    // A way tried: where it has come to on its curve, and a ball on the bar going as a value would.
+    if (trial case final u?) {
+      final at = px(Offset(u, y0 + (y1 - y0) * (onion ?? ease).at(u)));
+      c.drawLine(Offset(at.dx, top - 8), Offset(at.dx, bottom + 4), Paint()..color = WsT.playhead..strokeWidth = 1.5);
+      c.drawCircle(at, 4.5, Paint()..color = WsT.playhead);
+      c.drawCircle(Offset(g.right + easeBarOut, at.dy), 6, Paint()..color = WsT.playhead);
+    }
     // The value jumping at the end pulled: from where it was (the key the jump leaves outside) to where it is now.
     if (pulled != null && jump) {
       final was = pulled == end ? home.$1 : home.$2, now = pulled == end ? a : b;
@@ -319,6 +329,6 @@ class _GraphPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_GraphPainter o) => o.beats != beats || o.reach != reach || o.ease != ease || o.onion != onion || o.ends != ends || o.overshoot != overshoot || o.endAt != endAt || o.jump != jump || o.from != from || o.to != to || o.frame != frame || o.active != active || o.dragging != dragging || o.ghosts.length != ghosts.length || (ghosts.isNotEmpty && o.ghosts.first.$1 != ghosts.first.$1);
+  bool shouldRepaint(_GraphPainter o) => o.trial != trial || o.beats != beats || o.reach != reach || o.ease != ease || o.onion != onion || o.ends != ends || o.overshoot != overshoot || o.endAt != endAt || o.jump != jump || o.from != from || o.to != to || o.frame != frame || o.active != active || o.dragging != dragging || o.ghosts.length != ghosts.length || (ghosts.isNotEmpty && o.ghosts.first.$1 != ghosts.first.$1);
 }
 

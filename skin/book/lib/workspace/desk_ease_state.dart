@@ -12,6 +12,7 @@ import 'package:lab_book/workspace/desk_ease_cards.dart';
 import 'package:lab_book/workspace/desk_ease_graph.dart';
 import 'package:lab_book/workspace/desk_ease_numbers.dart';
 import 'package:lab_book/workspace/desk_ease_shelf.dart';
+import 'package:lab_book/workspace/desk_ease_trial.dart';
 import 'package:lab_book/workspace/desk_ease_side.dart';
 import 'package:lab_book/workspace/ws.dart';
 
@@ -182,9 +183,9 @@ class DeskEaseState extends State<DeskEase> with _EaseEnds {
   @override
   Widget build(BuildContext context) {
     final ws = WsScope.of(context, {WsAspect.document, WsAspect.picked}), span = easeSpan(ws), store = eases[ws] ??= {}, id = spanId(span);
-    if (ws.inside case final m?) {
-      final at = span == null ? const <String, double>{} : keysAt(ws, span);
-      final inDocument = at.isEmpty ? easePreset('Linear') : heard(m.wayOf(int.parse(span!.layer.id), at.keys.first, at.values.first));
+    if ((ws.inside, span) case (final m?, final span?)) {
+      final at = keysAt(ws, span);
+      final inDocument = at.isEmpty ? easePreset('Linear') : heard(m.wayOf(int.parse(span.layer.id), at.keys.first, at.values.first));
       if (_told case final t? when !ws.waiting || said(t) == said(inDocument)) _told = null;
       var ease = _pending ?? _told ?? _base ?? inDocument;
       if (easeOther(ease) && ease.drawn == null) ease = easeCard(said(ease), m);   // (no seat for this kind: its curve is the inside's own working of it, as said now)
@@ -206,8 +207,10 @@ class DeskEaseState extends State<DeskEase> with _EaseEnds {
         child: _body(ws, span, ease, set),
       );
     }
-    final ease = store[id] ?? easePreset('Ease');
-    return _body(ws, span, ease, (e) => setState(() => store[id] = e));
+    // (no stretch: a way of the panel's own, to make and try and keep on the shelf, the document told nothing: the maker,
+    //  10/31, "区間を選ばなくてもプリセットの作成ぐらいできるように")
+    final own = store[id] ?? easePreset(ws.inside == null ? 'Ease' : 'Linear');
+    return _body(ws, span, easeOther(own) ? easeCard(said(own), ws.inside) : own, (e) => setState(() => store[id] = e));   // (a tile's own curve is a tile's: few points)
   }
 
   // The panel as AbsentMotion's EasingPanel.kt lays it, its widths its weights: the left column, the graph, the shapes.
@@ -236,7 +239,7 @@ class DeskEaseState extends State<DeskEase> with _EaseEnds {
     }
     void hold(Ease? e) {   // (on the stage too, as the graph shows it)
       setState(() => _held = e);
-      if (ws.inside == null) return;
+      if (ws.inside == null || span == null) return;
       if (e == null) return _giveUp(ws);
       _base ??= ease;
       _live(ws, e);
@@ -254,6 +257,7 @@ class DeskEaseState extends State<DeskEase> with _EaseEnds {
       }
     }
     final turned = bezier ? card.reversed() : Ease(card.kind, card.p1, card.p2, easeTurn(said(card)));   // (AbsentMotion's reversed(): a bezier's handles turned, any other marked so)
+    Widget graph(int frame, [double? trial]) => EaseGraph(beats: beats, ease: whole ? easeLaid(cards) : card, onion: _held ?? (laid && !whole ? easeLaid(cards) : null), ends: _endsOf(ws, span), span: span, frame: frame, onChanged: put, jump: easeJump, overshoot: overshoot && !whole, onEnd: ws.inside == null ? null : (start, by) => _toEnd(ws, span, start, by, done: true), onEndMove: ws.inside == null ? null : (start, by) => _toEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by), trial: trial);
     return LayoutBuilder(builder: (_, box) {
       // (the left column as wide as its two marks; the shapes as large as the height lets seven and a bit be, or the width
       //  leaves, the two columns round them; all the rest the graph: a pane of any size has no empty part)
@@ -334,9 +338,11 @@ class DeskEaseState extends State<DeskEase> with _EaseEnds {
                       child: Stack(
                         children: [
                           Positioned.fill(
-                            child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(beats: beats, ease: whole ? easeLaid(cards) : card, onion: _held ?? (laid && !whole ? easeLaid(cards) : null), ends: _endsOf(ws, span), span: span, frame: frame, onChanged: put, jump: easeJump, overshoot: overshoot && !whole, onEnd: ws.inside == null ? null : (start, by) => _toEnd(ws, span, start, by, done: true), onEndMove: ws.inside == null ? null : (start, by) => _toEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by))),   // (only the graph follows the playhead)
+                            child: span == null
+                                ? EaseTrial(way: said(ease), builder: (trial) => graph(ws.frame, trial))
+                                : ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => graph(frame)),   // (only the graph follows the playhead)
                           ),
-                          if (span == null) Positioned.fill(child: Center(child: Padding(padding: EdgeInsets.all(Shape.s(8)), child: Text('Put the playhead between two keys, or pick a key', textAlign: TextAlign.center, style: T.label(Grey.g63))))),
+                          if (span == null && ws.inside != null) Positioned(left: Shape.s(6), top: Shape.s(4), right: Shape.s(6), child: IgnorePointer(child: Text('Trying here. Pick a key to go on a stretch', key: const ValueKey('ease-no-span'), maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(Grey.g63)))),
                           if (_trouble case final why?) Positioned(left: Shape.s(4), right: Shape.s(4), top: Shape.s(2), child: Text(why, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63))),
                           if (span case final s?) Positioned(left: Shape.s(6), top: Shape.s(4), right: Shape.s(6), child: IgnorePointer(child: Text('${s.layer.name}  ${s.from} → ${s.to}', key: const ValueKey('ease-span'), maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(Grey.g63)))),   // (which thing, which stretch)
                           Positioned.fill(child: EaseNumbers(card: whole ? easeLaid(cards) : card, onChanged: put)),
