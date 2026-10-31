@@ -42,7 +42,7 @@ class EasePresets extends StatelessWidget {
   final ValueChanged<Ease> onPick;
 
   Widget _tile(Ease e) => Padding(
-    padding: EdgeInsets.all(Shape.s(3)),
+    padding: EdgeInsets.zero,
     child: PresetTile(e, key: ValueKey('ease.${e.name}'), on: _lit(e, ease), label: '', onTap: () => _lit(e, ease) ? null : onPick(e)),   // (the one it is already: its own numbers kept)
   );
 
@@ -73,7 +73,7 @@ class EaseFamilies extends StatelessWidget {
           for (final i in rows)
             Expanded(
               child: Padding(
-                padding: EdgeInsets.fromLTRB(Shape.s(6), Shape.s(3), Shape.s(3), Shape.s(3)),
+                padding: EdgeInsets.only(left: Shape.s(4)),   // (past the notch)
                 child: PresetTile(
                   easesOfFamily(i, ways)[i == 0 ? 3 : 0],
                   key: ValueKey('ease.family.$i'),
