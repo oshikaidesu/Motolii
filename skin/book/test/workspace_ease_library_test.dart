@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/desk_ease_state.dart' show easeOvershoot;
+import 'package:lab_book/workspace/desk_ease_cards.dart' show EaseCards;
 import 'package:lab_book/workspace/desk_ease_graph.dart';
 import 'package:lab_book/workspace/desk_ease_handles.dart';
 
@@ -182,7 +183,16 @@ void main() {
     expect(t.widget<EaseGraph>(graph).ease.name, 'Linear', reason: 'the one just laid in hand');
     final r = t.getRect(graph), g = r.deflate(r.width * 42 / 575);
     Offset px(double x, double y) => Offset(g.left + x * g.width, g.bottom - (y + .25) / 1.5 * g.height);
-    await t.timedDragFrom(px(.25, .25), px(.25, .9) - px(.25, .25), const Duration(milliseconds: 300));
+    List<double> whole() => t.widget<EaseCards>(_in(find.byType(EaseCards))).whole!.drawn!;
+    final was = whole();
+    final hand = await t.startGesture(px(.25, .25), kind: PointerDeviceKind.mouse);
+    for (var i = 1; i <= 12; i++) {
+      await hand.moveBy((px(.25, .9) - px(.25, .25)) / 12);
+      await t.pump();
+    }
+    expect(whole(), isNot(was), reason: 'what they make, at the flow\'s foot, while the hand is on it');
+    expect(t.widget<EaseGraph>(graph).onion?.drawn, whole(), reason: 'and the skin behind the graph');
+    await hand.up();
     await settled(t, ws);
     final pulled = m.wayOf(cube, 'x', 0);
     expect(pulled, allOf(startsWith('Cyclic'), contains('×Bezier')), reason: 'its handle, on its stretch: ${m.trouble}');
@@ -194,6 +204,11 @@ void main() {
     await t.pumpAndSettle();
     await carry(_in(find.byKey(const ValueKey('ease.Elastic'))), t.getCenter(_in(find.byKey(const ValueKey('ease.card.1')))));
     expect(m.wayOf(cube, 'x', 0).split('×').map((w) => w.split('~').first), ['Cyclic', 'Elastic', 'Bezier'], reason: 'let go on a card it goes in before it');
+    await hand.moveTo(t.getCenter(_in(find.byKey(const ValueKey('ease.card.1')))));   // (the hand over it)
+    await t.pumpAndSettle();
+    await t.tap(_in(find.byKey(const ValueKey('ease.off.1'))));
+    await settled(t, ws);
+    expect(m.wayOf(cube, 'x', 0).split('×').map((w) => w.split('~').first), ['Cyclic', 'Bezier'], reason: 'its ×: that card off, the others stay');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await t.pumpAndSettle();

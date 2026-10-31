@@ -209,8 +209,8 @@ class _GraphPainter extends CustomPainter {
     c.restore();
     if (onion case final whole?) {
       final skin = Path()..moveTo(a.dx, a.dy);
-      for (var i = 1; i <= 96; i++) {
-        final o = px(Offset(i / 96, whole.at(i / 96)));
+      for (var i = 1; i <= 192; i++) {
+        final o = px(Offset(i / 192, whole.at(i / 192)));
         skin.lineTo(o.dx, o.dy);
       }
       c.drawPath(skin, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.6..strokeJoin = StrokeJoin.round..color = Grey.g56);
@@ -228,7 +228,7 @@ class _GraphPainter extends CustomPainter {
     }
     // The curve.
     final path = Path()..moveTo(a.dx, a.dy);
-    const n = 96;
+    const n = 192;
     for (var i = 1; i <= n; i++) {
       final x = i / n;
       final o = px(Offset(x, along(x)));

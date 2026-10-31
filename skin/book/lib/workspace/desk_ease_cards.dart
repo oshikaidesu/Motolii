@@ -4,6 +4,7 @@
 // listed as any way is.
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/motolii.dart';
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show Hov;
 import 'package:lab_book/tokens.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/desk_ease_presets.dart';
@@ -27,21 +28,26 @@ List<(String, String)> easeDefines(String word) => [
   if (easeIsLaid(word)) (word, 'a + (b - a) * ${[for (final c in easeCards(word)) "way('${c.replaceAll("'", "''")}', u)"].join(' * ')}'),
 ];
 
+const _steps = 192;   // (a curve drawn large, its peaks whole)
+final _worked = <String, List<double>>{};   // (a card's curve, worked out once: all but the one a hand moves stay as they were)
+
 /// A card, as the way it says.
 Ease easeCard(String word, Motolii? m) {
   if (easeIsTurned(word)) {
     final base = easeCard(easeTurn(word), m);
-    return Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), word, [for (var i = 0; i <= 96; i++) 1 - base.at(1 - i / 96)]);
+    return Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), word, [for (var i = 0; i <= _steps; i++) 1 - base.at(1 - i / _steps)]);
   }
   final e = heard(word);
-  return easeOther(e) && m != null ? Ease(e.kind, e.p1, e.p2, e.name, [for (var i = 0; i <= 96; i++) m.wayAt(word, i / 96)]) : e;
+  if (!easeOther(e) || m == null) return e;
+  if (_worked.length > 256) _worked.clear();
+  return Ease(e.kind, e.p1, e.p2, e.name, _worked[word] ??= [for (var i = 0; i <= _steps; i++) m.wayExact(word, i / _steps)]);
 }
 
 /// The cards laid as one way; a card left alone: itself.
 Ease easeLaid(List<Ease> cards) => cards.length == 1
     ? cards.single
     : Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), [for (final c in cards) said(c).replaceAll(' ', _space)].join(_over), [
-        for (var i = 0; i <= 96; i++) cards.fold<double>(1, (v, c) => v * c.at(i / 96)),
+        for (var i = 0; i <= _steps; i++) cards.fold<double>(1, (v, c) => v * c.at(i / _steps)),
       ]);
 
 /// What a way is called under the graph.
@@ -68,7 +74,30 @@ class EaseCards extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final side = Size.square(Shape.z(30));
-    Widget card(int i, Ease c) => SizedBox.fromSize(size: side, child: PresetTile(c, on: i == now, onTap: () => onPress(i), carried: false));
+    Widget card(int i, Ease c) => Hov(   // (under the hand, its × : as Cavalry's, Bitwig's and Serum's rows take a modulation off)
+      builder: (_, h) => Stack(
+        clipBehavior: Clip.none,
+        children: [
+          SizedBox.fromSize(size: side, child: PresetTile(c, on: i == now, onTap: () => onPress(i), carried: false)),
+          if (h && (cards.length > 1 || c != easePreset('Linear')))
+            Positioned(
+              right: -Shape.s(4),
+              top: -Shape.s(3),
+              child: Hov(
+                key: ValueKey('ease.off.$i'),
+                onTap: () => onOff(i),
+                builder: (_, over) => Container(
+                  width: Shape.z(15),
+                  height: Shape.z(15),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(color: over ? Grey.g95 : Grey.g38, shape: BoxShape.circle),
+                  child: Text('×', style: T.micro(over ? Grey.g13 : Grey.g95).copyWith(fontWeight: FontWeight.w700, height: 1)),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
     Widget place(int i, Widget child) => DragTarget<Object>(
       onWillAcceptWithDetails: (d) {
         if (d.data case final Ease e) onHold(e, i);

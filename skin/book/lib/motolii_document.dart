@@ -134,6 +134,9 @@ extension MotoliiDocument on Motolii {
     return _with([way], (s) => _wayAt(_m, s[0], u));
   }
 
+  /// A way as the inside works it out, not as the picture's few steps say it: for a curve drawn large.
+  double wayExact(String way, double u) => _with([way], (s) => _wayAt(_m, s[0], u));
+
   /// Every stretch of a thing's keyed values: from, to (seconds), its way, as the inside says them (a timeline draws how each goes).
   List<(double, double, String)> thingStretches(int thing) => [
         for (final l in ((_of(thing)['stretches'] as String?) ?? '').split('\n'))

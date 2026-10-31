@@ -572,6 +572,11 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "stay") ok = changes(m, (int)doc_stay(doc(m), thing, n.c_str(), number));
             else if (c == "way") ok = way_is(m, thing, n.c_str(), number, w.c_str());
             else if (c == "define") ok = define_is(m, n.c_str(), w.c_str());   // (name: the way; word: how it goes)
+            else if (c == "show") {   // (what the open step has made so far, on the stage while a hand is still down: as doc_paths.h shows a picture placed, within its step)
+                Doc& d = doc(m);
+                ok = 1;
+                if (d.act && d.act_unmatched) d.act_unmatched = false, doc_forget(d), ok = changes(m, (int)doc_match(d));
+            }
             else if (c == "effect") ok = changes(m, (int)doc_effect(doc(m), thing, n.c_str(), number));
             else if (c == "pen") {   // (word: where the hand is and its handle, "x y hx hy", points of the picture; the answer is the path shape)
                 double x = 0.0, y = 0.0, hx = 0.0, hy = 0.0;
