@@ -28,6 +28,13 @@ final _kinds = <String, (List<double>, List<_Number>)>{
 /// Whether they are open: left so, whatever is pressed, as the Inspector's cards are.
 bool easeNumbersOpen = false;
 
+/// Whether a way goes by its kind's usual numbers: a tile then draws what the kind does, and otherwise its own curve.
+bool easeIsUsual(String said) {
+  final w = said.split(' '), usual = _kinds[w.first]?.$1;
+  if (usual == null || w.length == 1 || w.first == 'Bezier') return true;   // (a bezier's tile draws its own numbers already)
+  return [for (final (i, x) in w.skip(1).indexed) (double.tryParse(x) ?? 0) - (i < usual.length ? usual[i] : 0)].every((d) => d.abs() < 1e-6);
+}
+
 class EaseNumbers extends StatefulWidget {
   const EaseNumbers({super.key, required this.card, required this.onChanged});
   final Ease card;   // (the card in hand, or the whole: a whole has a name, and no numbers)

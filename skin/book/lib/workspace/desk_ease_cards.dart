@@ -33,6 +33,9 @@ String easeTurn(String said) => easeIsTurned(said) ? said.substring(_turned.leng
 
 enum _By { through, times, plus }
 
+/// Whether a card takes what is above it through it, so that it is walked by that and not by the clock.
+bool easeThrough(Ease card) => _by(said(card)) == _By.through;
+
 // (how a card acts on what is above it)
 _By _by(String word) => switch ((easeIsTurned(word) ? easeTurn(word) : word).split(' ').first) {
   'Cyclic' => _By.times,
@@ -143,9 +146,11 @@ Ease? easeFromText(String? text, Motolii? m) {
 /// always, the whole has no handles); that at the foot pressed, the graph shows the whole. A card carried up or down it takes that place, a shape let go on a card goes in
 /// before it, and one carried off the flow comes off.
 class EaseCards extends StatelessWidget {
-  const EaseCards({super.key, required this.cards, required this.now, required this.whole, required this.onWhole, required this.onPress, required this.onOff, required this.onMove, required this.onLay, required this.onHold, required this.side, this.across = false});
+  const EaseCards({super.key, this.adding = false, this.onSlot, required this.cards, required this.now, required this.whole, required this.onWhole, required this.onPress, required this.onOff, required this.onMove, required this.onLay, required this.onHold, required this.side, this.across = false});
   final double side;
   final bool across;   // (laid across, under the graph, in a tall pane)
+  final bool adding;   // (the empty frame pressed: it waits for what is picked next)
+  final VoidCallback? onSlot;
   final List<Ease> cards;
   final int now;
   final Ease? whole;
@@ -218,7 +223,7 @@ class EaseCards extends StatelessWidget {
               if (cards.length > 1) place(i, carried(i, c)) else if (c == easePreset('Linear')) card(i, c) else carried(i, c),   // (a straight line alone: nothing to carry)
             ],
             arrow(),
-            EaseSlot(key: const ValueKey('ease.slot'), side: this.side, ink: Grey.g38),
+            Hov(key: const ValueKey('ease.slot'), onTap: onSlot, builder: (_, h) => EaseSlot(side: this.side, ink: adding ? WsT.accent : h ? Grey.g76 : Grey.g38)),
                 ],
               ),
             ),

@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show Hov;
 import 'package:lab_book/tokens.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
+import 'package:lab_book/workspace/desk_ease_numbers.dart' show easeIsUsual;
 import 'package:lab_book/workspace/ws.dart';
 
 class PresetTile extends StatelessWidget {
@@ -106,7 +107,7 @@ class EaseIcon extends CustomPainter {
     }
 
     final word = said(ease).split(' ').first;
-    switch (word) {
+    switch (easeIsUsual(said(ease)) ? word : '') {   // (its numbers changed: its own curve, or a card or a kept one with 8 waves would look like 3.5)
       case 'Linear':
         bezier(const Offset(.25, .25), const Offset(.75, .75));
       case 'Bezier':

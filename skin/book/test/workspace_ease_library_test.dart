@@ -593,6 +593,66 @@ void main() {
     await closeWorkspace(t);
   }, skip: !insideBuilt);
 
+  testWidgets('what a reader found: on Linear a shape goes in as pressed; the empty frame takes what is picked next; beats fall where the film has them; paste to all needs no key picked', (t) async {
+    final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    expect(m.key(cube, 'x', 0, 0) && m.key(cube, 'x', 2, 1) && m.key(cube, 'x', 4, 0), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..pickKey((layer: '$cube', frame: 0))
+      ..front('Ease');
+    await t.pumpAndSettle();
+    final graph = _in(find.byType(EaseGraph));
+    Future<void> lay(String shape) async {
+      final hand = await t.startGesture(t.getCenter(_in(find.byKey(ValueKey('ease.$shape')))), kind: PointerDeviceKind.mouse);
+      await hand.moveBy(const Offset(-14, 0));
+      await t.pump();
+      await hand.moveTo(t.getCenter(graph));
+      await t.pump();
+      await hand.up();
+      await settled(t, ws);
+      await hand.removePointer();
+      await t.pumpAndSettle();
+    }
+
+    await lay('Cyclic');
+    expect(m.wayOf(cube, 'x', 0), startsWith('Cyclic'), reason: 'on a straight line alone: as a press, ${m.trouble}');
+    expect(m.wayOf(cube, 'x', 0), isNot(contains('×')));
+    await t.tap(_in(find.byKey(const ValueKey('ease.In-out'))));
+    await settled(t, ws);
+    await t.tap(_in(find.byKey(const ValueKey('ease.slot'))));
+    await t.pumpAndSettle();
+    await t.tap(_in(find.byKey(const ValueKey('ease.Bounce'))));
+    await settled(t, ws);
+    await t.pumpAndSettle();
+    expect(m.wayOf(cube, 'x', 0), allOf(contains('×'), contains('Bounce')), reason: 'the frame pressed: the next goes in it, ${m.trouble}');
+    expect(_in(find.byKey(const ValueKey('ease.card.1'))), findsOneWidget);
+    await t.tap(_in(find.byKey(const ValueKey('ease.Elastic'))));
+    await settled(t, ws);
+    expect(m.wayOf(cube, 'x', 0), allOf(contains('×'), contains('Elastic'), isNot(contains('Bounce'))), reason: 'and only the next: then a press takes the card\'s place');
+    expect(m.set(0, 'bpm', 120), isTrue, reason: m.trouble);   // (two beats a second: 2, 3... at frames 30, 60, 90 of 120)
+    ws.reread();
+    await t.pumpAndSettle();
+    final inOut = easePreset('In-out');
+    expect(t.widget<EaseGraph>(graph).beats.first, closeTo(inOut.at(.25), 1e-3), reason: 'the card under In-out is walked by it: the first beat is where In-out has come to');
+    await t.tap(_in(find.byKey(const ValueKey('ease.card.0'))));
+    await t.pumpAndSettle();
+    expect(t.widget<EaseGraph>(graph).beats.first, closeTo(.25, 1e-6), reason: 'the top one by the clock');
+    ws.clearKeys();
+    ws.frame = 30;
+    await t.pumpAndSettle();
+    await menu(t, 'copy');
+    await menu(t, 'all');
+    await settled(t, ws);
+    expect(m.wayOf(cube, 'x', 2), m.wayOf(cube, 'x', 0), reason: 'the other stretch too, no key picked');
+    expect(easeIsUsual('Cyclic 0.285714286 0 0.5 0 0'), isTrue);
+    expect(easeIsUsual('Cyclic 0.125 0 0.5 0 0'), isFalse, reason: 'its tile draws its own curve');
+    expect(easeIsUsual('Bounce'), isTrue);
+    expect(easeIsUsual('Bezier 0.42 0.0 1.0 1.0'), isTrue, reason: 'it draws its numbers as it is');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
   testWidgets('a wave turned end for end, and back (AbsentMotion\'s reverse)', (t) async {
     final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
     final cube = m.add('solid', 'cube');
