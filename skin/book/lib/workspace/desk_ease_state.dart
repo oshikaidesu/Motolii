@@ -295,11 +295,17 @@ class DeskEaseState extends State<DeskEase> {
     final overshoot = bezier && !_noOver && (easeOvershoot || _overLocked || [card.p1.dy, card.p2.dy].any((y) => y < 0 || y > 1));
     _overLocked = overshoot;
     final turned = bezier ? card.reversed() : Ease(card.kind, card.p1, card.p2, easeTurn(said(card)));   // (AbsentMotion's reversed(): a bezier's handles turned, any other marked so)
-    return Row(
+    return LayoutBuilder(builder: (_, box) {
+      // (the left column as wide as its two marks; the shapes as large as the height lets seven and a bit be, or the width
+      //  leaves, the two columns round them; all the rest the graph: a pane of any size has no empty part)
+      final left = Shape.z(34);
+      final side = math.min(box.maxHeight / (easeShapes.length + .45) - Shape.s(6), (box.maxWidth * .55 - left) / 2 - Shape.s(12)).clamp(Shape.z(16), Shape.z(64));
+      final column = side + Shape.s(12);
+      return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          flex: 110,
+        SizedBox(
+          width: left,
           child: EaseLeft(
             onReverse: !whole && card != easePreset('Linear') && turned != card ? () => put(turned) : null,
             menu: [
@@ -318,7 +324,6 @@ class DeskEaseState extends State<DeskEase> {
           ),
         ),
         Expanded(
-          flex: 575 + 150,
           child: DragTarget<Object>(
             onWillAcceptWithDetails: (d) {
               if (d.data case final Ease e) setState(() => _held = laidOn(e));
@@ -339,7 +344,6 @@ class DeskEaseState extends State<DeskEase> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Expanded(
-                    flex: 575,
                     child: ColoredBox(
                       color: WsT.well,
                       child: Stack(
@@ -356,7 +360,7 @@ class DeskEaseState extends State<DeskEase> {
                       ),
                     ),
                   ),
-                  Expanded(flex: 150, child: EaseCards(cards: pile, now: whole ? -1 : at, whole: pile.length > 1 ? _held ?? easeLaid(cards) : null, onWhole: () => setState(() => _card = -1), onPress: (i) => setState(() => _card = i), onOff: (i) => set(cards.length > 1 ? easeLaid([...cards]..removeAt(i)) : easePreset('Linear')), onMove: (from, to) {
+                  SizedBox(width: column, child: EaseCards(side: side, cards: pile, now: whole ? -1 : at, whole: pile.length > 1 ? _held ?? easeLaid(cards) : null, onWhole: () => setState(() => _card = -1), onPress: (i) => setState(() => _card = i), onOff: (i) => set(cards.length > 1 ? easeLaid([...cards]..removeAt(i)) : easePreset('Linear')), onMove: (from, to) {
                     final next = [...cards];
                     next.insert(to, next.removeAt(from));
                     _card = to;
@@ -371,11 +375,12 @@ class DeskEaseState extends State<DeskEase> {
             ),
           ),
         ),
-        Expanded(flex: 150, child: EaseShapes(ease: whole ? ease : card, shapes: easeRow(unseated(ws)), onPick: (e) {
+        SizedBox(width: column, child: EaseShapes(ease: whole ? ease : card, side: side, shapes: easeRow(unseated(ws)), onPick: (e) {
           if (whole) _card = at;   // (the last card takes it, in hand)
           put(e);
         })),
       ],
-    );
+      );
+    });
   }
 }

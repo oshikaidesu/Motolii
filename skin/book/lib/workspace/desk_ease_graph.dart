@@ -16,11 +16,10 @@ import 'two_fingers.dart';
 /// 10/31, the bars drawn on a picture of it, "確定してもその位置のままで"): [onEnd] is told which end and how far, in the
 /// bars' own measure (1: from the one key's value to the other's as they first were); [ends] is where they stand. With
 /// [jump] on, a dashed line shows the value jumping there, as the keys it makes will.
-/// Where the curve's square lies in a graph of that size (AbsentMotion's geoOf: 42 of 575 kept round it), with room each
-/// side for the bars; and how far out of it they stand: past any handle, which goes no further than its edge.
+/// Where the curve's square lies in a graph of that size, all it can be, with room each side for the bars; and how far out of it they stand: past any handle, which goes no further than its edge.
 Rect easeBox(Size s) {
-  final m = s.width * 42 / 575, side = m + Shape.z(10);
-  return Rect.fromLTRB(side, m, math.max(side + 1, s.width - side), math.max(m + 1, s.height - m));
+  final side = Shape.z(14) + easeBarOut, top = Shape.z(22), under = Shape.z(36);   // (room for the bars, the thing's name, the frames and the way's name: no more, whatever its size)
+  return Rect.fromLTRB(side, top, math.max(side + 1, s.width - side), math.max(top + 1, s.height - under));
 }
 
 double get easeBarOut => Shape.z(16);
@@ -265,8 +264,10 @@ class _GraphPainter extends CustomPainter {
     // The timeline here: its playhead in its own colour, where on the way it is now, and the frames: which part is being read.
     final numbers = T.micro(Grey.g56);
     if (from != null && to != null && to! > from!) {
-      deskText(c, '$from', Offset(g.left, bottom + 6), numbers);
-      deskText(c, '$to', Offset(g.right, bottom + 6), numbers, ax: 1);
+      if (g.width > Shape.z(80)) {   // (too narrow, only the frame now)
+        deskText(c, '$from', Offset(g.left, bottom + 6), numbers);
+        deskText(c, '$to', Offset(g.right, bottom + 6), numbers, ax: 1);
+      }
       if (frame >= from! && frame <= to!) {
         final u = (frame - from!) / (to! - from!), x = g.left + g.width * u, y = y0 + (y1 - y0) * (onion ?? ease).at(u), line = Paint()..color = WsT.playhead..strokeWidth = 1.5;
         c.drawLine(Offset(x, top - 8), Offset(x, bottom + 4), line);

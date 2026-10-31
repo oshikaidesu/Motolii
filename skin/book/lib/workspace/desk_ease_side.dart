@@ -30,8 +30,9 @@ bool _isOf(Ease shape, Ease now) {
 
 /// The row beside the graph: a press puts a shape on the stretch, or a curved line back straight.
 class EaseShapes extends StatelessWidget {
-  const EaseShapes({super.key, required this.ease, required this.shapes, required this.onPick});
+  const EaseShapes({super.key, required this.ease, required this.shapes, required this.side, required this.onPick});
   final Ease ease;
+  final double side;
   final List<Ease> shapes;
   final ValueChanged<Ease> onPick;
 
@@ -43,7 +44,7 @@ class EaseShapes extends StatelessWidget {
         itemExtent: box.maxHeight / (easeShapes.length + .45),   // (the next cut by the edge: it says there is more)
         children: [
           for (final e in shapes)
-            PresetTile(e, key: ValueKey('ease.${e.name}'), on: _isOf(e, ease), onTap: () => _isOf(e, ease) && !(easeIsBezier(e) && e != ease) ? null : onPick(e)),   // (the one it is already: its own numbers kept)
+            PresetTile(e, key: ValueKey('ease.${e.name}'), on: _isOf(e, ease), side: side, onTap: () => _isOf(e, ease) && !(easeIsBezier(e) && e != ease) ? null : onPick(e)),   // (the one it is already: its own numbers kept)
         ],
       ),
     ),

@@ -9,8 +9,9 @@ import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/ws.dart';
 
 class PresetTile extends StatelessWidget {
-  const PresetTile(this.ease, {super.key, required this.on, required this.onTap, this.carried = true});
+  const PresetTile(this.ease, {super.key, required this.on, required this.onTap, required this.side, this.carried = true});
   final Ease ease;
+  final double side;   // (the square's: as the panel's height lets it be, so no row of them lies empty)
   final bool on;
   final VoidCallback onTap;
 
@@ -24,7 +25,7 @@ class PresetTile extends StatelessWidget {
         : Draggable<Ease>(
             data: ease,
             dragAnchorStrategy: pointerDragAnchorStrategy,
-            feedback: easeHeld(tile),
+            feedback: easeHeld(tile, side),
             childWhenDragging: Opacity(opacity: .3, child: tile),
             child: tile,
           );
@@ -36,7 +37,7 @@ class PresetTile extends StatelessWidget {
     builder: (_, h) => Center(
       child: Transform.translate(
         offset: Offset(0, h && carried ? -Shape.s(2) : 0),
-        child: CustomPaint(size: Size.square(Shape.z(30)), painter: EaseIcon(ease, on ? WsT.accentInk : (h ? Grey.g95 : Grey.g76))),
+        child: CustomPaint(size: Size.square(side), painter: EaseIcon(ease, on ? WsT.accentInk : (h ? Grey.g95 : Grey.g76))),
       ),
     ),
   );
@@ -45,8 +46,8 @@ class PresetTile extends StatelessWidget {
 const easeShadow = [BoxShadow(color: Color(0x80000000), blurRadius: 10, offset: Offset(0, 4))];
 
 /// A card in the hand: held by its middle, tilted a little.
-Widget easeHeld(Widget card) {
-  final w = Shape.z(30), h = Shape.z(30);
+Widget easeHeld(Widget card, double side) {
+  final w = side, h = side;
   return IgnorePointer(
     child: Transform.translate(
       offset: Offset(-w / 2, -h / 2),

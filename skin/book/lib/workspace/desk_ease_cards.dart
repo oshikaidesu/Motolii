@@ -111,7 +111,8 @@ String easeWord(Ease e) {
 /// always, the whole has no handles); that at the foot pressed, the graph shows the whole. A card carried up or down it takes that place, a shape let go on a card goes in
 /// before it, and one carried off the flow comes off.
 class EaseCards extends StatelessWidget {
-  const EaseCards({super.key, required this.cards, required this.now, required this.whole, required this.onWhole, required this.onPress, required this.onOff, required this.onMove, required this.onLay, required this.onHold});
+  const EaseCards({super.key, required this.cards, required this.now, required this.whole, required this.onWhole, required this.onPress, required this.onOff, required this.onMove, required this.onLay, required this.onHold, required this.side});
+  final double side;
   final List<Ease> cards;
   final int now;
   final Ease? whole;
@@ -123,12 +124,12 @@ class EaseCards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final side = Size.square(Shape.z(30));
+    final side = Size.square(this.side);
     Widget card(int i, Ease c) => Hov(   // (under the hand, its × : as Cavalry's, Bitwig's and Serum's rows take a modulation off)
       builder: (_, h) => Stack(
         clipBehavior: Clip.none,
         children: [
-          SizedBox.fromSize(size: side, child: PresetTile(c, on: i == now, onTap: () => onPress(i), carried: false)),
+          SizedBox.fromSize(size: side, child: PresetTile(c, on: i == now, side: this.side, onTap: () => onPress(i), carried: false)),
           if (h && (cards.length > 1 || c != easePreset('Linear')))
             Positioned(
               right: -Shape.s(4),
@@ -164,7 +165,7 @@ class EaseCards extends StatelessWidget {
         child: child,
       ),
     );
-    Widget arrow() => CustomPaint(size: Size(side.width, Shape.z(12)), painter: _Arrow(Grey.g56));
+    Widget arrow() => CustomPaint(size: Size(side.width, this.side * .4), painter: _Arrow(Grey.g56));
     return ColoredBox(
       color: WsT.card,
       child: Column(
@@ -182,7 +183,7 @@ class EaseCards extends StatelessWidget {
                       key: ValueKey('ease.card.$i'),
                       data: i,
                       dragAnchorStrategy: pointerDragAnchorStrategy,
-                      feedback: easeHeld(card(i, c)),
+                      feedback: easeHeld(card(i, c), this.side),
                       childWhenDragging: Opacity(opacity: .3, child: card(i, c)),
                       onDraggableCanceled: (_, _) => onOff(i),   // (let go on the flow or the graph it is accepted there, and stays)
                       child: card(i, c),
@@ -196,7 +197,7 @@ class EaseCards extends StatelessWidget {
           ),
           if (whole case final w?) Padding(
             padding: EdgeInsets.only(top: Shape.s(4), bottom: Shape.s(6)),
-            child: SizedBox.fromSize(size: side, child: PresetTile(w, key: const ValueKey('ease.whole'), on: now < 0, onTap: onWhole, carried: false)),
+            child: SizedBox.fromSize(size: side, child: PresetTile(w, key: const ValueKey('ease.whole'), on: now < 0, side: this.side, onTap: onWhole, carried: false)),
           ),
         ],
       ),
