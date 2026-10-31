@@ -3,6 +3,7 @@
 // when its path changes, `refill`), then its edge (ThorVG's own stroker: trimmed and dashed as told, its triangles
 // straight), in shares of its height from its middle (uv) and in the stage's units (pos), into its sheet; where each
 // part's indices end (a part with none: one empty triangle).
+bool sk_trim(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, float from, float to, std::vector<tvg::PathCommand>& outCmds, std::vector<tvg::Point>& outPts);
 static std::vector<uint32_t> shape_cut(Drawn* d, float trimFrom, float trimTo, bool refill) {
     const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
     d->outline->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
@@ -27,10 +28,17 @@ static std::vector<uint32_t> shape_cut(Drawn* d, float trimFrom, float trimTo, b
             TESStesselator* t = tessNewTess(nullptr);
             std::vector<float2> ring;
             const auto end = [&] { if (ring.size() > 2) tessAddContour(t, 2, ring.data(), sizeof(float2), (int)ring.size()); ring.clear(); };
-            for (uint32_t c = 0, p = 0; c < cmdsCnt; ++c) switch (cmds[c]) {
-                case tvg::PathCommand::MoveTo: end(); ring.push_back({pts[p].x, pts[p].y}); ++p; break;
-                case tvg::PathCommand::LineTo: ring.push_back({pts[p].x, pts[p].y}); ++p; break;
-                case tvg::PathCommand::CubicTo: ring.push_back({pts[p + 2].x, pts[p + 2].y}); p += 3; break;
+            std::vector<tvg::PathCommand> partBy;   // (trimmed: what is left of it, closed across)
+            std::vector<tvg::Point> partAt;
+            const bool part = trimFrom > 0.f || trimTo < 1.f;
+            if (part) sk_trim(cmds, cmdsCnt, pts, trimFrom, trimTo, partBy, partAt);
+            const tvg::PathCommand* fillBy = part ? partBy.data() : cmds;
+            const tvg::Point* fillAt = part ? partAt.data() : pts;
+            const uint32_t fillCnt = part ? (uint32_t)partBy.size() : cmdsCnt;
+            for (uint32_t c = 0, p = 0; c < fillCnt; ++c) switch (fillBy[c]) {
+                case tvg::PathCommand::MoveTo: end(); ring.push_back({fillAt[p].x, fillAt[p].y}); ++p; break;
+                case tvg::PathCommand::LineTo: ring.push_back({fillAt[p].x, fillAt[p].y}); ++p; break;
+                case tvg::PathCommand::CubicTo: ring.push_back({fillAt[p + 2].x, fillAt[p + 2].y}); p += 3; break;
                 case tvg::PathCommand::Close: end(); break;
             }
             end();
@@ -192,9 +200,10 @@ static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 10>&
         reshape(s, d->sheet, c.ends);
         return;
     }
+    const bool refillTrim = !d->hollow && !(trim == d->trimmed);
     d->trimmed = trim;
-    const bool refill = bend != d->bent || joins;
-    if (refill) {
+    const bool rebend = bend != d->bent || joins, refill = rebend || refillTrim;
+    if (rebend) {
         d->bent = bend, d->joined = join, d->morphed = morph, d->traced = trace;
         const float high = d->plainHigh;
         const bool traces = !trace.by.empty();   // (tracing another: its track is its path, as Cavalry's Trails)

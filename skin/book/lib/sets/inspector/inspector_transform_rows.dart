@@ -165,7 +165,8 @@ class ScaleRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final x = Ctx.of(context), doc = x.doc;
-    final axes = [for (final a in const ['x', 'y', 'z']) if (doc.seat('v_scale_$a')) a]; // (only the axes the thing has: a light none, a film no depth)
+    final flat = doc.space == Space.d2 && doc.kindWord != 'Solid' && (doc.get('v_scale_z') ?? 100) == 100;   // (a 2D layer's Scale has no Z, After Effects'; given a thickness already, it shows)
+    final axes = [for (final a in const ['x', 'y', 'z']) if (doc.seat('v_scale_$a') && !(flat && a == 'z')) a]; // (only the axes the thing has: a light none, a film no depth)
     if (axes.isEmpty) return const SizedBox.shrink();
     // contract: with the link on, a factor applies to every axis (2:3, X=4 gives 4:6); unlinked writes only the touched axis; a zero axis gets the typed value (E1). Toggling the link changes nothing.
     void set(String a, double v) {

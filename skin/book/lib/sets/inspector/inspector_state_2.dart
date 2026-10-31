@@ -282,6 +282,11 @@ class Doc extends ChangeNotifier {
     _undo.clear();
     keys[prop] = s;
     _watched['key:$prop']?.value++;   // (the field whose mark it is draws it now)
+    if (link && (prop == 'v_scale_x' || prop == 'v_scale_y')) {   // (linked, Scale is one value with one key: After Effects' stopwatch on Scale; the link undone, each its own: Separate Dimensions)
+      final other = prop == 'v_scale_x' ? 'v_scale_y' : 'v_scale_x';
+      keys[other] = s;
+      _watched['key:$other']?.value++;
+    }
     notifyListeners();
   }
 

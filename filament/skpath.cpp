@@ -376,6 +376,25 @@ bool sk_resample(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Poin
     return !outCmds.empty();
 }
 
+// Each outline of a path from `from` to `to` (shares of its length, going round past either end) in short straight pieces,
+// closed across: what is filled of a trimmed shape, as After Effects' Trim Paths and Skottie's cut the fill (Skia's contour measure).
+bool sk_trim(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, float from, float to, std::vector<tvg::PathCommand>& outCmds, std::vector<tvg::Point>& outPts) {
+    outCmds.clear(), outPts.clear();
+    SkContourMeasureIter it(sk_of(cmds, cmdsCnt, pts), false);
+    while (const sk_sp<SkContourMeasure> c = it.next()) {
+        if (to <= from) break;
+        const int steps = std::clamp((int)(c->length() * (to - from) / 2.f), 8, 512);
+        for (int i = 0; i <= steps; ++i) {
+            const float at = from + (to - from) * (float)i / (float)steps;
+            SkPoint p;
+            if (!c->getPosTan(c->length() * (c->isClosed() ? at - std::floor(at) : std::clamp(at, 0.f, 1.f)), &p, nullptr)) continue;
+            outCmds.push_back(i ? tvg::PathCommand::LineTo : tvg::PathCommand::MoveTo), outPts.push_back({p.fX, p.fY});
+        }
+        outCmds.push_back(tvg::PathCommand::Close);
+    }
+    return !outCmds.empty();
+}
+
 // `n` places along a path, evenly by its length (all its outlines one after another; a closed path's last place not
 // on its first), slid on by `from` (a share of its length, going round): x, y and the way it goes there (radians), three
 // numbers a place (Skia's contour measure), as Cavalry's Duplicator on a shape's outline.
