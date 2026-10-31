@@ -390,7 +390,7 @@
 - [x] 同：Steps（今は 6 段、Alight Motion は 4 段）：既定を 4 段に（0.25・0.5・0.75 で 4 分の 1 ずつ、終わりで 1。実機の絵 135 と同じ、10/28） — 済：`check/doc.sh`
 - [x] 同：Elastic Steps — 数と曲線は AbsentMotion の（Alight Motion のプリセット `Keyframes.kt`、式 `easing.cpp` をそのまま、`filament/interp.h` → `absent_motion.cpp` absent_ease）。10/29 edit.sh：キーの間の値が AbsentMotion の Ease と小数 4 桁まで同じ（u 0.1・0.25・0.4 で 0 20.79 20.00）。曲線の上の取っ手は別の行
 - [ ] イーズの取っ手を曲線の上で直接動かす（黄＝形、白＝始めと終わり）
-- [x] ベジェの 4 つのプリセット（有る）：Ease の机のプリセットに Linear・In・Out・In-out（Alight Motion の直線・加速・減速・加速して減速と同じ形、CSS の ease-in・ease-out・ease-in-out の数）、ほかに Ease・Back・Hold。曲線の白い取っ手 2 つは引ける（`skin/book/lib/workspace/desk_ease.dart` の easePresets、`desk_ease_graph.dart`）
+- [x] ベジェの 4 つのプリセット（有る）：Ease の机の形の列の頭に Linear・In・Out・In-out（Alight Motion の直線・加速・減速・加速して減速と同じ形、数は AbsentMotion の EasingCatalog・CSS の ease-in・ease-out・ease-in-out）、ほかに Hold。一度列から落としていたのを 10/31 に戻した。曲線の白い取っ手 2 つは引ける（`skin/book/lib/workspace/desk_ease_side.dart` の easeShapes、`desk_ease_graph.dart`）
 - [x] 親：一覧で選ぶ（None・自分は灰色・音は出ない）：Transform カードの Parent（None と他の物の名前、自分は出ない） — 済：窓の試験（`workspace_joined_test_2.dart` の Parent）
 - [x] 親：子を選ぶと親の外枠を出す：親のある物を選ぶと、舞台に親の枠が灰色の線で（10/28） — 済：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 動きの道筋を細い線と向きの矢印で出す：選んだ物が動くと、舞台にその道筋（内側の位置の計算 motolii_path、揺れも含む）を細い線と矢印で（10/28） — 済：窓の試験（`workspace_joined_test_3.dart`）
@@ -470,6 +470,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] 区間の繰り返しの入口：エンジンは済（`<値>_loop`、cycle・pingpong・offset）。窓から選ぶ入口がまだ
 - [ ] レーンの箱（Ableton の Stretching and Skewing Envelopes、Live 12 手引き 26.7.2）。作る前に Logic と FL Studio も見る
 - [ ] レーンへの形の差し込み（Ableton の Insert Shape）
+- [x] 作った形を残す — 済（10/31）：流れのカード、足元の結果を形の列へ運ぶと列の足元に残る。押すと戻る、× で消える。`~/.motolii/ease_kept.json`（Live の手引き 23.2.5 Saving Presets の、装置を棚へ運ぶと残る動き。`desk_ease_side.dart` の easeKeep）
 - [ ] `cubic-bezier(...)`・`linear(...)` を貼ってイーズにする（ways/ のファイルの仕組みに載せる）
 - [ ] 区間の波の数を拍で決める
 - [ ] 区間に重ねる（Blender の F-Curve Modifiers）

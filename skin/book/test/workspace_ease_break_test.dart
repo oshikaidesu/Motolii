@@ -49,11 +49,13 @@ void main() {
   }
 
   Future<void> press(String key) async {
+    if (easeShapes.any((s) => key == 'ease.$s')) await seeShape(t, key.substring(5));
     await t.tap(find.byKey(ValueKey(key)));
     await settled(t, ws);
   }
 
   Future<void> layOn(String shape) async {
+    await seeShape(t, shape);
     final hand = await t.startGesture(t.getCenter(find.byKey(ValueKey('ease.$shape'))), kind: PointerDeviceKind.mouse);
     await hand.moveBy(const Offset(-14, 0));
     await t.pump();

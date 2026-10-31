@@ -14,6 +14,7 @@ import 'package:lab_book/workspace/zoom.dart' show WsZoom;
 import 'package:lab_book/workspace/create_preview.dart' show RecipeMotions;
 import 'package:lab_book/workspace/dock_parts.dart' show dockStarsAt;
 import 'package:lab_book/workspace/timeline.dart' show WsTimeline;
+import 'package:lab_book/workspace/desk_ease_side.dart' show EaseShapes, easeFits, easeShapes;
 
 export 'package:lab_book/motolii.dart' show motoliiDir;
 export 'package:lab_book/workspace/door.dart';
@@ -208,4 +209,11 @@ Future<void> closeWorkspace(WidgetTester t) async {
   await t.runAsync(RecipeMotions.stop);   // (the Create shelf's previews, made on an isolate of their own, not left making as the program ends)
   await t.pumpWidget(const SizedBox());
   t.view.reset();
+}
+
+/// A shape of the Ease panel brought into sight: its row scrolls, by a wheel (a hand held on a tile carries it).
+Future<void> seeShape(WidgetTester t, String name) async {
+  final row = t.state<ScrollableState>(find.descendant(of: find.byType(EaseShapes), matching: find.byType(Scrollable))).position;
+  row.jumpTo((easeShapes.indexOf(name) * row.viewportDimension / easeFits(row.viewportDimension)).clamp(0, row.maxScrollExtent));
+  await t.pump();
 }

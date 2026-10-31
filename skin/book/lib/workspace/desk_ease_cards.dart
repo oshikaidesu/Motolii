@@ -15,6 +15,7 @@ import 'package:lab_book/workspace/desk_ease_presets.dart';
 import 'package:lab_book/workspace/ws.dart';
 
 const _over = '×', _space = '~', _turned = 'Reverse:';   // (a way defined in a document is one word)
+const _all = -1;   // (what the tile at the foot of the flow carries: all the cards, EaseShapes.onKeep)
 
 /// The ways a way is laid from, each as it is said; one not laid: itself.
 List<String> easeCards(String said) => [for (final w in said.split(_over)) w.startsWith(_turned) ? w : w.replaceAll(_space, ' ')];
@@ -134,28 +135,14 @@ class EaseCards extends StatelessWidget {
         children: [
           SizedBox.fromSize(size: side, child: PresetTile(c, on: i == now, side: this.side, onTap: () => onPress(i), carried: false)),
           if (h && (cards.length > 1 || c != easePreset('Linear')))
-            Positioned(
-              right: -Shape.s(4),
-              top: -Shape.s(3),
-              child: Hov(
-                key: ValueKey('ease.off.$i'),
-                onTap: () => onOff(i),
-                builder: (_, over) => Container(
-                  width: Shape.z(15),
-                  height: Shape.z(15),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(color: over ? Grey.g95 : Grey.g38, shape: BoxShape.circle),
-                  child: Text('×', style: T.micro(over ? Grey.g13 : Grey.g95).copyWith(fontWeight: FontWeight.w700, height: 1)),
-                ),
-              ),
-            ),
+            Positioned(right: -Shape.s(4), top: -Shape.s(3), child: EaseOff(key: ValueKey('ease.off.$i'), onTap: () => onOff(i))),
         ],
       ),
     );
     Widget place(int i, Widget child) => DragTarget<Object>(
       onWillAcceptWithDetails: (d) {
         if (d.data case final Ease e) onHold(e, i);
-        return d.data != i;
+        return d.data != i && d.data != _all;
       },
       onLeave: (d) => d is Ease ? onHold(null, i) : null,
       onAcceptWithDetails: (d) {
@@ -167,6 +154,15 @@ class EaseCards extends StatelessWidget {
         decoration: BoxDecoration(borderRadius: BorderRadius.all(Shape.r(5)), border: hot.isEmpty ? null : Border.all(color: WsT.accent, width: 2)),
         child: child,
       ),
+    );
+    Widget carried(int i, Ease c) => Draggable<int>(
+      key: ValueKey('ease.card.$i'),
+      data: i,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: easeHeld(card(i, c), this.side),
+      childWhenDragging: Opacity(opacity: .3, child: card(i, c)),
+      onDraggableCanceled: (_, _) => onOff(i),   // (let go on the flow or the graph it is accepted there, and stays; on the shapes it is kept, and stays)
+      child: card(i, c),
     );
     final axis = across ? Axis.horizontal : Axis.vertical;
     Widget arrow() => CustomPaint(size: across ? Size(this.side * .4, side.height) : Size(side.width, this.side * .4), painter: _Arrow(Grey.g56, across));
@@ -185,17 +181,7 @@ class EaseCards extends StatelessWidget {
                 children: [
             for (final (i, c) in cards.indexed) ...[
               if (i > 0) arrow(),
-              cards.length < 2
-                  ? card(i, c)
-                  : place(i, Draggable<int>(
-                      key: ValueKey('ease.card.$i'),
-                      data: i,
-                      dragAnchorStrategy: pointerDragAnchorStrategy,
-                      feedback: easeHeld(card(i, c), this.side),
-                      childWhenDragging: Opacity(opacity: .3, child: card(i, c)),
-                      onDraggableCanceled: (_, _) => onOff(i),   // (let go on the flow or the graph it is accepted there, and stays)
-                      child: card(i, c),
-                    )),
+              if (cards.length > 1) place(i, carried(i, c)) else if (c == easePreset('Linear')) card(i, c) else carried(i, c),   // (a straight line alone: nothing to carry)
             ],
             arrow(),
             CustomPaint(key: const ValueKey('ease.slot'), size: side, painter: _Slot(Grey.g38)),
@@ -205,12 +191,34 @@ class EaseCards extends StatelessWidget {
           ),
           if (whole case final w?) Padding(
             padding: across ? EdgeInsets.only(left: Shape.s(4), right: Shape.s(6)) : EdgeInsets.only(top: Shape.s(4), bottom: Shape.s(6)),
-            child: SizedBox.fromSize(size: side, child: PresetTile(w, key: const ValueKey('ease.whole'), on: now < 0, side: this.side, onTap: onWhole, carried: false)),
+            child: Draggable<int>(
+              data: _all,
+              dragAnchorStrategy: pointerDragAnchorStrategy,
+              feedback: easeHeld(PresetTile(w, on: false, side: this.side, onTap: () {}, carried: false), this.side),
+              child: SizedBox.fromSize(size: side, child: PresetTile(w, key: const ValueKey('ease.whole'), on: now < 0, side: this.side, onTap: onWhole, carried: false)),
+            ),
           ),
         ],
       ),
     );
   }
+}
+
+/// A round × that takes a thing off (Cavalry's, Bitwig's and Serum's rows).
+class EaseOff extends StatelessWidget {
+  const EaseOff({super.key, required this.onTap});
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Hov(
+    onTap: onTap,
+    builder: (_, over) => Container(
+      width: Shape.z(15),
+      height: Shape.z(15),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: over ? Grey.g95 : Grey.g38, shape: BoxShape.circle),
+      child: Text('×', style: T.micro(over ? Grey.g13 : Grey.g95).copyWith(fontWeight: FontWeight.w700, height: 1)),
+    ),
+  );
 }
 
 class _Arrow extends CustomPainter {

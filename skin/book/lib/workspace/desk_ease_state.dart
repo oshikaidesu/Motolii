@@ -302,8 +302,8 @@ class DeskEaseState extends State<DeskEase> {
       //  container queries have it.
       final left = Shape.z(34), tall = box.maxHeight > box.maxWidth * 1.1;
       final side = (tall
-              ? math.min((box.maxWidth - left) / (easeShapes.length + .45) - Shape.s(4), (box.maxHeight * .4) / 2 - Shape.s(12))
-              : math.min(box.maxHeight / (easeShapes.length + .45) - Shape.s(6), (box.maxWidth * .55 - left) / 2 - Shape.s(12)))
+              ? math.min(box.maxWidth / easeFits(box.maxWidth) - Shape.s(4), (box.maxHeight * .4) / 2 - Shape.s(12))
+              : math.min(box.maxHeight / easeFits(box.maxHeight) - Shape.s(6), (box.maxWidth * .55 - left) / 2 - Shape.s(12)))
           .clamp(Shape.z(16), Shape.z(64));
       final column = side + Shape.s(12);
       final leftColumn = SizedBox(
@@ -325,10 +325,10 @@ class DeskEaseState extends State<DeskEase> {
             ],
           ),
         );
-      final shapes = EaseShapes(ease: whole ? ease : card, side: side, across: tall, shapes: easeRow(unseated(ws)), onPick: (e) {
+      final shapes = EaseShapes(ease: whole ? ease : card, side: side, across: tall, shapes: easeRow(unseated(ws)), kept: [for (final w in easeKept()) easeCard(w, ws.inside)], onPick: (e) {
         if (whole) _card = at;   // (the last card takes it, in hand)
         put(e);
-      });
+      }, onKeep: (i) => setState(() => easeKeep(said(i < 0 ? easeLaid(cards) : cards[i]))), onForget: (e) => setState(() => easeKeep(said(e), off: true)));
       final target = DragTarget<Object>(
             onWillAcceptWithDetails: (d) {
               if (d.data case final Ease e) setState(() => _held = laidOn(e));

@@ -214,6 +214,8 @@ void main() {
     // the one at 0.5) given it from its tile; still at both keys, other than straight between.
     ws.pickKey((layer: '$a', frame: 0));
     await open('Ease');
+    await t.ensureVisible(find.byKey(const ValueKey('ease.Random')));
+    await t.pump();
     await t.tap(find.byKey(const ValueKey('ease.Random')));
     await t.pump();
     await wait(100);
@@ -228,6 +230,8 @@ void main() {
     expect(along.last, closeTo(1, 1e-6));
     expect(strays, greaterThan(.02));
     // (the reviewer's: from a kind with no seat back to Linear; its tile tapped again keeps its numbers; undone, back)
+    await t.ensureVisible(find.byKey(const ValueKey('ease.Random')));
+    await t.pump();
     await t.tap(find.byKey(const ValueKey('ease.Random')));
     await t.pump();
     await wait(100);

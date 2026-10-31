@@ -163,7 +163,7 @@ void main() {
       ..pickKey((layer: '$cube', frame: 0))
       ..front('Ease');
     await t.pumpAndSettle();
-    for (final name in ['Linear', 'Bounce', 'Elastic', 'Cyclic', 'Random', 'Steps', 'ElasticSteps']) {
+    for (final name in ['Linear', 'In', 'Out', 'In-out', 'Bounce', 'Elastic', 'Cyclic']) {
       expect(find.byKey(ValueKey('ease.$name')).hitTestable(), findsOneWidget, reason: 'in sight, nothing to open');
     }
     await t.tap(find.byKey(const ValueKey('ease.Cyclic')));
