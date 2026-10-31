@@ -651,7 +651,7 @@ DockingArea _preset(DockingItem Function(String name, {double? size, double? wei
       DockingTabs([for (final (name, _, _) in dockShelves) item(name)], size: WsT.dock),
       item('Stage'),
     ]),
-    DockingRow([item('Timeline'), item('Ease', size: WsT.inspector)], size: WsT.lower + _strip),   // (the stretch between two keys, beside the keys)
+    DockingRow([item('Timeline'), item('Ease', size: WsT.inspector)], size: WsT.lower + _strip, minimalSize: 220),   // (the stretch between two keys, beside the keys; never lower than its seven shapes and its curve can be read: docking's own minimum, as VS Code's views say theirs)
   ]),
   DockingColumn([extra.isEmpty ? item('Inspector') : DockingTabs([item('Inspector'), for (final p in extra) item(p.name)]), DockingTabs([item('Camera'), item('Desk'), item('Relations')], size: WsT.lower + _strip)], size: WsT.inspector, minimalSize: 340),   // (the camera, whatever is picked)
 ]);

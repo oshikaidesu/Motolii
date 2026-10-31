@@ -4,6 +4,8 @@
 // is above through it, as GSAP's timingEase and Blender's stack; a wave is as large as what is above, as GSAP's
 // amplitudeEase; a shake is added to it, as Blender's Noise. To the document they are one way, defined so (way(),
 // doc_match.h), so it is kept, undone and listed as any way is. Linear changes nothing, wherever it lies.
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show Hov;
@@ -111,8 +113,9 @@ String easeWord(Ease e) {
 /// always, the whole has no handles); that at the foot pressed, the graph shows the whole. A card carried up or down it takes that place, a shape let go on a card goes in
 /// before it, and one carried off the flow comes off.
 class EaseCards extends StatelessWidget {
-  const EaseCards({super.key, required this.cards, required this.now, required this.whole, required this.onWhole, required this.onPress, required this.onOff, required this.onMove, required this.onLay, required this.onHold, required this.side});
+  const EaseCards({super.key, required this.cards, required this.now, required this.whole, required this.onWhole, required this.onPress, required this.onOff, required this.onMove, required this.onLay, required this.onHold, required this.side, this.across = false});
   final double side;
+  final bool across;   // (laid across, under the graph, in a tall pane)
   final List<Ease> cards;
   final int now;
   final Ease? whole;
@@ -165,15 +168,20 @@ class EaseCards extends StatelessWidget {
         child: child,
       ),
     );
-    Widget arrow() => CustomPaint(size: Size(side.width, this.side * .4), painter: _Arrow(Grey.g56));
+    final axis = across ? Axis.horizontal : Axis.vertical;
+    Widget arrow() => CustomPaint(size: across ? Size(this.side * .4, side.height) : Size(side.width, this.side * .4), painter: _Arrow(Grey.g56, across));
     return ColoredBox(
       color: WsT.card,
-      child: Column(
+      child: Flex(
+        direction: axis,
         children: [
           Expanded(
             child: SingleChildScrollView(
-              padding: EdgeInsets.symmetric(vertical: Shape.s(4)),
-              child: Column(
+              scrollDirection: axis,
+              padding: across ? EdgeInsets.symmetric(horizontal: Shape.s(4)) : EdgeInsets.symmetric(vertical: Shape.s(4)),
+              child: Flex(
+                direction: axis,
+                mainAxisSize: MainAxisSize.min,
                 children: [
             for (final (i, c) in cards.indexed) ...[
               if (i > 0) arrow(),
@@ -196,7 +204,7 @@ class EaseCards extends StatelessWidget {
             ),
           ),
           if (whole case final w?) Padding(
-            padding: EdgeInsets.only(top: Shape.s(4), bottom: Shape.s(6)),
+            padding: across ? EdgeInsets.only(left: Shape.s(4), right: Shape.s(6)) : EdgeInsets.only(top: Shape.s(4), bottom: Shape.s(6)),
             child: SizedBox.fromSize(size: side, child: PresetTile(w, key: const ValueKey('ease.whole'), on: now < 0, side: this.side, onTap: onWhole, carried: false)),
           ),
         ],
@@ -206,17 +214,23 @@ class EaseCards extends StatelessWidget {
 }
 
 class _Arrow extends CustomPainter {
-  const _Arrow(this.ink);
+  const _Arrow(this.ink, this.across);
   final Color ink;
+  final bool across;
   @override
   void paint(Canvas c, Size s) {
+    if (across) {   // (the same arrow, turned to point along the row)
+      c.translate(0, s.height);
+      c.rotate(-math.pi / 2);
+      s = Size(s.height, s.width);
+    }
     final x = s.width / 2, p = Paint()..color = ink..strokeWidth = 1.4..style = PaintingStyle.stroke..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;
     c.drawLine(Offset(x, 1), Offset(x, s.height - 2), p);
     c.drawPath(Path()..moveTo(x - 3, s.height - 5)..lineTo(x, s.height - 2)..lineTo(x + 3, s.height - 5), p);
   }
 
   @override
-  bool shouldRepaint(_Arrow o) => o.ink != ink;
+  bool shouldRepaint(_Arrow o) => o.ink != ink || o.across != across;
 }
 
 class _Slot extends CustomPainter {

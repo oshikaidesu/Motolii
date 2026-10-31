@@ -298,13 +298,15 @@ class DeskEaseState extends State<DeskEase> {
     return LayoutBuilder(builder: (_, box) {
       // (the left column as wide as its two marks; the shapes as large as the height lets seven and a bit be, or the width
       //  leaves, the two columns round them; all the rest the graph: a pane of any size has no empty part)
-      final left = Shape.z(34);
-      final side = math.min(box.maxHeight / (easeShapes.length + .45) - Shape.s(6), (box.maxWidth * .55 - left) / 2 - Shape.s(12)).clamp(Shape.z(16), Shape.z(64));
+      //  In a tall pane the two go under the graph, or it would be a thin post: what a card does in its container, as CSS's
+      //  container queries have it.
+      final left = Shape.z(34), tall = box.maxHeight > box.maxWidth * 1.1;
+      final side = (tall
+              ? math.min((box.maxWidth - left) / (easeShapes.length + .45) - Shape.s(4), (box.maxHeight * .4) / 2 - Shape.s(12))
+              : math.min(box.maxHeight / (easeShapes.length + .45) - Shape.s(6), (box.maxWidth * .55 - left) / 2 - Shape.s(12)))
+          .clamp(Shape.z(16), Shape.z(64));
       final column = side + Shape.s(12);
-      return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
+      final leftColumn = SizedBox(
           width: left,
           child: EaseLeft(
             onReverse: !whole && card != easePreset('Linear') && turned != card ? () => put(turned) : null,
@@ -322,9 +324,12 @@ class DeskEaseState extends State<DeskEase> {
               ('jump', easeJump ? 'Jump On' : 'Jump Off', () => setState(() => easeJump = !easeJump)),
             ],
           ),
-        ),
-        Expanded(
-          child: DragTarget<Object>(
+        );
+      final shapes = EaseShapes(ease: whole ? ease : card, side: side, across: tall, shapes: easeRow(unseated(ws)), onPick: (e) {
+        if (whole) _card = at;   // (the last card takes it, in hand)
+        put(e);
+      });
+      final target = DragTarget<Object>(
             onWillAcceptWithDetails: (d) {
               if (d.data case final Ease e) setState(() => _held = laidOn(e));
               return true;   // (a card of the flow too: let go on it, it stays)
@@ -340,7 +345,8 @@ class DeskEaseState extends State<DeskEase> {
             builder: (_, hot, _) => DecoratedBox(
               position: DecorationPosition.foreground,
               decoration: BoxDecoration(border: hot.isEmpty ? null : Border.all(color: WsT.accent, width: 2)),   // (as the stage shows a tile held over it)
-              child: Row(
+              child: Flex(
+                direction: tall ? Axis.vertical : Axis.horizontal,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Expanded(
@@ -360,7 +366,7 @@ class DeskEaseState extends State<DeskEase> {
                       ),
                     ),
                   ),
-                  SizedBox(width: column, child: EaseCards(side: side, cards: pile, now: whole ? -1 : at, whole: pile.length > 1 ? _held ?? easeLaid(cards) : null, onWhole: () => setState(() => _card = -1), onPress: (i) => setState(() => _card = i), onOff: (i) => set(cards.length > 1 ? easeLaid([...cards]..removeAt(i)) : easePreset('Linear')), onMove: (from, to) {
+                  SizedBox(width: tall ? null : column, height: tall ? column : null, child: EaseCards(side: side, across: tall, cards: pile, now: whole ? -1 : at, whole: pile.length > 1 ? _held ?? easeLaid(cards) : null, onWhole: () => setState(() => _card = -1), onPress: (i) => setState(() => _card = i), onOff: (i) => set(cards.length > 1 ? easeLaid([...cards]..removeAt(i)) : easePreset('Linear')), onMove: (from, to) {
                     final next = [...cards];
                     next.insert(to, next.removeAt(from));
                     _card = to;
@@ -373,14 +379,13 @@ class DeskEaseState extends State<DeskEase> {
                 ],
               ),
             ),
-          ),
-        ),
-        SizedBox(width: column, child: EaseShapes(ease: whole ? ease : card, side: side, shapes: easeRow(unseated(ws)), onPick: (e) {
-          if (whole) _card = at;   // (the last card takes it, in hand)
-          put(e);
-        })),
-      ],
-      );
+          );
+      return tall
+          ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Expanded(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [leftColumn, Expanded(child: target)])),
+              SizedBox(height: column, child: shapes),
+            ])
+          : Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [leftColumn, Expanded(child: target), SizedBox(width: column, child: shapes)]);
     });
   }
 }
