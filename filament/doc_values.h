@@ -340,9 +340,9 @@ static const DocCard doc_cards[] = {
     {"Camera", "parent x y z rotate_x rotate_y rotate distance zoom", "kind", "camera"},
     {"Fog", "fog fog_near fog_far fog_color", "kind", "camera"},   // (the camera's own, as Alight Motion's camera has: its colour, where it begins, where it is whole; the stage's when it says none)   // (After Effects' camera: what it looks at, where it is and how turned, how far its eye is, its zoom)
     {"Blending", "blend clip"},   // (After Effects' layer mode and its track matte, in its simplest: drawn over what lies below as it says, or only inside the one before it)
-    {"Text", "text file size align", "kind", "text"},   // (After Effects' Source Text and Character, Cavalry's Text Shape: what it says, in which font, how large, which way it lines up)
+    {"Text", "text file size letter_spacing line_spacing align", "kind", "text"},   // (After Effects' Source Text and Character, Cavalry's Text Shape: what it says, in which font, how large, which way it lines up)
     {"Fill", "fill fill_media stroke stroke_width"},   // (After Effects' Fill and Stroke, Cavalry's Fill and Stroke: a colour, colours down it, or the material glass; its edge and how wide)
-    {"Type", "split letter_spacing line_spacing italic wrap wrap_at", nullptr, nullptr, true},
+    {"Type", "split italic wrap wrap_at", nullptr, nullptr, true},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ ", true},
     {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_rotate_x copy_rotate_y copy_turn copy_size copy_opacity_end copy_wide copy_z tall copy_tall stagger stagger_from copy_fill copy_fill_way", nullptr, nullptr, true},
     {"Wave", "wave_x wave_y wave_z wave_rotate wave_size wave_speed wave_phase wave_noise noise_scale", nullptr, nullptr, true},

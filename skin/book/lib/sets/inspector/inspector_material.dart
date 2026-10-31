@@ -224,6 +224,16 @@ class _TextGroupState extends State<TextGroup> {
           label: 'Size',
           cells: [NumField(id: 'v_size', unit: 'px', decimals: 0, min: 1, max: 2000)],
         ),
+        const PropRow(   // (beside the size, in After Effects' Character, Premiere's Essential Graphics, Figma's Text, CapCut's Spacing; Alight Motion alone keeps it apart as an effect: golf_noise.md head)
+          id: 'v_letter_spacing',
+          label: 'Tracking',
+          cells: [NumField(id: 'v_letter_spacing', unit: '×', decimals: 2, min: 0, max: 10)],
+        ),
+        const PropRow(
+          id: 'v_line_spacing',
+          label: 'Line gap',
+          cells: [NumField(id: 'v_line_spacing', unit: '×', decimals: 2, min: 0, max: 10)],
+        ),
         PropRow(
           id: 'v_align',
           label: 'Alignment',

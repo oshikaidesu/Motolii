@@ -26,6 +26,7 @@ import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart';
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/keys.dart' show WsKeys;
 import 'package:lab_book/workspace/dock_make.dart' show ColorsShelf, CreateShelf;
+import 'package:lab_book/workspace/stage_art.dart' show WsArt;
 import 'package:lab_book/workspace/zoom.dart' show WsZoom;
 import 'package:lab_book/sets/panels/media_parts.dart' show MiniSlider;
 import 'package:lab_book/sets/foundations/text_hand.dart' show wordsPicked;

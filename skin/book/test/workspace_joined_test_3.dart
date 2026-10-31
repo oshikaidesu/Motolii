@@ -612,6 +612,27 @@ void _tests3() {
     await _close(t);
   }, tags: 'main', skip: !_built);
 
+  testWidgets('a shape tool pressed twice makes one as large as the picture, and the hand is free (After Effects\')', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    ws.reread();
+    await t.pumpAndSettle();
+    final tool = find.byKey(const ValueKey('ws-tool-2'));
+    await t.tap(tool);
+    await t.pump();
+    await t.tap(tool);
+    for (var i = 0; i < 200 && ws.selected == null; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    await settled(t, ws);
+    final made = int.parse(ws.selected!);
+    expect(m.value(made, 'size', 0)! * m.point, closeTo(WsArt.comp.height, 1e-6), reason: 'as high as the picture');
+    expect(m.value(made, 'wide', 0), closeTo(WsArt.comp.width / WsArt.comp.height, 1e-6), reason: 'as wide');
+    expect(ws.viewOf('stage.tool', 0), 0);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a text placed with its card folded is typed at once all the same: the card opens for it, nothing typed is lost', (t) async {
     final ws = await _pump(t);
     ws.reread();
@@ -1808,11 +1829,11 @@ void _tests3() {
     await doubleTap(t, glass);   // (a material is made in Create and put on the picked solid, as Repeater lays the picked thing out)
     await settled(t, ws);
     expect(m.word(cube, 'fill'), 'glass', reason: m.trouble);
-    expect(m.cards(cube).map((c) => c.$1), ['Fill', 'Transform', 'Blending', 'Glass'], reason: 'filled with glass: the glass\'s own card, not the surface\'s');
+    expect(m.cards(cube).map((c) => c.$1), ['Transform', 'Blending', 'Fill', 'Glass'], reason: 'filled with glass: the glass\'s own card, not the surface\'s');
     expect(m.cards(rect).map((c) => c.$1).contains('Matte'), isFalse, reason: 'not clipped: no matte to say how');
     expect(m.set(rect, 'clip', 1) && m.cards(rect).map((c) => c.$1).contains('Matte'), isTrue);
     expect(m.set(cube, 'ior', 2.2) && m.value(cube, 'ior', 0) == 2.2, isTrue, reason: m.trouble);
-    expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join(' ') == 'Fill Transform Blending Surface', isTrue);
+    expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join(' ') == 'Transform Blending Fill Surface', isTrue);
     ws.reread();   // (written to the inside directly: the window reads it again)
     await t.pumpAndSettle();
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_metallic'), findsOneWidget);

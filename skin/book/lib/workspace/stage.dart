@@ -146,7 +146,7 @@ class _StageState extends State<_Stage> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _ToolColumn(active: _tool, onChanged: (i) => setState(() => _tool = i)),
+                _ToolColumn(active: _tool, onChanged: (i) => setState(() => _tool = i), onTwice: (kind) => _whole(ws, kind)),
                 Expanded(
                   child: Stack(
                     fit: StackFit.expand,
@@ -258,12 +258,38 @@ class _IconPainter extends CustomPainter {
   bool shouldRepaint(_IconPainter o) => o.icon != icon || o.c != c;
 }
 
+/// A shape tool pressed twice: one as large as the picture, at once (After Effects': Adobe's own lesson on adding layers).
+void _whole(Ws ws, String kind) {
+  final m = ws.inside;
+  if (m == null) return;
+  m.later('together', number: 1);
+  var made = 0;
+  ws.after(m.later('add', name: 'shape', word: kind), null, (t) => made = t);
+  m
+    ..later('set', thing: -1, name: 'size', number: WsArt.comp.height / m.point)
+    ..later('set', thing: -1, name: 'wide', number: WsArt.comp.width / WsArt.comp.height);
+  ws.after(m.later('together'), (done, _) {
+    if (done && made > 0) ws.select('$made');
+  });
+  ws.setView('stage.tool', 0);
+}
+
 // ---- tool column -------------------------------------------------------------------------------------------------------
 
 class _ToolColumn extends StatelessWidget {
-  const _ToolColumn({required this.active, required this.onChanged});
+  const _ToolColumn({required this.active, required this.onChanged, required this.onTwice});
   final int active;
   final ValueChanged<int> onChanged;
+  final ValueChanged<String> onTwice;
+  static var _last = (-1, 0);   // (the tool last pressed, and when)
+
+  void _press(int i) {
+    final now = DateTime.now().millisecondsSinceEpoch, twice = _last.$1 == i && now - _last.$2 < 500;
+    _last = (i, now);
+    if (twice && (i == 2 || i == 3)) return onTwice(i == 2 ? 'rect' : 'circle');
+    onChanged(i);
+  }
+
   @override
   Widget build(BuildContext context) => Container(
     width: WsT.rail,
@@ -283,7 +309,7 @@ class _ToolColumn extends StatelessWidget {
               for (var i = 0; i < _tools.length; i++) ...[
                 if (i == 2 || i == 4 || i == 7) Container(width: Shape.z(20), height: 1, margin: EdgeInsets.symmetric(vertical: Shape.s(5)), color: WsT.line),
                 if (i != 0 && i != 2 && i != 4 && i != 7) SizedBox(height: Shape.s(3)),
-                _ToolButton(key: ValueKey('ws-tool-$i'), glyph: _tools[i].$1, on: i == active, onTap: () => onChanged(i)),
+                _ToolButton(key: ValueKey('ws-tool-$i'), glyph: _tools[i].$1, on: i == active, onTap: () => _press(i)),
               ],
               Container(width: Shape.z(20), height: 1, margin: EdgeInsets.symmetric(vertical: Shape.s(8)), color: WsT.line),
               const _Swatches(),   // (joined: the picked thing's fill and stroke, or the inks a drawn thing gets)
