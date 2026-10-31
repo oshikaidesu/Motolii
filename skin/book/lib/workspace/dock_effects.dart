@@ -243,6 +243,12 @@ class _FxLook extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.8
           ..strokeCap = StrokeCap.round);
+      case 'Move Along Path':
+        c.drawArc(Rect.fromCircle(center: r.center, radius: 5.5), -1.6, 3.8, false, Paint()
+          ..color = ink
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1);
+        c.drawCircle(r.center + const Offset(0, -5.5), 2, Paint()..color = ink);
       case 'Duotone':
         c.drawRect(Rect.fromLTWH(r.left, r.top, r.width / 2, r.height), Paint()..color = const Color(0xFF2B3A67));
         c.drawRect(Rect.fromLTWH(r.center.dx, r.top, r.width / 2, r.height), Paint()..color = const Color(0xFFF4C27A));

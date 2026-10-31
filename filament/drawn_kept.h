@@ -19,6 +19,7 @@
 // tint: how much its darks and lights are made two colours (0: not at all); tritone: how much its darks, middles and
 // lights are made three (0: not at all).
 struct DrawnFx { bool split = false;   // (a text's letters each a copy of their own)
+    bool splitWords = false;   // (its words, not its letters: After Effects' Based On Words, Alight Motion's Text Transform)
     bool together = false;   // (its copies drawn in one go, each an instance of one thing: none coloured or cleared each of its own, kit.h add_parts)
     float letters = 1.f, lines = 1.f, italic = 0.f, wrapWidth = 0.f; int wrap = 0;   // (a text's lines broken in a box so many of its letters' heights wide, ThorVG's layout and wrap; 0: as typed)
     float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)

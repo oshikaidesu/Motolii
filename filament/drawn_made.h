@@ -320,8 +320,10 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
             for (const char* at = line.c_str(); *at;) {
                 const char* next = at + 1;
                 while (*next && ((unsigned char)*next & 0xC0) == 0x80) ++next;   // (one letter, however many bytes)
+                if (fx.splitWords) while (*next && *next != ' ') ++next;
                 inks.push_back(float2{across(std::string(line.c_str(), next)).x, across(std::string(at, next)).y});
                 at = next;
+                if (fx.splitWords) while (*at == ' ') ++at;
             }
             float was = 0.f;   // (cut half way across the gap between a letter's ink and the next one's: no edge of a neighbour in either)
             for (size_t i = 0; i < inks.size(); ++i) {

@@ -249,6 +249,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
       ..later('set', thing: -1, name: 'x', number: x)
       ..later('set', thing: -1, name: 'y', number: y);
     wsInked(ws, kind == 'text' ? 'text' : 'shape', kind); // (the drawing inks)
+    if (kind == 'text') m.later('set', thing: -1, name: 'anchor_x', number: -1);   // (the words begin where the hand came down: After Effects' point text, Figma's, Illustrator's)
     if (cut != null) { // (Mask: it lies just behind the picked thing, and that one is clipped by it; not seen itself: it only cuts, as After Effects' matte)
       final all = m.things;
       if (all.contains(cut)) {
@@ -294,13 +295,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
     var made = 0;
     ws.after(m.later('pen', thing: first ? int.tryParse(widget.selected ?? '') ?? 0 : -1, word: '${a.dx} ${a.dy} ${h.dx} ${h.dy}'), null, (t) => made = t); // (first on the picked thing: a closed path gains or loses a point, anything else begins a new one)
     if (first) {
-      if (ws.ink.isNotEmpty) m.later('say', thing: -1, name: 'fill', word: ws.ink);
-      if (ws.ink.contains(' ') && ws.inkBlend.isNotEmpty) m.later('say', thing: -1, name: 'gradient_blend', word: ws.inkBlend);
-      if (ws.edge.isNotEmpty) {
-        m
-          ..later('say', thing: -1, name: 'stroke', word: ws.edge)
-          ..later('set', thing: -1, name: 'stroke_width', number: 6);
-      }
+      wsInked(ws, 'shape', 'path');
       ws.after(m.later('together'), (done, _) => done && made > 0 ? ws.select('$made') : null);
     }
   }

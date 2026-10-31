@@ -134,7 +134,8 @@ static bool doc_match(Doc& d) {
         }
         fx.wrapWidth = (float)doc_number(d, thing, "wrap_at", 0, 0);
         const std::string split = doc_word(d, thing, "split"), script = doc_word(d, thing, "script");
-        fx.split = split == "letters" || (split.empty() && !script.empty() && script != "none");   // (a text given a script moves letter by letter, as Cavalry's are, unless said none)
+        fx.splitWords = split == "words";
+        fx.split = split == "letters" || fx.splitWords || (split.empty() && !script.empty() && script != "none");   // (a text given a script moves letter by letter, as Cavalry's are, unless said none)
         { const std::string w = doc_word(d, thing, "wrap"); fx.wrap = w == "character" ? 1 : w == "word" ? 2 : w == "smart" ? 3 : w == "ellipsis" ? 4 : fx.wrapWidth > 0.f ? 2 : 0; }   // (ThorVG's TextWrap; a box said and no way: by words)
         fx.letters = (float)doc_number(d, thing, "letter_spacing", 0, 1), fx.lines = (float)doc_number(d, thing, "line_spacing", 0, 1), fx.italic = (float)doc_number(d, thing, "italic", 0, 0);
         const auto which = [&](const char* name, const char* words) { const std::string w = doc_word(d, thing, name); if (w.empty()) return -1; int n = 0; for (const char* at = words; *at; ++n) { const size_t len = strcspn(at, " "); if (w == std::string(at, len)) return n; at += len + (at[len] ? 1 : 0); } return -1; };

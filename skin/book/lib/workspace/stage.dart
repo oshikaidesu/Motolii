@@ -441,7 +441,7 @@ class _OptionsStrip extends StatelessWidget {
     1 => [_seg('move.axis', const ['Free', 'X', 'Y']), _flag('move.snap', 'Snap', initial: true)],
     2 => [_Field('Fill', swatch: p.fill ?? WsT.body), _Field('Stroke', value: p.width), _Field('Radius', value: p.round), _seg('rect.mode', const ['Shape', 'Mask'])],
     3 => [_Field('Fill', swatch: p.fill ?? WsT.body), _Field('Stroke', value: p.width), _seg('ell.from', const ['Corner', 'Centre'])],
-    4 => [_seg('pen.mode', const ['Path', 'Mask']), _flag('pen.close', 'Close path', initial: true)],
+    4 => [_seg('pen.mode', const ['Path', 'Mask'])],
     7 => [_Field('Drag', value: 'Orbit'), _Field('Wheel', value: 'Dolly')],   // (what the hand does with it, as After Effects' camera tools are named)
     6 => [_Field('Fill', swatch: p.fill ?? WsT.body), _seg('brush.kind', const ['Brush', 'Pen', 'Fill', 'Eraser'], initial: 0), _seg('brush.size', const ['Thin', 'Medium', 'Thick'], initial: 1)],   // (Alight Motion's drawing tools: as the pressure says, as wide all along, the way gone round filled, and its eraser, of the picked drawing)
     _ => [

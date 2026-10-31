@@ -432,6 +432,7 @@ static const DocEffect doc_effects[] = {
     {"Drop Shadow", "shadow", "000000", true, "Light", "shadow_distance=10 shadow_angle=135 shadow_blur=10 shadow_opacity=0.5"},
     {"Glow", "glow", "on", true, "", "glow_opacity=1"},   // (a document that has it; the shelf's Glow is the file am_lightglow.wgsl: golf (79))
     {"Trim Paths", "trim", "keys 0 1 1 0", false, "Path"},
+    {"Move Along Path", "copy_on_offset", "keys 0 0 1 1", false, "Path", "stagger=0.01", "Goes along the outline of the layer under it, end to end in a second. Alight Motion's Move Along Path"},   // (one copy of itself, as copies 1 and a stagger lay one on an outline: doc_place)
     {"Datamosh", "mosh", "1", false, "Glitch", "mosh_at=1"},
     {"Duotone", "tint", "1", false, "Color", "tint_black:1b1f5c tint_white:ff8a65"},
     {"Gradient Map", "tritone", "1", false, "Color", "tritone_shadow:1b1f5c tritone_midtone:c44569 tritone_highlight:ffd166"},
@@ -523,6 +524,12 @@ static bool doc_effect(Doc& d, int thing, const char* name, double at) {
             const std::string n = one.substr(0, at_), v = one.substr(at_ + 1);
             const bool said = one[at_] == '=' ? !std::isnan(doc_number(d, thing, n.c_str(), at, NAN)) : !doc_word(d, thing, n.c_str()).empty();
             if (!said) ok = one[at_] == '=' ? doc_set(d, thing, n.c_str(), std::atof(v.c_str())) : doc_say(d, thing, n.c_str(), v.c_str());   // (one said already, by a hand or before, is left as it is)
+        }
+        if (ok && !strcmp(e.value, "copy_on_offset")) {   // (on the layer immediately beneath it, Alight Motion's; off, as it was)
+            const std::vector<int> lie = doc_laid(d);
+            const auto at_ = std::find(lie.begin(), lie.end(), thing);
+            if (on) ok = doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name in ('copy_on', 'stagger')", thing));
+            else if (at_ != lie.begin() && at_ != lie.end()) ok = doc_set(d, thing, "copy_on", *(at_ - 1));
         }
         if (ok && doc_thor_letter(e.value)) {
             if (const auto had = std::find(list.begin(), list.end(), e.value); had != list.end()) list.erase(had);
