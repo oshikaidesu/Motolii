@@ -143,6 +143,11 @@ void main() {
     expect(m.wayOf(cube, 'x', 0), contains('×'), reason: m.trouble);
     expect(_in(find.byKey(const ValueKey('ease.whole'))), findsOneWidget, reason: 'what they make, at the foot of the flow');
     expect(t.widget<EaseGraph>(graph).onion?.name, contains('×'), reason: 'and faint behind the card in hand');
+    await t.tap(_in(find.byKey(const ValueKey('ease.whole'))));
+    await t.pumpAndSettle();
+    expect(t.widget<EaseGraph>(graph).ease.name, contains('×'), reason: 'that at the foot pressed: the graph shows the whole');
+    expect(t.widget<EaseGraph>(graph).onion, isNull, reason: 'no skin behind it');
+    expect(easeHandles(t.widget<EaseGraph>(graph).ease), isEmpty, reason: 'the whole has no handles');
     await t.tap(_in(find.byKey(const ValueKey('ease.card.0'))));
     await t.pumpAndSettle();
     expect(t.widget<EaseGraph>(graph).ease.p1, const Offset(.42, 0), reason: 'a card pressed: the graph shows it, its handles in hand');

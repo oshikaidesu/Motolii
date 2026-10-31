@@ -293,8 +293,8 @@ class _GraphPainter extends CustomPainter {
       c.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(x, k.dy), width: on ? 11 : 9, height: on ? 18 : 14), const Radius.circular(3)), Paint()..color = WsT.accentInk);
     }
     // What it is, under it, as Alight Motion's.
-    final name = easeWord(ease);
-    if (!easeIsLaid(said(ease))) deskText(c, name.toUpperCase(), Offset(g.center.dx, s.height - 5), T.micro(Grey.g63).copyWith(letterSpacing: .6), ax: .5, ay: 1);   // (cards laid: each says its own)
+    final name = easeIsLaid(said(ease)) ? 'Result' : easeWord(ease);
+    deskText(c, name.toUpperCase(), Offset(g.center.dx, s.height - 5), T.micro(Grey.g63).copyWith(letterSpacing: .6), ax: .5, ay: 1);
   }
 
   @override

@@ -108,13 +108,14 @@ String easeWord(Ease e) {
 /// The flow: the ways laid, top to bottom, each acting on what is above it (the maker's arrows, 10/31; Blender's stack); an
 /// empty frame under them for the next (Monster Train's empty slots: it says it takes one, and nothing need be learnt);
 /// what they make small at its foot. The card pressed is the one the graph shows, its handles in hand (the maker: seen
-/// always, the whole has no handles). A card carried up or down it takes that place, a shape let go on a card goes in
+/// always, the whole has no handles); that at the foot pressed, the graph shows the whole. A card carried up or down it takes that place, a shape let go on a card goes in
 /// before it, and one carried off the flow comes off.
 class EaseCards extends StatelessWidget {
-  const EaseCards({super.key, required this.cards, required this.now, required this.whole, required this.onPress, required this.onOff, required this.onMove, required this.onLay, required this.onHold});
+  const EaseCards({super.key, required this.cards, required this.now, required this.whole, required this.onWhole, required this.onPress, required this.onOff, required this.onMove, required this.onLay, required this.onHold});
   final List<Ease> cards;
   final int now;
   final Ease? whole;
+  final VoidCallback onWhole;
   final ValueChanged<int> onPress, onOff;
   final void Function(int from, int to) onMove;
   final void Function(Ease shape, int at) onLay;
@@ -195,7 +196,7 @@ class EaseCards extends StatelessWidget {
           ),
           if (whole case final w?) Padding(
             padding: EdgeInsets.only(top: Shape.s(4), bottom: Shape.s(6)),
-            child: CustomPaint(key: const ValueKey('ease.whole'), size: side, painter: EaseIcon(w, Grey.g95)),
+            child: SizedBox.fromSize(size: side, child: PresetTile(w, key: const ValueKey('ease.whole'), on: now < 0, onTap: onWhole, carried: false)),
           ),
         ],
       ),
