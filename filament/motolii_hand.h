@@ -428,6 +428,13 @@ static int desk_is(Motolii* m, int w, int h, double x, double y, double scale, d
     m->changed = true;
     return m->live->desk ? 1 : 0;
 }
+static int eye_is(Motolii* m, const char* word) {   // ("about over far": the window's working eye; nothing said: the camera's)
+    Doc& d = doc(m);
+    d.eyeAsked = std::sscanf(word, "%lf %lf %lf", &d.eyeIs[0], &d.eyeIs[1], &d.eyeIs[2]) == 3;
+    time_is(*m->s, m->now);
+    m->changed = true;
+    return 1;
+}
 int motolii_pick(Motolii* m, int thing, int hover) { return by_hand(m, [=] { return pick_is(m, thing, hover); }); }
 int motolii_desk(Motolii* m, int w, int h, double x, double y, double scale, double point) {
     return by_hand(m, [=] { return desk_is(m, w, h, x, y, scale, point); });

@@ -56,6 +56,16 @@ class _StageState extends State<_Stage> {
   bool get _grid => _ws.viewOf('stage.grid', false);
   set _grid(bool v) => _ws.setView('stage.grid', v);
   bool get _camera => _ws.viewOf('stage.camera', true);
+  (Object?, String) _eyeTold = (null, '');
+
+  /// The inside told which eye the stage is seen by, when that has changed (a document opened begins at the camera's).
+  void _tellEye(Ws ws) {
+    final m = ws.inside, word = ws.freeEye ? ws.eye.join(' ') : '';
+    if (m == null || _eyeTold == (m, word)) return;
+    _eyeTold = (m, word);
+    m.later('eye', word: word);
+  }
+
   set _camera(bool v) => _ws.setView('stage.camera', v);
   Map<String, int> get _opts => _ws.view.putIfAbsent('stage.options', () => <String, int>{}) as Map<String, int>;
   final _cursor = ValueNotifier<Offset?>(null);
@@ -96,6 +106,7 @@ class _StageState extends State<_Stage> {
     WsScope.frameOf(context);   // (the scene is at the playhead)
     WsScope.pictureOf(context);   // (and as the picture shown has it)
     final ws = WsScope.of(context, {WsAspect.document, WsAspect.picked, WsAspect.stage, WsAspect.view}), scene = Ws.timed('stage scene', () => ArtScene.of(ws, camera: _camera));
+    _tellEye(ws);
     return DragTarget<VoidCallback>(   // (a tile of a shelf dropped here does what its double press does: Ableton's drop of a device on a track)
       onWillAcceptWithDetails: (_) => true,
       onAcceptWithDetails: (d) => d.data(),
@@ -115,8 +126,10 @@ class _StageState extends State<_Stage> {
               SizedBox(width: WsT.gap),
               _Toggle(label: 'Grid', icon: _Icon.grid, on: _grid, onTap: () => setState(() => _grid = !_grid)),
               SizedBox(width: Shape.s(6)),
-              _Toggle(label: _camera ? 'Camera' : 'Free', glyph: G.camera, on: _camera, onTap: () => setState(() => _camera = !_camera)),
-              SizedBox(width: Shape.s(6)),
+              if (!_camera || ws.layers.any((l) => l.kind == WsKind.camera)) ...[   // (AbsentMotion's PreviewMode: the switch once there is a camera to switch to)
+                _Toggle(label: _camera ? 'Camera' : 'Free', glyph: G.camera, on: _camera, onTap: () => setState(() => _camera = !_camera)),
+                SizedBox(width: Shape.s(6)),
+              ],
               _Toggle(key: const ValueKey('ws-snapshot-take'), label: 'Snapshot', icon: _Icon.snap, on: false, onTap: _take),
               if (_shot != null) ...[
                 SizedBox(width: WsT.gap),

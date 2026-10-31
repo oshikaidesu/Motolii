@@ -336,6 +336,12 @@ class Ws extends ChangeNotifier {
     _tell(WsAspect.view);
   }
 
+  /// Whether the stage is seen by the working eye, not the camera (AbsentMotion's cameraMode off): only a document with a camera has two eyes.
+  bool get freeEye => !viewOf('stage.camera', true) && layers.any((l) => l.kind == WsKind.camera);
+
+  /// Where the working eye stands round the world's middle: about, over, how far.
+  List<double> get eye => viewOf('stage.eye', const [0.0, 0.0, 1.0]);
+
   /// What the user opened in the desk by hand; null lets the desk follow the selection.
   String? deskManual;
 

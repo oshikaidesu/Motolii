@@ -32,30 +32,38 @@ static void doc_moment(Doc& d, double now) {
                 const double since = now - doc_number(d, thing, "start", 0, 0), lasts = doc_number(d, thing, "duration", 0, -1);
                 if (since >= 0.0 && (lasts < 0.0 || since < lasts) && doc_number(d, thing, "visible", 0, 1) > 0.5) camera = thing;
             }
-        d.looking = camera;   // (its fog, if it says one: doc_look)
+        d.working = d.eyeAsked && camera && !d.writing;
+        god_view(s, d.working);
+        d.looking = d.working ? 0 : camera;   // (its fog, if it says one: doc_look)
         const auto turned = [&](const char* name, math::double3 about) { return camera ? math::mat4::rotation(doc_number(d, camera, name, now, 0) * (double)TAU / 360.0, about) : math::mat4{}; };
         const math::mat4 round = turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * turned("rotate", {0, 0, 1});
         const math::double3 look = camera ? (doc_place(d, camera, now) * math::double4{0, 0, 0, 1}).xyz : math::double3{0.0};
         const double far = camera ? doc_number(d, camera, "distance", now, 1) : 1.0, near = camera ? doc_number(d, camera, "zoom", now, 1) : 1.0;
         const math::double3 eye = look + (round * math::double4{0, 0, 6.0 * far, 0}).xyz, up = (round * math::double4{0, 1, 0, 0}).xyz;
-        s.camera->lookAt(eye, look, up);
+        s.film->lookAt(eye, look, up);
         const double fov = 2.0 * std::atan(std::tan(15.0 * (double)TAU / 360.0) / near);
         if (camera && doc_word(d, camera, "projection") == "orthographic") {   // (as large at the point it looks at as the perspective one shows it there)
             const double high = 6.0 * far * std::tan(0.5 * fov), wide = high * double(s.w) / double(s.h);
-            s.camera->setProjection(Camera::Projection::ORTHO, -wide, wide, -high, high, 0.05, 60.0 * std::max(1.0, far));
-        } else s.camera->setProjection(fov * 360.0 / (double)TAU, double(s.w) / double(s.h), 0.05, 60.0 * std::max(1.0, far));
-        s.camera->setShift(camera ? math::double2{doc_number(d, camera, "shift_x", now, 0), doc_number(d, camera, "shift_y", now, 0)} : math::double2{0.0});
-        d.rig = s.camera->getModelMatrix() * math::mat4::translation(math::double3{0, 0, -6});   // (from the stage's own camera to this one)
+            s.film->setProjection(Camera::Projection::ORTHO, -wide, wide, -high, high, 0.05, 60.0 * std::max(1.0, far));
+        } else s.film->setProjection(fov * 360.0 / (double)TAU, double(s.w) / double(s.h), 0.05, 60.0 * std::max(1.0, far));
+        s.film->setShift(camera ? math::double2{doc_number(d, camera, "shift_x", now, 0), doc_number(d, camera, "shift_y", now, 0)} : math::double2{0.0});
+        d.rig = s.film->getModelMatrix() * math::mat4::translation(math::double3{0, 0, -6});   // (from the stage's own camera to this one)
         // (its lens, Filament's own: sharp at the focus, as blurred off it as the f-number says; the shutter goes with the
         //  f-number so the picture is as bright as at the stage's own f/16 and 1/125 s)
         const double said = camera ? doc_number(d, camera, "aperture", now, 0) : 0.0, focus = camera ? doc_number(d, camera, "focus", now, 0) : 0.0;
-        d.blurred = said > 0.0;
+        d.blurred = !d.working && said > 0.0;
         const double stop = std::max(said, 0.5);   // (Filament's widest)
         View::DepthOfFieldOptions lens = s.view->getDepthOfFieldOptions();
         if (camera && lens.cocScale != (float)doc_number(d, camera, "blur_level", now, 1)) lens.cocScale = (float)doc_number(d, camera, "blur_level", now, 1), s.view->setDepthOfFieldOptions(lens);
-        s.camera->setExposure(d.blurred ? (float)stop : 16.f, d.blurred ? (float)(stop * stop / (16.0 * 16.0 * 125.0)) : 1.f / 125.f, 100.f);
-        s.camera->setFocusDistance((float)(focus > 0.0 ? focus : length(eye - look)));
+        s.film->setExposure(d.blurred ? (float)stop : 16.f, d.blurred ? (float)(stop * stop / (16.0 * 16.0 * 125.0)) : 1.f / 125.f, 100.f);
+        s.film->setFocusDistance((float)(focus > 0.0 ? focus : length(eye - look)));
         d.facing = math::mat4(d.rig.upperLeft());
+        if (d.working) {   // (the film's camera stays where it is, and what faces it faces it. A 2D thing is in the camera's picture and in no world (Adobe's working 3D views))
+            const math::mat4 about = math::mat4::rotation(d.eyeIs[0] * (double)TAU / 360.0, math::double3{0, 1, 0}) * math::mat4::rotation(d.eyeIs[1] * (double)TAU / 360.0, math::double3{1, 0, 0});
+            s.camera->lookAt((about * math::double4{0, 0, 6.0 * d.eyeIs[2], 0}).xyz, math::double3{0.0}, (about * math::double4{0, 1, 0, 0}).xyz);
+            s.camera->setProjection(30.0, double(s.w) / double(s.h), 0.05, 60.0 * std::max(1.0, d.eyeIs[2]));
+            for (Lies& l : lies) l.on = l.on && l.shown->space != 2;
+        }
     }
     doc_look(d);
     d.round = doc_seconds(d);

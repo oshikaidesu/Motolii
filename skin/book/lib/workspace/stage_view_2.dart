@@ -356,6 +356,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
   void _dolly(double by) {
     final ws = WsScope.read(context), m = ws.inside, cam = _cameraOf(ws);
     if (m == null || cam == null) return;
+    if (ws.freeEye) return ws.setView('stage.eye', [ws.eye[0], ws.eye[1], (ws.eye[2] * math.exp(by * .002)).clamp(.01, 100.0)]);   // (After Effects' working views: the tool moves the view, not the camera)
     if (_dollyAt == null) {
       m.take(cam);
       _dollyAt = m.value(cam, 'distance', ws.frame / Ws.fps) ?? 1;
@@ -374,6 +375,11 @@ class _StageViewState extends State<StageView> implements StageHandles {
       final ws = WsScope.read(context), m = ws.inside, cam = _cameraOf(ws);
       if (m == null || cam == null) {
         ws.notice = 'No camera: add one from Create › Layers';
+        return;
+      }
+      if (ws.freeEye) {
+        _orbitFrom = (x: ws.eye[1], y: ws.eye[0]);
+        _held = (from: local, moved: false, by: 'orbit');
         return;
       }
       final at = ws.frame / Ws.fps;
@@ -441,6 +447,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
     if (h == null || m == null) return;
     if (h.by == 'orbit' && _orbitFrom != null) {   // (sideways round it, up and down over it: a quarter of a degree a pixel)
       final d = local - h.from, o = _orbitFrom!;
+      if (ws.freeEye) return ws.setView('stage.eye', [o.y - d.dx * .25, (o.x - d.dy * .25).clamp(-89.0, 89.0), ws.eye[2]]);
       m.carry('rotate_y', o.y - d.dx * .25);
       m.carry('rotate_x', (o.x - d.dy * .25).clamp(-89.0, 89.0));
       _held = (from: h.from, moved: true, by: 'orbit');
@@ -480,13 +487,13 @@ class _StageViewState extends State<StageView> implements StageHandles {
   }
 
   void _letGo({bool keep = true}) {
-    final h = _held, ws = WsScope.read(context), m = ws.inside;
+    final h = _held, ws = WsScope.read(context), m = ws.inside, free = _orbitFrom != null && ws.freeEye;
     _held = null;
     _orbitFrom = null;
     _snapTo = null;
     if (_grip != null) setState(() => _grip = null);
     if (_met != (null, null)) setState(() => _met = (null, null));
-    if (h == null || m == null) return;
+    if (h == null || m == null || free) return;
     ws.after(m.later('let_go', number: keep && h.moved ? 1 : 0));   // (let go without waiting: the document read again once the inside has it)
   }
 

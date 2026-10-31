@@ -400,13 +400,18 @@ static bool matted(Stage& s, MaterialInstance* look, int matte, bool inside = tr
     return true;
 }
 
-// Another eye on the stage than the film's camera: the stage is looked at through it from now on (`camera`), as one
-// stands beside a set and watches; the film's own camera (`film`) goes on taking the mattes that are in the film's picture.
-static Camera* god_view(Stage& s) {
-    s.camera = s.engine->createCamera(utils::EntityManager::get().create());
-    s.camera->setExposure(16.0f, 1.0f / 125.0f, 100.0f);
-    for (View* v : {s.view, s.view_behind, s.view_through})
-        if (v) v->setCamera(s.camera);
+// Another eye on the stage than the film's camera: on, the stage is looked at through it (`camera`), as one stands beside
+// a set and watches; the film's own camera (`film`) goes on taking the mattes that are in the film's picture. Off, the film's again.
+static Camera* god_view(Stage& s, bool on) {
+    if (on && !s.god) {
+        s.god = s.engine->createCamera(utils::EntityManager::get().create());
+        s.god->setExposure(16.0f, 1.0f / 125.0f, 100.0f);
+    }
+    if (Camera* eye = on ? s.god : s.film; eye != s.camera) {
+        s.camera = eye;
+        for (View* v : {s.view, s.view_behind, s.view_through})
+            if (v) v->setCamera(s.camera);
+    }
     return s.camera;
 }
 

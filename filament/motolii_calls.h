@@ -603,8 +603,9 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
                 std::sscanf(w.c_str(), "%d %d %lf %lf %lf %lf", &dw, &dh, &x, &y, &sc, &pt);
                 ok = desk_is(m, dw, dh, x, y, sc, pt);
             }
+            else if (c == "eye") ok = eye_is(m, w.c_str());   // (word: where the window's working eye stands, as eye_is; none: the camera's)
             else if (c == "hold") ok = (int)doc_hold(doc(m), thing);   // (a hand takes hold: what it carries next is this thing's)
-            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, element, keep_element, follow_elements, fx_duplicate, duplicate, split, align, time_align, reset, fit, flip, extract_sound, freehand, brush, outline, copy, paste, copy_style, paste_style, keep_look, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_eye, fx_move, size, watch, pick, desk, live, relate, lead, free, release, setting";
+            else m->trouble = "a change asked later is one of: eye, say, set, hold, let_go, undo, redo, together, add, make, pen, element, keep_element, follow_elements, fx_duplicate, duplicate, split, align, time_align, reset, fit, flip, extract_sound, freehand, brush, outline, copy, paste, copy_style, paste_style, keep_look, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_eye, fx_move, size, watch, pick, desk, live, relate, lead, free, release, setting";
             } catch (const std::exception& e) {
                 ok = 0;
                 std::fprintf(stderr, "motolii: %s threw: %s\n", c.c_str(), e.what());

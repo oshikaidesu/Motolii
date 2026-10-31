@@ -89,6 +89,7 @@ struct Stage {
     SwapChain* swap;
     Camera* camera;      // the eye that looks at the stage: every picture of it is taken by this
     Camera* film;        // the film's own camera: the same, unless another eye looks (god_view); mattes in the film's picture are taken by it
+    Camera* god = nullptr;   // that other eye, once it has been asked for
     View* view_behind;   // the same scene without the glass (layer 2), drawn first into `behind`: what a block shows
     Texture* behind;
     bool behindRead = false;   // whether anything reads `behind` (glass, the paper): until then it is not drawn

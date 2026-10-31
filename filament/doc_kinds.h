@@ -76,6 +76,9 @@ struct Doc {
     ScreenStack screen;                 // the stage's whole-screen effects, its script .wgsl files one over another (screen.h)   // each thing's copies as its script said them, at one moment (worked out once a picture)
     bool phys_keyed = false;            // reading where a thing's keys put it (not where the world has it)
     bool writing = false;               // it is being written as a film: it is read, not changed, until that is done
+    bool eyeAsked = false;              // the window looks by its working eye (After Effects' working 3D views, Alight Motion's view without the camera): never in the document
+    double eyeIs[3] = {0.0, 0.0, 1.0};  // that eye round the world's middle: about, over, how far (as a camera's distance)
+    bool working = false;               // the stage is seen by it at this moment: a camera is on, and no film is being written
     double written_from = 0.0;          // the moment of the document that a film being written begins at (its work area's start)
     int looking = 0;                    // the camera the stage is seen through now (0: the stage's own: doc_moment)
     double round = 8.0;                 // how long the document is, as last shown: waves, noise and drifts go round in it a whole number of times (a film loops)
