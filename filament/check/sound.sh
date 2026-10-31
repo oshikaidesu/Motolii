@@ -27,3 +27,6 @@ rows = [('puppet film, against happy.mp4', off(o, h)), ('puppet film, against mo
 for name, (ms, alike) in rows[:4]: print('%-74s off by %5.1f ms, alike %.2f: %s' % (name, ms, alike, 'in time' if abs(ms) < 20 and alike > 0.2 else 'NOT in time'))
 print('%-74s %.4f: %s' % (rows[4][0], rows[4][1][1], 'silent' if rows[4][1][1] < 0.001 else 'NOT silent'))
 PY
+ffmpeg -hide_banner -loglevel error -y -f lavfi -i "sine=frequency=440:duration=3" -b:a 128k out/sound_check.mp3
+printf 'add film out/sound_check.mp3\n' | ./edit.sh out/sound_check_mp3.motolii 2>&1 | grep -q 'add: done' && echo 'an .mp3 is placed though it says no length of its own: yes' || echo 'an .mp3 is placed though it says no length of its own: NO'
+rm -f out/sound_check.mp3 out/sound_check_mp3.motolii

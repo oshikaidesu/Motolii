@@ -278,6 +278,17 @@ static void video_found(GstElement*, GstPad* stream, gpointer film) {
 // The film in `file` put in the scene: a sheet `high` tall (as wide as the film makes it) with its middle at `place`,
 // facing along the place's z. from, to: the cut of it that is shown, in seconds of the file (to below 0: to its end);
 // speed: how fast (2: twice as fast, 0.5: half, below 0: backwards).
+// How long a file is, as GStreamer's discoverer tells it, which reads on until it knows (gst-discoverer-1.0's own).
+static gint64 video_discovered(const char* file) {
+    GstDiscoverer* looks = gst_discoverer_new(5 * GST_SECOND, nullptr);
+    gchar* uri = gst_filename_to_uri(file, nullptr);
+    GstDiscovererInfo* info = looks && uri ? gst_discoverer_discover_uri(looks, uri, nullptr) : nullptr;
+    const gint64 length = info ? (gint64)gst_discoverer_info_get_duration(info) : 0;
+    if (info) g_object_unref(info);
+    if (looks) g_object_unref(looks);
+    g_free(uri);
+    return length;
+}
 static Video* video(Stage& s, const char* file, const mat4f& place, float high, float from = 0.f, float to = -1.f, float speed = 1.f, const char* lay = nullptr) {
     if (!door::device(s.engine)) return video_trouble = "not the WebGPU backend", nullptr;   // (another backend)
     static const bool started = (gst_init(nullptr, nullptr), true);
@@ -334,7 +345,8 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
         gst_element_set_state(v->reader, GST_STATE_PAUSED);
         if (gst_element_get_state(v->reader, nullptr, nullptr, 5 * GST_SECOND) == GST_STATE_CHANGE_FAILURE) continue;   // (waits until the file is open and its first picture is there)
         gint64 length = 0;
-        if (!gst_element_query_duration(v->reader, GST_FORMAT_TIME, &length) || length <= 0) return video_trouble = "the file does not open as a film (no length)", nullptr;
+        if (!gst_element_query_duration(v->reader, GST_FORMAT_TIME, &length) || length <= 0) length = video_discovered(file);   // (an .mp3 says no length: its parser reckons one from frames it has seen, and the appsink stopped it after the first)
+        if (length <= 0) return video_trouble = "the file does not open as a film (no length)", nullptr;
         v->from = std::max(0.f, from);
         v->to = to < 0.f ? (float)((double)length / (double)GST_SECOND) : std::min(to, (float)((double)length / (double)GST_SECOND));
         if (speed == 0.f) return video_trouble = "a speed of 0 shows nothing: a film goes forwards or backwards", nullptr;
