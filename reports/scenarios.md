@@ -234,6 +234,17 @@
 - 手：New Document（⌘N）・背景 Black・新しいレイヤーの長さ 5s・（Esc で閉じない：外れ）・外を押して閉じる・T の道具・舞台を押す（Text）・Text の段・文字の欄・⌘A・MOTOLII・外を押す（12）／Text の段・効果の棚・探す欄・bounce・Bounce In・Add（18）／Colors・白・⇧⌘A（21）・（Lens の Flare を引いた：外れ）・↶・Bloom 42%（光らない：外れ）・Text の段・（送って Surface）・Light up 3.7（光った）（26）／（送って上へ）・2.5D・Create・Layers・⏮・Camera・Create・Null・Create（34）／効果の棚・探す欄・shake・Auto-Shake・Add・Camera の段・Target › Layer・1. Null（42）／Null の段・（送って Auto-Shake）・Magnitude 0 Return（3）・時刻 52 Return（3）・ひし形・時刻 104 Return（3）・ひし形・1 コマ戻る・Ease の左の点を少し上へ（120 に）（56）／Camera の段・⏮・Distance のひし形・時刻 459 Return（3）・Distance 1400 Return（3）（65）
 - 前のゴルフで止まった所（カメラを揺らす入口、値のキー、文字に光）は全部通った。新しいノイズ：(73)〜(77)
 
+## 手本 PV の通し（11/1）
+
+YouTube の PV を手本に、窓だけで作り、詰まった所を直してから先へ進む。手本の絵と音は使わず、言葉は自前、曲は Kevin MacLeod「Volatile Reaction」（CC BY）、写真は Wellcome Collection（CC BY）。素材は git の外（`~/Movies/Motolii/pv1/`）。
+
+**1 本目：白黒の文字 PV**（手本 `_AIgv0EsOE4`、kyuzann / haruki の文字 PV）。`~/Movies/Motolii/pv1/pv1.mp4`（1920×1080、60 fps、900 コマ、曲入り、1.9 MB）。
+
+- 中身：× の格子と斜線の帯 → 「表現」が叩きつけで出る → 黒地に小さい文字 → 「いま」が欠けた字 → 骸骨の銅版画に金の輪 → 青地 → 「速」と集中線 → 四つ角の星の輪が回り、拍ごとに白黒反転 → 小さいクレジット
+- 通って良かった所：斜線の帯は Lines 3 手、銅版画は Threshold + Invert で黒地に白線、集中線は Rect + Repeater の Bend 360° で 1 本から作れる、拍の反転は白い板 difference を ⌘D と `[` で並べるだけ
+- 見つけて直した物：(124)〜(138)。一番大きいのは (137)：下を読む Blend 21 種が全部 normal のままで、絵を見ていなかったので 1 週間気づかなかった。Background Copy も同じ
+- 手本と違って残る所：文字 1 字ずつの散らし、縦書き、舞台全体の回転はまだ通していない。動きは手本より少ない
+
 ## 通し（11/1）：1 本の mp4 まで
 
 P01〜P20 を別々に測るのをやめて、20 秒の PV を 1 本、窓だけで最後まで作った。**通った**：`~/Movies/Motolii/teaser/pv.mp4`（1920×1080、60 fps、1200 コマ、曲入り、25.4 MB）。teaser の材料から mp4 が書けたのはこれが初めて。

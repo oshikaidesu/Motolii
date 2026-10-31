@@ -128,6 +128,11 @@ static void doc_moment(Doc& d, double now) {
         } else ++e;
     }
     doc_things_fx(d);   // (each with effects of its own drawn alone first: doc_moment_fx.h)
+    {
+        std::vector<std::pair<int, Doc::Shown*>> laid;
+        for (size_t i = 0; i < lies.size(); ++i) if (runOf[i] >= 0) laid.emplace_back(lies[i].thing, lies[i].shown);
+        doc_things_read(d, laid);
+    }
     {   // (a glow: Filament's own, a thing past 1 bright taken up by the stage's bloom (its threshold), as emissive is)
         float most = 0.f;
         for (size_t i = 0; i < lies.size(); ++i)

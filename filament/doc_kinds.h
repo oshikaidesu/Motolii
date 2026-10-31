@@ -73,6 +73,9 @@ struct Doc {
     std::map<int, std::pair<std::string, std::string>> drawingKept;   // (each freehand stroke's outline as AbsentMotion's drawing effects last made it, by what they were: doc_moment)   // (each thing's copies as AbsentMotion's repeat effects lay them, at the moment last asked: doc_absent_copies)
     std::shared_ptr<struct DocScripts> scripts;   // (its scripts, each run as its file says: doc_values.h)
     std::map<int, ThingFx> thingFx;     // the things with effects of their own (thing_fx.h): each drawn alone, its effects on, laid where it lies
+    struct Read { Texture* seen = nullptr; RenderTarget* into = nullptr; };
+    std::map<int, Read> reads;          // the things that read what is under them, each with its picture of it (doc_things_read)
+    std::vector<int> beforeOf;          // whose each of the stage's `before` is
     ScreenStack screen;                 // the stage's whole-screen effects, its script .wgsl files one over another (screen.h)   // each thing's copies as its script said them, at one moment (worked out once a picture)
     bool phys_keyed = false;            // reading where a thing's keys put it (not where the world has it)
     bool writing = false;               // it is being written as a film: it is read, not changed, until that is done

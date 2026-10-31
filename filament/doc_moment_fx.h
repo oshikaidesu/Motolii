@@ -134,7 +134,7 @@ static double doc_aviutl_asked(Doc& d, int thing, const double* box, const std::
 
 static void doc_things_fx(Doc& d) {
     Stage& s = *d.stage;
-    s.before.clear(), s.aim.clear(), s.after.clear();
+    s.before.clear(), s.aim.clear(), s.after.clear(), d.beforeOf.clear();
     for (auto& [thing, e] : d.thingFx) {   // (each drawn alone into a picture, its effects run on it, before the stage's own view: thing_fx.h)
         thing_effects(s, e.st, doc_fx_join(doc_fx_steps(d, thing)));
         e.solidFile.clear();
@@ -248,11 +248,67 @@ static void doc_things_fx(Doc& d) {
                 e.look->setParameter("glowing", (float)doc_number(d, thing, "emissive", d.stage->now, 0) + (doc_word(d, thing, "glow").empty() ? 0.f : 0.35f * (float)doc_number(d, thing, "glow_opacity", d.stage->now, 1)));
             }
         });
+        d.beforeOf.push_back(thing);
         s.before.push_back([&d, thing = thing, &e = e, numbers, thorFx] {   // (in the frame: drawn alone, its effects run)
             if (!e.solidFile.empty()) return doc_thing_solid(d, thing, e, numbers, thorFx);
             thing_effects_draw(*d.stage, e.st, e.view, numbers, thorFx);
             if (e.shell) doc_thing_shell(d, thing, e, true);
         });
         if (e.shell) s.after.push_back([&d, thing = thing, &e = e] { doc_thing_shell(d, thing, e, false); });
+    }
+}
+
+// Told a thing's way of reading what is under it, and the picture of that.
+static void doc_reading(Stage& s, Doc::Shown& t, float way, float behind, Texture* picture) {
+    doc_parts(s, t, [&](RenderableManager& faces, RenderableManager::Instance one) {
+        for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part)
+            if (MaterialInstance* look = faces.getMaterialInstanceAt(one, part); look->getMaterial()->hasParameter("blendWay"))
+                look->setParameter("blendWay", way), look->setParameter("behind", behind), look->setParameter("backdrop", picture, TextureSampler(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST));
+    });
+}
+// What a thing reads of what is under it, by a way of lying the GPU's own blending has not (the W3C's backdrop) or a fill
+// of what is behind it (After Effects' Adjustment Layer): the stage without it and without all that lies over it, drawn
+// into a picture of its own before it is drawn, in the order they lie, so one reads those under it as they are laid. The
+// same view the glass is drawn over; Filament's layers leave the rest out for that one picture.
+static void doc_things_read(Doc& d, const std::vector<std::pair<int, Doc::Shown*>>& laid) {
+    Stage& s = *d.stage;
+    const auto reads = [&](int thing) { return doc_blend_way(doc_word(d, thing, "blend")) || doc_word(d, thing, "fill") == "behind"; };
+    for (auto r = d.reads.begin(); r != d.reads.end();) {   // (no longer reading, or gone: let go)
+        if (d.shown.count(r->first) && reads(r->first)) { ++r; continue; }
+        if (const auto t = d.shown.find(r->first); t != d.shown.end()) doc_reading(s, t->second, 0.f, 0.f, white_point(s));
+        s.engine->destroy(r->second.into), s.engine->destroy(r->second.seen), r = d.reads.erase(r);
+    }
+    if (std::none_of(laid.begin(), laid.end(), [&](const auto& l) { return reads(l.first); })) return;
+    std::vector<std::function<void()>> fx = std::move(s.before);
+    s.before.clear();
+    std::vector<utils::Entity> parts;
+    std::vector<size_t> from(laid.size());
+    for (size_t i = 0; i < laid.size(); ++i) {
+        from[i] = parts.size();
+        doc_entities(s, *laid[i].second, [&](utils::Entity e) { parts.push_back(e); });
+        if (const auto own = d.thingFx.find(laid[i].first); own != d.thingFx.end())
+            for (const Stage::Made& made : s.made) if (made.of == own->second.sheet) parts.push_back(made.thing);
+    }
+    for (size_t i = 0; i < laid.size(); ++i) {
+        const int thing = laid[i].first;
+        if (reads(thing)) {
+            Doc::Read& r = d.reads[thing];
+            if (!r.seen) {
+                r.seen = Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).format(Texture::InternalFormat::RGBA16F).build(*s.engine);
+                r.into = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, r.seen).texture(RenderTarget::AttachmentPoint::DEPTH, s.behindDepth).build(*s.engine);
+            }
+            doc_reading(s, *laid[i].second, d.thingFx.count(thing) ? 0.f : (float)doc_blend_way(doc_word(d, thing, "blend")), doc_word(d, thing, "fill") == "behind" ? 1.f : 0.f, r.seen);
+            s.before.push_back([&s, over = std::vector<utils::Entity>(parts.begin() + (long)from[i], parts.end()), into = r.into] {
+                auto& faces = s.engine->getRenderableManager();
+                std::vector<uint8_t> masks;
+                for (utils::Entity e : over) masks.push_back(faces.getLayerMask(faces.getInstance(e))), faces.setLayerMask(faces.getInstance(e), 0xFF, 0x02);
+                RenderTarget* const was = s.view_behind->getRenderTarget();
+                s.view_behind->setRenderTarget(into);
+                s.renderer->render(s.view_behind);
+                s.view_behind->setRenderTarget(was);
+                for (size_t k = 0; k < over.size(); ++k) faces.setLayerMask(faces.getInstance(over[k]), 0xFF, masks[k]);
+            });
+        }
+        for (size_t k = 0; k < fx.size() && k < d.beforeOf.size(); ++k) if (d.beforeOf[k] == thing) s.before.push_back(std::move(fx[k]));
     }
 }

@@ -211,11 +211,11 @@ fragment {
         material.baseColor.rgb *= 1.0 + materialParams.glowing;   // (a neon: its own colour, brighter than white)
         if (materialParams.behind > 0.5 && material.baseColor.a > 1e-4) {   // (its fill what is behind it, where it is: a copy of the background in its shape)
             vec4 behind = textureLod(materialParams_backdrop, uvToRenderTargetUV(getNormalizedViewportCoord().xy), 0.0);
-            material.baseColor.rgb = toLight(behind.a > 1e-4 ? behind.rgb / behind.a : vec3(0.0)) * material.baseColor.a;
+            material.baseColor.rgb = (behind.a > 1e-4 ? behind.rgb / behind.a : vec3(0.0)) * material.baseColor.a;
         }
         if (materialParams.blendWay > 0.5 && material.baseColor.a > 1e-4) {   // (laid on what is under by reading it: the way's colour where it is, as much of it as it is there)
             vec4 below = textureLod(materialParams_backdrop, uvToRenderTargetUV(getNormalizedViewportCoord().xy), 0.0);
-            vec3 under = below.a > 1e-4 ? below.rgb / below.a : vec3(0.0);   // (as it is where it is there; where nothing is under, as itself: the W3C's (1 - ab) Cs + ab B)
+            vec3 under = toScreen(below.a > 1e-4 ? below.rgb / below.a : vec3(0.0));   // (as it is where it is there; where nothing is under, as itself: the W3C's (1 - ab) Cs + ab B)
             float a = material.baseColor.a;
             vec3 over = toScreen(material.baseColor.rgb / a);
             vec3 mixed = mix(over, clamp(way(int(materialParams.blendWay + 0.5), under, over), 0.0, 1.0), clamp(below.a, 0.0, 1.0));

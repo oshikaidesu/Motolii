@@ -91,6 +91,7 @@ struct Stage {
     Camera* film;        // the film's own camera: the same, unless another eye looks (god_view); mattes in the film's picture are taken by it
     Camera* god = nullptr;   // that other eye, once it has been asked for
     View* view_behind;   // the same scene without the glass (layer 2), drawn first into `behind`: what a block shows
+    Texture* behindDepth = nullptr;   // its depth, as it draws into a picture of its own for a thing that reads what is under (doc_things_read)
     Texture* behind;
     bool behindRead = false;   // whether anything reads `behind` (glass, the paper): until then it is not drawn
     std::vector<std::function<void()>> after;   // (once the picture is drawn: a solid's own looks back, doc_thing_shell)
@@ -168,7 +169,7 @@ static Stage open_stage(int w, int h) {
     s.renderer->setClearOptions(clear);
     s.behind = Texture::Builder().width(w).height(h).levels(1).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
                    .format(Texture::InternalFormat::RGBA16F).build(*s.engine);
-    Texture* depth = Texture::Builder().width(w).height(h).levels(1).usage(Texture::Usage::DEPTH_ATTACHMENT).format(Texture::InternalFormat::DEPTH24).build(*s.engine);
+    Texture* depth = s.behindDepth = Texture::Builder().width(w).height(h).levels(1).usage(Texture::Usage::DEPTH_ATTACHMENT).format(Texture::InternalFormat::DEPTH24).build(*s.engine);
     s.view_behind = s.engine->createView();
     s.view_behind->setScene(s.scene);
     s.view_behind->setCamera(s.camera);

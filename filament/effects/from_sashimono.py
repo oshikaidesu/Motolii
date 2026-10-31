@@ -8,7 +8,8 @@
 # a pixel read by texelFetch turned over as ISF's places are (isf.cpp: up from the
 # bottom left). Its params ISF's inputs by their own names: a track a float, a check a bool (a check read as a number a
 # float of 0 or 1), a colour a colour, a choice a long of its choices' numbers, a whole number (a seed, a count) a long.
-# Sashimono draws in linear light; Motolii gives an effect sRGB (screen.h screen_tone): its colours are read as given.
+# Sashimono draws in linear light; Motolii gives an effect sRGB (screen.h screen_tone): its colours are read as given,
+# so its own to_srgb and to_linear, there for an effect that works on what the eye sees, are left with nothing to do.
 # usage (Python 3.12 or later, numpy and packaging: what Sashimono's effects import):
 #   uv run --no-project --python 3.13 --with numpy --with packaging python -I from_sashimono.py <Sashimono's src> <out dir> [kind ...]
 # (a picture file a param: none given, its size 0, as Sashimono's own when it cannot be read: drawn without it)
@@ -23,7 +24,7 @@ from sashimono.effects import definition, spec   # noqa: E402
 
 register_builtin_effects()
 declared = PRELUDE[:PRELUDE.index('const vec3 LUMA')]   # (its declarations: said again below)
-kept = PRELUDE[len(declared):]
+kept = re.sub(r'vec3 to_srgb.*?\n}\nvec3 to_linear.*?\n}\n', 'vec3 to_srgb(vec3 c) { return clamp(c, 0.0, 1.0); }   // (what it is given is sRGB already: from_sashimono.py)\nvec3 to_linear(vec3 c) { return c; }\n', PRELUDE[len(declared):], flags=re.S)
 words = '''#define u_texture inputImage
 #define u_source inputImage
 #define v_uv isf_FragNormCoord
