@@ -61,7 +61,7 @@ class EaseShapes extends StatelessWidget {
 }
 
 /// The left column: reverse, and under ⋯ the curve copied and pasted (Alight Motion's Copy Curve, Paste Curve, Paste
-/// Curve to All Keyframes, Enable Overshoot), and the maker's own Jump (desk_ease_state.dart easeJump).
+/// Curve to All Keyframes), and the maker's own Jump (desk_ease_state.dart easeJump). Its Enable Overshoot is among the numbers.
 class EaseLeft extends StatelessWidget {
   const EaseLeft({super.key, this.onReverse, required this.menu});
   final VoidCallback? onReverse;   // (none: the way cannot be turned)

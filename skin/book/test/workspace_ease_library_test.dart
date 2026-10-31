@@ -86,8 +86,13 @@ void main() {
       ..pickKey((layer: '$cube', frame: 0))
       ..front('Ease');
     await t.pumpAndSettle();
-    await menu(t, 'overshoot');
-    addTearDown(() => easeOvershoot = false);
+    addTearDown(() => (easeOvershoot = false, easeNumbersOpen = false));
+    await t.tap(_in(find.byKey(const ValueKey('ease-numbers'))));
+    await t.pumpAndSettle();
+    await t.tap(_in(find.byKey(const ValueKey('ease-overshoot'))));
+    await t.pumpAndSettle();
+    await t.tap(_in(find.byKey(const ValueKey('ease-numbers'))));   // (out of the handles' way)
+    await t.pumpAndSettle();
     final graph = find.byType(EaseGraph), r = t.getRect(graph), p2 = t.widget<EaseGraph>(graph).ease.p2;
     final g = easeBox(r.size).shift(r.topLeft);   // (AbsentMotion's geoOf)
     const lo = -2.0, hi = 3.0;
@@ -529,7 +534,12 @@ void main() {
     await t.pumpAndSettle();
     await write('X1', '0.3');
     await write('Y2', '1.5');
-    expect(m.wayOf(cube, 'x', 0), 'Bezier 0.3 0 1 1.5', reason: m.trouble);
+    expect(m.wayOf(cube, 'x', 0), 'Bezier 0.3 0 1 1', reason: 'overshoot off: it stops at 1, ${m.trouble}');
+    await t.tap(_in(find.byKey(const ValueKey('ease-overshoot'))));
+    await t.pumpAndSettle();
+    addTearDown(() => easeOvershoot = false);
+    await write('Y2', '1.5');
+    expect(m.wayOf(cube, 'x', 0), 'Bezier 0.3 0 1 1.5', reason: 'on: past it, ${m.trouble}');
     await t.tap(_in(find.byKey(const ValueKey('ease.Cyclic'))));
     await settled(t, ws);
     await t.pumpAndSettle();
@@ -766,11 +776,24 @@ void main() {
     expect(g().overshoot, isFalse, reason: 'the next stretch does not go past them: not left looking so far');
     ws.pickKey((layer: '$cube', frame: 0));
     await t.pumpAndSettle();
-    await menu(t, 'overshoot');
+    await t.tap(_in(find.byKey(const ValueKey('ease-numbers'))));
+    await t.pumpAndSettle();
+    addTearDown(() => easeNumbersOpen = false);
+    await t.tap(_in(find.byKey(const ValueKey('ease-overshoot'))));
     await settled(t, ws);
     await t.pumpAndSettle();
     expect(g().overshoot, isFalse, reason: 'off');
     expect(m.wayOf(cube, 'x', 0), 'Bezier 0.2 1 0.8 0', reason: 'and the handles back inside, where a hand can reach them: ${m.trouble}');
+    final y1 = _in(find.byKey(const ValueKey('ease-number-Y1')));
+    await t.tap(y1);
+    await t.pump();
+    await t.enterText(find.descendant(of: y1, matching: find.byType(EditableText)), '2.5');
+    await t.testTextInput.receiveAction(TextInputAction.done);
+    await t.pump();
+    await settled(t, ws);
+    await t.pumpAndSettle();
+    expect(m.wayOf(cube, 'x', 0), 'Bezier 0.2 1 0.8 0', reason: 'off, a number stops at 1: it turns nothing on unseen');
+    expect(g().overshoot, isFalse);
     expect(m.undo() && m.wayOf(cube, 'x', 0) == 'Bezier 0.2 2.5 0.8 -1.5', isTrue, reason: 'one step');
     ws.reread();
     await t.pumpAndSettle();

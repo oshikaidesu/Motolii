@@ -1,7 +1,9 @@
 // A way's numbers, said exactly: under the graph its name wears the Inspector's fold mark, and folds them open over the
 // graph's foot as a card of it does (the maker, 10/31: "数値の指定", and of a name that gave no sign of it: "わかるかー！").
 // Their names are those of AbsentMotion's Keyframes.kt; Alight Motion has them only as handles. Waves and steps are said by
-// how many, not by how long each is, which is how they are thought of.
+// how many, not by how long each is, which is how they are thought of. Overshoot is here, where it decides how far a number
+// goes, not in a menu Alight Motion's way (the maker, 10/31: a number written turned it on unseen, and the curve went out of
+// reach): off, Y stops at 0 and 1.
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show Hov;
 import 'package:lab_book/sets/inspector/inspector_rows.dart' show FoldMark;
@@ -36,9 +38,11 @@ bool easeIsUsual(String said) {
 }
 
 class EaseNumbers extends StatefulWidget {
-  const EaseNumbers({super.key, required this.card, required this.onChanged});
+  const EaseNumbers({super.key, required this.card, required this.onChanged, this.overshoot = false, this.onOvershoot});
   final Ease card;   // (the card in hand, or the whole: a whole has a name, and no numbers)
   final ValueChanged<Ease> onChanged;
+  final bool overshoot;   // (a bezier's: Alight Motion's Enable Overshoot)
+  final VoidCallback? onOvershoot;
   @override
   State<EaseNumbers> createState() => _EaseNumbersState();
 }
@@ -83,19 +87,21 @@ class _EaseNumbersState extends State<EaseNumbers> {
                     runSpacing: Shape.s(3),
                     children: [
                       for (final n in kind.$2)
+                        if ((n.name.startsWith('Y') && !widget.overshoot ? 0.0 : n.lo, n.name.startsWith('Y') && !widget.overshoot ? 1.0 : n.hi) case (final lo, final hi))
                         SizedBox(
                           width: each,
                           child: DeskScrub(
                             key: ValueKey('ease-number-${n.name}'),
                             label: n.name,
                             value: n.many ? 1 / now[n.at] : now[n.at],
-                            min: n.lo,
-                            max: n.hi,
-                            perPx: n.many ? .05 : (n.hi - n.lo) / 200,
+                            min: lo,
+                            max: hi,
+                            perPx: n.many ? .05 : (hi - lo) / 200,
                             format: (v) => n.many ? v.toStringAsFixed(v == v.roundToDouble() ? 0 : 2) : v.toStringAsFixed(2),
                             onChanged: (v) => change(n.at, n.many ? 1 / v : v),
                           ),
                         ),
+                      if (bezier) SizedBox(width: each, child: DeskChip(key: const ValueKey('ease-overshoot'), label: 'Overshoot', on: widget.overshoot, onTap: widget.onOvershoot)),
                     ],
                   );
                 },

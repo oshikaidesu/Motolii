@@ -257,6 +257,15 @@ class DeskEaseState extends State<DeskEase> with _EaseEnds {
       }
     }
     final turned = bezier ? card.reversed() : Ease(card.kind, card.p1, card.p2, easeTurn(said(card)));   // (AbsentMotion's reversed(): a bezier's handles turned, any other marked so)
+    void overshootSet() {
+      setState(() {
+        easeOvershoot = !overshoot;
+        _overLocked = !overshoot;
+      });
+      // (off, the handles come back inside: AbsentMotion only looks less far, and a curve left out there has handles no hand can reach)
+      if (overshoot && [card.p1.dy, card.p2.dy].any((y) => y < 0 || y > 1)) put(card.withHandles(Offset(card.p1.dx, card.p1.dy.clamp(0.0, 1.0)), Offset(card.p2.dx, card.p2.dy.clamp(0.0, 1.0))));
+    }
+
     Widget graph(int frame, [double? trial]) => EaseGraph(beats: beats, ease: whole ? easeLaid(cards) : card, onion: _held ?? (laid && !whole ? easeLaid(cards) : null), ends: _endsOf(ws, span), span: span, frame: frame, onChanged: put, jump: easeJump, overshoot: overshoot && !whole, onEnd: ws.inside == null ? null : (start, by) => _toEnd(ws, span, start, by, done: true), onEndMove: ws.inside == null ? null : (start, by) => _toEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by), trial: trial);
     return LayoutBuilder(builder: (_, box) {
       // (the left column as wide as its two marks; the shapes as large as the height lets seven and a bit be, or the width
@@ -280,14 +289,6 @@ class DeskEaseState extends State<DeskEase> with _EaseEnds {
               }),
               ('paste', 'Paste Curve', () => paste(set)),   // (what was copied here, or a cubic-bezier() or linear() from a page: easeFromText)
               if (easeCopied != null && ws.inside != null) ('all', 'Paste Curve to All Keyframes', () => paste((e) => _onEveryKey(ws, e))),
-              if (bezier && !whole) ('overshoot', overshoot ? 'Disable Overshoot' : 'Enable Overshoot', () {
-                setState(() {
-                  easeOvershoot = !overshoot;
-                  _overLocked = !overshoot;
-                });
-                // (off, the handles come back inside: AbsentMotion only looks less far, and a curve left out there has handles no hand can reach)
-                if (overshoot && [card.p1.dy, card.p2.dy].any((y) => y < 0 || y > 1)) put(card.withHandles(Offset(card.p1.dx, card.p1.dy.clamp(0.0, 1.0)), Offset(card.p2.dx, card.p2.dy.clamp(0.0, 1.0))));
-              }),
               ('jump', easeJump ? 'Jump On' : 'Jump Off', () => setState(() => easeJump = !easeJump)),
             ],
           ),
@@ -348,7 +349,7 @@ class DeskEaseState extends State<DeskEase> with _EaseEnds {
                           if (span == null && ws.inside != null) Positioned(left: Shape.s(6), top: Shape.s(4), right: Shape.s(6), child: IgnorePointer(child: Text('Trying here. Pick a key to go on a stretch', key: const ValueKey('ease-no-span'), maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(Grey.g63)))),
                           if (_trouble case final why?) Positioned(left: Shape.s(4), right: Shape.s(4), top: Shape.s(2), child: Text(why, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63))),
                           if (span case final s?) Positioned(left: Shape.s(6), top: Shape.s(4), right: Shape.s(6), child: IgnorePointer(child: Text('${s.layer.name}  ${s.from} → ${s.to}', key: const ValueKey('ease-span'), maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(Grey.g63)))),   // (which thing, which stretch)
-                          Positioned.fill(child: EaseNumbers(card: whole ? easeLaid(cards) : card, onChanged: put)),
+                          Positioned.fill(child: EaseNumbers(card: whole ? easeLaid(cards) : card, onChanged: put, overshoot: overshoot, onOvershoot: overshootSet)),
                           Positioned(left: Shape.s(2), bottom: Shape.s(2), child: EaseStep(span: span, back: true)),
                           Positioned(right: Shape.s(2), bottom: Shape.s(2), child: EaseStep(span: span, back: false)),
                         ],
