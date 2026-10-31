@@ -1,0 +1,113 @@
+--- a/src/loaders/sfnt/tvgOtfReader.cpp
++++ b/src/loaders/sfnt/tvgOtfReader.cpp
+@@ -109,6 +109,15 @@
+         args.push(i32(ptr + 1));
+         ptr += 5;
+         return true;
++    // real number: its nibbles up to the one that ends it, as FreeType's cff_parser_run skips them (not used as dict offset)
++    } else if (b == 30) {
++        ++ptr;
++        while (validate(ptr, 1)) {
++            auto n = u8(ptr++);
++            if ((n >> 4) == 15 || (n & 15) == 15) break;
++        }
++        args.push(0);
++        return true;
+     // unnecessary. skip operators (0: Copyright, 7: FontMatrix, etc)
+     } else if (b == 12) {
+         ptr += 2;
+@@ -284,7 +293,7 @@
+ 
+ bool OtfReader::subRoutine(float operand, uint32_t subrs, uint32_t& p, uint32_t& end, SubRoutine* subRoutines, int& srp)
+ {
+-    if (srp >= SUBROUTINE_MAX) return false;
++    if (srp >= SUBROUTINE_MAX || !subrs || !validate(subrs, 3)) return false;
+ 
+     auto count = u16(subrs);
+     if (count == 0) return false;  // no available subroutines
+@@ -303,7 +312,7 @@
+     // read subroutine byte range from offset array
+     auto off1 = offset(base + subrIdx * size, size);
+     auto off2 = offset(base + (subrIdx + 1) * size, size);
+-    if (off2 <= off1) return false;
++    if (off2 <= off1 || !validate(data + (off1 - 1), off2 - off1)) return false;
+ 
+     subRoutines[srp++] = {p, end};  // save current execution state
+ 
+@@ -391,6 +400,7 @@
+ 
+ bool OtfReader::operand(Array<float>& v, uint8_t b, uint32_t& p)
+ {
++    if (!validate(p, b == 255 ? 5 : b == 28 ? 3 : b >= 247 ? 2 : 1)) return false;
+     if (b >= 32) {
+         if (b <= 246) {
+             v.push(float(b - 139));
+@@ -418,6 +428,7 @@
+ bool OtfReader::charStrings(RenderPath& path, uint32_t glyph)
+ {
+     // get the glyph data offset
++    if (!validate(toCharStrings, 3)) return false;
+     auto count = u16(toCharStrings);
+     if (glyph >= count) return false;
+ 
+@@ -426,11 +437,12 @@
+     auto size = u8(toCharStrings + 2);
+     auto base = toCharStrings + 3;
+     auto data = base + (count + 1) * size;
++    if (!validate(base, (count + 1) * size)) return false;
+     auto offset1 = offset(base + glyph * size, size);
+     auto offset2 = offset(base + (glyph + 1) * size, size);
+ 
+     auto len = offset2 - offset1;
+-    if (len <= 0) return false;
++    if (len <= 0 || !validate(data + (offset1 - 1), len)) return false;
+     auto p = data + (offset1 - 1);
+     auto end = (p + len);
+ 
+@@ -442,6 +454,7 @@
+     auto nStems = 0;          // running hint count, needed to size the hintmask/cntrmask operands
+ 
+     while (p < end) {
++        if (!validate(p, 1)) return false;
+         auto b = u8(p);
+         switch (b) {
+             case 1:    // TODO: hstem
+@@ -450,6 +463,7 @@
+                 break;
+             }
+             case 4: {  // vmoveto
++                if (values.count < 1) return false;  // too few arguments: the glyph stops, as FreeType's cff_decoder_parse_charstrings
+                 pos.y -= values.pick();
+                 path.moveTo(pos);
+                 break;
+@@ -483,6 +497,7 @@
+                 break;
+             }
+             case 10: {  // callsubr
++                if (values.count < 1) return false;
+                 if (this->subRoutine(values.pick(), subrs, p, end, subRoutines, srp)) continue;
+                 return false;
+             }
+@@ -515,12 +530,14 @@
+                 continue;
+             }
+             case 21: {  // rmoveto
++                if (values.count < 2) return false;
+                 pos.y -= values.pick();
+                 pos.x += values.pick();
+                 path.moveTo(pos);
+                 break;
+             }
+             case 22: {  // hmoveto
++                if (values.count < 1) return false;
+                 pos.x += values.pick();
+                 path.moveTo(pos);
+                 break;
+@@ -546,6 +563,7 @@
+                 break;
+             }
+             case 29: {  // callgsubr
++                if (values.count < 1) return false;
+                 if (this->subRoutine(values.pick(), gsubrs, p, end, subRoutines, srp)) continue;
+                 return false;
+             }

@@ -2,7 +2,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter/widgets.dart';
 
 import '../tokens.dart';
@@ -21,8 +23,11 @@ class _Font {
 }
 
 
-/// Joined: the font files of this machine that the inside sets words in (.ttf), and those beside the document: read
-/// once, without waiting. A font is called by its file's name.
+final _fontFile = RegExp(r'\.(ttf|otf|ttc|otc)$', caseSensitive: false);
+
+/// Joined: the font files of this machine that the inside sets words in, and those beside the document: read once,
+/// without waiting. A font is called by its file's name; a collection (.ttc) is one row, its first face (ThorVG sets no
+/// other: thorvg_ttc.patch).
 List<_Font>? _disk;
 Future<void>? _reading;
 List<_Font> _diskFonts(Ws ws) {
@@ -37,10 +42,10 @@ int? get fontsOffered => _disk?.length;
 /// shelf's own line in are offered (a font of other letters, or one ThorVG cannot read, is not).
 Future<void> fontsRead(Ws ws) => _reading ??= Zone.root.run<Future<void>>(() async {
   final files = <String>[];
-  for (final dir in ['/System/Library/Fonts/Supplemental', '/Library/Fonts', '${Platform.environment['HOME']}/Library/Fonts', ?ws.documentFolder]) {
+  for (final dir in ['/System/Library/Fonts', '/System/Library/Fonts/Supplemental', '/Library/Fonts', '${Platform.environment['HOME']}/Library/Fonts', ?ws.documentFolder]) {
     try {
       for (final e in await Directory(dir).list().toList()) {
-        if (e is File && e.path.toLowerCase().endsWith('.ttf')) files.add(e.path);
+        if (e is File && _fontFile.hasMatch(e.path)) files.add(e.path);
       }
     } on FileSystemException catch (_) {} // (a folder that is not there, or may not be read: it has no fonts to offer)
   }
@@ -224,21 +229,24 @@ class FontsShelf extends StatelessWidget {
                       );
                     }
                     final cols = wsCols(box.maxWidth, 200), w = wsCell(box.maxWidth, cols);
-                    return ListView(
+                    final rows = (list.length / cols).ceil();
+                    return ListView.builder(   // (a row at a time: only what is shown has its file read, _own)
                       padding: EdgeInsets.zero,
-                      children: [
-                        Wrap(
+                      itemCount: rows,
+                      itemBuilder: (context, i) => Padding(
+                        padding: EdgeInsets.only(bottom: i == rows - 1 ? 0 : WsT.gutter),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           spacing: WsT.gutter,
-                          runSpacing: WsT.gutter,
                           children: [
-                            for (final f in list)
+                            for (final f in list.skip(i * cols).take(cols))
                               SizedBox(
                                 width: w,
                                 child: _FontCard(f, c, usedBy: usedBy(f)),
                               ),
                           ],
                         ),
-                      ],
+                      ),
                     );
                   },
                 ),
@@ -251,7 +259,7 @@ class FontsShelf extends StatelessWidget {
               child: Text('Aa', style: _face(sel, 15, WsT.onAccent)),
             ),
             title: sel.family,
-            meta: c.mem.trouble[sel.family] ?? 'TTF · ${File(sel.path!).parent.path.split('/').last}',
+            meta: c.mem.trouble[sel.family] ?? '${sel.path!.split('.').last.toUpperCase()} · ${File(sel.path!).parent.path.split('/').last}',
             // (the picked text is set in it; with no text picked, a new text is)
             action: m.word(int.tryParse(c.ws.selected ?? '') ?? 0, 'kind') != 'text' ? 'Place' : 'Apply',
             done: onText,
@@ -264,9 +272,23 @@ class FontsShelf extends StatelessWidget {
   }
 }
 
+/// The family a shelf row is set in: its file's own bytes, read once the row is shown (FontLoader, Flutter's door for a
+/// font that is not in the program). The file's name is often not the family's (Songti.ttc's is Songti SC, a
+/// ~/Library/Fonts file's is its PostScript name), and a family's regular is not the face ThorVG will set: the row shows
+/// what the stage will (golf_noise.md (117)). The name stays behind it for the moment before they are read.
+final _read = <String>{};
+String _own(_Font f) {
+  final p = f.path;
+  if (p == null) return f.family;
+  if (_read.add(p)) {
+    Zone.root.run(() => (FontLoader(p)..addFont(File(p).readAsBytes().then(ByteData.sublistView))).load().catchError((Object _) {}));   // (a file gone since: the row stays in the name's face)
+  }
+  return p;
+}
+
 TextStyle _face(_Font f, double size, Color c) => TextStyle(
-  fontFamily: f.family,
-  fontFamilyFallback: const ['.AppleSystemUIFont'],
+  fontFamily: _own(f),
+  fontFamilyFallback: [f.family, '.AppleSystemUIFont'],
   fontSize: size,
   color: T.ink(c),
   height: 1.1,

@@ -62,6 +62,8 @@ void _tests2() {
     final recent = File('${Directory.systemTemp.createTempSync('fonts').path}/font_recent.json');
     fontRecentAt(recent);   // (not the maker's own list)
     await t.runAsync(() => fontsRead(ws)); // (the shelf reads the folders without waiting; here the reading is done first)
+    const chinese = ['/System/Library/Fonts/Supplemental/Songti.ttc', '/System/Library/Fonts/Hiragino Sans GB.ttc'];   // (a collection of TrueType letters, and one of CFF: golf_noise.md (117))
+    expect(await t.runAsync(() => m.setting(chinese, '大陆')), chinese, reason: 'the first face of a collection sets words');
     ws
       ..reread()
       ..select('$text')

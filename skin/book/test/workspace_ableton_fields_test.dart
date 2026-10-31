@@ -412,7 +412,7 @@ void main() {
     expect(menu, findsNothing, reason: 'the window\'s menu shuts on a press elsewhere');
     await t.tapAt(at, buttons: kSecondaryButton);
     await t.pumpAndSettle();
-    await t.tapAt(t.getCenter(stage), buttons: kSecondaryButton);
+    await t.tapAt(t.getTopLeft(stage) + const Offset(4, 4), buttons: kSecondaryButton);   // (where no thing is: on one, its own menu opens)
     await t.pumpAndSettle();
     expect(menu, findsNothing, reason: 'and on a right press elsewhere');
     await t.tapAt(at, buttons: kSecondaryButton);

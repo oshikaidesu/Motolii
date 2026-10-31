@@ -264,6 +264,7 @@ static bool type_sets(const char* fontFile, const char* words) {
     float x = 0.f, y = 0.f, wide = 0.f, tall = 0.f;
     const bool sets = t->bounds(&x, &y, &wide, &tall) == tvg::Result::Success && wide > 0.f && tall > 0.f;
     tvg::Paint::rel(t);
+    tvg::Text::unload(fontFile);   // (ThorVG counts each load: a font only asked about leaves memory, 543 MB over the shelf; one in use stays)
     return sets;
 }
 // edge: an outline round the letters, ThorVG's own (its colour; w: how wide, a share of the line's height; 0: none).

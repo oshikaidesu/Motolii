@@ -1,0 +1,75 @@
+--- a/src/loaders/sfnt/tvgSfntLoader.cpp
++++ b/src/loaders/sfnt/tvgSfntLoader.cpp
+@@ -484,10 +484,18 @@
+ Result SfntLoader::gen(uint8_t* data, uint32_t size, SfntReader*& out)
+ {
+     if (size > 4) {
+-        auto type = uint32_t(data[0] << 24 | data[1] << 16 | data[2] << 8 | data[3]);
++        auto word = [&](uint32_t at) { return uint32_t(data[at]) << 24 | data[at + 1] << 16 | data[at + 2] << 8 | data[at + 3]; };
++        uint32_t base = 0;
++        auto type = word(0);
++        if (type == 0x74746366 && size >= 16) {  // ttcf: a collection's first face (OpenType's TTC header; FreeType's face_index 0), whose table offsets count from the file's start
++            base = word(12);
++            if (base > size - 12) return Result::InvalidArguments;
++            type = word(base);
++        }
+         if (type == 0x00010000 || type == 0x74727565) {  // ttf (scalable font)
+ #ifdef THORVG_TTF_LOADER_SUPPORT
+             out = new TtfReader(data, size);
++            out->base = base;
+             return Result::Success;
+ #else
+             return Result::NonSupport;
+@@ -495,6 +503,7 @@
+         } else if (type == 0x4F54544F) {  // otf (OTTO)
+ #ifdef THORVG_OTF_LOADER_SUPPORT
+             out = new OtfReader(data, size);
++            out->base = base;
+             return Result::Success;
+ #else
+             return Result::NonSupport;
+--- a/src/loaders/sfnt/tvgSfntReader.cpp
++++ b/src/loaders/sfnt/tvgSfntReader.cpp
+@@ -37,9 +37,9 @@
+ 
+ uint32_t SfntReader::table(const char* tag) const
+ {
+-    auto tableCnt = u16(4);
+-    if (!validate(12, (uint32_t)tableCnt * 16)) return 0;
+-    auto match = bsearch(tag, data + 12, tableCnt, 16, cmpu32);
++    auto tableCnt = u16(base + 4);
++    if (!validate(base + 12, (uint32_t)tableCnt * 16)) return 0;
++    auto match = bsearch(tag, data + base + 12, tableCnt, 16, cmpu32);
+     if (!match) {
+         TVGLOG("SFNT", "No searching table = %s", tag);
+         return 0;
+@@ -210,7 +210,7 @@
+ 
+ Result SfntReader::header()
+ {
+-    if (!validate(0, 12)) return Result::InvalidArguments;
++    if (!validate(base, 12)) return Result::InvalidArguments;
+ 
+     // header
+     auto head = table("head");
+--- a/src/loaders/sfnt/tvgSfntReader.h
++++ b/src/loaders/sfnt/tvgSfntReader.h
+@@ -49,6 +49,7 @@
+ {
+     uint8_t* data = nullptr;
+     uint32_t size = 0;
++    uint32_t base = 0;  // where the face's table list begins: past the head of a collection (.ttc)
+ 
+     struct
+     {
+--- a/src/loaders/sfnt/tvgTtfReader.cpp
++++ b/src/loaders/sfnt/tvgTtfReader.cpp
+@@ -281,7 +281,7 @@
+     if (SfntReader::header() == Result::Success) {
+         kern = table("kern");
+         if (kern) {
+-            auto entry = static_cast<const uint8_t*>(bsearch("kern", data + 12, u16(4), 16, cmpu32));
++            auto entry = static_cast<const uint8_t*>(bsearch("kern", data + base + 12, u16(base + 4), 16, cmpu32));
+             auto length = u32(uint32_t(entry - data) + 12);
+             if (length < 4 || !validate(kern, length)) return Result::InvalidArguments;
+             kernEnd = kern + length;
