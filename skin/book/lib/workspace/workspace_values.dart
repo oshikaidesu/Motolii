@@ -66,7 +66,7 @@ void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}
     m.later('together', number: 1);   // (one step, without waiting)
     for (final e in said.entries) {
       final ways = m.words(t!, e.key.substring(2));
-      m.later('say', thing: t, name: e.key.substring(2), word: ways[e.value.round().clamp(0, ways.length - 1)]);
+      for (final o in [t, ..._withIt(ws, t)]) m.later('say', thing: o, name: e.key.substring(2), word: ways[e.value.round().clamp(0, ways.length - 1)]);
     }
     ws.after(m.later('together'), (done, why) => _told(ws, done ? null : why));
     changed = {for (final e in changed.entries) if (!said.containsKey(e.key)) e.key: e.value};
@@ -78,21 +78,42 @@ void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}
     if (!live) ws.after(m.later('time_stretch', thing: t, number: speed, word: '${m.word(t, 'speed_hold').isEmpty ? 'start' : m.word(t, 'speed_hold')} ${ws.frame / Ws.fps}'), (done, why) => done ? ws.reread() : _told(ws, why));
     if (changed.isEmpty) return;
   }
-  if (_holding != t) m.take(t); // (held once a hand: each step after only carries)
+  final now = ws.frame / Ws.fps, dragged = _holding == t;
+  if (!dragged) {
+    m.take(t); // (held once a hand: each step after only carries)
+    _found.clear();
+  }
   _holding = live ? t : null;
   String? why;
+  final carried = <String, double>{};
   for (final e in changed.entries) {
     final to = _asDocument(ws, e.key, e.value);
+    if (to != null) _found[to.$1] ??= m.value(t, to.$1, now) ?? to.$2;
     if (to != null && !m.carry(to.$1, to.$2)) why ??= m.trouble;
+    if (to != null) carried[to.$1] = to.$2;
     if (to == null) why ??= 'the document has no ${e.key}: '; // (a seat the document has no value for says so, rather than keep the number)
   }
   if (live) {
     if (ws.playing) ws.playing = false; // (a hand on a value stops the play: what is changed is changed at one moment)
     if (why != null) _told(ws, why);
   } else {
-    ws.after(m.later('let_go', number: 1), (done, no) => _told(ws, why ?? (done ? null : no))); // (the hand let go: the window does not wait for the step)
+    final also = _withIt(ws, t);
+    if (also.isNotEmpty) m.later('together', number: 1);
+    var kept = m.later('let_go', number: 1);
+    for (final o in also) {   // (After Effects' and Figma's: a value changed with many picked is changed on them all that have it, a number dragged by as much, one typed to it)
+      m.take(o);
+      for (final e in carried.entries) m.carry(e.key, dragged ? (m.value(o, e.key, now) ?? e.value) + e.value - _found[e.key]! : e.value);
+      m.later('let_go', number: 1);
+    }
+    if (also.isNotEmpty) kept = m.later('together');
+    ws.after(kept, (done, no) => _told(ws, why ?? (done ? null : no))); // (the hand let go: the window does not wait for the step)
   }
 }
+
+final _found = <String, double>{};   // (the values as the hand found them)
+
+/// What else is picked with [t].
+List<int> _withIt(Ws ws, int t) => ws.many.contains('$t') ? [for (final id in ws.many) if (int.tryParse(id) case final o? when o != t) o] : const [];
 
 /// Joined: the picked thing's words in the inspector's ids (a text's content; how it lies on what is behind), and a change of them told to the document.
 Map<String, String> _words(Ws ws, String? id) {

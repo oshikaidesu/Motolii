@@ -44,6 +44,43 @@ void main() {
     await closeWorkspace(t);
   }, skip: !insideBuilt);
 
+  testWidgets('a number changed with many picked is changed on them all: typed, to it; scrubbed, by as much; one step (After Effects, Figma)', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final a = m.add('shape', 'rect'), b = m.add('shape', 'rect');
+    expect(m.set(a, 'rotate', 10) && m.set(b, 'rotate', 40), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$a')
+      ..pickMany(['$a', '$b']);
+    await t.pumpAndSettle();
+    final turn = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_rotate');
+    await seen(t, turn);
+    final hand = await t.startGesture(t.getCenter(turn));
+    await t.pump();
+    await hand.moveBy(const Offset(30, 0));
+    await t.pump();
+    await hand.moveBy(const Offset(30, 0));
+    await t.pump();
+    await hand.up();
+    await settled(t, ws);
+    expect(m.value(a, 'rotate', 0), isNot(10), reason: 'the one under the hand');
+    expect(m.value(b, 'rotate', 0)! - 40, closeTo(m.value(a, 'rotate', 0)! - 10, 1e-6), reason: 'scrubbed: by as much: ${m.trouble}');
+    await t.tap(turn);
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.digit7);
+    await t.pump();
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await settled(t, ws);
+    expect(m.value(a, 'rotate', 0), -7, reason: 'shown 7: the document counts the other way');
+    expect(m.value(b, 'rotate', 0), -7, reason: 'typed: to it');
+    expect(m.undo(), isTrue, reason: m.trouble);
+    ws.reread();
+    await t.pumpAndSettle();
+    expect(m.value(a, 'rotate', 0), isNot(-7));
+    expect(m.value(b, 'rotate', 0), isNot(-7), reason: 'one step');
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
   testWidgets('what is typed before the editor has the keys goes on the number; Cmd+A on a field held is all of its number, not every thing (After Effects, Figma)', (t) async {
     final ws = await openWorkspace(t), m = ws.inside!;
     final a = m.add('shape', 'rect');
