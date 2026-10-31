@@ -209,14 +209,17 @@ class RotRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // contract: rotation keeps its turns, typed 450 stays 450 and reads "1x 90" (B5).
+    final doc = Ctx.of(context).doc, flat = doc.space == Space.d2 && (doc.get('v_rotate_x') ?? 0) == 0 && (doc.get('v_rotate_y') ?? 0) == 0;   // (a 2D layer's one Rotation, After Effects'; tilted already, its own two stay in sight)
     return PropRow(
       id: 'v_rotate',
       label: 'Rotation',
       ids: ['v_rotate_x', 'v_rotate_y', 'v_rotate'],
       cells: [
-        NumField(id: 'v_rotate_x', label: 'X', axis: axX, unit: '°', decimals: 1, perPx: .5),
-        NumField(id: 'v_rotate_y', label: 'Y', axis: axY, unit: '°', decimals: 1, perPx: .5),
-        NumField(id: 'v_rotate', label: 'Z', axis: axZ, unit: '°', decimals: 1, perPx: .5, turns: true),
+        if (!flat) ...[
+          NumField(id: 'v_rotate_x', label: 'X', axis: axX, unit: '°', decimals: 1, perPx: .5),
+          NumField(id: 'v_rotate_y', label: 'Y', axis: axY, unit: '°', decimals: 1, perPx: .5),
+        ],
+        NumField(id: 'v_rotate', label: flat ? null : 'Z', axis: flat ? null : axZ, unit: '°', decimals: 1, perPx: .5, turns: true),
       ],
     );
   }

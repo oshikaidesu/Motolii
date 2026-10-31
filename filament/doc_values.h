@@ -16,6 +16,8 @@ static const DocShown doc_shown[] = {
     {"wrap_at", "", "×", "Wrap at", 0, 40, nullptr},
     {"gradient", "", "", "Gradient", 0, 0, nullptr},
     {"gradient_angle", "angle", "°", "Angle", -180, 180, nullptr},
+    {"points", "count", "", "Points", 3, 32, nullptr},
+    {"inner", "share", "%", "Inner radius", 0.05, 1, nullptr},
     {"round", "share", "%", "Round", 0, 0.5, nullptr},
     {"trim", "share", "%", "Trim end", 0, 1, nullptr},
     {"trim_begin", "share", "%", "Trim start", 0, 1, nullptr},
@@ -341,6 +343,8 @@ static const DocCard doc_cards[] = {
     {"Fog", "fog fog_near fog_far fog_color", "kind", "camera"},   // (the camera's own, as Alight Motion's camera has: its colour, where it begins, where it is whole; the stage's when it says none)   // (After Effects' camera: what it looks at, where it is and how turned, how far its eye is, its zoom)
     {"Blending", "blend clip"},   // (After Effects' layer mode and its track matte, in its simplest: drawn over what lies below as it says, or only inside the one before it)
     {"Text", "text file size letter_spacing line_spacing align", "kind", "text"},   // (After Effects' Source Text and Character, Cavalry's Text Shape: what it says, in which font, how large, which way it lines up)
+    {"Star", "points inner", "shape", "star"},   // (After Effects' Polystar: how many points, how far in between them)
+    {"Polygon", "points", "shape", "polygon"},
     {"Fill", "fill fill_media stroke stroke_width"},   // (After Effects' Fill and Stroke, Cavalry's Fill and Stroke: a colour, colours down it, or the material glass; its edge and how wide)
     {"Type", "split italic wrap wrap_at", nullptr, nullptr, true},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ ", true},

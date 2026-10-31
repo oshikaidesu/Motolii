@@ -348,7 +348,7 @@ static double doc_usual(Doc& d, const char* name) {
          : !strcmp(name, "ior") ? 1.5 : !strcmp(name, "dispersion") ? 0.1 : !strcmp(name, "swim") ? 0.5 : !strcmp(name, "dark") ? 4.0 : !strcmp(name, "vivid") ? 1.3 : 0.0;   // (the kit's glass as it comes)
 }
 // What it is when nothing is said of it on this thing: a flat thing has no thickness (doc_fx_list), a solid is as deep as it is.
-static double doc_usual_on(Doc& d, int thing, const char* name) { return !strcmp(name, "scale_z") && doc_word(d, thing, "kind") != "solid" ? 0.0 : doc_usual(d, name); }
+static double doc_usual_on(Doc& d, int thing, const char* name) { return !strcmp(name, "scale_z") && doc_word(d, thing, "kind") != "solid" ? 0.0 : !strcmp(name, "points") ? (doc_word(d, thing, "shape") == "star" ? 5.0 : 6.0) : !strcmp(name, "inner") ? 0.5 : doc_usual(d, name); }
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual_on(d, thing, name)), true); }
 // A thing held by a hand, carried, and let go: the one form of everything a hand drags (a thing on the stage, its bar
 // on the timeline, a number). What is carried shows at once and is not the document's until it is let go, and then
