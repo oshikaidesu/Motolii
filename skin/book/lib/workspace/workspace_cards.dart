@@ -5,11 +5,12 @@ part of 'workspace.dart';
 String? _kindWord(Ws ws, String? id) {
   final t = int.tryParse(id ?? ''), w = t == null ? '' : ws.inside?.word(t, 'kind') ?? '';
   if (w == 'behaviour') return wsRelations.contains(ws.inside?.word(t!, 'file')) ? 'Relation' : 'Behaviour';
+  if (w == 'film' && wsSound(ws.inside!, t!)) return 'Sound';
   return const {'film', 'picture', 'solid', 'light'}.contains(w) ? w.replaceRange(0, 1, w[0].toUpperCase()) : null;
 }
 
 Kind _kindOf(WsLayer? l) => switch (l?.kind) {
-  null || WsKind.audio => Kind.none,
+  null => Kind.none,
   WsKind.text => Kind.text,
   WsKind.camera => Kind.camera,
   WsKind.group => Kind.group,
@@ -93,6 +94,7 @@ List<Fx> _makeCards(Ws ws, Motolii m, int t) {
   String colour(String base) => '  /// @label(${m.shown('${base}_x')!.label.substring(0, m.shown('${base}_x')!.label.length - 2)}) @unit(colours)\n  $base: vec3<f32>,';
   return [
     for (final (title, names) in m.cards(t))
+      if (title == 'Sound' || !wsSound(m, t))   // (a sound has its volume and no picture to place: Alight Motion's audio layer, reports/alight_ui.md 177)
       Fx('v', title, 'struct Params {\n${[
         for (final n in names)
           if (m.shown(n)?.fold == null)

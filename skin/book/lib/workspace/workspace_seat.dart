@@ -137,7 +137,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         movable: int.tryParse(l?.id ?? '') == null ? const [] : m.fxTitles(int.parse(l!.id)), // (its effects, up or down their stack)
         onCardMove: int.tryParse(l?.id ?? '') == null ? null : (title, by) => ws.after(m.later('fx_move', thing: int.parse(l!.id), word: title, number: by.toDouble())),
         onSum: m.workOut,
-        moreCards: int.tryParse(l?.id ?? '') == null ? const [] : m.moreCards(int.parse(l!.id)),
+        moreCards: int.tryParse(l?.id ?? '') == null ? const [] : [for (final c in m.moreCards(int.parse(l!.id))) if (l.kind != WsKind.audio || c == 'Play') c],   // (a sound's speed, Alight Motion's; nothing else)
         onMoreCard: int.tryParse(l?.id ?? '') == null ? null : (title) {
           m.asked.putIfAbsent(int.parse(l!.id), () => {}).add(title);
           ws.reread();
@@ -146,11 +146,11 @@ class _InspectorSeatState extends State<_InspectorSeat> {
           final t = int.parse(l!.id);
           ws.after(how.startsWith('flip') ? m.later('flip', thing: t, word: how.substring(4).toLowerCase()) : m.later('fit', thing: t, word: how), (_, _) => ws.reread());
         },
-        onAddEffect: int.tryParse(l?.id ?? '') == null ? null : () {
+        onAddEffect: int.tryParse(l?.id ?? '') == null || l?.kind == WsKind.audio ? null : () {
           ws.shelf = 'Effects';
           askDockSearch();
         },
-        onCardRemove: int.tryParse(l?.id ?? '') == null ? null : (title) => ws.after(m.later('fx_out', thing: int.parse(l!.id), word: title), (_, _) => ws.reread()),
+        onCardRemove: int.tryParse(l?.id ?? '') == null ? null : (title) => ws.after(title == 'Script' ? m.later('say', thing: int.parse(l!.id), name: 'script', word: '') : m.later('fx_out', thing: int.parse(l!.id), word: title), (_, _) => ws.reread()),
         onCardEye: int.tryParse(l?.id ?? '') == null ? null : (title) => ws.after(m.later('fx_eye', thing: int.parse(l!.id), word: title), (_, _) => ws.reread()),
         onCardDuplicate: int.tryParse(l?.id ?? '') == null ? null : (title) => ws.after(m.later('fx_duplicate', thing: int.parse(l!.id), word: title), (done, why) => done ? ws.reread() : ws.notice = why),   // (Alight Motion's ⋮ Duplicate: put on again after it, its values with it)
         onCardInfo: (title) => ws.notice = m.about(title).isEmpty ? '$title: no words of its maker\'s' : '$title: ${m.about(title)}',   // (in its maker's words, as the shelf searches them)

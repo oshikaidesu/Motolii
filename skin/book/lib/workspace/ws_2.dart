@@ -1,6 +1,9 @@
 // Part of ws.dart (cut there by size, as it was).
 part of 'ws.dart';
 
+/// A sound: a film whose file has no picture, hidden and heard (doc_add), Alight Motion's audio layer: reports/alight_ui.md 177.
+bool wsSound(Motolii m, int t) => m.word(t, 'kind') == 'film' && m.kindOf(m.word(t, 'file')) == 'sound';
+
 class Ws extends ChangeNotifier {
   /// Each aspect told on its own (a Flutter ValueNotifier: what listens to one hears only it).
   late final on = {for (final a in WsAspect.values) a: ValueNotifier<int>(0)};
@@ -181,6 +184,7 @@ class Ws extends ChangeNotifier {
             return WsLayer('$t', name, switch (kind) {
               'text' => WsKind.text,
               'camera' => WsKind.camera,
+              'film' when wsSound(m, t) => WsKind.audio,
               'film' || 'picture' => WsKind.image,
               _ => WsKind.shape,
             }, from, _outF(from, lasts), keys,

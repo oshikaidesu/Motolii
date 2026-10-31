@@ -539,7 +539,7 @@ class _Readout extends StatelessWidget {
         if (box == null && ws.inside?.word(int.parse(l.id), 'kind') != 'behaviour' && !(l.kind == WsKind.camera && (scene.layer(l.id)?.live(scene.frame) ?? false)))
           Padding(
             padding: EdgeInsets.only(left: Shape.s(10)),
-            child: Text(l.kind == WsKind.audio ? 'No picture' : 'Not on this frame', style: T.label(Grey.g56)),
+            child: Text(l.kind == WsKind.audio ? 'No picture' : ws.freeEye && (scene.layer(l.id)?.live(scene.frame) ?? false) ? 'In Camera View' : 'Not on this frame', style: T.label(Grey.g56)),   // (a 2D thing shows in the camera's eye alone, as in After Effects' working views)
           )
         else if (l.kind != WsKind.camera) ...[
           // (the same numbers as the inspector's, which are the document's)

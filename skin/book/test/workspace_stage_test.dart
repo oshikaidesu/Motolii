@@ -171,6 +171,24 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('a 2D thing on its frame says where it is seen when the stage has the working eye (After Effects\' working views)', (t) async {
+    final ws = _joined(), m = ws.inside!;
+    final a = m.add('shape', 'rect');
+    m.add('camera', 'camera');
+    ws.reread();
+    await _stage(t, ws, const Size(924, 616));
+    ws
+      ..frame = 0
+      ..select('$a');
+    await t.pump();
+    expect([ws.freeEye, find.text('In Camera View').evaluate().length, find.text('Not on this frame').evaluate().length], [true, 1, 0], reason: 'it is on this frame, in the camera\'s eye');
+    expect(m.set(a, 'start', 2), isTrue, reason: m.trouble);
+    ws.reread();
+    await t.pump();
+    expect(find.text('Not on this frame'), findsOneWidget, reason: 'it comes on at 2 s');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
   testWidgets('Snapshot keeps the picture as it is; Show lays it over the picture only while held (After Effects\' Take and Show Snapshot; P19)', (t) async {
     final ws = _joined(), m = ws.inside!;
     m.add('shape', 'rect');

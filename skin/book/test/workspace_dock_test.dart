@@ -346,6 +346,26 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('a sound is a sound: its volume on its card and no place, no effect, nothing to colour (Alight Motion\'s audio layer, reports/alight_ui.md 177)', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final wav = File('${ws.documentFolder}/tone.wav');
+    final data = ByteData(44 + 8000)..setUint32(0, 0x52494646)..setUint32(4, 36 + 8000, Endian.little)..setUint32(8, 0x57415645)..setUint32(12, 0x666d7420)..setUint32(16, 16, Endian.little)..setUint16(20, 1, Endian.little)..setUint16(22, 1, Endian.little)..setUint32(24, 8000, Endian.little)..setUint32(28, 16000, Endian.little)..setUint16(32, 2, Endian.little)..setUint16(34, 16, Endian.little)..setUint32(36, 0x64617461)..setUint32(40, 8000, Endian.little);
+    wav.writeAsBytesSync(data.buffer.asUint8List());
+    final a = m.add('', wav.path);
+    expect(a, isNot(0), reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$a')
+      ..shelf = 'Colors';
+    await t.pumpAndSettle();
+    expect(ws.layer?.kind.name, 'audio');
+    for (final (word, n) in [('Sound', 2), ('Transform', 0), ('Blending', 0), ('Fill of tone.wav', 0)]) {
+      expect(find.text(word).evaluate().length, n, reason: word);
+    }
+    expect(find.textContaining('Add Effect'), findsNothing);
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
   testWidgets('a sound file picked on the Media shelf is heard before it is placed: pressed, the Mac plays it; pressed again, it stops (Alight Motion\'s song preview)', (t) async {
     final ws = _joined();
     final wav = File('${ws.documentFolder}/tone.wav');   // (half a second of silence, as a WAV file says it: 16-bit mono at 8000)

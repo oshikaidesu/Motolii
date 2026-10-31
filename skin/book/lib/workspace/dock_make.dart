@@ -57,7 +57,7 @@ const _blends = {'rgb': 'RGB', 'oklab': 'OKLab', 'hue': 'Hue', 'steps': 'Steps'}
 
 /// How the gradient coloured now is mixed: the picked thing's gradient_blend, or the ink's ('rgb' unsaid).
 String _blendNow(DockCtx c) {
-  final t = int.tryParse(c.ws.selected ?? ''), w = t != null && (c.ws.aim ?? 'fill') == 'fill' ? c.ws.inside!.word(t, 'gradient_blend') : c.ws.inkBlend;
+  final t = _coloured(c), w = t != null && (c.ws.aim ?? 'fill') == 'fill' ? c.ws.inside!.word(t, 'gradient_blend') : c.ws.inkBlend;
   return w.isEmpty ? 'rgb' : w;
 }
 
@@ -72,7 +72,7 @@ String _blendNow(DockCtx c) {
 /// A gradient put on what is coloured: its colours, and how they are mixed (the picked thing's gradient_blend, or the
 /// ink's, for the next thing drawn); one step.
 void _putGradient(DockCtx c, List<Color> cs, String blend, [List<double>? at]) {
-  final m = c.ws.inside!, t = int.tryParse(c.ws.selected ?? '');
+  final m = c.ws.inside!, t = _coloured(c);
   final word = at != null && at.length == cs.length ? _wordOfStops([for (var i = 0; i < cs.length; i++) (cs[i], at[i])]) : [for (final k in cs) _hex(k).substring(1).toLowerCase()].join(' ');
   if (t == null || (c.ws.aim ?? 'fill') != 'fill') {
     c.ws.inkBlend = blend;
@@ -209,7 +209,7 @@ void _fillLetters(DockCtx c, int t, (int, int) at, String word) {
 }
 
 void _fill(DockCtx c, String word) {
-  final m = c.ws.inside!, t = int.tryParse(c.ws.selected ?? '');
+  final m = c.ws.inside!, t = _coloured(c);
   if ((c.ws.aim == null || c.ws.aim == 'fill') && RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(word)) {
     if (_lettersPicked(c, t) case final at?) return _fillLetters(c, t!, at, word.toLowerCase());
   }
@@ -325,7 +325,7 @@ class ColorsShelf extends StatelessWidget {
 
   /// The thing a colour goes to now and its value's name (null: the next thing drawn).
   (int?, String) _target() {
-    final t = int.tryParse(c.ws.selected ?? ''), aim = c.ws.aim ?? 'fill';
+    final t = _coloured(c), aim = c.ws.aim ?? 'fill';
     return (t ?? (aim == 'fill' || aim == 'stroke' ? null : 0), aim);
   }
 
@@ -425,7 +425,7 @@ class ColorsShelf extends StatelessWidget {
             children: [
               for (final MapEntry(key: b, value: label) in _blends.entries)
                 DeskChip(key: ValueKey('colour-blend-$b'), label: label, on: _blendNow(c) == b, onTap: () {
-                  final t = int.tryParse(c.ws.selected ?? '');
+                  final t = _coloured(c);
                   t != null && name == 'fill' ? c.ws.after(m.later('say', thing: t, name: 'gradient_blend', word: b)) : c.set(() => c.ws.inkBlend = b);
                 }),
             ],
@@ -568,10 +568,13 @@ class ColorsShelf extends StatelessWidget {
   }
 }
 
+/// The thing the shelf colours: the one picked (a sound has nothing to colour: the next thing drawn, then, as with none).
+int? _coloured(DockCtx c) => switch (int.tryParse(c.ws.selected ?? '')) { final t? when wsSound(c.ws.inside!, t) => null, final t => t };
+
 /// What is coloured now, as the document or the inks say it: the picked thing's value aimed at (its fill, unless a
 /// link or the tool strip aimed another), else the stage's, else the ink or edge of the next thing drawn.
 String _paintNow(DockCtx c) {
-  final t = int.tryParse(c.ws.selected ?? ''), aim = c.ws.aim ?? 'fill', m = c.ws.inside!;
+  final t = _coloured(c), aim = c.ws.aim ?? 'fill', m = c.ws.inside!;
   if (t != null) return m.word(t, aim);
   if (aim == 'fill' || aim == 'stroke') return aim == 'stroke' ? c.ws.edge : c.ws.ink;
   return m.word(0, aim);

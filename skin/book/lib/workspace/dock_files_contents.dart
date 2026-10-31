@@ -308,6 +308,7 @@ class _Footer extends StatelessWidget {
     //  effects as they are: After Effects' Replace Layer Source, Premiere Pro's Replace With Clip; P17)
     final swaps = m != null && shape != null && !fills && layer != '$shape' && const {'picture', 'film'}.contains(m.word(shape, 'kind')) && _kindOfFile(n.id) == m.word(shape, 'kind');
     return FutureBuilder<String>(   // (what the media is, as GStreamer's discoverer tells it: Alight Motion's Media Info; its file's kind and size until then)
+      key: ValueKey(n.id),   // (a file of its own: what was told of the last one is not carried over till this one's comes)
       future: can && m != null ? mediaInfoOf(m.libPath, n.id) : null,
       builder: (context, info) => DockFooter(
       preview: n.disk && (n.g == DockG.audio || n.g == DockG.video && (info.data ?? '×').isNotEmpty && !(info.data ?? '×').contains('×')) ? _Listen(n) : _Art(n),   // (sound alone, no picture in it: heard before it is placed)

@@ -75,6 +75,22 @@ void main() {
     await closeWorkspace(t);
   }, skip: !insideBuilt);
 
+  testWidgets('a text\'s script comes off by the bin on its card, as an effect does (Alight Motion\'s Delete)', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final a = m.add('text', '$motoliiDir/out/arial_black.ttf');
+    expect(m.say(a, 'script', '$motoliiDir/animators/bounce_in.js'), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$a');
+    await t.pumpAndSettle();
+    final bin = find.byKey(const ValueKey('card-remove:Script'));
+    await seen(t, bin);
+    await t.tap(bin);
+    await settled(t, ws);
+    expect([m.word(a, 'script'), bin.evaluate().length], ['', 0], reason: 'its card goes with it');
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
   testWidgets('a sum typed in a field is worked out, one begun with * or / from the value as it is; what is no sum keeps the field open (After Effects, Figma, Blender)', (t) async {
     final ws = await openWorkspace(t), m = ws.inside!;
     final a = m.add('shape', 'rect');

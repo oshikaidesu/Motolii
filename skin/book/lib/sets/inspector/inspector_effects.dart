@@ -150,6 +150,12 @@ class ValuesCard extends StatelessWidget {
           ? null
           : Row(mainAxisSize: MainAxisSize.min, children: [
               if (at < 0) CardWords(card.name, [for (final p in card.params) p.id]),
+              if (card.name == 'Script' && doc.onCardRemove != null)   // (a script is put on as an effect is, and comes off the same way: golf_noise.md (123))
+                Hov(
+                  key: const ValueKey('card-remove:Script'),
+                  onTap: () => doc.onCardRemove!(card.name),
+                  builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: CustomPaint(size: Size.square(Shape.z(12)), painter: _Bin(h ? Grey.g95 : Grey.g56))),
+                ),
               if (at >= 0) ...[   // (an effect's card, as AbsentMotion's EffectHeader and Alight Motion's: its eye, ⋮ with the rest, the bin)
                 if (doc.onCardEye != null)
                   Hov(
