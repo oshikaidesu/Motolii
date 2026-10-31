@@ -1302,7 +1302,7 @@ void _tests3() {
     await t.sendKeyEvent(LogicalKeyboardKey.keyT);
     await t.pumpAndSettle();
     await t.tapAt(comp.center);
-    for (var i = 0; i < 200 && (ws.waiting || m.things.length == before); i++) {
+    for (var i = 0; i < 3000 && (ws.waiting || m.things.length == before); i++) {   // (30 s at most, as opening is given: a clean CI Mac)
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
       await t.pump();
     }

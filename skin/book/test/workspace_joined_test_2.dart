@@ -734,7 +734,7 @@ void _tests2() {
     await t.tap(find.byKey(const ValueKey('ws-tool-2'))); // (the Rectangle tool)
     await t.pumpAndSettle();
     await t.dragFrom(stage.center - Offset(stage.width * .2, stage.height * .1), Offset(stage.width * .4, stage.height * .2));
-    await t.pumpAndSettle();
+    await settled(t, ws);   // (made by the inside, in its own time: on a slow Mac not yet at the next frame)
     final rect = int.parse(ws.selected!);
     expect([m.word(rect, 'kind'), m.word(rect, 'shape')], ['shape', 'rect'], reason: m.trouble);
     final box = m.frame(rect)!, k = 1920 / stage.width;

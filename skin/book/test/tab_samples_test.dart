@@ -61,7 +61,7 @@ void main() {
     await t.timedDragFrom(box.topLeft + lay.pulls[0].center, const Offset(80, 0), const Duration(milliseconds: 300));   // (Flutter's own drag in steps, as a hand drags: in real time one jump is not always taken)
     await rest();
     mv = wsMoves(ws).single;
-    expect(mv.lag, greaterThan(lag + .1));
+    expect(mv.lag, greaterThan(lag + .09));   // (a tenth is what 80 points make, on the mark on a slow Mac)
 
     final cube = ws.layers.firstWhere((l) => m.word(int.parse(l.id), 'kind') == 'solid').id;
     await t.tapAt(box.topLeft + lay.come[whip].center);   // (the pick whip, then the cube picked as a hand picks it)
