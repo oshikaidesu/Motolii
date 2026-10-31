@@ -43,4 +43,11 @@ for what, a, b in (('two solids stay crossed', 'crossed', 'crossed_fx'), ('fog s
     n = changed(a, b); print(what + ': ' + ('yes' if n < 50 else 'NO') + ' (%d pixels changed)' % n)
 n = changed('star', 'star_fx'); print('it stays the way up it was: ' + ('yes' if n < 2000 else 'NO') + ' (%d pixels changed)' % n)
 a, b = bars('middle'), bars('edge'); print('its pattern keeps to it at the edge: ' + ('yes' if abs(a - b) < .5 else 'NO') + ' (%.1f and %.1f pixels a bar)' % (a, b))"
+for o in 0.25 1; do printf "add shape rect\nsay 1 fill ffffff\nset 1 size 5\nsay 1 space 3d\nset 1 opacity $o\nsay 1 fx $PWD/effects/Ridgelines.fs $PWD/effects/am_gradientmap.wgsl\nstill $W/clear$o.png\n" | ./edit.sh $W/clear$o.motolii > /dev/null 2>&1; done
+python3 -c "
+from PIL import Image
+import numpy as np
+L = lambda p: (lambda c: np.where(c <= .04045, c / 12.92, ((c + .055) / 1.055) ** 2.4))(np.asarray(Image.open(p).convert('RGB'), dtype=float) / 255)
+a, b = L('$W/clear0.25.png'), L('$W/clear1.png')
+n = (abs(a - b * .25).max(axis=2) > .02).mean(); print('how clear it is comes after its effects (After Effects: masks, effects, transform): ' + ('yes' if n < .001 and b.mean() > .01 else 'NO') + ' (%.2f %% of pixels off a quarter)' % (100 * n))"
 rm -rf $W

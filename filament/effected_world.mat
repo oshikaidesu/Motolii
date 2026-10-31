@@ -6,6 +6,7 @@ material {
     parameters : [
         { type : sampler2d, name : image },
         { type : float, name : glowing },
+        { type : float, name : opacity },
         { type : sampler2d, name : matte0 }, { type : sampler2d, name : matte1 }, { type : sampler2d, name : matte2 }, { type : sampler2d, name : matte3 },
         { type : mat4, name : matteEye0 }, { type : mat4, name : matteEye1 }, { type : mat4, name : matteEye2 }, { type : mat4, name : matteEye3 },
         { type : float4, name : matteUse }, { type : float4, name : matteSoft }   // (matte.glsl, as flat.mat's: the thing cut after its effects)
@@ -26,7 +27,7 @@ fragment {
         if (material.baseColor.a < 0.004) discard;   // (where nothing of it is left it is not there at all: it hides nothing behind it, as flat.mat)
         material.baseColor.rgb *= material.baseColor.a;   // (effects give straight colour; Filament's transparent wants it times alpha, as effected.mat)
         material.baseColor.rgb *= 1.0 + materialParams.glowing;
-        material.baseColor *= matteLeft();
+        material.baseColor *= matteLeft() * materialParams.opacity;   // (how clear it is after its effects, as effected.mat)
 #if defined(LAY_multiply)
         material.baseColor.rgb += 1.0 - material.baseColor.a;   // (where it is clear, what is behind is left as it is: times one, as flat.mat)
 #endif

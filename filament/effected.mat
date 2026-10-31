@@ -18,6 +18,10 @@ material {
             type : float,
             name : glowing
         },
+        {
+            type : float,
+            name : opacity
+        },
         { type : sampler2d, name : matte0 }, { type : sampler2d, name : matte1 }, { type : sampler2d, name : matte2 }, { type : sampler2d, name : matte3 },
         { type : mat4, name : matteEye0 }, { type : mat4, name : matteEye1 }, { type : mat4, name : matteEye2 }, { type : mat4, name : matteEye3 },
         { type : float4, name : matteUse }, { type : float4, name : matteSoft }   // (matte.glsl, as flat.mat's: the thing cut after its effects)
@@ -56,7 +60,7 @@ fragment {
         material.baseColor = max(texture(materialParams_image, uv.st), 0.0);
         material.baseColor.rgb *= material.baseColor.a;   // (effects give straight colour, as OBS keeps its filters; Filament's transparent wants it times alpha: BlendingMode.TRANSPARENT)
         material.baseColor.rgb *= 1.0 + materialParams.glowing;   // (its glow after its effects: brighter than white, the stage's bloom takes it up, as flat.mat's)
-        material.baseColor *= matteLeftAt(variable_worldAt.xyz / variable_worldAt.w);   // (cut where what clips it is not, its effects' picture and all)
+        material.baseColor *= matteLeftAt(variable_worldAt.xyz / variable_worldAt.w) * materialParams.opacity;   // (cut where what clips it is not, its effects' picture and all; and how clear it is, after its effects as After Effects renders a layer: masks, effects, transform)
 #if defined(LAY_multiply)
         material.baseColor.rgb += 1.0 - material.baseColor.a;   // (where it is clear, what is behind is left as it is: times one, as flat.mat)
 #endif
