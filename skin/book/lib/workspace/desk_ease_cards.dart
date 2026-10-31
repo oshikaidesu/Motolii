@@ -2,8 +2,9 @@
 // graph or the flow joins them; a card carried out comes off. Top to bottom each acts on what is above it as its intent
 // asks (the maker, 10/31: "そのeaseの意図から考えるべき"): one that moves a value along, or cuts it into steps, takes what
 // is above through it, as GSAP's timingEase and Blender's stack; a wave is as large as what is above, as GSAP's
-// amplitudeEase; a shake is added to it, as Blender's Noise. To the document they are one way, defined so (way(),
-// doc_match.h), so it is kept, undone and listed as any way is. Linear changes nothing, wherever it lies.
+// amplitudeEase; a shake is added to it, as Blender's Noise. Between two cards the flow says which: an arrow, a ×, a + (the
+// maker, 10/31, of a reader who could not tell). To the document they are one way, defined so (way(), doc_match.h), so it is
+// kept, undone and listed as any way is. Linear changes nothing that goes through it; a wave under it is as large as it.
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
@@ -193,7 +194,12 @@ class EaseCards extends StatelessWidget {
       child: card(i, c),
     );
     final axis = across ? Axis.horizontal : Axis.vertical;
-    Widget arrow() => CustomPaint(size: across ? Size(this.side * .4, side.height) : Size(side.width, this.side * .4), painter: _Arrow(Grey.g56, across));
+    final gap = across ? Size(this.side * .4, side.height) : Size(side.width, this.side * .4);
+    Widget arrow() => CustomPaint(size: gap, painter: _Arrow(Grey.g56, across));
+    Widget by(int i) => switch (_by(said(cards[i]))) {   // (how it takes what is above it)
+      _By.through => arrow(),
+      final how => SizedBox.fromSize(key: ValueKey('ease.by.$i'), size: gap, child: Center(child: Text(how == _By.times ? '×' : '+', style: T.micro(Grey.g76).copyWith(fontWeight: FontWeight.w700, height: 1)))),
+    };
     return ColoredBox(
       color: WsT.card,
       child: Flex(
@@ -208,7 +214,7 @@ class EaseCards extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
             for (final (i, c) in cards.indexed) ...[
-              if (i > 0) arrow(),
+              if (i > 0) by(i),
               if (cards.length > 1) place(i, carried(i, c)) else if (c == easePreset('Linear')) card(i, c) else carried(i, c),   // (a straight line alone: nothing to carry)
             ],
             arrow(),

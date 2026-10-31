@@ -559,6 +559,40 @@ void main() {
     await closeWorkspace(t);
   }, skip: !insideBuilt);
 
+  testWidgets('between two cards the flow says how the lower takes the upper: an arrow, a ×, a +', (t) async {
+    final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    expect(m.key(cube, 'x', 0, 0) && m.key(cube, 'x', 1, 1) && m.way(cube, 'x', 0, 'Bounce'), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..pickKey((layer: '$cube', frame: 0))
+      ..front('Ease');
+    await t.pumpAndSettle();
+    Future<void> lay(String shape) async {
+      await seeShape(t, shape);
+      final hand = await t.startGesture(t.getCenter(_in(find.byKey(ValueKey('ease.$shape')))), kind: PointerDeviceKind.mouse);
+      await hand.moveBy(const Offset(-14, 0));
+      await t.pump();
+      await hand.moveTo(t.getCenter(_in(find.byType(EaseGraph))));
+      await t.pump();
+      await hand.up();
+      await settled(t, ws);
+      await hand.removePointer();
+      await t.pumpAndSettle();
+    }
+
+    String? mark(int i) => find.byKey(ValueKey('ease.by.$i')).evaluate().isEmpty ? null : t.widget<Text>(find.descendant(of: find.byKey(ValueKey('ease.by.$i')), matching: find.byType(Text))).data;
+    await lay('Elastic');
+    expect(mark(1), isNull, reason: 'it goes through: the arrow');
+    await lay('Cyclic');
+    expect(mark(2), '×', reason: 'a wave is as large as what is above it');
+    await lay('Random');
+    expect(mark(3), '+', reason: 'a shake is added');
+    expect(m.wayOf(cube, 'x', 0).split('×'), hasLength(4), reason: m.trouble);
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
   testWidgets('a wave turned end for end, and back (AbsentMotion\'s reverse)', (t) async {
     final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
     final cube = m.add('solid', 'cube');
