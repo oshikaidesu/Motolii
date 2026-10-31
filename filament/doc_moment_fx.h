@@ -18,6 +18,36 @@ static void doc_thing_solid_aim(Doc& d, int thing, ThingFx& e) {   // (before th
     const auto wrap = e.solidRepeat ? TextureSampler::WrapMode::REPEAT : TextureSampler::WrapMode::CLAMP_TO_EDGE;
     e.solidLook->setParameter("image", thing_fx_seen(e.st), TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR, wrap));
 }
+// Whether its picture stands in the world where it lies (thing_fx_stand): a flat thing, one alone, whose effects work on
+// its own picture. Not one that reads what is behind it or draws on the whole stage (the stage's is their frame), nor a
+// solid or a thing of many copies (not one face).
+static bool doc_thing_stands(Doc& d, int thing, ThingFx& e) {
+    thing_effects(*d.stage, e.st, doc_fx_join(doc_fx_steps(d, thing)));
+    if (e.st.readsBehind || e.st.wide || !e.st.aviutl.empty()) return false;
+    for (const std::string& w : doc_fx_list(d, thing)) if (solid_is(w)) return false;
+    const auto shown = d.shown.find(thing);
+    float2 half{0.f};
+    float deep = 0.f;
+    return shown != d.shown.end() && !shown->second.solid && doc_members(d, thing) == 1 && doc_half(d, thing, &half, &deep) && deep == 0.f;
+}
+static void doc_thing_stand(Doc& d, int thing, ThingFx& e) {   // (before the frame)
+    math::mat4 place;
+    float2 half{0.5f};
+    double seen = 0.0;
+    {
+        std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn)
+        place = doc_shown_at(d, thing, d.stage->now), doc_half(d, thing, &half);
+        const math::double2 a = doc_seen(d, place[3].xyz), b = doc_seen(d, place[3].xyz + normalize(d.facing[0].xyz));
+        seen = length(b - a);   // (a unit across the eye's sight, where it is)
+    }
+    thing_fx_stand(*d.stage, e, place, half, seen);
+}
+// Where it is on its picture, as doc_frame says it on the stage: stood, in the picture's middle, upright.
+static bool doc_fx_frame(Doc& d, int thing, const ThingFx& e, double* frame) {
+    if (!e.world) return doc_frame(d, thing, d.stage->now, frame);
+    std::copy(e.own, e.own + 4, frame), frame[4] = 0;
+    return true;
+}
 static void doc_thing_solid(Doc& d, int thing, ThingFx& e, const ScreenNumbers& numbers, const std::function<DrawnFx()>& thorFx) {   // (in the frame)
     Stage& s = *d.stage;
     thing_effects_draw(s, e.st, e.view, numbers, thorFx);
@@ -98,7 +128,7 @@ static void doc_things_fx(Doc& d) {
             }
             if (name.rfind("layerRect_", 0) == 0) {   // (its own rectangle on its picture, in the picture's pixels: AbsentMotion's layer, where its corner is and how large: effects/from_absent.py)
                 double frame[8];
-                if (!doc_frame(d, thing, d.stage->now, frame)) return 0.0;
+                if (!doc_fx_frame(d, thing, e, frame)) return 0.0;
                 const Stage& s = *d.stage;
                 const double ppp = (double)s.view->getViewport().width / std::max(1, s.w);
                 const size_t i = std::string("xyzw").find(name.back());
@@ -107,7 +137,7 @@ static void doc_things_fx(Doc& d) {
             if (name.rfind("aviutl.", 0) == 0) return doc_aviutl_asked(d, thing, e.box, name, usual);   // (an AviUtl2 script asking of the other things: its layers)
             if (name == "origin_x" || name == "origin_y" || name == "turn" || name == "extent") {   // (where the thing is on the picture now, how turned, how large: an effect's pattern stuck to it)
                 double frame[8];
-                if (!doc_frame(d, thing, d.stage->now, frame)) return usual;
+                if (!doc_fx_frame(d, thing, e, frame)) return usual;
                 return name == "origin_x" ? frame[0] - e.box[0] : name == "origin_y" ? frame[1] - e.box[1] : name == "turn" ? frame[4] : std::max(frame[2], frame[3]);   // (on its own picture: the box it is seen in)
             }
             if ((name == "blurLength" || name == "angle") && file.ends_with("am_directionalblur.wgsl") && doc_word(d, thing, "fx").find("am_directionalblur.wgsl") == std::string::npos) {
@@ -116,19 +146,21 @@ static void doc_things_fx(Doc& d) {
                 bool moves = false;
                 const double now = d.stage->now;
                 if (!doc_shutter(d, thing, now, &open, &moves) || !moves || !doc_frame(d, thing, now - 0.5 * open, was) || !doc_frame(d, thing, now + 0.5 * open, is)) return 0.0;
-                const double ppp = (double)d.stage->view->getViewport().width / std::max(1, d.stage->w), dx = is[0] - was[0], dy = is[1] - was[1];
+                const double ppp = (double)d.stage->view->getViewport().width / std::max(1, d.stage->w);
+                const math::double3 way = (doc_shown_at(d, thing, now + 0.5 * open)[3] - doc_shown_at(d, thing, now - 0.5 * open)[3]).xyz;
+                const double dx = e.world ? dot(way, e.square[0].xyz) * e.own[4] : is[0] - was[0], dy = e.world ? -dot(way, e.square[1].xyz) * e.own[4] : is[1] - was[1];   // (stood: along its own picture)
                 return name == "blurLength" ? ppp * std::hypot(dx, dy) : std::atan2(-dy, -dx) * 180.0 / M_PI;   // (its blur reads behind it along the way it is told: told back, it trails behind the way it goes)
             }
             return doc_number(d, thing, doc_screen_knob(file, name).c_str(), d.stage->now, usual);
         };
-        const auto thorFx = [&d, thing = thing] {   // (ThorVG's own among its steps, as they are now: lengths in points of the stage)
+        const auto thorFx = [&d, thing = thing, &e = e] {   // (ThorVG's own among its steps, as they are now: lengths in points of the stage)
             std::lock_guard<std::recursive_timed_mutex> hold(d.lock);
             DrawnFx fx;
             std::string why;
             doc_fx(d, thing, d.stage->now, false, 1.0, fx, why, true);
             double frame[8];
             const auto t = d.shown.find(thing);
-            if (t != d.shown.end() && t->second.drawn && t->second.drawn->fx.overHigh > 0.f && doc_frame(d, thing, d.stage->now, frame)) {
+            if (t != d.shown.end() && t->second.drawn && t->second.drawn->fx.overHigh > 0.f && doc_fx_frame(d, thing, e, frame)) {
                 const float k = (float)(frame[3] / (t->second.units * t->second.drawn->fx.overHigh));
                 fx.blur *= k, fx.fall *= k, fx.soft *= k;
             }
@@ -157,7 +189,8 @@ static void doc_things_fx(Doc& d) {
                 for (const Stage::Made& made : s.made) if (made.of == e.sheet) s.engine->getRenderableManager().setLayerMask(s.engine->getRenderableManager().getInstance(made.thing), 0xFF, 0x02);
             }
             e.st.ground = d.backdropIs.size() == 6 ? (int)std::strtol(d.backdropIs.c_str(), nullptr, 16) : -1;   // (the colour behind everything: what an effect reading the frame finds where nothing is drawn)
-            thing_fx_aim(s, e, box);
+            if (e.world) doc_thing_stand(d, thing, e);
+            else thing_fx_aim(s, e, box);
             thing_fx_pictures(s, e.st, e.view);
             if (e.look) e.look->setParameter("image", thing_fx_seen(e.st), TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
             if (e.look) {   // (its glow over what its effects made: the stage's bloom, as a thing without effects glows (doc_moment))

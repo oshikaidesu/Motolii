@@ -149,6 +149,9 @@ struct ThingFx {
     utils::Entity eye;                     // (its own camera's: told the stage's each picture, as samples/rendertarget.cpp's offscreen camera is)
     Camera* camera = nullptr;
     double box[4] = {0, 0, 0, 0};          // (where it is seen, in points of the stage: left, top, right, bottom)
+    bool world = false;                    // (its sheet stands where it lies in the world, its picture filmed square to it: thing_fx_stand; else laid on the screen)
+    double own[5] = {0, 0, 0, 0, 0};       // (stood: where it is on its picture, its middle, its width and height, in its points, and how many points a unit of the world)
+    math::mat4 square;                     // (stood: where its picture is filmed from, the thing's own place, unscaled)
     // (its picture on a solid's faces, when its fx names a shape (solids/*.js): the shape's file, what the solid was last
     //  made of, the solid and its look; for one made of its outline, its coverage as last read back, and how many times)
     std::string solidFile, solidSaid, solidAs;   // (solidAs: its look's material)
@@ -179,17 +182,17 @@ static View* thing_fx_view(Stage& s, ThingFx& e) {
 }
 
 // The sheet: the whole picture, samples/materials/image.mat's way (its points are the screen's own corners).
-static ThingFx& thing_fx_made(Stage& s, ThingFx& e, const std::string& lay = "") {
-    if (e.view && e.lay == lay) return e;
+static ThingFx& thing_fx_made(Stage& s, ThingFx& e, const std::string& lay = "", bool world = false) {
+    if (e.view && e.lay == lay && e.world == world) return e;
     if (!e.view) e.view = thing_fx_view(s, e);
     if (e.sheet) take_off(s, e.sheet), delete e.sheet;   // (another way of lying: its sheet made again in it)
-    e.lay = lay;
+    e.lay = lay, e.world = world;
     e.sheet = new Mesh;
     for (float2 c : {float2{-1, -1}, float2{1, -1}, float2{1, 1}, float2{-1, 1}}) e.sheet->pos.push_back({c.x, c.y, 0.f}), e.sheet->nrm.push_back({0, 0, 1}), e.sheet->uv.push_back(c * 0.5f + 0.5f);
     e.sheet->idx = {0, 1, 2, 0, 2, 3};
-    e.look = add(s, e.sheet, lay.empty() ? "effected.filamat" : ("effected_" + lay + ".filamat").c_str());
+    e.look = add(s, e.sheet, (std::string(world ? "effected_world" : "effected") + (lay.empty() ? "" : "_" + lay) + ".filamat").c_str());
     e.look->setParameter("image", white_point(s), TextureSampler());
-    e.look->setParameter("place", math::mat4f{});   // (the whole stage till it is aimed)   // (a picture from the start, as image.mat's sample sets it at once: Filament readies every instance before any view, the thing's own drawn first; never seen, its picture set before the stage's view)
+    if (!world) e.look->setParameter("place", math::mat4f{});   // (the whole stage till it is aimed)   // (a picture from the start, as image.mat's sample sets it at once: Filament readies every instance before any view, the thing's own drawn first; never seen, its picture set before the stage's view)
     return e;
 }
 
@@ -224,19 +227,38 @@ static void thing_fx_aim(Stage& s, ThingFx& e, const double* box) {
 
 // Aimed square at the thing's own face, for a solid's faces (its picture the same however it is turned): an orthographic
 // camera on its own z line, as wide and high as it is (Filament's Camera::setProjection ORTHO; told each frame, as
-// samples/rendertarget.cpp tells its offscreen camera), its picture 1024 pixels along its longer side.
-static void thing_fx_face(Stage& s, ThingFx& e, const math::mat4& place, float2 half) {
+// samples/rendertarget.cpp tells its offscreen camera), its picture 1024 pixels along its longer side, or as many a unit
+// of the world as `dense` says, with `room` round it.
+static void thing_fx_face(Stage& s, ThingFx& e, const math::mat4& place, float2 half, double room = 0.0, double dense = 0.0) {
     math::double3 x = place[0].xyz, y = place[1].xyz;
-    const double sx = length(x), sy = length(y), wide = half.x * sx, high = half.y * sy, far = 4.0 * std::max(wide, high) + 1.0;
+    const double sx = length(x), sy = length(y), wide = half.x * sx + room, high = half.y * sy + room, far = 4.0 * std::max(wide, high) + 1.0;
     if (wide < 1e-9 || high < 1e-9) return;
     x /= sx, y = normalize(y - dot(y, x) * x);
     const math::double3 z = cross(x, y);
-    e.camera->setModelMatrix(math::mat4(math::double4{x, 0}, math::double4{y, 0}, math::double4{z, 0}, math::double4{place[3].xyz + 0.5 * far * z, 1}));
+    e.square = math::mat4(math::double4{x, 0}, math::double4{y, 0}, math::double4{z, 0}, place[3]);
+    e.camera->setModelMatrix(e.square * math::mat4::translation(math::double3{0, 0, 0.5 * far}));
     e.camera->setProjection(Camera::Projection::ORTHO, -wide, wide, -high, high, 0.0, far);
     const Camera& c = *s.camera;
     e.camera->setExposure(c.getAperture(), c.getShutterSpeed(), c.getSensitivity());
-    const uint32_t w = (uint32_t)std::max(1L, std::lround(1024 * wide / std::max(wide, high))), h = (uint32_t)std::max(1L, std::lround(1024 * high / std::max(wide, high)));
-    e.view->setViewport({0, 0, w, h});
+    const double k = dense > 0.0 ? 2.0 * dense : 1024.0 / std::max(wide, high);
+    e.view->setViewport({0, 0, (uint32_t)std::max(1L, std::lround(k * wide)), (uint32_t)std::max(1L, std::lround(k * high))});
+}
+
+// A flat thing's picture stood in the world (After Effects' layer: "masks, effects, transformations"): filmed square to
+// its own face, with room round it for what its effects draw outside it (sashimono-edit's BAKE_MARGIN, 128 points of the
+// stage), its picture's room and shares the same wherever the eye is, so that what its effects make keeps to it; as many
+// pixels as the eye sees of it when it is near (`seen`: points of the stage a unit of the world where it is), so that it
+// is as sharp as it is without them. Its sheet lies where it lies.
+static void thing_fx_stand(Stage& s, ThingFx& e, const math::mat4& place, float2 half, double seen) {
+    const double ppp = (double)s.view->getViewport().width / std::max(1, s.w), usual = s.h / (12.0 * std::tan(15.0 * M_PI / 180.0));   // (points a unit of the world, by the stage's own eye: doc_moment.h)
+    const double room = 128.0 / usual, sx = length(place[0].xyz), sy = length(place[1].xyz), wide = half.x * sx + room, high = half.y * sy + room;
+    const double point = std::min(std::max(usual, seen), 2048.0 / (ppp * std::max(wide, high)));   // (4096 pixels at the most)
+    thing_fx_face(s, e, place, half, room, point * ppp);
+    e.box[0] = e.box[1] = 0, e.box[2] = 2 * wide * point, e.box[3] = 2 * high * point;
+    std::copy(e.box, e.box + 4, e.st.box);
+    e.own[0] = wide * point, e.own[1] = high * point, e.own[2] = 2 * half.x * sx * point, e.own[3] = 2 * half.y * sy * point, e.own[4] = point;
+    const mat4f sheet = mat4f(e.square * math::mat4::scaling(math::double3{wide, high, 1.0}));
+    move(s, e.sheet, [&](int, const mat4f&) { return sheet; });
 }
 
 // Its solid made again when what it is made of has changed (its shape's file, knobs and size; its coverage): put in the

@@ -26,6 +26,7 @@ run fx_out_keys.sh
 run fx_transition.sh
 run fx_colour.sh
 run fx_sheet.sh
+run fx_world.sh
 run extract.sh
 run shelf_words.sh
 run pack.sh

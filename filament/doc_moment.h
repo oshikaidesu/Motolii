@@ -78,7 +78,7 @@ static void doc_moment(Doc& d, double now) {
         Doc::Shown& t = *lies[i].shown;
         const bool own = doc_fx_files(doc_fx_steps(d, lies[i].thing));   // (with effects of its own: drawn alone, its picture laid here: thing_fx.h)
         const std::string laid = own ? doc_word(d, lies[i].thing, "blend") : std::string();   // (its sheet lies on what is behind as it says: Filament's own blending; one that reads what is under, as normal yet)
-        Scene* into = own ? thing_fx_made(s, d.thingFx[lies[i].thing], laid == "add" || laid == "multiply" || laid == "screen" ? laid : "").view->getScene() : s.scene;   // (one view: every other run in the stage's own scene, kept in order by Filament's channels)
+        Scene* into = own ? thing_fx_made(s, d.thingFx[lies[i].thing], laid == "add" || laid == "multiply" || laid == "screen" ? laid : "", doc_thing_stands(d, lies[i].thing, d.thingFx[lies[i].thing])).view->getScene() : s.scene;   // (one view: every other run in the stage's own scene, kept in order by Filament's channels)
         Scene* const was = t.scene ? t.scene : s.scene;
         if (was != into) {   // (into the scene of its run; one not seen goes in when it is seen)
             if (t.in) doc_entities(s, t, [&](utils::Entity e) { was->remove(e), into->addEntity(e); });
@@ -96,10 +96,12 @@ static void doc_moment(Doc& d, double now) {
         t.run = run, t.lies = (int)i;
         if (own) {   // (its sheet where it lies: the same channel and the same blend order as it has)
             auto& faces = s.engine->getRenderableManager();
+            const bool stood = d.thingFx[lies[i].thing].world, deep = stood && lies[i].solid;   // (stood in the world: in depth as a sheet of its sort is, by how far off; a 2D thing's, by the order)
+            if (stood) d.thingFx[lies[i].thing].look->setDepthCulling(deep), d.thingFx[lies[i].thing].look->setDepthWrite(deep);
             for (const Stage::Made& made : s.made)
                 if (made.of == d.thingFx[lies[i].thing].sheet || (d.thingFx[lies[i].thing].solid && made.of == d.thingFx[lies[i].thing].solid)) {
                     const auto one = faces.getInstance(made.thing);
-                    faces.setCulling(one, false), faces.setChannel(one, (uint8_t)std::min(run, 7)), faces.setBlendOrderAt(one, 0, (uint16_t)(i * 128)), faces.setGlobalBlendOrderEnabledAt(one, 0, true);   // (its points are the screen's corners: never culled, as image.mat's sheet is not)
+                    faces.setCulling(one, false), faces.setChannel(one, (uint8_t)std::min(run, 7)), faces.setBlendOrderAt(one, 0, (uint16_t)(i * 128)), faces.setGlobalBlendOrderEnabledAt(one, 0, !deep);   // (its points are the screen's corners: never culled, as image.mat's sheet is not)
                 }
         }
     }

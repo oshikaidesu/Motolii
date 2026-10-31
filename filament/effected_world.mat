@@ -1,0 +1,34 @@
+// effected_world.mat: a flat thing's picture with its effects on, on a sheet that stands where the thing lies in the
+// world (After Effects' layer: its effects on its own picture, then its place): what depth, fog and focus do to any thing
+// they do to it, by Filament's own passes. effected.mat with the world's own vertices in place of the screen's corners.
+material {
+    name : EffectedWorld,
+    parameters : [
+        { type : sampler2d, name : image },
+        { type : float, name : glowing },
+        { type : sampler2d, name : matte0 }, { type : sampler2d, name : matte1 }, { type : sampler2d, name : matte2 }, { type : sampler2d, name : matte3 },
+        { type : mat4, name : matteEye0 }, { type : mat4, name : matteEye1 }, { type : mat4, name : matteEye2 }, { type : mat4, name : matteEye3 },
+        { type : float4, name : matteUse }, { type : float4, name : matteSoft }   // (matte.glsl, as flat.mat's: the thing cut after its effects)
+    ],
+    requires : [ uv0 ],
+    depthWrite : true,   // (as flat.mat: a 2D thing's sheet is told otherwise, doc_moment.h)
+    blending : ${BLENDING},   // (kit_wgpu.sh builds it once for each way a sheet lies on what is behind, as flat.mat)
+    shadingModel : unlit,
+    variantFilter : [ skinning, shadowReceiver, vsm ],
+    culling : none
+}
+
+fragment {
+#include "matte.glsl"
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = max(texture(materialParams_image, saturate(getUV0())), 0.0);   // (getUV0 is already flipped as a texture reads: flipUV, Filament's own default)
+        if (material.baseColor.a < 0.004) discard;   // (where nothing of it is left it is not there at all: it hides nothing behind it, as flat.mat)
+        material.baseColor.rgb *= material.baseColor.a;   // (effects give straight colour; Filament's transparent wants it times alpha, as effected.mat)
+        material.baseColor.rgb *= 1.0 + materialParams.glowing;
+        material.baseColor *= matteLeft();
+#if defined(LAY_multiply)
+        material.baseColor.rgb += 1.0 - material.baseColor.a;   // (where it is clear, what is behind is left as it is: times one, as flat.mat)
+#endif
+    }
+}
