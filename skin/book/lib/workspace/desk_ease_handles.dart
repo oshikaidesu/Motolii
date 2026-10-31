@@ -28,7 +28,7 @@ List<EaseHandle> easeHandles(Ease e) {
     ];
   }
   if (e.kind == EaseKind.hold) return const [];
-  if (e == easePreset('Linear')) {
+  if (e.name == 'Linear') {   // (a curve a hand pulled straight is still its curve: its handles stay where they were let go)
     return [
       EaseHandle(.25, .25, (x, y) => e.withHandles(Offset(x, y), const Offset(.75, .75)), fromX: 0, fromY: 0),
       EaseHandle(.75, .75, (x, y) => e.withHandles(const Offset(.25, .25), Offset(x, y)), fromX: 1, fromY: 1),

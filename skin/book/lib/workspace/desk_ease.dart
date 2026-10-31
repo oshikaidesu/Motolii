@@ -104,7 +104,7 @@ class DeskEase extends StatefulWidget {
 /// Joined: an ease as the document says a stretch's way (three of its nine kinds have a seat on this desk), and back.
 String said(Ease e) => easeOther(e) ? e.name! : switch (e.kind) {
   EaseKind.hold => 'Hold',
-  EaseKind.bezier => e == easePreset('Linear') ? 'Linear' : 'Bezier ${e.p1.dx} ${e.p1.dy} ${e.p2.dx} ${e.p2.dy}',
+  EaseKind.bezier => e.name == 'Linear' ? 'Linear' : 'Bezier ${e.p1.dx} ${e.p1.dy} ${e.p2.dx} ${e.p2.dy}',
 };
 Ease heard(String said) {
   // (the inside says a way back in one form: the kind's name, then all its numbers)

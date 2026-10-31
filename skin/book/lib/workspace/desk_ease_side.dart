@@ -46,7 +46,7 @@ class EaseShapes extends StatelessWidget {
         itemExtent: (across ? box.maxWidth : box.maxHeight) / (easeShapes.length + .45),   // (the next cut by the edge: it says there is more)
         children: [
           for (final e in shapes)
-            PresetTile(e, key: ValueKey('ease.${e.name}'), on: _isOf(e, ease), side: side, onTap: () => _isOf(e, ease) && !(easeIsBezier(e) && e != ease) ? null : onPick(e)),   // (the one it is already: its own numbers kept)
+            PresetTile(e, key: ValueKey('ease.${e.name}'), on: _isOf(e, ease), side: side, onTap: () => _isOf(e, ease) && !(easeIsBezier(e) && said(e) != said(ease)) ? null : onPick(e)),   // (the one it is already: its own numbers kept)
         ],
       ),
     ),

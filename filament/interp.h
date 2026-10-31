@@ -110,10 +110,10 @@ static int interp_said(const std::string& text, Interp* is, std::string* why = n
         Interp made;
         made.kind = (Interp::Kind)k;
         int n = 0;
-        for (double one = 0; n < 5 && said >> one;) made.p[n++] = one;
+        for (double one = 0; n < 8 && said >> one;) made.p[n++] = one;
         said.clear();
         const bool right = !(said >> more) && (n == 0 || n == kind.numbers);
-        if (n == 0) for (int j = 0; j < 5; ++j) made.p[j] = kind.usual[j];
+        if (n == 0) for (int j = 0; j < 8; ++j) made.p[j] = kind.usual[j];
         const double* p = made.p;
         bool finite = true;
         for (int j = 0; j < kind.numbers; ++j) finite = finite && std::isfinite(p[j]);

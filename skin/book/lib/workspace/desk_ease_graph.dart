@@ -24,6 +24,19 @@ Rect easeBox(Size s) {
 
 double get easeBarOut => Shape.z(16);
 
+/// How far up and down a graph looks: the way's own reach, and far enough for where the ends stand, and for all that ways laid make: one card's overshoot is theirs too.
+(double, double) easeFit(Ease e, bool over, (double, double) ends, Ease? onion) {
+  var (lo, hi) = easeReach(e, over);
+  lo = math.min(lo, math.min(ends.$1, ends.$2) - .15);
+  hi = math.max(hi, math.max(ends.$1, ends.$2) + .15);
+  for (final v in [...?onion?.drawn, if (easeIsLaid(said(e))) ...?e.drawn]) {
+    final y = ends.$1 + (ends.$2 - ends.$1) * v;
+    lo = math.min(lo, y - .1);
+    hi = math.max(hi, y + .1);
+  }
+  return (lo, hi);
+}
+
 class EaseGraph extends StatefulWidget {
   const EaseGraph({super.key, required this.ease, required this.span, required this.frame, required this.onChanged, this.onEnd, this.onEndMove, this.endSays, this.jump = true, this.overshoot = false, this.onion, this.ends = (0, 1)});
   final Ease ease;
@@ -44,24 +57,12 @@ class _EaseGraphState extends State<EaseGraph> {
   int? _drag, _hot;
   double? _endAt;   // (where the end pulled is, in the graph's measure, while it is pulled)
   double _endFrom = 0;   // (where it stood when taken)
-  (double, double)? _reachHeld;   // (the graph's measure while an end is pulled: it does not move under the hand)
+  (double, double)? _reachHeld;   // (the graph's measure while a hand holds anything: it does not move under the hand)
   Offset _from = Offset.zero, _handle = Offset.zero;   // (where the hand took it, and where the handle was: it goes by the hand's move, as Alight Motion's)
 
   static Rect _box(Size s) => easeBox(s);
 
-  static (double, double) _reachOf(Ease e, bool over, (double, double) ends, Ease? onion) {   // (and far enough for where the ends stand, and for all that ways laid make: one card's overshoot is theirs too)
-    var (lo, hi) = easeReach(e, over);
-    lo = math.min(lo, math.min(ends.$1, ends.$2) - .15);
-    hi = math.max(hi, math.max(ends.$1, ends.$2) + .15);
-    for (final v in [...?onion?.drawn, if (easeIsLaid(said(e))) ...?e.drawn]) {
-      final y = ends.$1 + (ends.$2 - ends.$1) * v;
-      lo = math.min(lo, y - .1);
-      hi = math.max(hi, y + .1);
-    }
-    return (lo, hi);
-  }
-
-  (double, double) get _reach => _reachHeld ?? _reachOf(widget.ease, widget.overshoot, widget.ends, widget.onion);
+  (double, double) get _reach => _reachHeld ?? easeFit(widget.ease, widget.overshoot, widget.ends, widget.onion);
   Offset _px(Rect g, Offset v) => _pxIn(g, _reach, Offset(v.dx, widget.ends.$1 + (widget.ends.$2 - widget.ends.$1) * v.dy));   // (a point of the curve, on the graph between its two ends)
   static Offset _pxIn(Rect g, (double, double) reach, Offset v) => Offset(g.left + v.dx * g.width, g.bottom - (v.dy - reach.$1) / (reach.$2 - reach.$1) * g.height);
 
@@ -78,10 +79,8 @@ class _EaseGraphState extends State<EaseGraph> {
   void _take(int? which, Offset at) {
     _drag = which;
     _from = at;
-    if (which != null && which >= _end) {
-      _endFrom = which == _end ? widget.ends.$1 : widget.ends.$2;
-      _reachHeld = _reach;
-    }
+    if (which != null) _reachHeld = _reach;
+    if (which != null && which >= _end) _endFrom = which == _end ? widget.ends.$1 : widget.ends.$2;
     final hs = easeHandles(widget.ease);
     if (which != null && which < hs.length) _handle = Offset(hs[which].x, hs[which].y);
   }
