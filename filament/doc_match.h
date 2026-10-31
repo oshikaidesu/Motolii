@@ -256,7 +256,7 @@ static bool doc_match(Doc& d) {
             if (!fill.empty() && !glass && (rgb < 0 || ramp.size() > 1)) why = "a solid's fill is six digits, as ff3366, or glass";
             else if (!shape.empty()) {
                 made.shape = shape == "gem" ? gem(0.5f) : shape == "cube" ? cube(0.1f) : shape == "ball" ? sphere(0.5f) : torus(0.37f, 0.13f);
-                MaterialInstance* look = glass ? thick_glass(s, made.shape, {mat4f{}}) : add(s, made.shape, model);
+                MaterialInstance* look = glass ? thick_glass(s, made.shape, {mat4f{}}) : add(s, made.shape, model, std::vector<mat4f>((size_t)std::max(1, (int)doc_number(d, thing, "copies", 0, 1)), mat4f{}));
                 made.look = look;
                 if (look && glass) glassy(look);
                 if (!look) made.shape = nullptr;
@@ -276,7 +276,7 @@ static bool doc_match(Doc& d) {
                 made.look = look;
                 if (!look) made.shape = nullptr; else glassy(look);
             }
-            else if ((made.solid = solid(s, file.c_str(), mat4f{}, 1.f)) && rgb >= 0) solid_fill(s, made.solid, colour, surface, model);
+            else if ((made.solid = solid(s, file.c_str(), mat4f{}, 1.f, (int)doc_number(d, thing, "copies", 0, 1))) && rgb >= 0) solid_fill(s, made.solid, colour, surface, model);
             if (made.solid) s.playing.erase(made.solid);   // (the document tells it its moment)
         } else why = std::string("its kind is one of: ") + doc_kinds;
         if (!made.film && !made.drawn && !made.solid && !made.shape && !made.camera && made.light.isNull() && kind != "behaviour") { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }

@@ -581,8 +581,8 @@ static void doc_looks(Stage& s, const Doc::Shown& t, const std::function<void(Ma
     if (t.drawn) each(t.drawn->look);
     for (const Stage::Made& made : s.made)
         if (t.shape && made.of == t.shape) each(faces.getMaterialInstanceAt(faces.getInstance(made.thing), 0));
-    for (size_t i = 0; t.solid && i < t.solid->made->getRenderableEntityCount(); ++i) {
-        const auto one = faces.getInstance(t.solid->made->getRenderableEntities()[i]);
+    if (t.solid) for (const utils::Entity e : t.solid->parts) {
+        const auto one = faces.getInstance(e);
         for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part) each(faces.getMaterialInstanceAt(one, part));
     }
 }
@@ -591,7 +591,7 @@ static void doc_entities(Stage& s, const Doc::Shown& t, const std::function<void
     const Mesh* m = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : t.shape;
     for (const Stage::Made& made : s.made)
         if (m && made.of == m && !made.matte) each(made.thing);
-    for (size_t i = 0; t.solid && i < t.solid->made->getRenderableEntityCount(); ++i) each(t.solid->made->getRenderableEntities()[i]);
+    if (t.solid) for (const utils::Entity e : t.solid->parts) each(e);
 }
 static void doc_parts(Stage& s, const Doc::Shown& t, const std::function<void(RenderableManager&, RenderableManager::Instance)>& each) {
     auto& faces = s.engine->getRenderableManager();

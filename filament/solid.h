@@ -17,11 +17,12 @@ struct Solid {
     float seconds = 0.f;   // how long its own movement is (none: 0)
     float starts = 0.f;    // how far into it it is when the stage's time is 0
     std::vector<std::string> moves;   // the names of its own movements (gltfio's Animator: a file may have several)
+    std::vector<utils::Entity> parts;  // what it draws, of every copy (gltfio's getRenderableEntities says one instance's worth)
 };
 
 // A file's movement at a moment of its own: the one named (none, or not one of its own: its first), round and round.
-static void solid_at(Solid* d, const std::string& name, double seconds) {
-    gltfio::Animator* moves = d->made->getInstance()->getAnimator();
+static void solid_at(Solid* d, const std::string& name, double seconds, size_t nth = 0) {
+    gltfio::Animator* moves = d->made->getAssetInstances()[nth]->getAnimator();
     if (!moves->getAnimationCount()) return;
     size_t which = 0;
     for (size_t i = 0; i < d->moves.size(); ++i) if (d->moves[i] == name) which = i;
@@ -37,18 +38,20 @@ static gltfio::AssetLoader* solid_loader(Stage& s) {
 }
 
 // Where it is (and how large: a place may scale).
-static void solid_to(Stage& s, Solid* d, const mat4f& place) {
+static void solid_to(Stage& s, Solid* d, const mat4f& place, size_t nth = 0) {
     auto& tm = s.engine->getTransformManager();
-    tm.setTransform(tm.getInstance(d->made->getRoot()), place * d->fit);
+    tm.setTransform(tm.getInstance(d->made->getAssetInstances()[nth]->getRoot()), place * d->fit);
 }
 
-// The 3D file put in the scene, `high` tall, its middle at `place`. nullptr: it could not be read.
-static Solid* solid(Stage& s, const char* file, const mat4f& place, float high) {
+// The 3D file put in the scene, `high` tall, its middle at `place`, `many` of it (gltfio's own instances: one source, each
+// its own place and movement; a count given at once, as gltfio asks: AssetLoader::createInstance). nullptr: it could not be read.
+static Solid* solid(Stage& s, const char* file, const mat4f& place, float high, int many = 1) {
     const std::vector<uint8_t> bytes = load_file(file);
     Solid* d = new Solid;
-    d->made = bytes.empty() ? nullptr : solid_loader(s)->createAsset(bytes.data(), (uint32_t)bytes.size());
+    std::vector<gltfio::FilamentInstance*> ones((size_t)std::max(1, many));
+    d->made = bytes.empty() ? nullptr : solid_loader(s)->createInstancedAsset(bytes.data(), (uint32_t)bytes.size(), ones.data(), ones.size());
     if (!d->made) return nullptr;
-    gltfio::ResourceLoader pictures({.engine = s.engine, .normalizeSkinningWeights = true});
+    gltfio::ResourceLoader pictures({.engine = s.engine, .gltfPath = file, .normalizeSkinningWeights = true});   // (where a .gltf's parts are: Filament's gltf_viewer tells it so)
     std::vector<std::vector<uint8_t>> beside(d->made->getResourceUriCount());   // (a .gltf's parts in files beside it: read and handed over, as gltfio asks)
     for (size_t i = 0; i < beside.size(); ++i) {
         const char* part = d->made->getResourceUris()[i];
@@ -64,7 +67,9 @@ static Solid* solid(Stage& s, const char* file, const mat4f& place, float high) 
     const Aabb box = d->made->getBoundingBox();
     d->fit = mat4f::scaling(high / std::max(box.max.y - box.min.y, 1e-6f)) * mat4f::translation(-0.5f * (box.min + box.max));
     solid_to(s, d, place);
-    s.scene->addEntities(d->made->getRenderableEntities(), d->made->getRenderableEntityCount());
+    for (size_t i = 0; i < d->made->getEntityCount(); ++i)
+        if (s.engine->getRenderableManager().hasComponent(d->made->getEntities()[i])) d->parts.push_back(d->made->getEntities()[i]);
+    s.scene->addEntities(d->parts.data(), d->parts.size());
     gltfio::Animator* moves = d->made->getInstance()->getAnimator();
     for (size_t i = 0; i < moves->getAnimationCount(); ++i) {   // (its movements by name; one with none, by its number)
         const char* name = moves->getAnimationName(i);
@@ -159,16 +164,16 @@ static void solid_fill(Stage& s, Solid* d, float3 colour, const Surface& is = {}
     MaterialInstance* look = lit->createInstance();
     plain(look, colour, is);
     auto& faces = s.engine->getRenderableManager();
-    for (size_t i = 0; i < d->made->getRenderableEntityCount(); ++i) {
-        const auto one = faces.getInstance(d->made->getRenderableEntities()[i]);
+    for (const utils::Entity part : d->parts) {
+        const auto one = faces.getInstance(part);
         for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part) faces.setMaterialInstanceAt(one, part, look);
     }
 }
 
 // Whether it is in the picture; and taken off the stage for good.
 static void solid_seen(Stage& s, Solid* d, bool in) {
-    if (in) s.scene->addEntities(d->made->getRenderableEntities(), d->made->getRenderableEntityCount());
-    else s.scene->removeEntities(d->made->getRenderableEntities(), d->made->getRenderableEntityCount());
+    if (in) s.scene->addEntities(d->parts.data(), d->parts.size());
+    else s.scene->removeEntities(d->parts.data(), d->parts.size());
 }
 static void solid_off(Stage& s, Solid* d) {
     s.playing.erase(d);

@@ -171,7 +171,7 @@ static void doc_moment(Doc& d, double now) {
                                      {fx.tints[0], 0.f}, {fx.tints[1], 0.f}, {fx.tones[0], 0.f}, {fx.tones[1], 0.f}, {fx.tones[2], 0.f}};
             t.film->look->setParameter("grade", grade, 6);
         }
-        if (t.solid && !t.solid->moves.empty()) solid_at(t.solid, doc_word(d, thing, "animation"), lies[i].since * doc_number(d, thing, "speed", 0, 1));   // (its own movement, from when it comes on)
+        if (t.solid && !t.solid->moves.empty()) for (size_t nth = 0; nth < t.solid->made->getAssetInstanceCount(); ++nth) solid_at(t.solid, doc_word(d, thing, "animation"), (lies[i].since - doc_delay(d, thing, (int)nth)) * doc_number(d, thing, "speed", 0, 1), nth);   // (its own movement, from when it comes on)
         if (t.drawn && t.drawn->lottie)   // (its slots as their knobs are now)
             if (DocScript* sc = doc_script_of(d, doc_word(d, thing, "file")); sc && !sc->knobs.empty()) {
                 std::vector<double> v;
@@ -357,7 +357,7 @@ static void doc_moment(Doc& d, double now) {
                 doc_parts(s, t, [&](RenderableManager& faces, RenderableManager::Instance one) { faces.setMaterialInstanceAt(one, 0, t.splatDone ? t.splatPlain : t.look); });
             }
         }
-        if (t.solid) solid_to(s, t.solid, place);
+        if (t.solid) for (size_t nth = 0; nth < t.solid->made->getAssetInstanceCount(); ++nth) solid_to(s, t.solid, nth || staggered ? mat4f(doc_place(d, thing, now, 0, (int)nth, staggered)) : place, nth);
         else if (doc_number(d, thing, "connect", 0, 0) != 0.0) move(s, m, [&](int nth, const mat4f&) { return (size_t)nth < joins.size() ? mat4f(joins[(size_t)nth]) : mat4f::scaling(float3{0.f}); });
         else {
             std::vector<float> far;   // (how far off each copy is from the eye: those further off drawn first, within the thing's own place)

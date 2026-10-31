@@ -257,27 +257,27 @@ static const DocValue doc_values[] = {
     {"pin_bl_y", "shape", -10, 10, true, nullptr},
     {"pin_br_x", "shape", -10, 10, true, nullptr},
     {"pin_br_y", "shape", -10, 10, true, nullptr},
-    {"copies", "picture text shape", 1, 1000, false, nullptr}, {"copy_x", "picture text shape", -1e4, 1e4, true, nullptr}, {"copy_y", "picture text shape", -1e4, 1e4, true, nullptr},
-    {"copy_rotate", "picture text shape", -1e6, 1e6, true, nullptr}, {"copy_size", "picture text shape", 0.01, 100, true, nullptr},
-    {"copy_columns", "picture text shape", 0, 100, false, nullptr},   // (so many to a row, then the next row: copy_x along it, copy_y down; 0: one row)
-    {"stagger", "picture text shape", 0, 1e3, false, nullptr},   // (how much later the last of its copies moves than the first, in seconds: each as late as its order says)
-    {"stagger_from", "picture text shape", 0, 0, false, "start centre end edges"},   // (which of them moves first: the first, the middle one, the last, the outer ones)
+    {"copies", "picture text shape solid", 1, 1000, false, nullptr}, {"copy_x", "picture text shape solid", -1e4, 1e4, true, nullptr}, {"copy_y", "picture text shape solid", -1e4, 1e4, true, nullptr},
+    {"copy_rotate", "picture text shape solid", -1e6, 1e6, true, nullptr}, {"copy_size", "picture text shape solid", 0.01, 100, true, nullptr},
+    {"copy_columns", "picture text shape solid", 0, 100, false, nullptr},   // (so many to a row, then the next row: copy_x along it, copy_y down; 0: one row)
+    {"stagger", "picture text shape solid", 0, 1e3, false, nullptr},   // (how much later the last of its copies moves than the first, in seconds: each as late as its order says)
+    {"stagger_from", "picture text shape solid", 0, 0, false, "start centre end edges"},   // (which of them moves first: the first, the middle one, the last, the outer ones)
     {"copy_fill", "picture text shape", 0, 0, false, ""},   // (its copies coloured from the first colour to the last, in their order: six digits each; one, all in it; none, not coloured each)
     {"copy_fill_way", "picture text shape", 0, 0, false, "ramp cycle"},   // (from the first to the last across them all, or one colour each in turn, round and round)
-    {"copy_wide", "picture text shape", 0.01, 100, true, nullptr},   // (how many times as wide its last copy is as its first, those between in step: rows of waves, each with more of them)
-    {"copy_z", "picture text shape", -1e4, 1e4, true, nullptr},   // (its copies so far apart towards the eye, in units of the stage: a row going into the picture)
-    {"copy_rotate_x", "picture text shape", -1e6, 1e6, true, nullptr},   // (each copy turned so much more than the one before about the level, towards the eye: a fan of sheets in depth)
-    {"copy_rotate_y", "picture text shape", -1e6, 1e6, true, nullptr},   // (and about the upright: sheets turning round like pages)
-    {"wave_z", "picture text shape", -1e3, 1e3, true, nullptr},   // (and waved so far towards the eye and away, a quarter round after up and down: with wave_y, round and round, a helix)
-    {"scatter_z", "picture text shape", 0, 1e4, true, nullptr},   // (scattered so far towards the eye and away)
-    {"copy_turn", "picture text shape", -1e5, 1e5, true, nullptr},   // (how far its copies turn in all, spread evenly over them: 360 fills a round; copy_rotate's turn each on top)
+    {"copy_wide", "picture text shape solid", 0.01, 100, true, nullptr},   // (how many times as wide its last copy is as its first, those between in step: rows of waves, each with more of them)
+    {"copy_z", "picture text shape solid", -1e4, 1e4, true, nullptr},   // (its copies so far apart towards the eye, in units of the stage: a row going into the picture)
+    {"copy_rotate_x", "picture text shape solid", -1e6, 1e6, true, nullptr},   // (each copy turned so much more than the one before about the level, towards the eye: a fan of sheets in depth)
+    {"copy_rotate_y", "picture text shape solid", -1e6, 1e6, true, nullptr},   // (and about the upright: sheets turning round like pages)
+    {"wave_z", "picture text shape solid", -1e3, 1e3, true, nullptr},   // (and waved so far towards the eye and away, a quarter round after up and down: with wave_y, round and round, a helix)
+    {"scatter_z", "picture text shape solid", 0, 1e4, true, nullptr},   // (scattered so far towards the eye and away)
+    {"copy_turn", "picture text shape solid", -1e5, 1e5, true, nullptr},   // (how far its copies turn in all, spread evenly over them: 360 fills a round; copy_rotate's turn each on top)
     {"tall", "picture text shape", 0, 1e3, true, nullptr},   // (how many times as tall as it is, its anchor staying where it is: a bar growing up from its foot)
-    {"copy_tall", "picture text shape", 0, 0, false, ""},
+    {"copy_tall", "picture text shape solid", 0, 0, false, ""},
     {"copy_fill_at", "picture text shape", 0, 1, true, nullptr},   // (where along copy_fill each copy's colour is, given by a behaviour (copy_fill_at_by): 0 its first, 1 its last; not given, their order)   // (and its copies each so many times as tall again, in their order, going round: numbers, a bar chart's data; none: all as tall)
     {"copy_opacity_end", "picture text shape", 0, 1, true, nullptr},   // (the last copy as clear as this, the first as the thing: After Effects' Repeater, End Opacity)
     // (its copies laid on another shape's outline, each turned the way it goes, Cavalry's Duplicator on a shape; and slid along it, a share of its length)
-    {"copy_on", "picture text shape", 0, 1e9, false, nullptr},
-    {"copy_on_offset", "picture text shape", -1e4, 1e4, true, nullptr},
+    {"copy_on", "picture text shape solid", 0, 1e9, false, nullptr},
+    {"copy_on_offset", "picture text shape solid", -1e4, 1e4, true, nullptr},
     {"connect", "shape", 0, 1e9, false, nullptr},   // (the thing whose copies its own copies join, one each from one to another: lines between dots; 0: none)
     {"connect_to", "shape", 0, 1e9, false, nullptr},   // (and another: the first's nth copy joined to this one's nth, rungs between two strands; 0: within the first)
     {"connect_reach", "shape", 0, 1e4, true, nullptr},
@@ -335,9 +335,9 @@ static const DocValue doc_values[] = {
     {"path", "shape", 0, 0, false, ""},   // (a path shape's own path, drawn by a pen: SVG's path data, in its height from its middle, down as SVG goes)   // (only those nearer than this, in units of the stage, finer the further apart: a plexus; 0: each to the next in their order)
     // (a wave through it and its copies, Cavalry's oscillator: so far across and up (units), so far turned (degrees),
     //  so much larger (a share), so many times a second, each copy so far behind the one before (turns spread over all)
-    {"wave_x", "picture text shape", -1e3, 1e3, true, nullptr}, {"wave_y", "picture text shape", -1e3, 1e3, true, nullptr},
-    {"wave_rotate", "picture text shape", -1e4, 1e4, true, nullptr}, {"wave_size", "picture text shape", -1, 10, true, nullptr},
-    {"wave_speed", "picture text shape", 0, 100, true, nullptr}, {"wave_phase", "picture text shape", -100, 100, true, nullptr},
+    {"wave_x", "picture text shape solid", -1e3, 1e3, true, nullptr}, {"wave_y", "picture text shape solid", -1e3, 1e3, true, nullptr},
+    {"wave_rotate", "picture text shape solid", -1e4, 1e4, true, nullptr}, {"wave_size", "picture text shape solid", -1, 10, true, nullptr},
+    {"wave_speed", "picture text shape solid", 0, 100, true, nullptr}, {"wave_phase", "picture text shape solid", -100, 100, true, nullptr},
     // (a field over its copies, Cavalry's falloff: a round place on the stage (its middle, units; how far it reaches); a
     //  copy within it is so much larger and so far turned, most at its middle, none at its edge)
     {"field_x", "picture text shape", -1e4, 1e4, true, nullptr}, {"field_y", "picture text shape", -1e4, 1e4, true, nullptr}, {"field_radius", "picture text shape", 0, 1e4, true, nullptr},
@@ -345,12 +345,12 @@ static const DocValue doc_values[] = {
     {"field_push", "picture text shape", -1e3, 1e3, true, nullptr},   // (and pushed so far away from its middle, in units of the stage; below 0: drawn in)
     {"field_band", "picture text shape", 0, 1e4, true, nullptr},   // (a ring so wide, strongest at its radius from its middle and nothing so far either side: a band of large dots going out; 0: a round, strongest in its middle)
     {"field_z", "picture text shape", -1e4, 1e4, true, nullptr},   // (where its middle is towards the eye: the field is a ball, near and far measured too)
-    {"wave_noise", "picture text shape", 0, 1, true, nullptr},   // (how much of the wave is a noise of each copy's own instead of a sine: Cavalry's noise; 1 all noise)
+    {"wave_noise", "picture text shape solid", 0, 1, true, nullptr},   // (how much of the wave is a noise of each copy's own instead of a sine: Cavalry's noise; 1 all noise)
     {"noise_scale", "picture text shape", 0, 1e3, true, nullptr},   // (that noise read where each copy lies, so near ones move alike: how large its blobs are, in units of the stage; 0: each copy its own)
     // (its copies scattered, each its own way by a seed: up to so far across and up (units), so far turned (degrees), so
     //  much larger or smaller (a share); another seed, another scattering)
-    {"scatter_x", "picture text shape", 0, 1e4, true, nullptr}, {"scatter_y", "picture text shape", 0, 1e4, true, nullptr},
-    {"scatter_rotate", "picture text shape", 0, 1e4, true, nullptr}, {"scatter_size", "picture text shape", 0, 1, true, nullptr},
+    {"scatter_x", "picture text shape solid", 0, 1e4, true, nullptr}, {"scatter_y", "picture text shape solid", 0, 1e4, true, nullptr},
+    {"scatter_rotate", "picture text shape solid", 0, 1e4, true, nullptr}, {"scatter_size", "picture text shape solid", 0, 1, true, nullptr},
     {"seed", "picture text shape", 0, 1e6, false, nullptr},
     {"drift_x", "picture text shape", -1e3, 1e3, true, nullptr}, {"drift_y", "picture text shape", -1e3, 1e3, true, nullptr},   // (scattered copies flowing so far a second, units of the stage: past the scattering's edge, back in at the other)
     {"tint", "film picture text shape", 0, 1, true, nullptr}, {"tint_black", "film picture text shape", 0, 0, false, ""}, {"tint_white", "film picture text shape", 0, 0, false, ""},

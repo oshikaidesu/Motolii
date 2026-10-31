@@ -28,6 +28,7 @@ run fx_colour.sh
 run fx_sheet.sh
 run fx_world.sh
 run world_view.sh
+run solid_copies.sh
 run fx_reach.sh
 run fx_chains.sh
 run fx_moved.sh
