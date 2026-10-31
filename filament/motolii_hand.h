@@ -51,6 +51,7 @@ struct Motolii {
     std::string answered_why;                                    // (the last answer's why, told to the shell)   // (posted and not done yet, by what it is: a later one of the same takes its place)
     bool closing = false, changed = true;
     std::atomic<bool> playing{false};
+    bool second = false;   // the Camera View tab is open (live_camera)
     std::chrono::steady_clock::time_point stirred{};   // (the hand's last stir: something asked, or playing, or changed)
     bool ahead = false;                                  // (films' frames ahead being kept while the hand rests: picture_ahead)
     std::atomic<bool> loop{true};   // (play goes round the work area; not: it stops at its end. Atomic: asked without the document)
@@ -86,6 +87,26 @@ struct Motolii {
     long keptTold = 0;                                       // (what of the kept pictures the window was last told of)
     void (*told)(int) = nullptr;                             // (the window's one listener)
 };
+// The stage's pictures of this beat: with the Camera View tab open, the stage's own picture is the camera's, whichever
+// eye the desk has (After Effects' 2 Views, one comp seen by two eyes): the world told its moment by that eye, drawn again.
+static void live_camera(Motolii* m) {
+    Stage& s = *m->s;
+    Doc& d = *m->d;
+    if (!m->second) return live_draw(s, m->live);
+    const bool desk = m->live->desk && s.desk.w, eye = d.working;
+    if (desk) {
+        live_draw(s, m->live);
+        if (!eye && (s.over || !s.before.empty())) return;   // (the stage's own picture is the camera's already)
+        s.engine->destroy(m->live->pending), m->live->pending = nullptr;
+    }
+    std::lock_guard<std::recursive_timed_mutex> holding(d.lock);
+    const uint32_t w = s.desk.w;
+    if (eye) d.eyeAsked = false, time_is(s, m->now);
+    s.desk.w = 0;
+    live_draw(s, m->live);
+    s.desk.w = w;
+    if (eye) d.eyeAsked = true, time_is(s, m->now);
+}
 static void picture_update(Motolii* m);
 static void picture_moment(Motolii* m);
 static void picture_tell(Motolii* m);
@@ -340,7 +361,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             stage_kept_fresh(m->kept, *m->d, *m->s, m->revision.load(), RATE);
         }
         m->step = "drawing";
-        if (!m->playing || !stage_kept_show(m->kept, *m->s, m->live, m->now, RATE)) live_draw(*m->s, m->live);   // (played: a picture kept is put on the stage, not drawn)
+        if (!m->playing || m->d->eyeAsked || m->second || !stage_kept_show(m->kept, *m->s, m->live, m->now, RATE)) live_camera(m);   // (played: a picture kept is put on the stage, not drawn; kept pictures are the camera's and the desk's alone)
         const auto drawn = std::chrono::steady_clock::now();
         lap(5);
         if (++m->judged % 30 == 0) {   // (how long the GPU took for its last pictures, against the time each may have)

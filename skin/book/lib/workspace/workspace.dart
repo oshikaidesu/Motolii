@@ -29,6 +29,7 @@ import 'desk_kit.dart';
 import 'key_drag.dart';
 import 'keys.dart';
 import 'stage.dart';
+import 'stage_camera.dart';
 import 'stage_view.dart' show WsRelationStack;
 import 'timeline.dart';
 import 'top_bar.dart';
@@ -632,6 +633,7 @@ class _Window extends StatelessWidget {
 final _panes = [
   for (final (name, g, _) in dockShelves) WsPane(name, g, () => WsShelf(name), minSize: 240, iconOnly: true),
   WsPane('Stage', DockG.stage, () => const WsStage(), minSize: 320),
+  WsPane('Camera View', DockG.camera, () => const WsCameraView(), minSize: 240),
   WsPane('Inspector', DockG.inspector, () => const _InspectorSeat(), minSize: 200),
   WsPane('Timeline', DockG.timeline, () => const WsTimeline(), minSize: 160),
   WsPane('Ease', DockG.time, () => const DeskEase(), minSize: 260),
@@ -650,7 +652,7 @@ DockingArea _preset(DockingItem Function(String name, {double? size, double? wei
   DockingColumn([
     DockingRow([
       DockingTabs([for (final (name, _, _) in dockShelves) item(name)], size: WsT.dock),
-      item('Stage'),
+      DockingTabs([item('Stage'), item('Camera View')]),
     ]),
     DockingRow([item('Timeline'), item('Ease', size: WsT.inspector)], size: WsT.lower + _strip, minimalSize: 220),   // (the stretch between two keys, beside the keys; never lower than its seven shapes and its curve can be read: docking's own minimum, as VS Code's views say theirs)
   ]),

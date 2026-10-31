@@ -96,6 +96,7 @@ static void stage_kept_fresh(StageKept& k, Doc& d, Stage& s, long revision, int 
 // One picture of the work area not looked at yet, drawn as a written film draws it and kept if it took too long (the
 // hand rests: what it draws is not shown). false: none left to look at.
 static bool stage_kept_one(StageKept& k, Doc& d, Stage& s, int rate, double budget_ms) {
+    if (d.eyeAsked) return false;   // (these are the camera's pictures: not drawn by the window's working eye)
     double from = 0.0, to = 0.0;
     doc_work(d, &from, &to);
     int at = -1;
