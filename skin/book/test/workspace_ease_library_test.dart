@@ -1,4 +1,6 @@
 // The Ease desk: its menu, its arrows, its handles past the top, and ways laid on one another.
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -275,6 +277,9 @@ void main() {
     expect(await laid(out, 'Elastic'), closeTo(m.wayExact('Elastic', line), .001), reason: 'and a bounce is timed by the line');
     expect(await laid(out, 'Cyclic'), closeTo(line * m.wayExact('Cyclic', .4), .001), reason: 'a wave as large as the line');
     expect(await laid(out, 'Random'), closeTo(line + m.wayExact('Random', .4) - .4, .001), reason: 'a shake added to it');
+    await laid('Bezier 0.34 1.56 0.64 1', 'Bounce');
+    expect((await m.shownAt([(cube, 'x', .6)])).single, greaterThan(1), reason: 'an overshoot stays one, through what comes after');
+    expect(t.widget<EaseCards>(_in(find.byType(EaseCards))).whole!.drawn!.reduce(math.max), greaterThan(1), reason: 'and the whole shows it');
     expect(await m.shownAt([(cube, 'x', 0), (cube, 'x', 1)]), [0, 1], reason: 'on its keys at both ends, each');
     expect(t.takeException(), isNull);
     await closeWorkspace(t);

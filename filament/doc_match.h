@@ -440,7 +440,7 @@ static Doc* doc_open(Stage& s, const char* path) {
         const std::string said = text ? text : "";
         const double u = sqlite3_value_double(v[1]);
         Interp kind;
-        sqlite3_result_double(c, u <= 0.0 ? 0.0 : u >= 1.0 ? 1.0 : interp_said(said, &kind) == 0 ? interp_ease(kind, u) : doc_went_by(*(Doc*)sqlite3_user_data(c), said, u, u, 1.0, 0.0, 1.0));
+        sqlite3_result_double(c, u <= 0.0 || u >= 1.0 ? u : interp_said(said, &kind) == 0 ? interp_ease(kind, u) : doc_went_by(*(Doc*)sqlite3_user_data(c), said, u, u, 1.0, 0.0, 1.0));   // (past its ends as it was: an overshoot above it stays one)
     }, nullptr, nullptr);
     sqlite3_busy_timeout(d->file, 2000);   // (another program at the same document is waited for)
     // (a key's `way` is how the stretch from it to the next key goes; `way` the table holds the ways defined in this document)

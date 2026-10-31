@@ -144,8 +144,10 @@ class EaseIcon extends CustomPainter {
           }
           c.drawPath(path, Paint()..color = ink..style = PaintingStyle.stroke..strokeWidth = 3.2..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
         }
-      default:
-        line(ease.at, 48);
+      default:   // (its own curve, all of it in the square: what overshoots too)
+        final at = [for (var i = 0; i < 48; i++) ease.at(i / 47)];
+        final lo = math.min(0.0, at.reduce(math.min)), hi = math.max(1.0, at.reduce(math.max));
+        line((u) => .06 + .88 * (ease.at(u) - lo) / (hi - lo), 48);
     }
   }
 

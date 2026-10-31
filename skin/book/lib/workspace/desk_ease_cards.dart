@@ -91,7 +91,7 @@ double _went(List<Ease> cards, double u) {
   var went = cards.first.at(u);
   for (final c in cards.skip(1)) {
     went = switch (_by(said(c))) {
-      _By.through => c.at(went),
+      _By.through => went <= 0 || went >= 1 ? went : c.at(went),   // (past its ends as it was: an overshoot above it stays one)
       _By.times => went * c.at(u),
       _By.plus => went + c.at(u) - u,
     };
