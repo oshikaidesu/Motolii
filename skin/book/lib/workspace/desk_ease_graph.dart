@@ -26,14 +26,14 @@ Rect easeBox(Size s) {
 double get easeBarOut => Shape.z(16);
 
 class EaseGraph extends StatefulWidget {
-  const EaseGraph({super.key, required this.ease, required this.span, required this.frame, required this.onChanged, this.onEnd, this.endSays, this.jump = true, this.overshoot = false, this.onion, this.ends = (0, 1)});
+  const EaseGraph({super.key, required this.ease, required this.span, required this.frame, required this.onChanged, this.onEnd, this.onEndMove, this.endSays, this.jump = true, this.overshoot = false, this.onion, this.ends = (0, 1)});
   final Ease ease;
   final (double, double) ends;
   final Ease? onion;   // (what all the cards make, faint behind the one a hand shapes)
   final EaseSpan? span;
   final int frame;
   final ValueChanged<Ease> onChanged;
-  final void Function(bool start, double by)? onEnd;
+  final void Function(bool start, double by)? onEnd, onEndMove;   // (let go; and as it goes)
   final String? Function(bool start, double by)? endSays;   // (what the end pulled makes its value, shown beside it while it is pulled)
   final bool jump, overshoot;   // (overshoot: looks past 0 and 1, and a handle goes there: Alight Motion's Enable Overshoot)
   @override
@@ -44,6 +44,8 @@ class _EaseGraphState extends State<EaseGraph> {
   static const _end = 100;   // (_drag, _hot: a handle's place in easeHandles, or the key at the start, or at the end)
   int? _drag, _hot;
   double? _endAt;   // (where the end pulled is, in the graph's measure, while it is pulled)
+  double _endFrom = 0;   // (where it stood when taken)
+  (double, double)? _reachHeld;   // (the graph's measure while an end is pulled: it does not move under the hand)
   Offset _from = Offset.zero, _handle = Offset.zero;   // (where the hand took it, and where the handle was: it goes by the hand's move, as Alight Motion's)
 
   static Rect _box(Size s) => easeBox(s);
@@ -53,7 +55,7 @@ class _EaseGraphState extends State<EaseGraph> {
     return (math.min(lo, math.min(ends.$1, ends.$2) - .15), math.max(hi, math.max(ends.$1, ends.$2) + .15));
   }
 
-  (double, double) get _reach => _reachOf(widget.ease, widget.overshoot, widget.ends);
+  (double, double) get _reach => _reachHeld ?? _reachOf(widget.ease, widget.overshoot, widget.ends);
   Offset _px(Rect g, Offset v) => _pxIn(g, _reach, Offset(v.dx, widget.ends.$1 + (widget.ends.$2 - widget.ends.$1) * v.dy));   // (a point of the curve, on the graph between its two ends)
   static Offset _pxIn(Rect g, (double, double) reach, Offset v) => Offset(g.left + v.dx * g.width, g.bottom - (v.dy - reach.$1) / (reach.$2 - reach.$1) * g.height);
 
@@ -70,6 +72,10 @@ class _EaseGraphState extends State<EaseGraph> {
   void _take(int? which, Offset at) {
     _drag = which;
     _from = at;
+    if (which != null && which >= _end) {
+      _endFrom = which == _end ? widget.ends.$1 : widget.ends.$2;
+      _reachHeld = _reach;
+    }
     final hs = easeHandles(widget.ease);
     if (which != null && which < hs.length) _handle = Offset(hs[which].x, hs[which].y);
   }
@@ -77,7 +83,10 @@ class _EaseGraphState extends State<EaseGraph> {
   void _move(Rect g, Offset p) {
     final (lo, hi) = _reach;
     final (y0, y1) = widget.ends;
-    if (_drag! >= _end) return setState(() => _endAt = (lo + (g.bottom - p.dy) / g.height * (hi - lo)).clamp(lo + .02, hi - .02));
+    if (_drag! >= _end) {
+      setState(() => _endAt = (lo + (g.bottom - p.dy) / g.height * (hi - lo)).clamp(lo + .02, hi - .02));
+      return widget.onEndMove?.call(_drag == _end, _endAt! - _endFrom);
+    }
     final hs = easeHandles(widget.ease);
     if (_drag! >= hs.length) return;
     final h = hs[_drag!], d = (p - _from) * h.damping;
@@ -88,9 +97,9 @@ class _EaseGraphState extends State<EaseGraph> {
   void _let(_) {
     final end = _drag, at = _endAt;
     setState(() {
-      _drag = _endAt = null;
+      _drag = _endAt = _reachHeld = null;
     });
-    if (end != null && end >= _end && at != null) widget.onEnd?.call(end == _end, at - (end == _end ? widget.ends.$1 : widget.ends.$2));
+    if (end != null && end >= _end && at != null) widget.onEnd?.call(end == _end, at - _endFrom);
   }
 
   @override
@@ -118,7 +127,7 @@ class _EaseGraphState extends State<EaseGraph> {
           },
           onPanEnd: _let,
           onPanCancel: () => setState(() {
-            _drag = _endAt = null;
+            _drag = _endAt = _reachHeld = null;
           }),
           child: Stack(children: [
           CustomPaint(
@@ -136,9 +145,10 @@ class _EaseGraphState extends State<EaseGraph> {
               overshoot: widget.overshoot,
               onion: widget.onion,
               ends: widget.ends,
+              reach: _reach,
             ),
           ),
-          if (_drag != null && _drag! >= _end && _endAt != null ? widget.endSays?.call(_drag == _end, _endAt! - (_drag == _end ? widget.ends.$1 : widget.ends.$2)) : null case final says?)
+          if (_drag != null && _drag! >= _end && _endAt != null ? widget.endSays?.call(_drag == _end, _endAt! - _endFrom) : null case final says?)
             Positioned(
               left: _drag == _end ? g.left + 10 : null,
               right: _drag == _end + 1 ? box.maxWidth - g.right + 10 : null,
@@ -165,7 +175,8 @@ List<(double, Color)> _ghosts(Ws ws, EaseSpan? span) {
 }
 
 class _GraphPainter extends CustomPainter {
-  const _GraphPainter({required this.ease, required this.from, required this.to, required this.frame, required this.active, required this.dragging, this.ghosts = const [], this.overshoot = false, this.onion, this.ends = (0, 1), this.endAt, this.jump = true});
+  const _GraphPainter({required this.ease, required this.from, required this.to, required this.frame, required this.active, required this.dragging, this.ghosts = const [], this.overshoot = false, this.onion, this.ends = (0, 1), required this.reach, this.endAt, this.jump = true});
+  final (double, double) reach;
   final List<(double, Color)> ghosts;   // (a relation's things: how much later each, across the stretch, and its colour)
   final Ease ease;
   final int? from, to, active;
@@ -177,7 +188,7 @@ class _GraphPainter extends CustomPainter {
 
   @override
   void paint(Canvas c, Size s) {   // (AbsentMotion's EasingPanel.kt drawGraph: its grid, its dashed 0 and 1, the stems, the curve, the handles)
-    final g = _EaseGraphState._box(s), reach = _EaseGraphState._reachOf(ease, overshoot, ends), handles = easeHandles(ease), end = _EaseGraphState._end;
+    final g = _EaseGraphState._box(s), handles = easeHandles(ease), end = _EaseGraphState._end;
     Offset px(Offset v) => _EaseGraphState._pxIn(g, reach, v);
     // (an end pulled: the curve goes from where its start is to where its end is, as the keys it makes will)
     final pulled = endAt != null && dragging && (active ?? 0) >= end ? active : null;
@@ -202,11 +213,6 @@ class _GraphPainter extends CustomPainter {
     }
     dashed(Offset(g.left, top), Offset(g.right, top), Grey.g56, 1, 4, 3);
     dashed(Offset(g.left, bottom), Offset(g.right, bottom), Grey.g56, 1, 4, 3);
-    // The playhead, when it is inside the span.
-    if (from != null && to != null && frame > from! && frame < to!) {   // (on a key it would read as the graph's edge)
-      final x = g.left + g.width * (frame - from!) / (to! - from!);
-      dashed(Offset(x, top), Offset(x, bottom), Grey.g76, 1, 5, 3);
-    }
     // A relation's things' copies of the curve, each so much later (thin, faint, under the one a hand shapes).
     c.save();
     c.clipRect(g);
@@ -249,6 +255,18 @@ class _GraphPainter extends CustomPainter {
       path.lineTo(o.dx, o.dy);
     }
     c.drawPath(path, Paint()..style = PaintingStyle.stroke..strokeWidth = 3..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round..color = WsT.accentInk);
+    // The timeline here: its playhead in its own colour, where on the way it is now, and the frames: which part is being read.
+    final numbers = T.micro(Grey.g56);
+    if (from != null && to != null && to! > from!) {
+      deskText(c, '$from', Offset(g.left, bottom + 6), numbers);
+      deskText(c, '$to', Offset(g.right, bottom + 6), numbers, ax: 1);
+      if (frame >= from! && frame <= to!) {
+        final u = (frame - from!) / (to! - from!), x = g.left + g.width * u, y = y0 + (y1 - y0) * (onion ?? ease).at(u), line = Paint()..color = WsT.playhead..strokeWidth = 1.5;
+        c.drawLine(Offset(x, top - 8), Offset(x, bottom + 4), line);
+        c.drawCircle(px(Offset(u, y)), 4.5, Paint()..color = WsT.playhead);
+        if (frame != from && frame != to) deskText(c, '$frame', Offset(x, bottom + 6), T.micro(WsT.playhead).copyWith(fontWeight: FontWeight.w700), ax: .5);
+      }
+    }
     // The value jumping at the end pulled: from where it was (the key the jump leaves outside) to where it is now.
     if (pulled != null && jump) {
       final was = pulled == end ? home.$1 : home.$2, now = pulled == end ? a : b;
@@ -280,6 +298,6 @@ class _GraphPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_GraphPainter o) => o.ease != ease || o.onion != onion || o.ends != ends || o.overshoot != overshoot || o.endAt != endAt || o.jump != jump || o.from != from || o.to != to || o.frame != frame || o.active != active || o.dragging != dragging || o.ghosts.length != ghosts.length || (ghosts.isNotEmpty && o.ghosts.first.$1 != ghosts.first.$1);
+  bool shouldRepaint(_GraphPainter o) => o.reach != reach || o.ease != ease || o.onion != onion || o.ends != ends || o.overshoot != overshoot || o.endAt != endAt || o.jump != jump || o.from != from || o.to != to || o.frame != frame || o.active != active || o.dragging != dragging || o.ghosts.length != ghosts.length || (ghosts.isNotEmpty && o.ghosts.first.$1 != ghosts.first.$1);
 }
 

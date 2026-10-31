@@ -558,11 +558,12 @@ class _WorkspaceState extends State<Workspace> {
   }
 
   /// The panes drag their tabs on an overlay; the window brings its own so it works under any host.
+  _Window? _built;   // (one widget, kept: a card or a tab carried is a change of the overlay, and the whole window, every shelf's tiles, was built again for it: 18,358 widgets, 90 ms, each time one was taken up or let go)
   late final _entry = OverlayEntry(
     maintainState: true,
     builder: (context) => LayoutBuilder(
       builder: (context, box) {
-        final window = _Window(widget.extra);
+        final window = _built != null && _built!.extra == widget.extra ? _built! : _built = _Window(widget.extra);
         if (box.maxWidth >= WsT.minWindow.width && box.maxHeight >= WsT.minWindow.height) return window;
         return FittedBox( // (laid out no smaller than the least window, shrunk only as far as that needs: a zoomed window stays zoomed)
           child: SizedBox(width: math.max(box.maxWidth, WsT.minWindow.width), height: math.max(box.maxHeight, WsT.minWindow.height), child: window),

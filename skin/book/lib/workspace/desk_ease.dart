@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/motolii.dart';
+import 'package:lab_book/workspace/desk_ease_cards.dart' show easeIsLaid, easeIsTurned;
 import 'package:lab_book/workspace/desk_ease_state.dart';
 
 import 'ws.dart';
@@ -145,7 +146,7 @@ List<Ease> unseated(Ws ws) {
   final names = m.wayNames, said = '${ws.reads}';
   final tiles = [
     for (final name in names)
-      if (name != 'Bezier' && easePresets.every((p) => p.name != name)) Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), name, [for (var i = 0; i <= 32; i++) m.wayAt(name, i / 32)]),
+      if (name != 'Bezier' && !easeIsLaid(name) && !easeIsTurned(name) && easePresets.every((p) => p.name != name)) Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), name, [for (var i = 0; i <= 32; i++) m.wayAt(name, i / 32)]),
   ];
   _unseatedOf[m] = (said, tiles);
   return tiles;

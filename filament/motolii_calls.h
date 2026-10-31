@@ -576,6 +576,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
                 Doc& d = doc(m);
                 ok = 1;
                 if (d.act && d.act_unmatched) d.act_unmatched = false, doc_forget(d), ok = changes(m, (int)doc_match(d));
+                if (d.act) d.changed.insert({thing, ""}), picture_update(m), picture_moment(m);   // (and the window's pictures of that thing, what changed being known only when the step ends: the bars and the numbers go with the hand too)
             }
             else if (c == "effect") ok = changes(m, (int)doc_effect(doc(m), thing, n.c_str(), number));
             else if (c == "pen") {   // (word: where the hand is and its handle, "x y hx hy", points of the picture; the answer is the path shape)

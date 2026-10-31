@@ -1,5 +1,6 @@
 // The workspace's Timeline seat: transport + timecode on top, layer labels beside the track area, a ruler with the work area, the playhead.
 // The document lives in Ws; this seat keeps only how it looks at it (zoom, scroll, loop, the row toggles, the work area).
+import 'package:lab_book/workspace/desk_ease_cards.dart' show easeShape;
 import 'dart:developer' show Timeline;
 import 'dart:io';
 import 'dart:math' as math;
@@ -83,7 +84,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   // A way's shape from 0 to 1, as the bar's stretches are drawn (ws_2.dart: wayAt at seventeen points); kept by the way,
   // which says all of it, so a lane is not reckoned again as the view moves.
   static final _wayShapes = <String, List<double>>{};
-  List<double> _wayShape(Ws ws, String way) => way.isEmpty ? const [0, 1] : _wayShapes.putIfAbsent(way, () => [for (var i = 0; i <= 16; i++) ws.inside!.wayAt(way, i / 16)]);
+  List<double> _wayShape(Ws ws, String way) => way.isEmpty ? const [0, 1] : _wayShapes.putIfAbsent(way, () => [...easeShape(way, ws.inside!, 16)]);
 
   @override
   void initState() {

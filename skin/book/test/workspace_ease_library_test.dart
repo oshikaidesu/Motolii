@@ -125,7 +125,7 @@ void main() {
     expect((await m.shownAt([(cube, 'x', .4)])).single, closeTo(m.wayExact('Bounce', m.wayExact(alone, .4)), .001), reason: 'the line bends the time of what is laid on it');
     expect(await m.shownAt([(cube, 'x', 0), (cube, 'x', 1)]), [0, 1], reason: 'on its keys at both ends');
     expect(_in(find.byKey(const ValueKey('ease.card.1'))), findsOneWidget, reason: 'each a card');
-    expect(unseated(ws).map((e) => e.name), contains(laid), reason: 'and a way of the document, a tile');
+    expect(m.wayNames, contains(laid), reason: 'a way of the document');
     expect(_in(find.byKey(const ValueKey('ease.slot'))), findsOneWidget, reason: 'and room for the next');
     expect(m.undo() && m.wayOf(cube, 'x', 0) == alone, isTrue, reason: 'one step');
     expect(m.redo() && m.wayOf(cube, 'x', 0) == laid, isTrue);

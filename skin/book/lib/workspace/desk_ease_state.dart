@@ -32,6 +32,7 @@ class DeskEaseState extends State<DeskEase> {
   // one at a time (one still on its way: the next waits, those between are skipped); all of it one step of undo.
   bool _down = false, _open = false, _going = false;
   Ease? _pending, _waiting;
+  Ease? _told;   // (told the document and not yet heard back: shown meanwhile, not what it was)
   int _card = 0;   // (of a way laid from cards, the one the graph shows; another stretch: its first)
   String _cardOf = '';
   Ease? _held;   // (what a tile held over the graph would make: seen before it is let go, Final Cut Pro's skimming of an effect)
@@ -93,7 +94,9 @@ class DeskEaseState extends State<DeskEase> {
     for (final (t, name, at) in all) {
       last = m.later('way', thing: t, name: name, number: at, word: said(e));
     }
-    last = m.later('show');   // (the stage goes with the hand, the step still open)
+    for (final t in {for (final (t, _, _) in all) t}) {
+      last = m.later('show', thing: t);   // (the stage, the bars and the numbers go with the hand, the step still open)
+    }
     ws.after(last, (_, _) {
       _going = false;
       final next = _waiting;
@@ -113,6 +116,7 @@ class DeskEaseState extends State<DeskEase> {
     _pending = null;
     _waiting = null;
     if (e == null || span == null) return;
+    _told = e;
     final m = ws.inside!, to = said(e);
     final all = _stretches(ws);
     // (as it already goes, each: nothing is told, so a way's own numbers that have no seat here are not written over;
@@ -168,25 +172,54 @@ class DeskEaseState extends State<DeskEase> {
     return (0, 1);
   }
 
-  // (an end of the stretch pulled [by]: with Jump on, a key a frame outside first keeps the key's value as it was. One step.)
-  void _moveEnd(Ws ws, EaseSpan? span, bool start, double by) {
+  // (an end pulled, told as it goes: all one step, the newest one at a time, as _live; what the keys were when it was taken
+  //  held, the document's own moving under it. With Jump on, a key a frame outside first keeps the key's value as it was.)
+  List<(String, List<int>, List<double>, int, double)>? _pull;
+  double? _pullNext;
+  bool _pullGoing = false, _pullDone = false;
+  double _toward(Motolii m, EaseSpan span, Ws ws, String name, double was, double by) {
+    final shown = m.shown(name), lo = shown?.low ?? -double.infinity, hi = shown?.high ?? double.infinity;
+    return (was + by * _from(ws, span)[name]!.$3).clamp(math.min(lo, was), math.max(hi, was));
+  }
+
+  void _toEnd(Ws ws, EaseSpan? span, bool start, double by, {bool done = false}) {
     final m = ws.inside;
-    if (m == null || span == null || by.abs() < 1e-4) return;
+    if (m == null || span == null) return;
+    if (_pullGoing) {
+      _pullNext = by;
+      _pullDone = _pullDone || done;
+      return;
+    }
+    if (_pull == null && done && by.abs() < 1e-4) return;
     final t = int.parse(span.layer.id), key = start ? span.from : span.to, outside = start ? span.from - 1 : span.to + 1;
-    m.later('together', number: 1);
-    var told = 0;
-    for (final (name, at, vs, _, _) in _ends(ws, span, start, 0)) {   // (the measure of the bars, as the keys are now, once)
-      final i = at.indexOf(span.from), j = at.indexOf(span.to), shown = m.shown(name);
-      _from(ws, span).putIfAbsent(name, () => (vs[i], vs[j], (vs[j] - vs[i]).abs() > 1e-9 ? vs[j] - vs[i] : (shown == null ? 1.0 : shown.high - shown.low)));
-    }
-    for (final (name, at, vs, k, now) in _ends(ws, span, start, by)) {
-      if (easeJump && outside >= 0 && !at.contains(outside)) {
-        m.later('key', thing: t, name: name, word: '${outside / Ws.fps}', number: vs[k]);   // (the key's value before it moved: a frame off, what the value was there)
+    if (_pull == null) {
+      for (final (name, at, vs, _, _) in _ends(ws, span, start, 0)) {   // (the measure of the bars, as the keys are now, once)
+        final i = at.indexOf(span.from), j = at.indexOf(span.to), shown = m.shown(name);
+        _from(ws, span).putIfAbsent(name, () => (vs[i], vs[j], (vs[j] - vs[i]).abs() > 1e-9 ? vs[j] - vs[i] : (shown == null ? 1.0 : shown.high - shown.low)));
       }
-      m.later('key', thing: t, name: name, word: '${key / Ws.fps}', number: now);
-      told++;
+      _pull = [..._ends(ws, span, start, 0)];
+      m.later('together', number: 1);
+      for (final (name, at, vs, k, _) in _pull!) {
+        if (easeJump && outside >= 0 && !at.contains(outside)) m.later('key', thing: t, name: name, word: '${outside / Ws.fps}', number: vs[k]);   // (the key's value before it moved: a frame off, what the value was there)
+      }
     }
-    ws.after(m.later('together'), (done, why) => mounted ? setState(() => _trouble = done ? (told == 0 ? 'No value keyed at both ends' : null) : why) : null);
+    for (final (name, _, vs, k, _) in _pull!) {
+      m.later('key', thing: t, name: name, word: '${key / Ws.fps}', number: _toward(m, span, ws, name, vs[k], by));
+    }
+    if (done) {
+      final told = _pull!.length;
+      _pull = null;
+      ws.after(m.later('together'), (ok, why) => mounted ? setState(() => _trouble = ok ? (told == 0 ? 'No value keyed at both ends' : null) : why) : null);
+      return;
+    }
+    _pullGoing = true;
+    ws.after(m.later('show', thing: t), (_, _) {
+      _pullGoing = false;
+      final next = _pullNext, last = _pullDone;
+      _pullNext = null;
+      _pullDone = false;
+      if (next != null) _toEnd(ws, span, start, next, done: last);
+    });
   }
 
   // (what the end pulled [by] makes the first value keyed at both ends, as the inspector shows it: its name, its number
@@ -195,7 +228,8 @@ class DeskEaseState extends State<DeskEase> {
     final m = ws.inside;
     if (m == null || span == null) return null;
     final t = int.parse(span.layer.id);
-    for (final (name, _, _, _, now) in _ends(ws, span, start, by)) {
+    for (final (name, _, vs, i, _) in _pull ?? [..._ends(ws, span, start, 0)]) {
+      final now = _from(ws, span).containsKey(name) ? _toward(m, span, ws, name, vs[i], by) : vs[i];
       final (k, f) = m.reading(t, name);
       final v = now * k + f, shown = m.shown(name);
       return '${shown?.label ?? name} ${v.toStringAsFixed(v.abs() >= 100 ? 0 : 2)}${shown?.unit ?? ''}';
@@ -223,7 +257,9 @@ class DeskEaseState extends State<DeskEase> {
     final ws = WsScope.of(context, {WsAspect.document, WsAspect.picked}), span = easeSpan(ws), store = eases[ws] ??= {}, id = spanId(span);
     if (ws.inside case final m?) {
       final at = span == null ? const <String, double>{} : keysAt(ws, span);
-      var ease = _pending ?? (at.isEmpty ? easePreset('Linear') : heard(m.wayOf(int.parse(span!.layer.id), at.keys.first, at.values.first)));
+      final inDocument = at.isEmpty ? easePreset('Linear') : heard(m.wayOf(int.parse(span!.layer.id), at.keys.first, at.values.first));
+      if (_told case final t? when !ws.waiting || said(t) == said(inDocument)) _told = null;
+      var ease = _pending ?? _told ?? inDocument;
       if (easeOther(ease) && ease.drawn == null) ease = easeCard(said(ease), m);   // (no seat for this kind: its curve is the inside's own working of it, as said now)
       void set(Ease e) {
         setState(() => _pending = e);
@@ -309,7 +345,7 @@ class DeskEaseState extends State<DeskEase> {
                       child: Stack(
                         children: [
                           Positioned.fill(
-                            child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: card, onion: _held ?? (laid ? easeLaid(cards) : null), ends: _endsOf(ws, span), span: span, frame: frame, onChanged: put, jump: easeJump, overshoot: overshoot, onEnd: ws.inside == null ? null : (start, by) => _moveEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by))),   // (only the graph follows the playhead)
+                            child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: card, onion: _held ?? (laid ? easeLaid(cards) : null), ends: _endsOf(ws, span), span: span, frame: frame, onChanged: put, jump: easeJump, overshoot: overshoot, onEnd: ws.inside == null ? null : (start, by) => _toEnd(ws, span, start, by, done: true), onEndMove: ws.inside == null ? null : (start, by) => _toEnd(ws, span, start, by), endSays: (start, by) => _endSays(ws, span, start, by))),   // (only the graph follows the playhead)
                           ),
                           if (span == null) Positioned.fill(child: Center(child: Padding(padding: EdgeInsets.all(Shape.s(8)), child: Text('Put the playhead between two keys, or pick a key', textAlign: TextAlign.center, style: T.label(Grey.g63))))),
                           if (_trouble case final why?) Positioned(left: Shape.s(4), right: Shape.s(4), top: Shape.s(2), child: Text(why, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63))),

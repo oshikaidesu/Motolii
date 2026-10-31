@@ -60,6 +60,7 @@ final _worked = <String, List<double>>{};   // (a card's curve, worked out once:
 
 /// A card, as the way it says.
 Ease easeCard(String word, Motolii? m) {
+  if (easeIsLaid(word)) return easeLaid([for (final c in easeCards(word)) easeCard(c, m)]);
   if (easeIsTurned(word)) {
     final base = easeCard(easeTurn(word), m);
     return Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), word, [for (var i = 0; i <= _steps; i++) 1 - base.at(1 - i / _steps)]);
@@ -68,6 +69,14 @@ Ease easeCard(String word, Motolii? m) {
   if (!easeOther(e) || m == null) return e;
   if (_worked.length > 256) _worked.clear();
   return Ease(e.kind, e.p1, e.p2, e.name, _worked[word] ??= [for (var i = 0; i <= _steps; i++) m.wayExact(word, i / _steps)]);
+}
+
+/// A way's curve at so many steps, for a bar: one laid or turned is worked out here, not asked of the inside, whose answer
+/// waits on its hand, for each step.
+List<double> easeShape(String way, Motolii m, int steps) {
+  if (!easeIsLaid(way) && !easeIsTurned(way)) return [for (var i = 0; i <= steps; i++) m.wayAt(way, i / steps)];
+  final cards = [for (final c in easeCards(way)) easeCard(c, m)];
+  return [for (var i = 0; i <= steps; i++) _went(cards, i / steps)];
 }
 
 /// The cards laid as one way; a card left alone: itself.
