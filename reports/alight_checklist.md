@@ -527,5 +527,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [x] 大陸系の 20 秒 PV を 1 本の mp4 まで通した（11/1 ユーザー：「通す」）：`~/Movies/Motolii/teaser/pv.mp4`。約 400 手。記録は reports/scenarios.md の「通し」
 - [x] 通しで見つけた手間を直す（11/1）：golf_noise.md の (111)〜(123)。先に時刻の欄の全選択 (111)、Cmd+A の漏れ (112)、Free の札の言葉 (114)、切れ端の Bounce In (115)、時計の欠け (116)
 - [ ] 手本 PV の通し（11/1 ユーザー：「YouTubeの良さげなpvとか、を次のタスクにしてシナリオを進めておいてくれ、で、段階ごとに修正する」）：1 本目は白黒の文字 PV、2 本目は色と丸のブランド PV、3 本目は 3D のタイトル、4 本目は曲に合わせた映像編集（AMV）。素材は `~/Movies/Motolii/` と `~/Documents/Motolii-probes/refs/pv/`、git の外。記録は reports/scenarios.md の「手本 PV の通し」
+- [ ] 窓を開いたまま edit.sh を使う検査が止まる（11/1、check/text_column.sh が 60 秒で打ち切られ、窓を閉じると通った。1 回だけ、原因は未調査）
+- [ ] 舞台全体の回転：Adjustment + Rotate か Transform (Sashimono) で通るはず。絵は確かめたが回転の値を動かして見ていない
 - [ ] Position Z の向き（11/1、PV 3 で気づいた）：Motolii は Z を増やすと手前へ来る。After Effects は増やすと奥（Z+ が画面の奥）、AbsentMotion もカメラが z = -distance で PushIn が z を足す（CameraRig.kt）ので同じ向き。2 つの見本と逆。直すなら文書の z の読み（doc_place・カメラ・ライト・Copies の Gap deep・回転の向き）と古い文書の移し替えが要るので、一度に変えず 1 つずつ
 - [ ] ネットで拾った表現を取り込んで、通しの PV に使う（11/1）：Motolii の目的そのもの。今回は棚の Glitch Shifter で代えた
