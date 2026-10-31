@@ -432,9 +432,9 @@ static Doc* doc_open(Stage& s, const char* path) {
         if (trouble.empty()) sqlite3_result_double(c, went);
         else sqlite3_result_error(c, trouble.c_str(), -1);
     }, nullptr, nullptr);
-    // (and how far another way has gone at u, as it is said: way('Cyclic', u), way('Bezier .2 0 0 1', u). Multiplied, ways
-    //  laid over one another: Blender's F-Curve Noise modifier's Multiply, GSAP's CustomWiggle's amplitudeEase; each begins
-    //  at its first key and ends at its next, so what they make does too)
+    // (and how far another way has gone at u, as it is said: way('Cyclic', u), way('Bezier .2 0 0 1', u). So ways are laid
+    //  over one another, one through another, times or plus it: GSAP's CustomWiggle's timingEase and amplitudeEase,
+    //  Blender's F-Curve stack and its Noise; each begins at its first key and ends at its next, so what they make does too)
     sqlite3_create_function(d->file, "way", 2, SQLITE_UTF8 | SQLITE_DETERMINISTIC, d, [](sqlite3_context* c, int, sqlite3_value** v) {
         const char* text = (const char*)sqlite3_value_text(v[0]);
         const std::string said = text ? text : "";

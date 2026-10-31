@@ -122,7 +122,7 @@ void main() {
     });
     final laid = m.wayOf(cube, 'x', 0);
     expect(laid, allOf(contains('×'), contains('Bounce')), reason: m.trouble);
-    expect((await m.shownAt([(cube, 'x', .4)])).single, closeTo(m.wayAt(alone, .4) * m.wayAt('Bounce', .4), .02), reason: 'the two multiplied (wayAt: read off the picture\'s curve of it, a step at a time)');
+    expect((await m.shownAt([(cube, 'x', .4)])).single, closeTo(m.wayExact('Bounce', m.wayExact(alone, .4)), .001), reason: 'the line bends the time of what is laid on it');
     expect(await m.shownAt([(cube, 'x', 0), (cube, 'x', 1)]), [0, 1], reason: 'on its keys at both ends');
     expect(_in(find.byKey(const ValueKey('ease.card.1'))), findsOneWidget, reason: 'each a card');
     expect(unseated(ws).map((e) => e.name), contains(laid), reason: 'and a way of the document, a tile');
@@ -234,6 +234,43 @@ void main() {
     await t.tap(_in(find.byKey(const ValueKey('ease-reverse'))));
     await settled(t, ws);
     expect(m.wayOf(cube, 'x', 0), startsWith('Bounce'), reason: 'turned back');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
+  testWidgets('each card acts as its intent asks: Linear changes nothing, a line times what goes through it, steps cut it, a wave is as large as it, a shake is added', (t) async {
+    final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    expect(m.key(cube, 'x', 0, 0) && m.key(cube, 'x', 1, 1), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..pickKey((layer: '$cube', frame: 0))
+      ..front('Ease');
+    await t.pumpAndSettle();
+    final graph = _in(find.byType(EaseGraph));
+    Future<double> laid(String first, String on) async {
+      expect(m.way(cube, 'x', 0, first), isTrue, reason: m.trouble);
+      ws.reread();
+      await t.pumpAndSettle();
+      final hand = await t.startGesture(t.getCenter(_in(find.byKey(ValueKey('ease.$on')))), kind: PointerDeviceKind.mouse);
+      await hand.moveBy(const Offset(0, -24));
+      await t.pump();
+      await hand.moveTo(t.getCenter(graph));
+      await t.pump();
+      await hand.up();
+      await settled(t, ws);
+      expect(m.wayOf(cube, 'x', 0), contains('×'), reason: m.trouble);
+      return (await m.shownAt([(cube, 'x', .4)])).single!;
+    }
+
+    const out = 'Bezier 0 0 0.58 1';
+    final line = m.wayExact(out, .4);
+    expect(await laid('Cyclic', 'Linear'), closeTo(m.wayExact('Cyclic', .4), .001), reason: 'Linear: nothing');
+    expect(await laid(out, 'Steps'), closeTo(m.wayExact('Steps', line), .001), reason: 'steps cut what goes through them');
+    expect(await laid(out, 'Elastic'), closeTo(m.wayExact('Elastic', line), .001), reason: 'and a bounce is timed by the line');
+    expect(await laid(out, 'Cyclic'), closeTo(line * m.wayExact('Cyclic', .4), .001), reason: 'a wave as large as the line');
+    expect(await laid(out, 'Random'), closeTo(line + m.wayExact('Random', .4) - .4, .001), reason: 'a shake added to it');
+    expect(await m.shownAt([(cube, 'x', 0), (cube, 'x', 1)]), [0, 1], reason: 'on its keys at both ends, each');
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, skip: !insideBuilt);

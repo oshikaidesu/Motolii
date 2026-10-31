@@ -1,7 +1,9 @@
-// Ways laid over one another: each a card. A press on a tile puts it in place of them all; a tile laid on the graph
-// multiplies them (Blender's F-Curve Noise modifier's Multiply; GSAP's CustomWiggle's amplitudeEase); a card carried out
-// comes off. To the document they are one way, defined as they multiply (way(), doc_match.h), so it is kept, undone and
-// listed as any way is.
+// Ways laid over one another: each a card. A press on a shape puts it in place of the card in hand; a shape laid on the
+// graph or the flow joins them; a card carried out comes off. Top to bottom each acts on what is above it as its intent
+// asks (the maker, 10/31: "そのeaseの意図から考えるべき"): one that moves a value along, or cuts it into steps, takes what
+// is above through it, as GSAP's timingEase and Blender's stack; a wave is as large as what is above, as GSAP's
+// amplitudeEase; a shake is added to it, as Blender's Noise. To the document they are one way, defined so (way(),
+// doc_match.h), so it is kept, undone and listed as any way is. Linear changes nothing, wherever it lies.
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show Hov;
@@ -22,10 +24,35 @@ bool easeIsTurned(String said) => said.startsWith(_turned);
 /// it is a way defined so, as ways laid are).
 String easeTurn(String said) => easeIsTurned(said) ? said.substring(_turned.length).replaceAll(_space, ' ') : '$_turned${said.replaceAll(' ', _space)}';
 
+enum _By { through, times, plus }
+
+// (how a card acts on what is above it)
+_By _by(String word) => switch ((easeIsTurned(word) ? easeTurn(word) : word).split(' ').first) {
+  'Cyclic' => _By.times,
+  'Random' => _By.plus,
+  _ => _By.through,
+};
+
+// (how far cards laid have gone at u, as the document works it out)
+String _goes(List<String> cards) {
+  var went = "way('${_quoted(cards.first)}', u)";
+  for (final c in cards.skip(1)) {
+    final way = _quoted(c);
+    went = switch (_by(c)) {
+      _By.through => "way('$way', $went)",
+      _By.times => "($went) * way('$way', u)",
+      _By.plus => "($went) + way('$way', u) - u",
+    };
+  }
+  return went;
+}
+
+String _quoted(String word) => word.replaceAll("'", "''");
+
 /// The ways a word needs defined before a stretch can go by it: name and how it goes.
 List<(String, String)> easeDefines(String word) => [
   for (final c in easeCards(word)) if (easeIsTurned(c)) (c, "a + (b - a) * (1 - way('${easeTurn(c).replaceAll("'", "''")}', 1 - u))"),
-  if (easeIsLaid(word)) (word, 'a + (b - a) * ${[for (final c in easeCards(word)) "way('${c.replaceAll("'", "''")}', u)"].join(' * ')}'),
+  if (easeIsLaid(word)) (word, 'a + (b - a) * (${_goes(easeCards(word))})'),
 ];
 
 const _steps = 192;   // (a curve drawn large, its peaks whole)
@@ -47,8 +74,21 @@ Ease easeCard(String word, Motolii? m) {
 Ease easeLaid(List<Ease> cards) => cards.length == 1
     ? cards.single
     : Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), [for (final c in cards) said(c).replaceAll(' ', _space)].join(_over), [
-        for (var i = 0; i <= _steps; i++) cards.fold<double>(1, (v, c) => v * c.at(i / _steps)),
+        for (var i = 0; i <= _steps; i++) _went(cards, i / _steps),
       ]);
+
+// (as _goes, for the window to draw)
+double _went(List<Ease> cards, double u) {
+  var went = cards.first.at(u);
+  for (final c in cards.skip(1)) {
+    went = switch (_by(said(c))) {
+      _By.through => c.at(went),
+      _By.times => went * c.at(u),
+      _By.plus => went + c.at(u) - u,
+    };
+  }
+  return went;
+}
 
 /// What a way is called under the graph.
 String easeWord(Ease e) {
@@ -56,7 +96,7 @@ String easeWord(Ease e) {
   return (easeIsTurned(s) ? easeTurn(s) : easeName(e) ?? 'Bezier').split(' ').first;
 }
 
-/// The flow: the ways laid, top to bottom, each multiplied by the next (the maker's arrows, 10/31; Blender's stack); an
+/// The flow: the ways laid, top to bottom, each acting on what is above it (the maker's arrows, 10/31; Blender's stack); an
 /// empty frame under them for the next (Monster Train's empty slots: it says it takes one, and nothing need be learnt);
 /// what they make small at its foot. The card pressed is the one the graph shows, its handles in hand (the maker: seen
 /// always, the whole has no handles). A card carried up or down it takes that place, a shape let go on a card goes in
