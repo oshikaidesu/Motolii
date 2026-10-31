@@ -63,8 +63,8 @@ void main() {
     await t.pumpAndSettle();
 
     final box = find.descendant(of: find.byType(TextGroup), matching: find.byType(EditableText));
+    await seen(t, box);   // (under Transform and Blending, as in After Effects' Properties panel)
     expect(box, findsOneWidget);
-    await seen(t, box);
     await t.tap(box);
     await t.pump();
     // (Edit > Undo while a text box has the keys is the box's own undo, not the document's)

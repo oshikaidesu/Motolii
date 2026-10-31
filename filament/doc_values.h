@@ -334,12 +334,13 @@ static std::vector<AbsentEffect> doc_absent_on(Doc& d, int thing, double now) {
     return all;
 }
 static const DocCard doc_cards[] = {
-    {"Text", "text file size align", "kind", "text"},   // (After Effects' Source Text and Character, Cavalry's Text Shape: what it says, in which font, how large, which way it lines up)
-    {"Fill", "fill fill_media stroke stroke_width"},   // (After Effects' Fill and Stroke, Cavalry's Fill and Stroke: a colour, colours down it, or the material glass; its edge and how wide)
+    // (in the order a hand needs them: first what every thing has, as After Effects' Properties panel keeps Layer Transform at the top for all layer types; then, Alight Motion's Opacity & Blending, how it lies on what is under it; then its own, Text and Paragraph, Shape Properties)
     {"Transform", "space parent anchor_x anchor_y anchor_z x y z scale_x scale_y scale_z rotate_x rotate_y rotate opacity", "kind", "!camera"},   // (After Effects' Transform group: where it is, how large, how turned, how seen; each its own value)
     {"Camera", "parent x y z rotate_x rotate_y rotate distance zoom", "kind", "camera"},
     {"Fog", "fog fog_near fog_far fog_color", "kind", "camera"},   // (the camera's own, as Alight Motion's camera has: its colour, where it begins, where it is whole; the stage's when it says none)   // (After Effects' camera: what it looks at, where it is and how turned, how far its eye is, its zoom)
     {"Blending", "blend clip"},   // (After Effects' layer mode and its track matte, in its simplest: drawn over what lies below as it says, or only inside the one before it)
+    {"Text", "text file size align", "kind", "text"},   // (After Effects' Source Text and Character, Cavalry's Text Shape: what it says, in which font, how large, which way it lines up)
+    {"Fill", "fill fill_media stroke stroke_width"},   // (After Effects' Fill and Stroke, Cavalry's Fill and Stroke: a colour, colours down it, or the material glass; its edge and how wide)
     {"Type", "split letter_spacing line_spacing italic wrap wrap_at", nullptr, nullptr, true},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ ", true},
     {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_rotate_x copy_rotate_y copy_turn copy_size copy_opacity_end copy_wide copy_z tall copy_tall stagger stagger_from copy_fill copy_fill_way", nullptr, nullptr, true},

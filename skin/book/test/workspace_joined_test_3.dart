@@ -563,6 +563,37 @@ void _tests3() {
     await _close(t);
   }, tags: 'main', skip: !_built);
 
+  testWidgets('a text placed with the Inspector short is typed at once all the same: the Text card, low in the stack, is made for it and comes into sight', (t) async {
+    final ws = await _pump(t);
+    ws.reread();
+    await t.pumpAndSettle();
+    final tall = t.getRect(find.byType(InspectorPanel));
+    final edge = await t.startGesture(tall.bottomCenter + const Offset(0, 2), kind: PointerDeviceKind.mouse);
+    await edge.moveBy(const Offset(0, -20));
+    await t.pump();
+    await edge.moveTo(tall.topCenter + const Offset(0, 150));
+    await t.pump();
+    await edge.up();
+    await t.pumpAndSettle();
+    await edge.removePointer();
+    await t.tap(find.byKey(const ValueKey('ws-tool-5')));
+    await t.pumpAndSettle();
+    final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp')));
+    await t.tapAt(stage.center);
+    for (var i = 0; i < 200 && ws.selected == null; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await t.pump();
+    }
+    await t.pumpAndSettle();
+    final field = find.byWidgetPredicate((w) => w is EditableText && w.focusNode.debugLabel == 'text-content');
+    expect(field, findsOneWidget, reason: 'its card, under Transform, was never made');
+    expect(t.widget<EditableText>(field).focusNode.hasFocus, isTrue);
+    final panel = t.getRect(find.byType(InspectorPanel)), box = t.getRect(field);
+    expect(panel.contains(box.center), isTrue, reason: 'the keys go to a box out of sight: $box in $panel');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, tags: 'main', skip: !_built);
+
   testWidgets('the Text tool\'s row has its font, size, alignment and colour in one row, as Alight Motion\'s text bar', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final words = m.add('text', _font);

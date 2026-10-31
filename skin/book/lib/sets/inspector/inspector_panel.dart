@@ -121,8 +121,9 @@ class _InspectorPanelState extends State<InspectorPanel> {
           width: widget.width,
           height: widget.height,
           color: Grey.g07,
-          // (only the cards in sight are built: a stage with seventy effects on it builds as one with seven)
-          child: ListView(controller: _scroll, padding: EdgeInsets.all(Pop.gap), children: body),
+          // (only the cards in sight are built: a stage with seventy effects on it builds as one with seven; a text just
+          //  placed waits for its card, out of sight under Transform: built for it, the box then scrolls itself to the caret)
+          child: ListView(controller: _scroll, padding: EdgeInsets.all(Pop.gap), cacheExtent: textToType ? 4000 : null, children: body),
         ),
       ),
     );

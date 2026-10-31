@@ -462,9 +462,9 @@ void _tests2() {
       ..reread()
       ..select('$rect');
     await t.pumpAndSettle();
-    expect(titles(text), ['Text', 'Fill', 'Transform', 'Blending']);
-    expect(titles(rect), ['Fill', 'Transform', 'Blending']);
-    expect(titles(cube), ['Fill', 'Transform', 'Blending']);
+    expect(titles(text), ['Transform', 'Blending', 'Text', 'Fill'], reason: 'Layer Transform at the top for all layer types, After Effects\' Properties panel');
+    expect(titles(rect), ['Transform', 'Blending', 'Fill']);
+    expect(titles(cube), ['Transform', 'Blending', 'Fill']);
     expect(m.moreCards(rect), containsAll(['Copies', 'Wave', 'Field', 'Scatter', 'Shine', 'Motion', 'Play', 'Physics', 'Note']), reason: 'none lost');
     final more = find.byKey(const ValueKey('card-more:More'));
     await seen(t, more);
