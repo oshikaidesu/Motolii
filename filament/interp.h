@@ -35,6 +35,21 @@ static double interp_smoothstep(double edge0, double edge1, double x) {
     const double t = std::fmin(std::fmax((x - edge0) / (edge1 - edge0), 0.0), 1.0);
     return t * t * (3.0 - 2.0 * t);
 }
+// Bounce, as Alight Motion's (AbsentMotion's own: absent_motion.cpp), but for one thing. There a bounce that would end after
+// the stretch is not drawn, however high, and all the room left lies flat: a ball stopped dead in the air's reach (the maker,
+// 10/31: "畳まれてる"). Here it goes in that room, as much lower as it is shorter, so it lands on the key, and it grows out
+// of nothing as the room does. No other tool cuts one short: Dan Ebberts' runs on past the key, Penner's and GSAP's are
+// fitted. Fitting them all, as GSAP does, costs the Length knob and the stillness of a bounce that has died away: left as it
+// is. The usual numbers leave under 0.05 of room, so they go as Alight Motion's, to the number.
+static double interp_bounce(const double* p, double u) {
+    const double lowest = 0.0055;   // (easing.cpp's kMinBounce: lower, it has died away, and what is left is still)
+    double start = p[0] / 2, length = p[0] * p[1], height = p[1];
+    for (int i = 0; i < 10000 && height >= lowest && start + length <= 1; ++i) start += length, length *= p[1], height *= p[1];
+    const double room = 1 - start;
+    if (!(p[0] > 0) || height < lowest || room <= 0.05 || u < start) return absent_ease("bounce", p, 2, u);
+    const double high = height * room / length * interp_smoothstep(0.05, 0.15, room);
+    return 1 - 4 * high * (u - start) * (1 - u) / (room * room);
+}
 static double interp_mix(double a, double b, double t) { return a + (b - a) * t; }
 static double interp_fract(double x) { return x - std::floor(x); }
 static double interp_clamp(double x, double low, double high) { return std::fmin(std::fmax(x, low), high); }
@@ -79,7 +94,7 @@ static double interp_ease(const Interp& i, double u) {
         case Interp::Hold: return 0.0;
         case Interp::Linear: return interp_clamp(u, 0.0, 1.0);
         case Interp::Bezier: return interp_bezier(interp_clamp(p[0], 0.0, 1.0), p[1], interp_clamp(p[2], 0.0, 1.0), p[3], u);
-        case Interp::Bounce: return absent_ease("bounce", p, 2, u);   // (AbsentMotion's own, as Alight Motion's: absent_motion.cpp)
+        case Interp::Bounce: return interp_bounce(p, u);
         case Interp::Elastic: return absent_ease("elastic", p, 4, u);
         case Interp::Cyclic: return absent_ease("cyclic", p, 5, u);
         case Interp::Random: return absent_ease("random", p, 6, u);

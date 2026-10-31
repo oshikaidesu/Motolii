@@ -677,6 +677,21 @@ void main() {
     await closeWorkspace(t);
   }, skip: !insideBuilt);
 
+  testWidgets('a bounce that will not fit goes in the room left, lower, and lands on the key; one died away stays still; the usual numbers as Alight Motion\'s', (t) async {
+    final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
+    expect(m.wayExact('Bounce 0.3 0.8', .98), 1, reason: 'the usual: under 0.05 of room, flat as Alight Motion\'s');
+    expect(m.wayExact('Bounce 0.2 0.5', .6), 1, reason: 'died away at 0.3: still');
+    expect(m.wayExact('Bounce 0.346 0.906', .885), lessThan(.5), reason: 'the third bounce, where it lay flat');
+    expect(m.wayExact('Bounce 0.346 0.906', .995), greaterThan(.9), reason: 'and on the key at the end');
+    double? was;
+    for (var l = 300; l <= 400; l++) {
+      final now = m.wayExact('Bounce ${l / 1000} 0.906', .9);
+      if (was case final w?) expect((now - w).abs(), lessThan(.1), reason: 'no leap as Length goes: at ${l / 1000}');
+      was = now;
+    }
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
   testWidgets('a wave turned end for end, and back (AbsentMotion\'s reverse)', (t) async {
     final ws = await openWorkspace(t, size: const Size(1600, 960)), m = ws.inside!;
     final cube = m.add('solid', 'cube');
