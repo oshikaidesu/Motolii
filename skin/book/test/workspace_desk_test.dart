@@ -115,7 +115,7 @@ void main() {
       ..pickKey((layer: '$cube', frame: 30))
       ..front('Ease');
     await t.pumpAndSettle();
-    final r = t.getRect(find.byType(EaseGraph)), g = r.deflate(r.width * 42 / 575);   // (AbsentMotion's geoOf)
+    final r = t.getRect(find.byType(EaseGraph)), g = easeBox(r.size).shift(r.topLeft);   // (AbsentMotion's geoOf)
     double y(double v) => g.bottom - (v + .25) / 1.5 * g.height;   // (the graph's measure: desk_ease_handles.dart easeReach)
     Future<void> pull(Offset from, double to, {String? says}) async {
       final hand = await t.startGesture(from, kind: PointerDeviceKind.mouse);
@@ -129,7 +129,7 @@ void main() {
       await settled(t, ws);
     }
     List<double> keys() => [for (final s in m.keyMoments(cube, 'x')) (s * 60).roundToDouble()];
-    final bar = r.width * 42 / 575 * .55;
+    final bar = easeBarOut;
     await pull(Offset(g.left - bar, y(0)), .25, says: 'Position X');   // (the start up a quarter: a quarter of x's knob span, 8, as the stretch is flat)
     expect(keys(), [29, 30, 60], reason: 'a key a frame before keeps the value as it was');
     expect(m.keyValues(cube, 'x')[0], closeTo(0, 1e-9));
@@ -170,7 +170,7 @@ void main() {
     await settled(t, ws);
     final said = m.wayOf(cube, 'x', 0).split(' ');
     expect(said.first, 'Cyclic', reason: m.trouble);
-    final graph = find.byType(EaseGraph), r = t.getRect(graph), g = r.deflate(r.width * 42 / 575);
+    final graph = find.byType(EaseGraph), r = t.getRect(graph), g = easeBox(r.size).shift(r.topLeft);
     Offset px(double x, double y) => Offset(g.left + x * g.width, g.bottom - (y + .5) / 2 * g.height);   // (Cyclic's reach: easeReach)
     final period = double.parse(said[1]);
     await t.timedDragFrom(px(period, 0), px(period + .2, 0) - px(period, 0), const Duration(milliseconds: 300));

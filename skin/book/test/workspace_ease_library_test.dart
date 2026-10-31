@@ -78,7 +78,7 @@ void main() {
     await menu(t, 'overshoot');
     addTearDown(() => easeOvershoot = false);
     final graph = find.byType(EaseGraph), r = t.getRect(graph), p2 = t.widget<EaseGraph>(graph).ease.p2;
-    final g = r.deflate(r.width * 42 / 575);   // (AbsentMotion's geoOf)
+    final g = easeBox(r.size).shift(r.topLeft);   // (AbsentMotion's geoOf)
     const lo = -2.0, hi = 3.0;
     Offset px(Offset v) => Offset(g.left + v.dx * g.width, g.bottom - (v.dy - lo) / (hi - lo) * g.height);
     await t.timedDragFrom(px(p2), px(Offset(p2.dx, 1.4)) - px(p2), const Duration(milliseconds: 300));
@@ -181,7 +181,7 @@ void main() {
     await carry(_in(find.byKey(const ValueKey('ease.Linear'))), t.getCenter(graph));
     expect(m.wayOf(cube, 'x', 0), allOf(startsWith('Cyclic'), endsWith('Linear')), reason: m.trouble);
     expect(t.widget<EaseGraph>(graph).ease.name, 'Linear', reason: 'the one just laid in hand');
-    final r = t.getRect(graph), g = r.deflate(r.width * 42 / 575);
+    final r = t.getRect(graph), g = easeBox(r.size).shift(r.topLeft);
     Offset px(double x, double y) => Offset(g.left + x * g.width, g.bottom - (y + .25) / 1.5 * g.height);
     List<double> whole() => t.widget<EaseCards>(_in(find.byType(EaseCards))).whole!.drawn!;
     final was = whole();

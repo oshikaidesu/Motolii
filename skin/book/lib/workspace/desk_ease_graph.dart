@@ -16,6 +16,15 @@ import 'two_fingers.dart';
 /// 10/31, the bars drawn on a picture of it, "確定してもその位置のままで"): [onEnd] is told which end and how far, in the
 /// bars' own measure (1: from the one key's value to the other's as they first were); [ends] is where they stand. With
 /// [jump] on, a dashed line shows the value jumping there, as the keys it makes will.
+/// Where the curve's square lies in a graph of that size (AbsentMotion's geoOf: 42 of 575 kept round it), with room each
+/// side for the bars; and how far out of it they stand: past any handle, which goes no further than its edge.
+Rect easeBox(Size s) {
+  final m = s.width * 42 / 575, side = m + Shape.z(10);
+  return Rect.fromLTRB(side, m, math.max(side + 1, s.width - side), math.max(m + 1, s.height - m));
+}
+
+double get easeBarOut => Shape.z(16);
+
 class EaseGraph extends StatefulWidget {
   const EaseGraph({super.key, required this.ease, required this.span, required this.frame, required this.onChanged, this.onEnd, this.endSays, this.jump = true, this.overshoot = false, this.onion, this.ends = (0, 1)});
   final Ease ease;
@@ -37,12 +46,8 @@ class _EaseGraphState extends State<EaseGraph> {
   double? _endAt;   // (where the end pulled is, in the graph's measure, while it is pulled)
   Offset _from = Offset.zero, _handle = Offset.zero;   // (where the hand took it, and where the handle was: it goes by the hand's move, as Alight Motion's)
 
-  static Rect _box(Size s) {   // (AbsentMotion's geoOf: 42 of 575 kept round the curve)
-    final m = s.width * 42 / 575;
-    return Rect.fromLTRB(m, m, math.max(m + 1, s.width - m), math.max(m + 1, s.height - m));
-  }
+  static Rect _box(Size s) => easeBox(s);
 
-  static double _rail(Rect g) => g.left * .55;   // (how far out of the curve the bars stand)
   static (double, double) _reachOf(Ease e, bool over, (double, double) ends) {   // (and far enough for where the ends stand)
     final (lo, hi) = easeReach(e, over);
     return (math.min(lo, math.min(ends.$1, ends.$2) - .15), math.max(hi, math.max(ends.$1, ends.$2) + .15));
@@ -53,10 +58,10 @@ class _EaseGraphState extends State<EaseGraph> {
   static Offset _pxIn(Rect g, (double, double) reach, Offset v) => Offset(g.left + v.dx * g.width, g.bottom - (v.dy - reach.$1) / (reach.$2 - reach.$1) * g.height);
 
   int? _near(Rect g, Offset p) {
-    final r = _rail(g);
     if (widget.onEnd != null && widget.span != null) {
-      if ((p.dx - (g.left - r)).abs() < r) return _end;
-      if ((p.dx - (g.right + r)).abs() < r) return _end + 1;
+      final reach = Shape.z(9);
+      if ((p.dx - (g.left - easeBarOut)).abs() < reach) return _end;
+      if ((p.dx - (g.right + easeBarOut)).abs() < reach) return _end + 1;
     }
     final d = [for (final (i, h) in easeHandles(widget.ease).indexed) ((_px(g, Offset(h.x, h.y)) - p).distance, i)]..sort((a, b) => a.$1.compareTo(b.$1));
     return d.isEmpty || d.first.$1 > 14 ? null : d.first.$2;
@@ -259,14 +264,14 @@ class _GraphPainter extends CustomPainter {
       }
     }
     // The bars, left and right, as high as the way's 0 to 100, longer where an end has gone past; each end a grip on its own.
-    final rail = _EaseGraphState._rail(g);
+    final rail = easeBarOut;
     for (final (i, (x, k, inward)) in [(g.left - rail, a, 1.0), (g.right + rail, b, -1.0)].indexed) {
-      final on = active == end + i, cap = rail * .6;
+      final on = active == end + i, cap = rail * .35;
       final bar = Paint()..color = on ? WsT.accentInk : Grey.g63..strokeWidth = 2..strokeCap = StrokeCap.round;
       c.drawLine(Offset(x, math.min(top, k.dy)), Offset(x, math.max(bottom, k.dy)), bar);
       c.drawLine(Offset(x, top), Offset(x + inward * cap, top), bar);
       c.drawLine(Offset(x, bottom), Offset(x + inward * cap, bottom), bar);
-      c.drawLine(Offset(x, k.dy), k, Paint()..color = WsT.accentInk..strokeWidth = 3..strokeCap = StrokeCap.round);
+      c.drawLine(Offset(x, k.dy), k, Paint()..color = Grey.g63..strokeWidth = 1);
       c.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(x, k.dy), width: on ? 11 : 9, height: on ? 18 : 14), const Radius.circular(3)), Paint()..color = WsT.accentInk);
     }
     // What it is, under it, as Alight Motion's.
