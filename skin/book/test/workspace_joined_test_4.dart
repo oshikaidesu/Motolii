@@ -135,7 +135,7 @@ void _tests4() {
     await t.tap(find.byKey(ValueKey('ws-tl-label-$cube')));
     await t.pump();
     await t.sendKeyEvent(LogicalKeyboardKey.backspace);
-    await t.pumpAndSettle();
+    await settled(t, ws);   // (asked without waiting)
     expect(m.things, [ring]);
     expect(ws.layers.map((l) => l.id), ['$ring']);
 

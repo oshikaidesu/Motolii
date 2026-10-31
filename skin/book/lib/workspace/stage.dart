@@ -441,7 +441,13 @@ class _OptionsStrip extends StatelessWidget {
         index: p.align,
         onChanged: (i) { // (the picked text's lines laid so: the document's align)
           final t = int.tryParse(ws.selected ?? '');
-          if (t != null) ws.after(ws.inside!.later('set', thing: t, name: 'align', number: i / 2));   // (without waiting)
+          final m = ws.inside;
+          if (t == null || m == null) return;
+          m
+            ..later('together', number: 1)
+            ..later('set', thing: t, name: 'align', number: i / 2)
+            ..later('set', thing: t, name: 'anchor_x', number: i - 1.0);   // (round where it stands: After Effects' point text)
+          ws.after(m.later('together'));   // (without waiting)
         },
       ),
       _Field('Fill', swatch: p.fill ?? WsT.body),   // (and its colour, in the same row: Alight Motion's text bar, align, font, size, colour)

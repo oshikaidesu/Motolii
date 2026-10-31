@@ -300,11 +300,17 @@ void _tests2() {
     expect(m.word(text, 'text'), 'MOTOLII\nmakes moves', reason: m.trouble);
     expect(ws.layer?.name, 'MOTOLII makes moves', reason: 'listed on one line');
     expect(wsTransform(ws, '$text')['v_size'], closeTo(.5 * m.point, .1), reason: 'its size in points of the picture');
+    final right = find.descendant(of: find.byWidgetPredicate((w) => w is PropRow && w.id == 'v_align'), matching: find.byWidgetPredicate((w) => w is Text && w.data?.toLowerCase() == 'right'));
+    await seen(t, right);
+    await t.tap(right);
+    await settled(t, ws);
+    expect(m.value(text, 'anchor_x', 0), 1, reason: 'lines set right, round where it stands: After Effects\' point text');
     final centre = find.descendant(of: find.byWidgetPredicate((w) => w is PropRow && w.id == 'v_align'), matching: find.byWidgetPredicate((w) => w is Text && w.data?.toLowerCase() == 'centre')); // (buttons say it in capitals)
     await seen(t, centre);
     await t.tap(centre);
     await settled(t, ws);
     expect(m.value(text, 'align', 0), .5, reason: 'Centre is ThorVG\'s half way: ${m.trouble}');
+    expect(m.value(text, 'anchor_x', 0), 0);
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
