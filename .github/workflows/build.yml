@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 2 }   # (check/fx_chains.sh reads which effects the last commit changed)
       - uses: actions/cache/restore@v4   # (what the scripts fetch and build, kept between runs while their pins stay)
         id: deps
         with:

@@ -29,6 +29,7 @@ run fx_sheet.sh
 run fx_world.sh
 run world_view.sh
 run fx_reach.sh
+run fx_chains.sh
 run extract.sh
 run shelf_words.sh
 run pack.sh
