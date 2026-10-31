@@ -325,9 +325,18 @@ class _WorkspaceState extends State<Workspace> {
         ws.select(null);   // (nothing picked after it: a second Delete takes nothing else)
       },
       'thing.duplicate': () {
-        final t = int.tryParse(ws.selected ?? '');
-        if (t == null) return;
-        ws.after(m.later('duplicate', thing: t), null, (made) => ws.select('$made'));   // (the new one picked, as After Effects does)
+        final all = _picked(), made = <String>[];
+        if (all.isEmpty) return;
+        m.later('together', number: 1);
+        for (final t in all) {
+          ws.after(m.later('duplicate', thing: t), null, (one) {
+            made.add('$one');
+            if (made.length < all.length) return;
+            ws.select(made.last);   // (the new ones picked, as After Effects does)
+            if (made.length > 1) ws.pickMany(made);
+          });
+        }
+        ws.after(m.later('together'));
       },
       'thing.outline': () {   // (Alight Motion's Convert to Outline: a shape a path of the outline it shows, its points then the Pen's: doc_to_path)
         final t = int.tryParse(ws.selected ?? '');

@@ -486,6 +486,20 @@ static bool doc_keys_by(Doc& d, int thing, double by) {
                                          "update fact set at = at - 1e7 where thing = %d and at >= 5e6", 1e7 + by, thing, thing, thing));   // (by way of far off: no key lands on one not yet moved)
 }
 static double doc_lasts(Doc& d, int thing);
+// What was made again laid just above what it came from: a copy is made on top of all (After Effects' Duplicate and
+// Split Layer; AbsentMotion's duplicateSelected, addAbove).
+static bool doc_lay_above(Doc& d, int made, int thing) {
+    doc_forget(d);
+    const std::vector<int> lie = doc_laid(d);
+    const long from = std::find(lie.begin(), lie.end(), made) - lie.begin(), under = std::find(lie.begin(), lie.end(), thing) - lie.begin();
+    return from == under + 1 || doc_raise(d, made, (int)(under + (from > under ? 1 : 0) - from));
+}
+static int doc_copy_above(Doc& d, int thing) {
+    doc_act(d);
+    const int made = doc_duplicate(d, thing);
+    const bool ok = made && doc_lay_above(d, made, thing);
+    return doc_acted(d) && ok ? made : 0;
+}
 // A thing cut in two at a moment (Ableton Live's Split, Cmd+E; AbsentMotion's Scene.splitAt): it ends there, and a copy
 // of it (every fact, its keys staying where they are on the stage) begins there, a film's copy as far on in the film as
 // the head's trim takes it (above), lying just above it. One step to undo; the answer is the copy, as duplicate's.
@@ -497,12 +511,7 @@ static int doc_split(Doc& d, int thing, double at) {
     const int made = doc_duplicate(d, thing);
     bool ok = made && doc_set(d, thing, "duration", at - start) && doc_set(d, made, "start", at) && doc_set(d, made, "duration", end - at);
     if (const double on = doc_own_clock(d, thing, at - start); ok && on != 0.0) ok = doc_set(d, made, "begin", doc_number(d, thing, "begin", 0, 0) + on);
-    if (ok) {   // (the part after lies just above the part before, as After Effects' Split Layer puts the new layer: a copy is made on top of all)
-        doc_forget(d);
-        const std::vector<int> lie = doc_laid(d);
-        const long from = std::find(lie.begin(), lie.end(), made) - lie.begin(), under = std::find(lie.begin(), lie.end(), thing) - lie.begin();
-        if (from != under + 1) ok = doc_raise(d, made, (int)(under + (from > under ? 1 : 0) - from));
-    }
+    ok = ok && doc_lay_above(d, made, thing);   // (the part after lies just above the part before, as After Effects' Split Layer puts the new layer)
     return doc_acted(d) && ok ? made : 0;
 }
 // The work area taken out and the gap closed (After Effects' Edit > Extract Work Area; Premiere Pro's Extract, DaVinci

@@ -1,3 +1,4 @@
+import 'dart:async' show Timer;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart';
@@ -134,6 +135,7 @@ class _TextGroupState extends State<TextGroup> {
     },
   );
   String _entered = '';
+  Timer? _typed;
 
   @override
   void initState() {
@@ -149,6 +151,8 @@ class _TextGroupState extends State<TextGroup> {
     });
     _c.addListener(() {   // (its letters picked by the hand, kept for the Colors shelf to colour those alone: wordsPicked)
       if (!_f.hasFocus) return;
+      _typed?.cancel();
+      if (_c.text != Ctx.read(context).doc.s2['v_text']) _typed = Timer(const Duration(milliseconds: 250), () => mounted && _f.hasFocus ? Ctx.read(context).doc.str('v_text', _c.text) : null);   // (on the stage as it is typed, After Effects' and Figma's text tools; a pause apart, so a word is one step)
       final s = _c.selection;
       wordsPicked.value = s.isValid && !s.isCollapsed ? (text: _c.text, start: s.start, end: s.end) : null;
     });
@@ -156,6 +160,7 @@ class _TextGroupState extends State<TextGroup> {
 
   @override
   void dispose() {
+    _typed?.cancel();
     _f.dispose();
     _c.dispose();
     super.dispose();

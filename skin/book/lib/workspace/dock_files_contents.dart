@@ -7,23 +7,23 @@ class _Contents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final path = _pathOf(c, c.mem.folder), here = path.last;
-    final root = here.disk ? here : path.first; // (on the disk a search stays in the open folder and the folders already read below it)
+    final root = here.disk ? here : path.first; // (on the disk a search stays in the open folder and those below it, as far as a pile goes: golf_noise.md 151)
     final searching = c.query.isNotEmpty;
     final List<FileNode> items;
     if (searching) {
       final found = <FileNode>[];
-      void walk(FileNode n) {
+      void walk(FileNode n, int depth) {
         for (final k in n.kids) {
           if (k.folder) {
-            if (k.listed) walk(k);
+            if (depth < 4) walk(k, depth + 1);
           } else if (DockTags.hit(c.query, k.name, DockTags.of('Media', k.id, {_kindOf(k).toLowerCase(), if (k.id.contains('.')) k.id.split('.').last.toLowerCase()}))) {
             found.add(k);
           }
         }
       }
 
-      walk(root);
-      items = found;
+      walk(root, 0);
+      items = {for (final n in found) n.id: n}.values.toList();   // (a file in use is in the project twice over: once)
     } else {
       if (c.mem.mediaDeep) {   // (the folder and every folder below it, their files together: a folder looked at as one pile)
         final all = <FileNode>[];

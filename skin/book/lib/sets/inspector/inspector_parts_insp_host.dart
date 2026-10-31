@@ -242,7 +242,7 @@ class _InspHostState extends State<InspHost> {
     if (widget.onFlags case final tell?) {
       final flags = {
         for (final e in doc.b.entries)
-          if ((_seenFlags[e.key] ?? false) != e.value) e.key: e.value,
+          if ((_seenFlags[e.key] ?? e.key.endsWith('.open')) != e.value) e.key: e.value,   // (a card is open until it is folded: its first fold is news too, or it opens again at the next reading)
       };
       if (flags.isNotEmpty) {
         if (tell(flags)) {

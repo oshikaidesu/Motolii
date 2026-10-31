@@ -84,9 +84,12 @@ class Ws extends ChangeNotifier {
 
   String? _notice;
   String? get notice => _notice;
+  Timer? _noticeEnds;
   set notice(String? said) {
     if (said == _notice) return;
     _notice = said;
+    _noticeEnds?.cancel();
+    if (said != null && !said.endsWith('…')) _noticeEnds = Timer(const Duration(seconds: 10), () => notice = null);   // (said for a moment, Material's snackbar: four to ten seconds; what is still going on, "…", stays)
     _tell(WsAspect.notice);
   }
 
@@ -131,6 +134,7 @@ class Ws extends ChangeNotifier {
   @override
   void dispose() {
     _gone = true;
+    _noticeEnds?.cancel();
     seen.dispose();
     kept.dispose();
     moment.dispose();

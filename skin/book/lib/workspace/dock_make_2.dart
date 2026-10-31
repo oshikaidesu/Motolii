@@ -427,6 +427,7 @@ final _solids = (
     _Make('Ring', DockG.radial, WsT.toneShape, '', 'A solid ring'),
     _Make('Gem', DockG.polygon, WsT.toneShape, '', 'A cut solid'),
     _Make('Cube', DockG.rect, WsT.toneShape, '', 'A round-edged cube'),
+    _Make('Floor', DockG.rect, WsT.toneShape, '', 'A wide flat floor that takes shadows'),
     _Make('Ball', DockG.ellipse, WsT.toneShape, '', 'A ball'),
   ],
 );
@@ -463,10 +464,19 @@ final _asked = {
   'Ring': ('solid', 'ring'),
   'Gem': ('solid', 'gem'),
   'Cube': ('solid', 'cube'),
+  'Floor': ('solid', 'cube'),
   'Ball': ('solid', 'ball'),
   'Sun': ('light', 'sun'),
   'Point': ('light', 'point'),
   'Spot': ('light', 'spot'),
+};
+
+/// What a tile lays on what it makes, in its one step: Cinema 4D's Floor object, a Cube laid flat under the stage (a flat
+/// Rect is unlit and takes no shadow); a light from above in front, as After Effects' new light looks at the middle of the
+/// composition from there (at no turn a Sun looks along the floor and lights nothing of it).
+const _starts = <String, Map<String, double>>{
+  'Floor': {'scale_x': 12, 'scale_y': .01, 'scale_z': 12, 'y': -.48},
+  'Sun': {'rotate_x': -60, 'rotate_y': 35},
 };
 
 /// The tiles that lay the picked thing out in copies (the document's copies, as After Effects' repeater), and
@@ -509,6 +519,9 @@ void _make(DockCtx c, _Make tile) {
   m.later('together', number: 1);   // (one step: the thing and its inks)
   c.ws.after(m.later('add', name: asked.$1, word: asked.$1 == 'text' ? c.ws.bodyFace : asked.$2), null, (made) => c.ws.select('$made'));   // (without waiting: picked once made; a text in the body's font)
   wsInked(c.ws, asked.$1, asked.$2);
+  for (final e in (_starts[name] ?? const <String, double>{}).entries) m.later('set', thing: -1, name: e.key, number: e.value);
+  if (name == 'Floor') m.later('say', thing: -1, name: 'name', word: name);
+  if (asked.$1 == 'light' && (m.value(0, 'environment', 0) ?? 1) == 1) m.later('set', thing: 0, name: 'environment', number: .3);   // (After Effects: a light put in takes over from the default light; the Room dims, what it was is one field in Stage settings)
   c.ws.after(m.later('together'), (done, why) => c.set(() => done ? c.mem.trouble.remove(name) : c.mem.trouble[name] = why));
 }
 

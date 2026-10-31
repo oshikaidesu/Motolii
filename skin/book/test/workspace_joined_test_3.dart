@@ -87,7 +87,7 @@ void _tests3() {
     ws.shelf = 'Create';
     await t.pumpAndSettle();
     final r = ws.inside!.recipes.length; // (a recipe is a file: the shelf grows by what is in recipes/)
-    expect(find.text('${18 + r} ready'), findsOneWidget, reason: 'seventeen tiles of its own since K5 (one Repeater for Radial and Grid), Glass since 10/29 (a material is made in Create), and the recipes');
+    expect(find.text('${19 + r} ready'), findsOneWidget, reason: 'seventeen tiles of its own since K5 (one Repeater for Radial and Grid), Glass since 10/29, Floor since 11/1 (a material is made in Create), and the recipes');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
@@ -318,6 +318,9 @@ void _tests3() {
       await t.pump();
     }
     expect([m.things.length, m.word(int.parse(ws.selected!), 'shape')], [before + 1, 'rect'], reason: 'one more, a rect, picked: ${m.trouble}');
+    await settled(t, ws);
+    final rows = [for (final l in ws.layers) l.id];
+    expect(rows.indexOf(ws.selected!), rows.indexOf('$a') - 1, reason: 'it lies just above what it came from: $rows');
     await t.tap(find.byKey(const ValueKey('ws-undo')));
     await settled(t, ws);
     expect(m.things.length, before, reason: 'taken back by the arrow on the top bar');

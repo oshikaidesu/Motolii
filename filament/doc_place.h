@@ -27,7 +27,7 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         const int columns = (int)doc_literal(d, thing, "copy_columns", 0, 0);
         const double along = columns > 0 ? copy % columns : copy, down = columns > 0 ? copy / columns : copy;
         const double alongMid = columns > 0 ? (std::min(n, columns) - 1) * 0.5 : (n - 1) * 0.5, downMid = columns > 0 ? (std::ceil((double)n / columns) - 1) * 0.5 : (n - 1) * 0.5;
-        shift += math::double3{(along - alongMid) * doc_literal(d, thing, "copy_x", now, 0), (down - downMid) * doc_literal(d, thing, "copy_y", now, 0), (copy - (n - 1) * 0.5) * doc_literal(d, thing, "copy_z", now, 0)};
+        shift += math::double3{(along - alongMid) * doc_literal(d, thing, "copy_x", now, 0), (down - downMid) * doc_literal(d, thing, "copy_y", now, 0), (columns > 0 ? down - downMid : copy - (n - 1) * 0.5) * doc_literal(d, thing, "copy_z", now, 0)};   // (in rows, each row a step deeper: a floor of them, Cinema 4D's Cloner, Grid Array)
         if (doc_connects(d, thing)) {   // (where this copy lies, laid out in its rows, on the stage: what a falloff weighs; its own values, unconnected)
             d.ctxAt = (doc_above(d, thing, now, deeper) * math::double4{doc_number(d, thing, "x", now, 0) + shift.x, doc_number(d, thing, "y", now, 0) + shift.y, doc_number(d, thing, "z", now, 0) + shift.z, 1.0}).xyz;
             d.ctxHasAt = true;

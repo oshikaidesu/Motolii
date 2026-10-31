@@ -264,6 +264,7 @@ static std::string doc_name(Doc& d, int thing) {
             if (doc_word(d, t, "kind") == "behaviour" && doc_word(d, t, "file") == file && doc_word(d, t, "name").empty()) { ++all; if (t <= thing) ++nth; }
         return all > 1 && nth > 1 ? file + " " + std::to_string(nth) : file;
     }
+    if (is.empty() && doc_word(d, thing, "kind") == "light") is = doc_word(d, thing, "file");   // (Sun, as the tile says it)
     if (is.empty()) return std::filesystem::path(doc_word(d, thing, "file")).filename().string();
     if (doc_word(d, thing, "kind") != "text") is[0] = (char)std::toupper((unsigned char)is[0]);
     std::replace(is.begin(), is.end(), '\n', ' ');   // (a text of lines is listed on one)
@@ -664,7 +665,8 @@ static bool doc_half_now(Doc& d, int thing, float2* half, float* deep) {
 static math::double2 doc_seen(Doc& d, math::double3 p) {
     Stage& s = *d.stage;
     const math::double4 c = s.camera->getProjectionMatrix() * s.camera->getViewMatrix() * math::double4{p, 1.0};
-    return math::double2{(0.5 + 0.5 * c.x / c.w) * s.w, (0.5 - 0.5 * c.y / c.w) * s.h};
+    const double w = std::max(c.w, 1e-6);   // (a point at or behind the eye, a floor's far corners: far off that way, not a number that is none)
+    return math::double2{(0.5 + 0.5 * c.x / w) * s.w, (0.5 - 0.5 * c.y / w) * s.h};
 }
 // A camera as the working eye sees it, the picture's own points, spaced: its frame's four corners, the point it looks at,
 // where it is. AbsentMotion's CameraFrame: the picture's rectangle where it looks, as large as the lens takes in there;

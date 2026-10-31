@@ -8,7 +8,10 @@
 #include "third_party/filament_src/third_party/libassimp/contrib/rapidjson/include/rapidjson/stringbuffer.h"
 #include "third_party/filament_src/third_party/libassimp/contrib/rapidjson/include/rapidjson/writer.h"
 
-using PictureWriter = rapidjson::Writer<rapidjson::StringBuffer>;
+struct PictureWriter : rapidjson::Writer<rapidjson::StringBuffer> {
+    using rapidjson::Writer<rapidjson::StringBuffer>::Writer;
+    bool Double(double v) { return rapidjson::Writer<rapidjson::StringBuffer>::Double(std::isfinite(v) ? v : 0.0); }   // (rapidjson writes nothing for what is no number: "[,619,,]", and the window can read no more of the document)
+};
 
 static std::vector<std::string> picture_words(const char* said) {   // (a list said with spaces between)
     std::vector<std::string> all;

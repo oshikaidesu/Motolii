@@ -252,6 +252,13 @@ YouTube の PV を手本に、窓だけで作り、詰まった所を直して�
 - 見つけて直した物：(139)〜(148)。一番大きいのは (144)：Trim Paths が塗りを切っていなかったので半円も扇も作れなかった。もう 1 つは (145)：2D の物の Scale に Z があり、右端の ◇ を押すと物が消えていた
 - 手本と違って残る所：語でなく行で割る Split Lines は未だ。効果付きの物で Blend が効かなかった件は (148) で直した
 
+**3 本目：3D のタイトル**（手本 `NmS3m0OG-Ug`、Severance のタイトルの作り）。`~/Movies/Motolii/pv3/pv3.mp4`（1920×1080、60 fps、1080 コマ、18 秒、曲入り、6.8 MB）。字は自前の SMALL OFFICE、曲は「Lightless Dawn」（Kevin MacLeod、CC BY）、机と椅子は Poly Haven（CC0）、人は Khronos の CesiumMan（CC BY 4.0）。どれも git の外。
+
+- 中身：暗闇に光の扉と歩く人 → 緑の床に机 24 個を上からカメラが回る → 白い床に柱が並ぶ通路を、足並みのずれた 7 人が歩いてくる、影つき → 黒地に細い文字と線
+- 通って良かった所：机の格子は 1 個 + Copies 3 欄、足並みのずれは Copies の Delay 1 欄、光の扉は Rect + Shine + Bloom、カメラは Pitch・Yaw・Distance に ◇
+- 見つけて直した物：(149)〜(159)。一番大きいのは (150)：立体に Copies が無く 24 個置くしかなかった。(158)(159)：床と光は既定のままだと影が読めない。今は Floor と Sun の 2 手で出る
+- 手本と違って残る所：Mirror の濡れた床はまだ試していない。Z の向きが After Effects と逆（alight_checklist.md の T 節）
+
 ## 通し（11/1）：1 本の mp4 まで
 
 P01〜P20 を別々に測るのをやめて、20 秒の PV を 1 本、窓だけで最後まで作った。**通った**：`~/Movies/Motolii/teaser/pv.mp4`（1920×1080、60 fps、1200 コマ、曲入り、25.4 MB）。teaser の材料から mp4 が書けたのはこれが初めて。

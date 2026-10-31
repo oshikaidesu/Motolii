@@ -3,6 +3,7 @@
 // Tone and manner come from the Inspector's Pop rules (sets/inspector_parts.dart): containers square and tiled edge to edge,
 // what you touch or read round, colour flat and opaque, one lime accent, each kind of thing wearing its own hue.
 import 'package:lab_book/workspace/desk_ease_cards.dart' show easeCurve;
+import 'dart:async' show Timer;
 import 'dart:developer' show Timeline, TimelineTask;
 import 'dart:io' show Platform;
 import 'dart:math' as math;
