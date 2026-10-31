@@ -57,11 +57,17 @@ Future<void> _placeAll(DockCtx c, List<String> files) async {
 /// imageLayer and videoLayer, editor/EditorActions.kt and VideoActions.kt: golf ㊱); a drawing (Lottie, SVG, a roll) as it is.
 bool _fitted(String file) => _kindOfFile(file) == 'film' || _kindOfFile(file) == 'picture' && RegExp(r'\.(jpe?g|png|webp|bmp|heic)$', caseSensitive: false).hasMatch(file);
 
+final _placing = <String>{};
+
 /// A file put on the stage as a new thing, picked. Not done: the foot of the shelf says why.
 void _place(DockCtx c, FileNode n) {
+  if (!_placing.add(n.id)) return;   // (a song takes the inside a moment to read: a press in that moment is the same press; golf_noise.md (119), no source, a rule of this window's)
   final m = c.ws.inside!, still = _kindOfFile(n.id) == 'picture' && _stillSeconds > 0, cut = const ['film', 'sound'].contains(_kindOfFile(n.id)) ? _filmRanges[n.id] : null, fit = _fitted(n.id); // (the inside makes of it what the file is; without waiting, picked once made)
   if (still || cut != null || fit) m.later('together', number: 1);   // (made, fitted and given its length: one step)
-  c.ws.after(m.later('add', word: n.id), (done, why) => c.set(() => done ? c.mem.trouble.remove(n.id) : c.mem.trouble[n.id] = why), (made) => c.ws.select('$made'));
+  c.ws.after(m.later('add', word: n.id), (done, why) {
+    _placing.remove(n.id);
+    c.set(() => done ? c.mem.trouble.remove(n.id) : c.mem.trouble[n.id] = why);
+  }, (made) => c.ws.select('$made'));
   if (fit) m.later('fit', thing: -1, word: 'fit');
   if (still) m.later('set', thing: -1, name: 'duration', number: _stillSeconds);   // (the one just added: as long as chosen under it)
   if (cut case (final a, final b)) {

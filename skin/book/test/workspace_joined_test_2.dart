@@ -758,6 +758,7 @@ void _tests2() {
     final box = m.frame(rect)!, k = 1920 / stage.width;
     expect(box[2], closeTo(stage.width * .4 * k, 12), reason: 'as wide as drawn');
     expect(box[3], closeTo(stage.height * .2 * k, 12), reason: 'and as high');
+    expect(ws.viewOf('stage.tool', 0), 0, reason: 'one drawn, the tool is put down (Alight Motion, Figma)');
     expect(m.undo() && m.things.isEmpty, isTrue, reason: 'one step');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
@@ -882,6 +883,8 @@ void _tests2() {
     await t.tap(chip);   // (the rect picked: it is filled)
     await settled(t, ws);
     expect([m.word(rect, 'fill') != ink.join(' '), ws.ink], [true, m.word(rect, 'fill')], reason: 'a colour given to a thing is the next one\'s too (CLIP STUDIO PAINT\'s one drawing colour, every tool\'s)');
+    await t.tap(find.byKey(const ValueKey('ws-tool-2')));   // (put down when one was drawn: taken up again)
+    await t.pumpAndSettle();
     await t.dragFrom(stage.center - Offset(stage.width * .3, stage.height * .3), Offset(stage.width * .1, stage.height * .1));
     await settled(t, ws);
     for (var i = 0; i < 200 && ws.selected == '$rect'; i++) {

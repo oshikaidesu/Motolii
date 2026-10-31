@@ -1,6 +1,6 @@
 // The window's number fields as Ableton Live 12's (its manual, 42.4 and 42.6): a digit typed on a field starts its
 // number, Delete puts it back to its default. Driven on the real inside, as a hand would.
-import 'package:flutter/gestures.dart' show kSecondaryButton;
+import 'package:flutter/gestures.dart' show PointerDeviceKind, kSecondaryButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -72,6 +72,21 @@ void main() {
     await t.pump();
     final words = t.widget<EditableText>(typing).controller;
     expect([ws.many.length, words.selection.start, words.selection.end], [0, 0, words.text.length], reason: 'the things stay as they were, the number is all picked: a digit takes its place');
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
+  testWidgets('the time pressed from another field takes the keys: all of it picked, what is typed takes its place (golf_noise.md (111))', (t) async {
+    await openWorkspace(t);
+    final search = find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText));
+    await t.tap(search, kind: PointerDeviceKind.mouse);   // (a mouse: a press outside a field takes the keys from it, a finger's does not on the Mac's own default)
+    await t.pump();
+    await t.pump();
+    await t.tap(find.byKey(const ValueKey('ws-tl-time')), kind: PointerDeviceKind.mouse);
+    for (var i = 0; i < 4; i++) {
+      await t.pump();
+    }
+    final words = t.widget<EditableText>(find.descendant(of: find.byKey(const ValueKey('ws-tl-time-words')), matching: find.byType(EditableText)));
+    expect([words.focusNode.hasPrimaryFocus, words.controller.selection.start, words.controller.selection.end], [true, 0, words.controller.text.length]);
     await closeWorkspace(t);
   }, skip: !insideBuilt);
 

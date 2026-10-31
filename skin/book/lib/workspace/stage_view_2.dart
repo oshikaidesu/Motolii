@@ -274,6 +274,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
       if (kind == 'text') textToType = true;   // (typed at once: the Text card takes the keys, inspector_material.dart)
       ws.select('$made');
     });
+    ws.setView('stage.tool', 0);   // (one drawn, the hand is free: Alight Motion's Add is one act and Figma's tool goes back to select; After Effects' stays, so they part and Alight Motion decides: golf_noise.md head, ㊼)
   }
 
   // Joined: the pen: a point where the hand came down, its handle drawn out as far as the hand was dragged (a tap: a

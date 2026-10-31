@@ -399,10 +399,13 @@ void main() {
     expect(find.textContaining('Audio'), findsWidgets, reason: 'shelved as Audio, not Video (Alight Motion\'s picker keeps songs apart)');
     final m = ws.inside!, before = m.things.length;
     await t.tap(find.text('Place'));
+    await t.tap(find.text('Place'));   // (the inside still reading the song: the same press)
     for (var i = 0; i < 200 && m.things.length == before; i++) {
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
       await t.pump();
     }
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    expect(m.things.length, before + 1, reason: 'one song');
     expect(m.word(m.things.last, 'kind'), 'film', reason: m.trouble);
     expect(m.value(m.things.last, 'visible', 0), 0, reason: 'placed heard and not seen, as Alight Motion\'s audio layer: no wave over the picture');
     expect(t.takeException(), isNull);

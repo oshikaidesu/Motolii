@@ -200,12 +200,15 @@ class _WorkspaceState extends State<Workspace> {
   // The window holds the focus when nothing in it does (a field left, a pane closed): its keys are heard there.
   final _windowFocus = FocusNode(debugLabel: 'window');
   void _keepKeys() {
-    final now = FocusManager.instance.primaryFocus;
-    final above = now == null || (now is FocusScopeNode && _windowFocus.ancestors.contains(now));   // (fallen out of the window)
-    if (!mounted || !above || _windowFocus.context == null) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !_windowFocus.hasFocus) _windowFocus.requestFocus();
-    });
+    bool fallen() {   // (out of the window)
+      final now = FocusManager.instance.primaryFocus;
+      return now == null || (now is FocusScopeNode && _windowFocus.ancestors.contains(now));
+    }
+    if (!mounted || !fallen() || _windowFocus.context == null) return;
+    // (once the frame's own asking is done: a field built in it asks for the keys after the frame, and was robbed of them: golf_noise.md (111))
+    WidgetsBinding.instance.addPostFrameCallback((_) => scheduleMicrotask(() {
+      if (mounted && fallen()) _windowFocus.requestFocus();
+    }));
   }
 
   /// The window's commands by name (keys.dart: the keys that say them, the window's own and the maker's file).
