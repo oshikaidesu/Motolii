@@ -77,7 +77,7 @@ class DirectTransform extends StatelessWidget {
               ),
             ],
           ),
-          const AnchorCard(),   // (the box in sight, its numbers with it: After Effects hides nine points behind an icon, a step back from this)
+          if (doc.seat('v_anchor_x')) const AnchorCard(),   // (the box in sight, its numbers with it: After Effects hides nine points behind an icon, a step back from this)
         ],
       ),
     );
