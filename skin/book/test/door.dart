@@ -196,7 +196,7 @@ Future<void> settled(WidgetTester t, Ws ws) async {
 /// Two presses, as Flutter's own tests make a double tap (tap, kDoubleTapMinTime, tap): a dock tile is put on so (f052e7e).
 Future<void> doubleTap(WidgetTester t, Finder f) async {
   await t.tap(f);
-  await t.pump(kDoubleTapMinTime);
+  await t.runAsync(() => Future<void>.delayed(kDoubleTapMinTime));   // (as long as two presses take, no picture drawn between: on a slow Mac a frame outlasts kDoubleTapTimeout)
   await t.tap(f);
 }
 
