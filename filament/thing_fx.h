@@ -193,7 +193,7 @@ static ThingFx& thing_fx_made(Stage& s, ThingFx& e, const std::string& lay = "",
     e.sheet = new Mesh;
     for (float2 c : {float2{-1, -1}, float2{1, -1}, float2{1, 1}, float2{-1, 1}}) e.sheet->pos.push_back({c.x, c.y, 0.f}), e.sheet->nrm.push_back({0, 0, 1}), e.sheet->uv.push_back(c * 0.5f + 0.5f);
     e.sheet->idx = {0, 1, 2, 0, 2, 3};
-    e.look = add(s, e.sheet, shell ? "effected_solid.filamat" : (std::string(world ? "effected_world" : "effected") + (lay.empty() ? "" : "_" + lay) + ".filamat").c_str());
+    e.look = add(s, e.sheet, shell ? "effected_solid.filamat" : (std::string(world ? "effected_world" : "effected") + (lay.empty() ? "" : "_" + lay) + ".filamat").c_str(), {mat4f{}}, 1, world);
     if (shell) move(s, e.sheet, [](int, const mat4f&) { return mat4f::scaling(float3{0.f}); });   // (the look is what is wanted of it: its sheet nowhere)
     e.look->setParameter("image", white_point(s), TextureSampler());
     if (!world && !shell) e.look->setParameter("place", math::mat4f{});   // (the whole stage till it is aimed)   // (a picture from the start, as image.mat's sample sets it at once: Filament readies every instance before any view, the thing's own drawn first; never seen, its picture set before the stage's view)
