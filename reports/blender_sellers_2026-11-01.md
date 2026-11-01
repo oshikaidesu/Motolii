@@ -4,7 +4,7 @@
 
 ## 結論
 
-- 売れているのは、人形に動きを移す道具と、出来合いの素材の棚。
+- 店で売れているのは、人形に動きを移す道具と、出来合いの素材の棚。MV の人に絞ると Direktor 3D のような専用の棚があり、After Effects か AviUtl で仕上げている。
 - 1 位は Auto-Rig Pro で 70,700 本超。動きのプリセットそのものではなく、動きを別の人形へ移せる。
 - 文字や図形の動きだけのプリセット集は桁が小さい。MoGraph Toolbox が 800 本超、CinePack が 3,900 本超。
 - 売っている形はどれも同じ。絵の付いた棚から 1 手で入れて、数字で直す。Motolii の Look のダブルクリックと同じ形で、足りないのは棚の中身。
@@ -30,6 +30,43 @@ Superhive（旧 Blender Market）の商品ページに出ている数字。売�
 
 面白いのは Poly Haven。素材は CC0 で誰でも無料なのに、棚にしただけの物が 18,800 本超売れている。売れているのは素材より「探して入れる手間が無い事」。
 
+## MV を作る人が見せている物
+
+ユーザーの言葉：「あいつらって自己顕示欲の塊だからさ、もっと見えやすいというか、人が多いところで公開してんだろう」。その通りで、YouTube に山ほどあった。
+
+YouTube を 15 語で検索して、題名が MV のメイキングや解説らしい動画 49 本を集め、説明欄の道具名を機械で数えた（11/1）。
+
+| 説明欄に出た名前 | 本数 |
+|---|---|
+| After Effects | 13 |
+| AviUtl | 6 |
+| DaVinci Resolve | 4 |
+| AI の道具 | 4 |
+| BOOTH | 3 |
+| Superhive | 2 |
+| Direktor 3D | 2 |
+| Geometry Nodes | 2 |
+| Mixamo、Rokoko、VRoid、Sketchfab | 各 1 |
+
+見えた事：
+
+- MV 専用の棚は既にある。Max Novak の **Direktor 3D**（$77）は、舞台 14、物 100 超、効果 14、文字の型 12、灯りの組 20、ダンス 21。M.V.P Music Visualizer Pro（$11.19）は、絵の型 68、配色 96、カメラ 20、音に反応、1 クリックで舞台。Motolii の棚の手本はこの 2 つ。
+- Max Novak の動画は「5 EASY Ways」22.6 万回、「Animate Your Music in 5 Clicks」19 万回。音で動かす話が大きい。
+- 仕上げは別のソフト。After Effects と AviUtl が上位で、Blender の動画も最後は戻っている。原悠和は Blender の MV でも文字だけ After Effects と語っている。
+- 道具の買い物リストを見せる人は少ない。見せているのは売る側。Scenefiller の Grainy、MattePainter、Lens Sim、Botaniq、ToOptimize Tools は紹介料の付く物が混じる。Max Novak は自分の店。
+
+人によって型が分かれる：
+
+| 型 | 例 | 作り方 | 再生 |
+|---|---|---|---|
+| ラップの 3D 映像 | Max Novak、salfolio | 人形のキット、Mixamo の動き、魚眼、被写界深度、カメラ追跡、After Effects | 6 万〜25 万 |
+| ボカロと文字 PV | 藍瀬まなみ、Coloso の講座、盆地 | After Effects か AviUtl が主。Blender は一部 | 1 万〜41 万 |
+| 実写合成 | 涌井嶺 | 緑の幕で撮って全背景を CG。遠景だけ買い、目立つ所は自作。写真を板に貼って切る | VFX-JAPAN の優秀賞 |
+| VTuber | 海月とうみ、月森蝶華 | BOOTH のモデル、VRM Live Viewer と背景効果の設定集 | 16〜10.8 万 |
+| 商業 | サンジゲンの宝鐘マリン MV | モーションキャプチャを手付けで直す。Grease Pencil、質感は撮影で作る | — |
+
+「最初からモデリングしない」は型による。ラップと VTuber は出来合いが中心。涌井嶺は目立つ所を自分で作る。
+
 ## Motolii にある物と無い物
 
 | 売れ筋 | Motolii の今 | 差 |
@@ -45,14 +82,22 @@ Superhive（旧 Blender Market）の商品ページに出ている数字。売�
 
 ## 順番
 
-1. カメラの動き。売れていて、見本がそのまま手元にあり、手が一番小さい。
-2. Poly Haven の棚。無料で CC0。作るのは棚だけ。
-3. 人の動きの移し替え。一番売れている所だが、一番重い。既存の実装を探す所から。
-4. 火と爆発の棚。
+店の本数と YouTube を合わせて直した。
+
+1. カメラの動き。CinePack も M.V.P も持っている。見本が手元にあり、手が一番小さい。
+2. 音で動かす。BPM と音の打点は有るが、音の大きさで物を動かす口は検索で見つからない。BeatBlender と M.V.P が持っている。
+3. 舞台と灯りの組の棚。Poly Haven の素材と、Direktor 3D の舞台 14・灯り 20 が見本。
+4. 人形と踊り。Mixamo の FBX と、日本の VRM、MMD の動きを読む口。VRM、VMD、BVH は検索で見つからない。一番重い。
+5. 3D のトゥーン、カメラ追跡、火と爆発、面に散らす。
+
+文字は After Effects に残っている所で、Motolii はここを抱えている。別のソフトへ戻らなくて済むのが、Blender に無い強み。
 
 ## 分からない事
 
-- MV 制作者が実際に何を使っているかの調査は見つからなかった。CGWORLD の連載は本文を読んでいない。
+- YouTube の 49 本は検索の上位で、全体の見本ではない。書いていない道具は数えられない。字幕は取れず、説明欄と題名だけ。
+- 「ひっひっふー」の Hurray! の講演（Blender だけで編集まで）は案内の検索結果だけで、ページは 503 で読めなかった。CGWORLD の涌井嶺のインタビューも本文は読めず、検索の抜粋。
+- 宝鐘マリン MV の話は聴いた人のメモで、本人の資料ではない。
+- X は見ていない。Direktor 3D の売れた本数は載っていない。
 - 本数は「その店で」の数字。Blender の無料の拡張の棚と、Gumroad などの他の店は入っていない。
 - 本数には発売からの長さが効く。週間の順位でも Auto-Rig Pro は 1 位だったので、今も強いとは言える。
 - Mixamo の条件は Adobe の FAQ の検索結果で読んだ。ページ本体は読めず（403）、書き出しの形式と動きの本数は確かめていない。
@@ -78,3 +123,20 @@ Superhive（旧 Blender Market）の商品ページに出ている数字。売�
 - [Mixamo FAQ](https://helpx.adobe.com/en/creative-cloud/faq/mixamo-faq.html)
 - [Mixamo から Blender への手順（Cinevva）](https://app.cinevva.com/guides/mixamo-to-blender-2026)
 - [CGWORLD の Blender 連載](https://cgworld.jp/regular/blender/index.html)
+- [Direktor 3D](https://mediamonopoly.co/collections/video-presets-plugins/products/direktor-3d-ultimate-blender-plugin-for-creators)
+- [Media Monopoly の店](https://mediamonopoly.co)
+- [M.V.P Music Visualizer Pro](https://superhivemarket.com/products/mv)
+- [5 EASY Ways To Create Music Videos with BLENDER](https://www.youtube.com/watch?v=hgtBeWa5esY)
+- [Animate Your Music in 5 Clicks](https://www.youtube.com/watch?v=IQ3ABnImQvI)
+- [Top 10 Music Video Effects in Blender](https://www.youtube.com/watch?v=nXtJDXoEhx8)
+- [Creating 3D Music Visuals in Blender（salfolio）](https://www.youtube.com/watch?v=gLEtSbqYtGY)
+- [Music Videos in Blender（Scenefiller）](https://www.youtube.com/watch?v=gmp-zfvprS0)
+- [ボーカロイドの MV が出来るまで（藍瀬まなみ）](https://www.youtube.com/watch?v=2ttDoIA3uJU)
+- [VTuber が自分で MV つくってみた（海月とうみ）](https://www.youtube.com/watch?v=aFkKIJyxv5U)
+- [After Effects の代わりに Blender で作った MV（80 Level）](https://80.lv/articles/see-how-this-music-video-was-made-in-blender-instead-of-after-effects)
+- [涌井嶺のバーチャル MV（ねとらぼ）](https://nlab.itmedia.co.jp/nl/articles/2106/12/news030.html)
+- [涌井嶺のインタビュー（CGWORLD）](https://cgworld.jp/interview/202107-the6thlie-mv-2.html)
+- [「ひっひっふー」の講演（CGWORLD）](https://cgworld.jp/special/blenderfes/vol5/?p=940)
+- [宝鐘マリン MV の聴講メモ](https://scrapbox.io/motoso/%E3%80%90%E3%82%B5%E3%83%B3%E3%82%B8%E3%82%B2%E3%83%B3%E3%80%91%E5%AE%9D%E9%90%98%E3%83%9E%E3%83%AA%E3%83%B3MV%E5%88%B6%E4%BD%9C%E3%81%AE%E8%A3%8F%E5%81%B4%EF%BC%9ACG%E5%88%B6%E4%BD%9C%E3%81%AE%E3%82%B9%E3%83%86%E3%83%83%E3%83%97%E3%82%92%E5%AD%A6%E3%81%BC%E3%81%86%EF%BC%81%E3%80%90%E3%81%82%E3%81%AB%E3%81%A4%E3%81%8F2024%E3%80%91)
+- [VRM Live Viewer](https://booth.pm/ja/items/1783082)
+- [VRM Live Viewer の背景効果設定集](https://booth.pm/ja/items/3469388)
