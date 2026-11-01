@@ -218,6 +218,12 @@ static void doc_moment(Doc& d, double now) {
             const int reach = (int)std::ceil(across * (float)drawn.edgeW / (2.f * drawn.boxed.x));
             if (drawn.stale || reach > drawn.edgeReach) drawn.edgeReach = std::max(reach, drawn.edgeReach), edge_ask(s, &drawn, drawn.edgeReach);
         }
+        if (t.drawn && t.drawn->inLight) {   // (a solid's three as they are now, and as a solid's as they come)
+            const float3 surface{(float)doc_number(d, thing, "metallic", now, 0.08), (float)doc_number(d, thing, "roughness", now, 0.6), (float)doc_number(d, thing, "reflectance", now, 0.5)};
+            t.drawn->look->setParameter("surface", surface);
+            for (const Stage::Made& made : s.made)
+                if (const auto own = d.copyLooks.find(made.thing.getId()); made.of == t.drawn->sheet && own != d.copyLooks.end()) own->second->setParameter("surface", surface);
+        }
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)lies[i].since, t.drawn->seconds));
         if (t.drawn && !t.drawn->effects.empty()) {   // (its effects as they are now: those that move are drawn again)
             DrawnFx fx;

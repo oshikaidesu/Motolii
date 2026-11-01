@@ -2,7 +2,7 @@
 // drawn_edge.h: how far each point of a picture is from its edge, in points, for its bevel (deep.glsl): the pictures of
 // bevy_mod_outline's flood (src/flood/sobel_init.wgsl, jump_flood.wgsl; MIT OR Apache-2.0), its seeds and steps as they
 // are, the door's way of saying them: seeds from what is not the picture, so it floods inward, and a last pass that
-// keeps the length, which reads smoothly between points where the way to the edge turns round.
+// keeps the length, smoothed, which reads smoothly between points where the way to the edge turns round.
 static const char* const edge_seeds_wgsl = R"(
 @group(0) @binding(0) var picture: texture_2d<f32>;
 @group(0) @binding(1) var near: sampler;
@@ -56,7 +56,16 @@ static const char* const edge_length_wgsl = R"(
 @group(0) @binding(0) var picture: texture_2d<f32>;
 @group(0) @binding(1) var near: sampler;
 @fragment fn main(@builtin(position) frag: vec4f, @location(0) uv: vec2f) -> @location(0) vec4f {
-    return vec4f(length(textureLoad(picture, vec2i(frag.xy), 0).xy), 0.0, 0.0, 1.0);
+    let last = vec2i(textureDimensions(picture)) - vec2i(1);
+    let w = array<f32, 7>(1.0, 6.0, 15.0, 20.0, 15.0, 6.0, 1.0);   // (a Gaussian across 13 points, every other one: the way to a slanted edge turns in steps, and a mirror shows every one)
+    var r = 0.0;
+    for (var y = 0; y < 7; y++) {
+        for (var x = 0; x < 7; x++) {
+            r += w[x] * w[y] * length(textureLoad(picture, clamp(vec2i(frag.xy) + 2 * vec2i(x - 3, y - 3), vec2i(0), last), 0).xy);
+        }
+    }
+    let at = length(textureLoad(picture, vec2i(frag.xy), 0).xy);   // (at the edge itself as it is: smoothed, it would never come down to 0 there)
+    return vec4f(mix(at, r / 4096.0, smoothstep(0.0, 6.0, at)), 0.0, 0.0, 1.0);
 }
 )";
 

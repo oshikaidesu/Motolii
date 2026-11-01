@@ -52,6 +52,7 @@ material {
         { type : float4, name : deepTurn },
         // its bevel (deep.glsl): how far in across, how far in through, in the box's lengths, and its way (0 none); how far each point of its picture is from its edge (drawn_edge.h)
         { type : float4, name : deepBevel },
+        { type : float3, name : surface },
         { type : sampler2d, name : edge }
     ]
 }
@@ -199,6 +200,7 @@ fragment {
         if (fade.w > 0.5) material.baseColor *= mix(1.0, fade.x, fade.y > 1.0 ? (fade.z + variable_copyOf.x) / (fade.y - 1.0) : 0.0);   // (each copy clearer along them, from the first, as itself, to the last)
 #if defined(LIT)
         material.emissive = vec4(material.baseColor.rgb * materialParams.glowing, 0.0);   // (it lights itself, as floor_lit.mat)
+        material.metallic = materialParams.surface.x, material.roughness = materialParams.surface.y, material.reflectance = materialParams.surface.z;   // (a solid's own three, surface_set)
 #else
         material.baseColor.rgb *= 1.0 + materialParams.glowing;   // (a neon: its own colour, brighter than white)
 #endif

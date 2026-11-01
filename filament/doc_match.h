@@ -29,7 +29,8 @@ static std::string doc_mosh(Doc& d, int thing) {
     if (other.empty() || doc_word(d, with, "kind") != "film") return "";
     return mosh_file(file, doc_number(d, thing, "mosh_at", 0, 1), other);
 }
-// A thing in the lamps' light: as an After Effects 3D layer once its composition has a light; with none, as it is drawn.
+// A thing in the lamps' light: as an After Effects 3D layer once its composition has a light; with none, as it is drawn,
+// unless it is said to be metal: a metal is what it mirrors, and it mirrors the stage's room (Element 3D's reflection map).
 static std::vector<int> doc_things(Doc& d);
 // A thing's bevel: which of its ways, 0 none (and none but on a box).
 static int doc_bevel(Doc& d, int thing) {
@@ -41,14 +42,19 @@ static int doc_bevel(Doc& d, int thing) {
 static bool doc_lit(Doc& d, int thing) {
     const std::string space = doc_word(d, thing, "space");
     if (!doc_among("film text picture shape", doc_word(d, thing, "kind").c_str()) || (space != "3d" && space != "2.5d" && !doc_on(d, thing, "scale_z"))) return false;
+    if (doc_on(d, thing, "metallic")) return true;
     for (const int t : doc_things(d)) if (doc_word(d, t, "kind") == "light") return true;
     return false;
+}
+// A solid is made by its metal, rough and shine; a sheet is told them each moment (doc_moment.h), its picture left alone.
+static bool doc_sheet_told(Doc& d, int thing, const std::string& name) {
+    return doc_among("metallic roughness reflectance", name.c_str()) && doc_word(d, thing, "kind") != "solid";
 }
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     s.frames = doc_number(d, 0, "frame_rate", 0, 0);   // (the document's frame rate: its time seen at its frames from the next picture on)
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and (name in (%s) or name glob '*_by') order by thing, name) group by thing", doc_making),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and (name in (%s) or name glob '*_by') and not (name in ('metallic', 'roughness', 'reflectance') and thing in (select thing from fact where name = 'kind' and value != 'solid')) order by thing, name) group by thing", doc_making),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto& [thing, of] : told)   // (one way that reads what is under is made as any other: going from one to another tells the look, it makes nothing again)
         if (const size_t at = of.find("blend="); at != std::string::npos) {
@@ -70,7 +76,7 @@ static bool doc_match(Doc& d) {
         for (const auto& [name, is] : d.held.said) if (name[0] != ' ') held->second += " " + name + "~" + is;
     if (const auto held = told.find(d.held.thing); held != told.end())
         for (const auto& [name, is] : d.held.tried)
-            if (strstr(doc_making, ("'" + name + "'").c_str())) {   // (one that moves is drawn again each moment anyway (doc_moment): made again only as it comes on or goes off)
+            if (strstr(doc_making, ("'" + name + "'").c_str()) && !doc_sheet_told(d, d.held.thing, name)) {   // (one that moves is drawn again each moment anyway (doc_moment): made again only as it comes on or goes off)
                 bool moves = false;
                 for (const DocValue& one : doc_values) moves = moves || (one.moves && name == one.name);
                 const auto from = d.held.from.find(name);

@@ -372,7 +372,8 @@ static std::string doc_cards_of(Doc& d, int thing, std::string* more = nullptr) 
         //  Color & Fill, Blending, Transform, its Edit, Effects; a video's Speed), the rest asked for by More. The stage's own
         //  are asked for as a whole, by Stage settings)
         const std::string kindNow = doc_word(d, thing, "kind");
-        if (!strcmp(card.title, "Surface") && kindNow != "solid") continue;   // (a flat thing's one value of it is its Shine)
+        const std::string spaceNow = doc_word(d, thing, "space");
+        if (!strcmp(card.title, "Surface") && kindNow != "solid" && spaceNow != "3d" && spaceNow != "2.5d" && !doc_on(d, thing, "scale_z")) continue;   // (a flat thing's one value of it is its Shine; in depth it has the rest, After Effects' Material Options on a 3D layer)
         bool said = !card.added || thing == 0 || (!strcmp(card.title, "Play") && kindNow == "film");
         for (const char* at = card.names; *at;) {
             const size_t len = strcspn(at, " ");

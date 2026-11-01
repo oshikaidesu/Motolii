@@ -377,7 +377,7 @@ static const DocValue doc_values[] = {
     {"dash", "shape", 0, 1000, false, nullptr}, {"dash_offset", "shape", -1e4, 1e4, false, nullptr},
     // (Filament's own surface of a solid in a colour: how metal, how rough, how much it reflects, a clear coat over it
     //  and how rough that is, and how much it lights itself: 1 its colour itself on the picture, more brighter still)
-    {"metallic", "solid", 0, 1, false, nullptr}, {"roughness", "solid", 0, 1, false, nullptr}, {"reflectance", "solid", 0, 1, false, nullptr},
+    {"metallic", "solid text shape picture", 0, 1, false, nullptr}, {"roughness", "solid text shape picture", 0, 1, false, nullptr}, {"reflectance", "solid text shape picture", 0, 1, false, nullptr},
     // (a solid filled with glass, the kit's own: how much it bends light (index of refraction), how far its colours part,
     //  how much what is behind it swims, how fast a long way through it goes dark, how vivid what is seen through it is)
     {"ior", "solid", 1, 3, false, nullptr}, {"dispersion", "solid", 0, 0.5, false, nullptr}, {"swim", "solid", 0, 1, false, nullptr}, {"dark", "solid", 0, 20, false, nullptr}, {"vivid", "solid", 0, 3, false, nullptr},

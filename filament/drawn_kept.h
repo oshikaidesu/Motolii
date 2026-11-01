@@ -69,6 +69,7 @@ struct Drawn {
     Texture* edge[3] = {};             // how far each of its points is from its edge (drawn_edge.h)
     RenderTarget* edgeInto[3] = {};
     uint32_t edgeW = 0, edgeH = 0;
+    bool inLight = false;              // (flat_lit: its surface is told each moment, doc_moment.h)
     int edgeReach = 0;                 // (how far that is known, in points)
     std::atomic<bool> stale{true};     // (drawn again since that was worked out: set on the driver thread)
     Mesh* sheet = nullptr;             // the thing in the scene: moved like any other (kit.h: move)
