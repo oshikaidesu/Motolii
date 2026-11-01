@@ -99,16 +99,10 @@ void deepMeet(inout highp vec2 uv, inout float k, inout float shine, inout float
 #endif
         return;
     }
-    highp float smooth_at = 14.0 * h.x / deepCells().x;   // (seven points in: the distance read past where it is its rim's own, unsmoothed, drawn_edge.h, or a mirror shows the rim's steps)
     highp vec2 e = 8.0 * h.xy / deepCells();   // (four points of its picture, read round a ring: a slanted edge is in steps, and nearer or fewer they show as stripes down a side)
     vec3 n3;
     if (bevelled) {   // (a bevel faces out by how steep its section is here: its slope across, the way away from the edge)
         highp vec2 g = deepSlope(p.xy);
-        highp float want = smooth_at - deepAway(p.xy);
-        if (want > 0.0 && dot(g, g) > 1e-4) {
-            highp vec2 smoother = deepSlope(p.xy + normalize(g) * want);
-            if (dot(smoother, smoother) > 1e-4) g = mix(g, smoother, smoothstep(0.8, 0.95, dot(normalize(smoother), normalize(g))));   // (past a corner it turns: the rim's own there)
-        }
         float slope = (deepProfile(min(along + 0.02, 1.0)) - deepProfile(max(along - 0.02, 0.0))) / 0.04 * cut.y / cut.x * materialParams.deepBevel.w;   // (w: the box's lengths to the world's: it is the world's slope a lamp sees)
         n3 = normalize(vec3(-g * slope, sign(p.z)));
         if (dot(g, g) > 1e-4) uv = deepUV(p.xy + normalize(g) * e);   // (its colour from within its edge)
@@ -119,9 +113,9 @@ void deepMeet(inout highp vec2 uv, inout float k, inout float shine, inout float
             g += round * deepCovered(p.xy + round * e);
         }
         vec2 n = length(g) > 1e-3 ? -normalize(g) : abs(p.x / h.x) > abs(p.y / h.y) ? vec2(sign(p.x), 0.0) : vec2(0.0, sign(p.y));   // (filled to its edge: the box's own side)
-        if (cut.z > 0.5 && length(g) > 1e-3) {
-            highp vec2 in_way = deepSlope(p.xy - n * smooth_at);
-            if (dot(in_way, in_way) > 1e-4) n = normalize(mix(n, -normalize(in_way), smoothstep(0.8, 0.95, dot(-normalize(in_way), n))));
+        if (cut.z > 0.5 && length(g) > 1e-3) {   // (its distance is smooth where the ring reads a slanted edge's steps)
+            highp vec2 way = deepSlope(p.xy);
+            if (dot(way, way) > 1e-4) n = -normalize(way);
         }
         uv = deepUV(p.xy - n * e);   // (its colour from within its edge)
         n3 = vec3(n, 0.0);
