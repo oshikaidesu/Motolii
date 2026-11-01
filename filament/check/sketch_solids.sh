@@ -109,6 +109,17 @@ function draw() {
   push(); translate(0, 0, -300); box(200); pop()
 }
 J
+cat > $W/deep.js <<'J'
+function setup() { createCanvas(600, 400, WEBGL) }
+function draw() {
+  background(0)
+  noStroke()
+  fill(0, 255, 0)
+  push(); translate(0, 0, -1500); box(300); pop()
+  stroke(255, 0, 0)
+  line(-280, 180, 280, 180)
+}
+J
 python3 - $W <<'P'
 import os,subprocess,sys
 from PIL import Image,ImageChops
@@ -148,6 +159,10 @@ said=['add solid cube',f'say 1 script {W}/wide.js','at 0',f'still {W}/o0.png']
 subprocess.run(['zsh','./edit.sh',f'{W}/o.motolii'],input='\n'.join(said)+'\n',capture_output=True,text=True,timeout=200,env={**os.environ,'SIZE':'960x540'})
 o=Image.open(f'{W}/o0.png').convert('L').point(lambda v:255 if v>20 else 0).getbbox()
 print('ortho is as wide as its box says, however deep:','yes' if o and abs((o[3]-o[1])-135)<4 else f'NO {o}')
+said=['add solid cube',f'say 1 script {W}/deep.js','at 0',f'still {W}/e0.png']
+subprocess.run(['zsh','./edit.sh',f'{W}/e.motolii'],input='\n'.join(said)+'\n',capture_output=True,text=True,timeout=200,env={**os.environ,'SIZE':'960x540'})
+far=sum(1 for c in Image.open(f'{W}/e0.png').convert('RGB').getdata() if c[1]>200 and c[0]<60)
+print('what stands far back is in front of what it clears with:','yes' if far>2000 else f'NO {far}')
 box=lambda n:Image.open(f'{W}/{n}.png').convert('L').point(lambda v:255 if v>20 else 0).getbbox()
 a,b=box('a'),box('b')
 tall=a and (a[3]-a[1])>3*(a[2]-a[0])

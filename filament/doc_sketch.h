@@ -139,8 +139,8 @@ static void doc_sketch_mesh(Doc& d, int thing, Doc::Shown& t, double now) {
         point(a - side - along, n, c, 1.f), point(a + side - along, n, c, 1.f), point(b + side + along, n, c, 1.f), point(b - side + along, n, c, 1.f);
         parts[0].insert(parts[0].end(), {o, o + 1, o + 2, o, o + 2, o + 3});
     };
-    if (back[3] > 0.f) {   // (what it clears with, a wall behind it as far back as the sketch is likely to go, the stage's size where it stands)
-        const float x = 0.75f * U * wide, y = 0.75f * U * high, z = -3.f;
+    if (back[3] > 0.f) {   // (what it clears with: a wall near the end of what the world's eye sees, 6 back and 60 on from it (doc_moment.h), as wide from that eye as the sketch)
+        const float z = -40.f, grow = (6.f - z) / 12.f, x = grow * U * wide, y = grow * U * high;
         const float4 c{back[0], back[1], back[2], back[3]};
         const uint32_t o = (uint32_t)m.pos.size();
         const float3 n{0.f, 0.f, 1.f};

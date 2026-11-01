@@ -591,7 +591,8 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [x] セミコロン無しのスケッチ：線の目印が前の行に繋がって動かなかった（script.cpp `__at`）
 - [x] Hydra の動く値をキーにする：効果の名前が付いておらず、キーが入っていなかった（doc_door.h `doc_door_keys`）
 - [ ] p5 2.x の `buildFilterShader`・`buildMaterialShader`（32 作のうち 4 作が止まる）
-- [ ] WEBGL の遅さ：線の計算は省いたが、5 作がまだ 50 秒で切れる（3003417、3027758、3029712、3031773、3032237）
+- [ ] WEBGL の遅さ：3 作が 50 秒の枠に入らない。止まらず遅いだけ（3029712 は 1 コマ 160 ms、3029535 は 80 ms）。QuickJS と p5 のどちらが重いかは未測
+- [x] スケッチの奥が背景の壁に隠れていた：壁を z −3 から z −40 へ（doc_sketch.h、本物の p5 と地平線が揃う）
 - [x] three.js の場面を動かす台：three.core.js をそのまま走らせ、形と材質の組ごとに本物の立体で世界に立てる（doc_door.h、p5_stand.h）
 - [x] プログラムの置き場：左のブラウザに Program を足し、一覧とコードの表示を切り替える。つまみは今のまま右のインスペクター。貼った物は Create と Effects に混ぜず、ここに入れる。見本：Godot と Unity は「コードはファイルとしてブラウザに、つまみはインスペクターに」、Cavalry はつまみが Attribute Editor でコードのタブは閉じても残る、TouchDesigner はコードが Text DAT でつまみが Parameter Dialog。割れた点（コードをどこで打つか）は「舞台を見ながら直す」が要るので左に置く。これは見本から取った決めではなく、出典なし
 - [x] Shadertoy の複数バッファ（Buffer A〜D、Common）：済（11/2）。JSON を入口で 1 本の ISF に変える（door_shadertoy.h）。実物 300 本で 261 本が絵になる（reports/sketch_import_2026-11-01.md）
@@ -602,7 +603,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] 前のコマを読む効果は時間を飛ばすと合わない：`iFrame == 0` の種まきは 0 コマ目を通った時だけ。書き出しは頭から順なので合う。止めて飛ばした時は合わない。After Effects の Particular が頭から回し直す形が候補（未読）
 - [ ] Bonzomatic の音と画像：`texFFT` などをゼロで読む
 - [ ] 2D の入口の絵を世界に立てる：Dwitter・tixy・Turtletoy・Two.js・Paper.js・Canvas は世界の中で 1 枚の板。線や形ごとの奥行きが要るか
-- [ ] p5 の WEBGL の物ごとの色：`solid_fill` が全部の複製に 1 つの材質を渡すので、白い箱になる
+- [x] p5 の WEBGL の物ごとの色：1 コマ 1 メッシュにして、頂点の色で持つ（doc_sketch.h）
 - [ ] three.js で立たない物：テクスチャ、線と点、ShaderMaterial、モーフ、外のファイル（glTF、フォント）、霧と背景色、シーンの光
 - [ ] 重いスケッチのメモリ：`__frames` が全コマを持つ。10 万個を描く dweet は 1 秒で 1.5 GB、19.8 秒。2 GB の上限で止まるようにはした。上限の手前で古いコマを捨てる形が要る
 - [ ] Hydra を窓から入れる：今は `filament/extensions/hydra/get.sh` を手で走らせる
