@@ -130,16 +130,19 @@ static void stage_scale(Motolii* m) {
 static thread_local std::string why_asked;
 static const char* motolii_why(Motolii* m);
 template <class Does> static auto asked(Motolii* m, Does does, bool changes, const char* who) -> decltype(does()) {
-    std::packaged_task<decltype(does())()> task(does);
-    auto done = task.get_future();
     std::string why;
+    std::packaged_task<decltype(does())()> task([&why, m, does] {   // (said before the answer is ready: from then the asker may be gone and this frame with it, C++ [futures.state])
+        auto out = does();
+        why = motolii_why(m);
+        return out;
+    });
+    auto done = task.get_future();
     {
         std::lock_guard<std::mutex> hold(m->asked_lock);
         m->lastPosted.clear();
-        m->asked.push_back([&task, &why, m, changes, who] {
+        m->asked.push_back([&task, m, changes, who] {
             const auto t0 = std::chrono::steady_clock::now();
             task();
-            why = motolii_why(m);
             if (changes) m->changed = true;
             const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
             m->spent[changes ? 0 : 1] += took, m->many[changes ? 0 : 1]++;
