@@ -458,6 +458,9 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 
 ## T. いまの順番（ここを見れば続きが分かる。上から順に）
 - [x] 平らな物にも厚い物にもランプの光と影を当てる（11/1、golf_noise (175) の残り） — 済（11/1）：After Effects の 3D レイヤーに合わせ、書類にランプがあれば 3D の物と厚い物が受ける（`doc_lit`、`flat_lit`）。影は描いた形（Filament の WebGPU が色なしの撮影で fragment を捨てていたのを `filament_webgpu_depth_fragment.patch` で止めた）。ランプが無ければ今まで通りで 0 画素差、太陽の影つきで厚い文字 8 個 60.0 枚/秒、窓で太陽を回して確かめた。
+- [ ] 文字の面取りを距離から作る（11/1、調べは `reports/text3d_2026-11-01.md`）。縁からの距離 → 高さの断面 1 本で、Round、Chamfer、Cove、Ogee、Step、彫りを書く。距離は bevy_mod_outline の WGSL（Sobel の初期値 + Jump Flood、door::screen で流せる）
+- [ ] 部位ごとの材質（11/1、同）：面、面取り、横、裏を別の色と質感に。金、クロムなどは Presets の棚へ
+- [ ] 重ねた縁取りを厚みでも（11/1、同）：PopText、GN Rounded Bevel の多重の縁。パチンコの文字の残り
 - [ ] 効果を掛けた物にもランプの光と影を当てる（11/1）。`effected_world.mat` と `effected_solid.mat` はまだ光を受けない（`thing_fx.h:196`）
 - [ ] フィルムにも Scale Z を効かせる（11/1、同）。今の Scale Z は solid、文字、図形、写真だけ。`video()` のシートを `sheet_deep` にして `doc_kinds.h` に film を足す
 - [ ] やる事 × ソフトの表を 55 行ぜんぶ埋める（11/1 ユーザー：「今必要なのはゴルフじゃなくって」「一回表として作ってからの方がいいのかもしれないね」）：見本の 6 行まで済み。reports/manual_table.md。機械に打たせるゴルフは、この表のあと
