@@ -327,6 +327,7 @@ class Ws extends ChangeNotifier {
     _playing = p;
     if (p) _inside?.at(frame / fps);
     _inside?.play(p);   // (the inside keeps the clock; the playhead follows its moment: timeline.dart)
+    if (!p) _inside?.at(frame / fps);   // (its clock runs ahead of a stage that is late with its pictures: stopped, it stands where the hand sees it)
     _tell(WsAspect.playing);
   }
 

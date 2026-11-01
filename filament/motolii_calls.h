@@ -649,6 +649,7 @@ int motolii_at(Motolii* m, double seconds) {
     return posted(m, "at", [m, seconds] {
         if (!(seconds >= 0.0 && seconds <= doc_seconds(*m->d))) { char runs[80]; std::snprintf(runs, sizeof runs, "the document runs from 0 to %.2f seconds", doc_seconds(*m->d)); m->d->trouble = runs; return; }
         m->now = seconds;   // (told to the stage in the hand's round, the films put there after the document is let go: not here, under its lock)
+        if (m->d->stage) m->d->stage->now = seconds;   // (what is asked after this is made at this moment: a round busy with a sketch's frames has not come yet)
     });
 }
 static bool ends(const char* name, const char* with) { return strlen(name) > strlen(with) && !strcmp(name + strlen(name) - strlen(with), with); }

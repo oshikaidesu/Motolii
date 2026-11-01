@@ -1786,6 +1786,17 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('stopped, the inside stands at the moment the hand sees, and what is made next is made there', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    ws.playing = true;
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400)));
+    ws.moment.value = 6;   // (a stage late with its pictures: its clock is past what has been shown)
+    ws.playing = false;
+    final rect = m.add('shape', 'rect');   // (asked after the moment, with no wait: the hand's round may not have come)
+    expect(m.value(rect, 'start', 0), closeTo(.1, .001), reason: 'frame 6 of 60 a second');
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Arrange: lined up on the picture, against their own box, spread evenly; made to fit the picture; turned over (Keynote\'s Align, Alight Motion\'s Fit and Flip)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final a = m.add('shape', 'rect'), b = m.add('shape', 'rect'), c = m.add('shape', 'rect');
