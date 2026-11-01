@@ -542,6 +542,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] VRM と踊りを読む（11/1、同）：VRM、VMD、Mixamo の FBX。BOOTH の VRM Live Viewer の人たちの素材がそのまま使える口
 - [ ] 3D のトゥーン（11/1、同）：Halftone などの平面の効果はあるが、灯りで段が付く物は見つからない
 - [ ] カメラ追跡（11/1、同）：実写に 3D を載せる。今は物の枠の追跡だけ
+- [ ] Stack の手法で 1 カット作って手数を測る（11/1、同）：少ない形、200mm、メトロノーム、マッチカット。作品の絵と音は使わない
 - [ ] カメラ本体が作業の目の後ろにあると丸が出ず、掴めない（10/31）：引くと出る
 - [x] カメラのタブ — 済（10/31 ユーザー：「ステージとは別にカメラのタブが必要だ」）：`Camera View` タブ。タブを舞台の横へ運ぶと世界とカメラを同時に見られる（After Effects の 2 Views）。Filament の View は Camera を替えて描ける（`live_camera`）ので、1 拍に 2 回描く。測った（p90 と立方体と効果、再生中）：手の仕事 0.3 → 7.3 ms、60fps のまま。タブが裏にある間は描かない。カメラの絵は舞台サイズの `Live`
 - [x] Stage と Camera View が同じ絵だった（11/1 ユーザー：「カメラとステージが一緒のビューになっているように見える」）：カメラのある書類で舞台の初期の目が `Camera` だったので、横に並べても 2 面が同じ絵になった。舞台の初期は世界（`Free`）に直した（AbsentMotion の `EditorState.kt`：`cameraView` は false で始まる）。切り替えの出る条件も同じ行に合わせた（`PreviewMode.kt`：`cameraMode` か、カメラがある時）。2 面に分ける使い方は After Effects の 2 Views と同じ（片方 Top、片方 Active Camera）。After Effects 自身の舞台の初期は Active Camera で、ここは Alight Motion を床にする。

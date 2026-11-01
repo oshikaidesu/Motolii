@@ -67,6 +67,27 @@ YouTube を 15 語で検索して、題名が MV のメイキングや解説ら�
 
 「最初からモデリングしない」は型による。ラップと VTuber は出来合いが中心。涌井嶺は目立つ所を自分で作る。
 
+## デザインが動く映像（Stack）
+
+ユーザーは Codex との話で、MV からモーグラ、VJ を経て、Kimathi Flavien の『Stack』の型に行き着いた（11/1）。Codex の話は本人の記事で確かめた。
+
+本人の記事で確かめられた事：
+
+- 2D で 4 年働いた人の初めての 3D。この作品のために Cinema 4D を覚えた。
+- Cinema 4D で書き出して After Effects で混ぜた。記事にプラグインの名前は出ていない。
+- 少ない形からできるだけ多くの場面を作る。1 日 1 場面以上。つなぎは形、動き、音のマッチカット。
+- 3D を 2D に合わせるため、主に 200mm のレンズで奥行きを潰した。
+- メトロノームに合わせて切った。
+- 一番の苦労は、途中確認の絵が無く、After Effects と遅い書き出しを何度も往復した事。
+
+読み取り：足りないのはプラグインより、2D と 3D の往復を無くす事。Motolii は 1 つの窓で両方を見られるので、この苦労が最初から無い。ユーザーの「元から 2D は存在していなくて、z が 0 なだけ」と同じ話。
+
+Codex の話で確かめられなかった事：本人が Signal や Ricochet を使った証拠は無い。Codex 自身もそう言っている。
+
+Signal は loop、ease、noise、flicker・bounce・vibration・spin の型、Fields、BPM。Motolii のふるまい、区間イージング、BPM、減衰と大きく重なる。別物として足す必要は薄い。
+
+Stack の作り方で次に測る事：真似の 1 カットを窓で作り、何が足りないかを手数で見る。作品の絵と音は使わず、手法だけ真似る。
+
 ## Motolii にある物と無い物
 
 | 売れ筋 | Motolii の今 | 差 |
@@ -123,6 +144,10 @@ YouTube を 15 語で検索して、題名が MV のメイキングや解説ら�
 - [Mixamo FAQ](https://helpx.adobe.com/en/creative-cloud/faq/mixamo-faq.html)
 - [Mixamo から Blender への手順（Cinevva）](https://app.cinevva.com/guides/mixamo-to-blender-2026)
 - [CGWORLD の Blender 連載](https://cgworld.jp/regular/blender/index.html)
+- [Stack の制作解説（Motionographer）](https://motionographer.com/2025/02/12/exclusive-kimathi-flavien-the-work-behind-of-chef-doeuvre-motion-design-film-stack/)
+- [Stack の紹介（STASH）](https://www.stashmedia.tv/kimathi-flavien-solves-the-design-puzzle-in-stack-short-film/)
+- [Signal](https://greyscalegorilla.com/plugins/signal)
+- [Rocket Lasso の棚](https://rocketlasso.com/shop)
 - [Direktor 3D](https://mediamonopoly.co/collections/video-presets-plugins/products/direktor-3d-ultimate-blender-plugin-for-creators)
 - [Media Monopoly の店](https://mediamonopoly.co)
 - [M.V.P Music Visualizer Pro](https://superhivemarket.com/products/mv)
