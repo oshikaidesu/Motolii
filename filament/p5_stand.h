@@ -118,7 +118,7 @@ function __flat(e) {
       const o = from === c ? ops.slice() : from.held(), sx = dw / w, sy = dh / h, U = x => dx + (x - a) * sx, V = y => dy + (y - b) * sy, grow = large() * Math.sqrt(Math.abs(sx * sy)), P = (x, y) => { const u = U(x), v = V(y); ops.push(X(u, v), Y(u, v)); };
       for (let i = 0; i < o.length;) {
         const kind = o[i], n = o[i + 9], more = o[i + 10], end = i + 12 + n;
-        for (let j = 0; j < 12; ++j) ops.push(j === 6 ? (kind === 3 ? o[i + 6] * Math.sqrt(Math.abs(sx * sy)) : o[i + 6] * grow) : j === 11 ? __L : o[i + j]);   // (what another canvas holds shows where image() says it does)
+        for (let j = 0; j < 12; ++j) ops.push(j === 6 && kind !== 3 ? o[i + 6] * grow : j === 11 ? __L : o[i + j]);   // (what another canvas holds shows where image() says it does)
         let q = i + 12;
         if (kind === 3) {
           ops.push(m[0] * sx * o[q] + m[2] * sy * o[q + 1], m[1] * sx * o[q] + m[3] * sy * o[q + 1], m[0] * sx * o[q + 2] + m[2] * sy * o[q + 3], m[1] * sx * o[q + 2] + m[3] * sy * o[q + 3]), P(o[q + 4], o[q + 5]), q += 6;

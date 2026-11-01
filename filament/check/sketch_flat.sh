@@ -31,6 +31,11 @@ let cam;
 function setup() { createCanvas(400, 300); cam = createCapture(VIDEO); cam.size(40, 30); cam.hide(); noStroke(); }
 function draw() { cam.loadPixels(); let most = 0; for (let i = 0; i < cam.pixels.length; i += 4) most = max(most, cam.pixels[i + 1]); background(0, most, 0); }
 J
+cat > $W/grown.js <<'J'
+let g;
+function setup() { createCanvas(800, 400); noStroke(); g = createGraphics(50, 50); g.background(255); g.fill(0); g.noStroke(); g.textAlign(CENTER, CENTER); g.textSize(30); g.text('H', 25, 25); }
+function draw() { background(255); image(g, 0, 0, 400, 400); image(g, 500, 0, 50, 50); }
+J
 python3 - $W <<'P'
 import os,subprocess,sys
 from PIL import Image,ImageChops
@@ -61,5 +66,9 @@ print('its camera sees the film under it:','yes' if max(g('s0').split()[1].getda
 red=lambda n:sum(1 for r,gr,b in g(n).resize((80,60)).getdata() if r>180 and gr<90 and b<90)
 print('a line that draws is a knob, however many it draws:','yes' if 'NOT done' not in said and red('l0')>20 and red('l1')==0 else f'NO ({red("l0")} {red("l1")} {said[-200:]})')
 print('its background line off, what is under it shows:','yes' if red('l2')>20 and max(g('l2').split()[1].getdata())>40 else 'NO')
+run('g',f'add picture {W}/grown.js','set 1 size 3','at 0.2',f'still {at("g0")}')
+ink=lambda n,box:sum(1 for r,gr,b in g(n).crop(box).getdata() if r<100)
+full=g('g0').size[0]/800; big,small=ink('g0',tuple(int(v*full) for v in (0,0,400,400))),ink('g0',tuple(int(v*full) for v in (500,0,550,50)))
+print('words on another canvas grow as it grows, once:','yes' if small and 40<big/small<90 else f'NO ({big} {small})')
 print('and it takes keys:','yes' if 0<g('l3').getextrema()[0][1] and red('l3')<red('l0') else f'NO ({red("l3")} {red("l0")})')
 P
