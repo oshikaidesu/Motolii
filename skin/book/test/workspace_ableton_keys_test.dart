@@ -275,11 +275,11 @@ void main() {
     ws.frame = (ws.marks.single.$1 * Ws.fps).round();
     await t.pumpAndSettle();
     await t.tap(find.byKey(const ValueKey('ws-tl-mark')));
-    await t.pumpAndSettle();
+    await settled(t, ws);   // (sent, not waited for by the window)
     ws.reread();
     expect(ws.marks, isEmpty, reason: 'on a marker, the Marker button takes it away (Live\'s Set becomes Delete Locator)');
     await t.tap(find.byKey(const ValueKey('ws-tl-mark')));
-    await t.pumpAndSettle();
+    await settled(t, ws);
     ws.reread();
     expect(ws.marks.single.$1 * Ws.fps, closeTo(ws.frame, .5), reason: 'elsewhere it sets one where the playhead is (Set Locator)');
     await menu(Offset(300, WtM.header + WtM.ruler - 6), 'Add Marker and Name…');

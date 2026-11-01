@@ -1247,7 +1247,13 @@ void _tests3() {
     Map<String, Offset> h() => (t.state(stage) as StageHandles).handles;
     expect(h().keys, containsAll(['crop 0', 'crop 1', 'crop 2', 'crop 3']), reason: 'a bar on each side');
     final wide = (h()['corner 1']! - h()['corner 0']!).distance;
-    await t.timedDragFrom(origin + h()['crop 0']!, Offset(wide * .3, 0), const Duration(milliseconds: 300));
+    final g = await t.startGesture(origin + h()['crop 0']!, kind: PointerDeviceKind.mouse);   // (a mouse, a frame at each step: a finger's tap gives up 18 away, Pan taking it only on a turn of the clock, and this photo's third is 20: let go in the same turn, neither had it)
+    for (var i = 1; i <= 10; ++i) {
+      await g.moveBy(Offset(wide * .03, 0));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await g.removePointer();
     await settled(t, ws);
     expect(m.value(photo, 'crop_left', 0) ?? 0, closeTo(.3, .05), reason: 'cut in a third from the left: ${m.trouble}');
     expect(h()['crop 0']!.dx, closeTo(h()['corner 0']!.dx + wide * .3, 4), reason: 'its bar where it is cut');
