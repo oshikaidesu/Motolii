@@ -65,6 +65,11 @@ struct Drawn {
     uint32_t slotsId = 0;              // (ThorVG's for them, driver thread only)
     std::atomic<int> keepAge{0};       // (one more each time its kept frames are thrown away: a copy made before is not kept)
     tvg::Animation* film = nullptr;    // (the same)
+    std::function<std::vector<double>(int, int)> sketch;   // (a 2D sketch: what makes a frame on a canvas holding another, its Script's paints; main thread: drawn_sketch.h)
+    std::shared_ptr<std::map<int, double>> sketchLines;    // (how strong each of its lines that draw is now; main thread: script.h sketch_marked)
+    int sketchAt = -1;                 // (the frame last asked of it, which its canvas will hold; main thread)
+    tvg::Scene* sketchScene = nullptr; // (what its paints are put in, driver thread only)
+    std::string sketchFont;            // (ThorVG's name of the font its words are set in)
     Texture* texture = nullptr;        // what Filament reads
     Texture* edge[3] = {};             // how far each of its points is from its edge (drawn_edge.h)
     RenderTarget* edgeInto[3] = {};
@@ -462,8 +467,10 @@ static void kept_put(Stage& s, Drawn* d, int at, const std::vector<uint8_t>& pix
 }
 // A frame drawn by ThorVG into the texture it draws into (driver thread), and, if `keep`, copied on the GPU to a
 // texture of its own that keeps it; and onto disk, once, if `file` is not there yet.
-static void kept_draw(Stage& s, Drawn* d, int at, bool keep, const std::filesystem::path& file, int age) {
-    if (d->film->frame(d->fromFrame + (float)at) == tvg::Result::Success || d->madeAt != at) {
+static void sketch_draw(Drawn* d, const std::vector<double>& paints);
+static void kept_draw(Stage& s, Drawn* d, int at, bool keep, const std::filesystem::path& file, int age, const std::vector<double>* paints = nullptr) {
+    if (paints) sketch_draw(d, *paints), d->madeAt = at;
+    else if (d->film->frame(d->fromFrame + (float)at) == tvg::Result::Success || d->madeAt != at) {
         for (uint32_t id : d->deep)   // (its 3D layers are sheets of their own: not drawn flat here)
             if (const tvg::Paint* one = d->film->picture()->paint(id)) const_cast<tvg::Paint*>(one)->visible(false);
         d->canvas->update();
@@ -525,8 +532,11 @@ static void picture_at(Stage& s, Drawn* d, float seconds) {
     auto pixels = std::make_shared<std::vector<uint8_t>>();
     if (d->look && kept_read(file, *pixels, kept_one(d)))   // (drawn before, on disk: put up as it is, not drawn)
         ++films_disk, door::on_driver(s.engine, [&s, d, at, pixels, keep, age = d->keepAge.load()] { kept_put(s, d, at, *pixels, true, keep, age); });
-    else
-        ++films_drawn, door::on_driver(s.engine, [&s, d, at, keep, file, age = d->keepAge.load()] { kept_draw(s, d, at, keep, file, age); });
+    else {
+        std::shared_ptr<std::vector<double>> paints;
+        if (d->sketch) paints = std::make_shared<std::vector<double>>(d->sketch(at, d->sketchAt)), d->sketchAt = at;
+        ++films_drawn, door::on_driver(s.engine, [&s, d, at, keep, file, paints, age = d->keepAge.load()] { kept_draw(s, d, at, keep, file, age, paints.get()); });
+    }
 }
 
 // While the hand rests: a few of a film's frames after the one shown, kept before they are asked for (as Final Cut

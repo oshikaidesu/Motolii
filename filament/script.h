@@ -39,8 +39,14 @@ inline std::vector<std::string> script_files(const std::string& word) {
 }
 
 // A file of p5.js's own two, setup() and draw(), as sketches are written: not a recipe of ours, whose code is each().
-inline bool script_is_sketch(const std::string& src) { return src.find("function each") == std::string::npos && (src.find("function draw") != std::string::npos || src.find("function setup") != std::string::npos); }
-// The knobs a file declares (read from its head; empty if it has none or cannot be read).
+inline bool script_is_sketch(const std::string& src) { return src.find("function each") == std::string::npos && (src.find("function draw") != std::string::npos || src.find("function setup") != std::string::npos || src.find("createCanvas") != std::string::npos); }
+// The lines of a sketch that draw: a for makes hundreds from one line and a count may grow, the line stays. Each is told
+// to the run as it comes, __L (as Processing's Tweak Mode rewrites a sketch's source to reach its numbers,
+// java/src/processing/mode/java/tweak), and is a knob of the thing, how strong that line's shapes are, named line_ and its
+// number: so a sketch is opened into few rows, however many it draws. Returns the source so told.
+struct SketchLine { int line; std::string what; };
+std::string sketch_marked(const std::string& src, std::vector<SketchLine>* lines);
+// The knobs a file declares (read from its head, a sketch's its lines that draw; empty if it has none or cannot be read).
 std::vector<ScriptKnob> script_knobs(const std::string& file);
 // The values an effect comes with where its own show nothing on a picture (Alight Motion's rule: an effect is seen as it
 // is put on, reports/alight_ui.md "最初の値"): first.tsv beside it, "file<TAB>knob<TAB>value" a line, measured by
@@ -54,13 +60,18 @@ double anime_ease(const std::string& bundle, const std::string& said, double u, 
 
 class Script {
 public:
-    explicit Script(const std::string& file, const std::string& p5 = "");   // made once a file: its code run, its each() kept (p5: where p5.js is, for a sketch: p5_stand.h)
+    explicit Script(const std::string& file, const std::string& p5 = "", const std::string& film = "");   // (film: what a sketch's createCapture and createVideo see)   // made once a file: its code run, its each() kept (p5: where p5.js is, for a sketch: p5_stand.h)
     ~Script();
     bool ok() const;
     const std::string& trouble() const;
     bool sketch() const;       // a p5.js sketch, run by p5.js itself (p5_stand.h)
     int most();                // how many copies it draws at once
     std::string shape();       // and of what shape, as a solid's word
+    bool flat();               // a sketch that paints on a 2D canvas
+    int width();               // its canvas
+    int height();
+    std::vector<double> paints(int frame, int had);
+    std::vector<int> lines() const;   // (a sketch's lines that draw, as sketch_marked says)   // what makes that frame on a canvas holding the frame `had` (p5_stand.h's __paints)
     // Each copy at a moment, the knobs as the document says them now (a select by the word it is).
     ScriptCopy each(int i, int n, double t, const std::map<std::string, double>& numbers, const std::map<std::string, std::string>& words);
     // Every copy at once: each() for each, or, for a file with no each(), the whole file run with its knobs as globals

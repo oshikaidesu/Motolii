@@ -232,7 +232,13 @@ static bool doc_match(Doc& d) {
             const double cl = doc_number(d, thing, "crop_left", 0, 0), ct = doc_number(d, thing, "crop_top", 0, 0), cr = doc_number(d, thing, "crop_right", 0, 0), cb = doc_number(d, thing, "crop_bottom", 0, 0);
             const bool cropped = cl + ct + cr + cb > 0.0;
             const float aspect = doc_among(".jpg .jpeg .png .webp .bmp .JPG .JPEG .PNG", ext) && (edge.w > 0.f || doc_number(d, thing, "round", 0, 0) > 0.0 || cropped) ? picture_aspect(s, file.c_str()) : 0.f;
-            if (fxOk && aspect > 0.f) {   // (a photo with an edge, round corners or cut in: a rect as wide as it is, its own file its fill, as a shape filled with media is (Alight Motion's media layers take a border as its shapes do))
+            if (ext == ".js") {   // (a p5.js sketch that paints in 2D, what it paints ThorVG's: drawn_sketch.h)
+                std::string under;   // (the film under it: what its createCapture and createVideo see)
+                for (int t : doc_laid(d)) { if (t == thing) break; if (doc_word(d, t, "kind") == "film") under = doc_word(d, t, "file"); }
+                auto run = std::make_shared<Script>(file, (doc_folders("third_party/js/p5").front() / "p5.min.js").string(), under);
+                if (!run->flat()) why = run->ok() ? "not a 2D sketch: " + file : run->trouble();
+                else if (fxOk && (made.drawn = sketch_picture(s, run, (doc_folders("third_party/filament_src/assets/fonts").front() / "Roboto-Medium.ttf").string(), 1.f, lay, fx))) s.playing.erase(made.drawn);
+            } else if (fxOk && aspect > 0.f) {   // (a photo with an edge, round corners or cut in: a rect as wide as it is, its own file its fill, as a shape filled with media is (Alight Motion's media layers take a border as its shapes do))
                 DrawnFx own = fx;
                 own.media = file;
                 char cut[256];   // (cut in: the rect it shows a path of its own within the whole photo, in its height from its middle, so what is left stays where it was)
@@ -332,7 +338,7 @@ static bool doc_match(Doc& d) {
 static double doc_seconds(Doc& d) {
     double all = 0.0;
     for (const auto& [thing, t] : d.shown) {
-        const double own = t.film ? (double)t.film->seconds : t.drawn ? (double)t.drawn->seconds : t.solid ? (double)t.solid->seconds : 0.0, lasts = doc_number(d, thing, "duration", 0, own);
+        const double own = t.film ? (double)t.film->seconds : t.drawn ? (t.drawn->sketch ? 0.0 : (double)t.drawn->seconds) : t.solid ? (double)t.solid->seconds : 0.0, lasts = doc_number(d, thing, "duration", 0, own);
         if (lasts > 0.0) all = std::max(all, doc_number(d, thing, "start", 0, 0) + lasts);
     }
     return all > 0.0 ? all : 8.0;

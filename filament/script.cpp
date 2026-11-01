@@ -2,9 +2,12 @@
 #include "script.h"
 #include "aviutl.h"
 #include "p5_stand.h"
+#include "film_read.h"
 #include "ways.h"
 #include <quickjs.h>
 #include <algorithm>
+#include <filesystem>
+#include <set>
 #include <cstdlib>
 #include <fstream>
 #include <mutex>
@@ -21,10 +24,77 @@ static std::vector<std::string> split(const std::string& s, char by) {
     return out;
 }
 
+// (what stands in a string or a comment is not a call; a name after a dot is another canvas's, a createGraphics': image()
+// says where that shows; a name followed by a { is a method of the sketch's own)
+std::string sketch_marked(const std::string& src, std::vector<SketchLine>* lines) {
+    static const std::set<std::string> draws{"rect", "square", "ellipse", "circle", "arc", "line", "point", "triangle", "quad", "bezier", "curve", "image", "text", "background", "beginShape",
+                                             "box", "sphere", "plane", "cone", "cylinder", "torus", "ellipsoid", "model"};
+    const auto word = [](char c) { return std::isalnum((unsigned char)c) || c == '_' || c == '$'; };
+    std::string out, last;
+    int line = 1, seen = 0;
+    for (size_t i = 0; i < src.size();) {
+        const char c = src[i];
+        if (c == '\n') ++line;
+        if (c == '/' && i + 1 < src.size() && src[i + 1] == '/') {
+            const size_t end = std::min(src.find('\n', i), src.size());
+            out.append(src, i, end - i), i = end;
+        } else if (c == '/' && i + 1 < src.size() && src[i + 1] == '*') {
+            const size_t end = std::min(src.find("*/", i + 2), src.size() - 2) + 2;
+            line += (int)std::count(src.begin() + (long)i, src.begin() + (long)end, '\n');
+            out.append(src, i, end - i), i = end;
+        } else if (c == '"' || c == '\'' || c == '`') {
+            size_t end = i + 1;
+            while (end < src.size() && src[end] != c && (c == '`' || src[end] != '\n')) end += src[end] == '\\' ? 2 : 1;
+            end = std::min(end + 1, src.size());
+            line += (int)std::count(src.begin() + (long)i, src.begin() + (long)end, '\n');
+            out.append(src, i, end - i), i = end;
+        } else if (word(c)) {
+            size_t end = i;
+            while (end < src.size() && word(src[end])) ++end;
+            const std::string name = src.substr(i, end - i);
+            size_t next = end;
+            while (next < src.size() && (src[next] == ' ' || src[next] == '\t')) ++next;
+            const size_t before = out.find_last_not_of(" \t\r\n");
+            bool mark = next < src.size() && src[next] == '(' && draws.count(name) && last != "function" && (before == std::string::npos || out[before] != '.');
+            if (mark) {
+                int deep = 0;
+                size_t close = next;
+                for (; close < src.size(); ++close) { if (src[close] == '(') ++deep; else if (src[close] == ')' && --deep == 0) break; }
+                size_t after = close + 1;
+                while (after < src.size() && std::isspace((unsigned char)src[after])) ++after;
+                mark = after >= src.size() || src[after] != '{';
+            }
+            if (mark) {
+                out += "(__L=" + std::to_string(line) + "," + name + ")";
+                if (lines && seen != line) lines->push_back({line, name}), seen = line;
+            } else out += name;
+            last = name, i = end;
+        } else {
+            if (!std::isspace((unsigned char)c)) last.clear();
+            out += c, ++i;
+        }
+    }
+    return out;
+}
 std::vector<ScriptKnob> script_knobs(const std::string& file) {
     if (aviutl_is(file)) return aviutl_knobs(file);   // (an AviUtl2 script's head: aviutl.cpp)
     std::vector<ScriptKnob> knobs;
     std::ifstream in(file);
+    if (std::filesystem::path(file).extension() == ".js") {
+        std::stringstream all;
+        all << in.rdbuf();
+        if (script_is_sketch(all.str())) {
+            std::vector<SketchLine> lines;
+            sketch_marked(all.str(), &lines);
+            for (const SketchLine& l : lines) {
+                ScriptKnob k;
+                k.kind = "track", k.name = "line_" + std::to_string(l.line), k.label = l.what + " " + std::to_string(l.line), k.high = 1, k.usual = 1;
+                knobs.push_back(k);
+            }
+            return knobs;
+        }
+        in.clear(), in.seekg(0);
+    }
     for (std::string line; std::getline(in, line);) {
         if (line.rfind("//", 0) != 0) { if (line.find_first_not_of(" \t\r") == std::string::npos) continue; break; }   // (the head ends where code begins)
         const size_t dash = line.find("--"), at = line.find('@'), colon = line.find(':');
@@ -114,6 +184,14 @@ static std::string ways_kept() {
     return js + "}; return function (name, u) { u = Math.min(1, Math.max(0, u)); return w[name] ? w[name](u) : u; }; })();\n";
 }
 
+static JSValue film_next(JSContext* cx, JSValueConst, int, JSValueConst*) {   // (the film's next picture, 1/60 s on: its size and its bytes)
+    FilmRead* f = (FilmRead*)JS_GetContextOpaque(cx);
+    if (!f->reader || !f->next()) return JS_NULL;
+    JSValue o = JS_NewObject(cx);
+    JS_SetPropertyStr(cx, o, "w", JS_NewInt32(cx, f->w)), JS_SetPropertyStr(cx, o, "h", JS_NewInt32(cx, f->h));
+    JS_SetPropertyStr(cx, o, "data", JS_NewArrayBufferCopy(cx, f->last.data(), f->last.size()));
+    return o;
+}
 struct Script::Own {
     JSRuntime* rt = nullptr;
     JSContext* cx = nullptr;
@@ -121,9 +199,11 @@ struct Script::Own {
     std::string trouble, file, src;
     bool whole = false;   // no each(): the whole file says every copy at once, as a Canvalry distribution (a PointCloud)
     bool sketch = false;   // a p5.js sketch (p5_stand.h)
+    FilmRead film;         // what its createCapture and createVideo see
+    std::vector<SketchLine> lines;   // its lines that draw
 };
 
-Script::Script(const std::string& file, const std::string& p5) : own(new Own) {
+Script::Script(const std::string& file, const std::string& p5, const std::string& film) : own(new Own) {
     std::ifstream in(file);
     std::stringstream code;
     code << in.rdbuf();
@@ -143,9 +223,23 @@ Script::Script(const std::string& file, const std::string& p5) : own(new Own) {
         JS_FreeValue(own->cx, JS_Eval(own->cx, p5_before, std::char_traits<char>::length(p5_before), "p5_before", JS_EVAL_TYPE_GLOBAL));
         JS_FreeValue(own->cx, JS_Eval(own->cx, p5js.c_str(), p5js.size(), "p5.min.js", JS_EVAL_TYPE_GLOBAL));
         JS_FreeValue(own->cx, JS_Eval(own->cx, p5_after, std::char_traits<char>::length(p5_after), "p5_after", JS_EVAL_TYPE_GLOBAL));
+        if (!film.empty() && (src.find("createCapture") != std::string::npos || src.find("createVideo") != std::string::npos || src.find("loadImage") != std::string::npos)) own->film.open(film, 320);   // (as much of it as a webcam sketch reads, and light)
+        JS_SetContextOpaque(own->cx, &own->film);
+        JSValue g = JS_GetGlobalObject(own->cx);
+        JS_SetPropertyStr(own->cx, g, "__film_next", JS_NewCFunction(own->cx, film_next, "__film_next", 0));
+        JS_FreeValue(own->cx, g);
     }
-    const std::string run = sketch ? src + "\n;\n" + p5_start : src;
+    std::string body = src;
+    if (sketch) {
+        std::string marked = sketch_marked(src, &own->lines);
+        JSValue told = JS_Eval(own->cx, marked.c_str(), marked.size(), file.c_str(), JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_COMPILE_ONLY);
+        if (JS_IsException(told)) JS_FreeValue(own->cx, JS_GetException(own->cx)), own->lines.clear();   // (a file this reader misread runs as it is, its lines not told)
+        else body = std::move(marked);
+        JS_FreeValue(own->cx, told);
+    }
+    const std::string run = sketch ? body + "\n;\n" + p5_start : src;
     JSValue ran = JS_Eval(own->cx, run.c_str(), run.size(), file.c_str(), JS_EVAL_TYPE_GLOBAL);
+    if (sketch) for (JSContext* job = nullptr; JS_ExecutePendingJob(own->rt, &job) > 0;) {}   // (an async setup(), as p5 2 sketches are, goes on to its end)
     if (JS_IsException(ran)) {
         JSValue e = JS_GetException(own->cx);
         const char* s = JS_ToCString(own->cx, e);
@@ -176,6 +270,34 @@ static std::string script_said(JSContext* cx, const char* js) {
 }
 int Script::most() { return own->sketch && ok() ? std::atoi(script_said(own->cx, "__most()").c_str()) : 0; }
 std::string Script::shape() { return own->sketch && ok() ? script_said(own->cx, "__shape()") : ""; }
+bool Script::flat() { return own->sketch && ok() && script_said(own->cx, "__2d") == "true"; }
+int Script::width() { return own->sketch && ok() ? std::atoi(script_said(own->cx, "width").c_str()) : 0; }
+int Script::height() { return own->sketch && ok() ? std::atoi(script_said(own->cx, "height").c_str()) : 0; }
+std::vector<int> Script::lines() const {
+    std::vector<int> all;
+    for (const SketchLine& l : own->lines) all.push_back(l.line);
+    return all;
+}
+std::vector<double> Script::paints(int frame, int had) {
+    const std::string js = "__paints(" + std::to_string(frame) + "," + std::to_string(had) + ")";
+    JSValue out = JS_Eval(own->cx, js.c_str(), js.size(), "sketch", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(out) && own->trouble.empty()) {   // (its draw() has failed: it stays as it was, and says so once)
+        JSValue e = JS_GetException(own->cx);
+        const char* s = JS_ToCString(own->cx, e);
+        own->trouble = std::string("the sketch ") + own->file + ": " + (s ? s : "?");
+        std::fprintf(stderr, "%s\n", own->trouble.c_str());
+        JS_FreeCString(own->cx, s), JS_FreeValue(own->cx, e);
+    }
+    size_t at = 0, bytes = 0, unit = 0, size = 0;
+    JSValue buffer = JS_IsException(out) ? JS_EXCEPTION : JS_GetTypedArrayBuffer(own->cx, out, &at, &bytes, &unit);
+    std::vector<double> all;
+    if (const uint8_t* data = JS_IsException(buffer) ? nullptr : JS_GetArrayBuffer(own->cx, &size, buffer)) {
+        const double* from = (const double*)(data + at);
+        all.assign(from, from + bytes / sizeof(double));
+    }
+    JS_FreeValue(own->cx, buffer), JS_FreeValue(own->cx, out);
+    return all;
+}
 const std::string& Script::trouble() const { return own->trouble; }
 
 std::vector<ScriptCopy> Script::copies(int n, double t, const std::map<std::string, double>& numbers, const std::map<std::string, std::string>& words, double unit) {

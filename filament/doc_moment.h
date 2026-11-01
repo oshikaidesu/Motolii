@@ -16,12 +16,17 @@ static void doc_moment(Doc& d, double now) {
     std::vector<Lies> lies;
     bool solo = false;   // (while any thing is solo, only those are seen)
     for (int thing : lie) solo = solo || doc_number(d, thing, "solo", 0, 0) > 0.5;
+    const auto solo_of = [&](int thing) {   // (a group's solo is its things': a Null's eye and opacity go down to them already, doc_relations.h)
+        for (int up = thing, n = 0; up > 0 && n < 64; up = (int)doc_number(d, up, "parent", 0, 0), ++n)
+            if (doc_number(d, up, "solo", 0, 0) > 0.5 && (up == thing || doc_word(d, up, "shape") == "null")) return true;
+        return false;
+    };
     for (int thing : lie) {
         const auto found = d.shown.find(thing);
         if (found == d.shown.end() || found->second.camera) continue;
         const double since = doc_element_now(d, thing, now) - doc_number(d, thing, "start", 0, 0), lasts = doc_number(d, thing, "duration", 0, -1);   // (held in an element put in: at the moment it shows)
         const bool open = found->second.drawn && found->second.drawn->boxed.z > 0.f && doc_literal(d, thing, "scale_z", now, 1) != 0.0;   // (its box open by its Scale Z; at 0 shut, one sheet: deep.glsl)
-        Lies one{thing, &found->second, since >= 0.0 && (lasts < 0.0 || since < lasts) && doc_number(d, thing, "visible", 0, 1) > 0.5 && (!solo || doc_number(d, thing, "solo", 0, 0) > 0.5), found->second.space != 2 || open, since, open};   // (a sheet in the world settles depth with the solid things)
+        Lies one{thing, &found->second, since >= 0.0 && (lasts < 0.0 || since < lasts) && doc_number(d, thing, "visible", 0, 1) > 0.5 && (!solo || solo_of(thing)), found->second.space != 2 || open, since, open};   // (a sheet in the world settles depth with the solid things)
         lies.push_back(one);
     }
     // The camera: the nearest one in the order of the things that is on (the past repository's choice); none, the stage's own.
@@ -223,6 +228,14 @@ static void doc_moment(Doc& d, double now) {
             t.drawn->look->setParameter("surface", surface);
             for (const Stage::Made& made : s.made)
                 if (const auto own = d.copyLooks.find(made.thing.getId()); made.of == t.drawn->sheet && own != d.copyLooks.end()) own->second->setParameter("surface", surface);
+        }
+        if (t.drawn && t.drawn->sketchLines) {   // (a sketch's lines as strong as they are now: what was drawn with them as they were goes)
+            bool moved = false;
+            for (auto& [line, strong] : *t.drawn->sketchLines) {
+                const double is = doc_number(d, thing, ("js_line_" + std::to_string(line)).c_str(), now, 1);
+                moved = moved || is != strong, strong = is;
+            }
+            if (moved) kept_drop(s, t.drawn), t.drawn->shownAt = t.drawn->sketchAt = -1;
         }
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)lies[i].since, t.drawn->seconds));
         if (t.drawn && !t.drawn->effects.empty()) {   // (its effects as they are now: those that move are drawn again)

@@ -561,7 +561,14 @@ static bool doc_let_go(Doc& d, bool keep) {
     }
     for (const auto& [name, is] : h.said) if (name[0] != ' ' && !doc_say(d, h.thing, name.c_str(), is.c_str())) break;   // (' path': what it was, kept with the hold)
     const auto bar = h.from.find(" bar"), start = h.tried.find("start");
-    if (bar != h.from.end() && start != h.tried.end() && start->second != h.from.at("start")) doc_keys_by(d, h.thing, start->second - h.from.at("start"));
+    if (bar != h.from.end() && start != h.tried.end() && start->second != h.from.at("start")) {
+        const double by = start->second - h.from.at("start");
+        doc_keys_by(d, h.thing, by);
+        for (const int t : doc_under(d, h.thing)) {   // (a group's bar slid: what it holds goes with it, as a precomposed layer's inside goes with its bar)
+            doc_set(d, t, "start", std::max(0.0, doc_number(d, t, "start", 0, 0) + by));
+            doc_keys_by(d, t, by);
+        }
+    }
     return doc_acted(d);
 }
 // Sequence Layers (After Effects' Keyframe Assistant): the things that have a length and stand on their own (shown,

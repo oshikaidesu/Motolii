@@ -77,7 +77,7 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
 // not seen (doc_add).
 static const char* doc_kind_of(const char* file) {
     static const struct { const char* kind; const char* ends; } made[] = {
-        {"film", "mp4 mov m4v webm mkv"}, {"sound", "mp3 wav m4a aac flac ogg opus"}, {"picture", "png jpg jpeg webp svg json lot mid"}, {"solid", "glb gltf ply"}, {"text", "ttf otf ttc"}};
+        {"film", "mp4 mov m4v webm mkv"}, {"sound", "mp3 wav m4a aac flac ogg opus"}, {"picture", "png jpg jpeg webp svg json lot mid js"}, {"solid", "glb gltf ply"}, {"text", "ttf otf ttc"}};
     std::string end = std::filesystem::path(file).extension().string();
     for (char& c : end) c = (char)std::tolower((unsigned char)c);
     if (doc_among(doc_shapes, file)) return "solid";
@@ -472,16 +472,30 @@ static bool doc_key_here(Doc& d, int thing, const char* name, double at) {
     if (!doc_knows(d, thing, name, nullptr, nullptr, true)) return false;
     return doc_keys(d, thing, name, at) && doc_keys(d, thing, name) ? true : doc_key(d, thing, name, at, doc_number(d, thing, name, at, doc_usual_on(d, thing, name)));
 }
+// What a group holds, however deep: the things under a Null (a thing's parent that is not a Null holds nothing: After
+// Effects' parenting moves a child, it does not take it in).
+static std::vector<int> doc_under(Doc& d, int group) {
+    std::vector<int> all;
+    if (doc_word(d, group, "shape") != "null") return all;
+    for (const int t : doc_laid(d)) {
+        int up = (int)doc_number(d, t, "parent", 0, 0);
+        for (int n = 0; up > 0 && up != group && n < 64; ++n) up = (int)doc_number(d, up, "parent", 0, 0);
+        if (up == group) all.push_back(t);
+    }
+    return all;
+}
 // raise: a thing brought `places` places nearer among the things (below 0: further back): each thing is told where it
-// lies now, as one change.
+// lies now, as one change. A group goes with what it holds, one place among the things (a precomposed layer is one).
 static bool doc_raise(Doc& d, int thing, int places) {
     if (!doc_knows(d, thing)) return false;
     doc_forget(d);   // (the order as the document has it now, a thing just added in the same act too: as doc_relate forgets before it reads)
-    std::vector<int> lie = doc_laid(d);
-    const long from = std::find(lie.begin(), lie.end(), thing) - lie.begin(), to = std::clamp(from + (long)places, 0L, (long)lie.size() - 1);
+    std::vector<int> lie = doc_laid(d), going = doc_under(d, thing);
+    going.push_back(thing);
+    const long from = std::find(lie.begin(), lie.end(), going.front()) - lie.begin();
+    lie.erase(std::remove_if(lie.begin(), lie.end(), [&](int t) { return std::find(going.begin(), going.end(), t) != going.end(); }), lie.end());
+    const long to = std::clamp(from + (long)places, 0L, (long)lie.size());
     if (to == from) return d.trouble = places > 0 ? "it is the nearest already" : "it is the furthest back already", false;
-    lie.erase(lie.begin() + from);
-    lie.insert(lie.begin() + to, thing);
+    lie.insert(lie.begin() + to, going.begin(), going.end());
     char* all = sqlite3_mprintf("");
     for (size_t i = 0; i < lie.size(); ++i)
         all = sqlite3_mprintf("%zinsert into fact(thing, name, at, value) values(%d, 'order', 0.0, %d) on conflict do update set value = excluded.value;", all, lie[i], (int)i + 1);

@@ -261,7 +261,7 @@ static char doc_thor_letter(const std::string& w) {
     return 0;
 }
 static std::vector<std::filesystem::path> doc_folders(const char* folder);
-static DocScript* doc_script_of(Doc& d, const std::string& file) {
+static DocScript* doc_script_of(Doc& d, const std::string& file, bool runs = true) {
     if (file.empty() || file == "none" || std::filesystem::path(file).extension() == ".mid") return nullptr;   // (a MIDI file's notes are copies, not a script: midi.h)
     const std::string ext = std::filesystem::path(file).extension().string();
     const bool screen = ext == ".wgsl" || ext == ".fs" || ext == ".mjs" || three_is(file) || solid_is(file) || aviutl_is(file);   // (a three.js effect: as an ISF one, three_isf.cpp; a solid's shape: its knobs named by it too, not run as a script, solid_three.cpp; an AviUtl2 script: run by its own Lua, aviutl_fx.h)
@@ -294,7 +294,7 @@ static DocScript* doc_script_of(Doc& d, const std::string& file) {
             return &s;
         }
         if (lottie) return &s;   // (read, not run)
-        if (!screen) s.run = std::make_unique<Script>(file, (doc_folders("third_party/js/p5").front() / "p5.min.js").string());   // (a .wgsl or an ISF .fs is drawn, not run: screen.h)
+        if (!screen && runs) s.run = std::make_unique<Script>(file, (doc_folders("third_party/js/p5").front() / "p5.min.js").string());   // (a .wgsl or an ISF .fs is drawn, not run: screen.h)
         { std::ifstream in(screen ? isf_file(file) : file); std::stringstream text; text << in.rdbuf(); s.clears = text.str().find("opacity") != std::string::npos; }
     }
     return &s;
@@ -309,9 +309,9 @@ static std::vector<DocScript*> doc_scripts_on(Doc& d, int thing) {
     if (thing != 0) {
         if (DocScript* sc = doc_script_of(d, said)) all.push_back(sc);
         for (const std::string& file : script_files(doc_word(d, thing, "fx"))) if (!doc_thor_letter(file)) if (DocScript* sc = doc_script_of(d, file)) all.push_back(sc);
-        if (const std::string file = doc_word(d, thing, "file"); doc_word(d, thing, "kind") == "picture")   // (an After Effects file's slots)
-            if (const std::string ext = std::filesystem::path(file).extension().string(); ext == ".json" || ext == ".lot")
-                if (DocScript* sc = doc_script_of(d, file); sc && !sc->knobs.empty()) all.push_back(sc);
+        if (const std::string file = doc_word(d, thing, "file"); doc_word(d, thing, "kind") == "picture")   // (an After Effects file's slots, a sketch's lines that draw; a sketch is run by its picture, doc_match)
+            if (const std::string ext = std::filesystem::path(file).extension().string(); ext == ".json" || ext == ".lot" || ext == ".js")
+                if (DocScript* sc = doc_script_of(d, file, ext != ".js"); sc && !sc->knobs.empty()) all.push_back(sc);
         return all;
     }
     for (const std::string& file : script_files(said)) if (DocScript* sc = doc_script_of(d, file)) all.push_back(sc);

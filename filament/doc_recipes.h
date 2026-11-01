@@ -8,7 +8,9 @@ static std::vector<DocRecipe> doc_recipes_read() {
         std::stringstream text;
         text << in.rdbuf();
         if (text.str().find("\n// make ") == std::string::npos && script_is_sketch(text.str())) {   // (a sketch of p5.js as it comes, no head of ours: a solid given it)
-            r.name = f.stem().string(), r.what = "A p5.js sketch", r.code = true, r.lines = {"make solid cube"};
+            r.name = f.stem().string(), r.what = "A p5.js sketch", r.code = text.str().find("WEBGL") != std::string::npos;
+            r.lines = {r.code ? "make solid cube" : "make picture " + r.path};   // (in 3D its solids stand in the world; in 2D what it paints is a picture)
+            if (!r.code) r.lines.push_back("fit fit");   // (as large as the picture: doc_fit, After Effects' Fit to Comp)
             all.push_back(r);
             continue;
         }
@@ -407,11 +409,11 @@ static std::string doc_cards_of(Doc& d, int thing, std::string* more = nullptr) 
             if (!card.empty()) all += (all.empty() ? "" : "; ") + card;
         }
     if (!besides.empty()) all += (all.empty() ? "" : "; ") + besides;
-    if (doc_among("picture text shape stage", doc_word(d, thing, "kind")))   // (its script's own card: the knobs its head declares)
+    if (doc_among("picture text shape solid stage", doc_word(d, thing, "kind")))   // (its script's own card: the knobs its head declares)
         if (const std::vector<DocScript*> scs = doc_scripts_on(d, thing); !scs.empty()) {
             std::string names = thing == 0 ? "script follow" : "script";
             for (const DocScript* sc : scs)
-                if (thing == 0 || sc == doc_script_of(d, doc_word(d, thing, "script")))   // (a thing's effect files have cards of their own, above)
+                if (thing == 0 || sc == doc_script_of(d, doc_word(d, thing, "script")) || (std::filesystem::path(doc_word(d, thing, "file")).extension() == ".js" && sc == doc_script_of(d, doc_word(d, thing, "file"), false)))   // (a thing's effect files have cards of their own, above; a sketch's lines that draw are its picture's)
                 for (const DocValue& one : sc->values)
                     if ((" " + names + " ").find(" " + std::string(one.name) + " ") == std::string::npos) names += std::string(" ") + one.name;   // (a knob two effects share is one)
             if (names != "script") all += (all.empty() ? "" : "; ") + std::string("Script: ") + names;   // (none of them with knobs: no card)

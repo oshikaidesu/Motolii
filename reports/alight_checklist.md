@@ -286,7 +286,7 @@
 - [x] グループにする・グループにしてマスク・グループにして抜く — Edit メニューの Group（⌘G）・Group and Mask・Group and Exclude。グループの Null の group_mask（mask・exclude）で、一番上の物が型になり（それ自体は見えない）、ほかはその中だけ・その外だけ見える（`filament/doc_moment.h`、型はクリップと同じ matte）。10/29 edit.sh：写真と円で、mask は円の中だけ、exclude は円の穴、none で元に戻る
 - [x] 時間の揃え：始まりを伸ばす・再生位置へ寄せる・左揃え・ずらして並べる・右揃え：Animation メニューの Align Starts・Align Ends・Move to Playhead・Stagger・Extend Start to Playhead（選んだ物に、選んだ順で。動かした物はキーも一緒。始まりを伸ばすは Final Cut Pro の Extend Edit と同じく両向き、終わりは動かない） — 済（10/28）：窓の試験（`workspace_joined_test_3.dart`）
 - [x] 画面の揃え：左・中・右・上・中・下・等間隔 2 種：Arrange > Align Left〜Bottom・Spread Across・Spread Down（Keynote・Figma の Align：1 つなら絵に、いくつかならその箱に、3 つ以上を等間隔に） — 済（10/28）：窓の試験
-- [x] グループに入って編集、パンくず：要らない作りにした。グループは Null と親子づけ（⌘G、10/28）で、中の物は時間軸にそのまま並び、そのまま選んで直せる（Figma と同じ）
+- [x] グループに入って編集、パンくず：要らない作りにした。グループは Null と親子づけ（⌘G、10/28）で、⌘G の直後は時間軸で 1 行に畳まれ、三角で開くと中の物が並び、そのまま選んで直せる（11/1。Apple Motion の三角と Cavalry の Scene Tree、1 行になるのは After Effects の Pre-compose ほか。Figma と同じと書いていたが出典は見つからなかった）
 - [x] グループの設定：幅・高さ・背景・Precompose・伸び方（Freeze・Stretch・Loop・Loop & Stretch・Blank）：持ち込まない（After Effects のプリコンプ由来の箱の設定。Motolii のグループは箱を作らない）
 - [x] カメラ：遠近、画角とズーム：カメラのカード（Projection：遠近と正投影）と Depth の机（焦点距離＝ズーム） — 済：窓の試験（`workspace_joined_test_2.dart`・`workspace_desk_test.dart`）
 - [x] カメラ：焦点ぼけ（距離・深度・強さ）：カメラの focus（距離）・aperture（深さ、f 値）・blur_level（強さ） — 済：窓の試験（`workspace_joined_test_2.dart` の Depth の机）
@@ -546,6 +546,30 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] 魚眼のカメラ（11/1、同）：しぐれうい「ひっひっふー」の絵の核。Blender では物を歪ませて作っている
 - [ ] Autograph を触って手数を比べる（11/1、同）：無料、Mac と Win、2D と 3D が 1 つ、描画は Filament
 - [ ] Stack の手法で 1 カット作って手数を測る（11/1、同）：少ない形、200mm、メトロノーム、マッチカット。作品の絵と音は使わない
+- [x] グループを時間軸で畳む：⌘G の直後は 1 行、三角で開く。目と不透明度は元から下へ効く。ソロ、行の移動、バーの時間移動、Delete は持っている物も一緒（11/1、reports/sketch_import_2026-11-01.md）
+- [x] スケッチを行で開く：描く行が 1 本のつまみ（0〜1）。background の行を 0 で作品が動画に乗る（11/1、同上）
+- [ ] グループの開閉をファイルに残す。今は開け直すと閉じた状態から始まる
+- [ ] グループ行のバーを中身に合わせ続ける：今は ⌘G の時だけ合わせる。バーの頭と尻を切っても中身は切れない
+- [ ] 1 行の中の 1 個を触る：何番目の形かを取る。形が増減しても番号は保てるか、作品で試す
+- [ ] スケッチの中身を本物の物として取り出す（Cinema 4D の Current State to Object、Blender の Make Instances Real が手本の候補。未読）。出した物はグループに入れる
+- [ ] スケッチの数字をつまみにする（Processing の Tweak Mode）。for の回数を変えられる
+- [ ] スケッチを 1 行ごとに色で見分ける：今は `rect 20` の字だけ。押して見ないと分からない
+- [ ] スケッチを別のスレッドで動かす：重い作品で窓が止まる。先へ飛ぶと初回は全部走らせる
+- [ ] 重いスケッチのメモリ：動くたびに JS 側へコマを残す。重い作品は 1 分で約 1.4 GB。上限を付けて走り直す
+- [ ] p5 の未対応：meta のライブラリ読み込み、p5 2.x、shadowBlur、clip、filter()、pixels と putImageData、実画像ファイル、loadFont、日本語フォント、自分自身の copy()、部分 clearRect、erase、conic gradient
+- [ ] WEBGL の未対応：シェーダー 33 作、beginShape、コピーごとの色
+- [ ] スケッチの動画：頭出しと切り出し、スケッチの後から入れた動画に取り替え、動画の大きさ
+- [ ] Time Remap：スケッチの時間にキーを打つ
+- [ ] スケッチの文字のフォント：Filament の Roboto を third_party から読む。配る版に入るか確かめていない。日本語は出ない
+- [ ] Shadertoy の入口：`mainImage` を貼るだけで効果になる。今は前書き 4 行を手で足せば通る（reports/sketch_import_2026-11-01.md）。iChannel と複数バッファ、規約の本文は未確認
+- [ ] Dwitter の入口：`u(t)` の 140 文字を貼るだけで動く。今は前書き 3 行を手で足せば通る（同上）
+- [ ] tixy の入口：32 文字の式を貼るだけで動く（同上）
+- [ ] Turtletoy の入口：`Turtle` と `walk(i)` の台（同上）
+- [ ] p5 の shader()：168 作のうち 33 作が使う。Shadertoy の入口と同じ GLSL の読み口に繋げられるか
+- [ ] three.js の場面を動かす台：Art Blocks などの three.js の作品（同上）
+- [ ] OpenProcessing の URL を貼って持ってくる。ライセンスの表示も一緒に
+- [ ] Cavalry の JavaScript デフォーマとシェイプ
+- [ ] Metal で止まった 3 作（2977569、2995171、3001005）：区切りを入れて落ちなくなったが 45 秒で終わらない。終わるまで走らせて確かめる
 - [ ] カメラ本体が作業の目の後ろにあると丸が出ず、掴めない（10/31）：引くと出る
 - [x] カメラのタブ — 済（10/31 ユーザー：「ステージとは別にカメラのタブが必要だ」）：`Camera View` タブ。タブを舞台の横へ運ぶと世界とカメラを同時に見られる（After Effects の 2 Views）。Filament の View は Camera を替えて描ける（`live_camera`）ので、1 拍に 2 回描く。測った（p90 と立方体と効果、再生中）：手の仕事 0.3 → 7.3 ms、60fps のまま。タブが裏にある間は描かない。カメラの絵は舞台サイズの `Live`
 - [x] Stage と Camera View が同じ絵だった（11/1 ユーザー：「カメラとステージが一緒のビューになっているように見える」）：カメラのある書類で舞台の初期の目が `Camera` だったので、横に並べても 2 面が同じ絵になった。舞台の初期は世界（`Free`）に直した（AbsentMotion の `EditorState.kt`：`cameraView` は false で始まる）。切り替えの出る条件も同じ行に合わせた（`PreviewMode.kt`：`cameraMode` か、カメラがある時）。2 面に分ける使い方は After Effects の 2 Views と同じ（片方 Top、片方 Active Camera）。After Effects 自身の舞台の初期は Active Camera で、ここは Alight Motion を床にする。
