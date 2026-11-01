@@ -618,7 +618,8 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [x] Program の右クリック：Create、Rename…、Show in Finder / Explorer（Live のブラウザ 4.2.1、4.5、4.7.7）。窓での右クリックは未確認、Windows も未確認
 - [ ] 効果のタイルの作り直し：同じ見本が流れるだけ、3.6 コマ毎秒。AbsentMotion は表を手で書く。Motolii は読んで決める（`time` なら動かす、色だけなら前後の分割、どのつまみかは描いて測る）。手書きの表と比べた数は reports/sketch_import_2026-11-01.md
 - [ ] Program を棚から消す：今は Show in Finder から手で消す
-- [ ] Program のタイルの絵にするコマを選ぶ：今は 1 秒目から（AM はプロジェクトの絵のコマを選べる）
+- [ ] Program のタイルの絵にするコマを選ぶ：今は 1 秒目から（AM はプロジェクトの絵のコマを選べる）。絵の出た 7 枚のうち 4 枚は黒地に小さい絵で読みにくい
+- [ ] Program の右クリックを本物の窓で押す：computer use が窓を前に出す操作を断るので試験だけ。Show in Finder を押した結果、Windows の `explorer /select,` も未確認
 - [x] Shadertoy の複数バッファ（Buffer A〜D、Common）：済（11/2）。JSON を入口で 1 本の ISF に変える（door_shadertoy.h）。実物 300 本で 261 本が絵になる（reports/sketch_import_2026-11-01.md）
 - [ ] Shadertoy の組み込みの絵：JSON の `src` でどの絵か分かるが、今は置いた物の絵を読む。ノイズとフォントが多い（300 本で上位 3 枚が 33 回）。出どころと権利を調べてから
 - [ ] Shadertoy のタブを 1 枚ずつ貼る入口：サイトからはタブごとにしかコピーできない。JSON が無い人の道が無い
