@@ -49,7 +49,10 @@ material {
         // a thing with depth (deep.glsl): half its box across, up and through, in its own lengths (all 0: a sheet), and 1: its box open (0: Z 0, shut, a sheet);
         // how its box's corners turn into its picture's (a film on its side: video.h)
         { type : float4, name : deep },
-        { type : float4, name : deepTurn }
+        { type : float4, name : deepTurn },
+        // its bevel (deep.glsl): how far in across, how far in through, in the box's lengths, and its way (0 none); how far each point of its picture is from its edge (drawn_edge.h)
+        { type : float4, name : deepBevel },
+        { type : sampler2d, name : edge }
     ]
 }
 
@@ -135,6 +138,7 @@ fragment {
         return keyLeft(c);
     }
     highp vec2 deepCells() { return vec2(textureSize(materialParams_picture, 0)); }
+    float deepAwayAt(highp vec2 uv) { return textureLod(materialParams_edge, uv, 0.0).r; }
 #include "deep.glsl"
 #if defined(LIT)
     // (a box's point is not where its sheet is: the sun's first shadow map is read at the point met, as Filament reads its others,

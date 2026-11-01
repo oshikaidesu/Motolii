@@ -344,7 +344,7 @@ static void layer_at(Stage& s, Drawn* d, float frame) {
             d->holder->add(copy);
         }
         d->canvas->update();
-        d->canvas->draw(true);
+        d->canvas->draw(true), d->stale = true;
         d->canvas->sync();
     });
 }
@@ -354,6 +354,7 @@ static void layer_at(Stage& s, Drawn* d, float frame) {
 // after every frame sent before that may still draw it, since that thread runs what it is given in turn.
 static void picture_off(Stage& s, Drawn* d) {
     s.playing.erase(d);
+    edge_off(s, d);
     take_off(s, d->sheet);
     d->look = nullptr;
     kept_drop(s, d);

@@ -23,6 +23,7 @@ struct DrawnFx { bool split = false;   // (a text's letters each a copy of their
     bool together = false;   // (its copies drawn in one go, each an instance of one thing: none coloured or cleared each of its own, kit.h add_parts)
     bool thick = false;    // (it has depth: its sheet a box, its picture pushed through it, deep.glsl)
     bool lit = false;      // (in the lamps' light: flat.mat's flat_lit, doc_lit)
+    bool bevel = false;    // (its box's edges cut as its doc says: deep.glsl, drawn_edge.h)
     bool column = false;   // (its letters one under another, a letter's height from each to the next)
     float letters = 1.f, lines = 1.f, italic = 0.f, wrapWidth = 0.f; int wrap = 0;   // (a text's lines broken in a box so many of its letters' heights wide, ThorVG's layout and wrap; 0: as typed)
     float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)
@@ -65,6 +66,11 @@ struct Drawn {
     std::atomic<int> keepAge{0};       // (one more each time its kept frames are thrown away: a copy made before is not kept)
     tvg::Animation* film = nullptr;    // (the same)
     Texture* texture = nullptr;        // what Filament reads
+    Texture* edge[3] = {};             // how far each of its points is from its edge (drawn_edge.h)
+    RenderTarget* edgeInto[3] = {};
+    uint32_t edgeW = 0, edgeH = 0;
+    int edgeReach = 0;                 // (how far that is known, in points)
+    std::atomic<bool> stale{true};     // (drawn again since that was worked out: set on the driver thread)
     Mesh* sheet = nullptr;             // the thing in the scene: moved like any other (kit.h: move)
     float3 boxed{0.f};                 // (half its box across, up and through, when it has depth; its box is open: doc_moment.h)
     bool open = false;
@@ -146,7 +152,7 @@ static void trim_at(Stage& s, Drawn* d, float cut, float begin = 0.f, float offs
     door::on_driver(s.engine, [d, cut, begin, offset] {
         d->shape->trimpath(std::clamp(begin, 0.f, 1.f) + offset, 1.f - std::clamp(cut, 0.f, 1.f) + offset);
         d->canvas->update();
-        d->canvas->draw(true);
+        d->canvas->draw(true), d->stale = true;
         d->canvas->sync();
     });
 }
@@ -170,7 +176,7 @@ static void bend_at(Stage& s, Drawn* d, float round, float bloat, float zigzag, 
         float x = 0.f, y = 0.f, w = 0.f, h = 0.f;
         if (d->shape->bounds(&x, &y, &w, &h) == tvg::Result::Success && !(std::max(w, h) < 64.f * std::max(1.f, d->pictureHigh))) d->shape->reset();
         d->canvas->update();
-        d->canvas->draw(true);
+        d->canvas->draw(true), d->stale = true;
         d->canvas->sync();
     });
 }
@@ -204,7 +210,7 @@ static void lit_at(Stage& s, Drawn* d, const std::vector<float>& lit, const std:
             }
         d->film->picture()->opacity(254), d->film->picture()->opacity(255);   // (ThorVG redraws a picture only if it is marked changed itself, not its parts: tvgPicture.h update; Paint::opacity marks it)
         d->canvas->update();   // (a picture that does not move is drawn now, as fx_at draws it)
-        d->canvas->draw(true);
+        d->canvas->draw(true), d->stale = true;
         d->canvas->sync();
     });
 }
@@ -224,7 +230,7 @@ static bool words_at(Stage& s, Drawn* d, const std::string& words) {
         d->outgrown = wide > d->textWide + 0.5f;
         d->text->translate(0.5f * (d->textWide - wide) - x, d->textAt);
         d->canvas->update();
-        d->canvas->draw(true);
+        d->canvas->draw(true), d->stale = true;
         d->canvas->sync();
     });
     return true;
@@ -243,7 +249,7 @@ static void fx_at(Stage& s, Drawn* d, const DrawnFx& told) {
     door::on_driver(s.engine, [d, fx] {
         effects_on(d->effects, fx, d->tall);
         d->canvas->update();
-        d->canvas->draw(true);
+        d->canvas->draw(true), d->stale = true;
         d->canvas->sync();
     });
 }
@@ -460,7 +466,7 @@ static void kept_draw(Stage& s, Drawn* d, int at, bool keep, const std::filesyst
         for (uint32_t id : d->deep)   // (its 3D layers are sheets of their own: not drawn flat here)
             if (const tvg::Paint* one = d->film->picture()->paint(id)) const_cast<tvg::Paint*>(one)->visible(false);
         d->canvas->update();
-        d->canvas->draw(true);
+        d->canvas->draw(true), d->stale = true;
         d->canvas->sync();
         d->madeAt = at;
     }

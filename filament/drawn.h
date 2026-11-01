@@ -7,6 +7,7 @@
 // All of ThorVG's work is queued like Filament's own calls and runs on Filament's driver thread.
 // In parts, read in this order (each a piece of the one before it, none alone):
 #include "drawn_kept.h"
+#include "drawn_edge.h"
 #include "drawn_made.h"
 #include "absent_motion.h"   // (an open edge's ends as AbsentMotion draws them: drawn_flat.h)
 #include "drawn_flat.h"

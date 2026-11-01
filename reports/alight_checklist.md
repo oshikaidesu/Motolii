@@ -458,7 +458,8 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 
 ## T. いまの順番（ここを見れば続きが分かる。上から順に）
 - [x] 平らな物にも厚い物にもランプの光と影を当てる（11/1、golf_noise (175) の残り） — 済（11/1）：After Effects の 3D レイヤーに合わせ、書類にランプがあれば 3D の物と厚い物が受ける（`doc_lit`、`flat_lit`）。影は描いた形（Filament の WebGPU が色なしの撮影で fragment を捨てていたのを `filament_webgpu_depth_fragment.patch` で止めた）。ランプが無ければ今まで通りで 0 画素差、太陽の影つきで厚い文字 8 個 60.0 枚/秒、窓で太陽を回して確かめた。
-- [ ] 文字の面取りを距離から作る（11/1、調べは `reports/text3d_2026-11-01.md`）。縁からの距離 → 高さの断面 1 本で、Round、Chamfer、Cove、Ogee、Step、彫りを書く。距離は bevy_mod_outline の WGSL（Sobel の初期値 + Jump Flood、door::screen で流せる）
+- [x] 文字の面取りを距離から作る：Bevel（angular convex concave ogee step）と Bevel Depth。絵の縁からの距離は bevy_mod_outline の Jump Flood（MIT OR Apache-2.0）で、絵が描き直された時だけ作る。深さを文字の芯まで伸ばせば Chizzle の彫り。After Effects の Bevel Style、Easy Typography の Ogee と Step が出典。8 個で 58.7 枚/秒（無しで 59.1）、窓で深さのドラッグと 6 種の選択を確かめた
+- [ ] 面取りの残り：step は深さ 85px で下端が少し破れる。Hole Bevel Depth（After Effects）は内外の区別が要る
 - [ ] 部位ごとの材質（11/1、同）：面、面取り、横、裏を別の色と質感に。金、クロムなどは Presets の棚へ
 - [ ] 重ねた縁取りを厚みでも（11/1、同）：PopText、GN Rounded Bevel の多重の縁。パチンコの文字の残り
 - [ ] 効果を掛けた物にもランプの光と影を当てる（11/1）。`effected_world.mat` と `effected_solid.mat` はまだ光を受けない（`thing_fx.h:196`）

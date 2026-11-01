@@ -1,4 +1,5 @@
 // doc_moment.h: part of doc.h (the stage told a moment). Read only through doc.h.
+static int doc_bevel(Doc& d, int thing);
 static void doc_moment(Doc& d, double now) {
     Stage& s = *d.stage;
     d.halves.clear(), d.talls.clear();   // (made again since: a flat thing's sheet is as large as its picture now)
@@ -205,6 +206,17 @@ static void doc_moment(Doc& d, double now) {
             t.drawn->look->setParameter("deep", box), t.drawn->look->setDepthCulling(lies[i].solid), t.drawn->look->setDepthWrite(lies[i].solid);
             for (const Stage::Made& made : s.made)
                 if (const auto own = d.copyLooks.find(made.thing.getId()); made.of == t.drawn->sheet && own != d.copyLooks.end()) own->second->setParameter("deep", box), own->second->setDepthCulling(lies[i].solid), own->second->setDepthWrite(lies[i].solid);
+        }
+        if (t.drawn && t.drawn->edge[0]) {   // (its bevel as it is now, in the box's lengths; as far across as through in the world. 12 points as it comes: no source, After Effects' 2 is hardly seen on a title)
+            Drawn& drawn = *t.drawn;
+            const float across = (float)(doc_number(d, thing, "bevel_depth", now, 12) / t.units), z = (float)doc_literal(d, thing, "scale_z", now, 1);
+            const float through = z != 0.f ? across * (float)doc_literal(d, thing, "scale_x", now, 1) / std::fabs(z) : 0.f;
+            const float4 cut{across, std::min(through, drawn.boxed.z), across > 0.f ? (float)doc_bevel(d, thing) : 0.f, 0.f};
+            drawn.look->setParameter("deepBevel", cut);
+            for (const Stage::Made& made : s.made)
+                if (const auto own = d.copyLooks.find(made.thing.getId()); made.of == drawn.sheet && own != d.copyLooks.end()) own->second->setParameter("deepBevel", cut);
+            const int reach = (int)std::ceil(across * (float)drawn.edgeW / (2.f * drawn.boxed.x));
+            if (drawn.stale || reach > drawn.edgeReach) drawn.edgeReach = std::max(reach, drawn.edgeReach), edge_ask(s, &drawn, drawn.edgeReach);
         }
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)lies[i].since, t.drawn->seconds));
         if (t.drawn && !t.drawn->effects.empty()) {   // (its effects as they are now: those that move are drawn again)

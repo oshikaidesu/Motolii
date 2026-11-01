@@ -140,6 +140,7 @@ struct Stage {
     struct { uint32_t w = 0, h = 0; double x = 0, y = 0, scale = 1, point = 2; math::mat4 was, wasCulled;
              bool picked = false, hovered = false, knob = true; double pick[8] = {}, hover[8] = {}; } desk;
     std::function<void()> over;   // drawn last, over all of them (a whole-screen effect: screen.h)
+    std::map<const void*, std::function<void()>> once;   // to do once before the next picture, by whose it is (a picture's distances from its edge: drawn_edge.h)
     std::vector<std::function<void()>> before;   // drawn before the stage's own view, each into a picture of its own (a thing with effects of its own: thing_fx.h)
     std::vector<std::function<void()>> aim;      // told before each frame begins, what those pictures and the looks that show them are (Filament sends a look's parameters on as a frame begins: FRenderer::beginFrame, FEngine::prepare)
     std::function<void()> lastly;   // and after everything, in the same frame (the desk: its stage's picture placed on it, live.h)

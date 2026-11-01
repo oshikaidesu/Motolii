@@ -150,6 +150,8 @@ static const DocShown doc_shown[] = {
     {"follow", "thing", "", "Follow", 0, 0, nullptr},
     {"connect_reach", "stage", "px", "Reach", 0, 2, nullptr},
     {"cap", "", "", "Ends", 0, 0, nullptr},
+    {"bevel", "", "", "Bevel", 0, 0, nullptr},
+    {"bevel_depth", "", "px", "Bevel Depth", 0, 200, nullptr},
     {"heads", "", "", "Heads", 0, 0, nullptr},
     {"head_size", "", "×", "Head", 0.5, 12, nullptr},
     {"head_shape", "", "", "Head shape", 0, 0, nullptr},
@@ -367,6 +369,7 @@ static const DocCard doc_cards[] = {
     {"Path", "round bloat offset zigzag zigzag_ridges zigzag_smooth", "kind", "shape", true},   // (its path made anew: After Effects' shape operators, ThorVG's own)
     {"Edit Shape", "crop_left crop_top crop_right crop_bottom round", "kind", "picture"},   // (a photo's rect, Alight Motion's Edit Shape, AbsentMotion's Shape Options: cut in from its sides, what is left where it was, and its corners rounded; drawn as a rect its own file fills, doc_match)
     {"Deform", "warp bend twist pinch skew squash wiggle stretch bend_direction pin_tl_x pin_tl_y pin_tr_x pin_tr_y pin_bl_x pin_bl_y pin_br_x pin_br_y warp_width warp_angle warp_speed skew_axis wiggle_detail wiggle_speed", "kind", "shape", true},   // (its points moved as it is drawn: Cavalry's deformers)
+    {"Bevel", "bevel bevel_depth", nullptr, nullptr, true},
     {"Surface", "shading metallic roughness reflectance clear_coat clear_coat_roughness sheen anisotropy thickness emissive", "fill", "!glass", true},
     {"Glass", "ior dispersion swim dark vivid", "fill", "glass"},
     {"Lit", "light_group", "kind", "solid", true},   // (which lights reach it)

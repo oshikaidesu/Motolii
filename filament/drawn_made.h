@@ -96,6 +96,7 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
     if (!d->look) return nullptr;
     d->look->setParameter("picture", d->texture, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
     if (fx.thick) d->look->setParameter("deep", float4{d->boxed, 0.f}), d->look->setParameter("deepTurn", float4{1.f, 0.f, 0.f, 1.f});
+    if (fx.bevel) edge_make(s, d, (uint32_t)w, (uint32_t)h), d->look->setParameter("edge", d->edge[2], TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
     return d;
 }
 

@@ -31,6 +31,13 @@ static std::string doc_mosh(Doc& d, int thing) {
 }
 // A thing in the lamps' light: as an After Effects 3D layer once its composition has a light; with none, as it is drawn.
 static std::vector<int> doc_things(Doc& d);
+// A thing's bevel: which of its ways, 0 none (and none but on a box).
+static int doc_bevel(Doc& d, int thing) {
+    const std::string way = doc_word(d, thing, "bevel");
+    const char* const ways[] = {"angular", "convex", "concave", "ogee", "step"};
+    for (int k = 0; k < 5; k++) if (way == ways[k] && doc_on(d, thing, "scale_z")) return k + 1;
+    return 0;
+}
 static bool doc_lit(Doc& d, int thing) {
     const std::string space = doc_word(d, thing, "space");
     if (!doc_among("film text picture shape", doc_word(d, thing, "kind").c_str()) || (space != "3d" && space != "2.5d" && !doc_on(d, thing, "scale_z"))) return false;
@@ -53,6 +60,7 @@ static bool doc_match(Doc& d) {
         const auto on = [&](const char* name) { return std::max(doc_most(d, thing, name, 0), doc_number(d, thing, name, 0, 0)) > 0.0; };
         if (doc_on(d, thing, "mosh")) of += " moshed=" + doc_mosh(d, thing);   // (made again once its datamosh is made)
         if (doc_on(d, thing, "scale_z")) of += " deep";   // (made once more as it is given depth: its sheet a box)
+        if (doc_bevel(d, thing)) of += " bevel";
         if (doc_lit(d, thing)) of += " lit";   // (and as a lamp comes or goes)
         if (of.find("kind=text") != std::string::npos) of += " shown=" + doc_text_shown(d, thing, s.now);   // (its words as AbsentMotion's text effects show them now: made again as they change (doc_moment))
         of += " order=" + doc_fx_join(doc_fx_list(d, thing)) + " fx=" + std::to_string((int)on("blur")) + (doc_word(d, thing, "shadow").empty() ? "0" : "1") + (doc_word(d, thing, "glow").empty() ? "0" : "1") + std::to_string((int)on("tint")) + std::to_string((int)on("tritone"))
@@ -129,7 +137,7 @@ static bool doc_match(Doc& d) {
         if (!stroke.empty() && edgeRgb < 0) why = "a stroke is six digits, as ff3366";
         const double units = 0.5 * s.h * up.y / up.w;   // (points of the picture to one unit of the stage, where things stand at first)
         DrawnFx fx;
-        fx.thick = doc_on(d, thing, "scale_z"), fx.lit = doc_lit(d, thing);
+        fx.thick = doc_on(d, thing, "scale_z"), fx.lit = doc_lit(d, thing), fx.bevel = doc_bevel(d, thing) > 0;
         if (ramp.size() > 1) fx.ramp = ramp;
         if (ramp.size() > 1 && std::any_of(rampAt.begin(), rampAt.end(), [](float a) { return a >= 0.f; })) {   // (placed: one not said stands evenly; one before the one ahead of it stands where that one does, CSS Images 3's colour stop fix-up)
             for (size_t i = 0; i < rampAt.size(); ++i) {

@@ -4,6 +4,7 @@
 # its picture's own colour, and two boxes cross where they really meet (After Effects' 3D layers intersect).
 # With a lamp in the document it takes its light, flat or thick, as an After Effects 3D layer; what it throws on a wall
 # is the shape drawn, not its box (a depth-only pass keeps its fragment stage: dawn_probe/filament_webgpu_depth_fragment.patch).
+# A bevel cuts its rim by how far each point is from its edge (drawn_edge.h); no bevel, or none deep, is the box as it was.
 #   ./check/deep.sh
 cd "$(dirname "$0")/.."
 W=$(mktemp -d)
@@ -16,6 +17,8 @@ shot one "$one"; shot crossed "$one\n$two"
 wall="add solid cube\nsay 2 fill bfbfbf\nset 2 scale_x 14\nset 2 scale_y 8\nset 2 scale_z 0.1\nset 2 z -0.8"
 sun="add light sun\nset 3 shadows 1\nset 3 intensity 0.3\nset 3 rotate_x -30\nset 3 rotate_y 25"
 shot bare "$star\nset 1 scale_z 1\n$wall"; shot sunlit "$star\nset 1 scale_z 1\n$wall\n$sun"; shot flatlit "$star\n$wall\n$sun"; shot unshaded "$star\nset 1 scale_z 1\n$wall\n$sun\nset 3 shadows 0"
+bevel="$star\nset 1 scale_z 1\n$wall\n$sun"
+shot plain "$bevel"; shot bevel0 "$bevel\nsay 1 bevel none"; shot bevelled "$bevel\nsay 1 bevel convex\nset 1 bevel_depth 30"; shot bevelno "$bevel\nsay 1 bevel convex\nset 1 bevel_depth 0"
 python3 -c "
 from PIL import Image, ImageChops
 import numpy as np
@@ -35,4 +38,7 @@ front = abs(b - [0xe5, 0x43, 0x2d]).max(axis=2) < 6; same = (abs(b - l)[front].m
 print('flat, it takes the lamp too: ' + ('yes' if (abs(L('flat') - f).max(axis=2) > 8)[abs(L('flat') - [0xe5, 0x43, 0x2d]).max(axis=2) < 6].mean() > .9 else 'NO'))
 dark = (L('unshaded') - l).sum(axis=2) > 8
 y, x = np.nonzero(dark); box = (y.max() - y.min()) * (x.max() - x.min()); print('its shadow is its shape, not its box: ' + ('yes' if 2000 < dark.sum() < .75 * box else 'NO') + ' (%d of %d pixels)' % (dark.sum(), box))
+p, e = L('plain'), L('bevelled')
+n = (p != L('bevel0')).any(axis=2).sum() + (p != L('bevelno')).any(axis=2).sum(); print('no bevel, or none deep, is the box as it was: ' + ('yes' if n == 0 else 'NO') + ' (%d pixels changed)' % n)
+ring = abs(p - e).max(axis=2) > 8; star = abs(p - p[0, 0]).max(axis=2) > 8; print('a bevel shades its rim, not its middle: ' + ('yes' if 2000 < ring.sum() < .75 * star.sum() else 'NO') + ' (%d of %d pixels)' % (ring.sum(), star.sum()))
 "

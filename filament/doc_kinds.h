@@ -370,6 +370,7 @@ static const DocValue doc_values[] = {
     {"gradient_blend", "text shape", 0, 0, false, "rgb oklab hue steps"},
     {"cap", "shape", 0, 0, false, "butt round square"}, {"join", "shape", 0, 0, false, "miter round bevel"},
     // (arrow heads on its edge's open ends, Cavalry's basicArrowHead: which ends, and so many times its edge long)
+    {"bevel", "text shape picture", 0, 0, false, "none angular convex concave ogee step"}, {"bevel_depth", "text shape picture", 0, 4096, true, nullptr},   // (After Effects' Bevel Style and Depth; Ogee and Step Easy Typography's)
     {"heads", "shape", 0, 0, false, "none end start both"},
     {"head_size", "shape", 0.5, 40, false, nullptr},
     {"head_shape", "shape", 0, 0, false, "arrow circle box chevron bar t_line square square_filled diamond diamond_filled arrow_hollow arrow_filled circle_hollow circle_filled teardrop_hollow teardrop_filled"}, {"head_start", "shape", 0, 0, false, "arrow circle box chevron bar t_line square square_filled diamond diamond_filled arrow_hollow arrow_filled circle_hollow circle_filled teardrop_hollow teardrop_filled"},
