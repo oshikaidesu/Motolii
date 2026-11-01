@@ -1,4 +1,4 @@
-// doc_sketch.h: part of doc.h. What a p5.js sketch draws in WEBGL, as p5 itself has it each frame (p5_stand.h's __mesh_at:
+// doc_sketch.h: part of doc.h. What a p5.js sketch draws in WEBGL, as p5 itself has it each frame (p5_mesh.h's __mesh_at:
 // its own shapes, its own vertices, what its camera sees), stood in the world as one mesh, made again each frame as a
 // sheet's is (kit_stage.h's reshape). Shapes come once and are laid out here (a thousand spheres are too many for a script
 // to turn each frame), so a sketch has no limit of copies, and any shape it can draw is the shape it drew. A line is a thin
@@ -21,7 +21,7 @@ static const SketchShape* doc_sketch_shape(std::vector<SketchShape>& shapes, Scr
     }
     return &shapes[i];
 }
-// A shader of a sketch's as a Filament material: what p5_stand.h's __shader_text made of it, compiled by Filament's own matc as the kit's
+// A shader of a sketch's as a Filament material: what p5_mesh.h's __shader_text made of it, compiled by Filament's own matc as the kit's
 // are (dawn_probe/kit_wgpu.sh), a third of a second for a real one, kept by what it says. What cannot be made says why and paints nothing.
 static SketchPaint doc_sketch_paint(Stage& s, const std::string& text, const std::string& names) {
     SketchPaint paint;
@@ -57,7 +57,7 @@ static void doc_sketch_told(MaterialInstance* look, const SketchTold& one, const
     else if (one.type == "mat4") { mat4f m; std::memcpy(&m, v, sizeof m); look->setParameter(name, m); }
 }
 static void doc_sketch_mesh(Doc& d, int thing, Doc::Shown& t, double now) {
-    // (p5_stand.h's __mesh_at: how many of each, its unit, its size, what it clears with, how many pictures, how long the table of what
+    // (p5_mesh.h's __mesh_at: how many of each, its unit, its size, what it clears with, how many pictures, how long the table of what
     //  it lights is; then each shape it stands: which, its 16, fill, flat -1 none, its line, stroke, weight, picture; each corner of a
     //  triangle: x y z, normal, colour, flat, line, where it reads its picture, which; each line: two ends, colour, weight, line; then
     //  sketch.mat's table; then what each way of being told a shader says. A sketch past MOST points shows as many as fit, past PICTURES
@@ -157,7 +157,7 @@ static void doc_sketch_mesh(Doc& d, int thing, Doc::Shown& t, double now) {
         std::memcpy(&e, r + 1, 16 * sizeof(float));
         e = e * mat4f::scaling(float3{k});
         const mat3f turn = transpose(inverse(e.upperLeft()));
-        const auto seen = [&](float3 p) { const float4 q = e * float4{p, 1.f}; return q.xyz / std::max(q.w, 0.1f) * flip; };   // (as __w: where p5_stand.h's __view carried it)
+        const auto seen = [&](float3 p) { const float4 q = e * float4{p, 1.f}; return q.xyz / std::max(q.w, 0.1f) * flip; };   // (as __w: where p5_mesh.h's __view carried it)
         if (r[21] >= 0.f && m.pos.size() + shape->pos.size() <= MOST) {
             const uint32_t o = (uint32_t)m.pos.size();
             std::vector<uint32_t>& into = part(r[21]);

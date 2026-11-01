@@ -230,7 +230,7 @@ Script::Script(const std::string& file, const std::string& p5, const std::string
         const std::string p5js = all.str();
         JS_FreeValue(own->cx, JS_Eval(own->cx, p5_before, std::char_traits<char>::length(p5_before), "p5_before", JS_EVAL_TYPE_GLOBAL));
         JS_FreeValue(own->cx, JS_Eval(own->cx, p5js.c_str(), p5js.size(), "p5.min.js", JS_EVAL_TYPE_GLOBAL));
-        JS_FreeValue(own->cx, JS_Eval(own->cx, p5_after, std::char_traits<char>::length(p5_after), "p5_after", JS_EVAL_TYPE_GLOBAL));
+        for (const char* stand : {p5_after, p5_three, p5_mesh}) JS_FreeValue(own->cx, JS_Eval(own->cx, stand, std::char_traits<char>::length(stand), "p5_after", JS_EVAL_TYPE_GLOBAL));
         if (const std::string needs = door_library(form); !needs.empty()) {
             std::ifstream one(std::filesystem::path(p5).parent_path().parent_path() / needs);
             std::stringstream text;
