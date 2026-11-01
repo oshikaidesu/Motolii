@@ -130,6 +130,23 @@ void main() {
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
+  testWidgets('a row opened says what it aims at, a press goes there (Cavalry\'s connections, After Effects\' Parent column)', (t) async {
+    final j = _joined(), m = j.ws.inside!, ws = j.ws;
+    await _pump(t, ws);
+    m.set(j.rect, 'parent', j.ring.toDouble());
+    ws.reread();
+    await t.pumpAndSettle();
+    final aim = find.byKey(ValueKey('ws-tl-aim-${j.rect}-Parent-${j.ring}'));
+    expect(aim, findsNothing, reason: 'shut');
+    ws.twirl(['${j.rect}']);
+    await t.pumpAndSettle();
+    expect(aim, findsOneWidget, reason: m.trouble);
+    await t.tap(aim);
+    await t.pumpAndSettle();
+    expect(ws.selected, '${j.ring}');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
   testWidgets('a stretch of a lane pressed is picked, no key put; pressed twice a key goes there', (t) async {
     final j = _joined(), m = j.ws.inside!, ws = j.ws;
     await _pump(t, ws);

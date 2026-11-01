@@ -26,6 +26,21 @@ Set<String> wsMembersOf(Ws ws) {
   return {for (final w in m.word(sel, 'members').split(' ')) if (int.tryParse(w) case final t? when m.things.contains(t)) '$t'};   // (its own list, in its order: one it moves through another relation counted too)
 }
 
+/// What a thing aims at: each value of it that names another thing (Parent, Leader, Join, Into...), and a relation's
+/// things, with what it is called there. A number's connection in Cavalry shows at both its ends; here at the end that
+/// says it, in the row's own lanes (After Effects' Parent & Link column, a row's parent named on the timeline).
+List<(String, String)> wsTargets(Ws ws, String id) {
+  final m = ws.inside, t = int.tryParse(id);
+  if (m == null || t == null) return const [];
+  return [
+    for (final n in m.values(t))
+      if (m.shown(n) case final s? when s.look == 'thing')
+        if ((m.value(t, n, 0) ?? 0).round() case final o when m.things.contains(o)) (s.label, '$o'),
+    if (m.word(t, 'kind') == 'behaviour' && wsRelations.contains(m.word(t, 'file')))
+      for (final s in m.word(t, 'members').split(' ')) if (int.tryParse(s) case final o? when m.things.contains(o)) ('Moves', '$o'),
+  ];
+}
+
 /// Joined: the picked relation led by another thing, nothing moving (the old leader among its things).
 void wsLead(Ws ws, String id) {
   final m = ws.inside, by = int.tryParse(ws.selected ?? ''), t = int.tryParse(id);

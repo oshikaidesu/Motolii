@@ -428,6 +428,7 @@ class Ws extends ChangeNotifier {
   // unfolded), or, with Animate on, every thing's (golf ③), and then what is kept is the ones shut by hand.
   final _lanesOpen = <String>{}, _lanesShut = <String>{};
   bool lanesOpen(String id) => animating ? !_lanesShut.contains(id) : _lanesOpen.contains(id);
+  bool aimsOpen(String id) => _lanesOpen.contains(id) && !_lanesShut.contains(id);   // (what it aims at, opened by hand: Animate lays out keys, not every relation's things)
   void twirl(Iterable<String> ids) {
     final open = ids.any(lanesOpen), s = animating ? _lanesShut : _lanesOpen;
     open == animating ? s.addAll(ids) : s.removeAll(ids);

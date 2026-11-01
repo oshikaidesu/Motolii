@@ -482,6 +482,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] レーンの箱（Ableton の Stretching and Skewing Envelopes、Live 12 手引き 26.7.2）。作る前に Logic と FL Studio も見る
 - [ ] レーンへの形の差し込み（Ableton の Insert Shape）
 - [ ] レーンの名前を押して、その物の値（効果のつまみも）から狙う先を選ぶ。キーの無い値でもレーンが出る（Ableton の Device と Control の chooser、Logic の Automation Parameter、Zrythm の検索付き popover）。VST の数百の引数もこの入口に載る。11/1 の時点で窓には無い
+- [ ] 関係をタイムラインでつなぐ・張り替える：行から行へ引くと何につなぐか出る（Cavalry の Scene Window：層の Connection Anchor から別の層へ引き、出た一覧で値を選ぶ）。受ける側の行にも出す（Cavalry は入力と出力の両端に印）。ふるまい（`_by`）を窓から値につなぐ入口も無い。つなぎ先の行の時間の帯に何を描くかも未定
 - [x] 作った形を残す — 済（10/31）：右端のつまみで出し入れする棚（列が右から入って全体を左へ押す。流れは隠れない）。流れのカードや足元の結果を棚へ運ぶ、または棚の空き枠を押すと残る。重ねた結果も 1 つで残り、押すと 1 枚ずつのカードで戻る。× で消える。50 個で確かめた。`~/.motolii/ease_kept.json`（Live の手引き 23.2.5 Saving Presets、Photoshop の Swatches の空き、macOS の spring-loaded folders、Easey の presetsPage.js。`desk_ease_shelf.dart`）
 - [x] `cubic-bezier(...)`・`linear(...)` を貼ってイーズにする — 済（10/31）：⋯ の Paste Curve がクリップボードの文字から読む。文の途中にあってもよい（CSS Easing Functions 2、`linear()` は anime.js が解く。`desk_ease_cards.dart` の easeFromText）。Copy Curve は CSS の書き方で出す
 - [x] イーズの数を打って決める — 済（10/31）：グラフ下の形の名前に、インスペクタのカードと同じ折りたたみの印（FoldMark）が付き、押すと数値が開く。開いたままを覚える。Waves・Steps は「いくつ」で言う（数の名は AbsentMotion の Keyframes.kt）。こする・押して打つ。`desk_ease_numbers.dart`

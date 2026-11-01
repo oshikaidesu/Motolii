@@ -9,6 +9,12 @@ extension _WsTimelineRows on _WsTimelineState {
     return [for (final s in m.word(t, 'members').split(' ')) if (s.isNotEmpty && s != '_') wsLabel(s)];
   }
 
+  // A thing by its row's number and name, as After Effects' Parent column says it (many may share the name).
+  String _numbered(Ws ws, String id) {
+    final i = ws.layers.indexWhere((l) => l.id == id);
+    return i < 0 ? id : '${i + 1} ${ws.layers[i].name}';
+  }
+
   // The eye of a row. Joined: the thing is put aside in the document (visible 0) and is not on the stage; one step.
   bool _isHidden(Ws ws, String id) => ws.layers.any((l) => l.id == id && l.hidden);   // (as last read: no call to the inside while a row is built)
 
@@ -42,7 +48,26 @@ extension _WsTimelineRows on _WsTimelineState {
                 return Stack(
                   children: [
                     for (var i = 0; i < rows.length; i++)
-                      if (_order[i].value case final n?)   // (a value's lane: its name, under its layer's, as Ableton names a lane by its control)
+                      if (_order[i].aim case (final said, final other)?)
+                        Positioned(
+                          key: ValueKey('ws-tl-aim-${ws.layers[_order[i].layer].id}-$said-$other'),
+                          left: Shape.s(34),
+                          right: Shape.s(8),
+                          top: i * WtM.row - top,
+                          height: WtM.row,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => ws.select(other),   // (a press goes there: Cavalry's connection list)
+                            child: Row(
+                              children: [
+                                Text(said, maxLines: 1, style: T.label(Grey.g56)),
+                                SizedBox(width: Shape.s(5)),
+                                Flexible(child: Text(_numbered(ws, other), maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g91))),
+                              ],
+                            ),
+                          ),
+                        )
+                      else if (_order[i].value case final n?)   // (a value's lane: its name, under its layer's, as Ableton names a lane by its control)
                         Positioned(
                           key: ValueKey('ws-tl-lane-${ws.layers[_order[i].layer].id}-$n'),
                           left: Shape.s(34),
@@ -83,7 +108,7 @@ extension _WsTimelineRows on _WsTimelineState {
                             row: rows[i],
                             hidden: _isHidden(ws, l.id),
                             solo: _isSolo(ws, l.id),
-                            lanes: l.keys.isEmpty ? null : ws.lanesOpen(l.id),
+                            lanes: l.keys.isEmpty && wsTargets(ws, l.id).isEmpty ? null : ws.lanesOpen(l.id),
                             onLanes: () => ws.twirl([l.id]),
                             onSelect: () => HardwareKeyboard.instance.isShiftPressed
                                 ? wsPickRange(ws, l.id)   // (Shift: every row from the last picked to this, After Effects' manner)

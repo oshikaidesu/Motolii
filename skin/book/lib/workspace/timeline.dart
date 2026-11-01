@@ -54,7 +54,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
 
   // The rows as laid: each layer's own, then, while it stands open, a lane for each of its values that moves (Ableton's
   // automation lanes, Live 12 manual 25.5: with Cmd, every automated envelope in a lane of its own). value: the lane's.
-  List<({int layer, String? value})> _order = const [];
+  List<({int layer, String? value, (String, String)? aim})> _order = const [];   // (aim: a row saying what the layer aims at, wsTargets; its value '', no keys)
 
   // A layer's values that have keys, in the thing's own order of them (Ableton lays out the automated ones: "Show
   // Automated Parameters Only"; with Animate on every value is said to move, so its keys tell).
@@ -450,9 +450,11 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     final sel = ws.selected, picks = ws.keys, lit = {...ws.many, ...wsMembersOf(ws)};   // (picked together, or moved by the relation picked: lit with it)
     _order = [
       for (final (i, l) in ws.layers.indexed) ...[
-        (layer: i, value: null),
+        (layer: i, value: null, aim: null),
+        if (ws.aimsOpen(l.id))
+          for (final a in wsTargets(ws, l.id)) (layer: i, value: '', aim: a),
         if (ws.lanesOpen(l.id))
-          for (final n in _moving(ws, l)) (layer: i, value: n),
+          for (final n in _moving(ws, l)) (layer: i, value: n, aim: null),
       ],
     ];
     final rows = <WtRow>[

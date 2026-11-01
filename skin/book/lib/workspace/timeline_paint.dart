@@ -322,7 +322,7 @@ class WtTracksPainter extends CustomPainter {
   }
 
   void _row(Canvas c, Size s, WtRow r, double cy) {
-    if (r.lane case final pts? when pts.isNotEmpty) return _lane(c, s, r, pts, cy);
+    if (r.lane case final pts?) return pts.isEmpty ? null : _lane(c, s, r, pts, cy);   // (empty: a row that only says what it aims at)
     final p = Paint(), x0 = view.x(r.inF), x1 = math.max(view.x(r.outF), x0 + 4), h = Forms.worn.trackBar(selected: r.selected);
     if (r.whole case (final a, final b)?) c.drawRect(Rect.fromLTRB(view.x(a), cy - h / 2, view.x(b), cy + h / 2), p..color = wtBarFill(r).withValues(alpha: .18));
     if (x1 < 0 || x0 > s.width) return;
