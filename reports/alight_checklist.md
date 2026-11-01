@@ -536,7 +536,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] Poly Haven の棚（11/1、reports/blender_sellers_2026-11-01.md）：HDRI と材質と模型を探して 1 手で入れる。素材は CC0、Poly Haven Asset Browser は棚だけで 18,800 本超
 - [ ] 人の動きを別の人形へ移す（11/1、同）：.glb の動きは流せるが移す口が無い。Auto-Rig Pro が 70,700 本超で一番売れている所。既存の実装を探す所から
 - [ ] 火と爆発の棚（11/1、同）：名前で探して見つからない。Dynamic VFX Elemental、Khaos が見本
-- [ ] 3D の面に物を散らす（11/1、同）：Scatter Repeat と Scatter Field は層を平面に散らす。Geo-Scatter が見本
+- [ ] 3D の面に物を散らす（11/1、同）：Scatter Repeat と Scatter Field は層を平面に散らす。Geo-Scatter と Cinema 4D の Cloner が見本（Cloner は Blender Artists で移行の一番の穴）
 - [ ] 音で動かす（11/1、reports/blender_sellers_2026-11-01.md）：音の大きさや帯域で物の値を動かす。BPM と打点はある。M.V.P と BeatBlender が見本
 - [ ] 舞台と灯りの組の棚（11/1、同）：Direktor 3D の舞台 14、灯り 20 が見本
 - [ ] VRM と踊りを読む（11/1、同）：VRM、VMD、Mixamo の FBX。BOOTH の VRM Live Viewer の人たちの素材がそのまま使える口

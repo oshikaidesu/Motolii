@@ -4,7 +4,7 @@
 
 ## 結論
 
-- MV の人が Blender へ行く一番の理由は世界。絵や実写を 3D の中に置いて、灯りを当てて、カメラで撮りたい。After Effects の 3D は物を並べるのが限界だった。入口は人によって絵コンテとアニメ調の人形。文字と仕上げは After Effects に残る。
+- MV の人が Blender へ行く話は 2 段に分かれる。3D が要るのは作品で見える。C4D でなく Blender を選ぶのはお金の説明が筋が通る（ユーザー：「c4dでもう既にいいのに金かかりすぎるからかも」）。「世界の中で撮りたい」は本人の言葉で、格好をつけた分は切り分けられない。文字と仕上げは After Effects に残る。
 - 店で売れているのは、人形に動きを移す道具と、出来合いの素材の棚。MV の人に絞ると Direktor 3D のような専用の棚があり、After Effects か AviUtl で仕上げている。
 - 1 位は Auto-Rig Pro で 70,700 本超。動きのプリセットそのものではなく、動きを別の人形へ移せる。
 - 文字や図形の動きだけのプリセット集は桁が小さい。MoGraph Toolbox が 800 本超、CinePack が 3,900 本超。
@@ -27,7 +27,7 @@
 | アニメ調の人形 | ぽぷりか、revirytic、かげひと | トゥーンを安く作れるとかげひとが書く。ぽぷりかの NPR 講座、セルルックの MV 制作ノート。Eevee の NPR の講演は 76,000 回再生 |
 | 布、流体、物理 | hama | 布と流体は Blender、ボールは After Effects。レンダリング 24 時間でも使う |
 | 待たずに見られる | tamf_kazuki（全編 Eevee）、涌井嶺 | 軽く作れば Eevee でその場で動く |
-| サブスクが嫌 | Blender Artists、Karon の動画のコメント（いいね 74） | Maxon のサブスク移行と教育版の打ち切り。これは Cinema 4D から来る人の理由。MV の作り手の記事では主な理由に出てこなかった |
+| お金 | Blender Artists、Karon の動画のコメント（いいね 74）、涌井嶺、revirytic、かげひと | Cinema 4D は年 $839、Blender は 0。Maxon のサブスク移行と教育版の打ち切りで離れた人がいる。涌井嶺は有料の拡張無しを売りに書き、revirytic は有料の Pencil+4 を標準機能で置き換え、かげひとはコスパと書く。海月とうみの MV へのコメント「こういうのやりてぇわ……C4Dか……」はいいね 216 |
 
 英語圏のラップの MV も形は近い。Max Novak の動画は再生 7 万〜22 万回で、説明欄は緑バックの合成、カメラ追跡、3D の人形の話。説明欄しか読めていない。
 
@@ -41,7 +41,7 @@
 | 往復の苦しさ | hama は 120fps で書き出して After Effects で詰めた。涌井嶺は EXR が After Effects で重くエラーも出た。darenoki は BlenderAe でもモデルは渡せず、人の前後で分けて書き出す要があると書く |
 | レンダリング待ち | 涌井嶺は平均 3〜4 分/コマ。Tarahese は自分の PC では 2 年かかると書く |
 
-読み取り：行く理由は世界で、残る理由は文字と切り貼り。だから皆 2 本の間を往復している。ぽぷりかは逆に Blender の中に編集と文字を寄せている。BYOL の動画のコメントで、読んだ中で一番いいねが多い物（182）は、After Effects 風の 2D を Blender でやる講座が欲しいという物だった。
+読み取り（ユーザーの指摘で直した。前の版は「一番の理由は世界」と書いたが、本人の言葉を数えただけだった）：3D が要るのは作品で見える。Blender を選ぶのはお金の説明が筋が通る。Motionographer では Cinema 4D 76 記事、Blender 13 記事で、お金のある所は Cinema 4D のままに見える。残る理由は文字と切り貼り。だから皆 2 本の間を往復している。ぽぷりかは逆に Blender の中に編集と文字を寄せている。BYOL の動画のコメントで、読んだ中で一番いいねが多い物（182）は、After Effects 風の 2D を Blender でやる講座が欲しいという物だった。
 
 ### Motolii と照らす
 
@@ -61,6 +61,8 @@
 | 魚眼 | 検索で見つからない | ひっひっふーの絵の核 |
 
 大きな差はアニメ調、人形、追跡の 3 つ。
+
+お金はもう差にならない。Blender、Autograph、Cavalry は個人なら 0。差は手数だけになる。手数の見本は Blender より Cinema 4D。Blender Artists で移行の一番の穴に挙がるのは Cinema 4D の Cloner で、物理もタグ 1 つと褒められている。Motolii の物理も値 1 つ（`physics`）で、Cloner に当たる物は平面の Scatter まで。
 
 ## 売れた本数
 
@@ -190,7 +192,8 @@ Blender へ行く理由から直した。
 2. 緑バックの 1 カットを Blender の手順と比べて手数を測る。部品はあるので、動画で影まで通るかを含めて確かめる。
 3. 人形：VRM、動きを別の人形へ。
 4. カメラ追跡、魚眼。
-5. Autograph を触って手数を比べる。
+5. 3D の Cloner。Cinema 4D が見本。
+6. Autograph を触って手数を比べる。
 
 文字、BPM、型の棚は外した。ユーザー：「そこらへんはもう奪ってるだろ」。カメラの動きも外した。ユーザー：「区間イージングでどうにかできる話」。
 
@@ -207,7 +210,8 @@ Blender へ行く理由から直した。
 - ぽぷりかがコンテを移した経緯は、公開の制作メモを読んだ人の note と、CGWORLD の記事の検索結果で読んだ。CGWORLD は 11/1 にメンテナンス中で本文は読めず、FANBOX の本人の記事も読めていない。
 - ビデオサロンの講座の「Blender を使うメリット」は項目名だけで、中身は有料で読んでいない。
 - BCON の講演は説明欄とコメントだけ。字幕は取れない。OK Go はジオメトリノードと実時間の入力の話で、After Effects から来た理由は書かれていない。
-- MV の作り手の記事が「無料」を主な理由にしていないのは、読んだ note の範囲の話。
+- コメント 313 件でお金と世界の話を数えたが、お金 11 件、世界 12 件で誤検出も多く、どちらが強いかは決められなかった。お金の説は確かめた結論ではなく、一番筋が通る説明。
+- Cinema 4D の値段は Maxon のページと CG Channel の検索結果で読んだ。公式ページ本体は開いていない。
 - 灯りと影の試しは静止画 1 枚。露出は調整していない。動画と Chroma Key の組は試していない。
 - 本数は「その店で」の数字。Blender の無料の拡張の棚と、Gumroad などの他の店は入っていない。
 - 本数には発売からの長さが効く。週間の順位でも Auto-Rig Pro は 1 位だったので、今も強いとは言える。
@@ -261,6 +265,9 @@ Blender へ行く理由から直した。
 - [ひっひっふー MV のセミナー（ビデオサロン）](https://videosalon.jp/premium/vsw307/)
 - [映像作家 ぽぷりかの講座（Coloso）](https://coloso.jp/products/videocreator-popurika-jp)
 - [Hurray! の映画は Blender が主（ITmedia）](https://www.itmedia.co.jp/news/articles/2401/24/news182.html)
+- [Cinema 4D の値段（Maxon）](https://www.maxon.net/en/cinema-4d)
+- [Cinema 4D 2027.0 と値段（CG Channel）](https://www.cgchannel.com/2026/10/maxon-releases-cinema-4d-2027-0/)
+- [VTuber が自分で MV を作った（海月とうみ）](https://www.youtube.com/watch?v=aFkKIJyxv5U)
 - [Eevee の NPR（Blender Fes）](https://www.youtube.com/watch?v=c9v2GjmylEg)
 - [This Is Why Blender Is Replacing After Effects（BYOL）](https://www.youtube.com/watch?v=5QaW7oI5rTw)
 - [I've Used Both Blender and Cinema 4D（Karon）](https://www.youtube.com/watch?v=9Vs5MQ0EogE)
