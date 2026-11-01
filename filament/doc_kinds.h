@@ -373,6 +373,10 @@ static const DocValue doc_values[] = {
     {"cap", "shape", 0, 0, false, "butt round square"}, {"join", "shape", 0, 0, false, "miter round bevel"},
     // (arrow heads on its edge's open ends, Cavalry's basicArrowHead: which ends, and so many times its edge long)
     {"bevel", "text shape picture", 0, 0, false, "none angular convex concave ogee step"}, {"bevel_depth", "text shape picture", 0, 4096, true, nullptr},   // (After Effects' Bevel Style and Depth; Ogee and Step Easy Typography's)
+    // (a thick thing's other faces as After Effects' Bevel, Side and Back Color, each its own Metal; none said: as its front)
+    {"bevel_color", "text shape picture", 0, 0, false, ""}, {"bevel_metallic", "text shape picture", 0, 1, false, nullptr}, {"bevel_roughness", "text shape picture", 0, 1, false, nullptr},
+    {"side_color", "text shape picture", 0, 0, false, ""}, {"side_metallic", "text shape picture", 0, 1, false, nullptr}, {"side_roughness", "text shape picture", 0, 1, false, nullptr},
+    {"back_color", "text shape picture", 0, 0, false, ""}, {"back_metallic", "text shape picture", 0, 1, false, nullptr}, {"back_roughness", "text shape picture", 0, 1, false, nullptr},
     {"heads", "shape", 0, 0, false, "none end start both"},
     {"head_size", "shape", 0.5, 40, false, nullptr},
     {"head_shape", "shape", 0, 0, false, "arrow circle box chevron bar t_line square square_filled diamond diamond_filled arrow_hollow arrow_filled circle_hollow circle_filled teardrop_hollow teardrop_filled"}, {"head_start", "shape", 0, 0, false, "arrow circle box chevron bar t_line square square_filled diamond diamond_filled arrow_hollow arrow_filled circle_hollow circle_filled teardrop_hollow teardrop_filled"},

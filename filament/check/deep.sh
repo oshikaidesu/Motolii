@@ -6,7 +6,8 @@
 # is the shape drawn, not its box (a depth-only pass keeps its fragment stage: dawn_probe/filament_webgpu_depth_fragment.patch).
 # A bevel cuts its rim by how far each point is from its edge (drawn_edge.h); no bevel, or none deep, is the box as it was.
 # Metal is a solid's own three numbers, and needs no lamp: it mirrors the room. With an effect of its own a flat thing is
-# filmed apart, and its sheet, standing where it lies, throws the shadow.
+# filmed apart, and its sheet, standing where it lies, throws the shadow. Its bevel, side and back each take a colour of
+# their own (After Effects' Bevel, Side and Back Color), and its front stays as it is.
 #   ./check/deep.sh
 cd "$(dirname "$0")/.."
 W=$(mktemp -d)
@@ -22,6 +23,7 @@ shot bare "$star\nset 1 scale_z 1\n$wall"; shot sunlit "$star\nset 1 scale_z 1\n
 bevel="$star\nset 1 scale_z 1\n$wall\n$sun"
 shot plain "$bevel"; shot bevel0 "$bevel\nsay 1 bevel none"; shot bevelled "$bevel\nsay 1 bevel convex\nset 1 bevel_depth 30"; shot bevelno "$bevel\nsay 1 bevel convex\nset 1 bevel_depth 0"
 shot metal "$star\nset 1 scale_z 1\nset 1 metallic 1\nset 1 roughness 0.2"
+shot partside "$star\nset 1 scale_z 1\nsay 1 side_color 2fd04a"; shot partback "$star\nset 1 scale_z 1\nset 1 rotate_y 160\nsay 1 back_color 2fd04a"; shot partbevel "$star\nset 1 scale_z 1\nsay 1 bevel convex\nset 1 bevel_depth 20\nsay 1 bevel_color 2fd04a"
 fxd="say 1 fx $PWD/effects/am_huesaturation.wgsl"
 shot fxlit "$star\n$fxd\n$wall\n$sun"; shot fxshaded "$star\n$fxd\n$wall\n${sun/shadows 1/shadows 0}"
 python3 -c "
@@ -47,5 +49,9 @@ p, e = L('plain'), L('bevelled')
 n = (p != L('bevel0')).any(axis=2).sum() + (p != L('bevelno')).any(axis=2).sum(); print('no bevel, or none deep, is the box as it was: ' + ('yes' if n == 0 else 'NO') + ' (%d pixels changed)' % n)
 ring = abs(p - e).max(axis=2) > 8; star = abs(p - p[0, 0]).max(axis=2) > 8; print('a bevel shades its rim, not its middle: ' + ('yes' if 2000 < ring.sum() < .75 * star.sum() else 'NO') + ' (%d of %d pixels)' % (ring.sum(), star.sum()))
 front = abs(deep - [0xe5, 0x43, 0x2d]).max(axis=2) < 6; m = abs(deep - L('metal')).max(axis=2) > 8; print('said to be metal, it mirrors the room with no lamp: ' + ('yes' if m[front].mean() > .9 else 'NO') + ' (%.0f%% of its front changed)' % (100 * m[front].mean()))
+green = lambda a: (a[:, :, 1] > a[:, :, 0] + 30).sum()
+front = abs(deep - [0xe5, 0x43, 0x2d]).max(axis=2) < 6; s = L('partside'); n = (abs(s - deep).max(axis=2) > 8)[front].sum(); print('a side of its own colour, its front as it was: ' + ('yes' if green(s) > 2000 and n < .03 * front.sum() else 'NO') + ' (%d pixels; %d of its front, its last points to the edge, changed)' % (green(s), n))
+print('a back of its own colour: ' + ('yes' if green(L('partback')) > 2000 else 'NO') + ' (%d pixels)' % green(L('partback')))
+print('a bevel of its own colour: ' + ('yes' if green(L('partbevel')) > 2000 else 'NO') + ' (%d pixels)' % green(L('partbevel')))
 n = ((L('fxshaded') - L('fxlit')).sum(axis=2) > 8).sum(); print('with an effect on, a flat thing throws its shadow too: ' + ('yes' if n > 2000 else 'NO') + ' (%d pixels)' % n)
 "

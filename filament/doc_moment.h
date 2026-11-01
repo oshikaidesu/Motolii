@@ -229,6 +229,19 @@ static void doc_moment(Doc& d, double now) {
             for (const Stage::Made& made : s.made)
                 if (const auto own = d.copyLooks.find(made.thing.getId()); made.of == t.drawn->sheet && own != d.copyLooks.end()) own->second->setParameter("surface", surface);
         }
+        if (t.drawn && t.drawn->boxed.z > 0.f) {   // (After Effects' Bevel, Side and Back Color and their Metal; a part told nothing is as the front is)
+            float4 colour[3], surface[3];
+            const float3 front{(float)doc_number(d, thing, "metallic", now, 0.08), (float)doc_number(d, thing, "roughness", now, 0.6), (float)doc_number(d, thing, "reflectance", now, 0.5)};
+            for (int p = 0; p < 3; ++p) {
+                const std::string part = p == 0 ? "bevel_" : p == 1 ? "side_" : "back_", word = doc_word(d, thing, (part + "color").c_str());
+                const long hex = word.size() == 6 ? std::strtol(word.c_str(), nullptr, 16) : 0;
+                colour[p] = float4{(float)((hex >> 16) & 255) / 255.f, (float)((hex >> 8) & 255) / 255.f, (float)(hex & 255) / 255.f, word.size() == 6 ? 1.f : 0.f};
+                surface[p] = float4{(float)doc_number(d, thing, (part + "metallic").c_str(), now, front.x), (float)doc_number(d, thing, (part + "roughness").c_str(), now, front.y), front.z, 0.f};
+            }
+            t.drawn->look->setParameter("partColour", colour, 3), t.drawn->look->setParameter("partSurface", surface, 3);
+            for (const Stage::Made& made : s.made)
+                if (const auto own = d.copyLooks.find(made.thing.getId()); made.of == t.drawn->sheet && own != d.copyLooks.end()) own->second->setParameter("partColour", colour, 3), own->second->setParameter("partSurface", surface, 3);
+        }
         if (t.drawn && t.drawn->sketchLines) {   // (a sketch's lines as strong as they are now: what was drawn with them as they were goes)
             bool moved = false;
             for (auto& [line, strong] : *t.drawn->sketchLines) {

@@ -53,6 +53,9 @@ material {
         // its bevel (deep.glsl): how far in across, how far in through, in the box's lengths, and its way (0 none); how far each point of its picture is from its edge (drawn_edge.h)
         { type : float4, name : deepBevel },
         { type : float3, name : surface },
+        // its bevel's, side's and back's own (After Effects' Bevel, Side and Back Color): its colour and how much that counts (0: the picture's); metal, rough, shine, as `surface`
+        { type : float4[3], name : partColour },
+        { type : float4[3], name : partSurface },
         { type : sampler2d, name : edge }
     ]
 }
@@ -149,8 +152,9 @@ fragment {
     void material(inout MaterialInputs material) {
         highp vec2 uv = getUV0();
         float deepShade = 1.0, deepShine = 0.0, deepEdge = -1.0;
+        int deepPart = 0;
         gl_FragDepth = gl_FragCoord.z;
-        if (materialParams.deep.z > 0.0) deepMeet(uv, deepShade, deepShine, deepEdge);
+        if (materialParams.deep.z > 0.0) deepMeet(uv, deepShade, deepShine, deepEdge, deepPart);
 #if defined(LIT)
         material.normal = deepEdge >= 0.0 ? transpose(shading_tangentToWorld) * shading_geometricNormal : vec3(0.0, 0.0, 1.0);
 #endif
@@ -178,7 +182,8 @@ fragment {
         if (g.z > 0.0) c = mix(c, mix(materialParams.grade[1].rgb, materialParams.grade[2].rgb, l), g.z);
         if (g.w > 0.0) c = mix(c, l < 0.5 ? mix(materialParams.grade[3].rgb, materialParams.grade[4].rgb, 2.0 * l) : mix(materialParams.grade[4].rgb, materialParams.grade[5].rgb, 2.0 * l - 1.0), g.w);   // (the colour is then the film's share of the point already: only its clearness is `kept`)
         float there = deepEdge >= 0.0 ? deepEdge : materialParams.filmed > 0.5 ? 1.0 : drawn.a;
-        c = min(c * deepShade + deepShine, vec3(1.0));
+        vec4 ownColour = deepPart > 0 ? materialParams.partColour[deepPart - 1] : vec4(0.0);
+        c = min(mix(c, ownColour.rgb, ownColour.a) * deepShade + deepShine, vec3(1.0));
         if (kept * there < 0.004) discard;   // (where nothing of it is left it is not there at all: it hides nothing behind it)
         float uncut = matteLeft() * materialParams.opacity;
         if (uncut < 0.004) discard;
@@ -195,12 +200,13 @@ fragment {
                 wash = vec4(mix(materialParams.ramp[i].rgb, materialParams.ramp[i + 1].rgb, along - float(i)), 1.0);
             }
         }
-        material.baseColor.rgb = mix(material.baseColor.rgb, wash.rgb * material.baseColor.a, wash.a);   // (a copy's own colour, where it is drawn)
+        material.baseColor.rgb = mix(material.baseColor.rgb, wash.rgb * material.baseColor.a, wash.a * (1.0 - ownColour.a));   // (a copy's own colour, where it is drawn; a part with its own keeps that)
         vec4 fade = materialParams.copyFade;
         if (fade.w > 0.5) material.baseColor *= mix(1.0, fade.x, fade.y > 1.0 ? (fade.z + variable_copyOf.x) / (fade.y - 1.0) : 0.0);   // (each copy clearer along them, from the first, as itself, to the last)
 #if defined(LIT)
         material.emissive = vec4(material.baseColor.rgb * materialParams.glowing, 0.0);   // (it lights itself, as floor_lit.mat)
-        material.metallic = materialParams.surface.x, material.roughness = materialParams.surface.y, material.reflectance = materialParams.surface.z;   // (a solid's own three, surface_set)
+        vec3 surface = deepPart > 0 ? materialParams.partSurface[deepPart - 1].xyz : materialParams.surface;
+        material.metallic = surface.x, material.roughness = surface.y, material.reflectance = surface.z;   // (a solid's own three, surface_set)
 #else
         material.baseColor.rgb *= 1.0 + materialParams.glowing;   // (a neon: its own colour, brighter than white)
 #endif

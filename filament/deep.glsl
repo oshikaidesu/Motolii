@@ -38,8 +38,9 @@ float deepIn(highp vec3 q) {   // (how much of it is at a point of its box)
     return a * clamp(0.5 + (under - cut.y * (1.0 - deepProfile(clamp(deepAway(q.xy) / cut.x, 0.0, 1.0)))) / point, 0.0, 1.0);
 }
 // uv: the point of the picture seen here; k, shine: how it is shaded (AbsentMotion's: k times it, shine on top); edge:
-// how much of it is there. Nothing seen here: not there at all, as a clear point of a sheet.
-void deepMeet(inout highp vec2 uv, inout float k, inout float shine, inout float edge) {
+// how much of it is there; part: which it is, After Effects' Front, Bevel, Side and Back, 0 to 3. Nothing seen here: not
+// there at all, as a clear point of a sheet.
+void deepMeet(inout highp vec2 uv, inout float k, inout float shine, inout float edge, inout int part) {
     highp vec3 h = materialParams.deep.xyz, at = variable_deepAt.xyz;
     if (materialParams.deep.w < 0.5) {   // (Z 0: its box shut, one sheet: as flat as any)
         if (at.z < 0.0) discard;
@@ -90,7 +91,9 @@ void deepMeet(inout highp vec2 uv, inout float k, inout float shine, inout float
     highp vec3 cut = materialParams.deepBevel.xyz;
     highp float near = max(dt * abs(rd.z) * 1.5, 0.0005), along = cut.z > 0.5 ? clamp(deepAway(p.xy) / cut.x, 0.0, 1.0) : 1.0;
     bool bevelled = cut.z > 0.5 && along < 1.0 && h.z - abs(p.z) < cut.y + near;
+    part = bevelled ? 1 : 2;
     if (abs(p.z) > h.z - near && !bevelled) {   // (its front and back: the picture as it is, as at Z 0)
+        part = p.z < 0.0 ? 3 : 0;
 #if defined(LIT)
         shading_geometricNormal = normalize(sideZ * sign(p.z));
 #endif
