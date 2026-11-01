@@ -37,6 +37,35 @@ static tvg::Paint* sketch_words(Drawn* d, const double* p, const double* q, cons
     t->transform(tvg::Matrix{(float)q[0], (float)q[2], (float)(q[4] + q[0] * across + q[2] * down), (float)q[1], (float)q[3], (float)(q[5] + q[1] * across + q[3] * down), 0.f, 0.f, 1.f});
     return t;
 }
+// A whole picture, p5_stand.h's kind 4: its matrix, its number in __bitmaps, its size, the part of it shown, whether it is smoothed.
+static tvg::Paint* sketch_bitmap(Drawn* d, const double* p, const double* q, std::vector<std::shared_ptr<std::vector<uint8_t>>>& held) {
+    std::lock_guard<std::mutex> hold(d->sketchPicsLock);
+    const auto pic = d->sketchPics.find((int)q[6]);
+    const uint32_t w = (uint32_t)q[7], h = (uint32_t)q[8];
+    if (pic == d->sketchPics.end() || pic->second->size() != 4ull * w * h) return nullptr;
+    held.push_back(pic->second);
+    tvg::Picture* one = tvg::Picture::gen();
+    if (q[13] != 0.0) one->filter(tvg::FilterMethod::Nearest);
+    one->load((const uint32_t*)pic->second->data(), w, h, tvg::ColorSpace::ABGR8888S, false);
+    const tvg::Matrix at{(float)q[0], (float)q[2], (float)q[4], (float)q[1], (float)q[3], (float)q[5], 0.f, 0.f, 1.f};
+    one->transform(at), one->opacity((uint8_t)std::lround(p[4]));
+    if (q[9] > 0.0 || q[10] > 0.0 || q[11] < q[7] || q[12] < q[8]) {
+        tvg::Shape* part = tvg::Shape::gen();
+        part->appendRect((float)q[9], (float)q[10], (float)q[11], (float)q[12]), part->fill(255, 255, 255), part->transform(at), one->clip(part);
+    }
+    return one;
+}
+static void sketch_bitmaps(Drawn* d, Script* run, const std::vector<double>& o) {   // (the pictures a frame paints, while its script may be asked)
+    for (size_t i = 1; i + 12 <= o.size(); i += 12 + (size_t)o[i + 9] + (size_t)o[i + 10]) {
+        if (o[i] != 4.0) continue;
+        const int id = (int)o[i + 18];
+        std::lock_guard<std::mutex> hold(d->sketchPicsLock);
+        if (d->sketchPics.count(id)) continue;
+        auto pic = std::make_shared<std::vector<uint8_t>>(run->bytes("__bitmap(" + std::to_string(id) + ")"));
+        if (d->sketchPics.size() >= 64) d->sketchPics.erase(d->sketchPics.begin());   // (a film's, one a frame: the oldest goes)
+        d->sketchPics[id] = std::move(pic);
+    }
+}
 static void sketch_draw(Drawn* d, const std::vector<double>& o) {
     if (o.empty()) return;
     d->sketchScene->remove();
@@ -48,12 +77,14 @@ static void sketch_draw(Drawn* d, const std::vector<double>& o) {
         d->sketchScene->remove();
     };
     int held = 0;
+    std::vector<std::shared_ptr<std::vector<uint8_t>>> pics;   // (ThorVG reads them where they are, until it has drawn)
     for (size_t i = 1; i + 12 <= o.size();) {
         const double* p = &o[i];
         const size_t n = (size_t)p[9], more = (size_t)p[10];
         const double* q = p + 12, *end = q + n;
         tvg::Paint* out;
         if (p[0] == 3.0) out = sketch_words(d, p, q, end);
+        else if (p[0] == 4.0) out = sketch_bitmap(d, p, q, pics);
         else {
             tvg::Shape* one = tvg::Shape::gen();
             while (q < end)
@@ -72,8 +103,8 @@ static void sketch_draw(Drawn* d, const std::vector<double>& o) {
             }
             out = one;
         }
-        if (p[5] != 0.0) out->blend((tvg::BlendMethod)(int)p[5]);
-        d->sketchScene->add(out);
+        if (out && p[5] != 0.0) out->blend((tvg::BlendMethod)(int)p[5]);
+        if (out) d->sketchScene->add(out);
         i += 12 + n + more;
         if (++held == 4000) out_now(), held = 0;
     }
@@ -91,7 +122,7 @@ static Drawn* sketch_picture(Stage& s, std::shared_ptr<Script> run, const std::s
         d->sketchScene->scale(fit);
         d->sketchLines = std::make_shared<std::map<int, double>>();
         for (const int line : run->lines()) (*d->sketchLines)[line] = 1.0;
-        d->sketch = [run, lines = d->sketchLines](int at, int had) {   // (each paint as strong as its line's knob is now, doc_moment)
+        d->sketch = [run, d, lines = d->sketchLines](int at, int had) {   // (each paint as strong as its line's knob is now, doc_moment)
             std::vector<double> o = run->paints(at, had);
             for (size_t i = 1; i + 12 <= o.size();) {
                 double* p = &o[i];
@@ -102,6 +133,7 @@ static Drawn* sketch_picture(Stage& s, std::shared_ptr<Script> run, const std::s
                 }
                 i += 12 + n + more;
             }
+            sketch_bitmaps(d, run.get(), o);
             return o;
         };
         d->frames = 36000.f, d->seconds = 600.f;
@@ -114,7 +146,7 @@ static Drawn* sketch_texture(Stage& s, Script* run, const std::string& fontFile,
         *w = wide, *h = high;
         if (tvg::Text::load(fontFile.c_str()) == tvg::Result::Success) d->sketchFont = std::filesystem::path(fontFile).stem().string();
         d->sketchScene = tvg::Scene::gen();
-        d->sketch = [run, pic](int at, int had) { return run->paints(at, had, pic); };
+        d->sketch = [run, d, pic](int at, int had) { std::vector<double> o = run->paints(at, had, pic); sketch_bitmaps(d, run, o); return o; };
         d->frames = 36000.f, d->seconds = 600.f;
         return d->sketchScene;
     }, mat4f{}, 1.f, float3{-1.f}, false, nullptr);

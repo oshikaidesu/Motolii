@@ -558,14 +558,21 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] スケッチを 1 行ごとに色で見分ける：今は `rect 20` の字だけ。押して見ないと分からない
 - [ ] スケッチを別のスレッドで動かす：重い作品で窓が止まる。先へ飛ぶと初回は全部走らせる
 - [ ] 重いスケッチのメモリ：動くたびに JS 側へコマを残す。重い作品は 1 分で約 1.4 GB。上限を付けて走り直す
-- [ ] p5 の未対応：meta のライブラリ読み込み、p5 2.x、shadowBlur、clip、filter()、pixels と putImageData、実画像ファイル、loadFont、日本語フォント、自分自身の copy()、部分 clearRect、erase、conic gradient
+- [ ] p5 の未対応：meta のライブラリ読み込み、p5 2.x、shadowBlur、clip、filter()、loadFont、日本語フォント、自分自身の copy()、部分 clearRect、erase、conic gradient
 - [x] WEBGL のシェーダー：平らな物を塗る物は効果になる（door_p5_shader.h）。立体に塗る物は作品の GLSL のまま Filament の材質になる（p5_stand.h の __shader_text、doc_sketch.h、matc）
 - [ ] 立体に塗るシェーダーの残り：`setUniform` の絵（今は白）、varying 5 本以上、自分でカメラを持つ頂点シェーダー、three.js の ShaderMaterial、つまみ、matc を窓の中で待つ 0.3 秒
 - [ ] 絵を読み戻すシェーダー（`createFramebuffer`、p5.filterShader）
 - [x] WEBGL の beginShape、線、点、形の取り違え：p5 が描いた物をそのコマのまま世界のメッシュにする（doc_sketch.h、sketch.mat）
 - [x] WEBGL の texture と image：createGraphics の絵を ThorVG で描いて貼る。textureWrap、tint、箱にも帯にも（sketch.mat の 6 枚まで）
 - [x] p5 の待ち：`preload` が止まらない（`_preloadCount` は window の方を見ていた）。ページの部品を id で聞く作品、`loadSound` を呼ぶ作品が止まらない
-- [ ] p5 の loadImage：ファイルを読む（今は空の絵。隣にあっても読まない）
+- [x] p5 の loadImage：そばのファイルを入口が作品のフォルダへ写し、GStreamer で読む。無ければ下のフィルム（door.h、film_read.h）
+- [x] 絵 1 枚を塗り 1 回に：2D の `image()`、切り抜き、`noSmooth`、`createImage`、`updatePixels`、画面へ直接書く作品、2D の `image(cam)`（drawn_sketch.h sketch_bitmap）
+- [x] `async setup()` の縮尺：最初のコマを作る時に決める（3006412 が 9 倍になっていた）
+- [x] 別キャンバスの文字を拡大すると 2 回拡大された：直した（p5_stand.h drawImage）
+- [ ] 画面そのものを読み戻す：`get()`、`copy()`、`filter()`。画面は塗りの列で画素を持たない
+- [ ] URL の絵（`loadImage('https://…')`）、`data:` の絵
+- [ ] 貼ったコードに絵を渡す道：今はファイルを渡した時か、下のフィルムだけ
+- [ ] `new Image()` と素の canvas の `drawImage`
 - [ ] p5.sound：今は音を聞かない。音で動く作品は止まらず、音の無い動きになる
 - [ ] 3038344：ページの部品をもっと使う作品。`TypeError: not a function` で止まる。止まった事は door が言う
 - [x] WEBGL の text()：1 枚の紙に白で描いて四角に貼る。色は fill、揃えは textAlign

@@ -13,9 +13,10 @@ struct FilmRead {
     int w = 0, h = 0;
     std::vector<uint8_t> last;   // (the picture last read: at its end it stays)
     ~FilmRead() { if (reader) gst_element_set_state(reader, GST_STATE_NULL), gst_object_unref(reader); if (out) gst_object_unref(out); }
-    bool open(const std::string& file, int wide) {
+    std::string beside;   // (the folder of the pictures its sketch came with: doc_door.h)
+    bool open(const std::string& file, int wide) {   // (0: at its own size, a picture)
         gst_init(nullptr, nullptr);
-        const std::string line = "filesrc name=in ! decodebin ! videoconvert ! videoscale ! videorate ! video/x-raw,format=RGBA,width=" + std::to_string(wide) + ",pixel-aspect-ratio=1/1,framerate=60/1 ! appsink name=out sync=false max-buffers=8";
+        const std::string line = "filesrc name=in ! decodebin ! videoconvert ! videoscale ! videorate ! video/x-raw,format=RGBA" + (wide ? ",width=" + std::to_string(wide) : std::string()) + ",pixel-aspect-ratio=1/1,framerate=60/1 ! appsink name=out sync=false max-buffers=8";
         reader = gst_parse_launch(line.c_str(), nullptr);
         if (!reader) return false;
         GstElement* in = gst_bin_get_by_name(GST_BIN(reader), "in");

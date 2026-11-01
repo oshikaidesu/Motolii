@@ -143,7 +143,7 @@ function __paint(r) {   // (what sketch.mat reads, or 1000 and on: which of this
 var __tex = [], __tex_of = new Map();
 function __tex_at(r) {
   const e = r._tex && r._tex.canvas, flat = e && e.flat;
-  return !flat || e.bytes || (r._tex instanceof p5.Image && !flat.held().length) ? 0 : __tex_on(e, r.textureWrapX, r.textureWrapY);   // (a picture that is not there: white, not nothing)
+  return !flat || (r._tex instanceof p5.Image && !flat.held().length) ? 0 : __tex_on(e, r.textureWrapX, r.textureWrapY);   // (a picture that is not there: white, not nothing)
 }
 function __tex_on(e, x, y) {
   const wraps = { clamp: 0, repeat: 1, mirror: 2 }, flat = e.flat;

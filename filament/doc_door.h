@@ -78,6 +78,7 @@ static int doc_door(Doc& d, const std::string& word, int picked) {
     std::filesystem::path file = folder / (name + tail + (shader ? ".fs" : ".js"));
     if (kept && !hydra) file = word;
     else if (!std::filesystem::exists(file, wrong)) std::ofstream(file) << text;
+    if (word != came && !kept) door_pictures(text, std::filesystem::path(word).parent_path(), file);
     if (hydra) std::ofstream(file.parent_path() / (file.stem().string() + ".hydra")) << came;   // (what was written, kept beside what it became: the Program shelf shows this one)
     std::string shaded, why;   // (a p5 sketch that paints its stage with a shader is that shader, an effect as any: not a picture of it)
     if (form.empty() && door_has(told, "hader(") && (shaded = doc_p5_shaded(file, moving, why)).empty() && !why.empty()) return d.trouble = why, 0;

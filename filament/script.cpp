@@ -199,6 +199,18 @@ static JSValue film_next(JSContext* cx, JSValueConst, int, JSValueConst*) {   //
     JS_SetPropertyStr(cx, o, "data", JS_NewArrayBufferCopy(cx, f->last.data(), f->last.size()));
     return o;
 }
+static JSValue image_read(JSContext* cx, JSValueConst, int, JSValueConst* a) {   // (a picture its sketch came with, by the name it gives it: only the last part of that name, only from that folder)
+    const char* name = JS_ToCString(cx, a[0]);
+    const std::filesystem::path file = std::filesystem::path(((FilmRead*)JS_GetContextOpaque(cx))->beside) / std::filesystem::path(name ? name : "").filename();
+    JS_FreeCString(cx, name);
+    std::error_code wrong;
+    FilmRead f;
+    if (!std::filesystem::is_regular_file(file, wrong) || !f.open(file.string(), 0)) return JS_NULL;
+    JSValue o = JS_NewObject(cx);
+    JS_SetPropertyStr(cx, o, "w", JS_NewInt32(cx, f.w)), JS_SetPropertyStr(cx, o, "h", JS_NewInt32(cx, f.h));
+    JS_SetPropertyStr(cx, o, "data", JS_NewArrayBufferCopy(cx, f.last.data(), f.last.size()));
+    return o;
+}
 struct Script::Own {
     JSRuntime* rt = nullptr;
     JSContext* cx = nullptr;
@@ -240,8 +252,10 @@ Script::Script(const std::string& file, const std::string& p5, const std::string
         }
         if (!film.empty() && (src.find("createCapture") != std::string::npos || src.find("createVideo") != std::string::npos || src.find("loadImage") != std::string::npos)) own->film.open(film, 320);   // (as much of it as a webcam sketch reads, and light)
         JS_SetContextOpaque(own->cx, &own->film);
+        own->film.beside = (std::filesystem::path(file).parent_path() / std::filesystem::path(file).stem()).string();
         JSValue g = JS_GetGlobalObject(own->cx);
         JS_SetPropertyStr(own->cx, g, "__film_next", JS_NewCFunction(own->cx, film_next, "__film_next", 0));
+        JS_SetPropertyStr(own->cx, g, "__image_read", JS_NewCFunction(own->cx, image_read, "__image_read", 1));
         JS_FreeValue(own->cx, g);
     }
     std::string body = src;

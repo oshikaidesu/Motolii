@@ -71,6 +71,8 @@ struct Drawn {
     int sketchAt = -1;                 // (the frame last asked of it, which its canvas will hold; main thread)
     tvg::Scene* sketchScene = nullptr; // (what its paints are put in, driver thread only)
     std::string sketchFont;            // (ThorVG's name of the font its words are set in)
+    std::map<int, std::shared_ptr<std::vector<uint8_t>>> sketchPics;   // (the pictures it paints, by p5_stand.h's __bitmaps: asked for on the main thread, read on the driver's)
+    std::mutex sketchPicsLock;
     Texture* texture = nullptr;        // what Filament reads
     Texture* edge[3] = {};             // how far each of its points is from its edge (drawn_edge.h)
     RenderTarget* edgeInto[3] = {};

@@ -32,6 +32,16 @@ function __rgba(style) {   // (a colour as p5 itself reads it)
   if (!c) __colours.set(style, c = p5.prototype.color.call(p5.instance, style).levels);
   return c;
 }
+// Whole pictures a sketch holds, loaded, made pixel by pixel or a film's: their bytes stay here, a paint says which by its number
+// (drawn_sketch.h sketch_bitmap). What is made each frame goes when 300 MB of them are held: what shows it is on disk by then (drawn_kept.h).
+var __bitmaps = [null], __bitmaps_made = [], __bitmaps_held = 0;
+function __bitmap_new(bytes, stays) {
+  __bitmaps.push(bytes);
+  if (!stays) __bitmaps_made.push(__bitmaps.length - 1), __bitmaps_held += bytes.length;
+  while (__bitmaps_held > 3e8 && __bitmaps_made.length > 1) { const i = __bitmaps_made.shift(); __bitmaps_held -= __bitmaps[i].length, __bitmaps[i] = null; }
+  return __bitmaps.length - 1;
+}
+function __bitmap(i) { globalThis.__bytes = __bitmaps[i] || new Uint8Array(0); }
 function __flat(e) {
   const keep = ['fillStyle', 'strokeStyle', 'lineWidth', 'lineCap', 'lineJoin', 'miterLimit', 'globalAlpha', 'globalCompositeOperation', 'font', 'textAlign', 'textBaseline', 'shadowBlur', 'shadowColor', 'shadowOffsetX', 'shadowOffsetY', 'filter', 'imageSmoothingEnabled'], saved = [];
   let m = [1, 0, 0, 1, 0, 0], path = [], ux = 0, uy = 0, sx = 0, sy = 0, ops = [], clear = false, seen = 0;
@@ -58,6 +68,7 @@ function __flat(e) {
     ops.push(3, k[0], k[1], k[2], a, __blends[c.globalCompositeOperation] || 0, parseFloat((/([\d.]+)px/.exec(c.font) || [0, 10])[1]), { center: 1, right: 2, end: 2 }[c.textAlign] || 0, { top: 1, hanging: 1, middle: 2, bottom: 3, ideographic: 3 }[c.textBaseline] || 0, 6 + codes.length, 0, __L, m[0], m[1], m[2], m[3], X(x, y), Y(x, y));
     for (let i = 0; i < codes.length; ++i) ops.push(codes[i]);
   };
+  const bitmap = (id, w, h, x, y, ax = 0, ay = 0, aw = w, ah = h) => ops.push(4, 255, 255, 255, 255 * c.globalAlpha, __blends[c.globalCompositeOperation] || 0, 0, 0, 0, 14, 0, __L, m[0], m[1], m[2], m[3], X(x, y), Y(x, y), id, w, h, ax, ay, aw, ah, c.imageSmoothingEnabled ? 0 : 1);
   const whole_ink = k => typeof k === 'string' ? __rgba(k)[3] === 255 : k.kind && k.stops.every(q => __rgba(q[1])[3] === 255);
   const whole = (x, y, w, h) => X(x, y) <= 0 && Y(x, y) <= 0 && X(x + w, y + h) >= e.width && Y(x + w, y + h) >= e.height && !m[1] && !m[2];   // (a background(): what was painted before is gone)
   const box = (x, y, w, h) => { M(x, y), L(x + w, y), L(x + w, y + h), L(x, y + h), path.push(3), ux = sx, uy = sy; };
@@ -109,7 +120,13 @@ function __flat(e) {
       if (b) for (let r = 0, W = e.width; r < h; ++r) data.set(b.subarray(4 * ((y + r) * W + x), 4 * ((y + r) * W + x + w)), 4 * r * w);
       return { width: w, height: h, data };
     },
-    createImageData(w, h) { return { width: w, height: h, data: new Uint8ClampedArray(4 * w * h) }; }, putImageData() {},
+    createImageData(w, h) { return { width: w, height: h, data: new Uint8ClampedArray(4 * w * h) }; },
+    putImageData(d, x, y) {   // (ignoring the matrix, as the spec has it: what it held is gone only where these pixels are)
+      const was = m, all = x <= 0 && y <= 0 && d.width >= e.width && d.height >= e.height;
+      if (all) ops = [], clear = true, e.bytes = new Uint8ClampedArray(d.data);
+      m = [1, 0, 0, 1, 0, 0], bitmap(__bitmap_new(all ? e.bytes : new Uint8ClampedArray(d.data)), d.width, d.height, x, y), m = was;
+    },
+    bytes_are(bytes, stays) { const was = m; ops = [], clear = true, e.bytes = bytes, m = [1, 0, 0, 1, 0, 0], bitmap(__bitmap_new(bytes, stays), e.width, e.height, 0, 0), m = was; },
     fillText(t, x, y) { words(t, x, y, c.fillStyle); }, strokeText(t, x, y) { words(t, x, y, c.strokeStyle); },
     drawImage(im, a, b, w, h, dx, dy, dw, dh) {   // (another canvas, a createGraphics: what it holds painted again here)
       const from = im && im.flat;
@@ -120,8 +137,10 @@ function __flat(e) {
         const kind = o[i], n = o[i + 9], more = o[i + 10], end = i + 12 + n;
         for (let j = 0; j < 12; ++j) ops.push(j === 6 && kind !== 3 ? o[i + 6] * grow : j === 11 ? __L : o[i + j]);   // (what another canvas holds shows where image() says it does)
         let q = i + 12;
-        if (kind === 3) {
+        if (kind >= 3) {
+          const part = kind === 4 ? [Math.max(o[q + 9], (a - o[q + 4]) / o[q]), Math.max(o[q + 10], (b - o[q + 5]) / o[q + 3]), Math.min(o[q + 9] + o[q + 11], (a + w - o[q + 4]) / o[q]), Math.min(o[q + 10] + o[q + 12], (b + h - o[q + 5]) / o[q + 3])] : null;   // (the part of a picture asked for: as it stands, not turned)
           ops.push(m[0] * sx * o[q] + m[2] * sy * o[q + 1], m[1] * sx * o[q] + m[3] * sy * o[q + 1], m[0] * sx * o[q + 2] + m[2] * sy * o[q + 3], m[1] * sx * o[q + 2] + m[3] * sy * o[q + 3]), P(o[q + 4], o[q + 5]), q += 6;
+          if (part) ops.push(o[q], o[q + 1], o[q + 2], part[0], part[1], part[2] - part[0], part[3] - part[1], c.imageSmoothingEnabled ? 0 : 1), q = end;
           while (q < end) ops.push(o[q++]);
         } else while (q < end) { const t = o[q++]; ops.push(t); for (let p = t === 2 ? 3 : t === 3 ? 0 : 1; p > 0; --p, q += 2) P(o[q], o[q + 1]); }
         if (more) { ops.push(o[q]), P(o[q + 1], o[q + 2]), ops.push(o[q + 3] * grow), P(o[q + 4], o[q + 5]), ops.push(o[q + 6] * grow); for (let j = q + 7; j < q + more; ++j) ops.push(o[j]); }
@@ -177,10 +196,10 @@ function __film_show() {   // (at the size it was asked for, each its nearest of
   const s = __film.source, w = __film.width, h = __film.height;
   if (!s.data) return;
   const from = new Uint8ClampedArray(s.data);
-  if (w === s.w && h === s.h) { __film.canvas.bytes = from; return; }
+  if (w === s.w && h === s.h) { __film.drawingContext.bytes_are(from); return; }
   const out = new Uint8ClampedArray(4 * w * h);
   for (let y = 0, o = 0; y < h; ++y) { const r = Math.floor(y * s.h / h) * s.w; for (let x = 0; x < w; ++x, o += 4) { const p = 4 * (r + Math.floor(x * s.w / w)); out[o] = from[p], out[o + 1] = from[p + 1], out[o + 2] = from[p + 2], out[o + 3] = 255; } }
-  __film.canvas.bytes = out;
+  __film.drawingContext.bytes_are(out);
 }
 function __film_step() { const next = __film_next(); if (next) __film.source = next, __film_show(); }
 // What the forms of door.h paint on is p5's own canvas: asked for by a page's id or made, it is that one; a second made is another.
@@ -201,7 +220,15 @@ for (const k of ['loadSound', 'getAudioContext', 'userStartAudio', 'soundFormats
   globalThis[k] = globalThis[k] || function () { return __any(k); };
 const __load_image = p5.prototype.loadImage;
 const __promised = im => Object.assign(im, { then(ok) { delete im.then, delete im.catch; if (ok) ok(im); return Promise.resolve(im); }, catch() { return im; } });   // (p5 2's loadImage is a promise, 1's the picture itself: it is both, until it has been waited for)
-p5.prototype.loadImage = function (path, ok) { if (!__film_first()) return __promised(__load_image.apply(this, arguments)); const f = __film_open(); if (typeof ok === 'function') ok(f); return __promised(f); };
+p5.prototype.loadImage = function (path, ok) {   // (a picture that came with it; none, the film under it: what it puts over a picture it puts over yours)
+  const read = typeof path === 'string' ? __image_read(path) : null;
+  let f;
+  if (read) f = new p5.Image(read.w, read.h), f.drawingContext.bytes_are(new Uint8ClampedArray(read.data), true);
+  else if (!__film_first()) return __promised(__load_image.apply(this, arguments));
+  else f = __film_open();
+  if (typeof ok === 'function') ok(f);
+  return __promised(f);
+};
 p5.prototype.createCapture = p5.prototype.createVideo = function () { const f = __film_open(), ready = [...arguments].find(a => typeof a === 'function'); if (ready) ready(f); return f; };
 const __packed = c => c ? Math.round(c[0] * 255) << 16 | Math.round(c[1] * 255) << 8 | Math.round(c[2] * 255) : -1;   // (a copy's colour, red green blue; -1: its own solid's)
 var __drawn = [], __kinds = {}, __U = 0.01;   // (a pixel of the sketch in the world's unit: as tall as the stage as it comes, new p5() below)
@@ -219,11 +246,11 @@ var OPC = new Proxy({}, { get(t, k) {
 static const char* const p5_start = R"(
 new p5();
 if (!globalThis.frameCount && (p5.instance._preloadCount || globalThis._preloadCount)) p5.instance._preloadCount = globalThis._preloadCount = 0, p5.instance._runIfPreloadsAreDone();   // (what preload() asked of the net or of files does not come: on without it)
-__U = 3.2154 / (globalThis.height || 400);
 var __frames = [], __from = [];
 Object.defineProperty(globalThis, '__2d', { get: () => !p5.instance._renderer.isP3D });   // (asked late: an async setup() makes its canvas after new p5())
 Object.defineProperty(globalThis, '__canvas', { get: () => p5.instance._renderer.drawingContext });
 function __to(f) {
+  if (!__frames.length) __U = 3.2154 / (globalThis.height || 400);   // (here, not after new p5(): an async setup() has its size only by now)
   while (__frames.length <= f) {
     const was = globalThis.frameCount, q = __Q, last = __frames[__frames.length - 1];
     if (q.length) __drawn = [];

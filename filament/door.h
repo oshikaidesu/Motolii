@@ -83,6 +83,18 @@ inline std::string door_shader_files(const std::string& text, const std::filesys
     return out + text.substr(at);
 }
 
+// The pictures a sketch loads, from beside it to a folder named as what is kept: a script has no files of its own (film_read.h's beside).
+inline void door_pictures(const std::string& text, const std::filesystem::path& beside, const std::filesystem::path& kept) {
+    static const std::regex load(R"re(\bloadImage\s*\(\s*['"`]([^'"`]+)['"`])re");
+    std::error_code wrong;
+    for (std::sregex_iterator m(text.begin(), text.end(), load), end; m != end; ++m) {
+        const std::filesystem::path from = beside / (*m)[1].str(), to = kept.parent_path() / kept.stem();
+        if (!std::filesystem::is_regular_file(from, wrong)) continue;
+        std::filesystem::create_directories(to, wrong);
+        std::filesystem::copy_file(from, to / from.filename(), std::filesystem::copy_options::overwrite_existing, wrong);
+    }
+}
+
 // A library as a script runs it: three.js's module, its names one object as three.min.js gave them.
 inline std::string door_library_text(const std::string& form, std::string text) {
     if (form != "three") return text;
