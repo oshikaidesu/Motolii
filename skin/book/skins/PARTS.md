@@ -39,6 +39,7 @@ theme.xml に `<Parts Value="フォルダ"/>` を書くと、そのフォルダ�
 | `tp.eye` `tp.eyeOff` | 層の行の「見える・見えない」 |
 | `tp.solo` | 層の行の「これだけ見る」 |
 | `tp.lock` `tp.unlock` | 層の行の「触れない・触れる」 |
+| `tp.caretR` `tp.caretD` | 層の行の三角：閉じている・開いている |
 | `tp.keyFilled` | キーの印 |
 
 ## ドック（dock.）：パネルの見出しの印、作る棚・効果の棚の印（名前が中身のまま：`dock.media` はメディアのパネル、`dock.star` は星の形を作る）
