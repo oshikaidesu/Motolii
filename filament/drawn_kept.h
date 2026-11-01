@@ -24,6 +24,7 @@ struct DrawnFx { bool split = false;   // (a text's letters each a copy of their
     bool thick = false;    // (it has depth: its sheet a box, its picture pushed through it, deep.glsl)
     bool lit = false;      // (in the lamps' light: flat.mat's flat_lit, doc_lit)
     bool bevel = false;    // (its box's edges cut as its doc says: deep.glsl, drawn_edge.h)
+    std::vector<float4> rims;   // (more outlines, each outside the last: its colour; w: how wide, a share of its height: type)
     bool column = false;   // (its letters one under another, a letter's height from each to the next)
     float letters = 1.f, lines = 1.f, italic = 0.f, wrapWidth = 0.f; int wrap = 0;   // (a text's lines broken in a box so many of its letters' heights wide, ThorVG's layout and wrap; 0: as typed)
     float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)

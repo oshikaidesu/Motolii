@@ -7,7 +7,8 @@
 # A bevel cuts its rim by how far each point is from its edge (drawn_edge.h); no bevel, or none deep, is the box as it was.
 # Metal is a solid's own three numbers, and needs no lamp: it mirrors the room. With an effect of its own a flat thing is
 # filmed apart, and its sheet, standing where it lies, throws the shadow. Its bevel, side and back each take a colour of
-# their own (After Effects' Bevel, Side and Back Color), and its front stays as it is.
+# their own (After Effects' Bevel, Side and Back Color), and its front stays as it is. A word's further strokes, drawn
+# with it, stand in its depth.
 #   ./check/deep.sh
 cd "$(dirname "$0")/.."
 W=$(mktemp -d)
@@ -24,6 +25,8 @@ bevel="$star\nset 1 scale_z 1\n$wall\n$sun"
 shot plain "$bevel"; shot bevel0 "$bevel\nsay 1 bevel none"; shot bevelled "$bevel\nsay 1 bevel convex\nset 1 bevel_depth 30"; shot bevelno "$bevel\nsay 1 bevel convex\nset 1 bevel_depth 0"
 shot metal "$star\nset 1 scale_z 1\nset 1 metallic 1\nset 1 roughness 0.2"
 shot partside "$star\nset 1 scale_z 1\nsay 1 side_color 2fd04a"; shot partback "$star\nset 1 scale_z 1\nset 1 rotate_y 160\nsay 1 back_color 2fd04a"; shot partbevel "$star\nset 1 scale_z 1\nsay 1 bevel convex\nset 1 bevel_depth 20\nsay 1 bevel_color 2fd04a"
+word="add text $PWD/blobtrack/kit/JetBrainsMono-Regular.ttf\nsay 1 text Hi\nset 1 size 2\nset 1 scale_z 1\nset 1 rotate_y 40\nsay 1 fill e5432d\nsay 1 stroke ffffff\nset 1 stroke_width 4"
+shot rim0 "$word"; shot rim2 "$word\nsay 1 stroke_2 2fd04a\nset 1 stroke_2_width 8\nsay 1 stroke_3 2a62c9\nset 1 stroke_3_width 8"
 fxd="say 1 fx $PWD/effects/am_huesaturation.wgsl"
 shot fxlit "$star\n$fxd\n$wall\n$sun"; shot fxshaded "$star\n$fxd\n$wall\n${sun/shadows 1/shadows 0}"
 python3 -c "
@@ -52,6 +55,7 @@ front = abs(deep - [0xe5, 0x43, 0x2d]).max(axis=2) < 6; m = abs(deep - L('metal'
 green = lambda a: (a[:, :, 1] > a[:, :, 0] + 30).sum()
 front = abs(deep - [0xe5, 0x43, 0x2d]).max(axis=2) < 6; s = L('partside'); n = (abs(s - deep).max(axis=2) > 8)[front].sum(); print('a side of its own colour, its front as it was: ' + ('yes' if green(s) > 2000 and n < .03 * front.sum() else 'NO') + ' (%d pixels; %d of its front, its last points to the edge, changed)' % (green(s), n))
 print('a back of its own colour: ' + ('yes' if green(L('partback')) > 2000 else 'NO') + ' (%d pixels)' % green(L('partback')))
+r = L('rim2'); blue = (r[:, :, 2] > r[:, :, 0] + 40).sum(); print('a word\'s further strokes stand in its depth: ' + ('yes' if green(r) > 500 and blue > 500 and seen(r).sum() > 1.1 * seen(L('rim0')).sum() else 'NO') + ' (%d green, %d blue pixels)' % (green(r), blue))
 print('a bevel of its own colour: ' + ('yes' if green(L('partbevel')) > 2000 else 'NO') + ' (%d pixels)' % green(L('partbevel')))
 n = ((L('fxshaded') - L('fxlit')).sum(axis=2) > 8).sum(); print('with an effect on, a flat thing throws its shadow too: ' + ('yes' if n > 2000 else 'NO') + ' (%d pixels)' % n)
 "

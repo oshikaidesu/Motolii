@@ -167,6 +167,12 @@ static bool doc_match(Doc& d) {
         const double units = 0.5 * s.h * up.y / up.w;   // (points of the picture to one unit of the stage, where things stand at first)
         DrawnFx fx;
         fx.thick = doc_on(d, thing, "scale_z"), fx.lit = doc_lit(d, thing), fx.bevel = doc_bevel(d, thing) > 0;
+        for (const std::string rim : {"stroke_2", "stroke_3"})
+            if (const std::string word = doc_word(d, thing, rim.c_str()); word.size() == 6) {
+                const long hex = std::strtol(word.c_str(), nullptr, 16);
+                const double wide = doc_number(d, thing, (rim + "_width").c_str(), 0, 0) / units;
+                if (wide > 0.0) fx.rims.push_back(float4{(float)((hex >> 16) & 255) / 255.f, (float)((hex >> 8) & 255) / 255.f, (float)(hex & 255) / 255.f, (float)wide});
+            }
         if (ramp.size() > 1) fx.ramp = ramp;
         if (ramp.size() > 1 && std::any_of(rampAt.begin(), rampAt.end(), [](float a) { return a >= 0.f; })) {   // (placed: one not said stands evenly; one before the one ahead of it stands where that one does, CSS Images 3's colour stop fix-up)
             for (size_t i = 0; i < rampAt.size(); ++i) {

@@ -464,7 +464,8 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [x] 金属のルック（11/1）：Gold、Silver、Copper、Brass、Gold Glow を `filament/looks` に。色は Gold (metallic) d4af37 と Copper b87333 が Wikipedia の色の記事（Maerz & Paul）、Silver c0c0c0 が CSS の色名 silver、Brass b5a642 が Adobe Express の値。Filament の表の色（Materials.md）はこの部屋では白っぽく出たので使わなかった。効果の棚で `gold` と検索してダブルクリックの 1 回で、灰色の文字が光る金の立体文字になるのを窓で確かめた。Rough と面取りの深さは出典なし（Rough 0.15〜0.3、面取り 40px、奥行き 200%）
 - [x] 厚い文字の横面の段々（11/2、大当りの金文字の絵で見えた）：「り」の左の横面に階段が出る。面取りのある文字は、向きを縁から 7 点内側の距離で読む（drawn_edge.h の平滑が効く所）。面取りの無い文字は 12 点の輪のまま
 - [x] 部位ごとの材質（11/1、同）：面、面取り、横、裏を別の色と質感に（11/2 ユーザー：「そこも超えておかないとダメなんだよ」で再開）。After Effects の Bevel Color、Side Color、Back Color の 3 つに、各部位の Metal と Rough。何も言わない部位は面と同じ。Bevel カードと Side カード、ルック Red Gold。AE の Ambient、Diffuse、Specular、Reflection は部位ごとには持たない（Filament の 2 つで足りると見た。出典なしの判断）
-- [ ] 重ねた縁取りを厚みでも（11/1、同）：PopText、GN Rounded Bevel の多重の縁。パチンコの文字の残り
+- [x] 重ねた縁取りを厚みでも（11/1、同）：PopText、GN Rounded Bevel の多重の縁。パチンコの文字の残り。文字の Stroke 2 と Stroke 3 を足した（文字を縁ごと ThorVG で下に描き足す）。Multi-Border は 3D を描いた後の平らな輪郭で、厚みには入らない
+- [ ] 重ねた縁の段（11/2）：縁ごとに高さを変える。Step の段を縁の幅に合わせる
 - [x] 効果を掛けた物にも光と影（11/1）：光はもともと届いていた（`thing_fx.h` を読んだだけの早とちり。平らな物も厚みのある物も、絵で確かめた）。影だけが無く（平らも厚みも 0 画素）、平らな物は舞台に立つ効果後の板が落とすようにした（95763 画素、普通の物は 95654）
 - [ ] 厚みのある物に .fs、.wgsl の効果を掛けると影が消える。画面に貼る経路で舞台に板が無い。Filament はレイヤーで隠すと影も消す（`View.cpp` の computeVisibilityMasks）ので、影だけの代役が要る
 - [ ] フィルムにも Scale Z を効かせる（11/1、同）。今の Scale Z は solid、文字、図形、写真だけ。`video()` のシートを `sheet_deep` にして `doc_kinds.h` に film を足す

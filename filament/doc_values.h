@@ -8,6 +8,10 @@ static const DocShown doc_shown[] = {
     {"fill", "colours", "", "Fill", 0, 0, nullptr},
     {"stroke", "colour", "", "Stroke", 0, 0, nullptr},
     {"stroke_width", "", "px", "Stroke width", 0, 16, nullptr},
+    {"stroke_2", "colour", "", "Stroke 2", 0, 0, nullptr},
+    {"stroke_2_width", "", "px", "Width 2", 0, 40, nullptr},
+    {"stroke_3", "colour", "", "Stroke 3", 0, 0, nullptr},
+    {"stroke_3_width", "", "px", "Width 3", 0, 40, nullptr},
     {"split", "", "", "Split", 0, 0, nullptr},
     {"letter_spacing", "", "×", "Tracking", 0, 3, nullptr},
     {"line_spacing", "", "×", "Line gap", 0, 3, nullptr},
@@ -387,6 +391,7 @@ static const DocCard doc_cards[] = {
     {"Path", "round bloat offset zigzag zigzag_ridges zigzag_smooth", "kind", "shape", true},   // (its path made anew: After Effects' shape operators, ThorVG's own)
     {"Edit Shape", "crop_left crop_top crop_right crop_bottom round", "kind", "picture"},   // (a photo's rect, Alight Motion's Edit Shape, AbsentMotion's Shape Options: cut in from its sides, what is left where it was, and its corners rounded; drawn as a rect its own file fills, doc_match)
     {"Deform", "warp bend twist pinch skew squash wiggle stretch bend_direction pin_tl_x pin_tl_y pin_tr_x pin_tr_y pin_bl_x pin_bl_y pin_br_x pin_br_y warp_width warp_angle warp_speed skew_axis wiggle_detail wiggle_speed", "kind", "shape", true},   // (its points moved as it is drawn: Cavalry's deformers)
+    {"Strokes", "stroke_2 stroke_2_width stroke_3 stroke_3_width", "kind", "text", true},   // (more edges, each outside the last, drawn with the words: they stand in its depth, as Multi-Border's, on its picture, do not)
     {"Bevel", "bevel bevel_depth bevel_color bevel_metallic bevel_roughness", nullptr, nullptr, true},
     {"Side", "side_color side_metallic side_roughness back_color back_metallic back_roughness", nullptr, nullptr, true},   // (After Effects' Side and Back Color: a thick thing's other faces)
     {"Surface", "shading metallic roughness reflectance clear_coat clear_coat_roughness sheen anisotropy thickness emissive", "fill", "!glass", true},

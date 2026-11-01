@@ -357,6 +357,7 @@ static const DocValue doc_values[] = {
     {"drift_x", "picture text shape", -1e3, 1e3, true, nullptr}, {"drift_y", "picture text shape", -1e3, 1e3, true, nullptr},   // (scattered copies flowing so far a second, units of the stage: past the scattering's edge, back in at the other)
     {"tint", "film picture text shape", 0, 1, true, nullptr}, {"tint_black", "film picture text shape", 0, 0, false, ""}, {"tint_white", "film picture text shape", 0, 0, false, ""},
     {"tritone", "film picture text shape", 0, 1, true, nullptr}, {"tritone_shadow", "film picture text shape", 0, 0, false, ""}, {"tritone_midtone", "film picture text shape", 0, 0, false, ""}, {"tritone_highlight", "film picture text shape", 0, 0, false, ""},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
+    {"stroke_2", "text", 0, 0, false, ""}, {"stroke_2_width", "text", 0, 1000, false, nullptr}, {"stroke_3", "text", 0, 0, false, ""}, {"stroke_3_width", "text", 0, 1000, false, nullptr},   // (more edges, each outside the last: Alight Motion's Add Border, Illustrator's Appearance)
     {"stroke", "text shape picture", 0, 0, false, ""}, {"stroke_width", "text shape picture", 0, 1000, false, nullptr},   // (its edge: a colour, and how wide, in points of the picture at size 1)
     // (ThorVG's own: a text's letters and lines so many times as far apart as the font sets them, its slant; an edge's
     //  ends and corners, and dashes along it so long, with gaps as long, begun so far along)

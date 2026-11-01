@@ -274,6 +274,7 @@ static bool type_sets(const char* fontFile, const char* words) {
     return sets;
 }
 // edge: an outline round the letters, ThorVG's own (its colour; w: how wide, a share of the line's height; 0: none).
+// fx.rims: more of them, each outside the last: the letters drawn again under them, each its outline wider.
 // Lines: the words may be broken by \n; align: how the lines lie one under another (ThorVG's own: 0 left, 1 right).
 static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4f& place, float high, float3 colour = float3{0.f}, const char* lay = nullptr, float4 edge = float4{0.f}, float align = 0.f, const DrawnFx& fx = {}) {
     if (!std::filesystem::is_regular_file(fontFile)) return nullptr;
@@ -316,12 +317,14 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
             }
             tvg::Paint::rel(line);
         }
-        const float outline = edge.w * tall;   // (half of it lies outside the letters: the picture is that much larger all round)
-        if (outline > 0.f) t->outline(outline, (uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
+        const float stroke = edge.w * tall;
+        if (stroke > 0.f) t->outline(stroke, (uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
+        float outline = stroke;   // (half of it lies outside the letters: the picture is that much larger all round)
+        for (const float4& rim : fx.rims) outline += 2.f * rim.w * tall;
         t->translate(-x + 0.5f * outline, -y + 0.5f * outline);
         *w = 2 * (int)std::ceil(0.5f * (wide + outline));
         *h = 2 * (int)std::ceil(0.5f * (tall + outline));
-        if (!fx.split && fx.wrapWidth <= 0.f && align <= 0.f) d->text = t, d->words = words, d->textWide = (float)*w, d->textAt = -y + 0.5f * outline;   // (its words told again in place: words_at)
+        if (!fx.split && fx.wrapWidth <= 0.f && align <= 0.f && fx.rims.empty()) d->text = t, d->words = words, d->textWide = (float)*w, d->textAt = -y + 0.5f * outline;   // (its words told again in place: words_at)
         std::string line(words);   // (a last line left empty, a Return after the words, is no line: its letters are the ones before)
         while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
         if (fx.split && line.find('\n') == std::string::npos && fx.wrapWidth <= 0.f) {   // (one line split into its letters: where each ends, by how wide the words up to it are set)
@@ -354,14 +357,30 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
                 was = cut;
             }
         }
-        if (fx.ramp.size() < 2) return t;
+        std::vector<tvg::Paint*> under;
+        float wider = stroke;
+        for (const float4& rim : fx.rims) {
+            wider += 2.f * rim.w * tall;
+            const uint8_t r = (uint8_t)std::lround(255.f * rim.x), g = (uint8_t)std::lround(255.f * rim.y), b = (uint8_t)std::lround(255.f * rim.z);
+            tvg::Text* round = (tvg::Text*)t->duplicate();
+            round->fill(r, g, b), round->outline(wider, r, g, b);
+            under.push_back(round);
+        }
+        const auto over_rims = [&](tvg::Paint* top) -> tvg::Paint* {
+            if (under.empty()) return top;
+            tvg::Scene* all = tvg::Scene::gen();
+            for (auto it = under.rbegin(); it != under.rend(); ++it) all->add(*it);
+            all->add(top);
+            return all;
+        };
+        if (fx.ramp.size() < 2) return over_rims(t);
         // (a ramp: a rect as large as the words, filled with it, seen only where the letters are: ThorVG's own alpha
         //  mask; ThorVG counts a text's own gradient in the font's units, which are not to be had from outside)
         tvg::Shape* ramp = tvg::Shape::gen();
         ramp->appendRect(0.f, 0.f, (float)*w, (float)*h);
         ramp->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread, fx.rampAt, fx.rampBlend));
         ramp->mask(t, tvg::MaskMethod::Alpha);
-        return ramp;
+        return over_rims(ramp);
     }, place, high, float3{-1.f}, true, lay, fx);
 }
 

@@ -54,7 +54,7 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
             if (one.size() != 6 || one.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) return d.trouble = "copy_fill is colours of six digits, as ff3366 1b2fd8", false;
         if (n < 1) return d.trouble = "copy_fill is colours of six digits, as ff3366 1b2fd8, or none", false;
     }
-    if (word && *word && (doc_among("vignette_color fog_color background bevel_color side_color back_color", name) || (!strcmp(name, "fill") && kind == "light")))   // (one colour: six digits)
+    if (word && *word && (doc_among("vignette_color fog_color background bevel_color side_color back_color stroke_2 stroke_3", name) || (!strcmp(name, "fill") && kind == "light")))   // (one colour: six digits)
         if (strlen(word) != 6 || strspn(word, "0123456789abcdefABCDEF") != 6) return d.trouble = std::string(name) + " is six digits, as ff3366", false;
     if (number && (!std::isfinite(*number) || (*number < v->low && !(v->open && v->low < 0)) || (*number > v->high && !v->open) || (doc_among("keyed clip visible solo lock shadows clip_invert", name) && *number != 0.0 && *number != 1.0)))
         return std::snprintf(range, sizeof range, doc_among("keyed clip visible solo lock shadows clip_invert", name) ? " is 0 or 1" : " is from %g to %g", v->low, v->high), d.trouble = name + std::string(range), false;
