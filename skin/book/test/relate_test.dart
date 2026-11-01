@@ -130,6 +130,10 @@ void main() {
         ..set(made[i], 'y', i.isEven ? .1 : -.1);
     }
     List<double> where(int i) => m.frame(i)!.sublist(0, 2);
+    void wait(int ticket) {
+      while (m.answer(ticket) < 0) {}
+    }
+
     void stays(Map<int, List<double>> was, String why) {
       for (final e in was.entries) {
         expect((where(e.key)[0] - e.value[0]).abs() + (where(e.key)[1] - e.value[1]).abs(), lessThan(0.5), reason: '$why: thing ${e.key} moved');
@@ -138,20 +142,20 @@ void main() {
 
     final push = m.add('behaviour', 'push');
     expect(m.later('relate', thing: push, word: made.join(' ')), greaterThan(0));
-    while (m.answer(m.later('together')) < 0) {}
+    wait(m.later('together'));
     expect(m.value(made[1], 'x_by', 0), push.toDouble(), reason: 'in Push');
     final before = {for (final i in made.skip(1)) i: where(i)};
     final around = m.add('behaviour', 'around');
     m.set(around, 'strength', 0);   // (none of it yet: what shows is what Push gives, if Around starts from it)
     m.later('relate', thing: around, word: made.skip(1).take(3).join(' '));
-    while (m.answer(m.later('together')) < 0) {}
+    wait(m.later('together'));
     expect(m.value(made[1], 'x_by', 0), around.toDouble(), reason: 'in Around now');
     expect(m.shows(made[1], 'x', 0)?.$2, isTrue, reason: 'a place a relation moves says so');
     expect(m.shows(made[1], 'x', 0)!.$1, isNot(closeTo(m.value(made[1], 'x', 0)!, 1e-6)), reason: 'where it shows, not its own');
     expect(m.word(around, 'under').split(' '), everyElement('$push'), reason: 'Around starts from Push for each');
     stays(before, 'Around made at strength 0');
     final out = {for (final i in made.skip(1)) i: where(i)};
-    while (m.answer(m.later('free', thing: made[1], number: around.toDouble())) < 0) {}
+    wait(m.later('free', thing: made[1], number: around.toDouble()));
     expect(m.value(made[1], 'x_by', 0), push.toDouble(), reason: 'back in Push');
     stays(out, 'one out of Around');
     // (switched off by its eye: what Push gives shows, and its strength is as it was)
@@ -161,7 +165,7 @@ void main() {
     expect(m.value(around, 'strength', 0), closeTo(.8, 1e-9), reason: 'off is not strength 0');
     // (taken away, as a constraint deleted in Blender: back to what Push gives, Push still on them)
     m.set(around, 'visible', 1);
-    while (m.answer(m.later('remove', thing: around)) < 0) {}
+    wait(m.later('remove', thing: around));
     expect(m.things.contains(around), isFalse);
     expect(m.value(made[2], 'x_by', 0), push.toDouble(), reason: 'back in Push');
     stays({for (final i in made.skip(2).take(2)) i: out[i]!}, 'Around taken away');
