@@ -296,6 +296,15 @@ class CardMore extends StatefulWidget {
 class _CardMoreState extends State<CardMore> {
   final _link = LayerLink();
   final _portal = OverlayPortalController();
+  bool _up = false;   // (no room under it: opened upward, as TinyMenuAt does)
+
+  void _open() {
+    final box = context.findRenderObject()! as RenderBox;
+    final foot = box.localToGlobal(box.size.bottomLeft(Offset.zero)).dy;
+    setState(() => _up = foot + widget.items.length * Shape.z(22) + 2 * Shape.s(3) + 2 > MediaQuery.sizeOf(context).height);
+    _portal.toggle();
+  }
+
   @override
   Widget build(BuildContext context) => CompositedTransformTarget(
         link: _link,
@@ -305,8 +314,8 @@ class _CardMoreState extends State<CardMore> {
             alignment: Alignment.topLeft,
             child: CompositedTransformFollower(
               link: _link,
-              targetAnchor: widget.above ? Alignment.topLeft : Alignment.bottomRight,
-              followerAnchor: widget.above ? Alignment.bottomLeft : Alignment.topRight,
+              targetAnchor: widget.above ? Alignment.topLeft : _up ? Alignment.topRight : Alignment.bottomRight,
+              followerAnchor: widget.above ? Alignment.bottomLeft : _up ? Alignment.bottomRight : Alignment.topRight,
               child: FloatShut(shut: _portal.hide, group: _link, child: TinyMenu(name: 'card', of: widget.name, items: widget.items, hide: _portal.hide)),
             ),
           ),
@@ -314,7 +323,7 @@ class _CardMoreState extends State<CardMore> {
             groupId: _link,   // (a press on the ⋮ itself shuts it, by the ⋮: not shut, then opened again)
             child: Hov(
               key: ValueKey('card-more:${widget.name}'),
-              onTap: widget.items.isEmpty ? null : _portal.toggle,
+              onTap: widget.items.isEmpty ? null : _open,
               builder: (_, h) => Padding(padding: EdgeInsets.only(right: Shape.s(6)), child: Text(widget.word, style: T.label(h ? Grey.g95 : widget.big ? Grey.g76 : Grey.g56).copyWith(fontSize: widget.big ? T.px(20) : null, fontWeight: widget.big ? FontWeight.w700 : null))),
             ),
           ),

@@ -142,7 +142,7 @@ TabbedViewThemeData _tabs() {
     ..normalButtonColor = Grey.g56
     ..hoverButtonColor = Grey.g91;
   t.tab
-    ..padding = EdgeInsets.fromLTRB(Shape.s(plain ? 4 : 10), Shape.s(5), Shape.s(plain ? 4 : 10), Shape.s(5))
+    ..padding = EdgeInsets.fromLTRB(Shape.s(plain ? 4 : 8), Shape.s(5), Shape.s(plain ? 4 : 8), Shape.s(5))   // (seven shelf tabs fit a dock squeezed to 229 by a 1280 window)
     ..margin = EdgeInsets.zero
     ..innerBottomBorder = null
     ..innerTopBorder = null

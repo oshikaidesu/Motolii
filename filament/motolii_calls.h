@@ -327,7 +327,7 @@ const char* motolii_media_info(const char* file) {
     static thread_local std::string out;
     out.clear();
     gst_init(nullptr, nullptr);
-    GstDiscoverer* looks = gst_discoverer_new(5 * GST_SECOND, nullptr);
+    GstDiscoverer* looks = gst_discoverer_new(20 * GST_SECOND, nullptr);   // (gst-discoverer-1.0's own is 10; a busy CI Mac passed 5, here on an isolate of its own)
     gchar* uri = gst_filename_to_uri(file, nullptr);
     GstDiscovererInfo* info = looks && uri ? gst_discoverer_discover_uri(looks, uri, nullptr) : nullptr;
     if (info && gst_discoverer_info_get_result(info) != GST_DISCOVERER_OK) g_object_unref(info), info = nullptr;   // (not there, or not media: nothing said)
