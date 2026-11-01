@@ -440,6 +440,16 @@ static void doc_moment(Doc& d, double now) {
                 }
             }
         }
+        if (const auto told = d.scripted.find(thing); told != d.scripted.end() && t.look && !t.drawn && !t.film) {   // (a solid's copies each the colour its sketch fills it with: a look of its own each)
+            auto& faces = s.engine->getRenderableManager();
+            for (const Stage::Made& made : s.made) {
+                if (made.of != m || made.matte || made.nth < 0 || (size_t)made.nth >= told->second.copies.size() || told->second.copies[(size_t)made.nth].colour < 0.0) continue;
+                MaterialInstance*& own = d.copyLooks[made.thing.getId()];
+                if (!own) own = MaterialInstance::duplicate(t.look), faces.setMaterialInstanceAt(faces.getInstance(made.thing), 0, own);
+                const long hex = (long)told->second.copies[(size_t)made.nth].colour;
+                own->setParameter("color", float4{Color::toLinear<ACCURATE>(sRGBColor{float3{(float)((hex >> 16) & 255), (float)((hex >> 8) & 255), (float)(hex & 255)} / 255.f}), 1.f});
+            }
+        }
         const double whole = doc_number(d, thing, "opacity", now, 1) * doc_absent_opacity(d, thing, now) * doc_group_opacity(d, thing, now);   // (AbsentMotion's Pulse Opacity too, and its groups')
         const auto fxOf = d.thingFx.find(thing);
         const bool sheetClear = fxOf != d.thingFx.end() && fxOf->second.look && fxOf->second.look->getMaterial()->hasParameter("opacity");   // (with effects of its own how clear it is comes after them, on its sheet: After Effects renders a layer's masks, effects, then transform)

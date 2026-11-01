@@ -402,7 +402,7 @@ ScriptCopy Script::ask(int i, int n, double t) {   // (each(), the knobs as last
         if (JS_IsNumber(v)) JS_ToFloat64(cx, &to, v);
         JS_FreeValue(cx, v);
     };
-    read("x", c.x), read("y", c.y), read("z", c.z), read("size", c.size), read("rotate", c.rotate), read("rotate_x", c.rotate_x), read("rotate_y", c.rotate_y), read("opacity", c.opacity), read("scale_x", c.scale_x), read("scale_y", c.scale_y), read("scale_z", c.scale_z);
+    read("x", c.x), read("y", c.y), read("z", c.z), read("size", c.size), read("rotate", c.rotate), read("rotate_x", c.rotate_x), read("rotate_y", c.rotate_y), read("colour", c.colour), read("opacity", c.opacity), read("scale_x", c.scale_x), read("scale_y", c.scale_y), read("scale_z", c.scale_z);
     JS_FreeValue(cx, out);
     return c;
 }

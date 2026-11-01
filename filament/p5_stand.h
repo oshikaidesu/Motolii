@@ -231,7 +231,7 @@ function __three_render(scene, camera) {
     const sx = Math.hypot(e[0], e[1], e[2]) || 1, sy = Math.hypot(e[4], e[5], e[6]) || 1, sz = Math.hypot(e[8], e[9], e[10]) || 1;
     if (q.frame !== __T) q.frame = __T, q.now = 0;
     q.most = Math.max(q.most, ++q.now);
-    __drawn.push(e[12] * s, e[13] * s, (e[14] + __three.d) * s, sx * s, sy * s, sz * s, Math.atan2(e[1] / sx, e[0] / sx) * deg, Math.asin(Math.max(-1, Math.min(1, -e[2] / sx))) * deg, Math.atan2(e[6] / sy, e[10] / sz) * deg, p);
+    __drawn.push(e[12] * s, e[13] * s, (e[14] + __three.d) * s, sx * s, sy * s, sz * s, Math.atan2(e[1] / sx, e[0] / sx) * deg, Math.asin(Math.max(-1, Math.min(1, -e[2] / sx))) * deg, Math.atan2(e[6] / sy, e[10] / sz) * deg, p, -1);
   };
   scene.traverseVisible(o => {
     if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
@@ -278,6 +278,7 @@ var tokenData = { hash: '0x' + '6b3d'.repeat(16), tokenId: '1000000' }, fxhash =
 const __load_image = p5.prototype.loadImage;
 p5.prototype.loadImage = function (path, ok) { if (!__film_first()) return __load_image.apply(this, arguments); const f = __film_open(); if (typeof ok === 'function') ok(f); return f; };
 p5.prototype.createCapture = p5.prototype.createVideo = function () { const f = __film_open(), ready = [...arguments].find(a => typeof a === 'function'); if (ready) ready(f); return f; };
+const __packed = c => c ? Math.round(c[0] * 255) << 16 | Math.round(c[1] * 255) << 8 | Math.round(c[2] * 255) : -1;   // (a copy's colour, red green blue; -1: its own solid's)
 var __drawn = [], __kinds = {}, __U = 0.01;   // (a pixel of the sketch in the world's unit: as it comes half the stage's height, new p5() below)
 p5.RendererGL.prototype.drawBuffersScaled = function (gId, x, y, z) {
   const m = Array.from(this.uModelMatrix.mat4);
@@ -285,7 +286,7 @@ p5.RendererGL.prototype.drawBuffersScaled = function (gId, x, y, z) {
   const sx = Math.hypot(m[0], m[1], m[2]) || 1, sy = Math.hypot(m[4], m[5], m[6]) || 1, sz = Math.hypot(m[8], m[9], m[10]) || 1, deg = 180 / Math.PI;
   const of = String(gId).split('|')[0], whole = of === 'ellipsoid' ? 2 : 1;   // (an ellipsoid told by its radii; the world's ball is as wide as 1, as p5's box)
   __kinds[of] = (__kinds[of] || 0) + 1;
-  __drawn.push(m[12] * __U, m[13] * __U, m[14] * __U, whole * x * sx * __U, whole * y * sy * __U, whole * z * sz * __U, Math.atan2(m[1] / sx, m[0] / sx) * deg, Math.asin(Math.max(-1, Math.min(1, -m[2] / sx))) * deg, Math.atan2(m[6] / sy, m[10] / sz) * deg, __L);
+  __drawn.push(m[12] * __U, m[13] * __U, m[14] * __U, whole * x * sx * __U, whole * y * sy * __U, whole * z * sz * __U, Math.atan2(m[1] / sx, m[0] / sx) * deg, Math.asin(Math.max(-1, Math.min(1, -m[2] / sx))) * deg, Math.atan2(m[6] / sy, m[10] / sz) * deg, __L, this._useNormalMaterial || this._tex ? -1 : __packed(this.curFillColor));
   return this;
 };
 )";
@@ -323,7 +324,7 @@ function __paints(f, had) {   // (what makes frame f on a canvas holding frame `
 function __most() {   // (as many copies as its first seconds draw at once, a second of waiting at most)
   const from = Date.now();
   for (let f = 1; f < 300 && Date.now() - from < 1000; ++f) __to(f);
-  return Math.max(...__frames.map(c => c.length / 10));
+  return Math.max(...__frames.map(c => c.length / 11));
 }
 function __shape() {   // (the world's shape nearest what it draws most of)
   if (__parts.length) return '';
@@ -335,7 +336,7 @@ function __three_each(i, f, part) {   // (the frame's meshes by their parts; eac
   if (__by_at !== f) {
     __three_whole(), __by_at = f, __by = [];
     const c = __frames[f];
-    for (let at = 0; at < c.length; at += 10) { const w = __whole.of[c[at + 9]]; if (w !== undefined) (__by[w] = __by[w] || []).push(at); }
+    for (let at = 0; at < c.length; at += 11) { const w = __whole.of[c[at + 9]]; if (w !== undefined) (__by[w] = __by[w] || []).push(at); }
   }
   const at = (__by[part] || [])[i], c = __frames[f];
   return at === undefined ? { size: 0 } : { x: c[at], y: c[at + 1], z: c[at + 2], scale_x: c[at + 3], scale_y: c[at + 4], scale_z: c[at + 5], rotate: c[at + 6], rotate_y: c[at + 7], rotate_x: c[at + 8] };
@@ -345,7 +346,7 @@ function each(i, n, t, k) {
   const f = Math.max(0, Math.round(t * 60));
   __to(f);
   if (__parts.length || __three) return __three_each(i, f, k.part | 0);
-  const c = __frames[f], at = i * 10, strong = (k && k['line_' + c[at + 9]]) ?? 1;   // (its line's knob: what that line drew grows out of nothing)
-  return at < c.length ? { x: c[at], y: c[at + 1], z: c[at + 2], scale_x: c[at + 3] * strong, scale_y: c[at + 4] * strong, scale_z: c[at + 5] * strong, rotate: c[at + 6], rotate_y: c[at + 7], rotate_x: c[at + 8] } : { size: 0 };
+  const c = __frames[f], at = i * 11, strong = (k && k['line_' + c[at + 9]]) ?? 1;   // (its line's knob: what that line drew grows out of nothing)
+  return at < c.length ? { x: c[at], y: c[at + 1], z: c[at + 2], scale_x: c[at + 3] * strong, scale_y: c[at + 4] * strong, scale_z: c[at + 5] * strong, rotate: c[at + 6], rotate_y: c[at + 7], rotate_x: c[at + 8], colour: c[at + 10] } : { size: 0 };
 }
 )";

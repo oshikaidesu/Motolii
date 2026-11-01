@@ -111,8 +111,8 @@ static bool doc_match(Doc& d) {
         if (still != told.end() && still->second == it->second.of && !(it->second.drawn && it->second.drawn->outgrown)) { ++it; continue; }   // (a text told words wider than its picture: made again however it reads)
         if (it->second.scene && it->second.scene != s.scene)   // (out of the scene of its run first: the kit takes things out of the stage's own only)
             doc_entities(s, it->second, [&](utils::Entity e) { it->second.scene->remove(e); });
-        if (const Mesh* m = it->second.film ? it->second.film->sheet : it->second.drawn ? it->second.drawn->sheet : nullptr)   // (its copies' own looks first, while its copies are still known)
-            doc_copy_looks_off(d, m, it->second.film ? it->second.film->look : it->second.drawn->look);
+        if (const Mesh* m = it->second.film ? it->second.film->sheet : it->second.drawn ? it->second.drawn->sheet : it->second.shape)   // (its copies' own looks first, while its copies are still known)
+            doc_copy_looks_off(d, m, it->second.film ? it->second.film->look : it->second.drawn ? it->second.drawn->look : it->second.look);
         if (const Mesh* m = it->second.film ? it->second.film->sheet : it->second.drawn ? it->second.drawn->sheet : it->second.shape)   // (and the shape it cuts a matte by: done away with first)
             doc_unshape(s, [m](const Stage::Made& made) { return made.of == m; });
         if (it->second.film) video_off(s, it->second.film);
