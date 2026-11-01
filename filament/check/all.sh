@@ -27,6 +27,7 @@ run fx_transition.sh
 run fx_colour.sh
 run fx_sheet.sh
 run fx_world.sh
+run deep.sh
 run world_view.sh
 run solid_copies.sh
 run fx_reach.sh

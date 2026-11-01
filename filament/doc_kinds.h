@@ -136,8 +136,8 @@ static const DocValue doc_values[] = {
     {"rotate", "film picture text solid shape camera light behaviour", -1e6, 1e6, true, nullptr}, {"rotate_x", "film picture text solid shape camera light behaviour", -1e6, 1e6, true, nullptr}, {"rotate_y", "film picture text solid shape camera light behaviour", -1e6, 1e6, true, nullptr},   // (a relation's own: added to each of its things in turn)
     {"orient", "film picture text solid shape", 0, 1, false, nullptr},   // (turned the way it is going along its path, its rotate added: After Effects' Auto-Orient)
     // (how many times as wide, as high and as deep as its size makes it, each on its own as After Effects' Scale: below 0
-    //  turned over; a flat thing's scale_z is its thickness: none said, flat; said, it is drawn pushed out into depth by
-    //  Raster Extrude (doc_fx_list), as After Effects' Extrusion Depth and Apple Motion's Depth make a flat text solid)
+    //  turned over; a flat thing's scale_z is its thickness: none said, flat; said, its sheet is a box its picture is pushed
+    //  through (deep.glsl), as After Effects' Extrusion Depth and Apple Motion's Depth make a flat text solid; 0: shut, a sheet)
     {"scale_x", doc_drawn, -1e4, 1e4, true, nullptr},
     {"scale_y", doc_drawn, -1e4, 1e4, true, nullptr},
     {"scale_z", "solid text shape picture", -1e4, 1e4, true, nullptr},

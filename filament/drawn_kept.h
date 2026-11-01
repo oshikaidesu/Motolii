@@ -21,6 +21,7 @@
 struct DrawnFx { bool split = false;   // (a text's letters each a copy of their own)
     bool splitWords = false;   // (its words, not its letters: After Effects' Based On Words, Alight Motion's Text Transform)
     bool together = false;   // (its copies drawn in one go, each an instance of one thing: none coloured or cleared each of its own, kit.h add_parts)
+    bool thick = false;    // (it has depth: its sheet a box, its picture pushed through it, deep.glsl)
     bool column = false;   // (its letters one under another, a letter's height from each to the next)
     float letters = 1.f, lines = 1.f, italic = 0.f, wrapWidth = 0.f; int wrap = 0;   // (a text's lines broken in a box so many of its letters' heights wide, ThorVG's layout and wrap; 0: as typed)
     float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)
@@ -64,6 +65,8 @@ struct Drawn {
     tvg::Animation* film = nullptr;    // (the same)
     Texture* texture = nullptr;        // what Filament reads
     Mesh* sheet = nullptr;             // the thing in the scene: moved like any other (kit.h: move)
+    float3 boxed{0.f};                 // (half its box across, up and through, when it has depth; its box is open: doc_moment.h)
+    bool open = false;
     MaterialInstance* look = nullptr;  // its look (none if it is not shown)
     float seconds = 0.f, frames = 0.f; // a film's length (a still: 0)
     float starts = 0.f;                // how far into itself it is when the stage's time is 0

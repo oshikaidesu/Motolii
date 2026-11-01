@@ -6,7 +6,7 @@ material {
     shadingModel : unlit,
     requires : [ uv0 ],
     instanced : true,   // (its copies drawn in one go tell which they are: kit.h add_parts, the copies' own colours below)
-    variables : [ copyOf ],
+    variables : [ copyOf, deepAt, deepEye, deepUp ],
     culling : none,
     blending : ${BLENDING},   // (kit_wgpu.sh builds it once for each way a sheet lies on what is behind: transparent, add, multiply, screen)
     depthWrite : true,
@@ -42,7 +42,11 @@ material {
         // a film's own look, as ThorVG's effects give a picture theirs: [0] how far it is blurred (across, up: shares of
         // the picture), how much its darks and lights are made two colours, how much three; [1] [2] the two (tint);
         // [3] [4] [5] the three (tritone: shadow, middle, highlight). All 0: as it is.
-        { type : float4[6], name : grade }
+        { type : float4[6], name : grade },
+        // a thing with depth (deep.glsl): half its box across, up and through, in its own lengths (all 0: a sheet), and 1: its box open (0: Z 0, shut, a sheet);
+        // how its box's corners turn into its picture's (a film on its side: video.h)
+        { type : float4, name : deep },
+        { type : float4, name : deepTurn }
     ]
 }
 
@@ -56,8 +60,10 @@ vertex {
         return 2.0 * mix(a, b, f.z) - 1.0;
     }
     vec2 turned(vec2 p, float a) { float c = cos(a), s = sin(a); return vec2(c * p.x - s * p.y, s * p.x + c * p.y); }
+#include "deep_vertex.glsl"
     void materialVertex(inout MaterialVertexInputs material) {
         material.copyOf = vec4(float(getInstanceIndex()), 0.0, 0.0, 0.0);
+        if (materialParams.deep.z > 0.0) deepVertex(material);
         vec4 wave = materialParams.bends[0], bend = materialParams.bends[1], skew = materialParams.bends[2], wig = materialParams.bends[3], move = materialParams.bends[4];
         vec4 pinTop = materialParams.bends[5], pinBottom = materialParams.bends[6];
         float stretch = move.z * length(move.xy);
@@ -118,20 +124,33 @@ fragment {
     vec3 filmAt(vec2 uv) {   // (a film's colour at a place: its light and its colour planes, by the film's own rule)
         return clamp((materialParams.filmRule * vec4(textureLod(materialParams_picture, uv, 0.0).r, textureLod(materialParams_colours, uv, 0.0).rg, 1.0)).rgb, 0.0, 1.0);
     }
+    float deepThere(highp vec2 uv) {   // (how much of it is at a point of its picture: its own clearness, a film's where it is not keyed out, a letter's within its part)
+        if (materialParams.window.z > 0.5 && (uv.x < materialParams.window.x || uv.x >= materialParams.window.y)) return 0.0;
+        if (materialParams.filmed < 0.5) return textureLod(materialParams_picture, uv, 0.0).a;
+        if (materialParams.key.a <= 0.0) return 1.0;
+        vec3 c = filmAt(uv);
+        return keyLeft(c);
+    }
+    highp vec2 deepCells() { return vec2(textureSize(materialParams_picture, 0)); }
+#include "deep.glsl"
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        if (materialParams.window.z > 0.5 && (getUV0().x < materialParams.window.x || getUV0().x >= materialParams.window.y)) discard;   // (a letter: its own part of the words only)
-        vec4 drawn = textureLod(materialParams_picture, getUV0(), 0.0);   // (a drawn picture says itself how clear each point is; a film's is all there)
-        vec3 c = drawn.rgb;
+        highp vec2 uv = getUV0();
+        float deepShade = 1.0, deepShine = 0.0, deepEdge = -1.0;
+        gl_FragDepth = gl_FragCoord.z;
+        if (materialParams.deep.z > 0.0) deepMeet(uv, deepShade, deepShine, deepEdge);
+        if (materialParams.window.z > 0.5 && (uv.x < materialParams.window.x || uv.x >= materialParams.window.y)) discard;   // (a letter: its own part of the words only)
+        vec4 drawn = textureLod(materialParams_picture, uv, 0.0);   // (a drawn picture says itself how clear each point is; a film's is all there)
+        vec3 c = deepEdge >= 0.0 ? drawn.rgb / max(drawn.a, 1e-4) : drawn.rgb;   // (a ray takes its colour whole, as AbsentMotion's: its edge is told by `edge`)
         if (materialParams.filmed > 0.5) {
             // video keeps light and colour apart, in its own range: to red, green, blue by the film's own rule
-            c = filmAt(getUV0());
+            c = filmAt(uv);
             vec4 g = materialParams.grade[0];
             if (g.x > 0.0 || g.y > 0.0) {   // (blurred: read at twelve places round it, near and far, and itself)
                 vec3 sum = c;
                 for (int k = 0; k < 12; k++) {
                     float a = 6.2831853 * (float(k) + 0.5 * float(k / 6)) / 6.0, r = k < 6 ? 0.45 : 1.0;
-                    sum += filmAt(getUV0() + vec2(cos(a), sin(a)) * g.xy * r);
+                    sum += filmAt(uv + vec2(cos(a), sin(a)) * g.xy * r);
                 }
                 c = sum / 13.0;
             }
@@ -142,7 +161,8 @@ fragment {
         float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
         if (g.z > 0.0) c = mix(c, mix(materialParams.grade[1].rgb, materialParams.grade[2].rgb, l), g.z);
         if (g.w > 0.0) c = mix(c, l < 0.5 ? mix(materialParams.grade[3].rgb, materialParams.grade[4].rgb, 2.0 * l) : mix(materialParams.grade[4].rgb, materialParams.grade[5].rgb, 2.0 * l - 1.0), g.w);   // (the colour is then the film's share of the point already: only its clearness is `kept`)
-        float there = materialParams.filmed > 0.5 ? 1.0 : drawn.a;
+        float there = deepEdge >= 0.0 ? deepEdge : materialParams.filmed > 0.5 ? 1.0 : drawn.a;
+        c = min(c * deepShade + deepShine, vec3(1.0));
         if (kept * there < 0.004) discard;   // (where nothing of it is left it is not there at all: it hides nothing behind it)
         float uncut = matteLeft() * materialParams.opacity;
         if (uncut < 0.004) discard;

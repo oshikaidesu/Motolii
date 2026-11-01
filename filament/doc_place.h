@@ -499,8 +499,6 @@ static std::vector<std::string> doc_fx_list(Doc& d, int thing, bool off) {
     for (const std::string& w : script_files(doc_word(d, thing, "fx"))) if (w != "none" && w != "glow") said.push_back(w);   // (a glow is no step of the stack: Filament's bloom, doc_moment)
     for (const char* n : doc_thor_names) if (std::find(said.begin(), said.end(), n) == said.end() && doc_on(d, thing, n) && seen(n)) all.push_back(n);
     for (const std::string& w : said) if ((!doc_thor_letter(w) || doc_on(d, thing, w.c_str())) && seen(w)) all.push_back(w);
-    if (!off && doc_among("text shape picture", doc_word(d, thing, "kind")) && doc_on(d, thing, "scale_z") && std::none_of(all.begin(), all.end(), solid_is))   // (a flat thing given thickness: not one of its effects, no card of its own; its Scale Z deepens it, the place's own scaling)
-        all.push_back((doc_folders("solids").front() / "Raster_Extrude.js").string());
     return all;
 }
 // Whether a thing's effects are laid on it as the camera sees it (one of them a file: then all of them, in turn, there:

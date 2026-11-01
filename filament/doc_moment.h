@@ -11,7 +11,7 @@ static void doc_moment(Doc& d, double now) {
                 }
     const std::vector<int> lie = doc_laid(d);
     // Each thing as it is now, in the order they lie: whether it is on, and whether it is a solid thing.
-    struct Lies { int thing; Doc::Shown* shown; bool on, solid; double since; };
+    struct Lies { int thing; Doc::Shown* shown; bool on, solid; double since; bool open; };
     std::vector<Lies> lies;
     bool solo = false;   // (while any thing is solo, only those are seen)
     for (int thing : lie) solo = solo || doc_number(d, thing, "solo", 0, 0) > 0.5;
@@ -19,7 +19,8 @@ static void doc_moment(Doc& d, double now) {
         const auto found = d.shown.find(thing);
         if (found == d.shown.end() || found->second.camera) continue;
         const double since = doc_element_now(d, thing, now) - doc_number(d, thing, "start", 0, 0), lasts = doc_number(d, thing, "duration", 0, -1);   // (held in an element put in: at the moment it shows)
-        Lies one{thing, &found->second, since >= 0.0 && (lasts < 0.0 || since < lasts) && doc_number(d, thing, "visible", 0, 1) > 0.5 && (!solo || doc_number(d, thing, "solo", 0, 0) > 0.5), found->second.space != 2, since};   // (a sheet in the world settles depth with the solid things)
+        const bool open = found->second.drawn && found->second.drawn->boxed.z > 0.f && doc_literal(d, thing, "scale_z", now, 1) != 0.0;   // (its box open by its Scale Z; at 0 shut, one sheet: deep.glsl)
+        Lies one{thing, &found->second, since >= 0.0 && (lasts < 0.0 || since < lasts) && doc_number(d, thing, "visible", 0, 1) > 0.5 && (!solo || doc_number(d, thing, "solo", 0, 0) > 0.5), found->second.space != 2 || open, since, open};   // (a sheet in the world settles depth with the solid things)
         lies.push_back(one);
     }
     // The camera: the nearest one in the order of the things that is on (the past repository's choice); none, the stage's own.
@@ -197,6 +198,13 @@ static void doc_moment(Doc& d, double now) {
                 moves.push_back(tvg::Matrix{grow, 0.f, x0 * (1.f - grow), 0.f, grow, y0 * (1.f - grow) + dip, 0.f, 0.f, 1.f});
             }
             lit_at(s, t.drawn, lit, moves, float3{0xed, 0x9e, 0x85} / 255.f);
+        }
+        if (t.drawn && t.drawn->boxed.z > 0.f && lies[i].open != t.drawn->open) {   // (as anything in the world: it settles depth with the others)
+            t.drawn->open = lies[i].open;
+            const float4 box{t.drawn->boxed, lies[i].open ? 1.f : 0.f};
+            t.drawn->look->setParameter("deep", box), t.drawn->look->setDepthCulling(lies[i].solid), t.drawn->look->setDepthWrite(lies[i].solid);
+            for (const Stage::Made& made : s.made)
+                if (const auto own = d.copyLooks.find(made.thing.getId()); made.of == t.drawn->sheet && own != d.copyLooks.end()) own->second->setParameter("deep", box), own->second->setDepthCulling(lies[i].solid), own->second->setDepthWrite(lies[i].solid);
         }
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)lies[i].since, t.drawn->seconds));
         if (t.drawn && !t.drawn->effects.empty()) {   // (its effects as they are now: those that move are drawn again)

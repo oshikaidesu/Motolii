@@ -44,6 +44,7 @@ static bool doc_match(Doc& d) {
     for (auto& [thing, of] : told) {   // (its effects: which are on and the room they reach, not their numbers (doc_fxing))
         const auto on = [&](const char* name) { return std::max(doc_most(d, thing, name, 0), doc_number(d, thing, name, 0, 0)) > 0.0; };
         if (doc_on(d, thing, "mosh")) of += " moshed=" + doc_mosh(d, thing);   // (made again once its datamosh is made)
+        if (doc_on(d, thing, "scale_z")) of += " deep";   // (made once more as it is given depth: its sheet a box)
         if (of.find("kind=text") != std::string::npos) of += " shown=" + doc_text_shown(d, thing, s.now);   // (its words as AbsentMotion's text effects show them now: made again as they change (doc_moment))
         of += " order=" + doc_fx_join(doc_fx_list(d, thing)) + " fx=" + std::to_string((int)on("blur")) + (doc_word(d, thing, "shadow").empty() ? "0" : "1") + (doc_word(d, thing, "glow").empty() ? "0" : "1") + std::to_string((int)on("tint")) + std::to_string((int)on("tritone"))
             + " room=" + std::to_string(doc_fx_room(d, thing));
@@ -119,6 +120,7 @@ static bool doc_match(Doc& d) {
         if (!stroke.empty() && edgeRgb < 0) why = "a stroke is six digits, as ff3366";
         const double units = 0.5 * s.h * up.y / up.w;   // (points of the picture to one unit of the stage, where things stand at first)
         DrawnFx fx;
+        fx.thick = doc_on(d, thing, "scale_z");
         if (ramp.size() > 1) fx.ramp = ramp;
         if (ramp.size() > 1 && std::any_of(rampAt.begin(), rampAt.end(), [](float a) { return a >= 0.f; })) {   // (placed: one not said stands evenly; one before the one ahead of it stands where that one does, CSS Images 3's colour stop fix-up)
             for (size_t i = 0; i < rampAt.size(); ++i) {
@@ -243,7 +245,7 @@ static bool doc_match(Doc& d) {
                 // (its outline alone, in one colour: cut into triangles and drawn by Filament as the scene's other things
                 //  are, flat_mesh; with an edge, a ramp, a dash, effects, a trim or a bend made on the CPU: ThorVG's picture)
                 const std::string drawn = doc_word(d, thing, "path"), form = shape != "path" ? shape : drawn.empty() ? "M0 0" : drawn;   // (a path shape: its own path is its form; none yet: nothing)
-                const bool plain = !wave && shape != "spiral" && shape != "null" && fx.media.empty() && fx.ramp.size() < 2 && fx.blur <= 0.f && fx.shadow.w <= 0.f && fx.tint <= 0.f && fx.tritone <= 0.f;
+                const bool plain = !fx.thick && !wave && shape != "spiral" && shape != "null" && fx.media.empty() && fx.ramp.size() < 2 && fx.blur <= 0.f && fx.shadow.w <= 0.f && fx.tint <= 0.f && fx.tritone <= 0.f;
                 if (plain)
                     made.drawn = flat_mesh(s, form.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
                                            float4{edge.xyz, edge.w / high}, fx.over(high), (int)doc_number(d, thing, "points", 0, shape == "star" ? 5 : shape == "arc" ? 270 : shape == "squircle" ? 4 : shape == "cog" ? 12 : shape == "spiral" ? 3 : 6), (float)doc_number(d, thing, "inner", 0, shape == "cog" ? 0.2 : shape == "arc" ? 0.3 : shape == "spiral" ? 0.1 : shape == "chamfer" ? 0.3 : 0.5), (float)doc_number(d, thing, "round", 0, 0), doc_bends(d, thing));

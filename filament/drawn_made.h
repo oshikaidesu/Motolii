@@ -12,11 +12,12 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
     tvg::Paint* loose = nullptr;
     bool owned = false;
     int w = 0, h = 0;
+    float own = high;
     door::on_driver(s.engine, [&] {
         tvg::Initializer::init(0);
         tvg::Paint* p = paints(d, &w, &h);
         if (!p || w <= 0 || h <= 0) return;
-        high *= d->tallBy;
+        high *= d->tallBy, own = high;
         const float tall = (float)h;   // (what its effects' lengths are shares of: the thing as drawn, without room)
         if (fx.reach > 0.f) {
             const float room = std::ceil(fx.reach * (float)h);
@@ -87,12 +88,14 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
         d->sheet->uv.push_back(c * 0.5f + 0.5f);
     }
     d->sheet->idx = {0, 1, 2, 0, 2, 3};
+    if (fx.thick) sheet_deep(d->sheet, 0.1f * own), d->boxed = float3{d->sheet->pos[1].x, d->sheet->pos[2].y, 0.1f * own};   // (a fifth of its height through: the depth Raster_Extrude.js gives at Scale Z 1)
     if (d->frames > 1.f)   // (a film: it goes on by itself as the stage's time does, round and round)
         s.playing[d] = [&s, d](double now) { picture_at(s, d, std::fmod((float)now + d->starts, d->seconds)); };
     if (!shown) return d;
     d->look = add(s, d->sheet, flat_laid(lay).c_str(), std::vector<mat4f>((size_t)std::max(1, d->letters.empty() ? fx.copies : (int)d->letters.size()), place), 1, false, 1, 4, fx.together && d->letters.empty());   // (split into letters: a copy each)
     if (!d->look) return nullptr;
     d->look->setParameter("picture", d->texture, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
+    if (fx.thick) d->look->setParameter("deep", float4{d->boxed, 0.f}), d->look->setParameter("deepTurn", float4{1.f, 0.f, 0.f, 1.f});
     return d;
 }
 

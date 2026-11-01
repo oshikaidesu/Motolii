@@ -1,0 +1,68 @@
+// deep.glsl: a thing with depth (Scale Z): its picture pushed through a box, Alight Motion's Raster Extrude as AbsentMotion
+// writes it (effects/am_rasterextrude.wgsl, Apache-2.0): from where a ray comes into the box to where it goes out, 64
+// steps through the picture's coverage, the first over a half closed in on six times; on the box's front or back it
+// is the picture, else a side, facing down the coverage's slope. A ray that only brushes it is its soft edge. A side's
+// shading, light and shine are that effect's own defaults; its front is left as drawn, the same as at Z 0. Here the ray is the world camera's, in the box's own lengths
+// (deep_vertex.glsl), and the point it meets is written as the depth (Filament's custom depth, GLSLTools.cpp), so a
+// thing crosses others where it really is. The one who reads it says deepThere (how much of it is at a point of its
+// picture) and deepCells (how many points its picture has).
+highp vec2 deepUV(highp vec2 q) {   // (a point of the box's front to its picture: its corners as the sheet's, video.h; v turned over as Filament turns a sheet's)
+    vec2 o = mat2(materialParams.deepTurn.xy, materialParams.deepTurn.zw) * (q / materialParams.deep.xy) * 0.5 + 0.5;
+    return vec2(o.x, 1.0 - o.y);
+}
+float deepCovered(highp vec2 q) { return all(lessThanEqual(abs(q), materialParams.deep.xy)) ? deepThere(deepUV(q)) : 0.0; }
+// uv: the point of the picture seen here; k, shine: how it is shaded (AbsentMotion's: k times it, shine on top); edge:
+// how much of it is there. Nothing seen here: not there at all, as a clear point of a sheet.
+void deepMeet(inout highp vec2 uv, inout float k, inout float shine, inout float edge) {
+    highp vec3 h = materialParams.deep.xyz, at = variable_deepAt.xyz;
+    if (materialParams.deep.w < 0.5) {   // (Z 0: its box shut, one sheet: as flat as any)
+        if (at.z < 0.0) discard;
+        return;
+    }
+    bool eyed = variable_deepEye.w > 0.5;
+    highp vec3 rd = eyed ? at - variable_deepEye.xyz : -1000.0 * variable_deepEye.xyz, ro = at - rd;   // (t is 1 here)
+    highp vec3 inv = sign(rd + 1e-7) / max(abs(rd), vec3(1e-6)), t1 = (-h - ro) * inv, t2 = (h - ro) * inv, lo = min(t1, t2), hi = max(t1, t2);
+    highp float t0 = max(max(lo.x, lo.y), max(lo.z, 0.0)), tEnd = min(hi.x, min(hi.y, hi.z));
+    if (t0 >= tEnd || abs(tEnd - 1.0) > abs(t0 - 1.0)) discard;   // (a ray meets the box twice: where it goes out is seen, an eye within it sees out too)
+    highp float dt = (tEnd - t0) / 64.0, t = t0, tp = t0;
+    float peak = 0.0;
+    bool hit = false;
+    for (int i = 0; i <= 64; i++) {
+        t = t0 + dt * float(i);
+        float a = deepCovered((ro + rd * t).xy);
+        if (a > peak) peak = a, tp = t;
+        if (a > 0.5) { hit = true; break; }
+    }
+    if (!hit && peak < 0.02) discard;
+    if (hit) {
+        highp float low = max(t - dt, t0), high = t;
+        for (int i = 0; i < 6; i++) {
+            highp float mid = 0.5 * (low + high);
+            if (deepCovered((ro + rd * mid).xy) > 0.5) high = mid; else low = mid;
+        }
+        t = high;
+    } else t = tp;
+    highp vec3 p = ro + rd * t;
+    uv = deepUV(p.xy);
+    edge = hit ? 1.0 : min(peak * 2.0, 1.0);
+    highp mat4 eye = getWorldFromViewMatrix();
+    highp vec3 ahead = eyed ? shading_position - eye[3].xyz : -1000.0 * eye[2].xyz;
+    shading_position += (t - 1.0) * ahead;
+    highp vec4 clip = getClipFromWorldMatrix() * vec4(shading_position, 1.0);
+    gl_FragDepth = clip.z / clip.w;
+    if (abs(p.z) > h.z - max(dt * abs(rd.z) * 1.5, 0.0005)) return;   // (its front and back: the picture as it is, as at Z 0)
+    highp vec2 e = 8.0 * h.xy / deepCells();   // (four points of its picture, read round a ring: a slanted edge is in steps, and nearer or fewer they show as stripes down the side)
+    vec2 g = vec2(0.0);
+    for (int i = 0; i < 12; i++) {
+        vec2 round = vec2(cos(0.5235988 * float(i)), sin(0.5235988 * float(i)));
+        g += round * deepCovered(p.xy + round * e);
+    }
+    vec2 n = length(g) > 1e-3 ? -normalize(g) : abs(p.x / h.x) > abs(p.y / h.y) ? vec2(sign(p.x), 0.0) : vec2(0.0, sign(p.y));   // (filled to its edge: the box's own side)
+    uv = deepUV(p.xy - n * e);   // (its colour from within its edge)
+    // (AbsentMotion's own axes: x right, y down, z away)
+    vec3 seen = normalize(mat3(getViewFromWorldMatrix()) * (variable_copyOf.yzw * n.x + variable_deepUp.xyz * n.y)) * vec3(1.0, -1.0, -1.0);
+    vec3 way = normalize(mat3(getViewFromWorldMatrix()) * ahead) * vec3(1.0, -1.0, -1.0);
+    vec3 light = normalize(vec3(cos(2.35619449), -sin(2.35619449), -1.2));   // (135 degrees)
+    k = 0.4 + 0.6 * (0.3 + 0.85 * max(dot(seen, light), 0.0));
+    shine = 0.3 * pow(max(dot(seen, normalize(light - way)), 0.0), 40.0);
+}

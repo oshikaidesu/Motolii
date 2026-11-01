@@ -62,6 +62,13 @@ struct Mesh {
     uint32_t vbRoom = 0, ibRoom = 0;   // (how many points and indices they hold: written again in place while they fit)
 };
 
+// A sheet given depth: its four corners before it and behind it, a box its picture is read through (deep.glsl).
+static void sheet_deep(Mesh* m, float deep) {
+    for (size_t i = 0; i < 4; ++i) m->pos.push_back(m->pos[i]), m->nrm.push_back(m->nrm[i]), m->uv.push_back(m->uv[i]);
+    for (size_t i = 0; i < 4; ++i) m->pos[i].z = deep, m->pos[i + 4].z = -deep;
+    m->idx = {0, 1, 2, 0, 2, 3, 5, 4, 7, 5, 7, 6, 4, 5, 1, 4, 1, 0, 5, 6, 2, 5, 2, 1, 6, 7, 3, 6, 3, 2, 7, 4, 0, 7, 0, 3};
+}
+
 // What a buffer is told, copied: Filament reads it later, on its own thread, and lets it go when it has (its callback),
 // so the mesh may be made again meanwhile.
 static backend::BufferDescriptor copied(const void* from, size_t bytes) {
