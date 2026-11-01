@@ -266,7 +266,7 @@ var __frames = [], __from = [];
 Object.defineProperty(globalThis, '__2d', { get: () => !p5.instance._renderer.isP3D });   // (asked late: an async setup() makes its canvas after new p5())
 Object.defineProperty(globalThis, '__canvas', { get: () => p5.instance._renderer.drawingContext });
 function __to(f) {
-  if (!__frames.length) __U = 3.2154 / (globalThis.height || 400);   // (here, not after new p5(): an async setup() has its size only by now)
+  if (!__frames.length) __U = 3.2154 / (globalThis.height || 400), p5.instance._lastTargetFrameTime = -Infinity;   // (here, not after new p5(): an async setup() has its size only by now. p5's _draw waits a frame's time after setup, and at frameRate(30) that is a first frame with nothing on it)
   while (__frames.length <= f) {
     const was = globalThis.frameCount, q = __Q, last = __frames[__frames.length - 1];
     if (q.length) __drawn = [];

@@ -84,6 +84,10 @@ cat > $W/thick.js <<'J'
 function setup() { createCanvas(200, 100); pixelDensity(2); noStroke(); noLoop(); }
 function draw() { background(0); fill(255, 0, 0); rect(0, 0, 100, 100); }
 J
+cat > $W/slow.js <<'J'
+function setup() { createCanvas(100, 100); frameRate(30); }
+function draw() { background(255, 0, 0); }
+J
 python3 - $W <<'P'
 import os,subprocess,sys
 from PIL import Image,ImageChops
@@ -140,6 +144,8 @@ print('and a conic gradient is drawn:','yes' if 'NOT done' not in said and near(
 run('t',f'add picture {W}/thick.js','set 1 size 3','at 0.2',f'still {at("t0")}')
 th=g('t0').resize((80,60)); redx=[x for x in range(80) if th.getpixel((x,30))[0]>128]
 print('pixelDensity(2) is as large as 1:','yes' if redx and redx[0]<(80-th.size[0])/2+2 and 30<len(redx)<52 else f'NO ({redx[:2]} {len(redx)})')
+run('s',f'add picture {W}/slow.js','set 1 size 3',f'still {at("h0")}')
+print('frameRate(30) has drawn by its first frame:','yes' if near('h0',(255,0,0))>1000 else f'NO ({near("h0",(255,0,0))})')
 import http.server,functools,threading
 serve=http.server.ThreadingHTTPServer(('127.0.0.1',0),functools.partial(http.server.SimpleHTTPRequestHandler,directory=f'{W}/net'))
 threading.Thread(target=serve.serve_forever,daemon=True).start()

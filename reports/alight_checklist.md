@@ -587,6 +587,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] `createFilterShader`（3019066 が止まる）
 - [ ] `AudioContext`（3024378 が止まる）
 - [x] `pixelDensity(2)` が 2 倍に描かれていた（drawn_sketch.h）
+- [x] `frameRate(30)` の 0 コマ目が空だった（p5_stand.h `__to`）
 - [x] 時計：`Date`、`setTimeout`、`setInterval`、`await` を作品の時計で動かす（p5_stand.h、timesnap の lib/overwrite-time.js）
 - [x] 円錐グラデーション（drawn_sketch.h sketch_conic）。線はまだ白
 - [x] 絵の混色：シーンに包む（ThorVG の WgCompositor が絵の混色を読まない）。`image()` が貼る先の混色と透明度を見る
