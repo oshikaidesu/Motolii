@@ -71,7 +71,7 @@ YouTube を 15 語で検索して、題名が MV のメイキングや解説ら�
 
 | 売れ筋 | Motolii の今 | 差 |
 |---|---|---|
-| カメラの動き（CinePack） | カメラとギズモは有る。動きの棚は無い | 小。AbsentMotion の `CameraMove` 6 種が手元にある（`CameraRig.kt`）。T に行あり |
+| カメラの動き（CinePack） | カメラ、ギズモ、区間イージング、Auto-Shake | 無し。棚にしても名前が増えるだけ |
 | 素材の棚（Poly Haven） | `room` に 7 部屋。.gltf は読める | 中。読めるが棚に無い |
 | 人の動き（Auto-Rig Pro、Mixamo） | .glb に入った動きは流せる（gltfio の Animator） | 大。別の人形へ移す口が無い。FBX も BVH も読まない |
 | 火、電気、天気（Elemental） | 名前で探して Appear Rain、Smoke Screen、am_clouds、am_lightning、am_electricedges | 中。雨や雷はある。火と爆発は名前では見つからない |
@@ -83,12 +83,12 @@ YouTube を 15 語で検索して、題名が MV のメイキングや解説ら�
 ## 順番
 
 店の本数と YouTube を合わせて直した。
+カメラの動きは外した。ユーザー：「区間イージングでどうにかできる話」。
 
-1. カメラの動き。CinePack も M.V.P も持っている。見本が手元にあり、手が一番小さい。
-2. 音で動かす。BPM と音の打点は有るが、音の大きさで物を動かす口は検索で見つからない。BeatBlender と M.V.P が持っている。
-3. 舞台と灯りの組の棚。Poly Haven の素材と、Direktor 3D の舞台 14・灯り 20 が見本。
-4. 人形と踊り。Mixamo の FBX と、日本の VRM、MMD の動きを読む口。VRM、VMD、BVH は検索で見つからない。一番重い。
-5. 3D のトゥーン、カメラ追跡、火と爆発、面に散らす。
+1. 音で動かす。BPM と音の打点は有るが、音の大きさで物を動かす口は検索で見つからない。BeatBlender と M.V.P が持っている。
+2. 舞台と灯りの組の棚。Poly Haven の素材と、Direktor 3D の舞台 14・灯り 20 が見本。
+3. 人形と踊り。Mixamo の FBX と、日本の VRM、MMD の動きを読む口。VRM、VMD、BVH は検索で見つからない。一番重い。
+4. 3D のトゥーン、カメラ追跡、火と爆発、面に散らす。
 
 文字は After Effects に残っている所で、Motolii はここを抱えている。別のソフトへ戻らなくて済むのが、Blender に無い強み。
 
