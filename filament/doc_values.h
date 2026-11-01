@@ -260,6 +260,7 @@ static char doc_thor_letter(const std::string& w) {
     for (int i = 0; i < 4; ++i) if (w == doc_thor_names[i]) return "trsb"[i];
     return 0;
 }
+static std::vector<std::filesystem::path> doc_folders(const char* folder);
 static DocScript* doc_script_of(Doc& d, const std::string& file) {
     if (file.empty() || file == "none" || std::filesystem::path(file).extension() == ".mid") return nullptr;   // (a MIDI file's notes are copies, not a script: midi.h)
     const std::string ext = std::filesystem::path(file).extension().string();
@@ -293,7 +294,7 @@ static DocScript* doc_script_of(Doc& d, const std::string& file) {
             return &s;
         }
         if (lottie) return &s;   // (read, not run)
-        if (!screen) s.run = std::make_unique<Script>(file);   // (a .wgsl or an ISF .fs is drawn, not run: screen.h)
+        if (!screen) s.run = std::make_unique<Script>(file, (doc_folders("third_party/js/p5").front() / "p5.min.js").string());   // (a .wgsl or an ISF .fs is drawn, not run: screen.h)
         { std::ifstream in(screen ? isf_file(file) : file); std::stringstream text; text << in.rdbuf(); s.clears = text.str().find("opacity") != std::string::npos; }
     }
     return &s;

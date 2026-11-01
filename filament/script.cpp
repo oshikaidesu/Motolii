@@ -1,6 +1,7 @@
 // script.h's door: the head read for knobs, QuickJS-ng behind each().
 #include "script.h"
 #include "aviutl.h"
+#include "p5_stand.h"
 #include "ways.h"
 #include <quickjs.h>
 #include <algorithm>
@@ -119,9 +120,10 @@ struct Script::Own {
     JSValue each = JS_UNDEFINED, knobs = JS_UNDEFINED;
     std::string trouble, file, src;
     bool whole = false;   // no each(): the whole file says every copy at once, as a Canvalry distribution (a PointCloud)
+    bool sketch = false;   // a p5.js sketch (p5_stand.h)
 };
 
-Script::Script(const std::string& file) : own(new Own) {
+Script::Script(const std::string& file, const std::string& p5) : own(new Own) {
     std::ifstream in(file);
     std::stringstream code;
     code << in.rdbuf();
@@ -132,7 +134,18 @@ Script::Script(const std::string& file) : own(new Own) {
     const std::string ways = ways_kept();
     JS_FreeValue(own->cx, JS_Eval(own->cx, ways.c_str(), ways.size(), "ways", JS_EVAL_TYPE_GLOBAL));
     JS_FreeValue(own->cx, JS_Eval(own->cx, cavalry_kept, std::char_traits<char>::length(cavalry_kept), "cavalry", JS_EVAL_TYPE_GLOBAL));
-    JSValue ran = JS_Eval(own->cx, src.c_str(), src.size(), file.c_str(), JS_EVAL_TYPE_GLOBAL);
+    const bool sketch = own->sketch = !p5.empty() && script_is_sketch(src);
+    if (sketch) {
+        std::ifstream lib(p5);
+        std::stringstream all;
+        all << lib.rdbuf();
+        const std::string p5js = all.str();
+        JS_FreeValue(own->cx, JS_Eval(own->cx, p5_before, std::char_traits<char>::length(p5_before), "p5_before", JS_EVAL_TYPE_GLOBAL));
+        JS_FreeValue(own->cx, JS_Eval(own->cx, p5js.c_str(), p5js.size(), "p5.min.js", JS_EVAL_TYPE_GLOBAL));
+        JS_FreeValue(own->cx, JS_Eval(own->cx, p5_after, std::char_traits<char>::length(p5_after), "p5_after", JS_EVAL_TYPE_GLOBAL));
+    }
+    const std::string run = sketch ? src + "\n;\n" + p5_start : src;
+    JSValue ran = JS_Eval(own->cx, run.c_str(), run.size(), file.c_str(), JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(ran)) {
         JSValue e = JS_GetException(own->cx);
         const char* s = JS_ToCString(own->cx, e);
@@ -152,6 +165,17 @@ Script::~Script() {
     JS_FreeContext(own->cx), JS_FreeRuntime(own->rt);
 }
 bool Script::ok() const { return own->trouble.empty(); }
+bool Script::sketch() const { return own->sketch; }
+static std::string script_said(JSContext* cx, const char* js) {
+    JSValue out = JS_Eval(cx, js, strlen(js), "sketch", JS_EVAL_TYPE_GLOBAL);
+    const char* s = JS_IsException(out) ? nullptr : JS_ToCString(cx, out);
+    const std::string said = s ? s : "";
+    if (s) JS_FreeCString(cx, s);
+    JS_FreeValue(cx, out);
+    return said;
+}
+int Script::most() { return own->sketch && ok() ? std::atoi(script_said(own->cx, "__most()").c_str()) : 0; }
+std::string Script::shape() { return own->sketch && ok() ? script_said(own->cx, "__shape()") : ""; }
 const std::string& Script::trouble() const { return own->trouble; }
 
 std::vector<ScriptCopy> Script::copies(int n, double t, const std::map<std::string, double>& numbers, const std::map<std::string, std::string>& words, double unit) {
@@ -225,7 +249,7 @@ ScriptCopy Script::ask(int i, int n, double t) {   // (each(), the knobs as last
         if (JS_IsNumber(v)) JS_ToFloat64(cx, &to, v);
         JS_FreeValue(cx, v);
     };
-    read("x", c.x), read("y", c.y), read("z", c.z), read("size", c.size), read("rotate", c.rotate), read("rotate_x", c.rotate_x), read("rotate_y", c.rotate_y), read("opacity", c.opacity);
+    read("x", c.x), read("y", c.y), read("z", c.z), read("size", c.size), read("rotate", c.rotate), read("rotate_x", c.rotate_x), read("rotate_y", c.rotate_y), read("opacity", c.opacity), read("scale_x", c.scale_x), read("scale_y", c.scale_y), read("scale_z", c.scale_z);
     JS_FreeValue(cx, out);
     return c;
 }

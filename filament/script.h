@@ -23,7 +23,7 @@ struct ScriptKnob {
     double low = 0, high = 1, usual = 0, step = 0;
     std::string words;               // a select's words, with spaces between
 };
-struct ScriptCopy { double x = 0, y = 0, z = 0, size = 1, rotate = 0, rotate_x = 0, rotate_y = 0, opacity = 1; };
+struct ScriptCopy { double x = 0, y = 0, z = 0, size = 1, rotate = 0, rotate_x = 0, rotate_y = 0, opacity = 1, scale_x = 1, scale_y = 1, scale_z = 1; };
 
 // The files a word names in turn, with spaces between (an effect's list, the stage's): a path (a word with a "/" in it) is one to
 // its .wgsl, .fs, .js, .mjs, .json (Filament's own settings), .am (AbsentMotion's own motion) or AviUtl2 script (.anm2, .obj2, "#name" after an @ file's), spaces and all ("Application Support", an ISF effect's "Bad TV.fs"); any other word stands alone.
@@ -38,6 +38,8 @@ inline std::vector<std::string> script_files(const std::string& word) {
     return all;
 }
 
+// A file of p5.js's own two, setup() and draw(), as sketches are written: not a recipe of ours, whose code is each().
+inline bool script_is_sketch(const std::string& src) { return src.find("function each") == std::string::npos && (src.find("function draw") != std::string::npos || src.find("function setup") != std::string::npos); }
 // The knobs a file declares (read from its head; empty if it has none or cannot be read).
 std::vector<ScriptKnob> script_knobs(const std::string& file);
 // The values an effect comes with where its own show nothing on a picture (Alight Motion's rule: an effect is seen as it
@@ -52,10 +54,13 @@ double anime_ease(const std::string& bundle, const std::string& said, double u, 
 
 class Script {
 public:
-    explicit Script(const std::string& file);   // made once a file: its code run, its each() kept
+    explicit Script(const std::string& file, const std::string& p5 = "");   // made once a file: its code run, its each() kept (p5: where p5.js is, for a sketch: p5_stand.h)
     ~Script();
     bool ok() const;
     const std::string& trouble() const;
+    bool sketch() const;       // a p5.js sketch, run by p5.js itself (p5_stand.h)
+    int most();                // how many copies it draws at once
+    std::string shape();       // and of what shape, as a solid's word
     // Each copy at a moment, the knobs as the document says them now (a select by the word it is).
     ScriptCopy each(int i, int n, double t, const std::map<std::string, double>& numbers, const std::map<std::string, std::string>& words);
     // Every copy at once: each() for each, or, for a file with no each(), the whole file run with its knobs as globals

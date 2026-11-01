@@ -145,7 +145,7 @@ static const DocValue doc_values[] = {
     //  how much it bounces, how it rubs; and the stage's pull down, in units of the stage a second each second)
     {"physics", doc_drawn, 0, 0, false, "none moves still"},
     // (a recipe as code: a JavaScript file that says where each copy is (script.h); its head's knobs are values of the thing, named js_ and the knob's name)
-    {"script", "picture text shape stage", 0, 0, false, ""},   // (the stage's: a whole-screen effect, a .wgsl file: screen.h)
+    {"script", "picture text shape solid stage", 0, 0, false, ""},   // (the stage's: a whole-screen effect, a .wgsl file: screen.h)
     // (a thing's own effects, After Effects' effects on a layer: the whole-screen ones' .wgsl files, one over another, on the thing as the camera sees it)
     //  (a camera's: AbsentMotion's motions only, its place moved by them as AbsentMotion's camera is: doc_fx_say)
     {"fx", "film picture text shape solid camera", 0, 0, false, ""},

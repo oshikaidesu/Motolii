@@ -120,7 +120,7 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
             const ScriptCopy c = copy < n ? kept.copies[(size_t)copy] : ScriptCopy{};
             shift += math::double3{c.x, c.y, c.z};
             own = own * math::mat4::rotation(c.rotate * (double)TAU / 360.0, math::double3{0, 0, 1}) * math::mat4::rotation(c.rotate_y * (double)TAU / 360.0, math::double3{0, 1, 0}) *
-                  math::mat4::rotation(c.rotate_x * (double)TAU / 360.0, math::double3{1, 0, 0}) * math::mat4::scaling(c.size);
+                  math::mat4::rotation(c.rotate_x * (double)TAU / 360.0, math::double3{1, 0, 0}) * math::mat4::scaling(math::double3{c.size * c.scale_x, c.size * c.scale_y, c.size * c.scale_z});
         }
     if (const std::vector<AbsentEffect> moving = doc_absent_on(d, thing, said); !moving.empty()) {   // (AbsentMotion's own motion, its stack in order, as AbsentMotion moves a layer: absent_motion.h)
         const double begins = doc_literal(d, thing, "start", 0, 0), lasts = doc_literal(d, thing, "duration", 0, -1);

@@ -35,6 +35,8 @@ Motolii は「ネットで見つけたかっこいい表現を、自分の動画
 | three.js（形を作る部品） | [mrdoob/three.js](https://github.com/mrdoob/three.js) r186 | MIT | `filament/third_party/js/three/` |
 | d3-contour・d3-array | [d3](https://github.com/d3) | ISC | `filament/third_party/js/d3-contour/`、`d3-array/` |
 | anime.js v4.5.0 | [juliangarnier/anime](https://github.com/juliangarnier/anime) | MIT | `filament/third_party/anime/` |
+| p5.js 1.11.13 | [processing/p5.js](https://github.com/processing/p5.js) | LGPL-2.1 | `filament/third_party/js/p5/`（配布の `p5.min.js` と `license.txt` をそのまま、差し替えられる普通のファイルとして読む） |
+| Cube Wave（Coding Challenge 86） | [CodingTrain/Coding-Challenges](https://github.com/CodingTrain/Coding-Challenges)（Copyright (c) 2022 Coding Train） | MIT | `filament/recipes/Cube Wave.js`（1 行目に元、以下そのまま） |
 | Godot のイーズの式 | [godotengine/godot](https://github.com/godotengine/godot) の easing_equations.h（Robert Penner の式） | MIT | `filament/third_party/godot_easing/` |
 | 画面の拍子 | [nmfisher/thermion](https://github.com/nmfisher/thermion) | Apache-2.0 | `filament/third_party/thermion_frame/`（NOTICE.md） |
 | ブロブの追跡 | [k1sh0r/blob-tracker](https://github.com/k1sh0r/blob-tracker) | MIT | `filament/blobtrack/kit/` |

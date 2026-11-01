@@ -30,6 +30,7 @@ run fx_world.sh
 run deep.sh
 run world_view.sh
 run solid_copies.sh
+run sketch_solids.sh
 run fx_reach.sh
 run fx_chains.sh
 run fx_moved.sh

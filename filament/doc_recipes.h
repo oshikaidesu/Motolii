@@ -5,6 +5,14 @@ static std::vector<DocRecipe> doc_recipes_read() {
         DocRecipe r;
         r.path = f.string();
         std::ifstream in(f);
+        std::stringstream text;
+        text << in.rdbuf();
+        if (text.str().find("\n// make ") == std::string::npos && script_is_sketch(text.str())) {   // (a sketch of p5.js as it comes, no head of ours: a solid given it)
+            r.name = f.stem().string(), r.what = "A p5.js sketch", r.code = true, r.lines = {"make solid cube"};
+            all.push_back(r);
+            continue;
+        }
+        in.clear(), in.seekg(0);
         for (std::string line; std::getline(in, line);) {
             if (line.rfind("//", 0) != 0) { if (line.find_first_not_of(" \t\r") != std::string::npos) { r.code = true; break; } continue; }
             line.erase(0, line.find_first_not_of("/ "));

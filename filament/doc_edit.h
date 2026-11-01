@@ -163,7 +163,14 @@ static bool doc_say(Doc& d, int thing, const char* name, const char* word) {
         doc_say(d, thing, "fill_media", ""), doc_say(d, thing, name, word);
         return doc_acted(d);
     }
-    if (doc_knows(d, thing, name, nullptr, word)) return doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %Q) on conflict do update set value = excluded.value", thing, name, word));
+    if (doc_knows(d, thing, name, nullptr, word)) {
+        DocScript* sc = !strcmp(name, "script") && doc_word(d, thing, "kind") == "solid" ? doc_script_of(d, word) : nullptr;
+        if (!sc || !sc->run || !sc->run->sketch() || !sc->run->ok()) return doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %Q) on conflict do update set value = excluded.value", thing, name, word));
+        doc_act(d);   // (a sketch given to a solid: as many of the shape it draws as it draws)
+        doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %Q) on conflict do update set value = excluded.value", thing, name, word));
+        doc_say(d, thing, "shape", sc->run->shape().c_str()), doc_set(d, thing, "copies", sc->run->most());
+        return doc_acted(d);
+    }
     // (an effect's colour, ISF's one input that Motolii holds as three numbers and an alpha (isf.cpp: _x, _y, _z, _w),
     //  said as one colour, as the Colors shelf says a colour to a card's value: each put at the stage's moment by the rule
     //  of a value changed, a key there if it has keys (doc_put); the alpha as it was. After Effects' and Alight Motion's
