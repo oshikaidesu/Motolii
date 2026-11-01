@@ -53,6 +53,8 @@ using namespace filament::math;
 static const float TAU = 6.2831853f;
 
 struct SketchShape { std::vector<float3> pos, nrm; std::vector<float2> uv; std::vector<uint32_t> idx, edges; };   // (a shape a p5.js sketch draws, as it has it: doc_sketch.h)
+struct SketchTold { std::string name, type; int count = 1, size = 1; };   // (and what its shader() is told, by name)
+struct SketchPaint { Material* material = nullptr; std::vector<SketchTold> told; int size = 0; std::vector<MaterialInstance*> looks; };
 struct Mesh {
     std::vector<float3> pos, nrm;
     std::vector<float2> uv;
@@ -348,6 +350,22 @@ static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector
 // at, its parts' ends as told; the old ones let go (Filament keeps them until no picture uses them).
 // A mesh made again, put in the buffers it has while it fits them (as Rive and Live2D write theirs again, not make new
 // ones), else in new ones a quarter larger than it needs (Rive's growth).
+// A mesh in the scene given more parts, all wearing `look` until they are told otherwise: Filament makes an entity's renderable
+// anew when it is built on it (RenderableManager::Builder::build), so it stays where it is, in the scene, under what it is under.
+static void more_parts(Stage& s, Mesh* m, size_t parts, MaterialInstance* look) {
+    auto& faces = s.engine->getRenderableManager();
+    for (const Stage::Made& made : s.made) {
+        if (made.of != m) continue;
+        const auto at = faces.getInstance(made.thing);
+        const uint8_t mask = faces.getLayerMask(at), order = faces.getPriority(at), channel = faces.getChannel(at);
+        const uint16_t blend = faces.getBlendOrderAt(at, 0);
+        const bool everywhere = faces.isGlobalBlendOrderEnabledAt(at, 0);
+        const Box box = faces.getAxisAlignedBoundingBox(at);
+        RenderableManager::Builder b(parts);
+        for (size_t k = 0; k < parts; ++k) b.geometry(k, RenderableManager::PrimitiveType::TRIANGLES, m->vb, m->ib, 0, 0).material(k, look).blendOrder(k, blend).globalBlendOrderEnabled(k, everywhere);
+        b.boundingBox(box).culling(false).castShadows(false).receiveShadows(false).layerMask(0xFF, mask).priority(order).channel(channel).build(*s.engine, made.thing);
+    }
+}
 static void reshape(Stage& s, Mesh* m, const std::vector<uint32_t>& ends) {
     VertexBuffer* oldVb = nullptr;
     IndexBuffer* oldIb = nullptr;

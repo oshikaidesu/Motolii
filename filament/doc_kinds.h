@@ -102,7 +102,7 @@ struct Doc {
     std::map<std::pair<int, std::string>, std::vector<double>> keyed;   // the moments of a value's keys, the same way
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
     struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false, camera = false, drivenLooks = false, behaviour = false, grains = false; std::shared_ptr<SplatEffect> splatFx; std::string splatFxFile; MaterialInstance* splatPlain = nullptr; bool splatDone = false; int run = -1, lies = -1;
-                   bool sketch = false; int sketchFrame = -1; int sketchMade = -1; float3 sketchEye{}; std::map<int, float> sketchStrong; std::vector<SketchShape> sketchShapes; std::vector<Drawn*> sketchPics;   // (a p5.js sketch's mesh and what it was last made from: doc_sketch.h)
+                   bool sketch = false; int sketchFrame = -1; int sketchMade = -1; float3 sketchEye{}; std::map<int, float> sketchStrong; std::vector<SketchShape> sketchShapes; std::vector<Drawn*> sketchPics; std::vector<SketchPaint> sketchPaints; size_t sketchParts = 1;   // (a p5.js sketch's mesh and what it was last made from: doc_sketch.h)
                    utils::Entity light;   // (a light, Filament's own: in every scene of the stage while it is on)
                    double units = 1.0;    // (a flat thing's: points of the picture to a unit of the stage as it was made, which its effects are counted in)
                    int space = 3;

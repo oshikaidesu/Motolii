@@ -78,6 +78,37 @@ function draw() {
   sphere(100)
 }
 J
+cat > $W/paint.js <<'J'
+const V = `attribute vec3 aPosition; attribute vec3 aNormal; attribute vec2 aTexCoord;
+uniform mat4 uModelViewMatrix; uniform mat4 uProjectionMatrix; uniform mat3 uNormalMatrix;
+varying vec3 vNormal; varying vec2 vTexCoord;
+void main() { vTexCoord = aTexCoord; vNormal = uNormalMatrix * aNormal; gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(aPosition, 1.0); }`
+const F = `precision highp float;
+varying vec3 vNormal; varying vec2 vTexCoord; uniform vec3 uColor;
+const float PI = 3.14159265;
+float stripes(vec2 p) { return step(0.5, fract(p.x * 3.0)); }
+void main() { gl_FragColor = vec4(mix(uColor, vec3(1.0, 1.0, 0.0), stripes(vTexCoord)), 1.0); }`
+let sh
+function setup() { createCanvas(600, 400, WEBGL); noStroke(); sh = createShader(V, F) }
+function draw() {
+  background(30)
+  shader(sh)
+  sh.setUniform('uColor', [1, 0, 0])
+  push(); translate(-160, 0, 0); box(150); pop()
+  sh.setUniform('uColor', [0, 0, 1])
+  push(); translate(160, 0, 0); sphere(90); pop()
+}
+J
+cat > $W/wide.js <<'J'
+function setup() { createCanvas(600, 400, WEBGL); noStroke() }
+function draw() {
+  background(0)
+  ortho(-width, width, -height, height, -10000, 10000)
+  camera(0, 0, 1000, 0, 0, 0, 0, 1, 0)
+  fill(0, 255, 0)
+  push(); translate(0, 0, -300); box(200); pop()
+}
+J
 python3 - $W <<'P'
 import os,subprocess,sys
 from PIL import Image,ImageChops
@@ -108,6 +139,15 @@ said=['add solid cube',f'say 1 script {W}/light.js','add light sun','at 0',f'sti
 r=subprocess.run(['zsh','./edit.sh',f'{W}/l.motolii'],input='\n'.join(said)+'\n',capture_output=True,text=True,timeout=200,env={**os.environ,'SIZE':'960x540'})
 p=Image.open(f'{W}/l0.png').convert('RGB').getpixel((480,270))
 print('what it lights it lights by its own lights, by p5\'s own sums (0.73 of its red, all of its blue):','yes' if near(p,(186,0,128)) else f'NO {p}')
+said=[f'later door 0 {W}/paint.js','at 0',f'still {W}/s0.png']
+subprocess.run(['zsh','./edit.sh',f'{W}/z.motolii'],input='\n'.join(said)+'\n',capture_output=True,text=True,timeout=200,env={**os.environ,'MOTOLII_OWN':W,'SIZE':'960x540'})
+h=lambda a,f:sum(1 for c in Image.open(f'{W}/s0.png').convert('RGB').crop(a).getdata() if f(*c))
+red,blue,yellow=h((0,0,480,540),lambda r,gr,b:r>200 and gr<60),h((480,0,960,540),lambda r,gr,b:b>200 and r<60),h((0,0,960,540),lambda r,gr,b:r>200 and gr>200 and b<60)
+print('its own shader runs on what it draws, each told its own:','yes' if min(red,blue,yellow)>1000 and not h((0,0,960,540),lambda r,gr,b:min(r,gr,b)>200) else f'NO {red} {blue} {yellow}')
+said=['add solid cube',f'say 1 script {W}/wide.js','at 0',f'still {W}/o0.png']
+subprocess.run(['zsh','./edit.sh',f'{W}/o.motolii'],input='\n'.join(said)+'\n',capture_output=True,text=True,timeout=200,env={**os.environ,'SIZE':'960x540'})
+o=Image.open(f'{W}/o0.png').convert('L').point(lambda v:255 if v>20 else 0).getbbox()
+print('ortho is as wide as its box says, however deep:','yes' if o and abs((o[3]-o[1])-135)<4 else f'NO {o}')
 box=lambda n:Image.open(f'{W}/{n}.png').convert('L').point(lambda v:255 if v>20 else 0).getbbox()
 a,b=box('a'),box('b')
 tall=a and (a[3]-a[1])>3*(a[2]-a[0])

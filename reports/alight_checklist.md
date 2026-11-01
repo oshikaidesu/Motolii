@@ -559,7 +559,9 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] スケッチを別のスレッドで動かす：重い作品で窓が止まる。先へ飛ぶと初回は全部走らせる
 - [ ] 重いスケッチのメモリ：動くたびに JS 側へコマを残す。重い作品は 1 分で約 1.4 GB。上限を付けて走り直す
 - [ ] p5 の未対応：meta のライブラリ読み込み、p5 2.x、shadowBlur、clip、filter()、pixels と putImageData、実画像ファイル、loadFont、日本語フォント、自分自身の copy()、部分 clearRect、erase、conic gradient
-- [x] WEBGL のシェーダー：平らな物を塗る物は効果になる（door_p5_shader.h）。立体に塗る物と、絵を読み戻す物はまだ
+- [x] WEBGL のシェーダー：平らな物を塗る物は効果になる（door_p5_shader.h）。立体に塗る物は作品の GLSL のまま Filament の材質になる（p5_stand.h の __shader_text、doc_sketch.h、matc）
+- [ ] 立体に塗るシェーダーの残り：`setUniform` の絵（今は白）、varying 5 本以上、自分でカメラを持つ頂点シェーダー、three.js の ShaderMaterial、つまみ、matc を窓の中で待つ 0.3 秒
+- [ ] 絵を読み戻すシェーダー（`createFramebuffer`、p5.filterShader）
 - [x] WEBGL の beginShape、線、点、形の取り違え：p5 が描いた物をそのコマのまま世界のメッシュにする（doc_sketch.h、sketch.mat）
 - [x] WEBGL の texture と image：createGraphics の絵を ThorVG で描いて貼る。textureWrap、tint、箱にも帯にも（sketch.mat の 6 枚まで）
 - [x] p5 の待ち：`preload` が止まらない（`_preloadCount` は window の方を見ていた）。ページの部品を id で聞く作品、`loadSound` を呼ぶ作品が止まらない
