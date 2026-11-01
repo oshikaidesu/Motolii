@@ -1,5 +1,6 @@
 // script.h's door: the head read for knobs, QuickJS-ng behind each().
 #include "script.h"
+#include "door.h"
 #include "aviutl.h"
 #include "p5_stand.h"
 #include "film_read.h"
@@ -83,9 +84,15 @@ std::vector<ScriptKnob> script_knobs(const std::string& file) {
     if (std::filesystem::path(file).extension() == ".js") {
         std::stringstream all;
         all << in.rdbuf();
-        if (script_is_sketch(all.str())) {
+        const std::string told = door_js(all.str(), door_form(all.str()));   // (a form from the net told as a sketch: door.h)
+        if (script_is_sketch(told)) {
+            if (door_form(all.str()) == "three") {   // (which part of the scene this thing is: doc_door.h)
+                ScriptKnob part;
+                part.kind = "track", part.name = "part", part.label = "Part", part.high = 9999, part.step = 1;
+                return {part};
+            }
             std::vector<SketchLine> lines;
-            sketch_marked(all.str(), &lines);
+            sketch_marked(told, &lines);
             for (const SketchLine& l : lines) {
                 ScriptKnob k;
                 k.kind = "track", k.name = "line_" + std::to_string(l.line), k.label = l.what + " " + std::to_string(l.line), k.high = 1, k.usual = 1;
@@ -207,8 +214,9 @@ Script::Script(const std::string& file, const std::string& p5, const std::string
     std::ifstream in(file);
     std::stringstream code;
     code << in.rdbuf();
-    const std::string src = code.str();
+    const std::string form = door_form(code.str()), src = door_js(code.str(), form);   // (a form from the net told as a sketch: door.h)
     own->rt = JS_NewRuntime();
+    JS_SetMemoryLimit(own->rt, 2ull << 30);   // (a sketch keeps its frames: 100,000 rectangles a frame are 1.5 GB a second. It stops with an error, not with the machine)
     own->cx = JS_NewContext(own->rt);
     own->file = file, own->src = src;
     const std::string ways = ways_kept();
@@ -223,6 +231,13 @@ Script::Script(const std::string& file, const std::string& p5, const std::string
         JS_FreeValue(own->cx, JS_Eval(own->cx, p5_before, std::char_traits<char>::length(p5_before), "p5_before", JS_EVAL_TYPE_GLOBAL));
         JS_FreeValue(own->cx, JS_Eval(own->cx, p5js.c_str(), p5js.size(), "p5.min.js", JS_EVAL_TYPE_GLOBAL));
         JS_FreeValue(own->cx, JS_Eval(own->cx, p5_after, std::char_traits<char>::length(p5_after), "p5_after", JS_EVAL_TYPE_GLOBAL));
+        if (const std::string needs = door_library(form); !needs.empty()) {
+            std::ifstream one(std::filesystem::path(p5).parent_path().parent_path() / needs);
+            std::stringstream text;
+            text << one.rdbuf();
+            const std::string lib = door_library_text(form, text.str());
+            JS_FreeValue(own->cx, JS_Eval(own->cx, lib.c_str(), lib.size(), needs.c_str(), JS_EVAL_TYPE_GLOBAL));
+        }
         if (!film.empty() && (src.find("createCapture") != std::string::npos || src.find("createVideo") != std::string::npos || src.find("loadImage") != std::string::npos)) own->film.open(film, 320);   // (as much of it as a webcam sketch reads, and light)
         JS_SetContextOpaque(own->cx, &own->film);
         JSValue g = JS_GetGlobalObject(own->cx);
@@ -242,9 +257,13 @@ Script::Script(const std::string& file, const std::string& p5, const std::string
     if (sketch) for (JSContext* job = nullptr; JS_ExecutePendingJob(own->rt, &job) > 0;) {}   // (an async setup(), as p5 2 sketches are, goes on to its end)
     if (JS_IsException(ran)) {
         JSValue e = JS_GetException(own->cx);
+        JSValue stack = JS_GetPropertyStr(own->cx, e, "stack");
         const char* s = JS_ToCString(own->cx, e);
-        own->trouble = std::string("the script ") + file + ": " + (s ? s : "?");
+        const char* where = JS_IsString(stack) ? JS_ToCString(own->cx, stack) : nullptr;
+        own->trouble = std::string("the script ") + file + ": " + (s ? s : "?") + (where ? std::string(" ") + where : "");
         JS_FreeCString(own->cx, s), JS_FreeValue(own->cx, e);
+        if (where) JS_FreeCString(own->cx, where);
+        JS_FreeValue(own->cx, stack);
     }
     JS_FreeValue(own->cx, ran);
     JSValue g = JS_GetGlobalObject(own->cx);
@@ -267,6 +286,18 @@ static std::string script_said(JSContext* cx, const char* js) {
     if (s) JS_FreeCString(cx, s);
     JS_FreeValue(cx, out);
     return said;
+}
+std::string Script::said(const std::string& js) { return own->sketch && ok() ? script_said(own->cx, js.c_str()) : ""; }
+std::vector<uint8_t> Script::bytes(const std::string& js) {
+    std::vector<uint8_t> out;
+    if (!own->sketch || !ok()) return out;
+    script_said(own->cx, js.c_str());
+    JSValue g = JS_GetGlobalObject(own->cx), a = JS_GetPropertyStr(own->cx, g, "__bytes");
+    size_t from = 0, bytes = 0, each = 0, size = 0;
+    JSValue buffer = JS_GetTypedArrayBuffer(own->cx, a, &from, &bytes, &each);
+    if (const uint8_t* p = JS_IsException(buffer) ? nullptr : JS_GetArrayBuffer(own->cx, &size, buffer)) out.assign(p + from, p + from + bytes);
+    JS_FreeValue(own->cx, buffer), JS_FreeValue(own->cx, a), JS_FreeValue(own->cx, g);
+    return out;
 }
 int Script::most() { return own->sketch && ok() ? std::atoi(script_said(own->cx, "__most()").c_str()) : 0; }
 std::string Script::shape() { return own->sketch && ok() ? script_said(own->cx, "__shape()") : ""; }

@@ -7,8 +7,9 @@ static std::vector<DocRecipe> doc_recipes_read() {
         std::ifstream in(f);
         std::stringstream text;
         text << in.rdbuf();
-        if (text.str().find("\n// make ") == std::string::npos && script_is_sketch(text.str())) {   // (a sketch of p5.js as it comes, no head of ours: a solid given it)
-            r.name = f.stem().string(), r.what = "A p5.js sketch", r.code = text.str().find("WEBGL") != std::string::npos;
+        const std::string form = door_form(text.str()), told = door_js(text.str(), form);   // (a form from the net told as a sketch: door.h)
+        if (text.str().find("\n// make ") == std::string::npos && script_is_sketch(told)) {   // (a sketch of p5.js as it comes, no head of ours: a solid given it)
+            r.name = f.stem().string(), r.what = form.empty() ? "A p5.js sketch" : "A sketch from the net", r.code = told.find("WEBGL") != std::string::npos;
             r.lines = {r.code ? "make solid cube" : "make picture " + r.path};   // (in 3D its solids stand in the world; in 2D what it paints is a picture)
             if (!r.code) r.lines.push_back("fit fit");   // (as large as the picture: doc_fit, After Effects' Fit to Comp)
             all.push_back(r);

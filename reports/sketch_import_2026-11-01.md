@@ -66,23 +66,55 @@ Reddit は組み込みブラウザが安全上の理由で開かなかった。�
 
 見た所：検索 8 回、どれも要約だけ。本家の頁は Dwitter の About と Turtletoy の API の説明を読んだ。Shadertoy の利用規約は Cloudflare の確認で止まり、読めていない。確認は通していない。棚は `ASSETS.md`、`reports/effect_sets.md`、`reports/capcut_families.md`、`reports/capcut_origins.md` を見た。
 
-やり方：入口ごとの形を真似た短い見本を自分で書き、今の Motolii に通して絵を見た。本物の作品は通していない。
+やり方：`door.h` がコードの形を読み分け、`later door` か窓の ⌘V で舞台に置く。実物を Git の外に取り、1 本ずつ通して 2 秒目の絵を目で見た。数は 11/1 夜の最後の走行の物で、その後の小さな直し（下の注）の後の全走行は Mac が落ちて終わっていない。入口の見本は `filament/check/door.sh` が毎回確かめる。
 
-| 入口 | 形 | 通す所 | 結果 |
-|---|---|---|---|
-| Dwitter | 140 文字の JS、1920×1080 の canvas、`u(t)` を毎秒 60 回 | スケッチ | 前書き 3 行で通った。canvas の台が受ける |
-| tixy | 32 文字の式、16×16 の点 | スケッチ | 通った。`circle` の 1 行に 1 本のつまみが付く |
-| Shadertoy | `mainImage` の GLSL | ISF の効果 | 前書き 4 行で通った。時間で動く。iChannel と複数バッファは試していない |
-| Turtletoy | `Turtle` と `walk(i)`、白黒の線 | スケッチ | 試していない。`Turtle` の台が要る |
-| Art Blocks | p5.js と three.js の作品 | p5 の物はスケッチ | 試していない。three.js の場面を動かす台は無い |
-| Paper.js、Two.js | canvas に描く絵の部品、どちらも MIT | 未定 | 試していない |
-| Hydra | 鎖の JS が WebGL になる | 入れない | 本体が AGPL-3.0（effect_sets.md） |
+| 入口 | どこから取ったか | 本数 | 絵が出た | 出なかった物 |
+|---|---|---|---|---|
+| Turtletoy | 作品の頁の `<pre id="editor">` | 14 | 14 | 無し |
+| tixy | tixy の見本 | 19 | 19 | 無し（他に 1 本は私の抜き出しミス） |
+| Dwitter | 公開 API（総数 26,542 本） | 24 | 19 | 黒 3 本は原因未確認、絵文字の帯 3 本は絵文字が出ないだけで絵としては欠ける、重い 2 本は時間切れ |
+| Paper.js | paperjs.org の見本 | 14 | 11 | 3 本はマウスか画像が要る |
+| Hydra | hydra-examples | 4 | 2 | 1 本はコードどおり最後が黒、1 本はコメントだけ |
+| Shadertoy（自分で描く） | GitHub のコード検索の Shadertoy 形のファイル | 14 | 8 | `#include`、Common が別、自前の uniform など 6 本 |
+| Shadertoy（画像を読む） | 同上、動画の上で | 26 | 24 が入る | 多くは複数バッファの 1 枚だけなので見た目は素通し。`#iUniform` と自前の uniform の 2 本は入らない |
+| three.js | 公式 examples r186 | 10 | 6 | 線だけの 1 本は入らない。外のモデルやフォントが要る 3 本は中身が出ない |
+| Two.js、Canvas | 自分の見本のみ | 各 1 | 各 1 | 実物は通していない |
+| GLSL Sandbox | 自分の見本のみ | 1 | 1 | 実物は通していない |
+
+注：最後の走行の後に、色のまとめ方、複製を 1000 までにする、`#define iTime` を消す、貼り付けの照合を最後に 1 回にする、を直した。`check/door.sh` と箱 2000 個の場面では確かめた。`#define iTime` を消して s21 が通るかは確かめていない。
+
+Motolii の中にブラウザは無い。`libmotolii.dylib` に WebKit も Chromium も繋がっていない。コードは QuickJS で走り、2D の形は ThorVG、シェーダーは Dawn へ行く。ただし 2D の入口の絵は世界の中で 1 枚の板。Shadertoy と Hydra は舞台の大きさの四角に掛かる効果。世界に本物の立体で立つのは three.js と p5 の WEBGL だけ。
+
+three.js：形と材質の組ごとに 1 つの立体。立体が 48 を超えると同じ形の近い色をまとめ、それでも超えれば同じ形を 1 つにする。1 つの立体の複製は 1000 まで。カメラは動きに焼くので、世界のカメラで回り込める。立たない物はチェックリストの T の行。
+
+Mac が落ちた件（11/2 00:50）：カーネルの watchdog で再起動。ログは圧縮メモリ 100%、スワップ 35 個。窓の全試験と実物の全走行を私が同時に流していた。20:50 の JetsamEvent に `flutter_tester` 1 個で 33.37 GB の記録がある。落ちた瞬間のプロセス表は残っていないので、00:50 の犯人は確定ではない。
+
+直した事：スケッチの QuickJS に 2 GB の上限（`JS_SetMemoryLimit`）。10 万個を描く dweet は 2.3 GB で「out of memory」の表示で止まる。上限を入れた後、窓の全試験 118 本を見張り付きで 1 本だけ流して、全部通り最大 3.1 GB。20:50 の 33 GB はどのテストだったかは分かっていない。重い物は同時に流さない。
 
 山の大きさ：Dwitter の総数は見つからなかった。Shadertoy の 25,859 は、ラッパーの説明にある日付なしの例で、API に公開された分だけの数。fxhash は一次情報が無い。Art Blocks の「90% が鎖の上だけで描ける」は本人の発表。
 
 権利：Shadertoy は、何も書いていない作品は CC BY-NC-SA 3.0 と二次情報が揃って言う。規約の本文では確かめていない。仕事に使えないのは OpenProcessing と同じ。Dwitter は About に書いていない。Vidvox の掲示板に、Shadertoy から写した物へ MIT を付けて上げた人の報告があるので、ISF の配布物を拾う時も出所を見る。
 
 まだ食えていない物は「OpenProcessing 168 作の結果」のとおり。WEBGL は 41 作が白い箱だけ、シェーダーは 33 作が使い、p5 2.x 向けの 73 作は 1.11 の台で走っている。
+
+## プログラムの置き場
+
+問い：「programタブが新しく作った方がいいのかな」「createとかのブラウザ画面とコード画面の切り替えができるようにした方がいいのかしら」「インスペクターで見ておきたいからな、ノブの数をライブで保存しながら見ておきたいし」。
+
+見た所と読み方：Godot の exported properties と First look at the editor、Cavalry の JavaScript Editor と JavaScript Layers は本文を読んだ。Unity の Inspecting scripts と TouchDesigner の Custom Parameters、Text DAT は検索の要約だけ。
+
+| ソフト | コードの場所 | つまみの場所 | 保存 |
+|---|---|---|---|
+| Godot | 上の Script 画面で打つ。ファイルは FileSystem の棚 | `@export` の値がインスペクターに出る | 値もディスクに残る |
+| Unity | Project の窓のアセット | 保存した変数がインスペクターに自動で出る | シーンと一緒 |
+| Cavalry | 層の JavaScript 欄、または JavaScript Editor の窓 | Attribute Editor | タブは閉じても残る。ファイルには Save As |
+| TouchDesigner | Text DAT の中、編集は別の窓 | Parameter Dialog のカスタムパラメータ | プロジェクトの中 |
+
+4 つで揃う事：つまみはインスペクターで、コードとは分ける。Motolii のつまみは今もインスペクターにある（`js_line_N`、Script のカード）。
+ファイルとして棚に並べるのは Godot と Unity の 2 つ。Motolii の棚は Media、Effects、Fonts、Colors、Create と種類ごとなので、Program も 1 つの棚にする。
+割れる事：コードをどこで打つか。Godot は真ん中を切り替え、Cavalry は別の窓。Motolii は舞台を見ながら直したいので、左の棚の表示を一覧とコードで切り替える。ここは見本から取っていない（出典なし）。
+
+貼ったコードは今、シェーダーが Effects、スケッチが Create に入る。Program ができたら全部そこへ入れ、言語で分けない。
 
 ## 出典の無い決め
 

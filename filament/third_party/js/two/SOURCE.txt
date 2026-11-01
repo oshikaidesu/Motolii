@@ -1,0 +1,3 @@
+Two.js 0.8.24, build/two.min.js and LICENSE of the npm package two.js (https://www.npmjs.com/package/two.js/v/0.8.24), as released, unchanged.
+Source: https://github.com/jonobr1/two.js. Licence: MIT (LICENSE).
+A plain file read when code that is a Two.js scene is run (door.h, script.cpp).

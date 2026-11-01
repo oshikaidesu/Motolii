@@ -1,0 +1,3 @@
+Paper.js 0.16.0, dist/paper-full.min.js and LICENSE.txt of the npm package paper (https://www.npmjs.com/package/paper/v/0.16.0), as released, unchanged.
+Source: https://github.com/paperjs/paper.js. Licence: MIT (LICENSE.txt).
+A plain file read when code that is a Paper.js script is run (door.h, script.cpp).

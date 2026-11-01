@@ -1,0 +1,3 @@
+turtletoy 1.0.3, dist/turtletoy.umd.cjs and LICENSE of the npm package turtletoy (https://www.npmjs.com/package/turtletoy/v/1.0.3), as released, unchanged.
+Source: https://github.com/reindernijhoff/turtletoy-package. Licence: MIT (LICENSE).
+A plain file read when a Turtletoy script is run (door.h, script.cpp).

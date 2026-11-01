@@ -560,13 +560,22 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] WEBGL の未対応：シェーダー 33 作、beginShape、コピーごとの色
 - [ ] スケッチの動画：頭出しと切り出し、スケッチの後から入れた動画に取り替え、動画の大きさ
 - [ ] Time Remap：スケッチの時間にキーを打つ
-- [ ] スケッチの文字のフォント：Filament の Roboto を third_party から読む。配る版に入るか確かめていない。日本語は出ない
-- [ ] Shadertoy の入口：`mainImage` を貼るだけで効果になる。今は前書き 4 行を手で足せば通る（reports/sketch_import_2026-11-01.md）。iChannel と複数バッファ、規約の本文は未確認
-- [ ] Dwitter の入口：`u(t)` の 140 文字を貼るだけで動く。今は前書き 3 行を手で足せば通る（同上）
-- [ ] tixy の入口：32 文字の式を貼るだけで動く（同上）
-- [ ] Turtletoy の入口：`Turtle` と `walk(i)` の台（同上）
+- [ ] スケッチの文字のフォント：Filament の Roboto を third_party から読む。配る版に入るか確かめていない。日本語は出ない。絵文字も出ない（絵文字を使う dweet は帯だけになる）
+- [x] Shadertoy の入口：`mainImage` を貼るだけで動く。iChannel は選んだ物の絵（door.h）。1 つのパスだけで、複数バッファは下の別の行
+- [x] Dwitter の入口：`u(t)` の 140 文字をそのまま貼る。詰めた `eval(unescape(escape`...`))` も読む（door.h）
+- [x] tixy の入口：32 文字の式を貼るだけ（door.h）
+- [x] Turtletoy の入口：`Turtle` と `walk(i)`、`walk` の無い作品も。npm の turtletoy を使う（door.h）
 - [ ] p5 の shader()：168 作のうち 33 作が使う。Shadertoy の入口と同じ GLSL の読み口に繋げられるか
-- [ ] three.js の場面を動かす台：Art Blocks などの three.js の作品（同上）
+- [x] three.js の場面を動かす台：three.core.js をそのまま走らせ、形と材質の組ごとに本物の立体で世界に立てる（doc_door.h、p5_stand.h）
+- [ ] プログラムの置き場：左のブラウザに Program を足し、一覧とコードの表示を切り替える。つまみは今のまま右のインスペクター。貼った物は Create と Effects に混ぜず、ここに入れる。見本：Godot と Unity は「コードはファイルとしてブラウザに、つまみはインスペクターに」、Cavalry はつまみが Attribute Editor でコードのタブは閉じても残る、TouchDesigner はコードが Text DAT でつまみが Parameter Dialog。割れた点（コードをどこで打つか）は「舞台を見ながら直す」が要るので左に置く。これは見本から取った決めではなく、出典なし
+- [ ] Shadertoy の複数バッファ（Buffer A〜D、Common）：今は 1 つのパスだけ。Common に関数がある作品と、前のコマを読む作品は絵にならない
+- [ ] 2D の入口の絵を世界に立てる：Dwitter・tixy・Turtletoy・Two.js・Paper.js・Canvas は世界の中で 1 枚の板。線や形ごとの奥行きが要るか
+- [ ] p5 の WEBGL の物ごとの色：`solid_fill` が全部の複製に 1 つの材質を渡すので、白い箱になる
+- [ ] three.js で立たない物：テクスチャ、線と点、ShaderMaterial、モーフ、外のファイル（glTF、フォント）、霧と背景色、シーンの光
+- [ ] 重いスケッチのメモリ：`__frames` が全コマを持つ。10 万個を描く dweet は 1 秒で 1.5 GB、19.8 秒。2 GB の上限で止まるようにはした。上限の手前で古いコマを捨てる形が要る
+- [ ] Hydra を窓から入れる：今は `filament/extensions/hydra/get.sh` を手で走らせる
+- [ ] canvas が自分を読む `drawImage(c)`（Dwitter の帰還）
+- [ ] 配る版に third_party/js が入るか確かめる
 - [ ] OpenProcessing の URL を貼って持ってくる。ライセンスの表示も一緒に
 - [ ] Cavalry の JavaScript デフォーマとシェイプ
 - [ ] Metal で止まった 3 作（2977569、2995171、3001005）：区切りを入れて落ちなくなったが 45 秒で終わらない。終わるまで走らせて確かめる

@@ -7,6 +7,8 @@
 #include "interp.h"
 #include "physics.h"
 #include "script.h"
+#include "door.h"
+#include "hydra_isf.h"
 #include "lottie_slots.h"
 #include "viewer_settings.h"
 #include "absent_motion.h"

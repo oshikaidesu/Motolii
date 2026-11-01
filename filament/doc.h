@@ -39,5 +39,6 @@
 #include "doc_match.h"   // (the stage made again as the document says; its file opened, changed, undone)
 #include "doc_edit.h"   // (things added, freed, related, led; keys and values put)
 #include "doc_recipes.h"   // (recipes)
+#include "doc_door.h"   // (code from the net)
 #include "doc_looks.h"   // (a thing's look kept and given to another)
 #include "doc_paths.h"   // (a path shape's plane and points)

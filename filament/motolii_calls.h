@@ -506,6 +506,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             }
             else if (c == "add") ok = m->made = changes(m, doc_add(doc(m), n.c_str(), w.c_str()));   // (name: the kind, word: the file; the answer is the new thing)
             else if (c == "make") ok = m->made = changes(m, doc_make(doc(m), w.c_str()));
+            else if (c == "door") ok = m->made = changes(m, doc_door(doc(m), w, thing));   // (word: code from the net; thing: the one picked, or 0)
             else if (c == "duplicate") ok = m->made = changes(m, doc_copy_above(doc(m), thing));   // (the answer is the new thing)
             else if (c == "split") ok = m->made = changes(m, doc_split(doc(m), thing, number));   // (number: the moment; the answer is the part after it)
             else if (c == "extract") ok = changes(m, (int)doc_extract(doc(m)));   // (the work area taken out, the gap closed)

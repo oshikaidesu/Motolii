@@ -7,6 +7,7 @@
 // Made once into ~/Library/Caches/Motolii/isf/<hash>.wgsl, named by the file as it is. Its other images are
 // other things' pictures (screen.h others), its audio inputs other things' sound; its own vertex shader is worked out at each pixel.
 #include "isf.h"
+#include "door.h"
 #include "three_isf.h"
 #include <sys/stat.h>
 #include <cstdio>
@@ -246,7 +247,7 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
 
 std::string isf_tags(const std::string& file) {
     std::ifstream in(file);
-    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    const std::string text = door_isf(std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()));
     const size_t open = text.find("/*"), close = text.find("*/");
     rapidjson::Document head;
     if (open == std::string::npos || close == std::string::npos || head.Parse(text.c_str() + open + 2, close - open - 2).HasParseError() || !head.IsObject()) return "";
@@ -313,7 +314,7 @@ std::string isf_file(const std::string& asked) {
     const std::string stem = std::filesystem::path(file).stem().string();
     std::stringstream vertex;   // (its own vertex shader, if it has one beside it)
     if (std::ifstream vs(std::filesystem::path(file).replace_extension(".vs")); vs) vertex << vs.rdbuf();
-    const std::string wgsl = isf_wgsl(text.str(), stem, why, vertex.str());
+    const std::string wgsl = isf_wgsl(door_isf(text.str()), stem, why, vertex.str());   // (Shadertoy's and GLSL Sandbox's as they come: door.h)
     if (wgsl.empty()) {
         std::fprintf(stderr, "the ISF effect %s is not taken: %s\n", file.c_str(), why.substr(0, 600).c_str());
         return made[key] = "";

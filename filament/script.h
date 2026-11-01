@@ -70,6 +70,8 @@ public:
     bool flat();               // a sketch that paints on a 2D canvas
     int width();               // its canvas
     int height();
+    std::string said(const std::string& js);   // what the sketch says to that, as words
+    std::vector<uint8_t> bytes(const std::string& js);   // what it leaves in __bytes on being told that
     std::vector<double> paints(int frame, int had);
     std::vector<int> lines() const;   // (a sketch's lines that draw, as sketch_marked says)   // what makes that frame on a canvas holding the frame `had` (p5_stand.h's __paints)
     // Each copy at a moment, the knobs as the document says them now (a select by the word it is).

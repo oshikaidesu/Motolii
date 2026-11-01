@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:docking/docking.dart';
+import 'package:flutter/services.dart' show Clipboard;
 import 'package:flutter/widgets.dart';
 import '../parts/skin_parts.dart';
 import 'stage_art.dart' show WsArt;
@@ -126,7 +127,11 @@ class _WorkspaceState extends State<Workspace> {
     _ws.after(m.later('together'));
   }
 
+  /// The text the machine's clipboard held when something was last copied here: what was copied last is what is pasted.
+  String? _textWhenCopied;
+
   void _copy(String call, String what) {
+    Clipboard.getData(Clipboard.kTextPlain).then((said) => _textWhenCopied = said?.text);
     final t = int.tryParse(_ws.selected ?? '');
     if (_inside != null && t != null) _inside!.later(call, thing: t, word: _clipboard(what));
   }
@@ -272,6 +277,7 @@ class _WorkspaceState extends State<Workspace> {
         if (_typed(const CopySelectionTextIntent.cut(SelectionChangedCause.keyboard))) return;
         final t = int.tryParse(ws.selected ?? '');
         if (t == null) return;
+        Clipboard.getData(Clipboard.kTextPlain).then((said) => _textWhenCopied = said?.text);
         m.later('copy', thing: t, word: _clipboard('thing'));
         m.later('together', number: 1);
         for (final held in ws.under('$t')) {
@@ -286,13 +292,23 @@ class _WorkspaceState extends State<Workspace> {
         wsKeysKept = const [];
         ws.keys.isEmpty ? _copy('copy', 'thing') : wsCopyKeys(ws, ws.keys);
       },
-      'edit.paste': () => _typed(const PasteTextIntent(SelectionChangedCause.keyboard))
-          ? null
-          : wsKeysKept.isNotEmpty
-          ? wsPasteKeys(ws)
-          : File(_clipboard('thing')).existsSync()
-          ? ws.after(m.later('paste', word: _clipboard('thing'), number: ws.frame / Ws.fps), null, (made) => ws.select('$made'))   // (at the playhead, the pasted one picked: Live's paste at the insert marker)
-          : null,
+      'edit.paste': () {
+        if (_typed(const PasteTextIntent(SelectionChangedCause.keyboard))) return;
+        void own() => wsKeysKept.isNotEmpty
+            ? wsPasteKeys(ws)
+            : File(_clipboard('thing')).existsSync()
+            ? ws.after(m.later('paste', word: _clipboard('thing'), number: ws.frame / Ws.fps), null, (made) => ws.select('$made'))   // (at the playhead, the pasted one picked: Live's paste at the insert marker)
+            : null;
+        // (code copied from the net, whatever it is written for: read by the inside, door.h; what was copied last wins)
+        Clipboard.getData(Clipboard.kTextPlain).then((said) {
+          final code = said?.text ?? '';
+          if (code.trim().isEmpty || code == _textWhenCopied) return own();
+          ws.after(m.later('door', thing: int.tryParse(ws.selected ?? '') ?? 0, word: code), (done, why) {
+            if (done) return;
+            why.contains('not code') ? own() : ws.notice = 'Not taken: $why';
+          }, (made) => made > 0 ? ws.select('$made') : null);
+        });
+      },
       'edit.copyStyle': () => _copy('copy_style', 'style'),
       'thing.saveLook': () {   // (kept on the Effects shelf by the layer's name: Alight Motion's Save as Preset)
         final m = _inside, l = _ws.layer;

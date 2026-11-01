@@ -1619,6 +1619,30 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Code copied from the net is one Cmd V away: read as what it is and put on the stage, undone in one step; text that is not code, and what was copied here after it, paste as they did (Dwitter; the machine\'s clipboard)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    var board = 'c.width=1920;x.fillRect(S(t)*900+900,99,99,99)';
+    t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (c) async => c.method == 'Clipboard.getData' ? {'text': board} : null);
+    Future<void> paste() async {
+      await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await t.sendKeyEvent(LogicalKeyboardKey.keyV);
+      await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await settled(t, ws);
+    }
+    final before = m.things.length;
+    await paste();
+    expect(m.things.length, before + 1, reason: m.trouble);
+    expect(m.word(m.things.last, 'name'), 'Dwitter');
+    expect(m.word(m.things.last, 'file'), endsWith('.js'));
+    m.undo();
+    await settled(t, ws);
+    expect(m.things.length, before);
+    board = 'a sentence, not code';
+    await paste();
+    expect(ws.notice, isNot(startsWith('Not taken')), reason: 'words are not code: Paste is its own again');
+    expect(m.things.where((x) => m.word(x, 'name') == 'Dwitter'), isEmpty);
+  });
+
   testWidgets('A group is one row until its triangle opens it; its row stands where its top thing stood, the rest gathered under it; Delete takes what it holds, one step (a precomposed layer; Apple Motion\'s triangle; Alight Motion\'s group)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final a = m.add('shape', 'rect'), b = m.add('shape', 'circle'), c = m.add('shape', 'star'), d = m.add('shape', 'polygon');
