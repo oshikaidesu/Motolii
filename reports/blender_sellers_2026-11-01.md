@@ -88,6 +88,33 @@ Signal は loop、ease、noise、flicker・bounce・vibration・spin の型、Fi
 
 Stack の作り方で次に測る事：真似の 1 カットを窓で作り、何が足りないかを手数で見る。作品の絵と音は使わず、手法だけ真似る。
 
+## ポチポチで作れる道具は界隈にあるか
+
+ユーザーの問い：「大事な話はそうじゃない、簡単にポチポチ作れるかよ。そんでその道具はもう界隈では知られてるんじゃね？」。
+
+ある。ただし 2D か 3D のどちらかに寄っている。
+
+| 道具 | 場所 | ポチポチの中身 | 3D | 値段 |
+|---|---|---|---|---|
+| Jitter | ブラウザ | 動き、消え方、大きさ、マスク、ぼかしの型。テンプレート 300 超。キーの代わりに簡単な操作 | 説明に無い | 無料から |
+| Cavalry | Mac、Win | 型ではなく仕組み。複製と減衰、1 つの値で全体が変わる。書き出し待ちが無い | 2D | 個人は無料 |
+| Motion Bro | After Effects の中 | 型の棚と店。本体は無料。作者の言う利用者 100 万超 | After Effects 次第 | 無料と有料の型 |
+| Animation Composer | After Effects の中 | 型の棚。School of Motion が紹介 | After Effects 次第 | 無料と有料 |
+| Motion Studio | After Effects の中 | 道具 80 超。1 クリックの小道具が中心で、型の棚ではない | — | 値段は未読 |
+| Apple Motion | Mac | ふるまいをドラッグするとキー無しで動く。3D の文字、複製 | 有る | 約 $50（古い情報） |
+| Spline | ブラウザ | 形、材質、灯り、状態、物理。Web に載せる道具 | 有る | 無料から |
+
+見えた事：
+
+- 2D のデザインモーションは Jitter と Cavalry が知られている。どちらも説明に 3D が無い。
+- 一番近い席は Apple Motion。2D と 3D が 1 つの窓で、ふるまいで動く。ただし Mac だけ。
+- Spline は 3D だが、ページに動画の書き出しと音の話が無い。
+- 探した範囲で、Stack の型（2D と 3D を混ぜて、音に合わせて切る）のための Win でも動くポチポチの道具は見つからなかった。
+
+Motolii が取れそうな席は、Apple Motion の Win 版のような所。ふるまいと 3D の文字はもうある。
+
+分からない事：どの道具も実際に触っていない。手数は読んだ説明からで、比べていない。売れた本数と利用者数は Motion Bro の自己申告だけ。aescripts の売上順は 403 で読めず、School of Motion の業界調査も見つからなかった。Reddit は写しのサイト経由で、一部だけ。Apple Motion の値段は古い情報。
+
 ## Motolii にある物と無い物
 
 | 売れ筋 | Motolii の今 | 差 |
@@ -147,6 +174,15 @@ Stack の作り方で次に測る事：真似の 1 カットを窓で作り、�
 - [Stack の制作解説（Motionographer）](https://motionographer.com/2025/02/12/exclusive-kimathi-flavien-the-work-behind-of-chef-doeuvre-motion-design-film-stack/)
 - [Stack の紹介（STASH）](https://www.stashmedia.tv/kimathi-flavien-solves-the-design-puzzle-in-stack-short-film/)
 - [Signal](https://greyscalegorilla.com/plugins/signal)
+- [What is Jitter](https://help.jitter.video/en/articles/12089209-what-is-jitter)
+- [Jitter と After Effects](https://jitter.video/after-effects-alternative/)
+- [Cavalry](https://cavalry.studio/)
+- [Motion Bro](https://motionbro.com/plugin/)
+- [Motion Studio](https://mtmograph.com/products/motion)
+- [School of Motion の 2026 年のプラグイン](https://www.schoolofmotion.com/blog/best-after-effects-plugins-and-effect-packs-you-need-in-2026)
+- [Spline](https://spline.design/)
+- [Apple Motion の説明書](https://support.apple.com/guide/motion/motnb0278e80/mac)
+- [Motion（Wikipedia）](https://en.wikipedia.org/wiki/Motion_(software))
 - [Rocket Lasso の棚](https://rocketlasso.com/shop)
 - [Direktor 3D](https://mediamonopoly.co/collections/video-presets-plugins/products/direktor-3d-ultimate-blender-plugin-for-creators)
 - [Media Monopoly の店](https://mediamonopoly.co)
