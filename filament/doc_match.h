@@ -331,6 +331,7 @@ static bool doc_match(Doc& d) {
                 MaterialInstance* look = glass ? thick_glass(s, made.shape, {mat4f{}}) : add(s, made.shape, made.sketch ? "sketch.filamat" : model, std::vector<mat4f>((size_t)std::max(1, (int)doc_number(d, thing, "copies", 0, 1)), mat4f{}));
                 made.look = look;
                 if (look && glass) glassy(look);
+                if (look && made.sketch) for (int i = 0; i < 6; ++i) look->setParameter(("picture" + std::to_string(i)).c_str(), white_point(s), TextureSampler());
                 if (!look) made.shape = nullptr;
                 else if (!glass) plain(look, !fill.empty() ? colour : made.sketch ? float3{1.f} : float3{0xd9, 0xd2, 0xc3} / 255.f, surface);
             } else if (std::filesystem::path(file).extension() == ".ply") {   // (a point cloud: its grains, one buffer, points.h)

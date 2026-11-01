@@ -29,6 +29,32 @@ function draw() {
   line(150, -150, 280, 150)
 }
 J
+cat > $W/pic.js <<'J'
+let pg, sound
+function preload() { sound = loadSound('none.mp3') }
+function setup() {
+  createCanvas(600, 400, WEBGL)
+  document.getElementById('panel').style.display = 'none'
+  textureMode(NORMAL)
+  textureWrap(REPEAT)
+  pg = createGraphics(64, 64)
+  pg.noStroke()
+}
+function draw() {
+  background(10, 20, 40)
+  pg.background(255, 200, 0)
+  pg.fill(200, 0, 100)
+  pg.rect(0, 0, 32, 32 + frameCount)
+  noStroke()
+  texture(pg)
+  beginShape(TRIANGLE_STRIP)
+  vertex(-260, -180, 0, 0, 0)
+  vertex(-260, 180, 0, 0, 2)
+  vertex(260, -180, 0, 2, 0)
+  vertex(260, 180, 0, 2, 2)
+  endShape()
+}
+J
 python3 - $W <<'P'
 import os,subprocess,sys
 from PIL import Image,ImageChops
@@ -45,6 +71,12 @@ line=sum(1 for p in Image.open(f'{W}/m0.png').convert('RGB').getdata() if p[0]>2
 print('what it draws is its own shapes, one mesh:','yes' if '1 shape at 0.0: sketch' in r.stdout and count('m0',lambda r,gr,b:r>150 and gr<110)>30 and count('m0',lambda r,gr,b:gr>150 and r<90)>30 and line>500 else f"NO {count('m0',lambda r,gr,b:r>150 and gr<110)} {count('m0',lambda r,gr,b:gr>150 and r<90)} {line}")
 print('  what it clears with is behind it:','yes' if count('m0',lambda r,gr,b:b>r+15 and b<90)>1000 else 'NO')
 print('  it moves as its frames run, and going back is the same:','yes' if ImageChops.difference(g('m0'),g('m1')).getbbox() and not ImageChops.difference(g('m0'),g('m2')).getbbox() else 'NO')
+said=['add solid cube',f'say 1 script {W}/pic.js','list','at 0',f'still {W}/p0.png','at 0.3',f'still {W}/p1.png']
+r=subprocess.run(['zsh','./edit.sh',f'{W}/p.motolii'],input='\n'.join(said)+'\n',capture_output=True,text=True,timeout=200,env={**os.environ,'SIZE':'960x540'})
+near=lambda p,k:all(abs(p[i]-k[i])<3 for i in range(3))
+yellow,red=count('p0',lambda r,gr,b:near((r,gr,b),(255,200,0))),count('p0',lambda r,gr,b:near((r,gr,b),(200,0,100)))
+print('what it paints on a createGraphics is on what it draws, its wrap as it says:','yes' if yellow>300 and red>300 else f'NO {yellow} {red}')
+print('  that picture goes on with its frames:','yes' if ImageChops.difference(g('p0'),g('p1')).getbbox() else 'NO')
 box=lambda n:Image.open(f'{W}/{n}.png').convert('L').point(lambda v:255 if v>20 else 0).getbbox()
 a,b=box('a'),box('b')
 tall=a and (a[3]-a[1])>3*(a[2]-a[0])

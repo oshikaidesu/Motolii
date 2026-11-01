@@ -52,13 +52,14 @@ using namespace filament::math;
 
 static const float TAU = 6.2831853f;
 
-struct SketchShape { std::vector<float3> pos, nrm; std::vector<uint32_t> idx, edges; };   // (a shape a p5.js sketch draws, as it has it: doc_sketch.h)
+struct SketchShape { std::vector<float3> pos, nrm; std::vector<float2> uv; std::vector<uint32_t> idx, edges; };   // (a shape a p5.js sketch draws, as it has it: doc_sketch.h)
 struct Mesh {
     std::vector<float3> pos, nrm;
     std::vector<float2> uv;
     std::vector<uint32_t> idx;
     std::vector<quatf> quat;
     std::vector<float4> color;   // (each point's own, sketch.mat's; most have none)
+    std::vector<float2> uv1;     // (and where it reads its picture)
     VertexBuffer* vb = nullptr;   // (as last put in the scene: add_parts, reshape)
     IndexBuffer* ib = nullptr;
     uint32_t vbRoom = 0, ibRoom = 0;   // (how many points and indices they hold: written again in place while they fit)
@@ -259,22 +260,22 @@ static Material* material(Stage& s, const char* filamat) {
 // A mesh's buffers, and what it says put in them.
 static VertexBuffer* mesh_buffers(Stage& s, const Mesh& m, uint32_t room) {
     VertexBuffer::Builder make;
-    make.vertexCount(room).bufferCount(m.color.empty() ? 3 : 4)
+    make.vertexCount(room).bufferCount(m.color.empty() ? 3 : 5)
         .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3)
         .attribute(VertexAttribute::TANGENTS, 1, VertexBuffer::AttributeType::FLOAT4)
         .attribute(VertexAttribute::UV0, 2, VertexBuffer::AttributeType::FLOAT2);
-    if (!m.color.empty()) make.attribute(VertexAttribute::COLOR, 3, VertexBuffer::AttributeType::FLOAT4);
+    if (!m.color.empty()) make.attribute(VertexAttribute::COLOR, 3, VertexBuffer::AttributeType::FLOAT4).attribute(VertexAttribute::UV1, 4, VertexBuffer::AttributeType::FLOAT2);
     return make.build(*s.engine);
 }
 static void mesh_points(Stage& s, const Mesh& m, VertexBuffer* vb, size_t n) {
     vb->setBufferAt(*s.engine, 0, copied(m.pos.data(), n * sizeof(float3)));
     vb->setBufferAt(*s.engine, 1, copied(m.quat.data(), n * sizeof(quatf)));
     vb->setBufferAt(*s.engine, 2, copied(m.uv.data(), n * sizeof(float2)));
-    if (!m.color.empty()) vb->setBufferAt(*s.engine, 3, copied(m.color.data(), n * sizeof(float4)));
+    if (!m.color.empty()) vb->setBufferAt(*s.engine, 3, copied(m.color.data(), n * sizeof(float4))), vb->setBufferAt(*s.engine, 4, copied(m.uv1.data(), n * sizeof(float2)));
 }
 static Mesh* sketch_mesh() {   // (nothing yet: doc_sketch.h makes it again each frame)
     Mesh* m = new Mesh;
-    m->pos.assign(3, float3{0.f}), m->nrm.assign(3, float3{0.f, 0.f, 1.f}), m->uv.assign(3, float2{0.f}), m->color.assign(3, float4{0.f}), m->idx = {0, 1, 2};
+    m->pos.assign(3, float3{0.f}), m->nrm.assign(3, float3{0.f, 0.f, 1.f}), m->uv.assign(3, float2{0.f}), m->color.assign(3, float4{0.f}), m->uv1.assign(3, float2{0.f}), m->idx = {0, 1, 2};
     return m;
 }
 static std::vector<MaterialInstance*> add_parts(Stage& s, Mesh* m, const char* filamat, std::vector<mat4f> places, std::vector<uint32_t> ends,

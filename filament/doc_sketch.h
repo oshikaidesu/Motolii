@@ -10,9 +10,9 @@ static const SketchShape* doc_sketch_shape(std::vector<SketchShape>& shapes, Scr
         if (raw.size() >= 3 * sizeof(float)) {
             const float* f = (const float*)raw.data();
             const size_t points = (size_t)f[0], faces = (size_t)f[1], edges = (size_t)f[2];
-            if (raw.size() >= (3 + points * 6 + faces * 3 + edges * 2) * sizeof(float)) {
-                const float* p = f + 3, *n = p + points * 3, *a = n + points * 3, *e = a + faces * 3;
-                one.pos.assign((const float3*)p, (const float3*)n), one.nrm.assign((const float3*)n, (const float3*)a);
+            if (raw.size() >= (3 + points * 8 + faces * 3 + edges * 2) * sizeof(float)) {
+                const float* p = f + 3, *n = p + points * 3, *u = n + points * 3, *a = u + points * 2, *e = a + faces * 3;
+                one.pos.assign((const float3*)p, (const float3*)n), one.nrm.assign((const float3*)n, (const float3*)u), one.uv.assign((const float2*)u, (const float2*)a);
                 for (size_t k = 0; k < faces * 3; ++k) one.idx.push_back((uint32_t)a[k]);
                 for (size_t k = 0; k < edges * 2; ++k) one.edges.push_back((uint32_t)e[k]);
             }
@@ -22,10 +22,11 @@ static const SketchShape* doc_sketch_shape(std::vector<SketchShape>& shapes, Scr
     return &shapes[i];
 }
 static void doc_sketch_mesh(Doc& d, int thing, Doc::Shown& t, double now) {
-    // (p5_stand.h's __mesh_at: how many of each, its unit, its size, what it clears with; then each shape it stands: which, its 16,
-    //  fill, flat -1 none, its line, stroke, weight; each corner of a triangle: x y z, normal, colour, flat, line; each line: two
-    //  ends, colour, weight, line. A sketch past MOST points shows as many as fit)
-    constexpr size_t HEAD = 10, RET = 28, TRI = 12, SEG = 12, MOST = 3000000;
+    // (p5_stand.h's __mesh_at: how many of each, its unit, its size, what it clears with, how many pictures; then each shape it stands:
+    //  which, its 16, fill, flat -1 none, its line, stroke, weight, picture; each corner of a triangle: x y z, normal, colour, flat, line,
+    //  where it reads its picture, which; each line: two ends, colour, weight, line. A sketch past MOST points shows as many as fit,
+    //  past PICTURES pictures the rest as white)
+    constexpr size_t HEAD = 11, RET = 29, TRI = 15, SEG = 12, MOST = 3000000, PICTURES = 6;
     Stage& s = *d.stage;
     DocScript* sc = doc_script_of(d, doc_literal_word(d, thing, "script"));
     if (!sc || !sc->run || !sc->run->ok()) return;
@@ -37,7 +38,7 @@ static void doc_sketch_mesh(Doc& d, int thing, Doc::Shown& t, double now) {
     for (size_t i = 0; i < sc->knobs.size(); ++i)
         if (const std::string& k = sc->knobs[i].name; k.rfind("line_", 0) == 0) strong[std::atoi(k.c_str() + 5)] = (float)doc_number(d, thing, sc->names[i].c_str(), now, sc->knobs[i].usual);
     if (t.sketchFrame == frame && t.sketchMade == doc_scripts_made(d) && length(t.sketchEye - eye) < 1e-4f && t.sketchStrong == strong) return;
-    if (t.sketchMade != doc_scripts_made(d)) t.sketchShapes.clear();
+    if (t.sketchMade != doc_scripts_made(d)) t.sketchShapes.clear(), t.sketchPics.clear();
     t.sketchFrame = frame, t.sketchMade = doc_scripts_made(d), t.sketchEye = eye, t.sketchStrong = strong;
     const std::vector<uint8_t> raw = sc->run->bytes("__mesh_at(" + std::to_string(frame) + ")");
     if (raw.size() < HEAD * sizeof(float)) return;
@@ -46,10 +47,23 @@ static void doc_sketch_mesh(Doc& d, int thing, Doc::Shown& t, double now) {
     const float U = f[3], wide = f[4], high = f[5];
     if (raw.size() < (HEAD + draws * RET + tris * TRI + segs * SEG) * sizeof(float)) return;
     const float* back = f + 6, *all = f + HEAD;
+    for (size_t i = t.sketchPics.size(); i < std::min((size_t)f[10], PICTURES); ++i) {   // (each picture it draws with, its wraps as p5's textureWrap: clamp, repeat, mirror)
+        const std::vector<uint8_t> said = sc->run->bytes("__mesh_pic(" + std::to_string(i) + ")");
+        if (said.size() < 4 * sizeof(float)) break;
+        const float* p = (const float*)said.data();
+        Drawn* pic = sketch_texture(s, sc->run.get(), (doc_folders("third_party/filament_src/assets/fonts").front() / "Roboto-Medium.ttf").string(), (int)i, (int)p[0], (int)p[1]);
+        t.sketchPics.push_back(pic);
+        if (!pic) continue;
+        constexpr TextureSampler::WrapMode wraps[] = {TextureSampler::WrapMode::CLAMP_TO_EDGE, TextureSampler::WrapMode::REPEAT, TextureSampler::WrapMode::MIRRORED_REPEAT};
+        TextureSampler read(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR);
+        read.setWrapModeS(wraps[(int)p[2]]), read.setWrapModeT(wraps[(int)p[3]]);
+        t.look->setParameter(("picture" + std::to_string(i)).c_str(), pic->texture, read);
+    }
+    for (Drawn* pic : t.sketchPics) if (pic) picture_at(s, pic, (float)frame / 60.f);
     Mesh& m = *t.shape;
-    m.pos.clear(), m.nrm.clear(), m.uv.clear(), m.color.clear(), m.idx.clear();
+    m.pos.clear(), m.nrm.clear(), m.uv.clear(), m.uv1.clear(), m.color.clear(), m.idx.clear();
     const auto power = [&](int line) { const auto k = strong.find(line); return k == strong.end() ? 1.f : k->second; };
-    const auto point = [&](float3 p, float3 n, float4 c, float flatly) { m.pos.push_back(p), m.nrm.push_back(n), m.uv.push_back(float2{flatly, 0.f}), m.color.push_back(c); };
+    const auto point = [&](float3 p, float3 n, float4 c, float flatly, float2 at = {}, float pic = 0.f) { m.pos.push_back(p), m.nrm.push_back(n), m.uv.push_back(float2{flatly, pic}), m.uv1.push_back(at), m.color.push_back(c); };
     const auto band = [&](float3 a, float3 b, float4 c, float w) {   // (a line, two triangles, turned to the eye; a point a little square)
         if (m.pos.size() + 4 > MOST) return;
         const float3 way = b - a, look = eye - a;
@@ -86,7 +100,7 @@ static void doc_sketch_mesh(Doc& d, int thing, Doc::Shown& t, double now) {
             const float4 c{r[17], r[18], r[19], r[20]};
             for (size_t v = 0; v < shape->pos.size(); ++v) {
                 const float3 n = v < shape->nrm.size() ? turn * shape->nrm[v] : float3{0.f, 0.f, 1.f};
-                point(seen(shape->pos[v]), length(n) > 1e-6f ? normalize(n * float3{1.f, -1.f, 1.f}) : float3{0.f, 0.f, 1.f}, c, r[21]);
+                point(seen(shape->pos[v]), length(n) > 1e-6f ? normalize(n * float3{1.f, -1.f, 1.f}) : float3{0.f, 0.f, 1.f}, c, r[21], v < shape->uv.size() ? shape->uv[v] : float2{}, r[28]);
             }
             for (size_t v = 0; v + 2 < shape->idx.size(); v += 3) m.idx.insert(m.idx.end(), {o + shape->idx[v], o + shape->idx[v + 2], o + shape->idx[v + 1]});
         }
@@ -98,7 +112,7 @@ static void doc_sketch_mesh(Doc& d, int thing, Doc::Shown& t, double now) {
         for (const size_t v : {i, i + 2, i + 1}) {
             const float* r = all + draws * RET + v * TRI;
             const float3 n = normalize(float3{r[3], -r[4], r[5]} + float3{0.f, 0.f, 1e-6f});
-            point(float3{r[0], r[1], r[2]} * flip, n, float4{r[6], r[7], r[8], r[9] * power((int)r[11])}, r[10]);
+            point(float3{r[0], r[1], r[2]} * flip, n, float4{r[6], r[7], r[8], r[9] * power((int)r[11])}, r[10], float2{r[12], r[13]}, r[14]);
         }
         m.idx.insert(m.idx.end(), {o, o + 1, o + 2});
     }

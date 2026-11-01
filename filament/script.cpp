@@ -281,6 +281,13 @@ bool Script::ok() const { return own->trouble.empty(); }
 bool Script::sketch() const { return own->sketch; }
 static std::string script_said(JSContext* cx, const char* js) {
     JSValue out = JS_Eval(cx, js, strlen(js), "sketch", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(out)) {   // (its draw() has failed where it is asked: said here, and it goes on as far as it got)
+        JSValue e = JS_GetException(cx), stack = JS_GetPropertyStr(cx, e, "stack");
+        const char* m = JS_ToCString(cx, e), *where = JS_IsString(stack) ? JS_ToCString(cx, stack) : nullptr;
+        std::fprintf(stderr, "the sketch, asked %.40s: %s\n%s\n", js, m ? m : "?", where ? where : "");
+        if (where) JS_FreeCString(cx, where);
+        JS_FreeCString(cx, m), JS_FreeValue(cx, stack), JS_FreeValue(cx, e);
+    }
     const char* s = JS_IsException(out) ? nullptr : JS_ToCString(cx, out);
     const std::string said = s ? s : "";
     if (s) JS_FreeCString(cx, s);
@@ -309,8 +316,8 @@ std::vector<int> Script::lines() const {
     for (const SketchLine& l : own->lines) all.push_back(l.line);
     return all;
 }
-std::vector<double> Script::paints(int frame, int had) {
-    const std::string js = "__paints(" + std::to_string(frame) + "," + std::to_string(had) + ")";
+std::vector<double> Script::paints(int frame, int had, int pic) {
+    const std::string js = "__paints(" + std::to_string(frame) + "," + std::to_string(had) + "," + std::to_string(pic) + ")";
     JSValue out = JS_Eval(own->cx, js.c_str(), js.size(), "sketch", JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(out) && own->trouble.empty()) {   // (its draw() has failed: it stays as it was, and says so once)
         JSValue e = JS_GetException(own->cx);

@@ -6,19 +6,24 @@
 // draws behind it later. No face culled and no normal turned, as p5: it takes a sketch's triangles either way round and
 // its normals as they are told, and Filament's doubleSided would turn those of the ones wound the other way. What is flat
 // is put after the lights, Filament's own postLightingColor: with none of a surface's sums left, its edges and the world's
-// sky do not shine on it (specularDFG leaves a shine at an edge even at reflectance 0).
+// sky do not shine on it (specularDFG leaves a shine at an edge even at reflectance 0). uv.y: which picture it is drawn
+// with, 0 none, 1 picture0, read by uv1 and laid on its colour as p5's own shader does; ThorVG's are premultiplied.
 material {
     name : Sketch,
     requires : [
         uv0,
+        uv1,
         color
     ],
     shadingModel : lit,
     blending : transparent,
     culling : none,
     postLightingBlending : opaque,
+    flipUV : false,
     depthWrite : true,
     parameters : [
+        { type : sampler2d, name : picture0 }, { type : sampler2d, name : picture1 }, { type : sampler2d, name : picture2 },
+        { type : sampler2d, name : picture3 }, { type : sampler2d, name : picture4 }, { type : sampler2d, name : picture5 },
         { type : float4, name : color },
         { type : float, name : roughness },
         { type : float, name : metalOff }
@@ -26,9 +31,21 @@ material {
 }
 
 fragment {
+    vec4 drawnWith(float which, vec2 at) {
+        if (which < 1.5) return textureLod(materialParams_picture0, at, 0.0);
+        if (which < 2.5) return textureLod(materialParams_picture1, at, 0.0);
+        if (which < 3.5) return textureLod(materialParams_picture2, at, 0.0);
+        if (which < 4.5) return textureLod(materialParams_picture3, at, 0.0);
+        if (which < 5.5) return textureLod(materialParams_picture4, at, 0.0);
+        return textureLod(materialParams_picture5, at, 0.0);
+    }
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         vec4 c = max(getColor(), 0.0);
+        if (getUV0().y > 0.5) {
+            vec4 t = drawnWith(getUV0().y, getUV1());
+            c *= vec4(t.rgb / max(t.a, 1e-4), t.a);
+        }
         vec3 light = mix(c.rgb / 12.92, pow((c.rgb + 0.055) / 1.055, vec3(2.4)), step(0.04045, c.rgb)) * materialParams.color.rgb;
         material.baseColor = vec4(light * c.a, c.a);
         material.postLightingColor = material.baseColor;

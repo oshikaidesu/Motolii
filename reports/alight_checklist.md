@@ -561,7 +561,11 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] p5 の未対応：meta のライブラリ読み込み、p5 2.x、shadowBlur、clip、filter()、pixels と putImageData、実画像ファイル、loadFont、日本語フォント、自分自身の copy()、部分 clearRect、erase、conic gradient
 - [x] WEBGL のシェーダー：平らな物を塗る物は効果になる（door_p5_shader.h）。立体に塗る物と、絵を読み戻す物はまだ
 - [x] WEBGL の beginShape、線、点、形の取り違え：p5 が描いた物をそのコマのまま世界のメッシュにする（doc_sketch.h、sketch.mat）
-- [ ] WEBGL の texture：画像と createGraphics の絵（2983658、2987225 のリボン）。3 作（2994531、3006412、3038344）がまだ白い四角で、原因はまだ見ていない
+- [x] WEBGL の texture と image：createGraphics の絵を ThorVG で描いて貼る。textureWrap、tint、箱にも帯にも（sketch.mat の 6 枚まで）
+- [x] p5 の待ち：`preload` が止まらない（`_preloadCount` は window の方を見ていた）。ページの部品を id で聞く作品、`loadSound` を呼ぶ作品が止まらない
+- [ ] p5 の loadImage：ファイルを読む（今は空の絵。隣にあっても読まない）
+- [ ] p5.sound：今は音を聞かない。音で動く作品は止まらず、音の無い動きになる
+- [ ] 3038344：ページの部品をもっと使う作品。`TypeError: not a function` で止まる。止まった事は door が言う
 - [x] コピーごとの色（p5_stand.h）
 - [ ] スケッチの動画：頭出しと切り出し、スケッチの後から入れた動画に取り替え、動画の大きさ
 - [ ] Time Remap：スケッチの時間にキーを打つ

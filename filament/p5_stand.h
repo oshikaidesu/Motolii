@@ -31,7 +31,7 @@ function __rgba(style) {   // (a colour as p5 itself reads it)
 }
 function __flat(e) {
   const keep = ['fillStyle', 'strokeStyle', 'lineWidth', 'lineCap', 'lineJoin', 'miterLimit', 'globalAlpha', 'globalCompositeOperation', 'font', 'textAlign', 'textBaseline', 'shadowBlur', 'shadowColor', 'shadowOffsetX', 'shadowOffsetY', 'filter', 'imageSmoothingEnabled'], saved = [];
-  let m = [1, 0, 0, 1, 0, 0], path = [], ux = 0, uy = 0, sx = 0, sy = 0, ops = [], clear = false;
+  let m = [1, 0, 0, 1, 0, 0], path = [], ux = 0, uy = 0, sx = 0, sy = 0, ops = [], clear = false, seen = 0;
   const X = (x, y) => m[0] * x + m[2] * y + m[4], Y = (x, y) => m[1] * x + m[3] * y + m[5];
   const M = (x, y) => { path.push(0, X(x, y), Y(x, y)), ux = sx = x, uy = sy = y; };
   const L = (x, y) => { if (!path.length) return M(x, y); path.push(1, X(x, y), Y(x, y)), ux = x, uy = y; };
@@ -126,20 +126,23 @@ function __flat(e) {
       }
     },
     clip() {}, setLineDash() {}, getLineDash() { return []; }, isPointInPath() { return false; }, isPointInStroke() { return false; }, getContextAttributes() { return {}; },
-    held() { return ops; }, take() { const o = Float64Array.from(ops), was = clear; ops = [], clear = false; return [was, o]; } };
+    held() { return ops; }, take() { const o = Float64Array.from(ops), was = clear; ops = [], clear = false; return [was, o]; },
+    fresh() { const o = Float64Array.from(ops.slice(clear ? 0 : seen)), was = clear; clear = false, seen = ops.length; return [was, o]; } };   // (what came since it was last asked, what it holds staying: another canvas's own picture)
   return c;
 }
 function __element(tag) {
   const kids = [], name = String(tag).toUpperCase();
   const e = { tagName: name, nodeName: name, style: {}, width: 100, height: 100, id: '', className: '', dataset: {}, childNodes: kids, children: kids, classList: { add() {}, remove() {}, contains() { return false; } },
     appendChild(c) { kids.push(c); c.parentNode = e; return c; }, removeChild() {}, remove() {}, setAttribute() {}, getAttribute() { return null; }, hasAttribute() { return false; }, addEventListener() {}, removeEventListener() {}, getBoundingClientRect() { return { left: 0, top: 0, width: e.width, height: e.height }; },
-    querySelector() { return null; }, querySelectorAll() { return []; }, getElementsByTagName() { return []; }, focus() {}, blur() {},
+    querySelector() { return __element('div'); }, querySelectorAll() { return []; }, getElementsByTagName() { return []; }, focus() {}, blur() {},
+    append(...c) { c.forEach(k => typeof k === 'object' && e.appendChild(k)); }, prepend() {}, replaceChildren() { kids.length = 0; }, replaceWith() {}, insertBefore(c) { return e.appendChild(c); }, insertAdjacentHTML() {}, insertAdjacentElement() {}, after() {}, before() {},
+    closest() { return null; }, matches() { return false; }, contains() { return false; }, click() {}, cloneNode() { return __element(tag); }, removeAttribute() {}, toggleAttribute() {}, scrollIntoView() {}, dispatchEvent() {}, setPointerCapture() {}, releasePointerCapture() {},
     getContext(kind) { if (kind === '2d') return e.flat = e.flat || __flat(e); const c = __any('context'); c.getParameter = () => 16384; return c; } };   // (how large a texture may be: p5 clamps the canvas to it)
   e.scrollWidth = e.clientWidth = 100, e.parentNode = null;
   return e;
 }
-var __main = __element('main');
-var __page = { window: globalThis, self: globalThis, document: Object.assign(__element('document'), { readyState: 'complete', body: __element('body'), documentElement: __element('html'), head: __element('head'), createElement: __element, createElementNS: (_, t) => __element(t), createTextNode: () => __element('text'), getElementById: () => null, getElementsByTagName: t => t === 'main' ? [__main] : [], hasFocus: () => true, fonts: __any('fonts'), hidden: false }),
+var __main = __element('main'), __ids = {};   // (a page's parts it asks for by name: there, and nothing comes of them. p5 counts up its own canvases' names until one is not there)
+var __page = { window: globalThis, self: globalThis, document: Object.assign(__element('document'), { readyState: 'complete', body: __element('body'), documentElement: __element('html'), head: __element('head'), createElement: __element, createElementNS: (_, t) => __element(t), createTextNode: () => __element('text'), getElementById: id => /^(defaultCanvas|p5_loading)/.test(id) ? null : __ids[id] = __ids[id] || Object.assign(__element('div'), { id, parentNode: __main }), getElementsByTagName: t => t === 'main' ? [__main] : [], hasFocus: () => true, fonts: __any('fonts'), hidden: false }),
   location: { href: '', search: '', pathname: '/', hostname: 'localhost', protocol: 'file:' }, screen: { width: 1920, height: 1080 }, navigator: { userAgent: '', platform: '', language: 'en' },
   mocha: true,   // (p5 starts by itself after a promise, not when it is run under a test: new p5() below is the start)
   innerWidth: 1920, innerHeight: 1080, devicePixelRatio: 1, pageXOffset: 0, pageYOffset: 0, scrollX: 0, scrollY: 0,
@@ -276,6 +279,11 @@ function __three_says(w) {   // (what a part is, for doc_door.h)
   return [__whole.most[w], c.getHexString(), m.metalness === undefined ? 0 : m.metalness, m.roughness === undefined ? 1 : m.roughness].join(' ');
 }
 var tokenData = { hash: '0x' + '6b3d'.repeat(16), tokenId: '1000000' }, fxhash = 'oo' + 'Mot0lii'.repeat(7), fxrand = Math.random, $fx = { hash: fxhash, rand: fxrand, minter: 'tz1', iteration: 1, context: 'standalone', preview() {}, isPreview: false, features() {}, getFeature() {}, getFeatures: () => ({}), params() {}, getParam() {}, getParams: () => ({}), on() {}, emit() {} };   // (what Art Blocks' and fxhash's pages give a work: a seed, here always the same)
+// p5.sound is not here: what a sketch asks of it is there and silent, so that what it draws is drawn. It hears nothing yet.
+for (const k of ['SoundFile', 'FFT', 'Amplitude', 'Oscillator', 'SinOsc', 'TriOsc', 'SawOsc', 'SqrOsc', 'Noise', 'Envelope', 'Env', 'AudioIn', 'Reverb', 'Delay', 'Filter', 'LowPass', 'HighPass', 'BandPass', 'PeakDetect', 'Part', 'Phrase', 'Score', 'SoundLoop', 'Gain', 'Pulse', 'MonoSynth', 'PolySynth', 'Panner3D', 'Distortion', 'Compressor', 'EQ', 'Convolver', 'SoundRecorder', 'Signal', 'Effect'])
+  p5[k] = p5[k] || function () { return __any('p5.' + k); };
+for (const k of ['loadSound', 'getAudioContext', 'userStartAudio', 'soundFormats', 'outputVolume', 'getOutputVolume', 'masterVolume', 'sampleRate'])
+  globalThis[k] = globalThis[k] || function () { return __any(k); };
 const __load_image = p5.prototype.loadImage;
 p5.prototype.loadImage = function (path, ok) { if (!__film_first()) return __load_image.apply(this, arguments); const f = __film_open(); if (typeof ok === 'function') ok(f); return f; };
 p5.prototype.createCapture = p5.prototype.createVideo = function () { const f = __film_open(), ready = [...arguments].find(a => typeof a === 'function'); if (ready) ready(f); return f; };
@@ -293,7 +301,23 @@ function __seen(r, x, y, z) {   // (what its camera sees, what it draws at z 0 s
   for (let c = 0; c < 4; ++c) o[c * 4 + 2] += 800 * o[c * 4 + 3];   // (p5.Camera's defaultEyeZ, which its copy in push() has not got)
   return o;
 }
-const __fill_of = r => r._tex || r._useNormalMaterial ? [1, 1, 1, 1] : r.curFillColor;
+const __fill_of = r => r._tex ? r._tint.map(v => v / 255) : r._useNormalMaterial ? [1, 1, 1, 1] : r.curFillColor;
+// What it draws with, texture() or image(): a createGraphics is a canvas of paints like the one a 2D sketch paints on, each
+// frame's taken as that one's are (__paints) and drawn by ThorVG (drawn_sketch.h sketch_texture). 0: none.
+var __tex = [], __tex_of = new Map();
+function __tex_at(r) {
+  const e = r._tex && r._tex.canvas, flat = e && e.flat, wraps = { clamp: 0, repeat: 1, mirror: 2 };
+  if (!flat) return 0;
+  let i = __tex_of.get(flat);
+  if (i === undefined) __tex_of.set(flat, i = __tex.length), __tex.push({ flat, w: e.width, h: e.height, x: wraps[r.textureWrapX] | 0, y: wraps[r.textureWrapY] | 0, frames: [], from: [] });
+  return i + 1;
+}
+function __tex_done(f) {
+  for (const q of __tex) {
+    const [wiped, o] = q.flat.fresh();
+    q.frames[f] = o, q.from[f] = wiped || q.from[f - 1] === undefined ? f : q.from[f - 1], __mesh_held += o.byteLength;
+  }
+}
 function __stand(r, gId, x, y, z) {
   const g = r.retainedMode.geometry[gId], m = g && g.model;
   if (!__own(r) || !m || !m.vertices.length) return;
@@ -301,16 +325,16 @@ function __stand(r, gId, x, y, z) {
   if (i === undefined) __shape_of.set(m, i = __shapes.length), __shapes.push(m);
   const of = String(gId).split('|')[0], f = __fill_of(r), s = r.curStrokeColor, e = __seen(r, x, y, z);
   __kinds[of] = (__kinds[of] || 0) + 1, __lined = __lined || r._doStroke;
-  __mesh.draws.push(i, ...e, f[0], f[1], f[2], f[3], r._doFill ? (r._enableLighting ? 0 : 1) : -1, __L, s[0], s[1], s[2], s[3], r._doStroke ? r.curStrokeWeight : 0);
+  __mesh.draws.push(i, ...e, f[0], f[1], f[2], f[3], r._doFill ? (r._enableLighting ? 0 : 1) : -1, __L, s[0], s[1], s[2], s[3], r._doStroke ? r.curStrokeWeight : 0, __tex_at(r));
 }
 p5.RendererGL.prototype.drawBuffers = function (gId) { __stand(this, gId, 1, 1, 1); return this; };
 p5.RendererGL.prototype._drawImmediateFill = function () {
   if (!__own(this)) return;
-  const g = this.immediateMode.geometry, v = g.vertices, n = g.vertexNormals, c = g.vertexColors, e = __seen(this, 1, 1, 1), mode = this.immediateMode.shapeMode, out = __mesh.tris, own = __fill_of(this), flat = this._enableLighting ? 0 : 1, painted = !this._tex && c.length >= v.length * 4;
+  const g = this.immediateMode.geometry, v = g.vertices, n = g.vertexNormals, c = g.vertexColors, at = g.uvs, e = __seen(this, 1, 1, 1), mode = this.immediateMode.shapeMode, out = __mesh.tris, own = __fill_of(this), flat = this._enableLighting ? 0 : 1, painted = !this._tex && c.length >= v.length * 4, tex = __tex_at(this);
   const put = i => {
     const p = v[i], q = n[i] || { x: 0, y: 0, z: 1 }, a = painted ? i * 4 : -1;
     out.push(e[0] * p.x + e[4] * p.y + e[8] * p.z + e[12], e[1] * p.x + e[5] * p.y + e[9] * p.z + e[13], e[2] * p.x + e[6] * p.y + e[10] * p.z + e[14], e[0] * q.x + e[4] * q.y + e[8] * q.z, e[1] * q.x + e[5] * q.y + e[9] * q.z, e[2] * q.x + e[6] * q.y + e[10] * q.z,
-      a < 0 ? own[0] : c[a], a < 0 ? own[1] : c[a + 1], a < 0 ? own[2] : c[a + 2], a < 0 ? own[3] : c[a + 3], flat, __L);
+      a < 0 ? own[0] : c[a], a < 0 ? own[1] : c[a + 1], a < 0 ? own[2] : c[a + 2], a < 0 ? own[3] : c[a + 3], flat, __L, at[i * 2] || 0, at[i * 2 + 1] || 0, tex);
   };
   if (mode === 5) for (let i = 0; i + 2 < v.length; ++i) { if (i & 1) put(i + 1), put(i), put(i + 2); else put(i), put(i + 1), put(i + 2); }   // (TRIANGLE_STRIP)
   else if (mode === 6) for (let i = 1; i + 1 < v.length; ++i) put(0), put(i), put(i + 1);   // (TRIANGLE_FAN)
@@ -343,11 +367,12 @@ p5.RendererGL.prototype.clear = function (r, g, b, a) {
 function __mesh_done() {
   const m = __mesh, one = { draws: Float32Array.from(m.draws), tris: Float32Array.from(m.tris), lines: Float32Array.from(m.lines), back: m.back, wiped: m.wiped };
   __mesh_held += one.draws.byteLength + one.tris.byteLength + one.lines.byteLength;
-  __meshes.push(one), __mesh = { draws: [], tris: [], lines: [], back: null, wiped: false };
+  __tex_done(__meshes.length), __meshes.push(one), __mesh = { draws: [], tris: [], lines: [], back: null, wiped: false };
   for (; __mesh_held > 400e6 && __mesh_gone < __meshes.length - 1; ++__mesh_gone) {   // (a long heavy sketch: what it drew first goes, so that going back finds it gone rather than the Mac full)
     const g = __meshes[__mesh_gone];
     __mesh_held -= g.draws.byteLength + g.tris.byteLength + g.lines.byteLength;
     g.draws = g.tris = g.lines = new Float32Array(0);
+    for (const q of __tex) if (q.frames[__mesh_gone]) __mesh_held -= q.frames[__mesh_gone].byteLength, q.frames[__mesh_gone] = new Float64Array(0);
   }
 }
 function __mesh_at(f) {   // (all it has drawn since it last cleared, for doc_sketch.h)
@@ -355,22 +380,24 @@ function __mesh_at(f) {   // (all it has drawn since it last cleared, for doc_sk
   let from = f, d = 0, t = 0, l = 0;
   while (from > 0 && !__meshes[from].wiped) --from;
   for (let i = from; i <= f; ++i) d += __meshes[i].draws.length, t += __meshes[i].tris.length, l += __meshes[i].lines.length;
-  const o = new Float32Array(10 + d + t + l), b = __meshes[from].back || [0, 0, 0, 0];
-  o.set([d / 28, t / 12, l / 12, __U, globalThis.width, globalThis.height, b[0], b[1], b[2], b[3]]);
-  let at = 10;
+  const o = new Float32Array(11 + d + t + l), b = __meshes[from].back || [0, 0, 0, 0];
+  o.set([d / 29, t / 15, l / 12, __U, globalThis.width, globalThis.height, b[0], b[1], b[2], b[3], __tex.length]);
+  let at = 11;
   for (const k of ['draws', 'tris', 'lines']) for (let i = from; i <= f; ++i) o.set(__meshes[i][k], at), at += __meshes[i][k].length;
   globalThis.__bytes = o;
 }
 function __mesh_shape(i) {   // (a shape as p5 made it, once)
-  const g = __shapes[i], v = g.vertices, n = g.vertexNormals || [], f = g.faces, e = g.edges || [], o = new Float32Array(3 + v.length * 6 + f.length * 3 + e.length * 2);
+  const g = __shapes[i], v = g.vertices, n = g.vertexNormals || [], u = g.uvs || [], f = g.faces, e = g.edges || [], o = new Float32Array(3 + v.length * 8 + f.length * 3 + e.length * 2);
   o.set([v.length, f.length, e.length]);
   let at = 3;
   for (const p of v) o[at++] = p.x, o[at++] = p.y, o[at++] = p.z;
   for (let k = 0; k < v.length; ++k) { const p = n[k] || { x: 0, y: 0, z: 1 }; o[at++] = p.x, o[at++] = p.y, o[at++] = p.z; }
+  for (let k = 0; k < v.length * 2; ++k) o[at++] = u[k] || 0;
   for (const q of f) o[at++] = q[0], o[at++] = q[1], o[at++] = q[2];
   for (const q of e) o[at++] = q[0], o[at++] = q[1];
   globalThis.__bytes = o;
 }
+function __mesh_pic(i) { const q = __tex[i]; globalThis.__bytes = Float32Array.of(q.w, q.h, q.x, q.y); }
 p5.RendererGL.prototype.drawBuffersScaled = function (gId, x, y, z) {
   __stand(this, gId, x, y, z);
   const m = Array.from(this.uModelMatrix.mat4);
@@ -401,7 +428,7 @@ for (const way of ['drawBuffers', 'drawBuffersScaled', '_drawImmediateFill']) {
 
 static const char* const p5_start = R"(
 new p5();
-if (!globalThis.frameCount && p5.instance._preloadCount) p5.instance._preloadCount = 0, p5.instance._runIfPreloadsAreDone();   // (what preload() asked of the net or of files does not come: on without it)
+if (!globalThis.frameCount && (p5.instance._preloadCount || globalThis._preloadCount)) p5.instance._preloadCount = globalThis._preloadCount = 0, p5.instance._runIfPreloadsAreDone();   // (what preload() asked of the net or of files does not come: on without it)
 __U = 3.2154 / (globalThis.height || 400);
 var __frames = [], __from = [];
 Object.defineProperty(globalThis, '__2d', { get: () => !p5.instance._renderer.isP3D });   // (asked late: an async setup() makes its canvas after new p5())
@@ -434,14 +461,16 @@ function __shaded_take(seconds) {   // (the shader that paints its stage and wha
   }
   return JSON.stringify({ vert: __shaded._vertSrc, frag: __shaded._fragSrc, kind: __shaded_kind, width: globalThis.width, height: globalThis.height, density: pixelDensity(), told });
 }
-function __paints(f, had) {   // (what makes frame f on a canvas holding frame `had`: all since it was last wiped, or if `had` is on that way only what came after it; first a 1 if it is to be wiped)
+function __paints(f, had, pic) {   // (what makes frame f on a canvas holding frame `had`: all since it was last wiped, or if `had` is on that way only what came after it; first a 1 if it is to be wiped)
   __to(f);
-  const go = had >= __from[f] && had <= f, first = go ? had + 1 : __from[f];
+  const q = __tex[pic], frames = q ? q.frames : __frames, from = q ? q.from : __from;
+  if (from[f] === undefined) return Float64Array.of(1);   // (a picture it had not drawn with yet)
+  const go = had >= from[f] && had <= f, first = go ? had + 1 : from[f];
   let n = 1;
-  for (let i = first; i <= f; ++i) n += __frames[i].length;
+  for (let i = first; i <= f; ++i) n += frames[i].length;
   const all = new Float64Array(n);
   all[0] = go ? 0 : 1;
-  for (let i = first, at = 1; i <= f; at += __frames[i++].length) all.set(__frames[i], at);
+  for (let i = first, at = 1; i <= f; at += frames[i++].length) all.set(frames[i], at);
   return all;
 }
 function __most() {   // (as many copies as its first seconds draw at once, a second of waiting at most)
@@ -453,7 +482,7 @@ function __shape() {   // (only boxes, only balls or only rings, with no lines: 
   __most();
   if (__parts.length || __three) return '';
   const kit = { box: 'cube', ellipsoid: 'ball', torus: 'ring' }, kinds = Object.keys(__kinds);
-  return kinds.length === 1 && kit[kinds[0]] && !__lined && !__meshes.some(m => m.tris.length) ? kit[kinds[0]] : 'sketch';
+  return kinds.length === 1 && kit[kinds[0]] && !__lined && !__tex.length && !__meshes.some(m => m.tris.length) ? kit[kinds[0]] : 'sketch';
 }
 var __by_at = -1, __by = [];
 function __three_each(i, f, part) {   // (the frame's meshes by their parts; each part's copies a solid's: door.h)

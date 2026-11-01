@@ -107,6 +107,7 @@ static int doc_door(Doc& d, const std::string& word, int picked) {
         d.act_together = together;
     } else if (told.find("WEBGL") != std::string::npos) {
         if ((thing = doc_add(d, "solid", "cube"))) doc_say(d, thing, "name", name.c_str()), doc_say(d, thing, "script", file.string().c_str());
+        if (DocScript* sc = thing ? doc_script_of(d, file.string()) : nullptr; sc && sc->run && !sc->run->ok()) return d.trouble = sc->run->trouble(), d.act_ok = false, doc_acted(d), 0;   // (it stopped as it began: a white box is not what it drew)
     } else if ((thing = doc_add(d, "picture", file.string().c_str()))) doc_say(d, thing, "name", name.c_str()), doc_fit(d, thing, "fit");
     if (thing && !moving.empty()) {   // (what moved in its code: keys, where it can be edited)
         doc_moment(d, d.stage->now);
