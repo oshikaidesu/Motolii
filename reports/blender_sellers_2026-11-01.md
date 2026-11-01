@@ -4,11 +4,63 @@
 
 ## 結論
 
+- MV の人が Blender へ行く一番の理由は世界。絵や実写を 3D の中に置いて、灯りを当てて、カメラで撮りたい。After Effects の 3D は物を並べるのが限界だった。入口は人によって絵コンテとアニメ調の人形。文字と仕上げは After Effects に残る。
 - 店で売れているのは、人形に動きを移す道具と、出来合いの素材の棚。MV の人に絞ると Direktor 3D のような専用の棚があり、After Effects か AviUtl で仕上げている。
 - 1 位は Auto-Rig Pro で 70,700 本超。動きのプリセットそのものではなく、動きを別の人形へ移せる。
 - 文字や図形の動きだけのプリセット集は桁が小さい。MoGraph Toolbox が 800 本超、CinePack が 3,900 本超。
 - 売っている形はどれも同じ。絵の付いた棚から 1 手で入れて、数字で直す。Motolii の Look のダブルクリックと同じ形で、足りないのは棚の中身。
 - ユーザーの見立ては半分当たり。出来合いは確かに売れる。ただし Hard Ops、MACHIN3tools、MESHmachine のようなモデリングの道具も上位にいる。Blender の買い手全体の話で、MV の人だけの数字ではない。
+
+## なぜ MV を作る人は Blender へ行くのか
+
+ユーザーの問い：「そこらへんはもう奪ってるだろ」「blenderに行く？なぜmv製作者は」。文字、BPM、型の棚の話ではなく、After Effects の人がわざわざ 3D のソフトへ行く理由を、本人の言葉で読んだ。
+
+読んだ物：note の 14 本（作り手本人と講座の受講者。本文から関係する行を抜いて読んだ）。YouTube 16 本の説明欄と 1 ページ目のコメント 313 件。Blender Artists の議論 2 本（各 20 投稿まで）と MV の投稿 3 本。BCON（Blender の公式会議）の講演 4 本（MV 3 本、CM 1 本）の説明欄とコメント。ビデオサロンの講座のページ。
+
+### 行く理由
+
+| 理由 | 誰が言っているか | 中身 |
+|---|---|---|
+| 世界の中で撮りたい | 涌井嶺（note のスキ 707）、tamf_kazuki、無印かげひと | 涌井嶺は After Effects と Element 3D では物を並べるだけだった。Blender では人以外すべて 3D にして、影は灯りを当てて作った。tamf_kazuki は三脚で撮った素材を世界に置いて、カメラを後から付けた。かげひとはビル群の中に絵を置いて撮れる事を挙げる |
+| 合成に見せたくない | 涌井嶺 | バンドに合成っぽいのは嫌だと言われた。世界の灯りで素材を馴染ませて消す |
+| 絵コンテから 1 本で済ませたい | ぽぷりか（Hurray!） | Clip Studio と After Effects でやっていたコンテを Grease Pencil へ移したら快適になった。ヨルシカの MV、映画『数分間のエールを』も Blender が主。しぐれうい「ひっひっふー」（781 万回）は全編 Eevee |
+| アニメ調の人形 | ぽぷりか、revirytic、かげひと | トゥーンを安く作れるとかげひとが書く。ぽぷりかの NPR 講座、セルルックの MV 制作ノート。Eevee の NPR の講演は 76,000 回再生 |
+| 布、流体、物理 | hama | 布と流体は Blender、ボールは After Effects。レンダリング 24 時間でも使う |
+| 待たずに見られる | tamf_kazuki（全編 Eevee）、涌井嶺 | 軽く作れば Eevee でその場で動く |
+| サブスクが嫌 | Blender Artists、Karon の動画のコメント（いいね 74） | Maxon のサブスク移行と教育版の打ち切り。これは Cinema 4D から来る人の理由。MV の作り手の記事では主な理由に出てこなかった |
+
+英語圏のラップの MV も形は近い。Max Novak の動画は再生 7 万〜22 万回で、説明欄は緑バックの合成、カメラ追跡、3D の人形の話。説明欄しか読めていない。
+
+### 行かない物、戻る物
+
+| 物 | 証拠 |
+|---|---|
+| 文字 | 原悠和は Blender の MV でも文字は After Effects。Ducky 3D のコメント：Blender の問題は文字。BYOL のコメント（いいね 124）：2D の文字と図形は After Effects の方が楽そう |
+| 緑抜き | 涌井嶺は After Effects、tamf_kazuki は DaVinci |
+| 仕上げ | 涌井嶺は白の調整、フレア、粒を After Effects で。tamf_kazuki は DaVinci で色 |
+| 往復の苦しさ | hama は 120fps で書き出して After Effects で詰めた。涌井嶺は EXR が After Effects で重くエラーも出た。darenoki は BlenderAe でもモデルは渡せず、人の前後で分けて書き出す要があると書く |
+| レンダリング待ち | 涌井嶺は平均 3〜4 分/コマ。Tarahese は自分の PC では 2 年かかると書く |
+
+読み取り：行く理由は世界で、残る理由は文字と切り貼り。だから皆 2 本の間を往復している。ぽぷりかは逆に Blender の中に編集と文字を寄せている。BYOL の動画のコメントで、読んだ中で一番いいねが多い物（182）は、After Effects 風の 2D を Blender でやる講座が欲しいという物だった。
+
+### Motolii と照らす
+
+文字、切り貼り、緑抜き、仕上げはもう 1 つの窓にある。残りを実物で試した。
+
+| 物 | Motolii の今 | 確かめ方 |
+|---|---|---|
+| 緑を抜いて世界に置く、灯りを当てる、人の形の影 | できる | 11/1 に緑の画像を Chroma Key で抜いて `space 3d` に置き、灯りを当てた。丸い人に丸い影が壁へ落ちた。静止画 1 枚だけで、動画では未確認 |
+| カメラを後から付ける、何台も切り替える | できる | checklist 206 行 |
+| 待たずに見る | できる | Filament で実時間 |
+| 手で描く線 | shape の `drawing` がある | V コンテとして使えるかは未測 |
+| 物が落ちて当たる | できる | `physics` |
+| 布、流体 | 無い | 素材で済ますか未定 |
+| アニメ調の灯り | 無い | T の 3D のトゥーン |
+| 動きを別の人形へ、VRM | 無い | T に有り |
+| カメラ追跡 | 無い | T に有り。三脚の素材には要らない |
+| 魚眼 | 検索で見つからない | ひっひっふーの絵の核 |
+
+大きな差はアニメ調、人形、追跡の 3 つ。
 
 ## 売れた本数
 
@@ -80,7 +132,7 @@ YouTube を 15 語で検索して、題名が MV のメイキングや解説ら�
 - メトロノームに合わせて切った。
 - 一番の苦労は、途中確認の絵が無く、After Effects と遅い書き出しを何度も往復した事。
 
-読み取り：足りないのはプラグインより、2D と 3D の往復を無くす事。Motolii は 1 つの窓で両方を見られるので、この苦労が最初から無い。ユーザーの「元から 2D は存在していなくて、z が 0 なだけ」と同じ話。
+読み取り：Stack の苦労は 2D と 3D の往復だった。Autograph と Motolii はどちらも 1 つの窓でこれを解く。
 
 Codex の話で確かめられなかった事：本人が Signal や Ricochet を使った証拠は無い。Codex 自身もそう言っている。
 
@@ -88,32 +140,34 @@ Signal は loop、ease、noise、flicker・bounce・vibration・spin の型、Fi
 
 Stack の作り方で次に測る事：真似の 1 カットを窓で作り、何が足りないかを手数で見る。作品の絵と音は使わず、手法だけ真似る。
 
-## ポチポチで作れる道具は界隈にあるか
+## 界隈の実数
 
-ユーザーの問い：「大事な話はそうじゃない、簡単にポチポチ作れるかよ。そんでその道具はもう界隈では知られてるんじゃね？」。
+ユーザーの言葉：「界隈じゃないね、それはいかがでしたか系の記事だ」。前にここへ書いた表はまとめ記事の寄せ集めだったので消した。
 
-ある。ただし 2D か 3D のどちらかに寄っている。
+**前の版の誤り：**「一番近い席は Apple Motion」「Win でも動くポチポチの道具は見つからない」は間違い。Autograph を見落としていた。
 
-| 道具 | 場所 | ポチポチの中身 | 3D | 値段 |
-|---|---|---|---|---|
-| Jitter | ブラウザ | 動き、消え方、大きさ、マスク、ぼかしの型。テンプレート 300 超。キーの代わりに簡単な操作 | 説明に無い | 無料から |
-| Cavalry | Mac、Win | 型ではなく仕組み。複製と減衰、1 つの値で全体が変わる。書き出し待ちが無い | 2D | 個人は無料 |
-| Motion Bro | After Effects の中 | 型の棚と店。本体は無料。作者の言う利用者 100 万超 | After Effects 次第 | 無料と有料の型 |
-| Animation Composer | After Effects の中 | 型の棚。School of Motion が紹介 | After Effects 次第 | 無料と有料 |
-| Motion Studio | After Effects の中 | 道具 80 超。1 クリックの小道具が中心で、型の棚ではない | — | 値段は未読 |
-| Apple Motion | Mac | ふるまいをドラッグするとキー無しで動く。3D の文字、複製 | 有る | 約 $50（古い情報） |
-| Spline | ブラウザ | 形、材質、灯り、状態、物理。Web に載せる道具 | 有る | 無料から |
+文字、BPM、型の棚はユーザーの言うとおり奪い済みの話なので、数字だけ残す。Presets の棚が空なのは変わらない。
 
-見えた事：
+**BOOTH のスキ**（検索ごとにスキ順の上位 14 件）：MV-Effects α 7,892、トランジション 81 種 2,632、MV-Effects β 1,859、MultiEase 1,710、RandomMotionNS 1,615、リリックモーション素材 54 種 1,528、テキストアニメ 170 個 1,510、VegaroLyricMotion 1,357、ひらがなだけ小さく 1,289、文字分解 1,245、Aulymo 1,018。
 
-- 2D のデザインモーションは Jitter と Cavalry が知られている。どちらも説明に 3D が無い。
-- 一番近い席は Apple Motion。2D と 3D が 1 つの窓で、ふるまいで動く。ただし Mac だけ。
-- Spline は 3D だが、ページに動画の書き出しと音の話が無い。
-- 探した範囲で、Stack の型（2D と 3D を混ぜて、音に合わせて切る）のための Win でも動くポチポチの道具は見つからなかった。
+**Gumroad の評価の件数**（無料込み）：Free Motion Bro Presets 10,840、Ben Marriott の Grain Brush 450、Textures in After Effects 242、Cyberpunk LED Glitch 196、Type Array 194、Key Cloner 188、Depth 177。Cavalry の物は 10〜21 件。
 
-Motolii が取れそうな席は、Apple Motion の Win 版のような所。ふるまいと 3D の文字はもうある。
+**Motionographer 1,054 記事**（17 語で集めた）に言葉が出る記事の数：After Effects 217、storyboard 114、rig 80、Cinema 4D 76、stop motion 70、style frame 58、plugin 50、hand-drawn 48、grid か layout 33、Blender 13、template 11、preset 5、Cavalry、Jitter、Figma、Motion Bro は 0。plugin の話も最近は音か昔話が多い。Nickelodeon のリブランドは Illustrator でなぞって Cinema 4D へ入れ、スクリプトは自分たちで書いた。
 
-分からない事：どの道具も実際に触っていない。手数は読んだ説明からで、比べていない。売れた本数と利用者数は Motion Bro の自己申告だけ。aescripts の売上順は 403 で読めず、School of Motion の業界調査も見つからなかった。Reddit は写しのサイト経由で、一部だけ。Apple Motion の値段は古い情報。
+**YouTube** のコメント 36 本 408 件で Flow 5、Overlord 4、Limber 4、FX Console 4。少なくて当てにならない。
+
+### Autograph
+
+2026 年 4 月 15 日に Maxon が無料で出し直した。翌日に Cavalry も Canva の元で個人無料になった。5 月 7 日からチームも無料。2 週間前に 2027 が出た。
+
+- Mac と Win。2D と 3D が同じタイムライン。文字を 3D に押し出せる。Cloner がある。
+- 3D の描画は Filament と 2023 年の記事にある。Motolii と同じ。土台は OpenUSD。
+- 2027 で MCP サーバー、Cinema 4D との連携、文字の組版、テンプレート。
+- 公式ページに型の棚と音で動かす話は無い。
+- コメントの声：Adobe 離れ、Live Link の要望、講座が足りない。
+- 2025 年の無料版の制限は、Maxon が無くしたと言っている。
+
+世界と文字が 1 つの窓にある席は Motolii だけではなくなった。触っていないので手数は比べられない。
 
 ## Motolii にある物と無い物
 
@@ -130,15 +184,15 @@ Motolii が取れそうな席は、Apple Motion の Win 版のような所。ふ
 
 ## 順番
 
-店の本数と YouTube を合わせて直した。
-カメラの動きは外した。ユーザー：「区間イージングでどうにかできる話」。
+Blender へ行く理由から直した。
 
-1. 音で動かす。BPM と音の打点は有るが、音の大きさで物を動かす口は検索で見つからない。BeatBlender と M.V.P が持っている。
-2. 舞台と灯りの組の棚。Poly Haven の素材と、Direktor 3D の舞台 14・灯り 20 が見本。
-3. 人形と踊り。Mixamo の FBX と、日本の VRM、MMD の動きを読む口。VRM、VMD、BVH は検索で見つからない。一番重い。
-4. 3D のトゥーン、カメラ追跡、火と爆発、面に散らす。
+1. 3D のトゥーン。日本の MV が Blender へ行く入口で、Motolii に無い一番大きな物。
+2. 緑バックの 1 カットを Blender の手順と比べて手数を測る。部品はあるので、動画で影まで通るかを含めて確かめる。
+3. 人形：VRM、動きを別の人形へ。
+4. カメラ追跡、魚眼。
+5. Autograph を触って手数を比べる。
 
-文字は After Effects に残っている所で、Motolii はここを抱えている。別のソフトへ戻らなくて済むのが、Blender に無い強み。
+文字、BPM、型の棚は外した。ユーザー：「そこらへんはもう奪ってるだろ」。カメラの動きも外した。ユーザー：「区間イージングでどうにかできる話」。
 
 ## 分からない事
 
@@ -146,6 +200,15 @@ Motolii が取れそうな席は、Apple Motion の Win 版のような所。ふ
 - 「ひっひっふー」の Hurray! の講演（Blender だけで編集まで）は案内の検索結果だけで、ページは 503 で読めなかった。CGWORLD の涌井嶺のインタビューも本文は読めず、検索の抜粋。
 - 宝鐘マリン MV の話は聴いた人のメモで、本人の資料ではない。
 - X は見ていない。Direktor 3D の売れた本数は載っていない。
+- Reddit は内蔵ブラウザの安全制限で開けず、読んでいない。Core4D は証明書の不一致で読めなかった。aescripts の売上順は取れなかった。Discord は入っていない。
+- BOOTH のスキは欲しいの数で、売れた数ではない。検索語の取りこぼしもある。Gumroad の評価は無料の物が多い。
+- Motionographer は 17 語で引いた分だけで、全記事ではない。古い記事も混ざる。
+- Autograph は触っていない。.aep の読み込みは 2025 年の記事で、今の条件は確かめていない。
+- ぽぷりかがコンテを移した経緯は、公開の制作メモを読んだ人の note と、CGWORLD の記事の検索結果で読んだ。CGWORLD は 11/1 にメンテナンス中で本文は読めず、FANBOX の本人の記事も読めていない。
+- ビデオサロンの講座の「Blender を使うメリット」は項目名だけで、中身は有料で読んでいない。
+- BCON の講演は説明欄とコメントだけ。字幕は取れない。OK Go はジオメトリノードと実時間の入力の話で、After Effects から来た理由は書かれていない。
+- MV の作り手の記事が「無料」を主な理由にしていないのは、読んだ note の範囲の話。
+- 灯りと影の試しは静止画 1 枚。露出は調整していない。動画と Chroma Key の組は試していない。
 - 本数は「その店で」の数字。Blender の無料の拡張の棚と、Gumroad などの他の店は入っていない。
 - 本数には発売からの長さが効く。週間の順位でも Auto-Rig Pro は 1 位だったので、今も強いとは言える。
 - Mixamo の条件は Adobe の FAQ の検索結果で読んだ。ページ本体は読めず（403）、書き出しの形式と動きの本数は確かめていない。
@@ -174,15 +237,44 @@ Motolii が取れそうな席は、Apple Motion の Win 版のような所。ふ
 - [Stack の制作解説（Motionographer）](https://motionographer.com/2025/02/12/exclusive-kimathi-flavien-the-work-behind-of-chef-doeuvre-motion-design-film-stack/)
 - [Stack の紹介（STASH）](https://www.stashmedia.tv/kimathi-flavien-solves-the-design-puzzle-in-stack-short-film/)
 - [Signal](https://greyscalegorilla.com/plugins/signal)
-- [What is Jitter](https://help.jitter.video/en/articles/12089209-what-is-jitter)
-- [Jitter と After Effects](https://jitter.video/after-effects-alternative/)
-- [Cavalry](https://cavalry.studio/)
-- [Motion Bro](https://motionbro.com/plugin/)
-- [Motion Studio](https://mtmograph.com/products/motion)
-- [School of Motion の 2026 年のプラグイン](https://www.schoolofmotion.com/blog/best-after-effects-plugins-and-effect-packs-you-need-in-2026)
-- [Spline](https://spline.design/)
-- [Apple Motion の説明書](https://support.apple.com/guide/motion/motnb0278e80/mac)
-- [Motion（Wikipedia）](https://en.wikipedia.org/wiki/Motion_(software))
+- [MV-Effects α](https://booth.pm/ja/items/4112016)
+- [RandomMotionNS](https://booth.pm/ja/items/3036337)
+- [VegaroLyricMotion](https://booth.pm/ja/items/6856099)
+- [Aulymo](https://booth.pm/ja/items/6403113)
+- [BOOTH の After Effects スクリプト、スキ順](https://booth.pm/ja/search/AfterEffects%20%E3%82%B9%E3%82%AF%E3%83%AA%E3%83%97%E3%83%88?sort=wish_lists)
+- [After Effects で「ずっと使っている」プラグイン 10 選（未都いのり）](https://note.com/mito_inori/n/n523ac8b7fad4)
+- [モーショングラフィックス どんなツールで作る？（ヨシダタカユキ）](https://note.com/takayukiyoshida/n/n5d37f2db0629)
+- [考えないで作る「それっぽい」モーショングラフィックス（しげぞう）](https://note.com/shige518/n/n05b4abe22f65)
+- [Cavalry ってどんなツール？（Iori Iwaki）](https://note.com/ioriiwaki/n/n5f9f1a782330)
+- [REEL 2025 の裏側（hama）](https://note.com/hama_mov/n/n7bf1c1ad592f)
+- [Layr（しあさ）](https://note.com/shiasa/n/n258eeabb559d)
+- [Nickelodeon のリブランド（Motionographer）](https://motionographer.com/2024/02/27/nickelodeon-global-rebrand-project-breakdown/)
+- [Autograph](https://www.maxon.net/en/autograph)
+- [Blenderで実写合成MVを作った記録（涌井嶺）](https://note.com/raywakui/n/na7cd1ee70030)
+- [Blenderで実写合成MVを制作した話（tamf_kazuki）](https://note.com/tamf_kazuki/n/n0c8fa4c5c3ca)
+- [Ae × Blender の制作の裏側（hama）](https://note.com/hama_mov/n/n8e69b97a2eea)
+- [BlenderとAEの連携テスト（darenoki）](https://note.com/darenoki/n/n8ee90a3c4cf0)
+- [blenderでセルルックアニメ制作（revirytic）](https://note.com/revirytic/n/neeaaaea70de3)
+- [3D系MVも作りたいから（無印かげひと）](https://note.com/kagehito_muji/n/nfdafdfcb118d)
+- [Hurray! コンセプトムービー 2 のメモ](https://note.com/lab1092/n/n751d390fe949)
+- [ひっひっふー](https://www.youtube.com/watch?v=VXUbEH0DvSM)
+- [ひっひっふー MV のセミナー（ビデオサロン）](https://videosalon.jp/premium/vsw307/)
+- [映像作家 ぽぷりかの講座（Coloso）](https://coloso.jp/products/videocreator-popurika-jp)
+- [Hurray! の映画は Blender が主（ITmedia）](https://www.itmedia.co.jp/news/articles/2401/24/news182.html)
+- [Eevee の NPR（Blender Fes）](https://www.youtube.com/watch?v=c9v2GjmylEg)
+- [This Is Why Blender Is Replacing After Effects（BYOL）](https://www.youtube.com/watch?v=5QaW7oI5rTw)
+- [I've Used Both Blender and Cinema 4D（Karon）](https://www.youtube.com/watch?v=9Vs5MQ0EogE)
+- [Can Blender Still Compete（Ducky 3D）](https://www.youtube.com/watch?v=bDHdUT2oiZE)
+- [5 EASY Ways To Create Music Videos（Max Novak）](https://www.youtube.com/watch?v=hgtBeWa5esY)
+- [10-year C4D veteran moving to Blender（Blender Artists）](https://blenderartists.org/t/10-year-c4d-veteran-moving-to-blender/1178612)
+- [Thinking of switching to Blender from C4D（Blender Artists）](https://blenderartists.org/t/thinking-of-switching-to-blender-from-c4d/1486541)
+- [Tarahese の MV（Blender Artists）](https://blenderartists.org/t/tarahese-manifestations-an-animated-music-video/1392739)
+- [OK Go の MV（BCON 2025）](https://www.youtube.com/watch?v=SQhJllRhOTU)
+- [音で動く MV（BCON 2024）](https://www.youtube.com/watch?v=WV_zD_KppjY)
+- [Autograph を無料に（CG Channel）](https://www.cgchannel.com/2026/04/maxon-releases-motion-graphics-software-autograph-for-free/)
+- [チームも無料に（80 Level）](https://80.lv/articles/maxon-makes-autograph-free-for-all-users)
+- [Autograph の描画は Filament（80 Level）](https://80.lv/articles/autograph-motion-design-visual-effects-tool)
+- [2025 年の無料版の制限（Digital Production）](https://digitalproduction.com/2025/03/10/autograph-starter-free-motion-graphics-tool-with-a-twist/)
 - [Rocket Lasso の棚](https://rocketlasso.com/shop)
 - [Direktor 3D](https://mediamonopoly.co/collections/video-presets-plugins/products/direktor-3d-ultimate-blender-plugin-for-creators)
 - [Media Monopoly の店](https://mediamonopoly.co)
