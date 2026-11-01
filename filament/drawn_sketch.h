@@ -55,6 +55,40 @@ static tvg::Paint* sketch_bitmap(Drawn* d, const double* p, const double* q, std
     }
     return one;
 }
+// A conic gradient, which ThorVG has not: by the canvas spec's words, each point's colour by its angle from the first ray,
+// a picture of the shape's bounds, the shape its clip. A table of 1024 steps, not the stops each time. (p5_stand.h's ramp.)
+static tvg::Paint* sketch_conic(tvg::Shape* shape, const double* g, size_t many, std::vector<std::shared_ptr<std::vector<uint8_t>>>& held) {
+    float bx = 0.f, by = 0.f, bw = 0.f, bh = 0.f;
+    shape->bounds(&bx, &by, &bw, &bh);
+    const int W = std::clamp((int)std::ceil(bw), 1, 1024), H = std::clamp((int)std::ceil(bh), 1, 1024);
+    const double det = g[1] * g[4] - g[2] * g[3];
+    if (det == 0.0) return shape;
+    uint32_t ramp[1024];
+    for (int i = 0; i < 1024; ++i) {
+        const double t = (i + 0.5) / 1024.0;
+        size_t b = 7;
+        while (b + 5 < many && g[b + 5] <= t) b += 5;
+        const size_t c = b + 5 < many ? b + 5 : b;
+        const double f = c == b || t <= g[b] ? 0.0 : (t - g[b]) / (g[c] - g[b]);
+        uint32_t out = 0;
+        for (int k = 3; k >= 0; --k) out = out << 8 | (uint32_t)std::lround(g[b + 1 + k] + f * (g[c + 1 + k] - g[b + 1 + k]));
+        ramp[i] = out;
+    }
+    auto pic = std::make_shared<std::vector<uint8_t>>(4ull * W * H);
+    uint32_t* to = (uint32_t*)pic->data();
+    for (int y = 0; y < H; ++y) for (int x = 0; x < W; ++x) {
+        const double dx = bx + (x + 0.5) * bw / W - g[5], dy = by + (y + 0.5) * bh / H - g[6];
+        double t = std::atan2((g[1] * dy - g[2] * dx) / det, (g[4] * dx - g[3] * dy) / det) / (2.0 * M_PI);
+        if (t < 0.0) t += 1.0;
+        *to++ = ramp[std::min(1023, (int)(t * 1024.0))];
+    }
+    held.push_back(pic);
+    tvg::Picture* out = tvg::Picture::gen();
+    out->load((const uint32_t*)pic->data(), W, H, tvg::ColorSpace::ABGR8888S, false);
+    out->transform(tvg::Matrix{bw / W, 0.f, bx, 0.f, bh / H, by, 0.f, 0.f, 1.f});
+    out->clip(shape);
+    return out;
+}
 static void sketch_bitmaps(Drawn* d, Script* run, const std::vector<double>& o) {   // (the pictures a frame paints, while its script may be asked)
     for (size_t i = 1; i + 12 <= o.size(); i += 12 + (size_t)o[i + 9] + (size_t)o[i + 10]) {
         if (o[i] != 4.0) continue;
@@ -70,14 +104,15 @@ static void sketch_draw(Drawn* d, const std::vector<double>& o) {
     if (o.empty()) return;
     d->sketchScene->remove();
     bool wipe = o[0] != 0.0;
+    std::vector<std::shared_ptr<std::vector<uint8_t>>> pics;   // (ThorVG reads them where they are, until it has drawn)
     const auto out_now = [&] {   // (a painting gone back to from its start comes in lengths: Metal's command buffers hold so much and no more, or it stops the program)
         d->canvas->update();
         d->canvas->draw(wipe), d->stale = true, wipe = false;
         d->canvas->sync();
         d->sketchScene->remove();
+        pics.clear();
     };
     int held = 0;
-    std::vector<std::shared_ptr<std::vector<uint8_t>>> pics;   // (ThorVG reads them where they are, until it has drawn)
     for (size_t i = 1; i + 12 <= o.size();) {
         const double* p = &o[i];
         const size_t n = (size_t)p[9], more = (size_t)p[10];
@@ -95,18 +130,25 @@ static void sketch_draw(Drawn* d, const std::vector<double>& o) {
                     default: one->close(), q += 1;
                 }
             const uint8_t r = (uint8_t)std::lround(p[1]), g = (uint8_t)std::lround(p[2]), b = (uint8_t)std::lround(p[3]), a = (uint8_t)std::lround(p[4]);
+            const bool conic = more && end[0] == 3.0;
             if (p[0] == 1.0) {
-                if (more) one->fill(sketch_ramp(end, more)); else one->fill(r, g, b, a);
+                if (more && !conic) one->fill(sketch_ramp(end, more)); else one->fill(r, g, b, a);
             } else {
                 one->strokeWidth((float)p[6]), one->strokeCap((tvg::StrokeCap)(int)p[7]), one->strokeJoin((tvg::StrokeJoin)(int)p[8]);
-                if (more) one->strokeFill(sketch_ramp(end, more)); else one->strokeFill(r, g, b, a);
+                if (more && !conic) one->strokeFill(sketch_ramp(end, more)); else one->strokeFill(r, g, b, a);
             }
-            out = one;
+            out = conic && p[0] == 1.0 ? sketch_conic(one, end, more, pics) : one;
         }
-        if (out && p[5] != 0.0) out->blend((tvg::BlendMethod)(int)p[5]);
+        if (out && p[5] != 0.0) {
+            if (out->type() == tvg::Type::Picture) {   // (WgCompositor::renderImage reads no blend on a picture with a clip, and WgSolidBatch takes one with none: a scene's it does read)
+                tvg::Scene* alone = tvg::Scene::gen();
+                alone->add(out), out = alone;
+            }
+            out->blend((tvg::BlendMethod)(int)p[5]);
+        }
         if (out) d->sketchScene->add(out);
         i += 12 + n + more;
-        if (++held == 4000) out_now(), held = 0;
+        if (++held == 4000 || pics.size() >= 256) out_now(), held = 0;
     }
     out_now();
 }
@@ -119,7 +161,7 @@ static Drawn* sketch_picture(Stage& s, std::shared_ptr<Script> run, const std::s
         *w = 2 * (int)std::lround(0.5f * (float)fw * fit), *h = 2 * (int)std::lround(0.5f * (float)fh * fit);
         if (tvg::Text::load(fontFile.c_str()) == tvg::Result::Success) d->sketchFont = std::filesystem::path(fontFile).stem().string();   // (a sketch's font, any: the one Filament brings)
         d->sketchScene = tvg::Scene::gen();
-        d->sketchScene->scale(fit);
+        d->sketchScene->scale(fit / run->density());   // (its paints come in its canvas's own pixels: pixelDensity(2) has twice as many as its width says)
         d->sketchLines = std::make_shared<std::map<int, double>>();
         for (const int line : run->lines()) (*d->sketchLines)[line] = 1.0;
         d->sketch = [run, d, lines = d->sketchLines](int at, int had) {   // (each paint as strong as its line's knob is now, doc_moment)

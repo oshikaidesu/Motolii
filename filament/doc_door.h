@@ -3,6 +3,7 @@
 // goes on the picked thing, as an effect; one that makes its own fills the stage; a sketch is a picture, in 3D a solid.
 #include "door_shadertoy_json.h"
 #include "door_p5_shader.h"
+#include "door_net.h"
 // What moved in a program's code as keys on what wears its effect `fx`, where they can be edited: a straight line two of them.
 static void doc_door_keys(Doc& d, int thing, const std::string& fx, const std::vector<HydraKnob>& moving) {
     for (const HydraKnob& k : moving) {
@@ -41,9 +42,11 @@ static int doc_three_part(Doc& d, Script& run, const std::filesystem::path& file
     doc_say(d, solid, "script", file.string().c_str()), doc_set(d, solid, "js_part", p);
     return solid;
 }
-static int doc_door(Doc& d, const std::string& word, int picked) {
-    std::string text = word;
+static int doc_door(Doc& d, const std::string& said, int picked) {
+    std::string word = said, why;
     std::error_code wrong;
+    if (const std::string work = door_site_work(said); !work.empty() && (word = door_openprocessing(work, doc_folders("sites").back() / "openprocessing" / work, why).string()).empty()) return d.trouble = why, 0;
+    std::string text = word;
     if (word.size() < 1024 && std::filesystem::is_regular_file(word, wrong)) {
         std::ifstream in(word);
         std::stringstream all;
@@ -52,7 +55,17 @@ static int doc_door(Doc& d, const std::string& word, int picked) {
     }
     const std::filesystem::path folder = doc_folders("programs").back();
     const bool kept = std::filesystem::path(word).parent_path() == folder;   // (one of the Program shelf's own, as it is now: not kept again)
-    text = door_page(text, text != word ? std::filesystem::path(word).parent_path() : std::filesystem::path{});
+    std::vector<std::pair<std::string, std::filesystem::path>> libraries;   // (each file's name, where it was fetched to)
+    const std::filesystem::path brought = doc_folders("libraries").back();
+    text = door_page(text, text != word ? std::filesystem::path(word).parent_path() : std::filesystem::path{}, [&](const std::string& url) {
+        uint64_t mark = 1469598103934665603ull;
+        for (unsigned char c : url) mark = (mark ^ c) * 1099511628211ull;
+        const std::string name = std::to_string(mark & 0xffffff) + ".js";   // (an address is not a file's name; each one fetched once)
+        std::filesystem::create_directories(brought, wrong);
+        if (!std::filesystem::exists(brought / name, wrong) && !door_fetch(url, brought / name)) return std::string();
+        libraries.push_back({name, brought / name});
+        return name;
+    });
     if (text != word) text = door_shader_files(text, std::filesystem::path(word).parent_path());
     const bool tabs = door_has(text, "\"renderpass\"");
     if (tabs) {   // (Shadertoy's file of all its tabs: made one ISF here, as Hydra's is)
@@ -79,8 +92,13 @@ static int doc_door(Doc& d, const std::string& word, int picked) {
     if (kept && !hydra) file = word;
     else if (!std::filesystem::exists(file, wrong)) std::ofstream(file) << text;
     if (word != came && !kept) door_pictures(text, std::filesystem::path(word).parent_path(), file);
+    for (const auto& [name, from] : libraries) {   // (it needs them beside it, as its pictures)
+        const std::filesystem::path to = file.parent_path() / file.stem();
+        std::filesystem::create_directories(to, wrong);
+        std::filesystem::copy_file(from, to / name, std::filesystem::copy_options::skip_existing, wrong);
+    }
     if (hydra) std::ofstream(file.parent_path() / (file.stem().string() + ".hydra")) << came;   // (what was written, kept beside what it became: the Program shelf shows this one)
-    std::string shaded, why;   // (a p5 sketch that paints its stage with a shader is that shader, an effect as any: not a picture of it)
+    std::string shaded;   // (a p5 sketch that paints its stage with a shader is that shader, an effect as any: not a picture of it)
     if (form.empty() && door_has(told, "hader(") && (shaded = doc_p5_shaded(file, moving, why)).empty() && !why.empty()) return d.trouble = why, 0;
     const std::string fx = shaded.empty() ? file.string() : std::filesystem::path(file).replace_extension(".fs").string();
     const bool effect = shader || !shaded.empty();

@@ -558,7 +558,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] スケッチを 1 行ごとに色で見分ける：今は `rect 20` の字だけ。押して見ないと分からない
 - [ ] スケッチを別のスレッドで動かす：重い作品で窓が止まる。先へ飛ぶと初回は全部走らせる
 - [ ] 重いスケッチのメモリ：動くたびに JS 側へコマを残す。重い作品は 1 分で約 1.4 GB。上限を付けて走り直す
-- [ ] p5 の未対応：meta のライブラリ読み込み、p5 2.x、shadowBlur、clip、filter()、loadFont、日本語フォント、自分自身の copy()、部分 clearRect、erase、conic gradient
+- [ ] p5 の未対応：meta のライブラリ読み込み、p5 2.x、shadowBlur、clip、filter()、loadFont、日本語フォント、自分自身の copy()、部分 clearRect、erase
 - [x] WEBGL のシェーダー：平らな物を塗る物は効果になる（door_p5_shader.h）。立体に塗る物は作品の GLSL のまま Filament の材質になる（p5_stand.h の __shader_text、doc_sketch.h、matc）
 - [ ] 立体に塗るシェーダーの残り：`setUniform` の絵（今は白）、varying 5 本以上、自分でカメラを持つ頂点シェーダー、three.js の ShaderMaterial、つまみ、matc を窓の中で待つ 0.3 秒
 - [ ] 絵を読み戻すシェーダー（`createFramebuffer`、p5.filterShader）
@@ -579,7 +579,17 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [x] OPC（OpenProcessing の設定パネル）：名前の変数を最初の値で作る
 - [ ] OPC の値をつまみにする
 - [x] 保存したページ：`<script src>` の隣のファイルを順に読む
-- [ ] 外のライブラリ（gsap 2 作、chromotome 1 作）：今は「gsap is not defined」と言って止まる
+- [x] 外のライブラリ：ページの `<script src>` を取って作品のそばに置く。コードに混ぜない（door.h、door_net.h）
+- [x] 作品の URL：OpenProcessing の URL を貼ると、タブ、絵、ライブラリ、ライセンスを公開 API で取る（door_net.h）
+- [ ] コードだけを貼った時のライブラリ：名前から URL を引く表が要る。今は「gsap is not defined」と言って止まる
+- [ ] 他のサイトの URL（CodePen、Shadertoy など）：Shadertoy は Cloudflare の確認で止まる
+- [ ] 1247971（chromotome）：読めるが本物より暗い
+- [ ] `createFilterShader`（3019066 が止まる）
+- [ ] `AudioContext`（3024378 が止まる）
+- [x] `pixelDensity(2)` が 2 倍に描かれていた（drawn_sketch.h）
+- [x] 時計：`Date`、`setTimeout`、`setInterval`、`await` を作品の時計で動かす（p5_stand.h、timesnap の lib/overwrite-time.js）
+- [x] 円錐グラデーション（drawn_sketch.h sketch_conic）。線はまだ白
+- [x] 絵の混色：シーンに包む（ThorVG の WgCompositor が絵の混色を読まない）。`image()` が貼る先の混色と透明度を見る
 - [ ] `copy()` でキャンバスを自分に写す作品（1164426）：このスタンドに画素が無い。線と面は数で持っている
 - [ ] `.mjs` のタブを import する作品（2982343）
 - [ ] p5 以外の 2 作：素の canvas（2980511）、textmode.js（2998051）

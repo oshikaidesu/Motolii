@@ -8,9 +8,11 @@
 #pragma once
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <regex>
 #include <sstream>
 #include <string>
+#include <vector>
 #include "third_party/js/twigl/noise.h"
 
 inline bool door_has(const std::string& t, const char* word) { return t.find(word) != std::string::npos; }
@@ -42,24 +44,39 @@ inline std::string door_library(const std::string& form) {
     return form == "two" ? "two/two.min.js" : form == "paper" ? "paper/paper-full.min.js" : form == "turtle" ? "turtletoy/turtletoy.umd.cjs" : form == "three" ? "three/three.core.js" : "";
 }
 
-// A whole page as it is copied: what its own <script> tags hold; what they load is the form's library.
-inline std::string door_page(const std::string& t, const std::filesystem::path& beside = {}) {   // (`beside`: where a saved page's own scripts are; p5 and three are here already)
-    static const std::regex named(R"re(\bsrc\s*=\s*['"]([^'"]+)['"])re"), ours(R"re(^(p5|three)[.\-])re");
-    std::string out;
+// A whole page as it is copied: what its own <script> tags hold; what they load is the form's library. `beside`: where a saved
+// page's own scripts are. A script from the net (p5's and three's are here already) is what `fetched` makes of it, a file's name,
+// told in a line above what is kept: a library is not the sketch's own lines (script.cpp reads the line).
+inline std::string door_page(const std::string& t, const std::filesystem::path& beside = {}, const std::function<std::string(const std::string&)>& fetched = {}) {
+    static const std::regex named(R"re(\bsrc\s*=\s*['"]([^'"]+)['"])re"), ours(R"re(^(p5(\.sound|\.dom)?|three(\.module|\.core)?)(\.min)?\.js$)re");
+    std::string out, needs;
     for (size_t at = t.find("<script"); at != std::string::npos; at = t.find("<script", at)) {
         const size_t head = t.find('>', at), end = head == std::string::npos ? head : t.find("</script>", head);
         if (end == std::string::npos) break;
         const std::string tag = t.substr(at, head - at);
         std::smatch name;
-        if (std::error_code wrong; !beside.empty() && std::regex_search(tag, name, named) && !door_has(name[1].str(), "://") && !std::regex_search(std::filesystem::path(name[1].str()).filename().string(), ours) && std::filesystem::is_regular_file(beside / name[1].str(), wrong)) {
-            std::ifstream in(beside / name[1].str());
+        const bool told = std::regex_search(tag, name, named);
+        const std::string src = told ? name[1].str() : "", base = std::filesystem::path(src.substr(0, src.find('?'))).filename().string();
+        if (std::error_code wrong; told && door_has(src, "://")) {
+            if (const std::string got = fetched && !door_has(tag, "module") && !std::regex_match(base, ours) ? fetched(src) : ""; !got.empty()) needs += "//! needs " + got + "\n";
+        } else if (told && !beside.empty() && !std::regex_match(base, ours) && std::filesystem::is_regular_file(beside / src, wrong)) {
+            std::ifstream in(beside / src);
             std::stringstream all;
             all << in.rdbuf();
             out += all.str() + "\n";
-        } else if (!door_has(tag, "src=") && (!door_has(tag, "type=") || door_has(tag, "module") || door_has(tag, "javascript"))) out += t.substr(head + 1, end - head - 1) + "\n";
+        } else if (!told && (!door_has(tag, "type=") || door_has(tag, "module") || door_has(tag, "javascript"))) out += t.substr(head + 1, end - head - 1) + "\n";
         at = end;
     }
-    return out.empty() ? t : out;
+    return out.empty() ? t : needs + out;
+}
+inline std::vector<std::string> door_needs(const std::string& text) {   // (what door_page told above what is kept)
+    std::vector<std::string> out;
+    for (size_t at = 0; text.compare(at, 9, "//! needs") == 0;) {
+        const size_t end = text.find('\n', at);
+        if (end == std::string::npos) break;
+        out.push_back(text.substr(at + 10, end - at - 10)), at = end + 1;
+    }
+    return out;
 }
 
 inline std::string door_quoted(const std::string& t) {   // (as a JavaScript string)

@@ -199,6 +199,10 @@ static JSValue film_next(JSContext* cx, JSValueConst, int, JSValueConst*) {   //
     JS_SetPropertyStr(cx, o, "data", JS_NewArrayBufferCopy(cx, f->last.data(), f->last.size()));
     return o;
 }
+static JSValue jobs_run(JSContext* cx, JSValueConst, int, JSValueConst*) {   // (what a promise was waiting on came: it goes on)
+    for (JSContext* job = nullptr; JS_ExecutePendingJob(JS_GetRuntime(cx), &job) > 0;) {}
+    return JS_UNDEFINED;
+}
 static JSValue image_read(JSContext* cx, JSValueConst, int, JSValueConst* a) {   // (a picture its sketch came with, by the name it gives it: only the last part of that name, only from that folder)
     const char* name = JS_ToCString(cx, a[0]);
     const std::filesystem::path file = std::filesystem::path(((FilmRead*)JS_GetContextOpaque(cx))->beside) / std::filesystem::path(name ? name : "").filename();
@@ -250,12 +254,20 @@ Script::Script(const std::string& file, const std::string& p5, const std::string
             const std::string lib = door_library_text(form, text.str());
             JS_FreeValue(own->cx, JS_Eval(own->cx, lib.c_str(), lib.size(), needs.c_str(), JS_EVAL_TYPE_GLOBAL));
         }
+        for (const std::string& needs : door_needs(code.str())) {   // (a library from the net: fetched by the door, it stands beside the sketch)
+            std::ifstream one(std::filesystem::path(file).parent_path() / std::filesystem::path(file).stem() / needs);
+            std::stringstream text;
+            text << one.rdbuf();
+            const std::string lib = text.str();
+            JS_FreeValue(own->cx, JS_Eval(own->cx, lib.c_str(), lib.size(), needs.c_str(), JS_EVAL_TYPE_GLOBAL));
+        }
         if (!film.empty() && (src.find("createCapture") != std::string::npos || src.find("createVideo") != std::string::npos || src.find("loadImage") != std::string::npos)) own->film.open(film, 320);   // (as much of it as a webcam sketch reads, and light)
         JS_SetContextOpaque(own->cx, &own->film);
         own->film.beside = (std::filesystem::path(file).parent_path() / std::filesystem::path(file).stem()).string();
         JSValue g = JS_GetGlobalObject(own->cx);
         JS_SetPropertyStr(own->cx, g, "__film_next", JS_NewCFunction(own->cx, film_next, "__film_next", 0));
         JS_SetPropertyStr(own->cx, g, "__image_read", JS_NewCFunction(own->cx, image_read, "__image_read", 1));
+        JS_SetPropertyStr(own->cx, g, "__jobs", JS_NewCFunction(own->cx, jobs_run, "__jobs", 0));
         JS_FreeValue(own->cx, g);
     }
     std::string body = src;
@@ -323,6 +335,7 @@ std::vector<uint8_t> Script::bytes(const std::string& js) {
 int Script::most() { return own->sketch && ok() ? std::atoi(script_said(own->cx, "__most()").c_str()) : 0; }
 std::string Script::shape() { return own->sketch && ok() ? script_said(own->cx, "__shape()") : ""; }
 bool Script::flat() { return own->sketch && ok() && script_said(own->cx, "__2d") == "true"; }
+float Script::density() { return own->sketch && ok() ? (float)std::atof(script_said(own->cx, "pixelDensity()").c_str()) : 1.f; }
 int Script::width() { return own->sketch && ok() ? std::atoi(script_said(own->cx, "width").c_str()) : 0; }
 int Script::height() { return own->sketch && ok() ? std::atoi(script_said(own->cx, "height").c_str()) : 0; }
 std::vector<int> Script::lines() const {

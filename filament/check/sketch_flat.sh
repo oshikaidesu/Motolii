@@ -63,6 +63,27 @@ function preload() { im = loadImage('pic.png'); }
 function setup() { createCanvas(400, 300, WEBGL); noStroke(); }
 function draw() { background(0); texture(im); box(150); }
 J
+cat > $W/burns.js <<'J'
+let im;
+function setup() { createCanvas(400, 300); noStroke(); rectMode(CENTER); im = createImage(4, 4); im.loadPixels(); for (let i = 0; i < 64; i += 4) { im.pixels[i] = 255; im.pixels[i + 1] = 128; im.pixels[i + 2] = 64; im.pixels[i + 3] = 255; } im.updatePixels(); noLoop(); }
+function draw() { background(255, 128, 64); blendMode(MULTIPLY); image(im, 20, 20, 100, 100);
+  const g = drawingContext.createConicGradient(0, 300, 200); g.addColorStop(0, '#ff8040'); g.addColorStop(1, '#ff8040'); drawingContext.fillStyle = g; push(); translate(300, 200); rotate(PI / 4); translate(-300, -200); rect(300, 200, 100, 100); pop(); }
+J
+mkdir $W/net $W/page
+print 'var said = [0, 255, 0];' > $W/net/said.js
+cat > $W/page/page.html <<'J'
+<script src="PORT/said.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.11.0/lib/p5.min.js"></script>
+<script src="own.js"></script>
+J
+cat > $W/page/own.js <<'J'
+function setup() { createCanvas(40, 30); noStroke(); }
+function draw() { background(said); }
+J
+cat > $W/thick.js <<'J'
+function setup() { createCanvas(200, 100); pixelDensity(2); noStroke(); noLoop(); }
+function draw() { background(0); fill(255, 0, 0); rect(0, 0, 100, 100); }
+J
 python3 - $W <<'P'
 import os,subprocess,sys
 from PIL import Image,ImageChops
@@ -102,13 +123,30 @@ pic=Pic.new('RGB',(32,32),(255,128,0)); pic.paste((0,120,255),(16,16,32,32)); pi
 run('m',f'add picture {W}/made.js','set 1 size 3','at 0.2',f'still {at("m0")}')
 run('i',f'add picture {W}/bits.js','set 1 size 3','at 0.2',f'still {at("i0")}')
 run('p',f'later door 0 {W}/loads.js','at 0.2',f'still {at("p0")}')
-run('v',f'add film {os.getcwd()}/check/beats.mp4',f'add picture {W}/shows.js','set 2 size 3','at 0.5',f'still {at("v0")}')
+run('w',f'add picture {W}/wipes.js','set 1 size 3',f'write {W}/moves.mp4')   # (beats.mp4 is one picture from end to end)
+run('v',f'add film {W}/moves.mp4',f'add picture {W}/shows.js','set 2 size 3','at 0.5',f'still {at("v0")}','at 2.5',f'still {at("v1")}')
 run('x',f'later door 0 {W}/box.js','at 0.2',f'still {at("x0")}')
 near=lambda n,k:sum(1 for c in g(n).resize((80,60)).getdata() if sum(abs(a-b) for a,b in zip(c,k))<60)
 print('a picture made pixel by pixel shows:','yes' if 30<near('m0',(0,255,0))<900 else f'NO ({near("m0",(0,255,0))})')
 print('a canvas written pixel by pixel shows:','yes' if near('i0',(255,0,0))>1000 else f'NO ({near("i0",(255,0,0))})')
 print('a picture that came with it shows, the part asked for, and can be read:','yes' if near('p0',(255,128,0))>20 and near('p0',(0,120,255))>20 else f'NO ({near("p0",(255,128,0))} {near("p0",(0,120,255))})')
-print('a film shows through image():','yes' if g('v0').getextrema()[2][1]>40 else f'NO ({g("v0").getextrema()})')
+print('a film shows through image():','yes' if g('v0').getextrema()[0][1]>40 else f'NO ({g("v0").getextrema()})')
+print('and it moves as the film does:','yes' if ImageChops.difference(g('v0'),g('v1')).getbbox() else 'NO')
 print('and a picture is what a solid wears:','yes' if near('x0',(255,128,0))>20 else f'NO ({near("x0",(255,128,0))})')
+run('u',f'add picture {W}/burns.js','set 1 size 3','at 0.2',f'still {at("u0")}')
+want=(255,64,16)   # (each as multiply makes it: 255 128 64 by itself)
+print('a picture and a conic gradient blend as anything does:','yes' if 2<near('u0',want)<1500 and near('u0',(255,128,64))>1500 else f'NO ({near("u0",want)} {near("u0",(255,128,64))})')
+print('and a conic gradient is drawn:','yes' if 'NOT done' not in said and near('u0',(255,255,255))<4 else f'NO ({near("u0",(255,255,255))})')
+run('t',f'add picture {W}/thick.js','set 1 size 3','at 0.2',f'still {at("t0")}')
+th=g('t0').resize((80,60)); redx=[x for x in range(80) if th.getpixel((x,30))[0]>128]
+print('pixelDensity(2) is as large as 1:','yes' if redx and redx[0]<(80-th.size[0])/2+2 and 30<len(redx)<52 else f'NO ({redx[:2]} {len(redx)})')
+import http.server,functools,threading
+serve=http.server.ThreadingHTTPServer(('127.0.0.1',0),functools.partial(http.server.SimpleHTTPRequestHandler,directory=f'{W}/net'))
+threading.Thread(target=serve.serve_forever,daemon=True).start()
+page=open(f'{W}/page/page.html').read().replace('PORT',f'http://127.0.0.1:{serve.server_port}')
+open(f'{W}/page/page.html','w').write(page)
+said=run('n',f'later door 0 {W}/page/page.html','at 0.2',f'still {at("n0")}')
+print('a library a page names on the net is fetched, and p5 is not:','yes' if 'NOT done' not in said and near('n0',(0,255,0))>1000 else f'NO ({near("n0",(0,255,0))} {said[-200:]})')
+serve.shutdown()
 print('and it takes keys:','yes' if 0<g('l3').getextrema()[0][1] and red('l3')<red('l0') else f'NO ({red("l3")} {red("l0")})')
 P

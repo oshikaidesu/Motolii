@@ -69,6 +69,7 @@ public:
     std::string shape();       // and of what shape, as a solid's word
     bool flat();               // a sketch that paints on a 2D canvas
     int width();               // its canvas
+    float density();   // (what pixelDensity() says: its canvas has this many pixels to each of its width)
     int height();
     std::string said(const std::string& js);   // what the sketch says to that, as words
     std::vector<uint8_t> bytes(const std::string& js);   // what it leaves in __bytes on being told that

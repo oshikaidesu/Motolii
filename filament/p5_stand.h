@@ -51,7 +51,9 @@ function __flat(e) {
   const C = (a, b, c, d, x, y) => { if (!path.length) M(a, b); path.push(2, X(a, b), Y(a, b), X(c, d), Y(c, d), X(x, y), Y(x, y)), ux = x, uy = y; };
   const large = () => Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
   const ramp = g => {   // (a gradient's ends where the matrix puts them when it is used, as the spec says; ThorVG's radial has them as outer and focal)
-    const out = [g.kind, X(g.x0, g.y0), Y(g.x0, g.y0), g.r0 * large(), X(g.x1, g.y1), Y(g.x1, g.y1), g.r1 * large()];
+    const q = g.kind === 3 && Math.cos(g.a), s = g.kind === 3 && Math.sin(g.a);
+    const out = g.kind === 3 ? [3, m[0] * q + m[2] * s, m[1] * q + m[3] * s, m[2] * q - m[0] * s, m[3] * q - m[1] * s, X(g.x0, g.y0), Y(g.x0, g.y0)]   // (a conic one: where its first ray and the one a quarter on go, and its centre)
+      : [g.kind, X(g.x0, g.y0), Y(g.x0, g.y0), g.r0 * large(), X(g.x1, g.y1), Y(g.x1, g.y1), g.r1 * large()];
     for (const [at, k] of g.stops.slice().sort((a, b) => a[0] - b[0])) { const q = __rgba(k); out.push(at, q[0], q[1], q[2], q[3] * c.globalAlpha); }
     return out;
   };
@@ -112,7 +114,7 @@ function __flat(e) {
     strokeRect(x, y, w, h) { alone(() => { box(x, y, w, h), paint(2, c.strokeStyle); }); },
     clearRect(x, y, w, h) { if (whole(x, y, w, h)) ops = [], clear = true; },
     createLinearGradient(x0, y0, x1, y1) { const g = { kind: 1, x0, y0, r0: 0, x1, y1, r1: 0, stops: [], addColorStop(at, k) { g.stops.push([at, k]); } }; return g; },
-    createRadialGradient(x0, y0, r0, x1, y1, r1) { return Object.assign(c.createLinearGradient(x0, y0, x1, y1), { kind: 2, r0, r1 }); }, createConicGradient() { return Object.assign(c.createLinearGradient(0, 0, 0, 0), { kind: 0 }); }, createPattern() { return { kind: 0, stops: [] }; },
+    createRadialGradient(x0, y0, r0, x1, y1, r1) { return Object.assign(c.createLinearGradient(x0, y0, x1, y1), { kind: 2, r0, r1 }); }, createConicGradient(a, x, y) { return Object.assign(c.createLinearGradient(x, y, x, y), { kind: 3, a }); }, createPattern() { return { kind: 0, stops: [] }; },
     measureText(t) { return { width: String(t).length * parseFloat(c.font) * 0.5, actualBoundingBoxAscent: 0, actualBoundingBoxDescent: 0 }; },
     getImageData(x, y, w, h) {   // (no pixels but a film's: see __film_step)
       const data = new Uint8ClampedArray(4 * w * h), b = e.bytes;
@@ -135,7 +137,7 @@ function __flat(e) {
       const o = from === c ? ops.slice() : from.held(), sx = dw / w, sy = dh / h, U = x => dx + (x - a) * sx, V = y => dy + (y - b) * sy, grow = large() * Math.sqrt(Math.abs(sx * sy)), P = (x, y) => { const u = U(x), v = V(y); ops.push(X(u, v), Y(u, v)); };
       for (let i = 0; i < o.length;) {
         const kind = o[i], n = o[i + 9], more = o[i + 10], end = i + 12 + n;
-        for (let j = 0; j < 12; ++j) ops.push(j === 6 && kind !== 3 ? o[i + 6] * grow : j === 11 ? __L : o[i + j]);   // (what another canvas holds shows where image() says it does)
+        for (let j = 0; j < 12; ++j) ops.push(j === 6 && kind !== 3 ? o[i + 6] * grow : j === 11 ? __L : j === 4 ? o[i + 4] * c.globalAlpha : j === 5 ? __blends[c.globalCompositeOperation] || o[i + 5] : o[i + j]);   // (what another canvas holds shows where image() says it does)
         let q = i + 12;
         if (kind >= 3) {
           const part = kind === 4 ? [Math.max(o[q + 9], (a - o[q + 4]) / o[q]), Math.max(o[q + 10], (b - o[q + 5]) / o[q + 3]), Math.min(o[q + 9] + o[q + 11], (a + w - o[q + 4]) / o[q]), Math.min(o[q + 10] + o[q + 12], (b + h - o[q + 5]) / o[q + 3])] : null;   // (the part of a picture asked for: as it stands, not turned)
@@ -143,7 +145,8 @@ function __flat(e) {
           if (part) ops.push(o[q], o[q + 1], o[q + 2], part[0], part[1], part[2] - part[0], part[3] - part[1], c.imageSmoothingEnabled ? 0 : 1), q = end;
           while (q < end) ops.push(o[q++]);
         } else while (q < end) { const t = o[q++]; ops.push(t); for (let p = t === 2 ? 3 : t === 3 ? 0 : 1; p > 0; --p, q += 2) P(o[q], o[q + 1]); }
-        if (more) { ops.push(o[q]), P(o[q + 1], o[q + 2]), ops.push(o[q + 3] * grow), P(o[q + 4], o[q + 5]), ops.push(o[q + 6] * grow); for (let j = q + 7; j < q + more; ++j) ops.push(o[j]); }
+        if (more && o[q] === 3) { const L = [m[0] * sx, m[1] * sx, m[2] * sy, m[3] * sy]; ops.push(3, L[0] * o[q + 1] + L[2] * o[q + 2], L[1] * o[q + 1] + L[3] * o[q + 2], L[0] * o[q + 3] + L[2] * o[q + 4], L[1] * o[q + 3] + L[3] * o[q + 4]), P(o[q + 5], o[q + 6]); for (let j = q + 7; j < q + more; ++j) ops.push(o[j]); }
+        else if (more) { ops.push(o[q]), P(o[q + 1], o[q + 2]), ops.push(o[q + 3] * grow), P(o[q + 4], o[q + 5]), ops.push(o[q + 6] * grow); for (let j = q + 7; j < q + more; ++j) ops.push(o[j]); }
         i = end + more;
       }
     },
@@ -163,13 +166,26 @@ function __element(tag) {
   e.scrollWidth = e.clientWidth = 100, e.parentNode = globalThis.__main || null;
   return e;
 }
+// The clock is the sketch's, not the wall's: Date, setTimeout and setInterval as timesnap has them (lib/overwrite-time.js), its
+// frames stepped by hand; what waits on them comes when the frames reach them. The wall's is kept for how long to wait for a sketch.
+const __wall = Date.now, __began = __wall(), __WallDate = Date;
+globalThis.Date = class extends __WallDate { constructor(...a) { if (a.length) super(...a); else super(__began + __T); } static now() { return __began + __T; } };
+var __timers = [], __timer = 0;
+function __later(f, ms, every, args) { __timers.push({ id: ++__timer, at: __T + (+ms || 0), f, every: every ? Math.max(+ms || 0, 1) : 0, args }); return __timer; }
+function __unlater(id) { __timers = __timers.filter(t => t.id !== id); }
+function __timers_due() {
+  for (const t of __timers.filter(q => q.at <= __T).sort((p, q) => p.at - q.at)) {
+    if (t.every) t.at += t.every * Math.ceil((__T - t.at + 1) / t.every); else __unlater(t.id);
+    if (typeof t.f === 'function') t.f(...t.args);
+  }
+}
 var __main = __element('main'), __ids = {};   // (a page's parts it asks for by name: there, and nothing comes of them. p5 counts up its own canvases' names until one is not there)
 var __page = { window: globalThis, self: globalThis, document: Object.assign(__element('document'), { readyState: 'complete', body: __element('body'), documentElement: __element('html'), head: __element('head'), createElement: __element, createElementNS: (_, t) => __element(t), createTextNode: () => __element('text'), getElementById: id => /^(defaultCanvas|p5_loading)/.test(id) ? null : __ids[id] = __ids[id] || Object.assign(__element('div'), { id, parentNode: __main }), getElementsByTagName: t => t === 'main' ? [__main] : [], hasFocus: () => true, fonts: __any('fonts'), hidden: false }),
   location: { href: '', search: '', pathname: '/', hostname: 'localhost', protocol: 'file:' }, screen: { width: 1920, height: 1080 }, navigator: { userAgent: '', platform: '', language: 'en' },
   mocha: true,   // (p5 starts by itself after a promise, not when it is run under a test: new p5() below is the start)
   innerWidth: 1920, innerHeight: 1080, devicePixelRatio: 1, pageXOffset: 0, pageYOffset: 0, scrollX: 0, scrollY: 0,
   addEventListener() {}, removeEventListener() {}, dispatchEvent() {}, getComputedStyle: () => ({ getPropertyValue: () => '' }), matchMedia: () => ({ matches: false, addListener() {}, addEventListener() {} }),
-  requestAnimationFrame: f => (__Q.push(f), __Q.length), cancelAnimationFrame() {}, setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0, clearInterval() {},
+  requestAnimationFrame: f => (__Q.push(f), __Q.length), cancelAnimationFrame() {}, setTimeout: (f, ms, ...a) => __later(f, ms, false, a), clearTimeout: __unlater, setInterval: (f, ms, ...a) => __later(f, ms, true, a), clearInterval: __unlater,
   performance: { now: () => __T, mark() {}, measure() {} }, console: { log() {}, warn() {}, error() {}, info() {}, debug() {}, trace() {}, table() {}, group() {}, groupCollapsed() {}, groupEnd() {}, time() {}, timeEnd() {}, timeLog() {}, assert() {}, count() {}, countReset() {}, dir() {}, clear() {} }, URL: { createObjectURL: () => '' }, fetch: () => Promise.reject(new Error('no net')),
   Image: function () { return __element('img'); } };
 for (const k of ['Request', 'Headers', 'Response', 'HTMLElement', 'HTMLCanvasElement', 'Element', 'Node', 'ImageData', 'FileReader', 'Blob', 'XMLHttpRequest', 'DOMMatrix', 'Path2D', 'WebGL2RenderingContext', 'WebGLRenderingContext', 'Event', 'MouseEvent', 'TouchEvent', 'KeyboardEvent', 'WheelEvent', 'CustomEvent', 'FontFace']) __page[k] = function () {};
@@ -256,7 +272,9 @@ function __to(f) {
     if (q.length) __drawn = [];
     if (__film) __film_step();
     __T += 1000 / 60, __Q = [];
+    __timers_due();
     q.forEach(g => g(__T));
+    __jobs();   // (what was awaiting them goes on)
     if (__2d) {   // (2D: what each frame adds to the one before, as its canvas keeps what was painted; __from: the frame it was last wiped at)
       const [wiped, o] = __canvas.take();
       __from.push(wiped || !__frames.length ? __frames.length : __from[__from.length - 1]), __frames.push(o);
@@ -264,8 +282,8 @@ function __to(f) {
   }
 }
 function __shaded_take(seconds) {   // (the shader that paints its stage and what the sketch tells it every 0.1 second, a few seconds of waiting at most: "" none)
-  const told = {}, from = Date.now();
-  for (let k = 0; k <= seconds * 10 && Date.now() - from < 5000; ++k) {
+  const told = {}, from = __wall();
+  for (let k = 0; k <= seconds * 10 && __wall() - from < 5000; ++k) {
     __to(k * 6);
     if (!__shaded && k < 2) continue;
     if (!__shaded || __draws_most > 1) return '';
@@ -291,8 +309,8 @@ function __paints(f, had, pic) {   // (what makes frame f on a canvas holding fr
   return all;
 }
 function __most() {   // (as many copies as its first seconds draw at once, a second of waiting at most)
-  const from = Date.now();
-  for (let f = 1; f < 300 && Date.now() - from < 1000; ++f) __to(f);
+  const from = __wall();
+  for (let f = 1; f < 300 && __wall() - from < 1000; ++f) __to(f);
   return Math.max(...__frames.map(c => c.length / 11));
 }
 function __shape() {   // (only boxes, only balls or only rings, with no lines and no lights of its own: the world's own, as real as any. Any more: as it draws them, doc_sketch.h)
