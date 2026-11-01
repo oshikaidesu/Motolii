@@ -1,13 +1,16 @@
 // flat.mat: a sheet that shows a picture drawn for the screen (ThorVG's, drawn.h) as it was drawn: its colours are
 // the screen's own numbers, so they are taken back to light before Filament's output step turns light into screen
-// numbers again. Unlit: no lamp and no shadow touches it.
+// numbers again. Unlit: no lamp and no shadow touches it. flat_lit (kit_wgpu.sh: -TSHADE=lit -DLIT) is the same sheet in
+// the lamps' light, as an After Effects 3D layer once its composition has a light: its colour the surface's.
 material {
     name : flat,
-    shadingModel : unlit,
+    shadingModel : ${SHADE},
     requires : [ uv0 ],
     instanced : true,   // (its copies drawn in one go tell which they are: kit.h add_parts, the copies' own colours below)
     variables : [ copyOf, deepAt, deepEye, deepUp ],
     culling : none,
+    doubleSided : true,
+    transparentShadow : true,   // (it throws the shadow of what is drawn of it: Filament's own, dithered by how clear it is)
     blending : ${BLENDING},   // (kit_wgpu.sh builds it once for each way a sheet lies on what is behind: transparent, add, multiply, screen)
     depthWrite : true,
     parameters : [
@@ -133,12 +136,20 @@ fragment {
     }
     highp vec2 deepCells() { return vec2(textureSize(materialParams_picture, 0)); }
 #include "deep.glsl"
+#if defined(LIT)
+    // (a box's point is not where its sheet is: the sun's first shadow map is read at the point met, as Filament reads its others,
+    // surface_getters.fs. Its shadow code comes after this, ShaderGenerator.cpp)
+#define getCascadeLightSpacePosition(cascade) computeLightSpacePosition(getWorldPosition(), getWorldGeometricNormalVector(), frameUniforms.lightDirection, shadowUniforms.shadows[cascade].normalBias, shadowUniforms.shadows[cascade].lightFromWorldMatrix)
+#endif
     void material(inout MaterialInputs material) {
-        prepareMaterial(material);
         highp vec2 uv = getUV0();
         float deepShade = 1.0, deepShine = 0.0, deepEdge = -1.0;
         gl_FragDepth = gl_FragCoord.z;
         if (materialParams.deep.z > 0.0) deepMeet(uv, deepShade, deepShine, deepEdge);
+#if defined(LIT)
+        material.normal = deepEdge >= 0.0 ? transpose(shading_tangentToWorld) * shading_geometricNormal : vec3(0.0, 0.0, 1.0);
+#endif
+        prepareMaterial(material);
         if (materialParams.window.z > 0.5 && (uv.x < materialParams.window.x || uv.x >= materialParams.window.y)) discard;   // (a letter: its own part of the words only)
         vec4 drawn = textureLod(materialParams_picture, uv, 0.0);   // (a drawn picture says itself how clear each point is; a film's is all there)
         vec3 c = deepEdge >= 0.0 ? drawn.rgb / max(drawn.a, 1e-4) : drawn.rgb;   // (a ray takes its colour whole, as AbsentMotion's: its edge is told by `edge`)
@@ -182,7 +193,11 @@ fragment {
         material.baseColor.rgb = mix(material.baseColor.rgb, wash.rgb * material.baseColor.a, wash.a);   // (a copy's own colour, where it is drawn)
         vec4 fade = materialParams.copyFade;
         if (fade.w > 0.5) material.baseColor *= mix(1.0, fade.x, fade.y > 1.0 ? (fade.z + variable_copyOf.x) / (fade.y - 1.0) : 0.0);   // (each copy clearer along them, from the first, as itself, to the last)
+#if defined(LIT)
+        material.emissive = vec4(material.baseColor.rgb * materialParams.glowing, 0.0);   // (it lights itself, as floor_lit.mat)
+#else
         material.baseColor.rgb *= 1.0 + materialParams.glowing;   // (a neon: its own colour, brighter than white)
+#endif
         if (materialParams.behind > 0.5 && material.baseColor.a > 1e-4) {   // (its fill what is behind it, where it is: a copy of the background in its shape)
             highp vec4 seen = materialParams.behindEye * vec4(getUserWorldPosition(), 1.0);
             vec4 behind = textureLod(materialParams_backdrop, uvToRenderTargetUV(seen.xy / max(seen.w, 1e-6) * 0.5 + 0.5), 0.0);

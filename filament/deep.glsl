@@ -43,14 +43,22 @@ void deepMeet(inout highp vec2 uv, inout float k, inout float shine, inout float
         t = high;
     } else t = tp;
     highp vec3 p = ro + rd * t;
+#if defined(LIT)
+    highp vec3 sideX = variable_copyOf.yzw, sideY = variable_deepUp.xyz, sideZ = normalize(cross(sideX, sideY)) * variable_deepUp.w;
+#endif
     uv = deepUV(p.xy);
     edge = hit ? 1.0 : min(peak * 2.0, 1.0);
-    highp mat4 eye = getWorldFromViewMatrix();
-    highp vec3 ahead = eyed ? shading_position - eye[3].xyz : -1000.0 * eye[2].xyz;
-    shading_position += (t - 1.0) * ahead;
+    highp vec4 eye = getWorldFromClipMatrix()[2];   // (deep_vertex.glsl)
+    highp vec3 ahead = eyed ? vertex_worldPosition.xyz - eye.xyz / eye.w : -1000.0 * normalize(eye.xyz);
+    shading_position = vertex_worldPosition.xyz + (t - 1.0) * ahead;
     highp vec4 clip = getClipFromWorldMatrix() * vec4(shading_position, 1.0);
     gl_FragDepth = clip.z / clip.w;
-    if (abs(p.z) > h.z - max(dt * abs(rd.z) * 1.5, 0.0005)) return;   // (its front and back: the picture as it is, as at Z 0)
+    if (abs(p.z) > h.z - max(dt * abs(rd.z) * 1.5, 0.0005)) {   // (its front and back: the picture as it is, as at Z 0)
+#if defined(LIT)
+        shading_geometricNormal = normalize(sideZ * sign(p.z));
+#endif
+        return;
+    }
     highp vec2 e = 8.0 * h.xy / deepCells();   // (four points of its picture, read round a ring: a slanted edge is in steps, and nearer or fewer they show as stripes down the side)
     vec2 g = vec2(0.0);
     for (int i = 0; i < 12; i++) {
@@ -59,6 +67,10 @@ void deepMeet(inout highp vec2 uv, inout float k, inout float shine, inout float
     }
     vec2 n = length(g) > 1e-3 ? -normalize(g) : abs(p.x / h.x) > abs(p.y / h.y) ? vec2(sign(p.x), 0.0) : vec2(0.0, sign(p.y));   // (filled to its edge: the box's own side)
     uv = deepUV(p.xy - n * e);   // (its colour from within its edge)
+#if defined(LIT)
+    shading_geometricNormal = normalize(sideX * n.x + sideY * n.y);   // (in the lamps' light: they shade it, the world's normal; flat.mat turns it to the sheet's)
+    return;
+#endif
     // (AbsentMotion's own axes: x right, y down, z away)
     vec3 seen = normalize(mat3(getViewFromWorldMatrix()) * (variable_copyOf.yzw * n.x + variable_deepUp.xyz * n.y)) * vec3(1.0, -1.0, -1.0);
     vec3 way = normalize(mat3(getViewFromWorldMatrix()) * ahead) * vec3(1.0, -1.0, -1.0);

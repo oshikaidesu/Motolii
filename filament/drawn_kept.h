@@ -22,6 +22,7 @@ struct DrawnFx { bool split = false;   // (a text's letters each a copy of their
     bool splitWords = false;   // (its words, not its letters: After Effects' Based On Words, Alight Motion's Text Transform)
     bool together = false;   // (its copies drawn in one go, each an instance of one thing: none coloured or cleared each of its own, kit.h add_parts)
     bool thick = false;    // (it has depth: its sheet a box, its picture pushed through it, deep.glsl)
+    bool lit = false;      // (in the lamps' light: flat.mat's flat_lit, doc_lit)
     bool column = false;   // (its letters one under another, a letter's height from each to the next)
     float letters = 1.f, lines = 1.f, italic = 0.f, wrapWidth = 0.f; int wrap = 0;   // (a text's lines broken in a box so many of its letters' heights wide, ThorVG's layout and wrap; 0: as typed)
     float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)

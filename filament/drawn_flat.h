@@ -150,7 +150,7 @@ static Drawn* flat_mesh(Stage& s, const char* form, float wide, const mat4f& pla
     const std::vector<uint32_t> ends = shape_cut(d, 0.f, 1.f, true);
     d->cut = true, d->wideBy = wide;
     d->wash = float4{Color::toLinear<ACCURATE>(sRGBColor{colour}), 1.f};
-    const std::vector<MaterialInstance*> looks = add_parts(s, d->sheet, flat_laid(lay).c_str(), std::vector<mat4f>((size_t)std::max(1, fx.copies), place), ends, 1, false, 1, 4, fx.together);
+    const std::vector<MaterialInstance*> looks = add_parts(s, d->sheet, flat_laid(lay, fx.lit).c_str(), std::vector<mat4f>((size_t)std::max(1, fx.copies), place), ends, 1, fx.lit, 1, 4, fx.together);
     if (looks.empty()) return nullptr;
     d->look = looks[0];
     d->edgeLook = looks.size() > 1 ? looks[1] : nullptr;

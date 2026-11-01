@@ -1,0 +1,26 @@
+diff --git a/filament/backend/src/webgpu/WebGPUPipelineCache.cpp b/filament/backend/src/webgpu/WebGPUPipelineCache.cpp
+index f84febbb0..c3c6a77d8 100644
+--- a/filament/backend/src/webgpu/WebGPUPipelineCache.cpp
++++ b/filament/backend/src/webgpu/WebGPUPipelineCache.cpp
+@@ -342,18 +342,13 @@ wgpu::RenderPipeline WebGPUPipelineCache::createRenderPipeline(
+             .dstFactor = toWebGPU(request.rasterState.blendFunctionDstAlpha)
+         }
+     };
+-    // According to the WebGPU spec, a pipeline cannot have a fragment stage with zero color
+-    // targets. This situation can arise in Filament during depth-only passes (like shadow map
+-    // generation) if the material variant still includes a fragment shader.
+-    //
+-    // To handle this, we check if any color targets are configured for this pipeline. If not, we
+-    // create a pipeline *without* a fragment stage. This makes the pipeline valid for a
+-    // depth-only pass, allowing depth writes to proceed correctly.
++    // A fragment stage with no color targets is valid beside a depth attachment. A depth-only pass
++    // (a shadow map) needs it: what a material discards or writes as its depth is its shape.
+ 
+     // Note that this needs to be defined in the same scope as the CreateRenderpipeline call
+     std::array<wgpu::ColorTargetState, MRT::MAX_SUPPORTED_RENDER_TARGET_COUNT> colorTargets {};
+ 
+-    if (request.fragmentShaderModule != nullptr && request.colorFormatCount > 0) {
++    if (request.fragmentShaderModule != nullptr) {
+         fragmentState.module = request.fragmentShaderModule;
+         fragmentState.entryPoint = "main";
+         // see the comment about constants for the vertex state, as the same reasoning applies

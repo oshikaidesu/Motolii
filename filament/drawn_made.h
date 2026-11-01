@@ -92,7 +92,7 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
     if (d->frames > 1.f)   // (a film: it goes on by itself as the stage's time does, round and round)
         s.playing[d] = [&s, d](double now) { picture_at(s, d, std::fmod((float)now + d->starts, d->seconds)); };
     if (!shown) return d;
-    d->look = add(s, d->sheet, flat_laid(lay).c_str(), std::vector<mat4f>((size_t)std::max(1, d->letters.empty() ? fx.copies : (int)d->letters.size()), place), 1, false, 1, 4, fx.together && d->letters.empty());   // (split into letters: a copy each)
+    d->look = add(s, d->sheet, flat_laid(lay, fx.lit).c_str(), std::vector<mat4f>((size_t)std::max(1, d->letters.empty() ? fx.copies : (int)d->letters.size()), place), 1, fx.lit, 1, 4, fx.together && d->letters.empty());   // (split into letters: a copy each)
     if (!d->look) return nullptr;
     d->look->setParameter("picture", d->texture, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
     if (fx.thick) d->look->setParameter("deep", float4{d->boxed, 0.f}), d->look->setParameter("deepTurn", float4{1.f, 0.f, 0.f, 1.f});

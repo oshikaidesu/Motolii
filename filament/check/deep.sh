@@ -2,6 +2,8 @@
 # A flat thing is a thing at Z 0 (the user, 11/1): its Scale Z opens its sheet into a box its picture is pushed through
 # (deep.glsl), nothing filmed, read back or cut anew. At 0 not a pixel changes; opened its sides are seen, its front is
 # its picture's own colour, and two boxes cross where they really meet (After Effects' 3D layers intersect).
+# With a lamp in the document it takes its light, flat or thick, as an After Effects 3D layer; what it throws on a wall
+# is the shape drawn, not its box (a depth-only pass keeps its fragment stage: dawn_probe/filament_webgpu_depth_fragment.patch).
 #   ./check/deep.sh
 cd "$(dirname "$0")/.."
 W=$(mktemp -d)
@@ -11,6 +13,9 @@ one="add shape rect\nsay 1 fill e5432d\nset 1 scale_z 1\nset 1 rotate_y 50"
 two="add shape rect\nsay 2 fill 2a62c9\nset 2 scale_z 1\nset 2 rotate_y -50"
 shot flat "$star"; shot zero "$star\nset 1 scale_z 0"; shot deep "$star\nset 1 scale_z 1"
 shot one "$one"; shot crossed "$one\n$two"
+wall="add solid cube\nsay 2 fill bfbfbf\nset 2 scale_x 14\nset 2 scale_y 8\nset 2 scale_z 0.1\nset 2 z -0.8"
+sun="add light sun\nset 3 shadows 1\nset 3 intensity 0.3\nset 3 rotate_x -30\nset 3 rotate_y 25"
+shot bare "$star\nset 1 scale_z 1\n$wall"; shot sunlit "$star\nset 1 scale_z 1\n$wall\n$sun"; shot flatlit "$star\n$wall\n$sun"; shot unshaded "$star\nset 1 scale_z 1\n$wall\n$sun\nset 3 shadows 0"
 python3 -c "
 from PIL import Image, ImageChops
 import numpy as np
@@ -24,4 +29,10 @@ side = (seen(deep) & (abs(deep - [0xe5, 0x43, 0x2d]).max(axis=2) > 24)).sum(); p
 c, o = L('crossed'), L('one')
 red = abs(c - [0xe5, 0x43, 0x2d]).max(axis=2) < 40; blue = abs(c - [0x2a, 0x62, 0xc9]).max(axis=2) < 40
 x = np.nonzero(seen(c).any(axis=0))[0]; mid = (x[0] + x[-1]) // 2
-print('two boxes cross: ' + ('yes' if red[:, :mid].sum() > 4 * red[:, mid:].sum() and blue[:, mid:].sum() > 4 * blue[:, :mid].sum() else 'NO') + ' (red %d left, %d right; blue %d left, %d right)' % (red[:, :mid].sum(), red[:, mid:].sum(), blue[:, :mid].sum(), blue[:, mid:].sum()))"
+print('two boxes cross: ' + ('yes' if red[:, :mid].sum() > 4 * red[:, mid:].sum() and blue[:, mid:].sum() > 4 * blue[:, :mid].sum() else 'NO') + ' (red %d left, %d right; blue %d left, %d right)' % (red[:, :mid].sum(), red[:, mid:].sum(), blue[:, :mid].sum(), blue[:, mid:].sum()))
+b, l, f = L('bare'), L('sunlit'), L('flatlit')
+front = abs(b - [0xe5, 0x43, 0x2d]).max(axis=2) < 6; same = (abs(b - l)[front].max(axis=1) > 8).mean(); print('a lamp lights it: ' + ('yes' if same > .9 else 'NO') + ' (%.0f%% of its front changed)' % (100 * same))
+print('flat, it takes the lamp too: ' + ('yes' if (abs(L('flat') - f).max(axis=2) > 8)[abs(L('flat') - [0xe5, 0x43, 0x2d]).max(axis=2) < 6].mean() > .9 else 'NO'))
+dark = (L('unshaded') - l).sum(axis=2) > 8
+y, x = np.nonzero(dark); box = (y.max() - y.min()) * (x.max() - x.min()); print('its shadow is its shape, not its box: ' + ('yes' if 2000 < dark.sum() < .75 * box else 'NO') + ' (%d of %d pixels)' % (dark.sum(), box))
+"
