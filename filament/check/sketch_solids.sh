@@ -68,6 +68,16 @@ function draw() {
   line(-300, 170, 300, 170)
 }
 J
+cat > $W/light.js <<'J'
+function setup() { createCanvas(600, 400, WEBGL); noStroke() }
+function draw() {
+  background(0)
+  ambientLight(0, 0, 128)
+  directionalLight(255, 0, 0, 0, 0, -1)
+  fill(255)
+  sphere(100)
+}
+J
 python3 - $W <<'P'
 import os,subprocess,sys
 from PIL import Image,ImageChops
@@ -94,6 +104,10 @@ said=['add solid cube',f'say 1 script {W}/words.js','at 0',f'still {W}/w0.png']
 r=subprocess.run(['zsh','./edit.sh',f'{W}/w.motolii'],input='\n'.join(said)+'\n',capture_output=True,text=True,timeout=200,env={**os.environ,'SIZE':'960x540'})
 red=[x for x,p in enumerate(Image.open(f'{W}/w0.png').convert('RGB').crop((0,200,960,340)).getdata()) if p[0]>150 and p[1]<80]
 print('words stand in WEBGL, in its fill, where it aligns them:','yes' if len(red)>2000 and abs(sum(x%960 for x in red)/len(red)-480)<25 else f'NO {len(red)}')
+said=['add solid cube',f'say 1 script {W}/light.js','add light sun','at 0',f'still {W}/l0.png']
+r=subprocess.run(['zsh','./edit.sh',f'{W}/l.motolii'],input='\n'.join(said)+'\n',capture_output=True,text=True,timeout=200,env={**os.environ,'SIZE':'960x540'})
+p=Image.open(f'{W}/l0.png').convert('RGB').getpixel((480,270))
+print('what it lights it lights by its own lights, by p5\'s own sums (0.73 of its red, all of its blue):','yes' if near(p,(186,0,128)) else f'NO {p}')
 box=lambda n:Image.open(f'{W}/{n}.png').convert('L').point(lambda v:255 if v>20 else 0).getbbox()
 a,b=box('a'),box('b')
 tall=a and (a[3]-a[1])>3*(a[2]-a[0])

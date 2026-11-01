@@ -293,7 +293,8 @@ var __drawn = [], __kinds = {}, __U = 0.01;   // (a pixel of the sketch in the w
 // What WEBGL draws, as p5 has it: which of its shapes where its camera sees them, the triangles and lines it makes as it goes,
 // what it clears with. doc_sketch.h stands them in the world, one mesh each frame. p5 makes a line's corners in triangles
 // for its line shader here too, 0.8 s a frame in the heaviest; nothing here reads them.
-var __mesh = { draws: [], tris: [], lines: [], back: null, wiped: false }, __meshes = [], __mesh_held = 0, __mesh_gone = 0, __shapes = [], __shape_of = new Map(), __lined = false;
+const __mesh_new = (back, wiped) => ({ draws: [], tris: [], lines: [], back, wiped, rows: new Map(), sets: new Map() });
+var __mesh = __mesh_new(null, false), __meshes = [], __mesh_held = 0, __mesh_gone = 0, __shapes = [], __shape_of = new Map(), __lined = false;
 const __own = r => p5.instance && r === p5.instance._renderer;
 function __seen(r, x, y, z) {   // (what its camera sees, what it draws at z 0 still at z 0: a camera of its own moves things from there)
   const e = r._curCamera.cameraMatrix.mat4, m = r.uModelMatrix.mat4, o = new Array(16);
@@ -303,6 +304,30 @@ function __seen(r, x, y, z) {   // (what its camera sees, what it draws at z 0 s
   return o;
 }
 const __fill_of = r => r._tex ? r._tint.map(v => v / 255) : r._useNormalMaterial ? [1, 1, 1, 1] : r.curFillColor;
+// What _setFillUniforms tells p5's lit shader, as it stands where this is drawn, in sketch.mat's table: a row of four for each way
+// of being lit (ambient material, specular material and shininess, emissive and metalness, how many lights and where), and
+// its lights after them, where the sketch's camera has them. 1: it takes no light. 2 and on: its row, in this frame's table.
+function __lit(r) {
+  if (!r._enableLighting || r._useNormalMaterial) return 1;
+  const V = r._curCamera.cameraMatrix.mat4, m = __mesh, metal = r._useMetalness, at = (a, i, w) => [V[0] * a[i] + V[4] * a[i + 1] + V[8] * a[i + 2] + w * V[12], V[1] * a[i] + V[5] * a[i + 1] + V[9] * a[i + 2] + w * V[13], V[2] * a[i] + V[6] * a[i + 1] + V[10] * a[i + 2] + w * V[14]];
+  const way = (a, i) => { const p = at(a, i, 0); return [p[0], -p[1], p[2]]; }, place = (a, i) => { const p = at(a, i, 1); return [p[0] * __U, -p[1] * __U, (p[2] + 800) * __U]; }, three = (a, i) => [a[i], a[i + 1], a[i + 2]];
+  const kept = [r.ambientLightColors, r.directionalLightDirections, r.directionalLightDiffuseColors, r.directionalLightSpecularColors, r.pointLightPositions, r.pointLightDiffuseColors, r.pointLightSpecularColors, r.spotLightPositions, r.spotLightDirections, r.spotLightDiffuseColors, r.spotLightSpecularColors, r.spotLightAngle, r.spotLightConc, r.constantAttenuation, r.linearAttenuation, r.quadraticAttenuation, metal, V].join();
+  let set = m.sets.get(kept);
+  if (set === undefined) {
+    const o = [0, 0, 0, __U, r.constantAttenuation, r.linearAttenuation, r.quadraticAttenuation, 0];
+    for (let i = 0; i + 2 < r.ambientLightColors.length && i < 15; i += 3) for (let k = 0; k < 3; ++k) o[k] += Math.max(0, r.ambientLightColors[i + k] - metal);
+    const dirs = Math.min(5, r.directionalLightDiffuseColors.length / 3), points = Math.min(5, r.pointLightDiffuseColors.length / 3), spots = Math.min(5, r.spotLightDiffuseColors.length / 3);
+    for (let j = 0; j < dirs; ++j) o.push(...way(r.directionalLightDirections, j * 3), 0, ...three(r.directionalLightDiffuseColors, j * 3), 0, ...three(r.directionalLightSpecularColors, j * 3), 0);
+    for (let j = 0; j < points; ++j) o.push(...place(r.pointLightPositions, j * 3), 0, ...three(r.pointLightDiffuseColors, j * 3), 0, ...three(r.pointLightSpecularColors, j * 3), 0);
+    for (let j = 0; j < spots; ++j) o.push(...place(r.spotLightPositions, j * 3), r.spotLightAngle[j], ...way(r.spotLightDirections, j * 3), r.spotLightConc[j], ...three(r.spotLightDiffuseColors, j * 3), 0, ...three(r.spotLightSpecularColors, j * 3), 0);
+    m.sets.set(kept, set = { o, dirs, points, spots, i: m.sets.size });
+  }
+  const own = r.curSpecularColor, shine = metal > 0 ? own.map((v, i) => r.curFillColor[i] * metal + v * (1 - metal)) : own, row = [...three(r.curAmbientColor, 0), (r._hasSetAmbient ? 1 : 0) + (r._useSpecularMaterial ? 2 : 0), ...three(shine, 0), r._useShininess, ...three(r.curEmissiveColor, 0), metal, set.dirs, set.points, set.spots, set.i];
+  const key = row.join();
+  let i = m.rows.get(key);
+  if (i === undefined) m.rows.set(key, i = m.rows.size);
+  return 2 + i;
+}
 // What it draws with, texture() or image(): a createGraphics is a canvas of paints like the one a 2D sketch paints on, each
 // frame's taken as that one's are (__paints) and drawn by ThorVG (drawn_sketch.h sketch_texture). 0: none.
 var __tex = [], __tex_of = new Map();
@@ -366,12 +391,12 @@ function __stand(r, gId, x, y, z) {
   if (i === undefined) __shape_of.set(m, i = __shapes.length), __shapes.push(m);
   const of = String(gId).split('|')[0], f = __fill_of(r), s = r.curStrokeColor, e = __seen(r, x, y, z);
   __kinds[of] = (__kinds[of] || 0) + 1, __lined = __lined || r._doStroke;
-  __mesh.draws.push(i, ...e, f[0], f[1], f[2], f[3], r._doFill ? (r._enableLighting ? 0 : 1) : -1, __L, s[0], s[1], s[2], s[3], r._doStroke ? r.curStrokeWeight : 0, __tex_at(r));
+  __mesh.draws.push(i, ...e, f[0], f[1], f[2], f[3], r._doFill ? __lit(r) : -1, __L, s[0], s[1], s[2], s[3], r._doStroke ? r.curStrokeWeight : 0, __tex_at(r));
 }
 p5.RendererGL.prototype.drawBuffers = function (gId) { __stand(this, gId, 1, 1, 1); return this; };
 p5.RendererGL.prototype._drawImmediateFill = function () {
   if (!__own(this)) return;
-  const g = this.immediateMode.geometry, v = g.vertices, n = g.vertexNormals, c = g.vertexColors, at = g.uvs, e = __seen(this, 1, 1, 1), mode = this.immediateMode.shapeMode, out = __mesh.tris, own = __fill_of(this), flat = this._enableLighting ? 0 : 1, painted = !this._tex && c.length >= v.length * 4, tex = __tex_at(this);
+  const g = this.immediateMode.geometry, v = g.vertices, n = g.vertexNormals, c = g.vertexColors, at = g.uvs, e = __seen(this, 1, 1, 1), mode = this.immediateMode.shapeMode, out = __mesh.tris, own = __fill_of(this), flat = __lit(this), painted = !this._tex && c.length >= v.length * 4, tex = __tex_at(this);
   const put = i => {
     const p = v[i], q = n[i] || { x: 0, y: 0, z: 1 }, a = painted ? i * 4 : -1;
     out.push(e[0] * p.x + e[4] * p.y + e[8] * p.z + e[12], e[1] * p.x + e[5] * p.y + e[9] * p.z + e[13], e[2] * p.x + e[6] * p.y + e[10] * p.z + e[14], e[0] * q.x + e[4] * q.y + e[8] * q.z, e[1] * q.x + e[5] * q.y + e[9] * q.z, e[2] * q.x + e[6] * q.y + e[10] * q.z,
@@ -402,17 +427,17 @@ p5.RendererGL.prototype._drawPoints = function (v) {
 };
 const __clear = p5.RendererGL.prototype.clear;
 p5.RendererGL.prototype.clear = function (r, g, b, a) {
-  if (__own(this)) __mesh = { draws: [], tris: [], lines: [], back: [r || 0, g || 0, b || 0, a || 0], wiped: true };
+  if (__own(this)) __mesh = __mesh_new([r || 0, g || 0, b || 0, a || 0], true);
   return __clear.apply(this, arguments);
 };
 function __mesh_done() {
-  const m = __mesh, one = { draws: Float32Array.from(m.draws), tris: Float32Array.from(m.tris), lines: Float32Array.from(m.lines), back: m.back, wiped: m.wiped };
+  const m = __mesh, one = { draws: Float32Array.from(m.draws), tris: Float32Array.from(m.tris), lines: Float32Array.from(m.lines), back: m.back, wiped: m.wiped, rows: [...m.rows.keys()].map(k => k.split(',').map(Number)), sets: [...m.sets.values()] };
   __mesh_held += one.draws.byteLength + one.tris.byteLength + one.lines.byteLength;
-  __tex_done(__meshes.length), __meshes.push(one), __mesh = { draws: [], tris: [], lines: [], back: null, wiped: false };
+  __tex_done(__meshes.length), __meshes.push(one), __mesh = __mesh_new(null, false);
   for (; __mesh_held > 400e6 && __mesh_gone < __meshes.length - 1; ++__mesh_gone) {   // (a long heavy sketch: what it drew first goes, so that going back finds it gone rather than the Mac full)
     const g = __meshes[__mesh_gone];
     __mesh_held -= g.draws.byteLength + g.tris.byteLength + g.lines.byteLength;
-    g.draws = g.tris = g.lines = new Float32Array(0);
+    g.draws = g.tris = g.lines = new Float32Array(0), g.rows = g.sets = [];
     for (const q of __tex) if (q.frames[__mesh_gone]) __mesh_held -= q.frames[__mesh_gone].byteLength, q.frames[__mesh_gone] = new Float64Array(0);
   }
 }
@@ -421,10 +446,31 @@ function __mesh_at(f) {   // (all it has drawn since it last cleared, for doc_sk
   let from = f, d = 0, t = 0, l = 0;
   while (from > 0 && !__meshes[from].wiped) --from;
   for (let i = from; i <= f; ++i) d += __meshes[i].draws.length, t += __meshes[i].tris.length, l += __meshes[i].lines.length;
-  const o = new Float32Array(11 + d + t + l), b = __meshes[from].back || [0, 0, 0, 0];
-  o.set([d / 29, t / 15, l / 12, __U, globalThis.width, globalThis.height, b[0], b[1], b[2], b[3], __tex.length]);
-  let at = 11;
-  for (const k of ['draws', 'tris', 'lines']) for (let i = from; i <= f; ++i) o.set(__meshes[i][k], at), at += __meshes[i][k].length;
+  // (sketch.mat's table: each frame kept its own, so those of a sketch that never clears go after one another; past 80 rows what is drawn is flat, past 720 places a row reads the last lights that fit)
+  const rows = [], sets = [];
+  let count = 0;
+  for (let i = from; i <= f; ++i) count += __meshes[i].rows.length;
+  const shown = Math.min(count, 80);
+  for (let i = from, row = 0, place = shown * 4, last = place; i <= f; ++i) {
+    const m = __meshes[i], where = [];
+    m.base = row;
+    if (row < shown) for (const q of m.sets) {
+      const n = q.o.length / 4;
+      if (place + n <= 720) sets.push(...q.o), last = place, place += n;
+      where.push(last);
+    }
+    for (const q of m.rows) { if (row < shown) rows.push(...q.slice(0, 15), where[q[15]]); ++row; }
+  }
+  const o = new Float32Array(12 + d + t + l + rows.length + sets.length), b = __meshes[from].back || [0, 0, 0, 0];
+  o.set([d / 29, t / 15, l / 12, __U, globalThis.width, globalThis.height, b[0], b[1], b[2], b[3], __tex.length, (rows.length + sets.length) / 4]);
+  let at = 12;
+  for (const k of ['draws', 'tris', 'lines']) for (let i = from; i <= f; ++i) {
+    const q = __meshes[i][k], step = k === 'draws' ? 29 : 15, of = k === 'draws' ? 21 : 10;
+    o.set(q, at);
+    if (k !== 'lines' && __meshes[i].base) for (let v = at + of; v < at + q.length; v += step) if (o[v] >= 2) o[v] = o[v] + __meshes[i].base < 2 + shown ? o[v] + __meshes[i].base : 1;
+    at += q.length;
+  }
+  o.set(rows, at), o.set(sets, at + rows.length);
   globalThis.__bytes = o;
 }
 function __mesh_shape(i) {   // (a shape as p5 made it, once)
@@ -519,11 +565,11 @@ function __most() {   // (as many copies as its first seconds draw at once, a se
   for (let f = 1; f < 300 && Date.now() - from < 1000; ++f) __to(f);
   return Math.max(...__frames.map(c => c.length / 11));
 }
-function __shape() {   // (only boxes, only balls or only rings, with no lines: the world's own, as real as any. Any more: as it draws them, doc_sketch.h)
+function __shape() {   // (only boxes, only balls or only rings, with no lines and no lights of its own: the world's own, as real as any. Any more: as it draws them, doc_sketch.h)
   __most();
   if (__parts.length || __three) return '';
   const kit = { box: 'cube', ellipsoid: 'ball', torus: 'ring' }, kinds = Object.keys(__kinds);
-  return kinds.length === 1 && kit[kinds[0]] && !__lined && !__tex.length && !__meshes.some(m => m.tris.length) ? kit[kinds[0]] : 'sketch';
+  return kinds.length === 1 && kit[kinds[0]] && !__lined && !__tex.length && !__meshes.some(m => m.tris.length || m.rows.length) ? kit[kinds[0]] : 'sketch';
 }
 var __by_at = -1, __by = [];
 function __three_each(i, f, part) {   // (the frame's meshes by their parts; each part's copies a solid's: door.h)

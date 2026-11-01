@@ -22,18 +22,20 @@ static const SketchShape* doc_sketch_shape(std::vector<SketchShape>& shapes, Scr
     return &shapes[i];
 }
 static void doc_sketch_mesh(Doc& d, int thing, Doc::Shown& t, double now) {
-    // (p5_stand.h's __mesh_at: how many of each, its unit, its size, what it clears with, how many pictures; then each shape it stands:
-    //  which, its 16, fill, flat -1 none, its line, stroke, weight, picture; each corner of a triangle: x y z, normal, colour, flat, line,
-    //  where it reads its picture, which; each line: two ends, colour, weight, line. A sketch past MOST points shows as many as fit,
-    //  past PICTURES pictures the rest as white)
-    constexpr size_t HEAD = 11, RET = 29, TRI = 15, SEG = 12, MOST = 3000000, PICTURES = 6;
+    // (p5_stand.h's __mesh_at: how many of each, its unit, its size, what it clears with, how many pictures, how long the table of what
+    //  it lights is; then each shape it stands: which, its 16, fill, flat -1 none, its line, stroke, weight, picture; each corner of a
+    //  triangle: x y z, normal, colour, flat, line, where it reads its picture, which; each line: two ends, colour, weight, line; then
+    //  sketch.mat's table. A sketch past MOST points shows as many as fit, past PICTURES pictures the rest as white)
+    constexpr size_t HEAD = 12, RET = 29, TRI = 15, SEG = 12, TOLD = 720, MOST = 3000000, PICTURES = 6;
     Stage& s = *d.stage;
     DocScript* sc = doc_script_of(d, doc_literal_word(d, thing, "script"));
     if (!sc || !sc->run || !sc->run->ok()) return;
     const double gone = doc_literal(d, thing, "begin", 0, 0), begins = doc_literal(d, thing, "start", 0, 0) - gone;
     const int frame = std::max(0, (int)std::lround((now - begins) * 60.0));
-    const math::double4 from = inverse(doc_shown_at(d, thing, now)) * math::double4{s.camera->getPosition(), 1.0};
+    const auto shown = doc_shown_at(d, thing, now);
+    const math::double4 from = inverse(shown) * math::double4{s.camera->getPosition(), 1.0};
     const float3 eye = float3{(float)(from.x / from.w), (float)(from.y / from.w), (float)(from.z / from.w)};
+    t.look->setParameter("eye", eye), t.look->setParameter("fromSketch", math::mat3f(shown.upperLeft()));   // (what it lights itself it lights where it stands now)
     std::map<int, float> strong;
     for (size_t i = 0; i < sc->knobs.size(); ++i)
         if (const std::string& k = sc->knobs[i].name; k.rfind("line_", 0) == 0) strong[std::atoi(k.c_str() + 5)] = (float)doc_number(d, thing, sc->names[i].c_str(), now, sc->knobs[i].usual);
@@ -45,8 +47,10 @@ static void doc_sketch_mesh(Doc& d, int thing, Doc::Shown& t, double now) {
     const float* f = (const float*)raw.data();
     const size_t draws = (size_t)f[0], tris = (size_t)f[1], segs = (size_t)f[2];
     const float U = f[3], wide = f[4], high = f[5];
-    if (raw.size() < (HEAD + draws * RET + tris * TRI + segs * SEG) * sizeof(float)) return;
+    const size_t told = (size_t)f[11];
+    if (raw.size() < (HEAD + draws * RET + tris * TRI + segs * SEG + told * 4) * sizeof(float)) return;
     const float* back = f + 6, *all = f + HEAD;
+    if (told) t.look->setParameter("told", (const float4*)(all + draws * RET + tris * TRI + segs * SEG), std::min(told, TOLD));
     for (size_t i = t.sketchPics.size(); i < std::min((size_t)f[10], PICTURES); ++i) {   // (each picture it draws with, its wraps as p5's textureWrap: clamp, repeat, mirror)
         const std::vector<uint8_t> said = sc->run->bytes("__mesh_pic(" + std::to_string(i) + ")");
         if (said.size() < 4 * sizeof(float)) break;

@@ -1,13 +1,14 @@
 // sketch.mat: what a p5.js sketch draws in WEBGL, one mesh remade each frame (doc_sketch.h). Its colours are each point's,
 // as p5 keeps them, in the sketch's own sRGB (p5's own shaders do no sum to them either), so they are turned to light here
 // and go on through the triangle as p5's do. uv.x: 1 what the sketch draws with no lights, as flat as the sketch has it,
-// and every line (p5's line shader takes no light); 0 what it lights, here by the world's own. Clear as it says and
-// writing depth all the same, drawn in the order it draws them: p5 sorts nothing either, and a clear thing hides what it
-// draws behind it later. No face culled and no normal turned, as p5: it takes a sketch's triangles either way round and
-// its normals as they are told, and Filament's doubleSided would turn those of the ones wound the other way. What is flat
-// is put after the lights, Filament's own postLightingColor: with none of a surface's sums left, its edges and the world's
-// sky do not shine on it (specularDFG leaves a shine at an edge even at reflectance 0). uv.y: which picture it is drawn
-// with, 0 none, 1 picture0, read by uv1 and laid on its colour as p5's own shader does; ThorVG's are premultiplied.
+// and every line (p5's line shader takes no light); 0 what the world's own lights light; 2 and on what the sketch lights
+// itself, the row of what it told. Clear as it says and writing depth all the same, drawn in the order it draws them: p5
+// sorts nothing either, and a clear thing hides what it draws behind it later. No face culled and no normal turned, as p5:
+// it takes a sketch's triangles either way round and its normals as they are told, and Filament's doubleSided would turn
+// those of the ones wound the other way. What is flat is put after the lights, Filament's own postLightingColor: with none
+// of a surface's sums left, its edges and the world's sky do not shine on it (specularDFG leaves a shine at an edge even at
+// reflectance 0). uv.y: which picture it is drawn with, 0 none, 1 picture0, read by uv1 and laid on its colour as p5's own
+// shader does; ThorVG's are premultiplied.
 material {
     name : Sketch,
     requires : [
@@ -26,11 +27,52 @@ material {
         { type : sampler2d, name : picture3 }, { type : sampler2d, name : picture4 }, { type : sampler2d, name : picture5 },
         { type : float4, name : color },
         { type : float, name : roughness },
-        { type : float, name : metalOff }
-    ]
+        { type : float, name : metalOff },
+        { type : float4[720], name : told },
+        { type : float3, name : eye },
+        { type : mat3, name : fromSketch }
+    ],
+    variables : [ sketchAt ]
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        material.sketchAt = vec4(getPosition().xyz, 1.0);
+    }
 }
 
 fragment {
+    // p5.js's lighting.glsl and phong.frag, sums and all, read from what its _setFillUniforms told (p5_stand.h's __lit) in one
+    // table instead of its uniforms, as what is drawn in one mesh differs from draw to draw. Its sums are done where p5 does them,
+    // on the sketch's own sRGB numbers, in the sketch's own space: the eye is the world's, so a shine moves with the camera.
+    void shone(inout vec3 diffuse, inout vec3 specular, vec3 lightVector, vec3 colour, vec3 shine, float k, vec3 view, vec3 normal, float shininess, float metallic, bool shiny) {
+        vec3 lightDir = normalize(lightVector);
+        if (shiny) specular += pow(max(0.0, dot(reflect(lightDir, normal), view)), shininess) * mix(1.0, 0.4, metallic) * colour * shine * k;
+        diffuse += max(0.0, dot(-lightDir, normal)) * mix(1.0, 0.1, metallic) * colour * k;
+    }
+    vec3 lit(int row, vec3 colour) {
+        vec4 a = materialParams.told[row], b = materialParams.told[row + 1], c = materialParams.told[row + 2], d = materialParams.told[row + 3];
+        int at = int(d.w);
+        vec4 ambient = materialParams.told[at], fall = materialParams.told[at + 1];
+        at += 2;
+        vec3 here = variable_sketchAt.xyz, normal = normalize(transpose(materialParams.fromSketch) * shading_normal), view = normalize(materialParams.eye - here), diffuse = vec3(0.0), specular = vec3(0.0);
+        bool shiny = a.w > 1.5;
+        for (int j = 0; j < int(d.x); ++j, at += 3)
+            shone(diffuse, specular, materialParams.told[at].xyz, materialParams.told[at + 1].xyz, materialParams.told[at + 2].xyz, 1.0, view, normal, b.w, c.w, shiny);
+        for (int j = 0; j < int(d.y); ++j, at += 3) {
+            vec3 lightVector = here - materialParams.told[at].xyz;
+            float far = length(lightVector) / ambient.w, k = 1.0 / (fall.x + far * fall.y + far * far * fall.z);
+            shone(diffuse, specular, lightVector, materialParams.told[at + 1].xyz, materialParams.told[at + 2].xyz, k, view, normal, b.w, c.w, shiny);
+        }
+        for (int j = 0; j < int(d.z); ++j, at += 4) {
+            vec3 lightVector = here - materialParams.told[at].xyz;
+            float far = length(lightVector) / ambient.w, k = 1.0 / (fall.x + far * fall.y + far * far * fall.z);
+            float spotDot = dot(normalize(lightVector), normalize(materialParams.told[at + 1].xyz));
+            k *= spotDot < materialParams.told[at].w ? 0.0 : pow(spotDot, materialParams.told[at + 1].w);
+            shone(diffuse, specular, lightVector, materialParams.told[at + 2].xyz, materialParams.told[at + 3].xyz, k, view, normal, b.w, c.w, shiny);
+        }
+        return diffuse * 0.73 * colour + ambient.xyz * (mod(a.w, 2.0) > 0.5 ? a.xyz : colour) + specular * 2.0 * b.xyz + c.xyz;
+    }
     vec4 drawnWith(float which, vec2 at) {
         if (which < 1.5) return textureLod(materialParams_picture0, at, 0.0);
         if (which < 2.5) return textureLod(materialParams_picture1, at, 0.0);
@@ -47,6 +89,7 @@ fragment {
             c *= vec4(t.rgb / max(t.a, 1e-4), t.a);
             if (c.a < 0.004) discard;   // (what a picture leaves clear hides nothing behind it)
         }
+        if (getUV0().x > 1.5) c.rgb = clamp(lit((int(round(getUV0().x)) - 2) * 4, c.rgb), 0.0, 1.0);
         vec3 light = mix(c.rgb / 12.92, pow((c.rgb + 0.055) / 1.055, vec3(2.4)), step(0.04045, c.rgb)) * materialParams.color.rgb;
         material.baseColor = vec4(light * c.a, c.a);
         material.postLightingColor = material.baseColor;

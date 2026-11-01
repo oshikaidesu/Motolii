@@ -574,6 +574,9 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] `copy()` でキャンバスを自分に写す作品（1164426）：このスタンドに画素が無い。線と面は数で持っている
 - [ ] `.mjs` のタブを import する作品（2982343）
 - [ ] p5 以外の 2 作：素の canvas（2980511）、textmode.js（2998051）
+- [x] p5 自身の光：ambientLight、directionalLight、pointLight、spotLight、lights、lightFalloff、ambientMaterial、specularMaterial、emissiveMaterial、shininess、metalness。p5 の lighting.glsl の計算のまま（sketch.mat、本物の p5 と並べて確認）
+- [ ] p5 の imageLight と panorama（3 作）：今は無視される
+- [ ] 世界の光をスケッチにも当てる（AE の Accepts Lights が手本の候補。未読）：今は自分の光を持つ物に世界の光は当たらない
 - [x] コピーごとの色（p5_stand.h）
 - [ ] スケッチの動画：頭出しと切り出し、スケッチの後から入れた動画に取り替え、動画の大きさ
 - [ ] Time Remap：スケッチの時間にキーを打つ
