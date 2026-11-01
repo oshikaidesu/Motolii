@@ -17,7 +17,7 @@ import 'package:lab_book/workspace/effect_tiles.dart';
 
 import 'door.dart';
 
-const _shelves = ['Media', 'Effects', 'Fonts', 'Colors', 'Create'];
+const _shelves = ['Media', 'Effects', 'Fonts', 'Colors', 'Create', 'Program'];
 
 /// A window's state joined to a new document in a folder of its own, with a picture beside it.
 Ws _joined() {

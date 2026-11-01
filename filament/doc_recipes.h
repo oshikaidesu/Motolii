@@ -36,9 +36,8 @@ static std::string doc_recipe_names() {
 // over since it was read: a stage that is not drawing is woken by it (a file saved shows at once).
 static bool doc_files_moved(Doc& d) {
     bool moved = screen_moved(d.screen);
-    const int before = doc_scripts_made(d);
     for (int t : doc_laid(d)) doc_scripts_on(d, t);   // (each looks at its file's time and reads it again if it changed)
-    if (doc_scripts_made(d) != before) moved = true, d.scripted.clear();
+    if (DocScripts& kept = doc_scripts_kept(d); kept.made != kept.told) kept.told = kept.made, moved = true, d.scripted.clear();   // (read again here, or by a window asking for its cards first)
     return moved;
 }
 // The files of a kind in its folders (doc_folders) ("name\tpath\tlabel\tpicture", one to a line): the whole-screen effects (effects/*.wgsl),

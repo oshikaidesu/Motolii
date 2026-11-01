@@ -1643,6 +1643,38 @@ void _tests3() {
     expect(m.things.where((x) => m.word(x, 'name') == 'Dwitter'), isEmpty);
   });
 
+  testWidgets('A program stands on a shelf of its own: put on the stage from it, its code typed at moves what stands there and what the inspector shows, and code half typed leaves all that and says why (Godot\'s and Unity\'s scripts on a shelf, their knobs in the inspector; Shadertoy keeps the last picture that compiled)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final file = File('${EffectTiles.own}/programs/p5.js-0test.js')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('function setup(){createCanvas(99,99);}\nfunction draw(){\nrect(1,1,9,9);\n}\n');
+    addTearDown(file.deleteSync);
+    ws.shelf = 'Program';
+    await t.pumpAndSettle();
+    await t.tap(find.text('0test'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Create'));
+    await settled(t, ws);
+    final made = m.things.last;
+    expect(m.word(made, 'file'), file.path, reason: m.trouble);
+    List<String> knobs() => [for (final (title, names) in m.cards(made)) if (title == 'Script') ...names.where((n) => n.startsWith('js_line'))];
+    expect(knobs(), ['js_line_3'], reason: 'a line that draws, a knob');
+    await t.tap(find.byWidgetPredicate((w) => w is DockIconButton && w.g == DockG.program));
+    await t.pumpAndSettle();
+    final code = t.widget<CodeEditor>(find.byType(CodeEditor)).controller!;
+    code.text = 'function setup(){createCanvas(99,99);}\nfunction draw(){\nrect(1,1,9,9);\nellipse(5,5,9,9);\n}\n';
+    await t.pump(const Duration(milliseconds: 500));
+    await settled(t, ws);
+    expect(file.readAsStringSync(), contains('ellipse'), reason: 'saved as it is typed');
+    expect(knobs(), ['js_line_3', 'js_line_4'], reason: 'a line more, a knob more, nothing pressed');
+    code.text = 'function draw({';
+    await t.pump(const Duration(milliseconds: 500));
+    await settled(t, ws);
+    expect(find.textContaining('SyntaxError'), findsOneWidget, reason: 'it says why');
+    expect(m.things.contains(made), isTrue);
+    expect(m.trouble, isNot(contains('could not be made')));
+  });
+
   testWidgets('A group is one row until its triangle opens it; its row stands where its top thing stood, the rest gathered under it; Delete takes what it holds, one step (a precomposed layer; Apple Motion\'s triangle; Alight Motion\'s group)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final a = m.add('shape', 'rect'), b = m.add('shape', 'circle'), c = m.add('shape', 'star'), d = m.add('shape', 'polygon');

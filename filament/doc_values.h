@@ -236,7 +236,8 @@ struct DocScript {
 // Each document its own: a script runs in a QuickJS runtime of its own, and "inside a given runtime, no
 // multi-threading is supported" (QuickJS's documentation, 3.4.1 Runtime and contexts): two documents' hands (the
 // window's and the recipes' previews) each run theirs, under their document's lock.
-struct DocScripts { std::map<std::string, DocScript> all; int made = 0; };
+struct DocSketch { long long seen = 0, whole = 0; std::shared_ptr<Script> ready; };   // (a flat sketch's file: when it was last looked at, when it last ran, and that run)
+struct DocScripts { std::map<std::string, DocScript> all; int made = 0, told = 0; std::map<std::string, DocSketch> sketches; std::map<std::string, std::string> why; };   // (why: a file's code as it does not run, what it was before left standing)
 static DocScripts& doc_scripts_kept(Doc& d) { if (!d.scripts) d.scripts = std::make_shared<DocScripts>(); return *d.scripts; }
 static std::map<std::string, DocScript>& doc_scripts(Doc& d) { return doc_scripts_kept(d).all; }
 static int& doc_scripts_made(Doc& d) { return doc_scripts_kept(d).made; }
@@ -274,6 +275,7 @@ static DocScript* doc_script_of(Doc& d, const std::string& file, bool runs = tru
     const long long stamp = (long long)std::filesystem::last_write_time(aviutl_is(file) ? aviutl_path(file) : fx_source(file), wrong).time_since_epoch().count();
     if (wrong) return s.stamp >= 0 ? &s : nullptr;
     if (s.stamp != stamp) {
+        DocScript was = std::move(s);
         s = DocScript{};
         s.viewer = lottie && viewer_is(file);
         s.stamp = stamp, s.seen = files_changed(), s.knobs = ext == ".mjs" ? SplatEffect(file).knobs() : s.viewer ? viewer_knobs(file) : lottie ? lottie_knobs(file) : script_knobs(screen ? isf_file(file) : file);
@@ -295,6 +297,12 @@ static DocScript* doc_script_of(Doc& d, const std::string& file, bool runs = tru
         }
         if (lottie) return &s;   // (read, not run)
         if (!screen && runs) s.run = std::make_unique<Script>(file, (doc_folders("third_party/js/p5").front() / "p5.min.js").string());   // (a .wgsl or an ISF .fs is drawn, not run: screen.h)
+        if (s.run && !s.run->ok() && was.run && was.run->ok()) {   // (code half typed: what ran stays, and says why)
+            doc_scripts_kept(d).why[file] = d.trouble = s.run->trouble();
+            s = std::move(was), s.stamp = stamp, s.seen = files_changed();
+            return &s;
+        }
+        doc_scripts_kept(d).why.erase(file);
         { std::ifstream in(screen ? isf_file(file) : file); std::stringstream text; text << in.rdbuf(); s.clears = text.str().find("opacity") != std::string::npos; }
     }
     return &s;

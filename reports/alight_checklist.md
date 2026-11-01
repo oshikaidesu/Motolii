@@ -567,7 +567,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [x] Turtletoy の入口：`Turtle` と `walk(i)`、`walk` の無い作品も。npm の turtletoy を使う（door.h）
 - [ ] p5 の shader()：168 作のうち 33 作が使う。Shadertoy の入口と同じ GLSL の読み口に繋げられるか
 - [x] three.js の場面を動かす台：three.core.js をそのまま走らせ、形と材質の組ごとに本物の立体で世界に立てる（doc_door.h、p5_stand.h）
-- [ ] プログラムの置き場：左のブラウザに Program を足し、一覧とコードの表示を切り替える。つまみは今のまま右のインスペクター。貼った物は Create と Effects に混ぜず、ここに入れる。見本：Godot と Unity は「コードはファイルとしてブラウザに、つまみはインスペクターに」、Cavalry はつまみが Attribute Editor でコードのタブは閉じても残る、TouchDesigner はコードが Text DAT でつまみが Parameter Dialog。割れた点（コードをどこで打つか）は「舞台を見ながら直す」が要るので左に置く。これは見本から取った決めではなく、出典なし
+- [x] プログラムの置き場：左のブラウザに Program を足し、一覧とコードの表示を切り替える。つまみは今のまま右のインスペクター。貼った物は Create と Effects に混ぜず、ここに入れる。見本：Godot と Unity は「コードはファイルとしてブラウザに、つまみはインスペクターに」、Cavalry はつまみが Attribute Editor でコードのタブは閉じても残る、TouchDesigner はコードが Text DAT でつまみが Parameter Dialog。割れた点（コードをどこで打つか）は「舞台を見ながら直す」が要るので左に置く。これは見本から取った決めではなく、出典なし
 - [ ] Shadertoy の複数バッファ（Buffer A〜D、Common）：今は 1 つのパスだけ。Common に関数がある作品と、前のコマを読む作品は絵にならない
 - [ ] 2D の入口の絵を世界に立てる：Dwitter・tixy・Turtletoy・Two.js・Paper.js・Canvas は世界の中で 1 枚の板。線や形ごとの奥行きが要るか
 - [ ] p5 の WEBGL の物ごとの色：`solid_fill` が全部の複製に 1 つの材質を渡すので、白い箱になる

@@ -18,7 +18,7 @@ void main() {
     for (final pane in const ['Stage', 'Inspector', 'Timeline', 'Desk']) {
       expect(find.text(pane), findsWidgets, reason: 'a named tab per pane');
     }
-    for (final shelf in const ['Media', 'Effects', 'Fonts', 'Colors', 'Create']) {
+    for (final shelf in const ['Media', 'Effects', 'Fonts', 'Colors', 'Create', 'Program']) {
       expect(find.bySemanticsLabel(shelf), findsOneWidget, reason: 'an icon tab per shelf');
     }
     await closeWorkspace(t);

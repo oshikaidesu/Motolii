@@ -11,6 +11,7 @@ enum DockG {
   colors,
   files,
   create,
+  program,
   search,
   close,
   chevron,
@@ -136,6 +137,12 @@ class _P extends CustomPainter {
         final k = g == DockG.create ? .3 : .2;
         cv.drawLine(p(.5, k), p(.5, 1 - k), st);
         cv.drawLine(p(k, .5), p(1 - k, .5), st);
+      case DockG.program:   // (code's angle brackets and slash)
+        cv.drawLine(p(.34, .3), p(.12, .5), st);
+        cv.drawLine(p(.12, .5), p(.34, .7), st);
+        cv.drawLine(p(.66, .3), p(.88, .5), st);
+        cv.drawLine(p(.88, .5), p(.66, .7), st);
+        cv.drawLine(p(.56, .22), p(.44, .78), st);
       case DockG.search:
         cv.drawCircle(p(.43, .43), w * .26, st);
         cv.drawLine(p(.63, .63), p(.86, .86), st);

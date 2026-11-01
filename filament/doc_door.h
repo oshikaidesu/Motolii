@@ -77,3 +77,13 @@ static int doc_door(Doc& d, const std::string& word, int picked) {
     }
     return doc_acted(d) ? thing : 0;
 }
+// A program's file saved on the shelf: what was made from it follows now, not when the OS's watch tells the window. Why
+// its code does not run comes back ("": it runs).
+static std::string doc_code_saved(Doc& d, const std::string& file) {
+    ++files_changed();
+    doc_files_moved(d);
+    if (std::filesystem::path(file).extension() == ".js") doc_sketch_written(d, file);
+    doc_match(d);
+    const auto& why = doc_scripts_kept(d).why;
+    return why.count(file) ? why.at(file) : "";
+}

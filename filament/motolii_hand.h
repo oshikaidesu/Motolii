@@ -40,7 +40,7 @@ struct Motolii {
     std::condition_variable asked_now;
     std::unique_ptr<thermion::FrameScheduler> beat;   // (the screen's beat, Thermion's: a picture is drawn on each; CVDisplayLink, DXGI on Windows)
     uint64_t beats = 0, drew_at = 0;                  // (beats come, and the one the last picture was drawn on: under asked_lock)
-    long rounds_threw = 0, beats_drawn = 0, beats_gpu_busy = 0, beats_still = 0, writes_on_beat = 0, beats_two = 0, beats_unseen = 0; uint64_t busy_at = 0, still_at = 0, seen_beat = 0; double films_ms = 0, films_most = 0, part_ms[7] = {}, part_most[7] = {};   // (the hand's round in parts: files looked at, changes, telling, GPU asked, ahead, the rest)   // (beats a picture was drawn on, and beats the GPU had not finished the last: for the spent line)
+    long rounds_threw = 0, beats_drawn = 0, beats_gpu_busy = 0, beats_still = 0, writes_on_beat = 0, beats_two = 0, beats_unseen = 0; uint64_t busy_at = 0, still_at = 0, seen_beat = 0; int files_seen = -1; double films_ms = 0, films_most = 0, part_ms[7] = {}, part_most[7] = {};   // (the hand's round in parts: files looked at, changes, telling, GPU asked, ahead, the rest)   // (beats a picture was drawn on, and beats the GPU had not finished the last: for the spent line)
     std::atomic<void (*)(void*)> shown{nullptr};      // (motolii_finished: told when a picture is finished, to tell Flutter)
     std::atomic<void*> shown_with{nullptr};
     std::deque<std::function<void()>> asked;
@@ -270,9 +270,10 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         }
         auto lap_at = std::chrono::steady_clock::now();
         const auto lap = [&](int i) { const auto n = std::chrono::steady_clock::now(); const double ms = 1e3 * std::chrono::duration<double>(n - lap_at).count(); m->part_ms[i] += ms; m->part_most[i] = std::max(m->part_most[i], ms); lap_at = n; };
-        if (todo.empty() && m->live && !m->playing && !m->changed) {
+        if (todo.empty() && m->live && ((!m->playing && !m->changed) || m->files_seen != files_changed())) {   // (playing too, once the window says a file changed)
             std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
-            if (doc_files_moved(*m->d)) m->changed = true;
+            m->files_seen = files_changed();
+            if (doc_files_moved(*m->d)) doc_match(*m->d), m->changed = true;
         }   // (a shader or a script saved: drawn again)
         lap(0);
         m->step = "doing the changes asked";

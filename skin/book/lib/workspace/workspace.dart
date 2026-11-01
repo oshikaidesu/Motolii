@@ -577,6 +577,8 @@ class _WorkspaceState extends State<Workspace> {
     _inside = inside;
     _own = EffectTiles.watch(inside, () {   // (a file put in the maker's own folder: on the shelves at once; an element written over: followed where it is put in)
       if (mounted) _ws.after(inside.later('follow_elements'), (_, _) => _ws.reread());
+    }, program: (file) {
+      if (mounted) _ws.after(inside.later('code', word: file), (_, _) => _ws.reread());
     });
     _ws.after(inside.later('follow_elements'));   // (as the document is opened: AbsentMotion's elements followed as a project is loaded)
     _doc = doc;

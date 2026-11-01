@@ -29,6 +29,9 @@ class DockMem {
   final trouble = <String, String>{};
   bool mediaList = false;
 
+  /// Program: the picked one's code rather than the list.
+  bool programCode = false;
+
   /// Media: the folders below the open one listed with it (all at once), and where the tree lies (0 by the room, 1 left, 2 above).
   bool mediaDeep = false;
 

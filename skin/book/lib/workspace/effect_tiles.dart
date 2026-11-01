@@ -93,7 +93,7 @@ abstract final class EffectTiles {
   static List<String> get library => [for (final f in const ['effects', 'aviutl_scripts', 'recipes', 'animators']) '$motoliiDir/$f'];
 
   /// Watched until the subscription is cancelled; [changed] is told after the folders are read again and after tiles are drawn.
-  static StreamSubscription<FileSystemEvent>? watch(Motolii m, void Function() changed) {
+  static StreamSubscription<FileSystemEvent>? watch(Motolii m, void Function() changed, {void Function(String file)? program}) {
     ask(m, changed);
     final dir = Directory('$own/effects');
     try {
@@ -110,7 +110,13 @@ abstract final class EffectTiles {
     final inner = <StreamSubscription<FileSystemEvent>>[];
     final merged = StreamController<FileSystemEvent>(onCancel: () => Future.wait([for (final w in inner) w.cancel()]));   // (one watch a folder, told as one)
     inner.addAll([for (final p in [own, ...library.where((p) => Directory(p).existsSync())]) Directory(p).watch(recursive: true).listen(merged.add)]);
-    return merged.stream.listen((_) {
+    final told = <String, Timer>{};
+    return merged.stream.listen((e) {
+      if (program != null && e.path.startsWith('$own/programs/')) {   // (a program's file: what is made from it follows, no shelf is read again)
+        told[e.path]?.cancel();
+        told[e.path] = Timer(const Duration(milliseconds: 300), () => program(e.path));
+        return;
+      }
       soon?.cancel();
       soon = Timer(const Duration(milliseconds: 300), again); // (a copy is several events: read once it has settled)
     });

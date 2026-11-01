@@ -11,6 +11,7 @@ import 'dock_glyphs.dart';
 import 'dock_make.dart';
 import 'dock_parts.dart';
 import 'dock_tags.dart';
+import 'dock_program.dart';
 import 'ws.dart';
 
 /// The shelves: name (also the pane's id and [Ws.shelf]), the mark on its tab, the search hint.
@@ -20,6 +21,7 @@ const dockShelves = <(String, DockG, String)>[
   ('Fonts', DockG.fonts, 'Search 15 families'),
   ('Colors', DockG.colors, 'Search palettes'),
   ('Create', DockG.create, 'Search layers and shapes'),
+  ('Program', DockG.program, 'Search code'),   // (what came as code: dock_program.dart)
   ('Presets', DockG.files, 'Search presets'),   // (motion and effects together, kept as one: saving them comes once editing is settled)
 ];
 
@@ -112,6 +114,9 @@ class _WsShelfState extends State<WsShelf> {
               DockIconButton(DockG.list, on: _mem.mediaList, onTap: () => setState(() => _mem.mediaList = true)),
               DockIconButton(DockG.folder, on: _mem.mediaDeep, onTap: () => setState(() => _mem.mediaDeep = !_mem.mediaDeep)),   // (the folders below listed with it)
               DockIconButton(DockG.files, on: _mem.treeSide != 0, onTap: () => setState(() => _mem.treeSide = (_mem.treeSide + 1) % 3)),   // (the tree: by the room, left, above)
+            ] else if (name == 'Program') ...[
+              DockIconButton(DockG.list, on: !_mem.programCode, onTap: () => setState(() => _mem.programCode = false)),
+              DockIconButton(DockG.program, on: _mem.programCode, onTap: () => setState(() => _mem.programCode = true)),
             ] else
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: Shape.z(88)),
@@ -171,6 +176,7 @@ class _WsShelfState extends State<WsShelf> {
             'Fonts' => FontsShelf(c),
             'Colors' => ColorsShelf(c),
             'Create' => CreateShelf(c),
+            'Program' => ProgramShelf(c),
             'Presets' => Padding(
               padding: EdgeInsets.all(Shape.s(24)),
               child: Text('No presets yet', textAlign: TextAlign.center, style: T.label(Grey.g63)),

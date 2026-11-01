@@ -50,6 +50,20 @@ static bool doc_lit(Doc& d, int thing) {
 static bool doc_sheet_told(Doc& d, int thing, const std::string& name) {
     return doc_among("metallic roughness reflectance", name.c_str()) && doc_word(d, thing, "kind") != "solid";
 }
+// A flat sketch as it was last written whole: what its thing is made from, so code typed at is made again once it runs,
+// and code half typed leaves the thing as it stood and says why (Shadertoy's editor keeps the last picture that compiled).
+static long long doc_sketch_written(Doc& d, const std::string& file) {
+    DocSketch& one = doc_scripts_kept(d).sketches[file];
+    std::error_code wrong;
+    const long long stamp = (long long)std::filesystem::last_write_time(file, wrong).time_since_epoch().count();
+    if (wrong || stamp == one.seen) return one.whole;
+    one.seen = stamp;
+    auto run = std::make_shared<Script>(file, (doc_folders("third_party/js/p5").front() / "p5.min.js").string());
+    if (run->flat()) one.whole = stamp, one.ready = run;
+    if (run->ok()) doc_scripts_kept(d).why.erase(file);
+    else doc_scripts_kept(d).why[file] = d.trouble = run->trouble();
+    return one.whole;
+}
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     s.frames = doc_number(d, 0, "frame_rate", 0, 0);   // (the document's frame rate: its time seen at its frames from the next picture on)
@@ -61,6 +75,9 @@ static bool doc_match(Doc& d) {
             const size_t end = of.find(' ', at);
             if (doc_blend_way(of.substr(at + 6, end == std::string::npos ? std::string::npos : end - at - 6))) of.replace(at + 6, (end == std::string::npos ? of.size() : end) - at - 6, "*");
         }
+    for (auto& [thing, of] : told)
+        if (of.find("kind=picture") != std::string::npos)
+            if (const std::string file = doc_word(d, thing, "file"); std::filesystem::path(file).extension() == ".js") of += " written=" + std::to_string(doc_sketch_written(d, file));
     for (auto& [thing, of] : told) of += doc_bends(d, thing) ? " bent=1" : " bent=0";   // (bent or not: cut fine, or only round its curves)
     for (auto& [thing, of] : told) {   // (its effects: which are on and the room they reach, not their numbers (doc_fxing))
         const auto on = [&](const char* name) { return std::max(doc_most(d, thing, name, 0), doc_number(d, thing, name, 0, 0)) > 0.0; };
@@ -235,7 +252,8 @@ static bool doc_match(Doc& d) {
             if (ext == ".js") {   // (a p5.js sketch that paints in 2D, what it paints ThorVG's: drawn_sketch.h)
                 std::string under;   // (the film under it: what its createCapture and createVideo see)
                 for (int t : doc_laid(d)) { if (t == thing) break; if (doc_word(d, t, "kind") == "film") under = doc_word(d, t, "file"); }
-                auto run = std::make_shared<Script>(file, (doc_folders("third_party/js/p5").front() / "p5.min.js").string(), under);
+                std::shared_ptr<Script>& ready = doc_scripts_kept(d).sketches[file].ready;   // (what was run to see it runs, where no film is under it)
+                auto run = ready && under.empty() ? std::exchange(ready, nullptr) : std::make_shared<Script>(file, (doc_folders("third_party/js/p5").front() / "p5.min.js").string(), under);
                 if (!run->flat()) why = run->ok() ? "not a 2D sketch: " + file : run->trouble();
                 else if (fxOk && (made.drawn = sketch_picture(s, run, (doc_folders("third_party/filament_src/assets/fonts").front() / "Roboto-Medium.ttf").string(), 1.f, lay, fx))) s.playing.erase(made.drawn);
             } else if (fxOk && aspect > 0.f) {   // (a photo with an edge, round corners or cut in: a rect as wide as it is, its own file its fill, as a shape filled with media is (Alight Motion's media layers take a border as its shapes do))

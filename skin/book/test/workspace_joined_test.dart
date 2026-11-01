@@ -17,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 
 import 'door.dart';
+import 'package:re_editor/re_editor.dart' show CodeEditor;
 import 'package:lab_book/parts/controls.dart' show Segmented;
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show InspectorPanel, NumField, Ctx, Chooser, GlyphPlate, AnchorCard, AnchorCube, AnchorGeometry, LinkMark, ValuesCard, FillStroke, InspHeader, KeyS, NumField, OnOff, Pop, PropRow, Space, TextGroup;
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart' show Sect;
@@ -24,6 +25,8 @@ import 'package:lab_book/sets/inspector/inspector_direct_transform_canvas.dart' 
 import 'package:lab_book/sets/inspector/inspector_direct_transform_layout.dart' show TransformLayout;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart';
 import 'package:lab_book/workspace/dock_fonts.dart';
+import 'package:lab_book/workspace/dock_glyphs.dart' show DockG;
+import 'package:lab_book/workspace/effect_tiles.dart' show EffectTiles;
 import 'package:lab_book/workspace/keys.dart' show WsKeys;
 import 'package:lab_book/workspace/dock_make.dart' show ColorsShelf, CreateShelf;
 import 'package:lab_book/workspace/stage_art.dart' show WsArt;
@@ -31,7 +34,7 @@ import 'package:lab_book/workspace/zoom.dart' show WsZoom;
 import 'package:lab_book/sets/panels/media_parts.dart' show MiniSlider;
 import 'package:lab_book/sets/foundations/text_hand.dart' show wordsPicked;
 import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
-import 'package:lab_book/workspace/dock_parts.dart' show DockChips, DockFooter, DockHover, DockSearch;
+import 'package:lab_book/workspace/dock_parts.dart' show DockChips, DockFooter, DockHover, DockIconButton, DockSearch;
 import 'package:lab_book/workspace/workspace.dart';
 import 'package:lab_book/workspace/top_bar.dart' show wsAskSize;
 import 'package:lab_book/workspace/desk_ease.dart';

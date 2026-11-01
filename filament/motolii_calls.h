@@ -507,6 +507,12 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "add") ok = m->made = changes(m, doc_add(doc(m), n.c_str(), w.c_str()));   // (name: the kind, word: the file; the answer is the new thing)
             else if (c == "make") ok = m->made = changes(m, doc_make(doc(m), w.c_str()));
             else if (c == "door") ok = m->made = changes(m, doc_door(doc(m), w, thing));   // (word: code from the net; thing: the one picked, or 0)
+            else if (c == "code") {   // (word: a program's file, saved)
+                const std::string why = doc_code_saved(doc(m), w);
+                ok = why.empty(), m->changed = true, doc(m).things_changed = true;   // (its knobs may be others now)
+                if (!ok) m->trouble = why;
+                m->revision.fetch_add(1, std::memory_order_release), picture_update(m), picture_moment(m);
+            }
             else if (c == "duplicate") ok = m->made = changes(m, doc_copy_above(doc(m), thing));   // (the answer is the new thing)
             else if (c == "split") ok = m->made = changes(m, doc_split(doc(m), thing, number));   // (number: the moment; the answer is the part after it)
             else if (c == "extract") ok = changes(m, (int)doc_extract(doc(m)));   // (the work area taken out, the gap closed)
@@ -607,7 +613,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "camera_view") ok = 1, m->second = !w.empty(), m->changed = true;   // (word: the Camera View tab is open; none: it is closed)
             else if (c == "eye") ok = eye_is(m, w.c_str());   // (word: where the window's working eye stands, as eye_is; none: the camera's)
             else if (c == "hold") ok = (int)doc_hold(doc(m), thing);   // (a hand takes hold: what it carries next is this thing's)
-            else m->trouble = "a change asked later is one of: eye, camera_view, say, set, hold, let_go, undo, redo, together, add, make, pen, element, keep_element, follow_elements, fx_duplicate, duplicate, split, align, time_align, reset, fit, flip, extract_sound, freehand, brush, outline, copy, paste, copy_style, paste_style, keep_look, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_eye, fx_move, size, watch, pick, desk, live, relate, lead, free, release, setting";
+            else m->trouble = "a change asked later is one of: code, door, eye, camera_view, say, set, hold, let_go, undo, redo, together, add, make, pen, element, keep_element, follow_elements, fx_duplicate, duplicate, split, align, time_align, reset, fit, flip, extract_sound, freehand, brush, outline, copy, paste, copy_style, paste_style, keep_look, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_eye, fx_move, size, watch, pick, desk, live, relate, lead, free, release, setting";
             } catch (const std::exception& e) {
                 ok = 0;
                 std::fprintf(stderr, "motolii: %s threw: %s\n", c.c_str(), e.what());
