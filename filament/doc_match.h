@@ -75,9 +75,15 @@ static bool doc_match(Doc& d) {
             const size_t end = of.find(' ', at);
             if (doc_blend_way(of.substr(at + 6, end == std::string::npos ? std::string::npos : end - at - 6))) of.replace(at + 6, (end == std::string::npos ? of.size() : end) - at - 6, "*");
         }
-    for (auto& [thing, of] : told)
+    for (auto& [thing, of] : told) {
         if (of.find("kind=picture") != std::string::npos)
             if (const std::string file = doc_word(d, thing, "file"); std::filesystem::path(file).extension() == ".js") of += " written=" + std::to_string(doc_sketch_written(d, file));
+        if (of.find("kind=solid") != std::string::npos)   // (a three.js part made again from its code: doc_three_saved)
+            if (const std::string file = doc_word(d, thing, "file"); std::filesystem::path(file).extension() == ".glb") {
+                std::error_code wrong;
+                of += " written=" + std::to_string((long long)std::filesystem::last_write_time(file, wrong).time_since_epoch().count());
+            }
+    }
     for (auto& [thing, of] : told) of += doc_bends(d, thing) ? " bent=1" : " bent=0";   // (bent or not: cut fine, or only round its curves)
     for (auto& [thing, of] : told) {   // (its effects: which are on and the room they reach, not their numbers (doc_fxing))
         const auto on = [&](const char* name) { return std::max(doc_most(d, thing, name, 0), doc_number(d, thing, name, 0, 0)) > 0.0; };

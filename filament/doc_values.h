@@ -236,7 +236,7 @@ struct DocScript {
 // Each document its own: a script runs in a QuickJS runtime of its own, and "inside a given runtime, no
 // multi-threading is supported" (QuickJS's documentation, 3.4.1 Runtime and contexts): two documents' hands (the
 // window's and the recipes' previews) each run theirs, under their document's lock.
-struct DocSketch { long long seen = 0, whole = 0; std::shared_ptr<Script> ready; };   // (a flat sketch's file: when it was last looked at, when it last ran, and that run)
+struct DocSketch { long long seen = 0, whole = 0, saved = 0; std::shared_ptr<Script> ready; };   // (a flat sketch's file: when it was last looked at, when it last ran, and that run)
 struct DocScripts { std::map<std::string, DocScript> all; int made = 0, told = 0; std::map<std::string, DocSketch> sketches; std::map<std::string, std::string> why; };   // (why: a file's code as it does not run, what it was before left standing)
 static DocScripts& doc_scripts_kept(Doc& d) { if (!d.scripts) d.scripts = std::make_shared<DocScripts>(); return *d.scripts; }
 static std::map<std::string, DocScript>& doc_scripts(Doc& d) { return doc_scripts_kept(d).all; }
