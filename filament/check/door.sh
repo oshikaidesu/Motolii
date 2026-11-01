@@ -43,6 +43,31 @@ uniform float time;
 uniform vec2 resolution;
 void main(void){ vec2 p=gl_FragCoord.xy/resolution; gl_FragColor=vec4(p, .5+.5*sin(time*4.+p.x*20.),1.0); }
 J
+cat > $W/s/twigl.txt <<'J'
+float i,e,g;vec3 p,d=vec3((FC.xy-.5*r)/r.y,.7);for(;i++<40.;){p=g*d;p.z+=t;p=mod(p,2.)-1.;e=length(p)-.5*snoise2D(p.xy+t)*.3-.4;g+=e;}o.rgb+=hsv(g*.1,.7,5./g);
+J
+cat > $W/s/twiglfeedback.txt <<'J'
+void main(){vec2 p=FC.xy/r;float c=step(length(p-.5-.3*vec2(cos(t*3.),sin(t*3.))),.05);gl_FragColor=vec4(vec3(c)+.9*texture(b,p).rgb,1.);}
+J
+cat > $W/s/bonzomatic.txt <<'J'
+#version 410 core
+uniform float fGlobalTime; // in seconds
+uniform vec2 v2Resolution; // viewport resolution (in pixels)
+uniform sampler1D texFFT;
+uniform sampler2D texPreviousFrame;
+layout(location = 0) out vec4 out_color; // out_color must be written in order to see anything
+void main(void){
+  vec2 uv = vec2(gl_FragCoord.x / v2Resolution.x, gl_FragCoord.y / v2Resolution.y);
+  float f = texture(texFFT, uv.x).r;
+  out_color = vec4(uv, .5+.5*sin(fGlobalTime*3.+uv.x*9.), 1) + f + .2*texture(texPreviousFrame, uv);
+}
+J
+cat > $W/s/sandboxfeedback.txt <<'J'
+uniform float time;
+uniform vec2 resolution;
+uniform sampler2D backbuffer;
+void main(void){ vec2 p=gl_FragCoord.xy/resolution; gl_FragColor=vec4(.9*texture2D(backbuffer,p).rgb+step(fract(time),.1)*p.x,1.0); }
+J
 cat > $W/three.js <<'J'
 import * as THREE from 'three';
 const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 100);

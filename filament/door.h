@@ -3,16 +3,18 @@
 // JavaScript is told as a p5.js sketch on p5.js's canvas (p5_stand.h), a shader as an ISF effect (isf.cpp). The forms are
 // each site's own: Dwitter's page (dwitter/templates/dweet/dweet.html: c, x, S, C, T, R, u(t) 60 times a second on a white
 // 1920 x 1080), tixy.land's (t, i, x, y, with(Math); 16 x 16, white or red), Turtletoy's (walk(i), turtletoy on npm),
-// Two.js's and Paper.js's own canvas renderers, Shadertoy's mainImage and its uniforms, GLSL Sandbox's time and resolution.
+// Two.js's and Paper.js's own canvas renderers, Shadertoy's mainImage and its uniforms, GLSL Sandbox's time and resolution,
+// twigl's r m t f s b and FC (src/fragmen.js), Bonzomatic's fGlobalTime, v2Resolution and out_color (its default shader).
 #pragma once
 #include <regex>
 #include <string>
+#include "third_party/js/twigl/noise.h"
 
 inline bool door_has(const std::string& t, const char* word) { return t.find(word) != std::string::npos; }
 
 // "" as it is (ISF, a p5.js sketch, a recipe of ours, or not code); or shadertoy sandbox hydra two paper turtle canvas dweet tixy.
 inline std::string door_form(const std::string& t) {
-    static const std::regex sandbox(R"(\buniform\s+\w+\s+(u_)?(time|resolution)\b)"), hydra(R"(\b(osc|noise|voronoi|shape|gradient|solid|src)\s*\()"), member(R"(\b[xc]\.\w|\bwith\s*\(\s*x\s*\))"), tixy(R"(\b[tixy]\b)"), paper(R"(\bnew\s+(Path|Point|Group|Raster|PointText|Layer|Size)\b|\bview\.|\bfunction\s+onFrame\b|\bproject\.)");
+    static const std::regex twigl(R"(\bFC\b|\buniform\s+vec2\s+r\s*;)"), sandbox(R"(\buniform\s+\w+\s+(u_)?(time|resolution)\b)"), hydra(R"(\b(osc|noise|voronoi|shape|gradient|solid|src)\s*\()"), member(R"(\b[xc]\.\w|\bwith\s*\(\s*x\s*\))"), tixy(R"(\b[tixy]\b)"), paper(R"(\bnew\s+(Path|Point|Group|Raster|PointText|Layer|Size)\b|\bview\.|\bfunction\s+onFrame\b|\bproject\.)");
     if (door_has(t, "\"ISFVSN\"") || door_has(t, "\"INPUTS\"") || door_has(t, "\"CATEGORIES\"") || door_has(t, "function each")) return "";
     if (door_has(t, "mainImage")) return "shadertoy";
     if (door_has(t, "gl_FragColor") && door_has(t, "void main") && std::regex_search(t, sandbox)) return "sandbox";
@@ -22,6 +24,8 @@ inline std::string door_form(const std::string& t) {
     if (door_has(t, "new Turtle(") || door_has(t, "extends Turtle") || door_has(t, "Canvas.setpenopacity(")) return "turtle";
     const bool sketch = door_has(t, "function draw") || door_has(t, "function setup") || door_has(t, "createCanvas");
     if (sketch) return "";
+    if (door_has(t, "fGlobalTime") || door_has(t, "v2Resolution")) return "bonzomatic";
+    if (door_has(t, "vec") && !door_has(t, "=>") && !door_has(t, "function") && (std::regex_search(t, twigl) || door_has(t, "gl_FragCoord") || door_has(t, "gl_FragColor"))) return "twigl";
     if (std::regex_search(t, paper)) return "paper";
     if (door_has(t, "getContext")) return "canvas";
     if (t.size() <= 900 && (door_has(t, "unescape(escape`") || std::regex_search(t, member))) return "dweet";   // (a dweet packed in wide characters: Dwitter's own players unpack it by running it)
@@ -115,6 +119,19 @@ inline std::string door_pictures_told(std::string body) {
     return std::regex_replace(body, std::regex(R"(,\s*\))"), ")");
 }
 
+// A shader with a main of its own (or a body with none: twigl's geekest) called from ISF's: `before` what it is given at
+// its top, `start` what it is told each time, `done` what comes of it. What it reads of its last frame (`last`, the names
+// that picture has) is a pass kept from frame to frame (ISF_Spec's PERSISTENT).
+inline std::string door_called(const std::string& name, std::string body, const std::string& last, const std::string& before, const std::string& start, const std::string& done) {
+    static const std::regex hasMain(R"(\bvoid\s+main\s*\(\s*(void)?\s*\))");
+    const std::regex past(R"(\b(?:texture|texture2D)\s*\(\s*(?:)" + last + R"()\s*,)");
+    const bool kept = std::regex_search(body, past);
+    body = std::regex_replace(body, past, "texture(isf_img_door_last,");
+    body = std::regex_search(body, hasMain) ? std::regex_replace(body, hasMain, "void door_main()") : "void door_main(){\n" + body + "\n}";
+    return "/*{\"ISFVSN\":\"2\",\"DESCRIPTION\":\"" + name + "\",\"CATEGORIES\":[\"Shadertoy\"],\"INPUTS\":[]" + (kept ? ",\"PASSES\":[{\"TARGET\":\"door_last\",\"PERSISTENT\":true},{}]" : "") + "}*/\n" + before + body +
+           "\nvoid main(){" + (kept ? "if(PASSINDEX==1){gl_FragColor=IMG_NORM_PIXEL(door_last,gl_FragCoord.xy/RENDERSIZE);return;}" : "") + start + "door_main();" + done + "}\n";
+}
+
 inline std::string door_isf(const std::string& text) {
     const std::string form = door_form(text);
     if (form == "shadertoy") {
@@ -129,9 +146,32 @@ inline std::string door_isf(const std::string& text) {
             + (reads ? "#define iChannel0 isf_img_inputImage\n#define iChannel1 isf_img_inputImage\n#define iChannel2 isf_img_inputImage\n#define iChannel3 isf_img_inputImage\nivec2 door_textureSize(int l){return ivec2(RENDERSIZE);}\nvec4 door_texture(vec2 p){return IMG_NORM_PIXEL(inputImage,p);}\nvec4 door_texture(vec2 p,float b){return IMG_NORM_PIXEL(inputImage,p);}\nvec4 door_textureLod(vec2 p,float l){return IMG_NORM_PIXEL(inputImage,p);}\nvec4 door_texelFetch(ivec2 p,int l){return IMG_NORM_PIXEL(inputImage,(vec2(p)+.5)/RENDERSIZE);}\n" : "")
             + body + "\nvoid main(){vec4 o=vec4(0.,0.,0.,1.);mainImage(o,gl_FragCoord.xy);gl_FragColor=vec4(o.rgb,1.);}\n";
     }
+    if (form == "bonzomatic") {
+        static const std::regex output(R"(\blayout\s*\([^)]*\)\s*out\s+vec4\s+(\w+)\s*;)");
+        std::smatch said;
+        const std::string out = std::regex_search(text, said, output) ? said[1].str() : "out_color";
+        static const std::regex picture(R"(\buniform\s+sampler[12]D\s+(\w+)\s*;)");
+        std::string none = "texFFT\\w*";   // (its sound and its pictures, whatever their names: none here)
+        for (std::sregex_iterator at(text.begin(), text.end(), picture), end; at != end; ++at) if ((*at)[1] != "texPreviousFrame") none += "|" + (*at)[1].str();
+        std::string body = std::regex_replace(text, std::regex(R"(#version[^\n]*|\buniform\s+\w+\s+(?:fGlobalTime|fFrameTime|v2Resolution)\s*;)"), "");
+        body = std::regex_replace(std::regex_replace(body, output, ""), picture, "");
+        body = std::regex_replace(body, std::regex(R"(\b(?:texture|texture2D|texture1D|textureLod|texelFetch)\s*\(\s*(?:)" + none + R"()\s*,)"), "door_none(");
+        return door_called("Bonzomatic", body, "texPreviousFrame", "float fGlobalTime,fFrameTime;vec2 v2Resolution;float door_now(){return TIME;}vec2 door_size(){return RENDERSIZE;}\nvec4 " + out + ";\nvec4 door_none(float a){return vec4(0.);}\nvec4 door_none(float a,float b){return vec4(0.);}\nvec4 door_none(vec2 a){return vec4(0.);}\nvec4 door_none(vec2 a,float b){return vec4(0.);}\n", "fGlobalTime=door_now();v2Resolution=door_size();fFrameTime=1./60.;", "gl_FragColor=vec4(" + out + ".rgb,1.);");   // (values, not words: `#define time fGlobalTime` is its usual first line)
+    }
+    if (form == "twigl") {
+        static const std::regex own(R"(\bvoid\s+main\s*\()"), frag(R"(\bFC\b)");
+        std::string body = std::regex_replace(text, std::regex(R"(#version[^\n]*|\bprecision\s+\w+\s+\w+\s*;|\buniform\s+\w+\s+(?:r|m|t|f|s|b|resolution|mouse|time|backbuffer)\s*;|\bout\s+vec4\s+(?:o|outColor)\s*;)"), "");
+        const std::string given = std::regex_search(text, own) && !std::regex_search(text, frag) ? "" : twigl_noise;   // (its helpers, its geekest mode's alone)
+        return door_called("twigl", body, "b|backbuffer", "#define FC gl_FragCoord\nvec2 r,m,mouse;float t,f,s;vec4 o,outColor;\n" + given + "\n", "r=RENDERSIZE;m=mouse=vec2(0.);t=TIME;f=float(FRAMEINDEX);s=0.;",
+                           door_has(body, "gl_FragColor") ? "" : std::string("gl_FragColor=vec4(") + (door_has(body, "outColor") ? "outColor" : "o") + ".rgb,1.);");
+    }
     if (form == "sandbox") {
         std::string body = std::regex_replace(text, std::regex(R"(\buniform\s+\w+\s+(u_)?(time|resolution|mouse)\s*;|\bvarying\s+vec2\s+surface\w*\s*;|#extension[^\n]*)"), "");
         body = std::regex_replace(body, std::regex(R"(\bvoid\s+main\s*\(\s*void\s*\))"), "void main()");
+        if (door_has(body, "backbuffer")) {   // (what it drew last: GLSL Sandbox's own, twigl's classic mode too)
+            body = std::regex_replace(body, std::regex(R"(\buniform\s+sampler2D\s+backbuffer\s*;)"), "");
+            return door_called("GLSL Sandbox", body, "backbuffer", "#define u_time TIME\n#define u_resolution RENDERSIZE\n#define mouse vec2(.5)\n#define u_mouse vec2(.5)\n", "", "");
+        }
         return "/*{\"ISFVSN\":\"2\",\"DESCRIPTION\":\"GLSL Sandbox\",\"CATEGORIES\":[\"Shadertoy\"],\"INPUTS\":[]}*/\n#define u_time TIME\n#define u_resolution RENDERSIZE\n#define mouse vec2(.5)\n#define u_mouse vec2(.5)\n" + body;   // (time and resolution are what ISF's own are called here: isf.cpp)
     }
     return text;

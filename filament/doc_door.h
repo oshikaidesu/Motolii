@@ -37,7 +37,7 @@ static int doc_door(Doc& d, const std::string& word, int picked) {
     const bool kept = std::filesystem::path(word).parent_path() == folder;   // (one of the Program shelf's own, as it is now: not kept again)
     text = door_page(text);
     const std::string came = text, form = door_form(text), told = door_js(text, form);
-    const bool hydra = form == "hydra", shader = hydra || form == "shadertoy" || form == "sandbox";
+    const bool hydra = form == "hydra", shader = hydra || form == "shadertoy" || form == "sandbox" || form == "twigl" || form == "bonzomatic";
     std::vector<HydraKnob> moving;
     if (hydra) {   // (the code as an ISF effect, kept as that: Hydra is a part apart, hydra_isf.cpp)
         std::string why, isf;
@@ -49,7 +49,7 @@ static int doc_door(Doc& d, const std::string& word, int picked) {
     for (unsigned char c : text) hash = (hash ^ c) * 1099511628211ull;
     char tail[16];
     std::snprintf(tail, sizeof tail, "-%04llx", (unsigned long long)(hash & 0xffff));
-    static const std::map<std::string, std::string> names = {{"", "p5.js"}, {"shadertoy", "Shadertoy"}, {"sandbox", "GLSL Sandbox"}, {"three", "three.js"}, {"hydra", "Hydra"}, {"dweet", "Dwitter"}, {"tixy", "tixy"}, {"turtle", "Turtletoy"}, {"two", "Two.js"}, {"paper", "Paper.js"}, {"canvas", "Canvas"}};
+    static const std::map<std::string, std::string> names = {{"", "p5.js"}, {"shadertoy", "Shadertoy"}, {"sandbox", "GLSL Sandbox"}, {"three", "three.js"}, {"hydra", "Hydra"}, {"dweet", "Dwitter"}, {"tixy", "tixy"}, {"turtle", "Turtletoy"}, {"two", "Two.js"}, {"paper", "Paper.js"}, {"canvas", "Canvas"}, {"twigl", "twigl"}, {"bonzomatic", "Bonzomatic"}};
     const std::string name = names.at(form);
     std::filesystem::create_directories(folder, wrong);
     std::filesystem::path file = folder / (name + tail + (shader ? ".fs" : ".js"));

@@ -1,0 +1,1 @@
+noise.h: src/shader_snippet/noise.glsl of doxas/twigl (MIT), as it is: the helpers twigl's geekest mode gives a shader (snoise2D, snoise3D, snoise4D, fsnoise, hsv, rotate2D, rotate3D). The simplex noise in it is Ashima Arts' webgl-noise (MIT).
