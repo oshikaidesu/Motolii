@@ -340,7 +340,7 @@ class SheetForms extends Forms {
         children: [
           SizedBox.square(dimension: Shape.z(16), child: CustomPaint(painter: _MarkPaint(t.selected ? _Mark.quarter : _Mark.ring, t.selected ? Accent.key : Grey.g38))),
           SizedBox(width: Shape.s(6)),
-          SizedBox(width: 14, child: Text('${t.index + 1}', style: T.value(Grey.g56).copyWith(fontSize: T.px(10)))),
+          SizedBox(width: 14, child: Text('${t.index + 1}', softWrap: false, overflow: TextOverflow.visible, style: T.value(Grey.g56).copyWith(fontSize: T.px(10)))),
           SizedBox(width: Shape.s(6)),
           t.kind,
           SizedBox(width: Shape.s(7)),

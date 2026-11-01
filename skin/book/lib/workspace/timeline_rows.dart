@@ -18,6 +18,13 @@ extension _WsTimelineRows on _WsTimelineState {
   // The eye of a row. Joined: the thing is put aside in the document (visible 0) and is not on the stage; one step.
   bool _isHidden(Ws ws, String id) => ws.layers.any((l) => l.id == id && l.hidden);   // (as last read: no call to the inside while a row is built)
 
+  // How many things a row carried [by] rows goes past: a shut group's row is all that it holds.
+  int _places(Ws ws, WsLayer l, int by) {
+    final away = ws.foldedAway, seen = [for (final o in _order) if (o.value == null) ws.layers[o.layer].id], at = seen.indexOf(l.id);
+    final past = by > 0 ? seen.sublist(at + 1, math.min(at + 1 + by, seen.length)) : seen.sublist(math.max(0, at + by), at);
+    return past.fold(0, (n, id) => n + 1 + away.values.where((g) => g == id).length);
+  }
+
   void _eye(Ws ws, String id) {
     ws.after(ws.inside!.later('set', thing: int.parse(id), name: 'visible', number: _isHidden(ws, id) ? 1 : 0));
   }
@@ -101,15 +108,16 @@ extension _WsTimelineRows on _WsTimelineState {
                           onVerticalDragUpdate: (d) => _lift += d.delta.dy,
                           onVerticalDragEnd: (_) {
                                   final by = (_lift / WtM.row).round();
-                                  if (by != 0) ws.after(ws.inside!.later('raise', thing: int.parse(l.id), number: -by.toDouble()));
+                                  if (by != 0) ws.after(ws.inside!.later('raise', thing: int.parse(l.id), number: (by > 0 ? -1 : 1) * _places(ws, l, by).toDouble()));
                                 },
                           child: _LabelRow(
                             index: _order[i].layer,   // (its layer's number, not its row's: After Effects' # counts layers, a value's lane none; golf (61))
+                            depth: ws.depth(l),
                             row: rows[i],
                             hidden: _isHidden(ws, l.id),
                             solo: _isSolo(ws, l.id),
-                            lanes: l.keys.isEmpty && wsTargets(ws, l.id).isEmpty ? null : ws.lanesOpen(l.id),
-                            onLanes: () => ws.twirl([l.id]),
+                            lanes: l.kind == WsKind.group ? ws.groupOpen(l.id) : l.keys.isEmpty && wsTargets(ws, l.id).isEmpty && !l.lined ? null : ws.lanesOpen(l.id),
+                            onLanes: () => l.kind == WsKind.group ? ws.turnGroup(l.id) : ws.twirl([l.id]),
                             onSelect: () => HardwareKeyboard.instance.isShiftPressed
                                 ? wsPickRange(ws, l.id)   // (Shift: every row from the last picked to this, After Effects' manner)
                                 : HardwareKeyboard.instance.isMetaPressed ? wsPickAlso(ws, l.id) : ws.select(l.id),   // (Cmd: one more, or one less)

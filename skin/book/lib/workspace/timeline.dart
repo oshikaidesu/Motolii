@@ -62,7 +62,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     final m = ws.inside, t = int.tryParse(l.id);
     if (m == null || t == null) return const [];
     final moving = m.moving(t).toSet();
-    return [for (final n in m.values(t)) if (moving.contains(n) && m.keyMoments(t, n).isNotEmpty) n];
+    return [for (final n in m.values(t)) if (n.startsWith('js_line_') || moving.contains(n) && m.keyMoments(t, n).isNotEmpty) n];
   }
 
   // The card a lane's value stands on: the effect it is a knob of, or Transform and the like.
@@ -447,9 +447,10 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
       _workOut = (to * Ws.fps).round();
     }
     final ws = WsScope.of(context, {WsAspect.document, WsAspect.picked, WsAspect.animating});
-    final sel = ws.selected, picks = ws.keys, lit = {...ws.many, ...wsMembersOf(ws)};   // (picked together, or moved by the relation picked: lit with it)
+    final away = ws.foldedAway;
+    final sel = ws.selected, picks = ws.keys, lit = {...ws.many, ...wsMembersOf(ws), for (final p in [?sel, ...ws.many]) ?away[p]};   // (picked together, or moved by the relation picked, or a shut group a picked thing is in: lit with it)
     _order = [
-      for (final (i, l) in ws.layers.indexed) ...[
+      for (final (i, l) in ws.layers.indexed) if (!away.containsKey(l.id)) ...[
         (layer: i, value: null, aim: null),
         if (ws.aimsOpen(l.id))
           for (final a in wsTargets(ws, l.id)) (layer: i, value: '', aim: a),

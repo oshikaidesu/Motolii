@@ -104,13 +104,14 @@ Color wsTone(WsKind k) => switch (k) {
 
 /// One layer of the mock composition: where it lives in time, and where its keys are (frames).
 class WsLayer {
-  WsLayer(this.id, this.name, this.kind, this.inF, this.outF, this.keys, {this.parent, this.hidden = false, this.solo = false, this.locked = false, this.clipped = false, this.stretches = const []});
+  WsLayer(this.id, this.name, this.kind, this.inF, this.outF, this.keys, {this.parent, this.lined = false, this.hidden = false, this.solo = false, this.locked = false, this.clipped = false, this.stretches = const []});
   final String id, name;
   final WsKind kind;
   int inF, outF;
   final List<int> keys;
   final List<WsStretch> stretches; // (how it goes between its keys, as the inside says: drawn on its bar)
   final String? parent;
+  final bool lined;   // (a sketch whose lines that draw are knobs of it: opened, a row of each, script.h sketch_marked)
   final bool hidden, solo, locked, clipped; // (clipped: shown only inside the thing under it, Clip to below) (as the inside said when the layers were last read: a row asks nothing of it while the stage plays)
   Color get tone => wsLabel(id);   // (its label colour)
 }

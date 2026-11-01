@@ -121,7 +121,7 @@ abstract final class Usual {
             padding: EdgeInsets.only(left: Shape.s(8), right: Shape.s(6)),
             child: Row(
               children: [
-                SizedBox(width: 14, child: Text('${t.index + 1}', style: T.value(t.selected ? Grey.g91 : Grey.g56).copyWith(fontSize: T.px(10)))),
+                SizedBox(width: 14, child: Text('${t.index + 1}', softWrap: false, overflow: TextOverflow.visible, style: T.value(t.selected ? Grey.g91 : Grey.g56).copyWith(fontSize: T.px(10)))),
                 SizedBox(width: Shape.s(6)),
                 t.kind,
                 SizedBox(width: Shape.s(7)),

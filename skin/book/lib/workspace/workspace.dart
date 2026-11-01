@@ -223,9 +223,20 @@ class _WorkspaceState extends State<Workspace> {
       final frames = [for (final t in all) ?m?.frame(t)];
       if (m == null || frames.isEmpty) return;
       final c = Offset(frames.map((f) => f[0]).reduce((a, b) => a + b) / frames.length, frames.map((f) => f[1]).reduce((a, b) => a + b) / frames.length);
+      final order = m.things, top = order.lastIndexWhere(all.contains);
       m.later('together', number: 1);
+      // (their row stands where the top one stood, the rest gathered under it: After Effects' Pre-compose, Figma's group)
+      for (final (i, t) in order.indexed.toList().reversed) {
+        final past = order.sublist(math.min(i, top), top).where((x) => !all.contains(x)).length;
+        if (all.contains(t) && past > 0) m.later('raise', thing: t, number: past.toDouble());
+      }
       ws.after(m.later('add', name: 'shape', word: 'null'), null, (g) => ws.select('$g'));
+      if (top + 1 < order.length) m.later('raise', thing: -1, number: (top + 1 - order.length).toDouble());
       m.later('say', thing: -1, name: 'name', word: mask.isEmpty ? 'Group' : 'Group and Mask');
+      // (its bar over theirs, as a precomposed layer's is)
+      final from = all.map((t) => m.value(t, 'start', 0) ?? 0).reduce(math.min), ends = [for (final t in all) m.lasts(t) < 0 ? double.infinity : (m.value(t, 'start', 0) ?? 0) + m.lasts(t)];
+      m.later('set', thing: -1, name: 'start', number: from);
+      if (ends.reduce(math.max).isFinite) m.later('set', thing: -1, name: 'duration', number: ends.reduce(math.max) - from);
       if (mask.isNotEmpty) m.later('say', thing: -1, name: 'group_mask', word: mask);
       m.later('set', thing: -1, name: 'x', number: (c.dx - WsArt.centre.dx) / m.point);
       m.later('set', thing: -1, name: 'y', number: (WsArt.centre.dy - c.dy) / m.point);
@@ -262,7 +273,12 @@ class _WorkspaceState extends State<Workspace> {
         final t = int.tryParse(ws.selected ?? '');
         if (t == null) return;
         m.later('copy', thing: t, word: _clipboard('thing'));
-        ws.after(m.later('remove', thing: t));
+        m.later('together', number: 1);
+        for (final held in ws.under('$t')) {
+          m.later('remove', thing: int.parse(held));
+        }
+        m.later('remove', thing: t);
+        ws.after(m.later('together'));
         ws.select(null);
       },
       'edit.copy': () {
@@ -321,7 +337,7 @@ class _WorkspaceState extends State<Workspace> {
         if (ws.stretch case final s?) return ws.after(m.later('way', thing: int.parse(s.layer), name: s.name, number: s.at, word: 'Linear'), (_, _) => ws.reread());   // (a stretch picked: its way off, straight again, not the thing)
         if (ws.keys.isNotEmpty) return wsRemoveKeys(ws, ws.keys.toList());   // (keys picked: those, not the thing)
         final all = ws.many.isNotEmpty ? ws.many.toList() : [if (ws.selected != null) ws.selected!];   // (things picked together: all of them, one step)
-        final ts = [for (final id in all) if (int.tryParse(id) case final t?) t];
+        final ts = [for (final id in {for (final id in all) ...ws.under(id), ...all}) if (int.tryParse(id) case final t?) t];   // (a group: with what it holds, as it is copied)
         if (ts.isEmpty) return;
         m.later('together', number: 1);
         for (final t in ts) {

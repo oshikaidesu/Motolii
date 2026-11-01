@@ -1619,6 +1619,42 @@ void _tests3() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('A group is one row until its triangle opens it; its row stands where its top thing stood, the rest gathered under it; Delete takes what it holds, one step (a precomposed layer; Apple Motion\'s triangle; Alight Motion\'s group)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final a = m.add('shape', 'rect'), b = m.add('shape', 'circle'), c = m.add('shape', 'star'), d = m.add('shape', 'polygon');
+    ws
+      ..reread()
+      ..pickMany(['$a', '$c']);
+    await t.pumpAndSettle();
+    await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await t.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await settled(t, ws);
+    final g = m.things.firstWhere((x) => ![a, b, c, d].contains(x));
+    expect(m.things, [b, a, c, g, d], reason: m.trouble);
+    Finder row(int thing) => find.byKey(ValueKey('ws-tl-label-$thing'));
+    expect([row(g).evaluate().length, row(a).evaluate().length, row(c).evaluate().length, row(b).evaluate().length], [1, 0, 0, 1], reason: 'shut as it is made');
+    ws.turnGroup('$g');
+    await t.pumpAndSettle();
+    expect([row(a).evaluate().length, row(c).evaluate().length], [1, 1], reason: 'opened');
+    ws.turnGroup('$g');
+    await t.pumpAndSettle();
+    expect(m.raise(g, -1), isTrue, reason: m.trouble);
+    expect(m.things, [a, c, g, b, d], reason: 'it goes with what it holds, one place among the things');
+    ws
+      ..reread()
+      ..select('$g');
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.delete);
+    await settled(t, ws);
+    expect(m.things, [b, d], reason: m.trouble);
+    await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await t.sendKeyEvent(LogicalKeyboardKey.keyZ);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await settled(t, ws);
+    expect(m.things.length, 5, reason: 'one step back');
+  });
+
   testWidgets('⌘G holds the picked together by a Null in their middle: moved, they go with it; ⌘⇧G lets them go where they are (Figma\'s group)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final a = m.add('shape', 'rect'), b = m.add('shape', 'circle');

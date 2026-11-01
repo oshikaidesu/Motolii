@@ -177,6 +177,7 @@ class Ws extends ChangeNotifier {
       ..clear()
       ..addAll({for (final t in m.things) if (m.words(t, 'label').indexOf(m.word(t, 'label')) case final i when i > 0) '$t': i - 1});
     final tl = TimelineTask()..start('MARK layers');
+    final holding = {for (final t in m.things) (m.value(t, 'parent', 0) ?? 0).round()};   // (who has things going with it)
     layers
       ..clear()
       ..addAll([
@@ -191,8 +192,11 @@ class Ws extends ChangeNotifier {
               'camera' => WsKind.camera,
               'film' when wsSound(m, t) => WsKind.audio,
               'film' || 'picture' => WsKind.image,
+              'shape' when m.word(t, 'shape') == 'null' && holding.contains(t) => WsKind.group,
               _ => WsKind.shape,
             }, from, _outF(from, lasts), keys,
+                parent: switch ((m.value(t, 'parent', 0) ?? 0).round()) { > 0 && final p => '$p', _ => null },
+                lined: (kind == 'picture' || kind == 'solid') && m.values(t).any((n) => n.startsWith('js_line_')),
                 hidden: (m.value(t, 'visible', 0) ?? 1) < .5, solo: (m.value(t, 'solo', 0) ?? 0) > .5, locked: (m.value(t, 'lock', 0) ?? 0) > .5, clipped: (m.value(t, 'clip', 0) ?? 0) > .5,
                 stretches: [
                   for (final (a, b, way) in m.thingStretches(t))
@@ -434,6 +438,45 @@ class Ws extends ChangeNotifier {
     open == animating ? s.addAll(ids) : s.removeAll(ids);
     _tell(WsAspect.animating);
   }
+
+  // The groups stood open. A group is one row until it is opened, as a precomposed layer, a nest, a compound clip and
+  // Alight Motion's group are, so what holds 200 things is one row; the triangle is Apple Motion's and Cavalry's, whose
+  // tree folds rows and changes nothing else. Only the rows fold: the document does not know. (Not kept in the file.)
+  final _groupsOpen = <String>{};
+  bool groupOpen(String id) => _groupsOpen.contains(id);
+  void turnGroup(String id) {
+    if (!_groupsOpen.remove(id)) _groupsOpen.add(id);
+    _groupsOpen.contains(id) ? _lanesOpen.add(id) : _lanesOpen.remove(id);   // (its own keys with them: one triangle to a row, Apple Motion's)
+    _tell(WsAspect.animating);
+  }
+
+  Iterable<WsLayer> _over(WsLayer l, Map<String, WsLayer> of) sync* {
+    var p = of[l.parent];
+    for (var n = 0; p != null && n < 64; p = of[p.parent], n++) {   // (64: as Group's walk up, stage_view_2.dart)
+      yield p;
+    }
+  }
+
+  /// Each thing folded away, with the row that stands for it: the outermost shut group over it (Cavalry marks that row).
+  Map<String, String> get foldedAway {
+    final of = {for (final l in layers) l.id: l}, away = <String, String>{};
+    for (final l in layers) {
+      for (final p in _over(l, of)) {
+        if (p.kind == WsKind.group && !groupOpen(p.id)) away[l.id] = p.id;
+      }
+    }
+    return away;
+  }
+
+  /// What a group holds, however deep (nothing, for any other thing: the inside's doc_under).
+  List<String> under(String id) {
+    final of = {for (final l in layers) l.id: l};
+    if (of[id]?.kind != WsKind.group) return const [];
+    return [for (final l in layers) if (_over(l, of).any((p) => p.id == id)) l.id];
+  }
+
+  /// How many groups a thing stands in: its row is set in by so many.
+  int depth(WsLayer l) => _over(l, {for (final x in layers) x.id: x}).where((p) => p.kind == WsKind.group).length;
 
 
   /// Joined: a change asked without waiting ([Motolii.later]): looked at once a picture till the inside has done it, then

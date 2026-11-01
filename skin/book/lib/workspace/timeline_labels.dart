@@ -36,6 +36,7 @@ class _LabelHeader extends StatelessWidget {
 class _LabelRow extends StatefulWidget {
   const _LabelRow({
     required this.index,
+    required this.depth,
     required this.row,
     required this.hidden,
     required this.solo,
@@ -46,7 +47,7 @@ class _LabelRow extends StatefulWidget {
     required this.onSolo,
     required this.onLock,
   });
-  final int index;
+  final int index, depth;
   final WtRow row;
   final bool hidden, solo;
   final bool? lanes;   // (whether its keyed values stand open; null: it has no keys)
@@ -75,6 +76,7 @@ class _LabelRowState extends State<_LabelRow> {
           kind: Row(   // (its own small picture, as Alight Motion's row; before it the triangle of a row with keys, After Effects' twirl)
             mainAxisSize: MainAxisSize.min,
             children: [
+              SizedBox(width: Shape.z(10) * widget.depth),   // (set in under its group, as Apple Motion's Layers list and Cavalry's tree)
               if (widget.lanes case final open?) _Toggle(open ? TpGlyph.caretD : TpGlyph.caretR, on: false, lit: true, onTap: widget.onLanes) else SizedBox(width: Shape.z(20)),
               WtThumb(r),
             ],
