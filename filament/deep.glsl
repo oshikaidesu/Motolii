@@ -20,6 +20,12 @@ float deepProfile(float t) {   // (how high it stands, 0 to 1, t of the way in)
     if (way < 2.5) return sqrt(max(t * (2.0 - t), 0.0));
     if (way < 3.5) return 1.0 - sqrt(max(1.0 - t * t, 0.0));
     if (way < 4.5) return t * t * (3.0 - 2.0 * t);
+    vec4 ends = materialParams.deepSteps;
+    if (ends.w > 0.5) {   // (a stair to each stroke, its riser two points wide, within its own)
+        float riser = 4.0 * materialParams.deep.x / deepCells().x / materialParams.deepBevel.x, up = 0.0;
+        for (int i = 0; i < int(ends.w); i++) up += clamp((t - ends[i]) / riser + 1.0, 0.0, 1.0);
+        return up / ends.w;
+    }
     float rise = t * 3.0;   // (three stairs; a quarter of each is its riser, or a stair's face is no wider than a line)
     return (min(floor(rise), 2.0) + clamp((fract(rise) - 0.75) * 4.0, 0.0, 1.0) * step(rise, 2.999) + step(2.999, rise)) / 3.0;
 }
@@ -105,7 +111,7 @@ void deepMeet(inout highp vec2 uv, inout float k, inout float shine, inout float
         highp vec2 g = deepSlope(p.xy);
         float slope = (deepProfile(min(along + 0.02, 1.0)) - deepProfile(max(along - 0.02, 0.0))) / 0.04 * cut.y / cut.x * materialParams.deepBevel.w;   // (w: the box's lengths to the world's: it is the world's slope a lamp sees)
         n3 = normalize(vec3(-g * slope, sign(p.z)));
-        if (dot(g, g) > 1e-4) uv = deepUV(p.xy + normalize(g) * e);   // (its colour from within its edge)
+        if (dot(g, g) > 1e-4 && materialParams.deepSteps.w < 0.5) uv = deepUV(p.xy + normalize(g) * e);   // (its colour from within its edge; a stroke's stair is its own colour, as drawn)
     } else {
         vec2 g = vec2(0.0);
         for (int i = 0; i < 12; i++) {

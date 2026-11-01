@@ -214,12 +214,16 @@ static void doc_moment(Doc& d, double now) {
         }
         if (t.drawn && t.drawn->edge[0]) {   // (its bevel as it is now, in the box's lengths; as far across as through in the world. 12 points as it comes: no source, After Effects' 2 is hardly seen on a title)
             Drawn& drawn = *t.drawn;
-            const float across = (float)(doc_number(d, thing, "bevel_depth", now, 12) / t.units), z = (float)doc_literal(d, thing, "scale_z", now, 1);
-            const float wide = (float)doc_literal(d, thing, "scale_x", now, 1), through = z != 0.f ? across * wide / std::fabs(z) : 0.f;
-            const float4 cut{across, std::min(through, drawn.boxed.z), across > 0.f ? (float)doc_bevel(d, thing) : 0.f, wide != 0.f ? std::fabs(z / wide) : 1.f};
-            drawn.look->setParameter("deepBevel", cut);
+            const float told = (float)(doc_number(d, thing, "bevel_depth", now, 12) / t.units), z = (float)doc_literal(d, thing, "scale_z", now, 1);
+            const float wide = (float)doc_literal(d, thing, "scale_x", now, 1), through = z != 0.f ? told * wide / std::fabs(z) : 0.f;
+            const bool banded = doc_bevel(d, thing) == 5 && drawn.bands.w > 0.f;   // (Step on a word with strokes: a stair to each, as wide as it is; Bevel Depth how high)
+            const float most = banded ? drawn.bands[(int)drawn.bands.w - 1] : 1.f;
+            const float across = banded ? most * 2.f * drawn.boxed.x / (float)drawn.edgeW : told;
+            const float4 cut{across, std::min(through, drawn.boxed.z), told > 0.f ? (float)doc_bevel(d, thing) : 0.f, wide != 0.f ? std::fabs(z / wide) : 1.f};
+            const float4 stairs = banded ? float4{drawn.bands.x / most, drawn.bands.y / most, drawn.bands.z / most, drawn.bands.w} : float4{0.f};
+            drawn.look->setParameter("deepBevel", cut), drawn.look->setParameter("deepSteps", stairs);
             for (const Stage::Made& made : s.made)
-                if (const auto own = d.copyLooks.find(made.thing.getId()); made.of == drawn.sheet && own != d.copyLooks.end()) own->second->setParameter("deepBevel", cut);
+                if (const auto own = d.copyLooks.find(made.thing.getId()); made.of == drawn.sheet && own != d.copyLooks.end()) own->second->setParameter("deepBevel", cut), own->second->setParameter("deepSteps", stairs);
             const int reach = (int)std::ceil(across * (float)drawn.edgeW / (2.f * drawn.boxed.x));
             if (drawn.stale || reach > drawn.edgeReach) drawn.edgeReach = std::max(reach, drawn.edgeReach), edge_ask(s, &drawn, drawn.edgeReach);
         }

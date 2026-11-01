@@ -357,6 +357,11 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
                 was = cut;
             }
         }
+        std::vector<float> ends;
+        for (auto rim = fx.rims.rbegin(); rim != fx.rims.rend(); ++rim) ends.push_back((ends.empty() ? 0.f : ends.back()) + rim->w * tall);
+        if (stroke > 0.f) ends.push_back((ends.empty() ? 0.f : ends.back()) + stroke);
+        for (size_t i = 0; i < ends.size() && i < 3; ++i) d->bands[i] = ends[i];
+        d->bands.w = (float)std::min<size_t>(ends.size(), 3);
         std::vector<tvg::Paint*> under;
         float wider = stroke;
         for (const float4& rim : fx.rims) {

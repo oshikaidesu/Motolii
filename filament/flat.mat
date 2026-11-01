@@ -52,6 +52,8 @@ material {
         { type : float4, name : deepTurn },
         // its bevel (deep.glsl): how far in across, how far in through, in the box's lengths, and its way (0 none); how far each point of its picture is from its edge (drawn_edge.h)
         { type : float4, name : deepBevel },
+        // where its stairs end, shares of its bevel across, and how many (0: three, even): one to each stroke of a word (drawn_made.h type)
+        { type : float4, name : deepSteps },
         { type : float3, name : surface },
         // its bevel's, side's and back's own (After Effects' Bevel, Side and Back Color): its colour and how much that counts (0: the picture's); metal, rough, shine, as `surface`
         { type : float4[3], name : partColour },

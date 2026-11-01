@@ -75,6 +75,7 @@ struct Drawn {
     Texture* edge[3] = {};             // how far each of its points is from its edge (drawn_edge.h)
     RenderTarget* edgeInto[3] = {};
     uint32_t edgeW = 0, edgeH = 0;
+    float4 bands{0.f};   // (where each stroke ends, in points from its outside; w: how many: a Step bevel's stairs, deep.glsl)
     bool inLight = false;              // (flat_lit: its surface is told each moment, doc_moment.h)
     int edgeReach = 0;                 // (how far that is known, in points)
     std::atomic<bool> stale{true};     // (drawn again since that was worked out: set on the driver thread)
