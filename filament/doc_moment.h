@@ -210,8 +210,8 @@ static void doc_moment(Doc& d, double now) {
         if (t.drawn && t.drawn->edge[0]) {   // (its bevel as it is now, in the box's lengths; as far across as through in the world. 12 points as it comes: no source, After Effects' 2 is hardly seen on a title)
             Drawn& drawn = *t.drawn;
             const float across = (float)(doc_number(d, thing, "bevel_depth", now, 12) / t.units), z = (float)doc_literal(d, thing, "scale_z", now, 1);
-            const float through = z != 0.f ? across * (float)doc_literal(d, thing, "scale_x", now, 1) / std::fabs(z) : 0.f;
-            const float4 cut{across, std::min(through, drawn.boxed.z), across > 0.f ? (float)doc_bevel(d, thing) : 0.f, 0.f};
+            const float wide = (float)doc_literal(d, thing, "scale_x", now, 1), through = z != 0.f ? across * wide / std::fabs(z) : 0.f;
+            const float4 cut{across, std::min(through, drawn.boxed.z), across > 0.f ? (float)doc_bevel(d, thing) : 0.f, wide != 0.f ? std::fabs(z / wide) : 1.f};
             drawn.look->setParameter("deepBevel", cut);
             for (const Stage::Made& made : s.made)
                 if (const auto own = d.copyLooks.find(made.thing.getId()); made.of == drawn.sheet && own != d.copyLooks.end()) own->second->setParameter("deepBevel", cut);

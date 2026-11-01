@@ -97,7 +97,7 @@ void deepMeet(inout highp vec2 uv, inout float k, inout float shine, inout float
     if (bevelled) {   // (a bevel faces out by how steep its section is here: its slope across, the way away from the edge)
         highp float by = 6.0 * h.x / deepCells().x;   // (three points: nearer, a slanted edge's steps show as stripes, as on a side)
         highp vec2 g = vec2(deepAway(p.xy + vec2(by, 0.0)) - deepAway(p.xy - vec2(by, 0.0)), deepAway(p.xy + vec2(0.0, by)) - deepAway(p.xy - vec2(0.0, by))) / (2.0 * by);
-        float slope = (deepProfile(min(along + 0.02, 1.0)) - deepProfile(max(along - 0.02, 0.0))) / 0.04 * cut.y / cut.x;
+        float slope = (deepProfile(min(along + 0.02, 1.0)) - deepProfile(max(along - 0.02, 0.0))) / 0.04 * cut.y / cut.x * materialParams.deepBevel.w;   // (w: the box's lengths to the world's: it is the world's slope a lamp sees)
         n3 = normalize(vec3(-g * slope, sign(p.z)));
         if (dot(g, g) > 1e-4) uv = deepUV(p.xy + normalize(g) * e);   // (its colour from within its edge)
     } else {
