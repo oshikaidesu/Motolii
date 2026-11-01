@@ -3,10 +3,14 @@
 // is saved as it is typed, and the thing on the stage and its knobs in the inspector follow (doc_script_of reads a file
 // that changed). As Godot and Unity keep scripts as files on a shelf with their knobs in the inspector; where the code is
 // typed they differ, and it is here so the stage stays in sight (no source for that). The code view is re_editor's
-// CodeEditor (MIT), coloured by re_highlight (highlight.js's rules and themes).
+// CodeEditor (MIT), coloured by re_highlight (highlight.js's rules and themes). Its tiles: program_tiles.dart. Its name is
+// kept beside the file and not in it (the file's name is what documents hold it by, its lines what its knobs are named
+// by; no source for the file beside it). A right click on a tile: Live's browser renames by its context menu (Live 12
+// manual, 4.2.1 and 4.5) and shows a file in Finder or Explorer (4.7.7).
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:re_editor/re_editor.dart';
 import 'package:re_highlight/languages/glsl.dart';
@@ -14,11 +18,15 @@ import 'package:re_highlight/languages/javascript.dart';
 import 'package:re_highlight/styles/atom-one-dark.dart';
 import 'package:re_highlight/styles/atom-one-light.dart';
 
+import '../sets/foundations/text_hand.dart';
 import '../tokens.dart';
+import 'dock_effects.dart';
 import 'dock_glyphs.dart';
 import 'dock_parts.dart';
 import 'effect_tiles.dart';
+import 'program_tiles.dart';
 import 'ws.dart';
+import 'ws_menu.dart';
 
 /// One program on the shelf: its file, what it was written for, and the hash that tells it from the others of those.
 class Program {
@@ -27,6 +35,30 @@ class Program {
   String get stem => file.substring(file.lastIndexOf('/') + 1, file.lastIndexOf('.'));
   String get form => stem.contains('-') ? stem.substring(0, stem.lastIndexOf('-')) : stem;
   String get tail => stem.contains('-') ? stem.substring(stem.lastIndexOf('-') + 1) : '';
+  File get _named => File('${file.substring(0, file.lastIndexOf('.'))}.name');
+
+  /// What it is called with no name given: what it was written for and its hash.
+  String get plain => '$form $tail'.trim();
+
+  /// What it is called: its maker's word, or what it says of itself (the site's title door_net.h wrote at its head, a
+  /// file of many tabs' description).
+  String get name {
+    try {
+      if (_named.existsSync()) return _named.readAsStringSync().trim();
+      final lines = File(file).readAsLinesSync();
+      final kept = RegExp(r'^/\*\{.*"DESCRIPTION":"([^"]*)"').firstMatch(lines.first)?[1];
+      if (kept != null && kept != 'Shadertoy') return kept;
+      return [for (final l in lines.take(8)) RegExp(r'^// (.+) by [^,]+, [^,]+, openprocessing\.org/sketch/\d+').firstMatch(l)?[1]].nonNulls.firstOrNull ?? plain;
+    } catch (_) {
+      return plain;
+    }
+  }
+
+  /// Nothing written: what it is called with none.
+  void rename(String to) {
+    if (to.trim().isNotEmpty) return _named.writeAsStringSync(to.trim());
+    if (_named.existsSync()) _named.deleteSync();
+  }
 
   /// The first line of it that says something.
   String get first {
@@ -60,9 +92,74 @@ class ProgramShelf extends StatefulWidget {
 class _ProgramShelfState extends State<ProgramShelf> {
   DockCtx get c => widget.c;
   void _told(Program p, bool done, String why) => c.set(() => done ? c.mem.trouble.remove(p.file) : c.mem.trouble[p.file] = why);
+  final _menu = GlobalKey<WsMenuState>();
+  String? _renaming;   // (the file whose name is being written)
+  final _words = TextEditingController();
+  late final FocusNode _focus = FocusNode()..addListener(() => _focus.hasFocus ? null : _renamed());
+
+  @override
+  void dispose() {
+    _words.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
   void _put(Program p) {
     final m = c.ws.inside!;
-    c.ws.after(m.later('door', thing: int.tryParse(c.ws.selected ?? '') ?? 0, word: p.file), (done, why) => _told(p, done, why), (made) => made > 0 ? c.ws.select('$made') : null);
+    c.ws.after(m.later('door', thing: int.tryParse(c.ws.selected ?? '') ?? 0, word: p.file), (done, why) => _told(p, done, why), (made) {
+      if (made <= 0) return;
+      if (p.name != p.plain) c.ws.after(m.later('say', thing: made, name: 'name', word: p.name));
+      c.ws.select('$made');
+    });
+  }
+
+  void _rename(Program p) {
+    setState(() => _renaming = p.file);
+    _words
+      ..text = p.name
+      ..selection = TextSelection(baseOffset: 0, extentOffset: p.name.length);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());   // (its field is there from the next frame)
+  }
+
+  void _renamed() {
+    final file = _renaming;
+    if (file == null) return;
+    Program(file).rename(_words.text);
+    setState(() => _renaming = null);
+  }
+
+  Widget _naming(Program p) => CallbackShortcuts(
+    bindings: {
+      const SingleActivator(LogicalKeyboardKey.escape): () {
+        _words.text = p.name;
+        _focus.unfocus();
+      },
+    },
+    child: Container(
+      color: Grey.g91,
+      padding: EdgeInsets.symmetric(horizontal: Shape.s(4)),
+      alignment: Alignment.centerLeft,
+      child: TextHand(key: const ValueKey('ws-program-name'), field: (k) => EditableText(key: k, rendererIgnoresPointer: true,
+        controller: _words,
+        focusNode: _focus,
+        style: T.micro(Grey.g13),
+        cursorColor: Grey.g13,
+        backgroundCursorColor: Grey.g38,
+        maxLines: 1,
+        onSubmitted: (_) => _focus.unfocus(),
+      )),
+    ),
+  );
+
+  void _menuOn(Program p, Offset at) {
+    c.pick(p.file);
+    final box = _menu.currentContext?.findRenderObject() as RenderBox?;
+    _menu.currentState?.show(box?.globalToLocal(at) ?? Offset.zero, [
+      WsMenuItem('Create', () => _put(p)),
+      WsMenuItem('Rename…', () => _rename(p)),
+      const WsMenuItem.rule(),
+      WsMenuItem(Platform.isWindows ? 'Show in Explorer' : 'Show in Finder', () => Platform.isWindows ? Process.run('explorer', ['/select,${p.file.replaceAll('/', r'\')}']) : Process.run('open', ['-R', p.file])),
+    ]);
   }
 
   /// What was made from it follows, its knobs in the inspector too; why its code does not run, under the code.
@@ -90,63 +187,60 @@ class _ProgramShelfState extends State<ProgramShelf> {
     for (final p in all) {
       forms[p.form] = (forms[p.form] ?? 0) + 1;
     }
-    final shown = all.where((p) => (c.chip == 'All' || c.chip == p.form) && (c.hit(p.stem) || c.hit(p.first))).toList();
+    final shown = all.where((p) => (c.chip == 'All' || c.chip == p.form) && (c.hit(p.name) || c.hit(p.stem) || c.hit(p.first))).toList();
     final sel = (c.mem.programCode ? _stood(all) : null) ?? all.where((p) => p.file == c.sel).firstOrNull;
     if (all.isEmpty) return Padding(padding: EdgeInsets.all(Shape.s(24)), child: Text('Copy code from the web, then Paste', textAlign: TextAlign.center, style: T.label(Grey.g63)));
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (!c.mem.programCode) DockChips([('All', all.length), for (final e in forms.entries) (e.key, e.value)], active: c.chip, onPick: c.pickChip),
-        Expanded(
-          child: c.mem.programCode && sel != null
-              ? ProgramCode(sel, () => _saved(sel), key: ValueKey(sel.file))
-              : shown.isEmpty
-              ? DockEmpty(c.query)
-              : ListView(children: [for (final p in shown) _ProgramRow(p, c, onPut: () => _put(p))]),
-        ),
-        if (sel != null)
-          DockFooter(
-            preview: DockBadge(DockG.program, WsT.toneText, size: Shape.z(34)),
-            title: sel.form,
-            meta: c.mem.trouble[sel.file]?.replaceAll('the script ${sel.file}: ', '') ?? sel.tail,
-            action: 'Create',
-            fresh: true,
-            onAction: () => _put(sel),
+    if (!c.mem.programCode) {
+      ProgramTiles.ask(all.map((p) => p.file), () {
+        if (mounted) setState(() {});
+      });
+    }
+    String tile(Program p) => File(ProgramTiles.home(p.file)).existsSync() ? ProgramTiles.home(p.file) : '';
+    return WsMenu(
+      key: _menu,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!c.mem.programCode) DockChips([('All', all.length), for (final e in forms.entries) (e.key, e.value)], active: c.chip, onPick: c.pickChip),
+          Expanded(
+            child: c.mem.programCode && sel != null
+                ? ProgramCode(sel, () => _saved(sel), key: ValueKey(sel.file))
+                : shown.isEmpty
+                ? DockEmpty(c.query)
+                : SingleChildScrollView(
+                    child: LayoutBuilder(
+                      builder: (context, box) {
+                        final cols = wsCols(box.maxWidth, Shape.z(84)), w = wsCell(box.maxWidth, cols);
+                        return Wrap(
+                          spacing: WsT.gutter,
+                          runSpacing: WsT.gutter,
+                          children: [
+                            for (final p in shown)
+                              SizedBox(
+                                width: w,
+                                child: GestureDetector(
+                                  onSecondaryTapDown: (d) => _menuOn(p, d.globalPosition),
+                                  child: EffectTile(p.name, key: ValueKey('ws-program-${p.stem}-${tile(p).isEmpty ? 0 : File(tile(p)).lastModifiedSync().millisecondsSinceEpoch}'), file: tile(p), on: null, onTap: () => c.pick(p.file), onApply: () => _put(p), picked: c.sel == p.file, naming: _renaming == p.file ? _naming(p) : null),   // (two presses make it, as on Create; drawn again under the same name, an Image with the same file goes on showing the first: the date in its key)
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
           ),
-      ],
-    );
-  }
-}
-
-class _ProgramRow extends StatelessWidget {
-  const _ProgramRow(this.p, this.c, {required this.onPut});
-  final Program p;
-  final DockCtx c;
-  final VoidCallback onPut;
-  @override
-  Widget build(BuildContext context) {
-    final sel = c.sel == p.file;
-    return DockHover(
-      onTap: () => c.pick(p.file),
-      onDoubleTap: onPut,   // (two presses make it, as on Create)
-      picks: true,
-      builder: (context, h) => Container(
-        padding: EdgeInsets.symmetric(horizontal: WsT.inset, vertical: Shape.s(6)),
-        margin: EdgeInsets.only(bottom: WsT.gutter),
-        color: sel ? WsT.accent : (h ? WsT.raised : WsT.card),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(child: Text(p.form, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(dockInk(sel, Grey.g95)))),
-                Text(p.tail, style: T.micro(dockInk(sel, Grey.g56))),
-              ],
+          if (sel != null && !c.mem.programCode && tile(sel).isNotEmpty)   // (large, as the Effects shelf's)
+            SizedBox(height: Shape.z(140), child: TileMoving(tile(sel), playing: true)),
+          if (sel != null)
+            DockFooter(
+              preview: DockBadge(DockG.program, WsT.toneText, size: Shape.z(34)),
+              title: sel.name,
+              meta: c.mem.trouble[sel.file]?.replaceAll('the script ${sel.file}: ', '') ?? sel.first,
+              action: 'Create',
+              fresh: true,
+              onAction: () => _put(sel),
             ),
-            SizedBox(height: Shape.s(3)),
-            Text(p.first, maxLines: 2, overflow: TextOverflow.ellipsis, style: T.value(dockInk(sel, Grey.g76))),
-          ],
-        ),
+        ],
       ),
     );
   }

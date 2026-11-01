@@ -38,18 +38,18 @@ class EffectsShelf extends StatelessWidget {
       if (picked)
         for (final (n, _) in m.thingEffects)
           (id: n, name: n, label: m.label(n), on: on.contains(n), apply: chosen(n, () => ws.fxToggle(n)), said: _said(ws, n),
-           tile: _Tile(n, file: m.picture(n), look: _FxLook(n), on: on.contains(n) ? 'ON' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: chosen(n, () => ws.fxToggle(n)), star: c)),
+           tile: EffectTile(n, file: m.picture(n), look: _FxLook(n), on: on.contains(n) ? 'ON' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: chosen(n, () => ws.fxToggle(n)), star: c)),
       for (final (n, f) in _byName[m.effects] ??= ([...m.effects]..sort((a, b) => a.$1.toLowerCase().compareTo(b.$1.toLowerCase()))))
         (id: f, name: n, label: m.label(n), on: screen.contains(f), apply: chosen(f, () => ws.screenToggle(f)), said: m.about(f).isEmpty ? (picked ? 'On the picked thing' : 'On all under it') : m.about(f),
-         tile: _Tile(n, key: ValueKey('ws-screen-$f'), file: m.picture(f), same: m.tileSame(f), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, picked: c.sel == f, onTap: () => c.pick(f), onApply: chosen(f, () => ws.screenToggle(f)), star: c, starId: f)),
+         tile: EffectTile(n, key: ValueKey('ws-screen-$f'), file: m.picture(f), same: m.tileSame(f), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, picked: c.sel == f, onTap: () => c.pick(f), onApply: chosen(f, () => ws.screenToggle(f)), star: c, starId: f)),
       if (picked)   // (a look kept by its name, Save Look: given to the picked thing, its values, effects and keys)
         for (final (n, f) in m.looks)
           (id: f, name: n, label: 'Look', on: false, apply: chosen(f, () => ws.after(m.later('paste_style', thing: int.parse(ws.selected!), word: f))), said: 'A look for the picked thing',
-           tile: _Tile(n, key: ValueKey('ws-look-$n'), file: m.picture(f), on: null, picked: c.sel == f, onTap: () => c.pick(f), onApply: chosen(f, () => ws.after(m.later('paste_style', thing: int.parse(ws.selected!), word: f))), star: c, starId: f)),
+           tile: EffectTile(n, key: ValueKey('ws-look-$n'), file: m.picture(f), on: null, picked: c.sel == f, onTap: () => c.pick(f), onApply: chosen(f, () => ws.after(m.later('paste_style', thing: int.parse(ws.selected!), word: f))), star: c, starId: f)),
       if (picked)
         for (final (n, f) in m.animators)
           (id: f, name: n, label: 'Motion', on: ws.motion == f, apply: chosen(f, () => ws.motionToggle(f)), said: 'A motion for the picked thing',
-           tile: _Tile(n, key: ValueKey('ws-motion-$n'), on: ws.motion == f ? 'ON' : null, picked: c.sel == f, onTap: () => c.pick(f), onApply: chosen(f, () => ws.motionToggle(f)))),
+           tile: EffectTile(n, key: ValueKey('ws-motion-$n'), on: ws.motion == f ? 'ON' : null, picked: c.sel == f, onTap: () => c.pick(f), onApply: chosen(f, () => ws.motionToggle(f)))),
     ];
     // (by its name, or by what it does in its maker's words, as Alight Motion's search reads the descriptions; when that
     //  finds nothing, a word typed wrong or in part, the nearest five by RapidFuzz (the inside's find, the user's choice),
@@ -92,7 +92,7 @@ class EffectsShelf extends StatelessWidget {
                 ),
         ),
         if (sel != null && m.picture(sel.id).isNotEmpty)   // (its pictures large and moving, as Alight Motion's effect browser opens a large moving sample of the one pressed)
-          SizedBox(key: const ValueKey('ws-fx-preview'), height: Shape.z(140), child: _Moving(m.picture(sel.id), playing: true)),
+          SizedBox(key: const ValueKey('ws-fx-preview'), height: Shape.z(140), child: TileMoving(m.picture(sel.id), playing: true)),
         if (sel != null) _FxFooter(sel.name, kind: sel.label, said: sel.said, done: sel.on, ws: ws, onAction: sel.apply, needs: !picked),   // (none picked: a file's goes on a board of its own, one of a thing's waits for a thing)
       ],
     );
@@ -103,9 +103,10 @@ class EffectsShelf extends StatelessWidget {
 /// moving while the hand is on it, as Alight Motion's tiles move; or made by filament/fx_tiles.sh; without one, a thing's
 /// effect its small drawing, else a plain tile), its name, ON (and its place among those on the stage) when it is on,
 /// NO CHANGE when it is seen to change nothing on the sample, the star for a thing's effect.
-class _Tile extends StatelessWidget {
-  const _Tile(this.name, {super.key, this.file, this.look, required this.on, required this.onTap, this.onApply, this.picked = false, this.same = false, this.star, this.starId});
+class EffectTile extends StatelessWidget {
+  const EffectTile(this.name, {super.key, this.file, this.look, required this.on, required this.onTap, this.onApply, this.picked = false, this.same = false, this.star, this.starId, this.naming});
   final String name;
+  final Widget? naming;   // (where its name is being written, in its place)
   final String? file, on;
   final CustomPainter? look;
   final bool picked, same;
@@ -128,7 +129,7 @@ class _Tile extends StatelessWidget {
             children: [
               ColoredBox(color: WsT.card),
               if (file case final f? when f.isNotEmpty)
-                _Moving(f, playing: h)
+                TileMoving(f, playing: h)
               else if (look != null)
                 FittedBox(child: CustomPaint(size: const Size(18, 16), painter: look)),
               if (on case final o?) Positioned(left: 3, top: 3, child: DockTag(o, hue: WsT.accent, edge: true)),
@@ -143,7 +144,7 @@ class _Tile extends StatelessWidget {
           padding: EdgeInsets.symmetric(horizontal: Shape.s(4)),
           alignment: Alignment.centerLeft,
           color: dockFill(picked, h, WsT.card),
-          child: FittedBox(fit: BoxFit.scaleDown, child: Text(name, maxLines: 1, style: T.micro(dockInk(picked, Grey.g76)))), // (a name wider than its tile is drawn smaller, never cut)
+          child: naming ?? FittedBox(fit: BoxFit.scaleDown, child: Text(name, maxLines: 1, style: T.micro(dockInk(picked, Grey.g76)))), // (a name wider than its tile is drawn smaller, never cut)
         ),
       ],
     ),
@@ -152,15 +153,15 @@ class _Tile extends StatelessWidget {
 
 /// A tile's picture, its eight moving ones played round and round while [playing] (the media shelf's 280 ms a picture,
 /// dock_files_contents.dart); its still otherwise, and for a picture with none beside it.
-class _Moving extends StatefulWidget {
-  const _Moving(this.file, {required this.playing});
+class TileMoving extends StatefulWidget {
+  const TileMoving(this.file, {super.key, required this.playing});
   final String file;
   final bool playing;
   @override
-  State<_Moving> createState() => _MovingState();
+  State<TileMoving> createState() => TileMovingState();
 }
 
-class _MovingState extends State<_Moving> {
+class TileMovingState extends State<TileMoving> {
   int? _step;
   Timer? _clock;
 
@@ -179,7 +180,7 @@ class _MovingState extends State<_Moving> {
   }
 
   @override
-  void didUpdateWidget(_Moving old) {
+  void didUpdateWidget(TileMoving old) {
     super.didUpdateWidget(old);
     _follow();
   }

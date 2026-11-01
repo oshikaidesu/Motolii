@@ -1663,7 +1663,7 @@ void _tests3() {
     addTearDown(file.deleteSync);
     ws.shelf = 'Program';
     await t.pumpAndSettle();
-    await t.tap(find.text('0test'));
+    await t.tap(find.text('p5.js 0test'));
     await t.pumpAndSettle();
     await t.tap(find.text('Create'));
     await settled(t, ws);
@@ -1685,6 +1685,33 @@ void _tests3() {
     expect(find.textContaining('SyntaxError'), findsOneWidget, reason: 'it says why');
     expect(m.things.contains(made), isTrue);
     expect(m.trouble, isNot(contains('could not be made')));
+  });
+
+  testWidgets('A program is called what the site calls it, or what its maker says by a right click (Live\'s browser), and what is made from it after that takes the name; its file and its code stay as they are', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    const code = '// A Title by someone, by-nc-sa, openprocessing.org/sketch/1\nfunction setup(){createCanvas(99,99);}\nfunction draw(){rect(1,1,9,9);}\n';
+    final file = File('${EffectTiles.own}/programs/p5.js-0name.js')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(code);
+    final name = File('${EffectTiles.own}/programs/p5.js-0name.name');
+    addTearDown(file.deleteSync);
+    addTearDown(() => name.existsSync() ? name.deleteSync() : null);
+    ws.shelf = 'Program';
+    await t.pumpAndSettle();
+    final click = await t.startGesture(t.getCenter(find.text('A Title')), kind: PointerDeviceKind.mouse, buttons: kSecondaryButton);
+    await click.up();
+    await t.pumpAndSettle();
+    expect(find.text(Platform.isWindows ? 'Show in Explorer' : 'Show in Finder'), findsOneWidget);
+    await t.tap(find.text('Rename…'));
+    await t.pumpAndSettle();
+    await t.enterText(find.descendant(of: find.byKey(const ValueKey('ws-program-name')), matching: find.byType(EditableText)), 'Mine');
+    await t.testTextInput.receiveAction(TextInputAction.done);
+    await t.pumpAndSettle();
+    expect(name.readAsStringSync(), 'Mine');
+    expect(file.readAsStringSync(), code);
+    await t.tap(find.text('Create'));
+    await settled(t, ws);
+    expect(m.word(m.things.last, 'name'), 'Mine', reason: m.trouble);
   });
 
   testWidgets('A group is one row until its triangle opens it; its row stands where its top thing stood, the rest gathered under it; Delete takes what it holds, one step (a precomposed layer; Apple Motion\'s triangle; Alight Motion\'s group)', (t) async {
@@ -2269,8 +2296,9 @@ void _tests3() {
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
       await t.pump();
     }
+    final said = ws.notice;   // (said for ten seconds, ws_2.dart's snackbar, and a clean CI Mac settles for longer)
     await settled(t, ws);
-    expect(ws.notice, startsWith('Written: 2 of 2'), reason: ws.inside?.trouble);
+    expect(said, startsWith('Written: 2 of 2'), reason: ws.inside?.trouble);
     expect(films.map((f) => f.existsSync() && f.lengthSync() > 1000), [true, true], reason: 'each beside its document');
     expect(ws.document, 'other.motolii', reason: 'the one open before is open again');
     for (final f in films) {
