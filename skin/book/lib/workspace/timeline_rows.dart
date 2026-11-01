@@ -49,7 +49,16 @@ extension _WsTimelineRows on _WsTimelineState {
                           right: Shape.s(8),
                           top: i * WtM.row - top,
                           height: WtM.row,
-                          child: Align(alignment: Alignment.centerLeft, child: Text(ws.inside?.shown(n)?.label ?? n, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g76))),   // (by its name in the inspector: an effect's knob Threshold, not js_am_rays_threshold)
+                          // (what it aims at, by the card's name then its own: Ableton's Device and Control choosers, Logic's plug-in and parameter; an effect's knob Threshold, not js_am_rays_threshold)
+                          child: Row(
+                            children: [
+                              if (_laneCard(ws, ws.layers[_order[i].layer], n) case final card?) ...[
+                                Flexible(child: Text(card, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g56))),
+                                SizedBox(width: Shape.s(5)),
+                              ],
+                              Text(ws.inside?.shown(n)?.label ?? n, maxLines: 1, style: T.label(Grey.g76)),
+                            ],
+                          ),
                         )
                       else if (ws.layers[_order[i].layer] case final l)
                       Positioned(

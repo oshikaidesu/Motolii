@@ -65,6 +65,9 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     return [for (final n in m.values(t)) if (moving.contains(n) && m.keyMoments(t, n).isNotEmpty) n];
   }
 
+  // The card a lane's value stands on: the effect it is a knob of, or Transform and the like.
+  String? _laneCard(Ws ws, WsLayer l, String name) => [for (final (title, names) in ws.inside!.cards(int.parse(l.id))) if (names.contains(name)) title].firstOrNull;
+
   // A value's lane: its keys where they are and what they hold, read from the document's picture (nothing asked of the inside).
   WtRow _laneRow(Ws ws, WsLayer l, String name) {
     final m = ws.inside!, t = int.parse(l.id), at = m.keyMoments(t, name), vs = m.keyValues(t, name);
