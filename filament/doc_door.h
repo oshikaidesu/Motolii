@@ -1,6 +1,7 @@
 // doc_door.h: part of doc.h. Code taken from the net, read as what it is (door.h), kept in the maker's own folder as it
 // came (so it is on the shelf too) and put on the stage. word: the code, or a file of it. A shader that reads a picture
 // goes on the picked thing, as an effect; one that makes its own fills the stage; a sketch is a picture, in 3D a solid.
+#include "door_shadertoy_json.h"
 static void doc_hydra_keys(Doc& d, int thing, const std::vector<HydraKnob>& moving) {
     for (const HydraKnob& k : moving)
         for (size_t i = 0; i < k.keys.size(); ++i) doc_key(d, thing, ("js_" + k.name).c_str(), (double)i * HYDRA_STEP, k.keys[i]);
@@ -36,7 +37,12 @@ static int doc_door(Doc& d, const std::string& word, int picked) {
     const std::filesystem::path folder = doc_folders("programs").back();
     const bool kept = std::filesystem::path(word).parent_path() == folder;   // (one of the Program shelf's own, as it is now: not kept again)
     text = door_page(text);
-    const std::string came = text, form = door_form(text), told = door_js(text, form);
+    const bool tabs = door_has(text, "\"renderpass\"");
+    if (tabs) {   // (Shadertoy's file of all its tabs: made one ISF here, as Hydra's is)
+        std::string why;
+        if ((text = door_shadertoy(text, why)).empty()) return d.trouble = why, 0;
+    }
+    const std::string came = text, form = tabs ? "shadertoy" : door_form(text), told = door_js(text, form);
     const bool hydra = form == "hydra", shader = hydra || form == "shadertoy" || form == "sandbox" || form == "twigl" || form == "bonzomatic";
     std::vector<HydraKnob> moving;
     if (hydra) {   // (the code as an ISF effect, kept as that: Hydra is a part apart, hydra_isf.cpp)
@@ -58,7 +64,7 @@ static int doc_door(Doc& d, const std::string& word, int picked) {
     if (hydra) std::ofstream(file.parent_path() / (file.stem().string() + ".hydra")) << came;   // (what was written, kept beside what it became: the Program shelf shows this one)
     doc_act(d);
     int thing = 0;
-    if (shader && (door_has(text, "iChannel") || (hydra && door_has(text, "inputImage"))) && picked) {
+    if (shader && door_has(door_isf(text), "inputImage") && picked) {
         if (doc_fx_file(d, picked, file.string().c_str(), d.stage->now)) thing = picked;
     } else if (shader) {
         if ((thing = doc_add(d, "shape", "rect")) && doc_say(d, thing, "name", name.c_str()) && doc_fx_file(d, thing, file.string().c_str(), d.stage->now)) doc_fit(d, thing, "stretch");

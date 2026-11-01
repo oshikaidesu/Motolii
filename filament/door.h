@@ -11,6 +11,7 @@
 #include "third_party/js/twigl/noise.h"
 
 inline bool door_has(const std::string& t, const char* word) { return t.find(word) != std::string::npos; }
+#include "door_shadertoy.h"
 
 // "" as it is (ISF, a p5.js sketch, a recipe of ours, or not code); or shadertoy sandbox hydra two paper turtle canvas dweet tixy.
 inline std::string door_form(const std::string& t) {
@@ -106,19 +107,6 @@ inline std::string door_js(const std::string& src, const std::string& form) {
 
 // A shader's form as an ISF effect: what it asks of its site said in ISF's words. A shader that reads iChannel takes the
 // picture it is put on, a film as much as anything. Any other: the text as it is.
-// A picture told to a function, which Vulkan's GLSL does not have: read where it is used, the one picture there is.
-inline std::string door_pictures_told(std::string body) {
-    static const std::regex param(R"(\bsampler2D\s+(\w+)\s*,?\s*)");
-    std::string names = "iChannel[0-9]";
-    for (auto m = std::sregex_iterator(body.begin(), body.end(), param); m != std::sregex_iterator(); ++m) names += "|" + (*m)[1].str();
-    if (names == "iChannel[0-9]") return body;
-    body = std::regex_replace(body, param, "");
-    body = std::regex_replace(body, std::regex(R"(\b(texture|textureLod|texelFetch|textureSize)\s*\(\s*(?:)" + names + R"()\s*,)"), "door_$1(");
-    body = std::regex_replace(body, std::regex(R"(\b(?:)" + names + R"()\s*,\s*)"), "");
-    body = std::regex_replace(body, std::regex(R"(,\s*(?:)" + names + R"()\s*\))"), ")");
-    return std::regex_replace(body, std::regex(R"(,\s*\))"), ")");
-}
-
 // A shader with a main of its own (or a body with none: twigl's geekest) called from ISF's: `before` what it is given at
 // its top, `start` what it is told each time, `done` what comes of it. What it reads of its last frame (`last`, the names
 // that picture has) is a pass kept from frame to frame (ISF_Spec's PERSISTENT).
@@ -134,17 +122,12 @@ inline std::string door_called(const std::string& name, std::string body, const 
 
 inline std::string door_isf(const std::string& text) {
     const std::string form = door_form(text);
-    if (form == "shadertoy") {
+    if (form == "shadertoy") {   // (one tab, as it is copied: every iChannel the picture it is put on)
+        DoorTab tab;
+        tab.name = "Image", tab.code = door_toy_clean(text);
         const bool reads = door_has(text, "iChannel");
-        std::string body = std::regex_replace(text, std::regex(R"(#iChannel[0-9][^\n]*|#version[^\n]*|#define\s+(?:iTime|iResolution|iMouse)\b[^\n]*|\buniform\s+\w+\s+(?:iTime|iGlobalTime|iResolution|iMouse|iFrame|iDate|iTimeDelta|iFrameRate|iSampleRate|iChannelTime|iChannelResolution|iChannel[0-9]|time|resolution|mouse)\s*(?:\[\s*\d*\s*\])?\s*;)"), "");   // (what another player declares for itself: shader-toy for VS Code, GLSL Sandbox's, a file's own)
-        body = std::regex_replace(body, std::regex(R"(\btexture2D\s*\(\s*iChannel)"), "texture(iChannel");
-        body = door_pictures_told(body);
-        body = std::regex_replace(body, std::regex(R"(\b(texture|textureLod|texelFetch|textureSize)\s*\(\s*iChannel[0-9]\s*,)"), "door_$1(");
-        return std::string("/*{\"ISFVSN\":\"2\",\"DESCRIPTION\":\"Shadertoy\",\"CATEGORIES\":[\"Shadertoy\"],\"INPUTS\":[") + (reads ? "{\"NAME\":\"inputImage\",\"TYPE\":\"image\"}" : "") + "]}*/\n"
-            "#define iTime TIME\n#define iGlobalTime TIME\n#define iChannelTime float[4](TIME,TIME,TIME,TIME)\n#define iTimeDelta TIMEDELTA\n#define iFrame FRAMEINDEX\n#define iFrameRate 60.\n#define iDate DATE\n#define iMouse vec4(0.)\n#define iSampleRate 44100.\n"
-            "#define iResolution vec3(RENDERSIZE,1.)\n#define iChannelResolution vec3[4](vec3(RENDERSIZE,1.),vec3(RENDERSIZE,1.),vec3(RENDERSIZE,1.),vec3(RENDERSIZE,1.))\n"
-            + (reads ? "#define iChannel0 isf_img_inputImage\n#define iChannel1 isf_img_inputImage\n#define iChannel2 isf_img_inputImage\n#define iChannel3 isf_img_inputImage\nivec2 door_textureSize(int l){return ivec2(RENDERSIZE);}\nvec4 door_texture(vec2 p){return IMG_NORM_PIXEL(inputImage,p);}\nvec4 door_texture(vec2 p,float b){return IMG_NORM_PIXEL(inputImage,p);}\nvec4 door_textureLod(vec2 p,float l){return IMG_NORM_PIXEL(inputImage,p);}\nvec4 door_texelFetch(ivec2 p,int l){return IMG_NORM_PIXEL(inputImage,(vec2(p)+.5)/RENDERSIZE);}\n" : "")
-            + body + "\nvoid main(){vec4 o=vec4(0.,0.,0.,1.);mainImage(o,gl_FragCoord.xy);gl_FragColor=vec4(o.rgb,1.);}\n";
+        if (reads) std::fill(tab.channel, tab.channel + 4, 0);
+        return door_tabs_isf("", {tab}, reads);
     }
     if (form == "bonzomatic") {
         static const std::regex output(R"(\blayout\s*\([^)]*\)\s*out\s+vec4\s+(\w+)\s*;)");

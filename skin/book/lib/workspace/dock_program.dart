@@ -31,6 +31,8 @@ class Program {
   /// The first line of it that says something.
   String get first {
     try {
+      final kept = RegExp(r'^/\*\{.*"DESCRIPTION":"([^"]*)"(?:,"CREDIT":"([^"]*)")?').firstMatch(File(file).readAsLinesSync().first);   // (what a file of many tabs says it is)
+      if (kept != null && kept[1] != 'Shadertoy') return kept[2] == null ? kept[1]! : '${kept[1]} · ${kept[2]}';
       return File(file).readAsLinesSync().map((l) => l.trim()).firstWhere((l) => l.isNotEmpty && !l.startsWith('//') && !l.startsWith('#') && !l.startsWith('/*'), orElse: () => '');
     } catch (_) {
       return '';

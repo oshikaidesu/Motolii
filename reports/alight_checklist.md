@@ -462,7 +462,8 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] 面取りの残り：step は深さ 85px で下端が少し破れる。Hole Bevel Depth（After Effects）は内外の区別が要る
 - [x] 文字にも金属：立体と同じ Metal、Rough、Shine（Filament の 3 つ）を奥行きのある文字、図形、絵に。カードは After Effects の Material Options と同じく 3D の時だけ。金属と言えばランプ無しでも部屋を映す（Element 3D の反射マップ）。値の変更は絵を作り直さず 58.3 枚/秒
 - [x] 金属のルック（11/1）：Gold、Silver、Copper、Brass、Gold Glow を `filament/looks` に。色は Gold (metallic) d4af37 と Copper b87333 が Wikipedia の色の記事（Maerz & Paul）、Silver c0c0c0 が CSS の色名 silver、Brass b5a642 が Adobe Express の値。Filament の表の色（Materials.md）はこの部屋では白っぽく出たので使わなかった。効果の棚で `gold` と検索してダブルクリックの 1 回で、灰色の文字が光る金の立体文字になるのを窓で確かめた。Rough と面取りの深さは出典なし（Rough 0.15〜0.3、面取り 40px、奥行き 200%）
-- [ ] 部位ごとの材質（11/1、同）：面、面取り、横、裏を別の色と質感に
+- [ ] 厚い文字の横面の段々（11/2、大当りの金文字の絵で見えた）：「り」の左の横面に階段が出る
+- [ ] 部位ごとの材質（11/1、同）：面、面取り、横、裏を別の色と質感に（11/2 ユーザー：「そこも超えておかないとダメなんだよ」で再開）
 - [ ] 重ねた縁取りを厚みでも（11/1、同）：PopText、GN Rounded Bevel の多重の縁。パチンコの文字の残り
 - [x] 効果を掛けた物にも光と影（11/1）：光はもともと届いていた（`thing_fx.h` を読んだだけの早とちり。平らな物も厚みのある物も、絵で確かめた）。影だけが無く（平らも厚みも 0 画素）、平らな物は舞台に立つ効果後の板が落とすようにした（95763 画素、普通の物は 95654）
 - [ ] 厚みのある物に .fs、.wgsl の効果を掛けると影が消える。画面に貼る経路で舞台に板が無い。Filament はレイヤーで隠すと影も消す（`View.cpp` の computeVisibilityMasks）ので、影だけの代役が要る
@@ -568,7 +569,13 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] p5 の shader()：168 作のうち 33 作が使う。Shadertoy の入口と同じ GLSL の読み口に繋げられるか
 - [x] three.js の場面を動かす台：three.core.js をそのまま走らせ、形と材質の組ごとに本物の立体で世界に立てる（doc_door.h、p5_stand.h）
 - [x] プログラムの置き場：左のブラウザに Program を足し、一覧とコードの表示を切り替える。つまみは今のまま右のインスペクター。貼った物は Create と Effects に混ぜず、ここに入れる。見本：Godot と Unity は「コードはファイルとしてブラウザに、つまみはインスペクターに」、Cavalry はつまみが Attribute Editor でコードのタブは閉じても残る、TouchDesigner はコードが Text DAT でつまみが Parameter Dialog。割れた点（コードをどこで打つか）は「舞台を見ながら直す」が要るので左に置く。これは見本から取った決めではなく、出典なし
-- [ ] Shadertoy の複数バッファ（Buffer A〜D、Common）：今は 1 つのパスだけ。Common に関数がある作品と、前のコマを読む作品は絵にならない
+- [x] Shadertoy の複数バッファ（Buffer A〜D、Common）：済（11/2）。JSON を入口で 1 本の ISF に変える（door_shadertoy.h）。実物 300 本で 261 本が絵になる（reports/sketch_import_2026-11-01.md）
+- [ ] Shadertoy の組み込みの絵：JSON の `src` でどの絵か分かるが、今は置いた物の絵を読む。ノイズとフォントが多い（300 本で上位 3 枚が 33 回）。出どころと権利を調べてから
+- [ ] Shadertoy のタブを 1 枚ずつ貼る入口：サイトからはタブごとにしかコピーできない。JSON が無い人の道が無い
+- [ ] Shadertoy のバッファの mipmap：`textureLod` は 0 段だけ読む。ぼかしを mipmap でやる作品は違う絵になる
+- [ ] Shadertoy のバッファは 16 bit（サイトは 32 bit）：足し続けるパストレースは 65504 で飽和するはず。Spectral Cornell Box が候補だが未確認。32 bit は Dawn の float32-filterable が要る
+- [ ] 前のコマを読む効果は時間を飛ばすと合わない：`iFrame == 0` の種まきは 0 コマ目を通った時だけ。書き出しは頭から順なので合う。止めて飛ばした時は合わない。After Effects の Particular が頭から回し直す形が候補（未読）
+- [ ] Bonzomatic の音と画像：`texFFT` などをゼロで読む
 - [ ] 2D の入口の絵を世界に立てる：Dwitter・tixy・Turtletoy・Two.js・Paper.js・Canvas は世界の中で 1 枚の板。線や形ごとの奥行きが要るか
 - [ ] p5 の WEBGL の物ごとの色：`solid_fill` が全部の複製に 1 つの材質を渡すので、白い箱になる
 - [ ] three.js で立たない物：テクスチャ、線と点、ShaderMaterial、モーフ、外のファイル（glTF、フォント）、霧と背景色、シーンの光

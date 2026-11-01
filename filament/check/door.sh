@@ -68,6 +68,14 @@ uniform vec2 resolution;
 uniform sampler2D backbuffer;
 void main(void){ vec2 p=gl_FragCoord.xy/resolution; gl_FragColor=vec4(.9*texture2D(backbuffer,p).rgb+step(fract(time),.1)*p.x,1.0); }
 J
+cat > $W/s/shadertoytabs.txt <<'J'
+{"Shader":{"info":{"name":"tabs"},"renderpass":[
+{"type":"image","name":"Image","code":"float own(){return 1.;}\nvoid mainImage(out vec4 c,vec2 p){c=read(iChannel0,p/iResolution.xy)*own();}","inputs":[{"channel":0,"ctype":"buffer","id":"a"}],"outputs":[]},
+{"type":"common","name":"Common","code":"vec4 read(sampler2D s,vec2 p){return texture(s,p);}","inputs":[],"outputs":[]},
+{"type":"buffer","name":"Buffer B","code":"float own(){return .9;}\nvoid mainImage(out vec4 c,vec2 p){c=vec4(texture(iChannel0,p/iResolution.xy).rgb*own(),1.);}","inputs":[{"channel":0,"ctype":"buffer","id":"a"}],"outputs":[{"id":"b","channel":0}]},
+{"type":"buffer","name":"Buffer A","code":"const float own=.05;\nvoid mainImage(out vec4 c,vec2 p){vec2 u=p/iResolution.xy;c=vec4(.9*texelFetch(iChannel0,ivec2(p),0).rgb+step(length(u-.5-.3*vec2(cos(iTime*3.),sin(iTime*3.))),own),1.);}","inputs":[{"channel":0,"ctype":"buffer","id":"b"}],"outputs":[{"id":"a","channel":0}]}
+]}}
+J
 cat > $W/three.js <<'J'
 import * as THREE from 'three';
 const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 100);
