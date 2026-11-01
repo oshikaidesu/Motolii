@@ -148,6 +148,7 @@ void _tests3() {
       ..select('$a');
     await t.pumpAndSettle();
     final box = find.descendant(of: find.byType(TextGroup), matching: find.byType(EditableText));
+    await seen(t, box);
     expect((t.widget(box) as EditableText).controller.text, 'first');
     ws.select('$b');
     await t.pumpAndSettle();
@@ -158,6 +159,7 @@ void _tests3() {
     await t.pumpAndSettle();
     expect([m.word(a, 'text'), m.word(b, 'text')], ['first', 'second'], reason: 'in and out of the box writes nothing stale');
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_x'), findsOneWidget); // (the inside's Transform card)
+    await seen(t, find.text('Transform').first);   // (the text box was brought into sight: its card lies under Transform's)
     await t.tap(find.text('Transform').first);
     await t.pumpAndSettle();
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_x'), findsNothing, reason: 'folded, and it stays so');
@@ -190,8 +192,8 @@ void _tests3() {
     expect(m.value(a, 'shadow_distance', 0), was, reason: 'one step');
     ws.fxToggle('Drop Shadow'); // (taken off as the shelf's Remove takes it)
     await t.pumpAndSettle();
-    expect([ws.fxOf('$a'), m.word(a, 'shadow')], [['Glow'], ''], reason: 'taken off the document');
-    expect(inspectorCards(t).contains('Drop Shadow'), isFalse);
+    expect([ws.fxOf('$a'), m.word(a, 'shadow')], [<String>[], ''], reason: 'taken off the document');
+    expect(inspectorCards(t), allOf(isNot(contains('Drop Shadow')), contains('Glow')), reason: 'the other stays: the shelf\'s Glow is a file on the thing, not one of its fx (golf (79))');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
@@ -1574,6 +1576,7 @@ void _tests3() {
     expect([hsv.saturation, hsv.value], [inInclusiveRange(.29, .81), inInclusiveRange(.54, 1)], reason: 'AbsentMotion\'s addShape randomColor');
     ws.reread();
     await t.pumpAndSettle();
+    await seen(t, find.text('#${fill.toUpperCase()}'));
     expect(find.text('#${fill.toUpperCase()}'), findsWidgets, reason: 'the Inspector\'s Fill shows it, not —');
     ws.shelf = 'Colors';
     await t.pumpAndSettle();
@@ -1804,10 +1807,11 @@ void _tests3() {
       ..select('$film');
     await t.pumpAndSettle();
     expect(find.descendant(of: find.byType(InspHeader), matching: find.text('Film')), findsOneWidget);
-    expect(find.byType(FillStroke), findsNothing, reason: 'a film has no fill: ${m.values(film)}');
+    expect(inspectorCards(t), isNot(contains('Fill')), reason: 'a film has no fill: ${m.values(film)}');
     ws.select('$cube');
     await t.pumpAndSettle();
     expect(find.descendant(of: find.byType(InspHeader), matching: find.text('Solid')), findsOneWidget);
+    await seen(t, find.byType(FillStroke));
     expect(find.byType(FillStroke), findsOneWidget, reason: 'a solid\'s fill is a colour or glass');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
@@ -1925,7 +1929,7 @@ void _tests3() {
     final spot = int.parse(ws.selected!);
     expect([m.word(spot, 'kind'), m.word(spot, 'file')], ['light', 'spot'], reason: m.trouble);
     expect(find.descendant(of: find.byType(InspHeader), matching: find.text('Light')), findsOneWidget);
-    expect(inspectorCards(t), ['Fill', 'Transform', 'Light'], reason: 'its colour, where it is and how it is turned, as After Effects\' lights have, then its own');
+    expect(inspectorCards(t), ['Transform', 'Fill', 'Light'], reason: 'where it is and how it is turned first, as for every thing, then its colour, as After Effects\' lights have, then its own');
     expect(m.set(spot, 'shadows', 1) && m.say(spot, 'fill', 'ffb36b') && m.set(spot, 'cone', 20), isTrue, reason: m.trouble);
     expect(m.set(spot, 'shadows', 2), isFalse, reason: 'shadows is 0 or 1');
     expect(m.key(spot, 'intensity', 0, 0) && m.key(spot, 'intensity', 1, 3), isTrue, reason: 'its strength moves: ${m.trouble}');

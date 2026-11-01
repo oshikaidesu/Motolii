@@ -159,7 +159,7 @@ void _tests4() {
     final field = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_opacity');
     await seen(t, field);
     await t.pump();
-    final r = t.getRect(field), mark = Offset(r.right - Pop.tilePad - 3, r.top + Pop.tile - 10);   // (a tile's: bottom right, number_paint.dart)
+    final r = t.getRect(field), mark = Offset(r.right - 6, r.top + 6);   // (a row's: top right; Opacity stands in Transform, inspector_number_field_num_field_state.dart's _keyAt)
     expect(m.keyMoments(cube, 'opacity'), isEmpty);
     await t.tapAt(mark);
     await settled(t, ws);

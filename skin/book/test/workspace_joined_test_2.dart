@@ -97,9 +97,12 @@ void _tests2() {
     await t.pumpAndSettle();
     Future<void> press(String family) async {   // (one press on its row, past a double press's wait)
       final row = find.descendant(of: find.byType(FontsShelf), matching: find.textContaining('$family  ·')), list = find.descendant(of: find.byType(FontsShelf), matching: find.byType(Scrollable)).last;
-      t.state<ScrollableState>(list).position.jumpTo(0);   // (from the top: the list is in the families' order)
-      await t.pump();
-      await t.scrollUntilVisible(row, 300, scrollable: list, maxScrolls: 200);
+      final at = t.state<ScrollableState>(list).position;   // (moved as a wheel moves it: a drag would carry off the tile under it, DockHover's)
+      for (var y = 0.0; y == 0 || row.evaluate().isEmpty && y <= at.maxScrollExtent; y += 300) {   // (from the top: the list is in the families' order)
+        at.jumpTo(y);
+        await t.pump();
+      }
+      await t.ensureVisible(row.first);
       await t.pumpAndSettle();
       await t.tap(row.first);
       await t.pump(const Duration(milliseconds: 400));

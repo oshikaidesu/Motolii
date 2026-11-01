@@ -129,6 +129,7 @@ Future<void> expectSameAfterReopen(WidgetTester t, {List<WsPane> extra = const [
   }
   await t.pumpAndSettle();
   final selected = ws.selected, frame = ws.frame, keys = ws.keys.toList(), desk = ws.deskManual, shelf = ws.shelf, ink = ws.ink, edge = ws.edge, aim = ws.aim, animating = ws.animating, view = Map.of(ws.view), fronted = ws.fronted?.$1, doc = openedDocument!;
+  final panel = find.byType(InspectorPanel), stageOpen = panel.evaluate().isNotEmpty && (Ctx.read(t.element(panel)).doc.b['stage.open'] ?? false);   // (Stage settings asked for: the hand's, not the document's)
   final before = windowWords(t), size = t.view.physicalSize;
   await closeWorkspace(t);
   final again = await openWorkspace(t, extra: extra, tools: tools, document: doc, view: view, size: size);
@@ -147,6 +148,10 @@ Future<void> expectSameAfterReopen(WidgetTester t, {List<WsPane> extra = const [
     ..animating = animating   // (Animate all: how the hand works now, not the document's)
     ..reread();   // (the window told to look again: a view put back that equals nothing changed tells nobody)
   await t.pumpAndSettle();
+  if (stageOpen) {
+    Ctx.read(t.element(panel)).doc.flag('stage.open', true);
+    await t.pumpAndSettle();
+  }
   final after = windowWords(t);
   // (each word as many times as it shows: a None more, a name fewer)
   final lost = [...before], gained = <String>[];
