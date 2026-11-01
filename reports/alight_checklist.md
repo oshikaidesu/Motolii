@@ -560,7 +560,8 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [ ] 重いスケッチのメモリ：動くたびに JS 側へコマを残す。重い作品は 1 分で約 1.4 GB。上限を付けて走り直す
 - [ ] p5 の未対応：meta のライブラリ読み込み、p5 2.x、shadowBlur、clip、filter()、pixels と putImageData、実画像ファイル、loadFont、日本語フォント、自分自身の copy()、部分 clearRect、erase、conic gradient
 - [x] WEBGL のシェーダー：平らな物を塗る物は効果になる（door_p5_shader.h）。立体に塗る物と、絵を読み戻す物はまだ
-- [ ] WEBGL の未対応：beginShape、形の取り違え（ellipse が箱になる）、texture
+- [x] WEBGL の beginShape、線、点、形の取り違え：p5 が描いた物をそのコマのまま世界のメッシュにする（doc_sketch.h、sketch.mat）
+- [ ] WEBGL の texture：画像と createGraphics の絵（2983658、2987225 のリボン）。3 作（2994531、3006412、3038344）がまだ白い四角で、原因はまだ見ていない
 - [x] コピーごとの色（p5_stand.h）
 - [ ] スケッチの動画：頭出しと切り出し、スケッチの後から入れた動画に取り替え、動画の大きさ
 - [ ] Time Remap：スケッチの時間にキーを打つ
@@ -573,7 +574,7 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [x] セミコロン無しのスケッチ：線の目印が前の行に繋がって動かなかった（script.cpp `__at`）
 - [x] Hydra の動く値をキーにする：効果の名前が付いておらず、キーが入っていなかった（doc_door.h `doc_door_keys`）
 - [ ] p5 2.x の `buildFilterShader`・`buildMaterialShader`（32 作のうち 4 作が止まる）
-- [ ] WEBGL の線：p5 の線の計算が 1 コマ 0.8 秒かかる作品がある（3003417）。8 作が 50 秒で切れた
+- [ ] WEBGL の遅さ：線の計算は省いたが、5 作がまだ 50 秒で切れる（3003417、3027758、3029712、3031773、3032237）
 - [x] three.js の場面を動かす台：three.core.js をそのまま走らせ、形と材質の組ごとに本物の立体で世界に立てる（doc_door.h、p5_stand.h）
 - [x] プログラムの置き場：左のブラウザに Program を足し、一覧とコードの表示を切り替える。つまみは今のまま右のインスペクター。貼った物は Create と Effects に混ぜず、ここに入れる。見本：Godot と Unity は「コードはファイルとしてブラウザに、つまみはインスペクターに」、Cavalry はつまみが Attribute Editor でコードのタブは閉じても残る、TouchDesigner はコードが Text DAT でつまみが Parameter Dialog。割れた点（コードをどこで打つか）は「舞台を見ながら直す」が要るので左に置く。これは見本から取った決めではなく、出典なし
 - [x] Shadertoy の複数バッファ（Buffer A〜D、Common）：済（11/2）。JSON を入口で 1 本の ISF に変える（door_shadertoy.h）。実物 300 本で 261 本が絵になる（reports/sketch_import_2026-11-01.md）

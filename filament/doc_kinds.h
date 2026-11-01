@@ -102,6 +102,7 @@ struct Doc {
     std::map<std::pair<int, std::string>, std::vector<double>> keyed;   // the moments of a value's keys, the same way
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
     struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false, camera = false, drivenLooks = false, behaviour = false, grains = false; std::shared_ptr<SplatEffect> splatFx; std::string splatFxFile; MaterialInstance* splatPlain = nullptr; bool splatDone = false; int run = -1, lies = -1;
+                   bool sketch = false; int sketchFrame = -1; int sketchMade = -1; float3 sketchEye{}; std::map<int, float> sketchStrong; std::vector<SketchShape> sketchShapes;   // (a p5.js sketch's mesh and what it was last made from: doc_sketch.h)
                    utils::Entity light;   // (a light, Filament's own: in every scene of the stage while it is on)
                    double units = 1.0;    // (a flat thing's: points of the picture to a unit of the stage as it was made, which its effects are counted in)
                    int space = 3;
@@ -129,7 +130,7 @@ struct Doc {
 static const char* const doc_kinds = "film picture text solid shape camera light";   // (the kinds of thing)
 static const char* const doc_drawn = "film picture text solid shape";          // (those that are seen)
 static const char* const doc_relations = "around row follow push group";   // (the kinds of relation: a group is the plainest, things in an order and nothing else)
-static const char* const doc_shapes = "ring gem cube ball";             // (the kit's own shapes a solid may be)
+static const char* const doc_shapes = "ring gem cube ball sketch";             // (the kit's own shapes a solid may be)
 // (whether a value is keyed, in SQLite's words: see doc_key)
 #define DOC_KEYED "(select count(*) > 1 or max(at) <> 0 or max(way) is not null from fact where thing = %d and name = %Q)"
 struct DocValue { const char* name; const char* kinds; double low, high; bool moves; const char* words; bool open = false; };   // (open: low and high are how far its knob goes, more is taken typed, After Effects' slider and valid ranges, PF_FloatSliderDef)

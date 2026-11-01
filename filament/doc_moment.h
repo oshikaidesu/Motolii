@@ -158,6 +158,7 @@ static void doc_moment(Doc& d, double now) {
         Doc::Shown& t = *lies[i].shown;
         const bool in = lies[i].on;
         const Mesh* m = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : t.shape;
+        if (t.sketch && in) doc_sketch_mesh(d, thing, t, now);
         if (in != t.in) {   // (in or out of the scene of its run)
             Scene* sc = t.scene ? t.scene : s.scene;
             doc_entities(s, t, [&](utils::Entity e) { in ? sc->addEntity(e) : sc->remove(e); });

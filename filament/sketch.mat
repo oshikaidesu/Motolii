@@ -1,0 +1,39 @@
+// sketch.mat: what a p5.js sketch draws in WEBGL, one mesh remade each frame (doc_sketch.h). Its colours are each point's,
+// as p5 keeps them, in the sketch's own sRGB (p5's own shaders do no sum to them either), so they are turned to light here
+// and go on through the triangle as p5's do. uv.x: 1 what the sketch draws with no lights, as flat as the sketch has it,
+// and every line (p5's line shader takes no light); 0 what it lights, here by the world's own. Clear as it says and
+// writing depth all the same, drawn in the order it draws them: p5 sorts nothing either, and a clear thing hides what it
+// draws behind it later. No face culled and no normal turned, as p5: it takes a sketch's triangles either way round and
+// its normals as they are told, and Filament's doubleSided would turn those of the ones wound the other way. What is flat
+// is put after the lights, Filament's own postLightingColor: with none of a surface's sums left, its edges and the world's
+// sky do not shine on it (specularDFG leaves a shine at an edge even at reflectance 0).
+material {
+    name : Sketch,
+    requires : [
+        uv0,
+        color
+    ],
+    shadingModel : lit,
+    blending : transparent,
+    culling : none,
+    postLightingBlending : opaque,
+    depthWrite : true,
+    parameters : [
+        { type : float4, name : color },
+        { type : float, name : roughness },
+        { type : float, name : metalOff }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec4 c = max(getColor(), 0.0);
+        vec3 light = mix(c.rgb / 12.92, pow((c.rgb + 0.055) / 1.055, vec3(2.4)), step(0.04045, c.rgb)) * materialParams.color.rgb;
+        material.baseColor = vec4(light * c.a, c.a);
+        material.postLightingColor = material.baseColor;
+        material.postLightingMixFactor = clamp(getUV0().x, 0.0, 1.0);
+        material.roughness = materialParams.roughness;
+        material.metallic = max(materialParams.metalOff + 0.08, 0.0);
+    }
+}

@@ -280,13 +280,103 @@ const __load_image = p5.prototype.loadImage;
 p5.prototype.loadImage = function (path, ok) { if (!__film_first()) return __load_image.apply(this, arguments); const f = __film_open(); if (typeof ok === 'function') ok(f); return f; };
 p5.prototype.createCapture = p5.prototype.createVideo = function () { const f = __film_open(), ready = [...arguments].find(a => typeof a === 'function'); if (ready) ready(f); return f; };
 const __packed = c => c ? Math.round(c[0] * 255) << 16 | Math.round(c[1] * 255) << 8 | Math.round(c[2] * 255) : -1;   // (a copy's colour, red green blue; -1: its own solid's)
-var __drawn = [], __kinds = {}, __U = 0.01;   // (a pixel of the sketch in the world's unit: as it comes half the stage's height, new p5() below)
+var __drawn = [], __kinds = {}, __U = 0.01;   // (a pixel of the sketch in the world's unit: as tall as the stage as it comes, new p5() below)
+// What WEBGL draws, as p5 has it: which of its shapes where its camera sees them, the triangles and lines it makes as it goes,
+// what it clears with. doc_sketch.h stands them in the world, one mesh each frame. p5 makes a line's corners in triangles
+// for its line shader here too, 0.8 s a frame in the heaviest; nothing here reads them.
+var __mesh = { draws: [], tris: [], lines: [], back: null, wiped: false }, __meshes = [], __mesh_held = 0, __mesh_gone = 0, __shapes = [], __shape_of = new Map(), __lined = false;
+const __own = r => p5.instance && r === p5.instance._renderer;
+function __seen(r, x, y, z) {   // (what its camera sees, what it draws at z 0 still at z 0: a camera of its own moves things from there)
+  const e = r._curCamera.cameraMatrix.mat4, m = r.uModelMatrix.mat4, o = new Array(16);
+  for (let c = 0; c < 4; ++c) for (let i = 0; i < 4; ++i) o[c * 4 + i] = e[i] * m[c * 4] + e[4 + i] * m[c * 4 + 1] + e[8 + i] * m[c * 4 + 2] + e[12 + i] * m[c * 4 + 3];
+  for (let i = 0; i < 4; ++i) o[i] *= x, o[4 + i] *= y, o[8 + i] *= z;
+  for (let c = 0; c < 4; ++c) o[c * 4 + 2] += 800 * o[c * 4 + 3];   // (p5.Camera's defaultEyeZ, which its copy in push() has not got)
+  return o;
+}
+const __fill_of = r => r._tex || r._useNormalMaterial ? [1, 1, 1, 1] : r.curFillColor;
+function __stand(r, gId, x, y, z) {
+  const g = r.retainedMode.geometry[gId], m = g && g.model;
+  if (!__own(r) || !m || !m.vertices.length) return;
+  let i = __shape_of.get(m);
+  if (i === undefined) __shape_of.set(m, i = __shapes.length), __shapes.push(m);
+  const of = String(gId).split('|')[0], f = __fill_of(r), s = r.curStrokeColor, e = __seen(r, x, y, z);
+  __kinds[of] = (__kinds[of] || 0) + 1, __lined = __lined || r._doStroke;
+  __mesh.draws.push(i, ...e, f[0], f[1], f[2], f[3], r._doFill ? (r._enableLighting ? 0 : 1) : -1, __L, s[0], s[1], s[2], s[3], r._doStroke ? r.curStrokeWeight : 0);
+}
+p5.RendererGL.prototype.drawBuffers = function (gId) { __stand(this, gId, 1, 1, 1); return this; };
+p5.RendererGL.prototype._drawImmediateFill = function () {
+  if (!__own(this)) return;
+  const g = this.immediateMode.geometry, v = g.vertices, n = g.vertexNormals, c = g.vertexColors, e = __seen(this, 1, 1, 1), mode = this.immediateMode.shapeMode, out = __mesh.tris, own = __fill_of(this), flat = this._enableLighting ? 0 : 1, painted = !this._tex && c.length >= v.length * 4;
+  const put = i => {
+    const p = v[i], q = n[i] || { x: 0, y: 0, z: 1 }, a = painted ? i * 4 : -1;
+    out.push(e[0] * p.x + e[4] * p.y + e[8] * p.z + e[12], e[1] * p.x + e[5] * p.y + e[9] * p.z + e[13], e[2] * p.x + e[6] * p.y + e[10] * p.z + e[14], e[0] * q.x + e[4] * q.y + e[8] * q.z, e[1] * q.x + e[5] * q.y + e[9] * q.z, e[2] * q.x + e[6] * q.y + e[10] * q.z,
+      a < 0 ? own[0] : c[a], a < 0 ? own[1] : c[a + 1], a < 0 ? own[2] : c[a + 2], a < 0 ? own[3] : c[a + 3], flat, __L);
+  };
+  if (mode === 5) for (let i = 0; i + 2 < v.length; ++i) { if (i & 1) put(i + 1), put(i), put(i + 2); else put(i), put(i + 1), put(i + 2); }   // (TRIANGLE_STRIP)
+  else if (mode === 6) for (let i = 1; i + 1 < v.length; ++i) put(0), put(i), put(i + 1);   // (TRIANGLE_FAN)
+  else for (let i = 0; i + 2 < v.length; i += 3) put(i), put(i + 1), put(i + 2);
+};
+function __line(r, e, a, b, c, at) {
+  __mesh.lines.push(e[0] * a.x + e[4] * a.y + e[8] * a.z + e[12], e[1] * a.x + e[5] * a.y + e[9] * a.z + e[13], e[2] * a.x + e[6] * a.y + e[10] * a.z + e[14], e[0] * b.x + e[4] * b.y + e[8] * b.z + e[12], e[1] * b.x + e[5] * b.y + e[9] * b.z + e[13], e[2] * b.x + e[6] * b.y + e[10] * b.z + e[14],
+    c[at], c[at + 1], c[at + 2], c[at + 3], r.curStrokeWeight, __L);
+}
+p5.Geometry.prototype._edgesToVertices = function () {
+  const r = p5.instance && p5.instance._renderer;
+  if (!r || !r.isP3D || this !== r.immediateMode.geometry || r.geometryBuilder || !__own(r)) return this;
+  const e = __seen(r, 1, 1, 1), v = this.vertices, c = this.vertexStrokeColors, own = c.length >= v.length * 4;
+  __lined = true;
+  for (const [a, b] of this.edges) __line(r, e, v[a], v[b], own ? c : r.curStrokeColor, own ? a * 4 : 0);
+  return this;
+};
+p5.RendererGL.prototype._drawPoints = function (v) {
+  if (!__own(this)) return this;
+  const e = __seen(this, 1, 1, 1);
+  __lined = true;
+  for (const p of v) __line(this, e, p, p, this.curStrokeColor, 0);
+  return this;
+};
+const __clear = p5.RendererGL.prototype.clear;
+p5.RendererGL.prototype.clear = function (r, g, b, a) {
+  if (__own(this)) __mesh = { draws: [], tris: [], lines: [], back: [r || 0, g || 0, b || 0, a || 0], wiped: true };
+  return __clear.apply(this, arguments);
+};
+function __mesh_done() {
+  const m = __mesh, one = { draws: Float32Array.from(m.draws), tris: Float32Array.from(m.tris), lines: Float32Array.from(m.lines), back: m.back, wiped: m.wiped };
+  __mesh_held += one.draws.byteLength + one.tris.byteLength + one.lines.byteLength;
+  __meshes.push(one), __mesh = { draws: [], tris: [], lines: [], back: null, wiped: false };
+  for (; __mesh_held > 400e6 && __mesh_gone < __meshes.length - 1; ++__mesh_gone) {   // (a long heavy sketch: what it drew first goes, so that going back finds it gone rather than the Mac full)
+    const g = __meshes[__mesh_gone];
+    __mesh_held -= g.draws.byteLength + g.tris.byteLength + g.lines.byteLength;
+    g.draws = g.tris = g.lines = new Float32Array(0);
+  }
+}
+function __mesh_at(f) {   // (all it has drawn since it last cleared, for doc_sketch.h)
+  __to(f);
+  let from = f, d = 0, t = 0, l = 0;
+  while (from > 0 && !__meshes[from].wiped) --from;
+  for (let i = from; i <= f; ++i) d += __meshes[i].draws.length, t += __meshes[i].tris.length, l += __meshes[i].lines.length;
+  const o = new Float32Array(10 + d + t + l), b = __meshes[from].back || [0, 0, 0, 0];
+  o.set([d / 28, t / 12, l / 12, __U, globalThis.width, globalThis.height, b[0], b[1], b[2], b[3]]);
+  let at = 10;
+  for (const k of ['draws', 'tris', 'lines']) for (let i = from; i <= f; ++i) o.set(__meshes[i][k], at), at += __meshes[i][k].length;
+  globalThis.__bytes = o;
+}
+function __mesh_shape(i) {   // (a shape as p5 made it, once)
+  const g = __shapes[i], v = g.vertices, n = g.vertexNormals || [], f = g.faces, e = g.edges || [], o = new Float32Array(3 + v.length * 6 + f.length * 3 + e.length * 2);
+  o.set([v.length, f.length, e.length]);
+  let at = 3;
+  for (const p of v) o[at++] = p.x, o[at++] = p.y, o[at++] = p.z;
+  for (let k = 0; k < v.length; ++k) { const p = n[k] || { x: 0, y: 0, z: 1 }; o[at++] = p.x, o[at++] = p.y, o[at++] = p.z; }
+  for (const q of f) o[at++] = q[0], o[at++] = q[1], o[at++] = q[2];
+  for (const q of e) o[at++] = q[0], o[at++] = q[1];
+  globalThis.__bytes = o;
+}
 p5.RendererGL.prototype.drawBuffersScaled = function (gId, x, y, z) {
+  __stand(this, gId, x, y, z);
   const m = Array.from(this.uModelMatrix.mat4);
   for (const i of [1, 4, 6, 9, 13]) m[i] = -m[i];   // (p5's y goes down, the world's up)
   const sx = Math.hypot(m[0], m[1], m[2]) || 1, sy = Math.hypot(m[4], m[5], m[6]) || 1, sz = Math.hypot(m[8], m[9], m[10]) || 1, deg = 180 / Math.PI;
   const of = String(gId).split('|')[0], whole = of === 'ellipsoid' ? 2 : 1;   // (an ellipsoid told by its radii; the world's ball is as wide as 1, as p5's box)
-  __kinds[of] = (__kinds[of] || 0) + 1;
   __drawn.push(m[12] * __U, m[13] * __U, m[14] * __U, whole * x * sx * __U, whole * y * sy * __U, whole * z * sz * __U, Math.atan2(m[1] / sx, m[0] / sx) * deg, Math.asin(Math.max(-1, Math.min(1, -m[2] / sx))) * deg, Math.atan2(m[6] / sy, m[10] / sz) * deg, __L, this._useNormalMaterial || this._tex ? -1 : __packed(this.curFillColor));
   return this;
 };
@@ -312,7 +402,7 @@ for (const way of ['drawBuffers', 'drawBuffersScaled', '_drawImmediateFill']) {
 static const char* const p5_start = R"(
 new p5();
 if (!globalThis.frameCount && p5.instance._preloadCount) p5.instance._preloadCount = 0, p5.instance._runIfPreloadsAreDone();   // (what preload() asked of the net or of files does not come: on without it)
-__U = 2 / (globalThis.height || 400);
+__U = 3.2154 / (globalThis.height || 400);
 var __frames = [], __from = [];
 Object.defineProperty(globalThis, '__2d', { get: () => !p5.instance._renderer.isP3D });   // (asked late: an async setup() makes its canvas after new p5())
 Object.defineProperty(globalThis, '__canvas', { get: () => p5.instance._renderer.drawingContext });
@@ -326,7 +416,7 @@ function __to(f) {
     if (__2d) {   // (2D: what each frame adds to the one before, as its canvas keeps what was painted; __from: the frame it was last wiped at)
       const [wiped, o] = __canvas.take();
       __from.push(wiped || !__frames.length ? __frames.length : __from[__from.length - 1]), __frames.push(o);
-    } else __frames.push(last && globalThis.frameCount === was ? last : Float64Array.from(__drawn));   // (a noLoop(), a frameRate(30): as it was)
+    } else __frames.push(last && globalThis.frameCount === was ? last : Float64Array.from(__drawn)), __mesh_done();   // (a noLoop(), a frameRate(30): as it was)
   }
 }
 function __shaded_take(seconds) {   // (the shader that paints its stage and what the sketch tells it every 0.1 second, a few seconds of waiting at most: "" none)
@@ -359,10 +449,11 @@ function __most() {   // (as many copies as its first seconds draw at once, a se
   for (let f = 1; f < 300 && Date.now() - from < 1000; ++f) __to(f);
   return Math.max(...__frames.map(c => c.length / 11));
 }
-function __shape() {   // (the world's shape nearest what it draws most of)
-  if (__parts.length) return '';
-  const most = Object.keys(__kinds).sort((a, b) => __kinds[b] - __kinds[a])[0];
-  return { ellipsoid: 'ball', torus: 'ring' }[most] || 'cube';
+function __shape() {   // (only boxes, only balls or only rings, with no lines: the world's own, as real as any. Any more: as it draws them, doc_sketch.h)
+  __most();
+  if (__parts.length || __three) return '';
+  const kit = { box: 'cube', ellipsoid: 'ball', torus: 'ring' }, kinds = Object.keys(__kinds);
+  return kinds.length === 1 && kit[kinds[0]] && !__lined && !__meshes.some(m => m.tris.length) ? kit[kinds[0]] : 'sketch';
 }
 var __by_at = -1, __by = [];
 function __three_each(i, f, part) {   // (the frame's meshes by their parts; each part's copies a solid's: door.h)

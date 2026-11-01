@@ -52,11 +52,13 @@ using namespace filament::math;
 
 static const float TAU = 6.2831853f;
 
+struct SketchShape { std::vector<float3> pos, nrm; std::vector<uint32_t> idx, edges; };   // (a shape a p5.js sketch draws, as it has it: doc_sketch.h)
 struct Mesh {
     std::vector<float3> pos, nrm;
     std::vector<float2> uv;
     std::vector<uint32_t> idx;
     std::vector<quatf> quat;
+    std::vector<float4> color;   // (each point's own, sketch.mat's; most have none)
     VertexBuffer* vb = nullptr;   // (as last put in the scene: add_parts, reshape)
     IndexBuffer* ib = nullptr;
     uint32_t vbRoom = 0, ibRoom = 0;   // (how many points and indices they hold: written again in place while they fit)
@@ -254,6 +256,27 @@ static Material* material(Stage& s, const char* filamat) {
 }
 // A mesh in the scene, once at each place, its triangles in parts (`ends`: where each part's indices end; none: one
 // part), each part a look of its own of the same material (Filament's own: a renderable of so many primitives).
+// A mesh's buffers, and what it says put in them.
+static VertexBuffer* mesh_buffers(Stage& s, const Mesh& m, uint32_t room) {
+    VertexBuffer::Builder make;
+    make.vertexCount(room).bufferCount(m.color.empty() ? 3 : 4)
+        .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3)
+        .attribute(VertexAttribute::TANGENTS, 1, VertexBuffer::AttributeType::FLOAT4)
+        .attribute(VertexAttribute::UV0, 2, VertexBuffer::AttributeType::FLOAT2);
+    if (!m.color.empty()) make.attribute(VertexAttribute::COLOR, 3, VertexBuffer::AttributeType::FLOAT4);
+    return make.build(*s.engine);
+}
+static void mesh_points(Stage& s, const Mesh& m, VertexBuffer* vb, size_t n) {
+    vb->setBufferAt(*s.engine, 0, copied(m.pos.data(), n * sizeof(float3)));
+    vb->setBufferAt(*s.engine, 1, copied(m.quat.data(), n * sizeof(quatf)));
+    vb->setBufferAt(*s.engine, 2, copied(m.uv.data(), n * sizeof(float2)));
+    if (!m.color.empty()) vb->setBufferAt(*s.engine, 3, copied(m.color.data(), n * sizeof(float4)));
+}
+static Mesh* sketch_mesh() {   // (nothing yet: doc_sketch.h makes it again each frame)
+    Mesh* m = new Mesh;
+    m->pos.assign(3, float3{0.f}), m->nrm.assign(3, float3{0.f, 0.f, 1.f}), m->uv.assign(3, float2{0.f}), m->color.assign(3, float4{0.f}), m->idx = {0, 1, 2};
+    return m;
+}
 static std::vector<MaterialInstance*> add_parts(Stage& s, Mesh* m, const char* filamat, std::vector<mat4f> places, std::vector<uint32_t> ends,
                                                 uint8_t layer = 1, bool shadows = false, int copies = 1, int order = 4, bool together = false) {
     Material* mat = material(s, filamat);
@@ -264,13 +287,8 @@ static std::vector<MaterialInstance*> add_parts(Stage& s, Mesh* m, const char* f
     m->quat.resize(n);
     frames->getQuats(m->quat.data(), n);
     delete frames;
-    VertexBuffer* vb = VertexBuffer::Builder().vertexCount((uint32_t)n).bufferCount(3)
-                           .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3)
-                           .attribute(VertexAttribute::TANGENTS, 1, VertexBuffer::AttributeType::FLOAT4)
-                           .attribute(VertexAttribute::UV0, 2, VertexBuffer::AttributeType::FLOAT2).build(*s.engine);
-    vb->setBufferAt(*s.engine, 0, copied(m->pos.data(), n * sizeof(float3)));
-    vb->setBufferAt(*s.engine, 1, copied(m->quat.data(), n * sizeof(quatf)));
-    vb->setBufferAt(*s.engine, 2, copied(m->uv.data(), n * sizeof(float2)));
+    VertexBuffer* vb = mesh_buffers(s, *m, (uint32_t)n);
+    mesh_points(s, *m, vb, n);
     IndexBuffer* ib = IndexBuffer::Builder().indexCount((uint32_t)std::max<size_t>(1, m->idx.size())).bufferType(IndexBuffer::IndexType::UINT).build(*s.engine);
     if (!m->idx.empty()) ib->setBuffer(*s.engine, copied(m->idx.data(), m->idx.size() * sizeof(uint32_t)));
     m->vb = vb, m->ib = ib, m->vbRoom = (uint32_t)n, m->ibRoom = (uint32_t)std::max<size_t>(1, m->idx.size());
@@ -347,18 +365,13 @@ static void reshape(Stage& s, Mesh* m, const std::vector<uint32_t>& ends) {
     }
     if (!m->vb || n > m->vbRoom) {
         oldVb = m->vb, m->vbRoom = (uint32_t)(n + n / 4 + 16);
-        m->vb = VertexBuffer::Builder().vertexCount(m->vbRoom).bufferCount(3)
-                    .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3)
-                    .attribute(VertexAttribute::TANGENTS, 1, VertexBuffer::AttributeType::FLOAT4)
-                    .attribute(VertexAttribute::UV0, 2, VertexBuffer::AttributeType::FLOAT2).build(*s.engine);
+        m->vb = mesh_buffers(s, *m, m->vbRoom);
     }
     if (!m->ib || m->idx.size() > m->ibRoom) {
         oldIb = m->ib, m->ibRoom = (uint32_t)(m->idx.size() + m->idx.size() / 4 + 48);
         m->ib = IndexBuffer::Builder().indexCount(m->ibRoom).bufferType(IndexBuffer::IndexType::UINT).build(*s.engine);
     }
-    m->vb->setBufferAt(*s.engine, 0, copied(m->pos.data(), n * sizeof(float3)));
-    m->vb->setBufferAt(*s.engine, 1, copied(m->quat.data(), n * sizeof(quatf)));
-    m->vb->setBufferAt(*s.engine, 2, copied(m->uv.data(), n * sizeof(float2)));
+    mesh_points(s, *m, m->vb, n);
     m->ib->setBuffer(*s.engine, copied(m->idx.data(), m->idx.size() * sizeof(uint32_t)));
     auto& faces = s.engine->getRenderableManager();
     for (const Stage::Made& made : s.made) {

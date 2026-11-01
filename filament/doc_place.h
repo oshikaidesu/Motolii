@@ -100,7 +100,7 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         shift += math::double3{c.x, c.y, c.z};
         own = own * math::mat4::scaling(c.size);
     } else if (member)   // (a recipe as code: each copy where the thing's script says, on top of what its copies' values say)
-        if (DocScript* sc = doc_script_of(d, doc_literal_word(d, thing, "script")); sc && sc->run && sc->run->ok()) {
+        if (DocScript* sc = doc_script_of(d, doc_literal_word(d, thing, "script")); sc && sc->run && sc->run->ok() && doc_literal_word(d, thing, "shape") != "sketch") {   // (a sketch's own mesh has no copies to place: doc_sketch.h)
             Doc::Scripted& kept = d.scripted[thing];
             if (kept.at != said || kept.made != doc_scripts_made(d) || (int)kept.copies.size() != n) {   // (every copy at once, the knobs read once)
                 std::map<std::string, double> numbers;

@@ -168,7 +168,7 @@ static bool doc_say(Doc& d, int thing, const char* name, const char* word) {
         if (!sc || !sc->run || !sc->run->sketch() || !sc->run->ok()) return doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %Q) on conflict do update set value = excluded.value", thing, name, word));
         doc_act(d);   // (a sketch given to a solid: as many of the shape it draws as it draws)
         doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %Q) on conflict do update set value = excluded.value", thing, name, word));
-        if (const std::string shape = sc->run->shape(); !shape.empty()) doc_say(d, thing, "shape", shape.c_str()), doc_set(d, thing, "copies", sc->run->most());   // (a scene's parts have their own shapes: doc_door.h)
+        if (const std::string shape = sc->run->shape(); !shape.empty()) doc_say(d, thing, "shape", shape.c_str()), doc_set(d, thing, "copies", shape == "sketch" ? 1 : sc->run->most());   // (a scene's parts have their own shapes: doc_door.h; a sketch's one mesh is all it draws: doc_sketch.h)
         return doc_acted(d);
     }
     // (an effect's colour, ISF's one input that Motolii holds as three numbers and an alpha (isf.cpp: _x, _y, _z, _w),

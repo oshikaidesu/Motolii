@@ -326,12 +326,13 @@ static bool doc_match(Doc& d) {
             const char* model = doc_number(d, thing, "clip", 0, 0) > 0.5 && (shading.empty() || shading == "lit") ? "floor_lit_matte.filamat" : surface_model(shading);   // (clipped: one a matte can cut)
             if (!fill.empty() && !glass && (rgb < 0 || ramp.size() > 1)) why = "a solid's fill is six digits, as ff3366, or glass";
             else if (!shape.empty()) {
-                made.shape = shape == "gem" ? gem(0.5f) : shape == "cube" ? cube(0.1f) : shape == "ball" ? sphere(0.5f) : torus(0.37f, 0.13f);
-                MaterialInstance* look = glass ? thick_glass(s, made.shape, {mat4f{}}) : add(s, made.shape, model, std::vector<mat4f>((size_t)std::max(1, (int)doc_number(d, thing, "copies", 0, 1)), mat4f{}));
+                made.sketch = shape == "sketch";
+                made.shape = made.sketch ? sketch_mesh() : shape == "gem" ? gem(0.5f) : shape == "cube" ? cube(0.1f) : shape == "ball" ? sphere(0.5f) : torus(0.37f, 0.13f);
+                MaterialInstance* look = glass ? thick_glass(s, made.shape, {mat4f{}}) : add(s, made.shape, made.sketch ? "sketch.filamat" : model, std::vector<mat4f>((size_t)std::max(1, (int)doc_number(d, thing, "copies", 0, 1)), mat4f{}));
                 made.look = look;
                 if (look && glass) glassy(look);
                 if (!look) made.shape = nullptr;
-                else if (!glass) plain(look, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, surface);
+                else if (!glass) plain(look, !fill.empty() ? colour : made.sketch ? float3{1.f} : float3{0xd9, 0xd2, 0xc3} / 255.f, surface);
             } else if (std::filesystem::path(file).extension() == ".ply") {   // (a point cloud: its grains, one buffer, points.h)
                 for (const std::string& w : doc_fx_list(d, thing)) if (std::filesystem::path(w).extension() == ".mjs") made.splatFxFile = w;   // (a PlayCanvas splat effect on it: its look made with it)
                 std::string effectWhy;
