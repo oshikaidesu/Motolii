@@ -1997,7 +1997,7 @@ void _tests3() {
     await t.pump(const Duration(milliseconds: 400)); // (a tile that makes on two presses knows one only when the second is not coming)
     await t.pumpAndSettle();
     await t.tap(find.descendant(of: find.byType(DockFooter), matching: find.text('Create')));
-    await t.pumpAndSettle();
+    await settled(t, ws);   // (picked once made: sent, not waited for by the window)
     final iris = int.parse(ws.selected!);
     expect([m.value(iris, 'copies', 0), m.word(iris, 'copy_fill')], [120, 'ff3366 ffd166 1b2fd8 22c55e ff3366'], reason: m.trouble);
     expect(inspectorCards(t), containsAll(['Copies', 'Wave']));

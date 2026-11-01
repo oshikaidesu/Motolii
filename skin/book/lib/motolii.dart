@@ -272,6 +272,7 @@ class Motolii {
   }
 
   void _take(int which) {
+    if (which & 8 != 0) which |= 3;   // (the answers looked at are all there are by now, later ones than the one told: heard late, a step's end comes with what the step made, as answer() takes them)
     final version = malloc<Long>();
     if (which & 1 != 0) {
       final p = _picture(_m, 1, _documentAt, version), all = jsonDecode(p.toDartString()) as Map<String, dynamic>;
