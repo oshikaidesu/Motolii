@@ -52,7 +52,7 @@ static int doc_door(Doc& d, const std::string& word, int picked) {
     }
     const std::filesystem::path folder = doc_folders("programs").back();
     const bool kept = std::filesystem::path(word).parent_path() == folder;   // (one of the Program shelf's own, as it is now: not kept again)
-    text = door_page(text);
+    text = door_page(text, text != word ? std::filesystem::path(word).parent_path() : std::filesystem::path{});
     if (text != word) text = door_shader_files(text, std::filesystem::path(word).parent_path());
     const bool tabs = door_has(text, "\"renderpass\"");
     if (tabs) {   // (Shadertoy's file of all its tabs: made one ISF here, as Hydra's is)

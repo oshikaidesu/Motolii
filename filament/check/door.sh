@@ -138,6 +138,11 @@ open(f'{W}/p5s/plain.js','w').write('function setup() {\n  createCanvas(400, 400
 said=run('p',f'later door 0 {W}/p5s/plain.js','at 1',f'still {W}/plain.png')
 red=sum(1 for r,gr,b in g('plain').resize((64,36)).getdata() if r>120 and r>2*gr)
 print('a sketch with no semicolons runs, each line its own:','yes' if 'NOT done' not in said and red>100 else f'NO ({red} {said[-240:]})')
+open(f'{W}/p5s/one.js','w').write("var made = 'left'\n")
+open(f'{W}/p5s/two.js','w').write("function setup() { createCanvas(300, 200) }\nfunction draw() { background(made === 'left' ? color(0, 200, 0) : color(200, 0, 0)) }\n")
+open(f'{W}/p5s/index.html','w').write('<!doctype html><html><head><script src="https://cdn.example/p5.min.js"></script></head><body><script src="one.js"></script><script src="two.js"></script></body></html>')
+said=run('pg',f'later door 0 {W}/p5s/index.html','at 1',f'still {W}/page.png')
+print("a saved page's own scripts run, in the order it has them:",'yes' if 'NOT done' not in said and g('page').getpixel((480,270))==(0,200,0) else f'NO ({g("page").getpixel((480,270))} {said[-240:]})')
 vert='attribute vec3 aPosition;\\nattribute vec2 aTexCoord;\\nvarying vec2 vUv;\\nvoid main(){vUv=aTexCoord;vec4 p=vec4(aPosition,1.);p.xy=p.xy*2.-1.;gl_Position=p;}'
 frag='precision mediump float;\\nvarying vec2 vUv;\\nuniform float u_t;\\nuniform vec2 iRes;\\nvoid main(){gl_FragColor=vec4(gl_FragCoord.x/iRes.x,fract(u_t*.1),vUv.y,1.);}'
 open(f'{W}/p5s/shaded.js','w').write(f'let s\nfunction setup() {{\n  createCanvas(300, 200, WEBGL)\n  noStroke()\n  s = createShader("{vert}", "{frag}")\n}}\nfunction draw() {{\n  shader(s)\n  s.setUniform("u_t", millis() / 1000)\n  s.setUniform("iRes", [width, height])\n  rect(0, 0, width, height)\n}}\n')

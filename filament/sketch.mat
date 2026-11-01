@@ -45,6 +45,7 @@ fragment {
         if (getUV0().y > 0.5) {
             vec4 t = drawnWith(getUV0().y, getUV1());
             c *= vec4(t.rgb / max(t.a, 1e-4), t.a);
+            if (c.a < 0.004) discard;   // (what a picture leaves clear hides nothing behind it)
         }
         vec3 light = mix(c.rgb / 12.92, pow((c.rgb + 0.055) / 1.055, vec3(2.4)), step(0.04045, c.rgb)) * materialParams.color.rgb;
         material.baseColor = vec4(light * c.a, c.a);

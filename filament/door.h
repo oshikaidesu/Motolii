@@ -43,13 +43,20 @@ inline std::string door_library(const std::string& form) {
 }
 
 // A whole page as it is copied: what its own <script> tags hold; what they load is the form's library.
-inline std::string door_page(const std::string& t) {
+inline std::string door_page(const std::string& t, const std::filesystem::path& beside = {}) {   // (`beside`: where a saved page's own scripts are; p5 and three are here already)
+    static const std::regex named(R"re(\bsrc\s*=\s*['"]([^'"]+)['"])re"), ours(R"re(^(p5|three)[.\-])re");
     std::string out;
     for (size_t at = t.find("<script"); at != std::string::npos; at = t.find("<script", at)) {
         const size_t head = t.find('>', at), end = head == std::string::npos ? head : t.find("</script>", head);
         if (end == std::string::npos) break;
         const std::string tag = t.substr(at, head - at);
-        if (!door_has(tag, "src=") && (!door_has(tag, "type=") || door_has(tag, "module") || door_has(tag, "javascript"))) out += t.substr(head + 1, end - head - 1) + "\n";
+        std::smatch name;
+        if (std::error_code wrong; !beside.empty() && std::regex_search(tag, name, named) && !door_has(name[1].str(), "://") && !std::regex_search(std::filesystem::path(name[1].str()).filename().string(), ours) && std::filesystem::is_regular_file(beside / name[1].str(), wrong)) {
+            std::ifstream in(beside / name[1].str());
+            std::stringstream all;
+            all << in.rdbuf();
+            out += all.str() + "\n";
+        } else if (!door_has(tag, "src=") && (!door_has(tag, "type=") || door_has(tag, "module") || door_has(tag, "javascript"))) out += t.substr(head + 1, end - head - 1) + "\n";
         at = end;
     }
     return out.empty() ? t : out;

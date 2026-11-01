@@ -55,6 +55,19 @@ function draw() {
   endShape()
 }
 J
+cat > $W/words.js <<'J'
+function setup() { createCanvas(600, 400, WEBGL) }
+function draw() {
+  background(250)
+  fill(200, 0, 60)
+  textSize(80)
+  textAlign(CENTER, CENTER)
+  text('Motolii', 0, 0)
+  stroke(0, 200, 0)
+  strokeWeight(8)
+  line(-300, 170, 300, 170)
+}
+J
 python3 - $W <<'P'
 import os,subprocess,sys
 from PIL import Image,ImageChops
@@ -77,6 +90,10 @@ near=lambda p,k:all(abs(p[i]-k[i])<3 for i in range(3))
 yellow,red=count('p0',lambda r,gr,b:near((r,gr,b),(255,200,0))),count('p0',lambda r,gr,b:near((r,gr,b),(200,0,100)))
 print('what it paints on a createGraphics is on what it draws, its wrap as it says:','yes' if yellow>300 and red>300 else f'NO {yellow} {red}')
 print('  that picture goes on with its frames:','yes' if ImageChops.difference(g('p0'),g('p1')).getbbox() else 'NO')
+said=['add solid cube',f'say 1 script {W}/words.js','at 0',f'still {W}/w0.png']
+r=subprocess.run(['zsh','./edit.sh',f'{W}/w.motolii'],input='\n'.join(said)+'\n',capture_output=True,text=True,timeout=200,env={**os.environ,'SIZE':'960x540'})
+red=[x for x,p in enumerate(Image.open(f'{W}/w0.png').convert('RGB').crop((0,200,960,340)).getdata()) if p[0]>150 and p[1]<80]
+print('words stand in WEBGL, in its fill, where it aligns them:','yes' if len(red)>2000 and abs(sum(x%960 for x in red)/len(red)-480)<25 else f'NO {len(red)}')
 box=lambda n:Image.open(f'{W}/{n}.png').convert('L').point(lambda v:255 if v>20 else 0).getbbox()
 a,b=box('a'),box('b')
 tall=a and (a[3]-a[1])>3*(a[2]-a[0])

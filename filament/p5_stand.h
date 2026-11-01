@@ -112,7 +112,7 @@ function __flat(e) {
       const from = im && im.flat;
       if (!from) return;
       if (dx === undefined) dx = a, dy = b, dw = w === undefined ? im.width : w, dh = h === undefined ? im.height : h, a = b = 0, w = im.width, h = im.height;
-      const o = from.held(), sx = dw / w, sy = dh / h, U = x => dx + (x - a) * sx, V = y => dy + (y - b) * sy, grow = large() * Math.sqrt(Math.abs(sx * sy)), P = (x, y) => { const u = U(x), v = V(y); ops.push(X(u, v), Y(u, v)); };
+      const o = from === c ? ops.slice() : from.held(), sx = dw / w, sy = dh / h, U = x => dx + (x - a) * sx, V = y => dy + (y - b) * sy, grow = large() * Math.sqrt(Math.abs(sx * sy)), P = (x, y) => { const u = U(x), v = V(y); ops.push(X(u, v), Y(u, v)); };
       for (let i = 0; i < o.length;) {
         const kind = o[i], n = o[i + 9], more = o[i + 10], end = i + 12 + n;
         for (let j = 0; j < 12; ++j) ops.push(j === 6 ? (kind === 3 ? o[i + 6] * Math.sqrt(Math.abs(sx * sy)) : o[i + 6] * grow) : j === 11 ? __L : o[i + j]);   // (what another canvas holds shows where image() says it does)
@@ -138,7 +138,7 @@ function __element(tag) {
     append(...c) { c.forEach(k => typeof k === 'object' && e.appendChild(k)); }, prepend() {}, replaceChildren() { kids.length = 0; }, replaceWith() {}, insertBefore(c) { return e.appendChild(c); }, insertAdjacentHTML() {}, insertAdjacentElement() {}, after() {}, before() {},
     closest() { return null; }, matches() { return false; }, contains() { return false; }, click() {}, cloneNode() { return __element(tag); }, removeAttribute() {}, toggleAttribute() {}, scrollIntoView() {}, dispatchEvent() {}, setPointerCapture() {}, releasePointerCapture() {},
     getContext(kind) { if (kind === '2d') return e.flat = e.flat || __flat(e); const c = __any('context'); c.getParameter = () => 16384; return c; } };   // (how large a texture may be: p5 clamps the canvas to it)
-  e.scrollWidth = e.clientWidth = 100, e.parentNode = null;
+  e.scrollWidth = e.clientWidth = 100, e.parentNode = globalThis.__main || null;
   return e;
 }
 var __main = __element('main'), __ids = {};   // (a page's parts it asks for by name: there, and nothing comes of them. p5 counts up its own canvases' names until one is not there)
@@ -148,7 +148,7 @@ var __page = { window: globalThis, self: globalThis, document: Object.assign(__e
   innerWidth: 1920, innerHeight: 1080, devicePixelRatio: 1, pageXOffset: 0, pageYOffset: 0, scrollX: 0, scrollY: 0,
   addEventListener() {}, removeEventListener() {}, dispatchEvent() {}, getComputedStyle: () => ({ getPropertyValue: () => '' }), matchMedia: () => ({ matches: false, addListener() {}, addEventListener() {} }),
   requestAnimationFrame: f => (__Q.push(f), __Q.length), cancelAnimationFrame() {}, setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0, clearInterval() {},
-  performance: { now: () => __T, mark() {}, measure() {} }, console: { log() {}, warn() {}, error() {}, info() {}, debug() {}, trace() {} }, URL: { createObjectURL: () => '' }, fetch: () => Promise.reject(new Error('no net')),
+  performance: { now: () => __T, mark() {}, measure() {} }, console: { log() {}, warn() {}, error() {}, info() {}, debug() {}, trace() {}, table() {}, group() {}, groupCollapsed() {}, groupEnd() {}, time() {}, timeEnd() {}, timeLog() {}, assert() {}, count() {}, countReset() {}, dir() {}, clear() {} }, URL: { createObjectURL: () => '' }, fetch: () => Promise.reject(new Error('no net')),
   Image: function () { return __element('img'); } };
 for (const k of ['Request', 'Headers', 'Response', 'HTMLElement', 'HTMLCanvasElement', 'Element', 'Node', 'ImageData', 'FileReader', 'Blob', 'XMLHttpRequest', 'DOMMatrix', 'Path2D', 'WebGL2RenderingContext', 'WebGLRenderingContext', 'Event', 'MouseEvent', 'TouchEvent', 'KeyboardEvent', 'WheelEvent', 'CustomEvent', 'FontFace']) __page[k] = function () {};
 for (const k in __page) Object.defineProperty(globalThis, k, { value: __page[k], writable: true, configurable: true });
@@ -285,7 +285,8 @@ for (const k of ['SoundFile', 'FFT', 'Amplitude', 'Oscillator', 'SinOsc', 'TriOs
 for (const k of ['loadSound', 'getAudioContext', 'userStartAudio', 'soundFormats', 'outputVolume', 'getOutputVolume', 'masterVolume', 'sampleRate'])
   globalThis[k] = globalThis[k] || function () { return __any(k); };
 const __load_image = p5.prototype.loadImage;
-p5.prototype.loadImage = function (path, ok) { if (!__film_first()) return __load_image.apply(this, arguments); const f = __film_open(); if (typeof ok === 'function') ok(f); return f; };
+const __promised = im => Object.assign(im, { then(ok) { delete im.then, delete im.catch; if (ok) ok(im); return Promise.resolve(im); }, catch() { return im; } });   // (p5 2's loadImage is a promise, 1's the picture itself: it is both, until it has been waited for)
+p5.prototype.loadImage = function (path, ok) { if (!__film_first()) return __promised(__load_image.apply(this, arguments)); const f = __film_open(); if (typeof ok === 'function') ok(f); return __promised(f); };
 p5.prototype.createCapture = p5.prototype.createVideo = function () { const f = __film_open(), ready = [...arguments].find(a => typeof a === 'function'); if (ready) ready(f); return f; };
 const __packed = c => c ? Math.round(c[0] * 255) << 16 | Math.round(c[1] * 255) << 8 | Math.round(c[2] * 255) : -1;   // (a copy's colour, red green blue; -1: its own solid's)
 var __drawn = [], __kinds = {}, __U = 0.01;   // (a pixel of the sketch in the world's unit: as tall as the stage as it comes, new p5() below)
@@ -306,12 +307,52 @@ const __fill_of = r => r._tex ? r._tint.map(v => v / 255) : r._useNormalMaterial
 // frame's taken as that one's are (__paints) and drawn by ThorVG (drawn_sketch.h sketch_texture). 0: none.
 var __tex = [], __tex_of = new Map();
 function __tex_at(r) {
-  const e = r._tex && r._tex.canvas, flat = e && e.flat, wraps = { clamp: 0, repeat: 1, mirror: 2 };
-  if (!flat) return 0;
+  const e = r._tex && r._tex.canvas, flat = e && e.flat;
+  return !flat || e.bytes || (r._tex instanceof p5.Image && !flat.held().length) ? 0 : __tex_on(e, r.textureWrapX, r.textureWrapY);   // (a picture that is not there: white, not nothing)
+}
+function __tex_on(e, x, y) {
+  const wraps = { clamp: 0, repeat: 1, mirror: 2 }, flat = e.flat;
   let i = __tex_of.get(flat);
-  if (i === undefined) __tex_of.set(flat, i = __tex.length), __tex.push({ flat, w: e.width, h: e.height, x: wraps[r.textureWrapX] | 0, y: wraps[r.textureWrapY] | 0, frames: [], from: [] });
+  if (i === undefined) __tex_of.set(flat, i = __tex.length), __tex.push({ flat, w: e.width, h: e.height, x: wraps[x] | 0, y: wraps[y] | 0, frames: [], from: [] });
   return i + 1;
 }
+// text() in WEBGL: p5 asks for a font file and its own shader. Each line is painted once, white, on one sheet of words (ThorVG's,
+// as a picture is), and stands on a rectangle where p5 would set it, its colour the fill's. The rectangle is wider than the
+// words and they are set from the side they are aligned to, so nothing here needs to know how wide they are.
+var __sheet = null, __sheet_of = new Map(), __sheet_x = 0, __sheet_y = 0, __sheet_row = 0;
+const __SHEET = 4096;
+function __sheet_word(r, line) {
+  const size = r._textSize, how = r._textAlign === 'center' ? 'center' : r._textAlign === 'right' ? 'right' : 'left', key = line + '|' + size + '|' + how;
+  let q = __sheet_of.get(key);
+  if (q) return q;
+  if (!__sheet) (__sheet = document.createElement('canvas')).width = __SHEET, __sheet.height = __SHEET, __sheet.getContext('2d');
+  const c = __sheet.flat, fine = Math.min(2, 200 / size), px = size * fine, W = Math.min(__SHEET, Math.ceil(String(line).length * px * 0.75 + px)), H = Math.ceil(px * 1.5);
+  if (__sheet_x + W > __SHEET) __sheet_x = 0, __sheet_y += __sheet_row, __sheet_row = 0;
+  if (__sheet_y + H > __SHEET) c.clearRect(0, 0, __SHEET, __SHEET), __sheet_of.clear(), __sheet_x = __sheet_y = __sheet_row = 0;   // (words that change each frame: a sheet again, each frame's kept as a picture's are)
+  c.font = px + 'px sans-serif', c.fillStyle = '#ffffff', c.textAlign = how, c.textBaseline = 'alphabetic';
+  c.fillText(String(line), __sheet_x + (how === 'center' ? W / 2 : how === 'right' ? W : 0), __sheet_y + px * 1.1);
+  q = { x: __sheet_x, y: __sheet_y, W, H, fine, base: px * 1.1 };
+  __sheet_x += W, __sheet_row = Math.max(__sheet_row, H), __sheet_of.set(key, q);
+  return q;
+}
+p5.RendererGL.prototype._renderText = function (p, line, x, y, maxY, minY) {
+  if (!__own(this) || !this._doFill || !line || y > maxY || y < minY) return p;
+  const q = __sheet_word(this, line), w = q.W / q.fine, h = q.H / q.fine, left = x - (this._textAlign === 'center' ? w / 2 : this._textAlign === 'right' ? w : 0), down = { top: 0.8, center: 0.35, bottom: -0.2 }[this._textBaseline] || 0, top = y + down * this._textSize - q.base / q.fine;
+  const e = __seen(this, 1, 1, 1), f = this.curFillColor, tex = __tex_on(__sheet, 'clamp', 'clamp'), S = 1 / __SHEET;
+  const put = (a, b) => __mesh.tris.push(e[0] * (left + a * w) + e[4] * (top + b * h) + e[12], e[1] * (left + a * w) + e[5] * (top + b * h) + e[13], e[2] * (left + a * w) + e[6] * (top + b * h) + e[14], 0, 0, 1, f[0], f[1], f[2], f[3], 1, __L, (q.x + a * q.W) * S, (q.y + b * q.H) * S, tex);
+  put(0, 0), put(1, 0), put(1, 1), put(0, 0), put(1, 1), put(0, 1);
+  return p;
+};
+p5.RendererGL.prototype.textWidth = function (s) { return String(s).length * this._textSize * 0.5; };   // (as measureText has it above)
+globalThis.flex = () => {};   // (p5.flex, how a canvas sits on its page: there is no page)
+// OpenProcessing's configurator, by its README (github.com/msawired/OPC, MIT): each call makes a global of that name, at its first value.
+var OPC = new Proxy({}, { get(t, k) {
+  const first = { toggle: o => true, color: o => '#333333', palette: o => o.options[0], select: o => Array.isArray(o.options) ? o.options[0] : Object.values(o.options)[0] }[k] || (o => null);
+  if (k === 'bezier') return (name) => { globalThis[typeof name === 'object' ? name.name : name] = t => t; };
+  if (k === 'palette' || k === 'select') return (a, options, value) => { const o = typeof a === 'object' ? a : { name: a, options, value }; globalThis[o.name] = o.value ?? first(o); };
+  if (['slider', 'toggle', 'text', 'button', 'color', 'label'].includes(k)) return (a, value) => { const o = typeof a === 'object' ? a : { name: a, value }; globalThis[o.name] = o.value ?? first(o); };
+  return () => {};
+} });
 function __tex_done(f) {
   for (const q of __tex) {
     const [wiped, o] = q.flat.fresh();
