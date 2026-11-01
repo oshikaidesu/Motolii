@@ -133,6 +133,27 @@ said=run('h','later door 0 osc(20, 0.1, 0.8).rotate(0.5).out()')
 print('Hydra, not there, says how to get it:','yes' if 'extensions/hydra/get.sh' in said else f'NO ({said[-240:]})')
 said=run('f',f'add film {os.getcwd()}/check/beats.mp4',"later door 1 void mainImage(out vec4 o, in vec2 p){ o=texture(iChannel0, p/iResolution.xy).bgra; }",'list','cards 1')
 print('a shader that reads a picture goes on the picked thing:','yes' if 'NOT done' not in said and '2 kind at' not in said and 'Shadertoy' in said else f'NO ({said[-240:]})')
+os.makedirs(f'{W}/p5s')
+open(f'{W}/p5s/plain.js','w').write('function setup() {\n  createCanvas(400, 400)\n}\nfunction draw() {\n  background(0)\n  fill(255, 0, 0)\n  rect(0, 0, 400, 400)\n}\n')
+said=run('p',f'later door 0 {W}/p5s/plain.js','at 1',f'still {W}/plain.png')
+red=sum(1 for r,gr,b in g('plain').resize((64,36)).getdata() if r>120 and r>2*gr)
+print('a sketch with no semicolons runs, each line its own:','yes' if 'NOT done' not in said and red>100 else f'NO ({red} {said[-240:]})')
+vert='attribute vec3 aPosition;\\nattribute vec2 aTexCoord;\\nvarying vec2 vUv;\\nvoid main(){vUv=aTexCoord;vec4 p=vec4(aPosition,1.);p.xy=p.xy*2.-1.;gl_Position=p;}'
+frag='precision mediump float;\\nvarying vec2 vUv;\\nuniform float u_t;\\nuniform vec2 iRes;\\nvoid main(){gl_FragColor=vec4(gl_FragCoord.x/iRes.x,fract(u_t*.1),vUv.y,1.);}'
+open(f'{W}/p5s/shaded.js','w').write(f'let s\nfunction setup() {{\n  createCanvas(300, 200, WEBGL)\n  noStroke()\n  s = createShader("{vert}", "{frag}")\n}}\nfunction draw() {{\n  shader(s)\n  s.setUniform("u_t", millis() / 1000)\n  s.setUniform("iRes", [width, height])\n  rect(0, 0, width, height)\n}}\n')
+said=run('s',f'later door 0 {W}/p5s/shaded.js','list','at 1',f'still {W}/shaded1.png','at 4',f'still {W}/shaded2.png')
+a,b=g('shaded1').convert('RGB'),g('shaded2').convert('RGB')
+right,left,up,down=a.getpixel((a.width-20,a.height//2)),a.getpixel((20,a.height//2)),a.getpixel((a.width//2,20)),a.getpixel((a.width//2,a.height-20))
+print('a p5 sketch that paints with shader() is that shader, its code told, the stage its size:','yes' if 'NOT done' not in said and '1 fx at' in said and right[0]>200 and left[0]<50 and up[2]>200 and down[2]<50 else f'NO ({right} {left} {up} {down} {said[-300:]})')
+print('  what moves is keys, a straight line two of them:','yes' if ' at 600.0:' in said and abs(b.getpixel((20,20))[1]-a.getpixel((20,20))[1])>50 else f'NO ({said[-300:]})')
+os.makedirs(f'{W}/p5f')
+open(f'{W}/p5f/a.vert','w').write('in vec3 aPosition;\nvoid main(){gl_Position=vec4(aPosition*2.-1.,1.);}\n')
+open(f'{W}/p5f/b.frag','w').write('#version 300 es\nprecision highp float;\nout vec4 O;\nuniform float time;\nuniform vec2 resolution;\nvoid main(){O=vec4(1.,fract(time),gl_FragCoord.x/resolution.x,1.);}\n')
+open(f'{W}/p5f/sketch.js','w').write('let s, time = 0\nfunction preload() {\n  s = loadShader("a.vert", "b.frag")\n}\nfunction setup() {\n  createCanvas(300, 200, WEBGL)\n}\nfunction draw() {\n  shader(s)\n  s.setUniform("time", frameCount / 60)\n  s.setUniform("resolution", [width, height])\n  rect(0, 0, width, height)\n}\n')
+said=run('l',f'later door 0 {W}/p5f/sketch.js','list','at 1',f'still {W}/files.png')
+pic=g('files').convert('RGB')
+kept=[f for f in glob.glob(f'{W}/own/programs/p5.js-*.js') if 'gl_FragCoord.x/resolution.x' in open(f).read()]
+print('its two shader files beside it come with it, its own name for time its own:','yes' if kept and 'loadShader' not in open(kept[0]).read() and pic.getpixel((pic.width//2,pic.height//2))[0]>200 else f'NO ({len(kept)} {said[-300:]})')
 shelf=[f for k in ('effects','recipes','animators') for f in glob.glob(k+'/**',recursive=True) if f.endswith(('.fs','.js'))]
 out=subprocess.run([f'{W}/form']+shelf,capture_output=True,text=True).stdout
 print('nothing on the shelf is mistaken for code from the net:','yes' if out.startswith('0 of ') else 'NO '+out[-300:],f'({out.split()[-1]} files)')

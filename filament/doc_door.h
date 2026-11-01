@@ -2,9 +2,25 @@
 // came (so it is on the shelf too) and put on the stage. word: the code, or a file of it. A shader that reads a picture
 // goes on the picked thing, as an effect; one that makes its own fills the stage; a sketch is a picture, in 3D a solid.
 #include "door_shadertoy_json.h"
-static void doc_hydra_keys(Doc& d, int thing, const std::vector<HydraKnob>& moving) {
-    for (const HydraKnob& k : moving)
-        for (size_t i = 0; i < k.keys.size(); ++i) doc_key(d, thing, ("js_" + k.name).c_str(), (double)i * HYDRA_STEP, k.keys[i]);
+#include "door_p5_shader.h"
+// What moved in a program's code as keys on what wears its effect `fx`, where they can be edited: a straight line two of them.
+static void doc_door_keys(Doc& d, int thing, const std::string& fx, const std::vector<HydraKnob>& moving) {
+    for (const HydraKnob& k : moving) {
+        const std::string name = doc_screen_knob(fx, k.name);
+        if (door_line(k.keys)) doc_key(d, thing, name.c_str(), 0, k.keys[0]), doc_key(d, thing, name.c_str(), DOOR_LINE_ENDS, door_line_end(k.keys));
+        else for (size_t i = 0; i < k.keys.size(); ++i) doc_key(d, thing, name.c_str(), (double)i * HYDRA_STEP, k.keys[i]);
+    }
+}
+// A p5 sketch's shader as an effect beside its code, its .fs's text (""; `why` when it has one that cannot come).
+static std::string doc_p5_shaded(const std::filesystem::path& file, std::vector<HydraKnob>& moving, std::string& why) {
+    Script run(file.string(), (doc_folders("third_party/js/p5").front() / "p5.min.js").string());
+    const std::string got = run.said("__shaded_take(30)");
+    std::string fs, vs;
+    if (!run.ok()) return why = run.trouble(), "";
+    if (got.empty() || !door_p5_shader(got, fs, vs, moving, why)) return "";
+    std::ofstream(std::filesystem::path(file).replace_extension(".fs")) << fs;
+    std::ofstream(std::filesystem::path(file).replace_extension(".vs")) << vs;
+    return fs;
 }
 // One part of a three.js scene as a solid (a new one, or `solid` as it is now): its shape a .glb beside the code, its look
 // as the scene says it, stood where the scene stands it (js_part: p5_stand.h's __three_each).
@@ -37,6 +53,7 @@ static int doc_door(Doc& d, const std::string& word, int picked) {
     const std::filesystem::path folder = doc_folders("programs").back();
     const bool kept = std::filesystem::path(word).parent_path() == folder;   // (one of the Program shelf's own, as it is now: not kept again)
     text = door_page(text);
+    if (text != word) text = door_shader_files(text, std::filesystem::path(word).parent_path());
     const bool tabs = door_has(text, "\"renderpass\"");
     if (tabs) {   // (Shadertoy's file of all its tabs: made one ISF here, as Hydra's is)
         std::string why;
@@ -62,12 +79,16 @@ static int doc_door(Doc& d, const std::string& word, int picked) {
     if (kept && !hydra) file = word;
     else if (!std::filesystem::exists(file, wrong)) std::ofstream(file) << text;
     if (hydra) std::ofstream(file.parent_path() / (file.stem().string() + ".hydra")) << came;   // (what was written, kept beside what it became: the Program shelf shows this one)
+    std::string shaded, why;   // (a p5 sketch that paints its stage with a shader is that shader, an effect as any: not a picture of it)
+    if (form.empty() && door_has(told, "hader(") && (shaded = doc_p5_shaded(file, moving, why)).empty() && !why.empty()) return d.trouble = why, 0;
+    const std::string fx = shaded.empty() ? file.string() : std::filesystem::path(file).replace_extension(".fs").string();
+    const bool effect = shader || !shaded.empty();
     doc_act(d);
     int thing = 0;
-    if (shader && door_has(door_isf(text), "inputImage") && picked) {
-        if (doc_fx_file(d, picked, file.string().c_str(), d.stage->now)) thing = picked;
-    } else if (shader) {
-        if ((thing = doc_add(d, "shape", "rect")) && doc_say(d, thing, "name", name.c_str()) && doc_fx_file(d, thing, file.string().c_str(), d.stage->now)) doc_fit(d, thing, "stretch");
+    if (effect && door_has(shaded.empty() ? door_isf(text) : shaded, "inputImage") && picked) {
+        if (doc_fx_file(d, picked, fx.c_str(), d.stage->now)) thing = picked;
+    } else if (effect) {
+        if ((thing = doc_add(d, "shape", "rect")) && doc_say(d, thing, "name", name.c_str()) && doc_fx_file(d, thing, fx.c_str(), d.stage->now)) doc_fit(d, thing, "stretch");
     } else if (form == "three") {   // (each pair of a shape and a material a solid of its own, under a group: stood in the world, not a picture of it)
         Script run(file.string(), (doc_folders("third_party/js/p5").front() / "p5.min.js").string());
         const int parts = std::atoi(run.said("__three_parts()").c_str());
@@ -89,7 +110,7 @@ static int doc_door(Doc& d, const std::string& word, int picked) {
     } else if ((thing = doc_add(d, "picture", file.string().c_str()))) doc_say(d, thing, "name", name.c_str()), doc_fit(d, thing, "fit");
     if (thing && !moving.empty()) {   // (what moved in its code: keys, where it can be edited)
         doc_moment(d, d.stage->now);
-        doc_hydra_keys(d, thing, moving);
+        doc_door_keys(d, thing, fx, moving);
     }
     return doc_acted(d) ? thing : 0;
 }
@@ -129,7 +150,18 @@ static std::string doc_hydra_saved(Doc& d, const std::filesystem::path& file, co
     const std::string made = std::filesystem::path(file).replace_extension(".fs").string();
     std::ofstream(made) << isf;
     doc_act(d);
-    for (const int t : doc_things(d)) if (doc_word(d, t, "fx").find(made) != std::string::npos) doc_hydra_keys(d, t, moving);
+    for (const int t : doc_things(d)) if (doc_word(d, t, "fx").find(made) != std::string::npos) doc_door_keys(d, t, made, moving);
+    doc_acted(d);
+    return "";
+}
+// A p5 sketch's code saved, one whose shader is an effect: the effect made from it again, its keys again on what wears it.
+static std::string doc_p5_shaded_saved(Doc& d, const std::filesystem::path& file) {
+    std::string why;
+    std::vector<HydraKnob> moving;
+    if (doc_p5_shaded(file, moving, why).empty()) return why;
+    const std::string made = std::filesystem::path(file).replace_extension(".fs").string();
+    doc_act(d);
+    for (const int t : doc_things(d)) if (doc_word(d, t, "fx").find(made) != std::string::npos) doc_door_keys(d, t, made, moving);
     doc_acted(d);
     return "";
 }
@@ -145,14 +177,16 @@ static std::string doc_code_saved(Doc& d, const std::string& file) {
     std::stringstream all;
     all << in.rdbuf();
     const bool three = ext == ".js" && door_form(all.str()) == "three";
+    const bool shaded = ext == ".js" && std::filesystem::exists(std::filesystem::path(file).replace_extension(".vs"), wrong);
     if (!wrong && stamp != seen) {
         seen = stamp, why.clear();
         if (ext == ".hydra") why = doc_hydra_saved(d, file, all.str());
         else if (three) why = doc_three_saved(d, file);
+        else if (shaded) why = doc_p5_shaded_saved(d, file);
     }
     ++files_changed();
     doc_files_moved(d);
-    if (ext == ".js" && !three) doc_sketch_written(d, file);
+    if (ext == ".js" && !three && !shaded) doc_sketch_written(d, file);
     doc_match(d);
     return doc_scripts_kept(d).why[file];
 }

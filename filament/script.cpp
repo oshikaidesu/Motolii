@@ -66,7 +66,7 @@ std::string sketch_marked(const std::string& src, std::vector<SketchLine>* lines
                 mark = after >= src.size() || src[after] != '{';
             }
             if (mark) {
-                out += "(__L=" + std::to_string(line) + "," + name + ")";
+                out += "__at(" + std::to_string(line) + "," + name + ")";   // (a word as it was, so a line before it with no semicolon still ends there)
                 if (lines && seen != line) lines->push_back({line, name}), seen = line;
             } else out += name;
             last = name, i = end;

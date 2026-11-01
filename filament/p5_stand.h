@@ -8,6 +8,7 @@
 
 static const char* const p5_before = R"(
 var __T = 0, __Q = [], __seed = 12345, __L = 0;   // (__L: the line of the sketch that draws now: script.h sketch_marked)
+function __at(line, it) { __L = line; return it; }
 Math.random = () => (__seed = (1664525 * __seed + 1013904223) % 4294967296) / 4294967296;   // (the same film each time it is played: p5's own _lcg, src/math/random.js, from one seed)
 function __any(name) {
   const f = function () {};
@@ -289,6 +290,23 @@ p5.RendererGL.prototype.drawBuffersScaled = function (gId, x, y, z) {
   __drawn.push(m[12] * __U, m[13] * __U, m[14] * __U, whole * x * sx * __U, whole * y * sy * __U, whole * z * sz * __U, Math.atan2(m[1] / sx, m[0] / sx) * deg, Math.asin(Math.max(-1, Math.min(1, -m[2] / sx))) * deg, Math.atan2(m[6] / sy, m[10] / sz) * deg, __L, this._useNormalMaterial || this._tex ? -1 : __packed(this.curFillColor));
   return this;
 };
+// shader(): nothing runs GLSL here, so what it is told is kept (door_p5_shader.h makes it an effect). A flat thing drawn with
+// one is that shader painting the stage, and draws nothing of its own; on a solid it is the solid as ever.
+var __shaded = null, __shaded_kind = '';
+p5.prototype.shader = function (s) { this._renderer.userFillShader = s, this._renderer._useNormalMaterial = false; return this; };
+p5.Shader.prototype.setUniform = function (n, v) {
+  (this.__told = this.__told || {})[n] = typeof v === 'number' || typeof v === 'boolean' ? +v : Array.isArray(v) || ArrayBuffer.isView(v) ? Array.from(v) : null;
+  return this;
+};
+for (const way of ['drawBuffers', 'drawBuffersScaled', '_drawImmediateFill']) {
+  const was = p5.RendererGL.prototype[way];
+  p5.RendererGL.prototype[way] = function (gId) {
+    const of = way[0] === '_' ? 'quad' : String(gId).split('|')[0];
+    if (!this.userFillShader || !this._doFill || !['rect', 'plane', 'quad'].includes(of)) return was.apply(this, arguments);
+    __shaded = this.userFillShader, __shaded_kind = of;
+    return this;
+  };
+}
 )";
 
 static const char* const p5_start = R"(
@@ -310,6 +328,21 @@ function __to(f) {
       __from.push(wiped || !__frames.length ? __frames.length : __from[__from.length - 1]), __frames.push(o);
     } else __frames.push(last && globalThis.frameCount === was ? last : Float64Array.from(__drawn));   // (a noLoop(), a frameRate(30): as it was)
   }
+}
+function __shaded_take(seconds) {   // (the shader that paints its stage and what the sketch tells it every 0.1 second, a few seconds of waiting at most: "" none)
+  const told = {}, from = Date.now();
+  for (let k = 0; k <= seconds * 10 && Date.now() - from < 5000; ++k) {
+    __to(k * 6);
+    if (!__shaded && k < 2) continue;
+    if (!__shaded) return '';
+    const now = __shaded.__told || {};
+    for (const n in now) {
+      const row = told[n] = told[n] || [];
+      while (row.length < k) row.push(now[n]);   // (told late: as if from the first)
+      row.push(now[n]);
+    }
+  }
+  return JSON.stringify({ vert: __shaded._vertSrc, frag: __shaded._fragSrc, kind: __shaded_kind, width: globalThis.width, height: globalThis.height, density: pixelDensity(), told });
 }
 function __paints(f, had) {   // (what makes frame f on a canvas holding frame `had`: all since it was last wiped, or if `had` is on that way only what came after it; first a 1 if it is to be wiped)
   __to(f);

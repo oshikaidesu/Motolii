@@ -40,12 +40,12 @@ class Program {
   }
 }
 
-/// The maker's programs, the last written first. Hydra's kept code stands for what it became.
+/// The maker's programs, the last written first. Kept code stands for what it became: Hydra's, a p5 sketch's shader.
 List<Program> programs() {
   final dir = Directory('${EffectTiles.own}/programs');
   if (!dir.existsSync()) return const [];
   final all = dir.listSync().whereType<File>().where((f) => RegExp(r'\.(js|fs|hydra)$').hasMatch(f.path)).toList();
-  final made = {for (final f in all) if (f.path.endsWith('.hydra')) f.path.replaceFirst(RegExp(r'\.hydra$'), '.fs')};
+  final made = {for (final f in all) if (RegExp(r'\.(hydra|js)$').hasMatch(f.path)) f.path.replaceFirst(RegExp(r'\.(hydra|js)$'), '.fs')};
   final kept = all.where((f) => !made.contains(f.path)).toList()..sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
   return [for (final f in kept) Program(f.path)];
 }
@@ -80,7 +80,7 @@ class _ProgramShelfState extends State<ProgramShelf> {
     final m = c.ws.inside, t = int.tryParse(c.ws.selected ?? '');
     if (m == null || t == null) return null;
     final said = '${m.word(t, 'file')} ${m.word(t, 'script')} ${m.word(t, 'fx')}';
-    return all.where((p) => said.contains(p.file.replaceFirst(RegExp(r'\.hydra$'), '.fs'))).firstOrNull;
+    return all.where((p) => said.contains(p.file) || said.contains(p.file.replaceFirst(RegExp(r'\.(hydra|js)$'), '.fs'))).firstOrNull;
   }
 
   @override

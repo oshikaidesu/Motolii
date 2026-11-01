@@ -6,7 +6,10 @@
 // Two.js's and Paper.js's own canvas renderers, Shadertoy's mainImage and its uniforms, GLSL Sandbox's time and resolution,
 // twigl's r m t f s b and FC (src/fragmen.js), Bonzomatic's fGlobalTime, v2Resolution and out_color (its default shader).
 #pragma once
+#include <filesystem>
+#include <fstream>
 #include <regex>
+#include <sstream>
 #include <string>
 #include "third_party/js/twigl/noise.h"
 
@@ -56,6 +59,21 @@ inline std::string door_quoted(const std::string& t) {   // (as a JavaScript str
     std::string out = "\"";
     for (const char c : t) out += c == '"' ? "\\\"" : c == '\\' ? "\\\\" : c == '\n' ? "\\n" : c == '\r' ? "" : std::string(1, c);
     return out + "\"";
+}
+
+// p5's loadShader as the two files beside the sketch say it, in the sketch from here on: what is kept is one file, and a
+// script has no net to fetch them by. Files not there: as it was.
+inline std::string door_shader_files(const std::string& text, const std::filesystem::path& beside) {
+    static const std::regex load(R"re(\bloadShader\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*['"`]([^'"`]+)['"`]\s*(?:,[^)]*)?\))re");
+    const auto file = [&](const std::string& name) { std::ifstream in(beside / name); std::stringstream all; all << in.rdbuf(); return all.str(); };
+    std::string out;
+    size_t at = 0;
+    for (std::sregex_iterator m(text.begin(), text.end(), load), end; m != end; ++m) {
+        const std::string vert = file((*m)[1]), frag = file((*m)[2]);
+        out += text.substr(at, (size_t)m->position() - at) + (vert.empty() || frag.empty() ? m->str() : "createShader(" + door_quoted(vert) + "," + door_quoted(frag) + ")");
+        at = (size_t)(m->position() + m->length());
+    }
+    return out + text.substr(at);
 }
 
 // A library as a script runs it: three.js's module, its names one object as three.min.js gave them.

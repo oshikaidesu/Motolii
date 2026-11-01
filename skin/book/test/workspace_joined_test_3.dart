@@ -1643,6 +1643,18 @@ void _tests3() {
     expect(m.things.where((x) => m.word(x, 'name') == 'Dwitter'), isEmpty);
   });
 
+  test('A program\'s code stands for what it became: a p5 sketch\'s shader is not a second program', () {
+    final js = File('${EffectTiles.own}/programs/p5.js-0made.js')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('function setup(){}');
+    final fs = File('${EffectTiles.own}/programs/p5.js-0made.fs')..writeAsStringSync('/*{}*/');
+    addTearDown(js.deleteSync);
+    addTearDown(fs.deleteSync);
+    final all = programs().map((p) => p.file).toList();
+    expect(all, contains(js.path));
+    expect(all, isNot(contains(fs.path)));
+  });
+
   testWidgets('A program stands on a shelf of its own: put on the stage from it, its code typed at moves what stands there and what the inspector shows, and code half typed leaves all that and says why (Godot\'s and Unity\'s scripts on a shelf, their knobs in the inspector; Shadertoy keeps the last picture that compiled)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final file = File('${EffectTiles.own}/programs/p5.js-0test.js')
