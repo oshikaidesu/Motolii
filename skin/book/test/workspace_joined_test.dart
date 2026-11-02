@@ -471,7 +471,7 @@ void main() {
     });
     expect(done, isTrue, reason: m.trouble);
     expect(refused, greaterThan(3), reason: 'asked while it was being written, and told so');
-    expect(slowest, lessThan(1000), reason: 'an answer came between two pictures');
+    expect(slowest, lessThan(5000), reason: 'an answer came between two pictures, not when the film was done (120 ms here, 2363 once on CI, where a film takes over 30 s)');
     debugPrint('while a film was written: $refused askings answered, the slowest in $slowest ms');
     expect(mp4.lengthSync(), greaterThan(1000));
     mp4.deleteSync();

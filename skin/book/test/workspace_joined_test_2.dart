@@ -299,7 +299,7 @@ void _tests2() {
     await t.tap(box);
     await t.enterText(box, 'MOTOLII\nmakes moves');
     FocusManager.instance.primaryFocus?.unfocus();
-    await t.pumpAndSettle();
+    await settled(t, ws);   // (told to the inside between pictures: on CI it was still 'Text' here)
     expect(m.word(text, 'text'), 'MOTOLII\nmakes moves', reason: m.trouble);
     expect(ws.layer?.name, 'MOTOLII makes moves', reason: 'listed on one line');
     expect(wsTransform(ws, '$text')['v_size'], closeTo(.5 * m.point, .1), reason: 'its size in points of the picture');
