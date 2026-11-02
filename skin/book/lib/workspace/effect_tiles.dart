@@ -3,9 +3,9 @@
 // the same things by the effect itself, so a file put in by its maker needs no line and no developer. Read from it
 // (doc_recipes.h, isf_tags): a transition's progress goes from 0 to 1, what runs by the clock or keeps its frame before is
 // left to run. Measured (AbsentMotion's change(), reports/sketch_import_2026-11-01.md): the sample stands still, so what
-// moves is the effect; its number knob that changes the picture most goes from where it is to a value plainly seen
-// (fx_first.sh tries knobs so); nothing seen on the whole photo, it goes on a card going past on AbsentMotion's grid (its
-// "move" layout), where what it does at an edge or to what moves shows; what does not move is split into before and after.
+// moves is the effect; the knob that stands for it goes between two values ([_telling]); nothing seen on the whole photo,
+// it goes on a card going past on AbsentMotion's grid (its "move" layout), where what it does at an edge or to what moves
+// shows; with no knob to turn, the line between before and after goes across it. No tile stands but one that shows nothing.
 // AbsentMotion's own effects keep their line of the table. Sixteen pictures a twelfth of a second apart, as its moving
 // tiles, played there and back at 24 a second, so nothing steps or jumps where it starts again. The sample is the balloon
 // fx_tiles.sh draws on (fx_sample.jpg). Drawn on a
@@ -44,7 +44,7 @@ abstract final class EffectTiles {
       if (home.isEmpty || (file != null && f != file)) continue;
       _asked.remove(home);
       try {
-        File('$home.shows').deleteSync();
+        File('$home.tells').deleteSync();
       } catch (_) {}
       if (file != null && _asked.add(home)) _queue.insert(0, (f, home));
     }
@@ -153,7 +153,7 @@ abstract final class EffectTiles {
     _told = changed;
     for (final (_, f) in [...m.effects]..sort((a, b) => a.$1.toLowerCase().compareTo(b.$1.toLowerCase()))) {   // (as the shelf lists them: its top first)
       final home = m.tileHome(f);
-      final stale = home.isNotEmpty && !File('$home.shows').existsSync();   // (drawn before a tile showed what its effect does: drawn again)
+      final stale = home.isNotEmpty && !File('$home.tells').existsSync();   // (drawn before a tile showed what its effect does: drawn again)
       if (home.isEmpty || (!stale && m.picture(f) == home)) continue;
       if (!stale && File(home).existsSync()) {
         m.tileDrawn(home, same: File('$home.same').existsSync());
@@ -231,6 +231,7 @@ abstract final class EffectTiles {
     }
     lay(false);
     final plain = shoot('${folder.path}/plain.png');   // (the sample as it is, to tell a tile that shows nothing done)
+    if (m.at(moments[still])) m.still('${folder.path}/sample.png');   // (as large as the tries set beside it)
     lay(true);
     final moved = shoot('${folder.path}/moved.png');
     final enough = plain.length == moments.length && moved.length == moments.length;
@@ -242,7 +243,8 @@ abstract final class EffectTiles {
         continue;
       }
       final show = f.endsWith('.wgsl') ? showcase(f, File(f).readAsStringSync(), shows) : null;
-      final said = m.tags(f), plays = f.endsWith('.fs') && RegExp(r'"PERSISTENT"\s*:\s*(true|1)').hasMatch(File(f).readAsStringSync());
+      final said = m.tags(f), isf = f.endsWith('.fs') ? File(f).readAsStringSync() : '', plays = RegExp(r'"PERSISTENT"\s*:\s*(true|1)').hasMatch(isf);
+      final lists = [for (final l in RegExp(r'\{[^{}]*"TYPE"\s*:\s*"long"[^{}]*\}').allMatches(isf)) '_${RegExp(r'"NAME"\s*:\s*"([^"]+)"').firstMatch(l.group(0)!)?.group(1)}'];   // (ISF's "long": a choice, which the inside takes as a span)
       final runs = said.contains('time') || said.contains('feedback') || plays;
       final first = (show?.moves ?? false) || said.contains('feedback') || plays;   // (an effect of what was has something going past it to see)
       final base = home.substring(0, home.length - 4);
@@ -252,17 +254,19 @@ abstract final class EffectTiles {
         lay(moving);
         final whole = !moving && (f.endsWith('.fs') || f.endsWith('.wgsl') || f.endsWith('.json')) && m.say(0, 'script', f);   // (.json: Filament's own settings, laid on the stage's view: viewer_settings.h)   // (a screen effect; the stage takes an AviUtl2 script too, but draws none of it: motolii.h, a thing's)
         final thing = moving ? card : photo, on = whole ? 0 : thing, onIt = !whole && m.say(thing, 'fx', f);   // (as a thing's: as edit.sh says it)
+        final filed = <String, double>{};
         for (final MapEntry(:key, :value) in (show?.knobs ?? const <String, double>{}).entries) {
+          if (m.value(on, key, 0) case final was? when !_part.hasMatch(key)) filed[key] = was;
           m.set(on, key, value);   // (as AbsentMotion shows it: its table's values, not the file's defaults)
         }
         final knobs = [for (final v in m.values(on)) if (v.startsWith('js_') && !own.contains(v)) v];
         final sweeps = <String, List<double>>{...?show?.sweeps};
         if (knobs.where((k) => k.endsWith('_progress')).firstOrNull case final p? when said.contains('transition')) {
           sweeps[p] = const [0, 1];   // (a transition seen going from 0 to 1 across its pictures)
-        } else if (show == null && !runs) {
-          if (_strongest(m, on, knobs, folder.path) case final knob?) sweeps[knob.$1] = [knob.$2, knob.$3];
+        } else if (sweeps.isEmpty && !runs) {
+          if (_telling(m, on, knobs, filed, lists, folder.path) case final knob?) sweeps[knob.$1] = [knob.$2, knob.$3];
         }
-        if (!moving && !runs && sweeps.isEmpty && enough && _same('${folder.path}/usual.png', '${folder.path}/plain_$still.png')) {   // (nothing on the photo: no sixteen pictures of nothing)
+        if (!moving && !runs && sweeps.isEmpty && enough && _same('${folder.path}/usual.png', '${folder.path}/sample.png')) {   // (nothing on the photo: no sixteen pictures of nothing)
           if (whole) m.say(0, 'script', 'none');
           if (onIt) m.say(thing, 'fx', 'none');
           same = true;
@@ -289,12 +293,13 @@ abstract final class EffectTiles {
         stands = true;
         if (!enough) continue;
       }
-      final at = show != null ? show.split : split ? 0.4 : null;   // (at AbsentMotion's 0.4, its 22 with a split: what does not move is seen beside what it did it to, golf ⑪)
+      final at = split ? '0.1+0.8*(3*pow(N/15,2)-2*pow(N/15,3))' : show?.split;   // (AbsentMotion's split, its 22 where one stands; no knob to turn, what it did is seen by the line going across: no model for that, the user's wish that no tile stand)
       if (at != null && !same && enough) {   // (before at its left, as AbsentMotion's effect_thumbs.py lays the photo over it up to there, a white line where they meet)
-        if (_ffmpeg(['-i', '${base}_%d.png', '-i', '${folder.path}/plain_%d.png', '-filter_complex', '[1:v]crop=iw*$at:ih:0:0[b];[0:v][b]overlay=0:0,drawbox=x=iw*$at-2:y=0:w=2:h=ih:color=white:t=fill', '-start_number', '0', '${base}_%d.split.png'])) {
+        if (_ffmpeg(['-i', '${base}_%d.png', '-i', '${folder.path}/plain_%d.png', '-filter_complex', "[0:v]format=gbrp[a];[1:v]format=gbrp[b];[a][b]blend=all_expr='if(lt(abs(X-W*($at)),1),255,if(lt(X,W*($at)),B,A))'", '-start_number', '0', '${base}_%d.split.png'])) {
           for (final (k, _) in moments.indexed) {
             File('${base}_$k.split.png').renameSync(_drawn(home, k));
           }
+          stands = false;
         }
       }
       File(_drawn(home, EffectTiles.still)).copySync(home);
@@ -311,7 +316,7 @@ abstract final class EffectTiles {
       try {
         same ? File('$home.same').writeAsStringSync('') : File('$home.same').deleteSync();
       } catch (_) {}
-      File('$home.shows').writeAsStringSync('');
+      File('$home.tells').writeAsStringSync('');
       drawn.add((home, same));
     }
     m.close();
@@ -327,42 +332,64 @@ abstract final class EffectTiles {
     return stops[k] + (stops[k + 1] - stops[k]) * (at - k);
   }
 
-  /// The number knob that changes the picture most, from what it has to a value plainly seen and short of wiping the
-  /// picture out, as fx_first.sh tries them and AbsentMotion's change() tells a tile that shows nothing: at most eight,
-  /// each half way to the far end of its span (all the way round, an angle's far end is where it began), single numbers
-  /// before a vector's parts, what only fades it out left alone; then the one that showed most, in steps. Null: none shows.
-  static (String, double, double)? _strongest(Motolii m, int on, List<String> knobs, String folder) {
+  /// The knob that stands for an effect, and the two values it goes between. Set beside the 121 lines of AbsentMotion's
+  /// table where a hand says which (reports/sketch_import_2026-11-01.md), the one that changes the picture most is right
+  /// for 3 of the 27 it moves: what a hand moves is what plays as a clock would, rotY, progress, evolution, phase (After
+  /// Effects' own Evolution and Transition Completion); then, of [filed], the knobs the hand gave a value, the one that
+  /// makes most of it, from what the file has to that; then the file's first that shows, its author's first, single
+  /// numbers before a vector's parts, leaving what only fades it out, draws it anew at each value or picks from a list. Each is tried half
+  /// way to the far end of its span (all the way round, an angle's far end is where it began), at most eight, as
+  /// fx_first.sh tries them and AbsentMotion's change() tells a tile that shows nothing; a turn or a progress goes that
+  /// far, as the hand's, the rest as far as is plainly seen, short of wiping the picture out. Null: none shows.
+  static (String, double, double)? _telling(Motolii m, int on, List<String> knobs, Map<String, double> filed, List<String> lists, String folder) {
     if (!m.at(moments[still]) || !m.still('$folder/usual.png')) return null;
-    final part = RegExp(r'_[xyzw]$'), plainly = RegExp(r'alpha|opacity', caseSensitive: false);
-    final tried = <(String, double, double)>[];
-    for (final k in [...knobs.where((k) => !part.hasMatch(k)), ...knobs.where(part.hasMatch)].where((k) => !plainly.hasMatch(k))) {
-      final span = m.shown(k), range = m.range(on, k), from = m.value(on, k, 0);
-      if (range == null || from == null || const ['onoff', 'seed'].contains(span?.look)) continue;
-      final (low, high) = span != null && span.high > span.low ? (span.low, span.high) : range;
-      final to = from + (((high - from).abs() >= (from - low).abs() ? high : low) - from) / 2;
+    bool says(RegExp words, String k) => words.hasMatch(k) || words.hasMatch(m.shown(k)?.label ?? '');
+    double change(String k, double to, double back) {
       m.set(on, k, to);
-      if (m.still('$folder/try_${tried.length}.png')) tried.add((k, from, to));
+      m.still('$folder/try_0.png');
+      m.set(on, k, back);
+      return _changes(folder).firstOrNull?.$2 ?? 0;
+    }
+    var tried = 0;
+    (String, double, double)? turned(String k) {
+      final span = m.shown(k), range = m.range(on, k), from = m.value(on, k, 0);
+      if (_faint.hasMatch(k) || range == null || from == null || const ['onoff', 'seed'].contains(span?.look) || m.words(on, k).isNotEmpty || lists.any(k.endsWith) || tried++ == 8) return null;
+      final (low, high) = span != null && span.high > span.low ? (span.low, span.high) : range;
+      final half = from + (((high - from).abs() >= (from - low).abs() ? high : low) - from) / 2;
+      if (change(k, half, from) <= _plain) return null;
+      if (says(_whole, k)) return (k, from, half);
+      final steps = [if (says(_clock, k)) ...[1 / 512, 1 / 128], 1 / 32, 1 / 8, 1 / 2, 1.0, 2.0];   // (spans go to 4000 in an AviUtl2 script: what shows is often far short of half way; a phase's to 2000, the hand's goes to 3)
+      final at = [for (final s in steps) from + (half - from) * s];
+      for (final (i, v) in at.indexed) {
+        m.set(on, k, v);
+        m.still('$folder/try_$i.png');
+      }
       m.set(on, k, from);
-      if (tried.length == 8) break;
+      final fine = _changes(folder), ways = [
+        for (final (i, v) in at.indexed) (v, fine.elementAtOrNull(i)?.$2 ?? 0),
+      ];
+      return (k, from, (ways.where((w) => w.$2 >= _clear).firstOrNull ?? ways.reduce((a, b) => b.$2 > a.$2 ? b : a)).$1);
     }
-    if (tried.isEmpty) return null;
-    final seen = _changes(folder);
-    if (seen.isEmpty) return null;
-    final most = seen.reduce((a, b) => b.$2 > a.$2 ? b : a);
-    if (most.$2 <= _plain || most.$1 >= tried.length) return null;
-    final (k, from, half) = tried[most.$1];
-    const steps = [1 / 32, 1 / 8, 1 / 2, 2.0];   // (spans go to 4000 in an AviUtl2 script: what shows is often far short of half way)
-    final at = [for (final s in steps) from + (half - from) * s];
-    for (final (i, v) in at.indexed) {
-      m.set(on, k, v);
-      m.still('$folder/try_$i.png');
+    for (final k in knobs.where((k) => says(_clock, k))) {
+      if (turned(k) case final knob?) return knob;
     }
-    m.set(on, k, from);
-    final fine = _changes(folder), ways = [
-      for (final (i, v) in at.indexed) (v, fine.elementAtOrNull(i)?.$2 ?? 0),
-    ]..insert(3, (half, most.$2));
-    return (k, from, (ways.where((w) => w.$2 >= _clear).firstOrNull ?? ways.reduce((a, b) => b.$2 > a.$2 ? b : a)).$1);
+    final given = [
+      for (final MapEntry(key: k, value: was) in filed.entries)
+        if (m.value(on, k, 0) case final to? when to != was && !_faint.hasMatch(k)) (k, was, to, change(k, was, to)),
+    ];
+    if (given.isNotEmpty) {
+      final most = given.reduce((a, b) => b.$4 > a.$4 ? b : a);
+      if (most.$4 > _plain) return (most.$1, most.$2, most.$3);
+    }
+    for (final k in [...knobs.where((k) => !_part.hasMatch(k)), ...knobs.where(_part.hasMatch)]) {
+      if (turned(k) case final knob?) return knob;
+    }
+    return null;
   }
+
+  static final _clock = RegExp(r'progress|completion|evolution|phase|rot_?y|進行|進捗|位相', caseSensitive: false);
+  static final _whole = RegExp(r'progress|completion|rot_?y|進行|進捗', caseSensitive: false);
+  static final _part = RegExp(r'_[xyzw]$'), _faint = RegExp(r'alpha|opacity|blend|mix|seed', caseSensitive: false);
 
   /// How far each try is from the usual picture: (its number, ffmpeg psnr's mean squared error), one run for them all.
   static List<(int, double)> _changes(String folder) {

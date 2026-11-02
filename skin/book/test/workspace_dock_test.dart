@@ -77,14 +77,16 @@ void main() {
     await t.pump();
     expect(find.textContaining(' ready'), findsOneWidget);
   }, skip: !insideBuilt);
-  test('a tile shows what its effect does, told by the effect: a knob that shows goes, one seen on nothing but an edge is laid on a card going past, one that does nothing says so; nothing moving keeps no pictures', () {
+  test('a tile shows what its effect does, told by the effect: the knob that stands for it goes, one seen on nothing but an edge is laid on a card going past, with no knob the line between before and after goes across, one that does nothing says so; only that keeps no pictures', () {
     final out = Directory.systemTemp.createTempSync('motolii_tile_test');
-    final effects = ['Bright.fs', 'am_longshadow.wgsl', '3d Rotate.fs'];
+    final effects = ['Bright.fs', 'am_longshadow.wgsl', '3d Rotate.fs', 'am_reorient360.wgsl', 'Color Invert.fs'];
     final drawn = EffectTiles.draw(motoliiDir, [for (final (i, e) in effects.indexed) ('$motoliiDir/effects/$e', '${out.path}/$i.png')]);
-    expect(drawn.map((d) => d.$2), [false, false, true], reason: '3d Rotate\'s vertex shader is not run here: it changes nothing, and the tile says so');
-    expect([for (final i in [0, 1, 2]) File(EffectTiles.frame('${out.path}/$i.png', EffectTiles.moments.length - 1)).existsSync()], [true, true, false]);
-    final first = File(EffectTiles.frame('${out.path}/0.png', 0)).readAsBytesSync(), last = File(EffectTiles.frame('${out.path}/0.png', EffectTiles.moments.length - 1)).readAsBytesSync();
-    expect(first.length == last.length && first.indexed.every((b) => last[b.$1] == b.$2), isFalse, reason: 'Bright has no clock: its knob moved, the sample stands');
+    expect(drawn.map((d) => d.$2), [false, false, true, false, false], reason: '3d Rotate\'s vertex shader is not run here: it changes nothing, and the tile says so');
+    expect([for (final (i, _) in effects.indexed) File(EffectTiles.frame('${out.path}/$i.png', EffectTiles.moments.length - 1)).existsSync()], [true, true, false, true, true], reason: 'a line of AbsentMotion\'s table with no knob moved moves one all the same');
+    for (final (i, why) in [(0, 'Bright has no clock: its knob moved, the sample stands'), (3, 'the hand set a value, and moved nothing'), (4, 'Color Invert has no knob: its line moved')]) {
+      final first = File(EffectTiles.frame('${out.path}/$i.png', 0)).readAsBytesSync(), last = File(EffectTiles.frame('${out.path}/$i.png', EffectTiles.moments.length - 1)).readAsBytesSync();
+      expect(first.length == last.length && first.indexed.every((b) => last[b.$1] == b.$2), isFalse, reason: why);
+    }
     out.deleteSync(recursive: true);
   }, skip: !insideBuilt);
 
