@@ -519,3 +519,17 @@ OpenProcessing の多くは by-nc-sa。ここまでは非営利のテストだ�
 
 **タイムズレ（Time Displacement、スリットスキャン）。** 元は写真のスリットスキャンで、映画では 2001 年宇宙の旅（1968）のスターゲートが有名（抜粋）。AE の Time Displacement と TD の Time Machine TOP は同じ考えで、絵の明るさがその場所の遅れを決める。Motolii の Time Displacement（keijiro/SlitScanCam）は横か縦の傾きしか持たない。マップの追加は途中で止めた。残りはチェックリストの T の末尾。
 
+## p5 のイーズの本（11/2）
+
+**どこをどう見たか。** p5.js の公式ライブラリ一覧に、イーズを名乗る物は無かった。検索で 2 つ見つけ、どちらも元の物を読んだ。p5.tween は GitHub の README と `src/Tween.ts`・`src/TweenManager.ts`・`src/Easings.ts`、`dist/p5.tween.js`（Milchreis、MIT、星 45）。p5-easing は npm の配布物 0.6.2 の README と `lib/p5.easing.js`（HSLU、package.json で MIT、LICENSE ファイルは配布物に無い）。npm のページは 403 で、配布の登録簿から取った。どちらも git の外に置いた。
+
+**動くか。** 手を入れず、スケッチの頭に付けて走らせた。50 から 350 へ 1 秒、easeOutQuad。0.5 秒の丸の位置は計算で 275。
+
+| 道 | 0.5 秒の x | 1.5 秒の x |
+|---|---|---|
+| p5.tween `addMotion`（続けて線形で 50 へ戻す） | 279.4 | 204.5（計算 200） |
+| p5-easing `easeByFrameSteps` | 274.5 | 349.5 |
+| p5-easing `ease`（時間） | 279.4 | 349.5 |
+
+**分かった事。** p5-easing は `frameCount` の純粋な式なので、書き出しのようにコマ順で進む Motolii に向き、for の 200 個にも 1 行で書ける。p5.tween は物ごとに状態を持つが、区間を続けて書け、表 `p5.tween.EASINGS` が開いていて、知らない名前は線形に落ちる。p5-easing の表は閉じていて、知らない名前は NaN を返す。
+
