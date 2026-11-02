@@ -54,6 +54,7 @@ enum DockG {
   inspector,
   timeline,
   desk,
+  reload,
 }
 
 class DockGlyph extends StatelessWidget {
@@ -137,6 +138,10 @@ class _P extends CustomPainter {
         final k = g == DockG.create ? .3 : .2;
         cv.drawLine(p(.5, k), p(.5, 1 - k), st);
         cv.drawLine(p(k, .5), p(1 - k, .5), st);
+      case DockG.reload:   // (the round arrow on a browser's reload)
+        cv.drawArc(r(.14, .14, .72, .72), -math.pi * .3, math.pi * 1.65, false, st);
+        cv.drawLine(p(.84, .1), p(.82, .34), st);
+        cv.drawLine(p(.82, .34), p(.58, .3), st);
       case DockG.program:   // (code's angle brackets and slash)
         cv.drawLine(p(.34, .3), p(.12, .5), st);
         cv.drawLine(p(.12, .5), p(.34, .7), st);

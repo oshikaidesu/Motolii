@@ -151,8 +151,9 @@ class EffectTile extends StatelessWidget {
   );
 }
 
-/// A tile's picture, its eight moving ones played round and round while [playing] (the media shelf's 280 ms a picture,
-/// dock_files_contents.dart); its still otherwise, and for a picture with none beside it.
+/// A tile's picture, its moving ones played there and back at 24 a second while [playing], so it neither steps nor jumps
+/// where it starts again (effect_tiles.dart); its still otherwise, and for a picture with none beside it. Keyed by when
+/// the file was written: a widget told the same file keeps the picture it had (an equal provider is not resolved again).
 class TileMoving extends StatefulWidget {
   const TileMoving(this.file, {super.key, required this.playing});
   final String file;
@@ -162,14 +163,15 @@ class TileMoving extends StatefulWidget {
 }
 
 class TileMovingState extends State<TileMoving> {
+  static final _way = [for (var k = 0; k < EffectTiles.moments.length; k++) k, for (var k = EffectTiles.moments.length - 2; k > 0; k--) k];
   int? _step;
   Timer? _clock;
 
   void _follow() {
-    final go = widget.playing && File(EffectTiles.frame(widget.file, 0)).existsSync();
+    final go = widget.playing && File(EffectTiles.frame(widget.file, EffectTiles.moments.length - 1)).existsSync();   // (the last: one drawn with fewer stands until it is drawn again)
     if (go == (_clock != null)) return;
     _clock?.cancel();
-    _clock = go ? Timer.periodic(const Duration(milliseconds: 280), (_) => mounted ? setState(() => _step = ((_step ?? EffectTiles.still) + 1) % EffectTiles.moments.length) : null) : null;
+    _clock = go ? Timer.periodic(const Duration(microseconds: 41667), (_) => mounted ? setState(() => _step = ((_step ?? EffectTiles.still) + 1) % _way.length) : null) : null;
     if (!go) _step = null;
   }
 
@@ -192,7 +194,7 @@ class TileMovingState extends State<TileMoving> {
   }
 
   @override
-  Widget build(BuildContext context) => Image.file(File(_step == null ? widget.file : EffectTiles.frame(widget.file, _step!)), fit: BoxFit.cover, cacheWidth: EffectTiles.readWide, gaplessPlayback: true, errorBuilder: (_, _, _) => const SizedBox());
+  Widget build(BuildContext context) => Image.file(key: ValueKey(FileStat.statSync(widget.file).modified), File(_step == null ? widget.file : EffectTiles.frame(widget.file, _way[_step!])), fit: BoxFit.cover, cacheWidth: EffectTiles.readWide, gaplessPlayback: true, errorBuilder: (_, _, _) => const SizedBox());
 }
 
 /// Joined: the document's value an effect is, and what the picked thing has for it now.

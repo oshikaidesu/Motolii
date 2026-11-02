@@ -293,7 +293,7 @@
 - [x] カメラ：フォグ（色・近い・遠い）（一部）：Lens カードの Fog（濃さ）・Fog near（始まり、10/28、`check/fog_near.sh`）・色。まだ：遠い（Filament の霧は始まりと濃さで決まり、終わりの距離は無い） — 済（10/29）：Lens カードに Fog far。言うと、遠い所で霧が 98% になる濃さを Filament の霧に渡す（Filament の霧は 1 − e^−(濃さ × 始まりからの距離) なので、濃さ ＝ Fog × ln 50 ÷（遠い − 近い）。three.js の線の Fog の far を FogExp2 の濃さにする考え）。edit.sh で赤い立方体 2 つ（近い・遠い）に Fog near 4・Fog far 18：近い方は薄い桃色、遠い方は霧で真っ白。言わなければ前の Fog の濃さのまま（`check/fog_near.sh` も前どおり） 入口も Alight Motion と同じくカメラに（10/29）：カメラを選ぶと Fog カード（Fog・Fog near・Fog far・色）。そのカメラで見ている間はカメラの霧、言っていなければ段の霧。edit.sh で赤い立方体にカメラの青い霧：(255,63,68) → (169,160,255)、霧 0 で戻る
 - [ ] 初めての所で押す場所を吹き出しで指す
 - [x] 効果の検索（説明文の中まで）：Effects の棚の検索が名前と、効果の作り手の説明（頭の --about:。AbsentMotion の description 126 本、ISF の DESCRIPTION）を読む。下の欄にも説明 — 済（10/28）：窓の試験（`workspace_dock_test.dart`、「checkerboard」で Checker）
-- [ ] 効果のおすすめ、分類、動く絵（一部）：分類は棚の上の札（効果の --label、AbsentMotion の category から：Blur・Color & Light…とそれぞれの数）、動く絵はタイルに乗ると 8 コマが回る（fx_tiles.sh と同じ気球の見本）、説明の中まで探す検索、★。まだ：おすすめ（Alight Motion の上の 6 本。AbsentMotion にも無い）
+- [ ] 効果のおすすめ、分類、動く絵（一部）：分類は棚の上の札（効果の --label、AbsentMotion の category から：Blur・Color & Light…とそれぞれの数）、動く絵はタイルに乗ると 16 コマが 24 コマ毎秒で行って戻る（fx_tiles.sh と同じ気球の見本）、説明の中まで探す検索、★。まだ：おすすめ（Alight Motion の上の 6 本。AbsentMotion にも無い）
 - [ ] 効果の大きな動く見本・説明・タグ・Guide（一部）：効果を 1 回押すと、下の欄の上にその 8 コマが大きく回る（10/29、Alight Motion の効果を押すと開く大きな動く見本。`skin/book/test/workspace_dock_test.dart`）、下の欄に名前・分類・説明（効果の頭の --about、ISF の DESCRIPTION）。まだ：タグ、Guide
 - [x] 効果ごとのプリセット、お気に入り — 済（10/29）：効果のカードの頭の Save で、その効果の値とキーだけを効果の棚の見た目（プリセット）として残す（「効果名 1」「効果名 2」…、押すたびに次の番号：`filament/doc_looks.h` の doc_look_keep）。棚のタイルからそのまま別の物に付けられる。お気に入りは棚のタイルの星（前から）。窓の試験で Gaussian Blur の Save を 2 回押して 2 つでき、1 つ目を円に付けるとぼかしのキーだけが付く（`skin/book/test/workspace_joined_test_3.dart`）
 - [x] 効果の札：畳む、詳しく、既定に戻す、複製、コピー、消す（一部）：窓のカードは名前を押して畳む、Advanced で詳しく、頭の Copy・Paste（そのカードの値だけを別の物に、10/28）・Reset。Remove（効果のカードだけ。棚で押して外すのと同じ外し方、1 回で取り消せる、10/28、`skin/book/test/workspace_fx_order_test.dart`）。まだ：複製（同じ効果を 2 つ持つと値が 1 組しか無いので、効果ごとに値を分ける仕組みが先） — 複製も済（10/29）：札の ⋮ に Duplicate（Alight Motion の ⋮ と同じ名前）。その効果をすぐ後ろにもう 1 つ、値（キーも）を写して置く。2 つ目は「Glow~2.fs」のように番号を入れた言葉で、読むのは元のファイル（fx_source）、値の名前はその言葉のもの（js_halftone_2_radius）なので別々に動く。札は「Halftone 2」。ISF と .wgsl の効果。窓の試験（`workspace_fx_order_test.dart` の Duplicate）
@@ -613,10 +613,18 @@ AbsentMotion（AM の写し）の欄の要素を機械で書き出し（panels/*
 - [x] スケッチの奥が背景の壁に隠れていた：壁を z −3 から z −40 へ（doc_sketch.h、本物の p5 と地平線が揃う）
 - [x] three.js の場面を動かす台：three.core.js をそのまま走らせ、形と材質の組ごとに本物の立体で世界に立てる（doc_door.h、p5_stand.h）
 - [x] プログラムの置き場：左のブラウザに Program を足し、一覧とコードの表示を切り替える。つまみは今のまま右のインスペクター。貼った物は Create と Effects に混ぜず、ここに入れる。見本：Godot と Unity は「コードはファイルとしてブラウザに、つまみはインスペクターに」、Cavalry はつまみが Attribute Editor でコードのタブは閉じても残る、TouchDesigner はコードが Text DAT でつまみが Parameter Dialog。割れた点（コードをどこで打つか）は「舞台を見ながら直す」が要るので左に置く。これは見本から取った決めではなく、出典なし
-- [x] Program のタイル：AbsentMotion の数字（384 で描いて 192、12 コマ毎秒、16 コマ）で、プログラムが自分で動く絵（program_tiles.dart）
+- [x] Program のタイル：AbsentMotion の数字（384 で描いて 192）で、プログラムが自分で動く絵（program_tiles.dart）。コマは 12 毎秒の 16 枚だとカクカクしたので、同じ 1.33 秒を 24 毎秒の 32 枚で
 - [x] Program の名前：隣の `.name`、無ければサイトの題。置いた層にも付く
 - [x] Program の右クリック：Create、Rename…、Show in Finder / Explorer（Live のブラウザ 4.2.1、4.5、4.7.7）。窓での右クリックは未確認、Windows も未確認
-- [ ] 効果のタイルの作り直し：同じ見本が流れるだけ、3.6 コマ毎秒。AbsentMotion は表を手で書く。Motolii は読んで決める（`time` なら動かす、色だけなら前後の分割、どのつまみかは描いて測る）。手書きの表と比べた数は reports/sketch_import_2026-11-01.md
+- [x] 効果のタイルの作り直し：済（11/2）。表を手で書かず、効果ごとに読んで描いて測って決める（effect_tiles.dart）。16 コマを 24 コマ毎秒で行って戻す。Aa を消した。棚の頭にリロードマーク（出典なし）。数は reports/sketch_import_2026-11-01.md
+- [ ] タイルの棚全部の描き直し：1 本 2.9 秒、全部で約 1 時間。窓を開けている間に裏で進む（閉めても次に続きから）。先頭の 250 本しか見ていない。全部の数はそれから
+- [ ] `.vs` の効果 38 本（3d Rotate など）：頂点シェーダーを Motolii が走らせないので、つまみが効かない。タイルは NO CHANGE（edit.sh で確かめた）
+- [ ] AviUtl の HLSL が通らない効果（bit数、GaussianBlur など、"HLSL parsing failed"）：タイルは NO CHANGE
+- [ ] `.anm2` と `.obj2` の NO CHANGE が多い：先頭 250 本のうち .anm2 56 本中 32、.obj2 10 本中 8。写真 1 枚とカードでは効かない物か止まる物か、1 本ずつ見ていない
+- [ ] 遷移の終わりが黒：次の絵を渡していないので progress 1 で黒になる。AM は 2 枚の写真で見せる
+- [ ] タイルの見本が気球とカードだけ：AM の写真 9 枚（人物、風景、緑幕など）と、文字・繰り返し・線の置き方は使っていない
+- [ ] `.am` はタイルの表を読まない：AbsentMotion の表を読むのは `.wgsl` だけ。`.am` は測って決める
+- [ ] 古い世代のタイルがキャッシュに残る：いま 238 MB、1.6 万ファイル。ファイルの日付が変わると古い絵が消えない
 - [ ] Program を棚から消す：今は Show in Finder から手で消す
 - [ ] Program のタイルの絵にするコマを選ぶ：今は 1 秒目から（AM はプロジェクトの絵のコマを選べる）。絵の出た 7 枚のうち 4 枚は黒地に小さい絵で読みにくい
 - [ ] Program の右クリックを本物の窓で押す：computer use が窓を前に出す操作を断るので試験だけ。Show in Finder を押した結果、Windows の `explorer /select,` も未確認

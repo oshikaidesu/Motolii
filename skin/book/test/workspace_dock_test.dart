@@ -11,7 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/workspace/dock.dart';
 import 'package:lab_book/workspace/create_preview.dart';
-import 'package:lab_book/workspace/dock_parts.dart' show DockSearch, dockStarsAt;
+import 'package:lab_book/workspace/dock_parts.dart' show DockIconButton, DockSearch, dockStarsAt;
 import 'package:lab_book/workspace/dock_tags.dart' show DockTags;
 import 'package:lab_book/workspace/effect_tiles.dart';
 
@@ -53,7 +53,7 @@ Future<void> _shelf(WidgetTester t, Ws ws, Size size, String shelf) async {
 void main() {
   test('an AbsentMotion effect\'s tile is drawn with the knobs its own table shows it with (tools/effect_showcase.json), split before and after where it says', () {
     final table = EffectTiles.table(motoliiDir);
-    ({Map<String, double> knobs, double? split})? of(String name) {
+    of(String name) {
       final f = '$motoliiDir/effects/am_$name.wgsl';
       return EffectTiles.showcase(f, File(f).readAsStringSync(), table);
     }
@@ -63,7 +63,30 @@ void main() {
     expect(EffectTiles.showcase('$motoliiDir/effects/God Rays.fs', '', table), isNull, reason: 'VIDVOX\'s: not in the table');
     final all = [for (final n in (table['effects'] as Map).keys) if (File('$motoliiDir/effects/am_$n.wgsl').existsSync()) of('$n')];
     expect([all.length > 100, all.every((s) => s != null)], [true, true], reason: 'every one of the table\'s with a file of its own read as it is');
+    expect(of('chromakey')?.sweeps['js_am_chromakey_tolerance'], [0, 0, .2, .2, 0], reason: 'a moving line\'s list of numbers for one knob: its keys');
+    expect(of('stretchaxis')?.moves, isTrue, reason: 'its "move" layout: seen on something going past');
   });
+  testWidgets('the Effects shelf has a reload mark: lit, and saying how many are drawn, while the tiles are', (t) async {
+    await _shelf(t, _joined(), const Size(1280, 800), 'Effects');
+    expect(find.byKey(const ValueKey('ws-fx-reload')), findsOneWidget);
+    EffectTiles.progress.value = (24, 1184);
+    await t.pump();
+    expect(find.text('24 of 1184'), findsOneWidget);
+    expect(t.widget<DockIconButton>(find.byKey(const ValueKey('ws-fx-reload'))).on, isTrue);
+    EffectTiles.progress.value = null;
+    await t.pump();
+    expect(find.textContaining(' ready'), findsOneWidget);
+  }, skip: !insideBuilt);
+  test('a tile shows what its effect does, told by the effect: a knob that shows goes, one seen on nothing but an edge is laid on a card going past, one that does nothing says so; nothing moving keeps no pictures', () {
+    final out = Directory.systemTemp.createTempSync('motolii_tile_test');
+    final effects = ['Bright.fs', 'am_longshadow.wgsl', '3d Rotate.fs'];
+    final drawn = EffectTiles.draw(motoliiDir, [for (final (i, e) in effects.indexed) ('$motoliiDir/effects/$e', '${out.path}/$i.png')]);
+    expect(drawn.map((d) => d.$2), [false, false, true], reason: '3d Rotate\'s vertex shader is not run here: it changes nothing, and the tile says so');
+    expect([for (final i in [0, 1, 2]) File(EffectTiles.frame('${out.path}/$i.png', EffectTiles.moments.length - 1)).existsSync()], [true, true, false]);
+    final first = File(EffectTiles.frame('${out.path}/0.png', 0)).readAsBytesSync(), last = File(EffectTiles.frame('${out.path}/0.png', EffectTiles.moments.length - 1)).readAsBytesSync();
+    expect(first.length == last.length && first.indexed.every((b) => last[b.$1] == b.$2), isFalse, reason: 'Bright has no clock: its knob moved, the sample stands');
+    out.deleteSync(recursive: true);
+  }, skip: !insideBuilt);
 
   testWidgets('every shelf lays out at the reference size and when smaller', (t) async {
     final ws = _joined();

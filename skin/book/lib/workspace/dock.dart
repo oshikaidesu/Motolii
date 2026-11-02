@@ -12,6 +12,7 @@ import 'dock_make.dart';
 import 'dock_parts.dart';
 import 'dock_tags.dart';
 import 'dock_program.dart';
+import 'effect_tiles.dart';
 import 'ws.dart';
 
 /// The shelves: name (also the pane's id and [Ws.shelf]), the mark on its tab, the search hint.
@@ -117,15 +118,23 @@ class _WsShelfState extends State<WsShelf> {
             ] else if (name == 'Program') ...[
               DockIconButton(DockG.list, on: !_mem.programCode, onTap: () => setState(() => _mem.programCode = false)),
               DockIconButton(DockG.program, on: _mem.programCode, onTap: () => setState(() => _mem.programCode = true)),
-            ] else
+            ] else ...[
+              if (name == 'Effects')   // (the tiles being drawn, lit; a press draws the picked one's again, or, none picked, all of them: no source for it, the user's own wish)
+                ListenableBuilder(
+                  listenable: EffectTiles.progress,
+                  builder: (context, _) => DockIconButton(DockG.reload, key: const ValueKey('ws-fx-reload'), on: EffectTiles.progress.value != null, onTap: ws.inside == null ? null : () => EffectTiles.again(ws.inside!, file: c.sel)),
+                ),
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: Shape.z(88)),
-                child: ValueListenableBuilder<int>(
-                  valueListenable: dockRead,
-                  builder: (context, _, _) => Text(
+                child: ListenableBuilder(
+                  listenable: Listenable.merge([dockRead, EffectTiles.progress]),
+                  builder: (context, _) => Text(
                     switch (name) { // (what the inside has: the fonts it sets, the effects it does, the colours the document uses, the tiles that make)
                       'Fonts' => '${fontsOffered ?? '…'} fonts',
-                      'Effects' => '${(ws.inside?.thingEffects.length ?? 0) + (ws.inside?.effects.length ?? 0)} ready',
+                      'Effects' => switch (EffectTiles.progress.value) {
+                        (final done, final all) => '$done of $all',
+                        null => '${(ws.inside?.thingEffects.length ?? 0) + (ws.inside?.effects.length ?? 0)} ready',
+                      },
                       'Colors' => '${usedColours(ws).values.toSet().length} used here',
                       'Create' => createFact(ws),
                       _ => _facts[name] ?? '',
@@ -136,6 +145,7 @@ class _WsShelfState extends State<WsShelf> {
                   ),
                 ),
               ),
+            ],
           ],
         ),
         DockSearch(

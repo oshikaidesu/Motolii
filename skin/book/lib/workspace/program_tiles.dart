@@ -1,5 +1,5 @@
 // A program's tile, by AbsentMotion's numbers for its moving ones (tools/effect_thumbs.py, Apache-2.0): rendered at 384,
-// kept at 192, sixteen pictures at 12 a second, one looping file that plays by itself. Theirs are made once on an emulator
+// kept at 192, one looping file that plays by itself; its 1.33 seconds at 24 a second, not its 12, which steps. Theirs are made once on an emulator
 // from a table written beforehand, one line an effect; a program moves by itself, so it needs no line and no sample, and
 // its maker needs no developer. Drawn on a document of its own on another isolate, as effect_tiles.dart's, one after
 // another, and again once the file has changed. APNG, as ffmpeg writes it and Flutter's engine plays
@@ -15,13 +15,13 @@ import '../motolii.dart';
 import 'effect_tiles.dart';
 
 abstract final class ProgramTiles {
-  static const _render = 384, _keep = 192, _pictures = 16, _perSecond = 12, _from = 1.0;
+  static const _render = 384, _keep = 192, _pictures = 32, _perSecond = 24, _from = 1.0;
   static final _asked = <String>{}, _queue = <(String, String)>[];
   static var _drawing = false;
   static void Function()? _told;
 
   /// Where its tile goes: one place a program, so the last one drawn shows until the next is there.
-  static String home(String file) => '${Platform.environment['HOME']}/Library/Caches/Motolii/tiles/program_${Uri.encodeComponent(file)}.png';
+  static String home(String file) => '${Platform.environment['HOME']}/Library/Caches/Motolii/tiles/program24_${Uri.encodeComponent(file)}.png';
 
   /// The programs whose tile is not drawn since they last changed, put in line. One that took the window down with it
   /// (its .trying left behind) waits for its file to change.
